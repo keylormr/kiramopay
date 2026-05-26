@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ── Frontend ─────────────────────────────────────────────────────────
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  frontend-test:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:run
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    needs: [frontend-lint, frontend-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 7
+
+  frontend-bundle-check:
+    name: Frontend Bundle Size Check
+    runs-on: ubuntu-latest
+    needs: frontend-build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+      - name: Check bundle sizes
+        run: |
+          echo "Checking bundle sizes (max 200KB per chunk)..."
+          MAX_SIZE=204800
+          FAILED=0
+          for file in dist/assets/*.js; do
+            SIZE=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+            SIZE_KB=$((SIZE / 1024))
+            FILENAME=$(basename "$file")
+            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+              echo "FAIL: $FILENAME is ${SIZE_KB}KB (max 200KB)"
+              FAILED=1
+            else
+              echo "OK: $FILENAME is ${SIZE_KB}KB"
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "Bundle size check failed!"
+            exit 1
+          fi
+          echo "All chunks within size limits."
+
+  frontend-e2e:
+    name: Frontend E2E Tests
+    runs-on: ubuntu-latest
+    needs: frontend-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ── Backend ──────────────────────────────────────────────────────────
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+          version: latest
+
+  backend-test-unit:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - name: Run unit tests
+        working-directory: backend
+        run: go test ./pkg/... -v -count=1
+
+  backend-test-integration:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    needs: backend-test-unit
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kiramopay
+          POSTGRES_PASSWORD: kiramopay_dev
+          POSTGRES_DB: kiramopay_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - name: Run integration tests
+        working-directory: backend
+        env:
+          TEST_DB_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable
+          TEST_REDIS_ADDR: localhost:6379
+        run: go test ./internal/... -v -count=1 -timeout=60s
+
+  backend-build:
+    name: Backend Build
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-test-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - name: Build binary
+        working-directory: backend
+        run: go build -o bin/api ./cmd/api
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-binary
+          path: backend/bin/api
+          retention-days: 7
+
+  # ── Docker ───────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [frontend-build, backend-build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend Docker image
+        working-directory: backend
+        run: docker build -t kiramopay-api:${{ github.sha }} .
+      - name: Build frontend Docker image
+        run: docker build -t kiramopay-web:${{ github.sha }} .

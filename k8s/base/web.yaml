@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiramopay-web
+  namespace: kiramopay
+  labels:
+    app: kiramopay-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kiramopay-web
+  template:
+    metadata:
+      labels:
+        app: kiramopay-web
+    spec:
+      containers:
+        - name: web
+          image: kiramopay-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kiramopay-web
+  namespace: kiramopay
+  labels:
+    app: kiramopay-web
+spec:
+  selector:
+    app: kiramopay-web
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

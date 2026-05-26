@@ -1,0 +1,1749 @@
+openapi: 3.0.3
+info:
+  title: KiramoPay API
+  description: |
+    KiramoPay is a fintech super app for Costa Rica. This API provides banking,
+    payments, crypto exchange, marketplace integration, and more.
+  version: 1.0.0
+  contact:
+    name: KiramoPay Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://kiramopay-api:8080
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: Auth
+    description: Authentication and session management
+  - name: Users
+    description: User profile management
+  - name: Wallets
+    description: Wallet and balance operations
+  - name: Transactions
+    description: Financial transactions
+  - name: SINPE
+    description: Costa Rica SINPE transfers
+  - name: Services
+    description: Bill payments and recharges
+  - name: Crypto
+    description: Cryptocurrency operations
+  - name: Marketplace
+    description: Partner integrations (rides, food)
+  - name: Loyalty
+    description: Points, rewards, and cashback
+  - name: QR Payments
+    description: QR code-based payments
+  - name: Split Payments
+    description: Bill splitting
+  - name: Virtual Cards
+    description: Virtual card management
+  - name: Fraud
+    description: Fraud detection and risk assessment
+  - name: Multi-Country
+    description: Cross-border and multi-currency operations
+  - name: Notifications
+    description: Push notifications and notification history
+  - name: Admin
+    description: Administrative endpoints
+  - name: System
+    description: Health, metrics, and WebSocket
+
+paths:
+  # ── System ─────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns service health status including database and Redis connectivity.
+      responses:
+        '200':
+          description: All services healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: One or more services degraded
+
+  /metrics:
+    get:
+      tags: [System]
+      summary: Prometheus metrics
+      description: Returns Prometheus-compatible text exposition format with HTTP and Go runtime metrics.
+      responses:
+        '200':
+          description: Metrics in text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /ws/prices:
+    get:
+      tags: [System]
+      summary: WebSocket crypto price feed
+      description: |
+        WebSocket endpoint for real-time cryptocurrency price updates.
+        Sends `price_update` messages every 5 seconds with prices for BTC, ETH, SOL, ADA, DOT, AVAX, LINK, MATIC, UNI, ATOM.
+      responses:
+        '101':
+          description: Switching Protocols (WebSocket upgrade)
+
+  /ws/notifications:
+    get:
+      tags: [Notifications]
+      summary: WebSocket per-user notifications
+      description: |
+        Authenticated WebSocket endpoint for real-time notifications per user.
+        After connecting, the client must send an auth message:
+        `{"type":"auth","token":"<jwt_access_token>"}`
+        The server responds with `{"type":"auth_ok"}` on success or `{"type":"auth_error","message":"..."}` on failure.
+        Once authenticated, the server pushes notification messages:
+        `{"type":"notification","notification":{...}}`
+        Multiple connections from the same user all receive notifications.
+      responses:
+        '101':
+          description: Switching Protocols (WebSocket upgrade)
+
+  # ── Auth ───────────────────────────────────────────────────────────────
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with cédula and PIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '423':
+          $ref: '#/components/responses/Locked'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (invalidate session)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Logged out
+
+  /api/v1/auth/change-pin:
+    post:
+      tags: [Auth]
+      summary: Change user PIN
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_pin, new_pin]
+              properties:
+                old_pin:
+                  type: string
+                  example: "1234"
+                new_pin:
+                  type: string
+                  example: "5678"
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+
+  # ── Users ──────────────────────────────────────────────────────────────
+  /api/v1/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+
+  # ── Wallets ────────────────────────────────────────────────────────────
+  /api/v1/wallets/me:
+    get:
+      tags: [Wallets]
+      summary: Get current user wallet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/WalletRecord' }
+
+  /api/v1/wallets/me/balance:
+    get:
+      tags: [Wallets]
+      summary: Get wallet balance
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Balance in centimos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/BalanceResponse' }
+
+  # ── Transactions ───────────────────────────────────────────────────────
+  /api/v1/transactions:
+    post:
+      tags: [Transactions]
+      summary: Create a transaction
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    get:
+      tags: [Transactions]
+      summary: List user transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/v1/transactions/{id}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── SINPE ──────────────────────────────────────────────────────────────
+  /api/v1/sinpe/contacts:
+    get:
+      tags: [SINPE]
+      summary: Get SINPE contacts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Contact list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      tags: [SINPE]
+      summary: Add SINPE contact
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSinpeContactRequest'
+      responses:
+        '201':
+          description: Contact added
+
+  /api/v1/sinpe/send:
+    post:
+      tags: [SINPE]
+      summary: Send SINPE transfer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SinpeSendRequest'
+      responses:
+        '200':
+          description: Transfer completed
+
+  /api/v1/sinpe/history:
+    get:
+      tags: [SINPE]
+      summary: Get SINPE transfer history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Transfer history
+
+  # ── Services & Payments ────────────────────────────────────────────────
+  /api/v1/services/pay-bill:
+    post:
+      tags: [Services]
+      summary: Pay a bill
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayBillRequest'
+      responses:
+        '200':
+          description: Bill paid
+
+  /api/v1/services/recharge:
+    post:
+      tags: [Services]
+      summary: Mobile phone recharge
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RechargeRequest'
+      responses:
+        '200':
+          description: Recharge completed
+
+  /api/v1/services/saved:
+    get:
+      tags: [Services]
+      summary: Get saved services
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Saved services list
+    post:
+      tags: [Services]
+      summary: Add a saved service
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Service saved
+
+  /api/v1/services/history:
+    get:
+      tags: [Services]
+      summary: Get payment history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Payment history
+
+  # ── Crypto ─────────────────────────────────────────────────────────────
+  /api/v1/crypto/prices:
+    get:
+      tags: [Crypto]
+      summary: Get current crypto prices (public)
+      responses:
+        '200':
+          description: Current prices for supported cryptocurrencies
+
+  /api/v1/crypto/assets:
+    get:
+      tags: [Crypto]
+      summary: Get user crypto portfolio
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User's crypto assets
+
+  /api/v1/crypto/transactions:
+    get:
+      tags: [Crypto]
+      summary: Get crypto transaction history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Crypto transactions
+
+  /api/v1/crypto/buy:
+    post:
+      tags: [Crypto]
+      summary: Buy cryptocurrency
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoBuySellRequest'
+      responses:
+        '200':
+          description: Purchase completed
+
+  /api/v1/crypto/sell:
+    post:
+      tags: [Crypto]
+      summary: Sell cryptocurrency
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoBuySellRequest'
+      responses:
+        '200':
+          description: Sale completed
+
+  /api/v1/crypto/convert:
+    post:
+      tags: [Crypto]
+      summary: Convert between cryptocurrencies
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Conversion completed
+
+  /api/v1/crypto/staking:
+    get:
+      tags: [Crypto]
+      summary: Get staking positions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active staking positions
+    post:
+      tags: [Crypto]
+      summary: Stake cryptocurrency
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Staking initiated
+
+  /api/v1/crypto/staking/{id}:
+    delete:
+      tags: [Crypto]
+      summary: Unstake cryptocurrency
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Unstaking initiated
+
+  /api/v1/crypto/alerts:
+    get:
+      tags: [Crypto]
+      summary: Get price alerts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Price alert list
+    post:
+      tags: [Crypto]
+      summary: Create price alert
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Alert created
+
+  /api/v1/crypto/alerts/{id}:
+    delete:
+      tags: [Crypto]
+      summary: Delete price alert
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Alert removed
+
+  # ── Marketplace (Phase 5) ──────────────────────────────────────────────
+  /api/v1/marketplace/partners:
+    get:
+      tags: [Marketplace]
+      summary: Get available marketplace partners
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of partners (Uber, DiDi, Rappi, etc.)
+
+  /api/v1/marketplace/connect:
+    post:
+      tags: [Marketplace]
+      summary: Connect a marketplace partner
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [partner_code]
+              properties:
+                partner_code:
+                  type: string
+                  example: uber
+      responses:
+        '201':
+          description: Partner connected
+
+  /api/v1/marketplace/connect/{code}:
+    delete:
+      tags: [Marketplace]
+      summary: Disconnect a marketplace partner
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Partner disconnected
+
+  /api/v1/marketplace/rides:
+    post:
+      tags: [Marketplace]
+      summary: Create a ride request
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Ride created
+    get:
+      tags: [Marketplace]
+      summary: List user ride requests
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ride list
+
+  /api/v1/marketplace/rides/{id}:
+    get:
+      tags: [Marketplace]
+      summary: Get ride details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Ride details
+    patch:
+      tags: [Marketplace]
+      summary: Update ride status
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Status updated
+
+  /api/v1/marketplace/food-orders:
+    post:
+      tags: [Marketplace]
+      summary: Create food order
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Order created
+    get:
+      tags: [Marketplace]
+      summary: List food orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Order list
+
+  /api/v1/marketplace/food-orders/{id}:
+    get:
+      tags: [Marketplace]
+      summary: Get food order details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Order details
+    patch:
+      tags: [Marketplace]
+      summary: Update food order status
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Status updated
+
+  # ── Loyalty & Rewards (Phase 5) ────────────────────────────────────────
+  /api/v1/loyalty/account:
+    get:
+      tags: [Loyalty]
+      summary: Get loyalty account (points, tier)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Loyalty account details with tier info
+
+  /api/v1/loyalty/transactions:
+    get:
+      tags: [Loyalty]
+      summary: Get loyalty point transactions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Points earn/spend history
+
+  /api/v1/loyalty/earn:
+    post:
+      tags: [Loyalty]
+      summary: Earn loyalty points
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Points earned
+
+  /api/v1/loyalty/rewards:
+    get:
+      tags: [Loyalty]
+      summary: Get available rewards catalog
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Rewards catalog
+
+  /api/v1/loyalty/redeem:
+    post:
+      tags: [Loyalty]
+      summary: Redeem a reward
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Reward redeemed
+
+  /api/v1/loyalty/redemptions:
+    get:
+      tags: [Loyalty]
+      summary: Get redemption history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Redemption history
+
+  /api/v1/loyalty/cashback-rules:
+    get:
+      tags: [Loyalty]
+      summary: Get cashback rules per category
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cashback percentage rules
+
+  # ── QR Payments (Phase 5) ──────────────────────────────────────────────
+  /api/v1/qr/merchant:
+    post:
+      tags: [QR Payments]
+      summary: Register as QR merchant
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Merchant registered
+    get:
+      tags: [QR Payments]
+      summary: Get merchant details
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Merchant info
+
+  /api/v1/qr/codes:
+    post:
+      tags: [QR Payments]
+      summary: Create a QR code
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: QR code created
+    get:
+      tags: [QR Payments]
+      summary: Get user's QR codes
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: QR code list
+
+  /api/v1/qr/pay:
+    post:
+      tags: [QR Payments]
+      summary: Scan and pay via QR
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Payment completed
+
+  /api/v1/qr/history:
+    get:
+      tags: [QR Payments]
+      summary: Get QR payment history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: QR payment history
+
+  # ── Split Payments (Phase 5) ───────────────────────────────────────────
+  /api/v1/splits:
+    post:
+      tags: [Split Payments]
+      summary: Create a split payment group
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Split created
+    get:
+      tags: [Split Payments]
+      summary: List user's splits
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Split list
+
+  /api/v1/splits/{id}:
+    get:
+      tags: [Split Payments]
+      summary: Get split details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Split with shares
+    delete:
+      tags: [Split Payments]
+      summary: Cancel a split
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Split cancelled
+
+  /api/v1/splits/{id}/pay:
+    post:
+      tags: [Split Payments]
+      summary: Pay your share of a split
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Share paid
+
+  /api/v1/splits/{id}/decline:
+    post:
+      tags: [Split Payments]
+      summary: Decline your share of a split
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Share declined
+
+  # ── Virtual Cards (Phase 5) ────────────────────────────────────────────
+  /api/v1/cards:
+    post:
+      tags: [Virtual Cards]
+      summary: Create a virtual card
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Card created (max 5 per user)
+    get:
+      tags: [Virtual Cards]
+      summary: List user's virtual cards
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Card list
+
+  /api/v1/cards/{id}:
+    get:
+      tags: [Virtual Cards]
+      summary: Get card details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Card details with masked number
+    delete:
+      tags: [Virtual Cards]
+      summary: Cancel a virtual card
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Card cancelled
+
+  /api/v1/cards/{id}/freeze:
+    post:
+      tags: [Virtual Cards]
+      summary: Toggle card freeze/unfreeze
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Freeze status toggled
+
+  /api/v1/cards/{id}/limits:
+    patch:
+      tags: [Virtual Cards]
+      summary: Update card spending limits
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Limits updated
+
+  /api/v1/cards/{id}/transactions:
+    get:
+      tags: [Virtual Cards]
+      summary: Get card transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Card transaction history
+
+  # ── Fraud Detection (Phase 5) ──────────────────────────────────────────
+  /api/v1/fraud/profile:
+    get:
+      tags: [Fraud]
+      summary: Get user risk profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Risk profile with score and level
+
+  /api/v1/fraud/assessments:
+    get:
+      tags: [Fraud]
+      summary: Get user fraud assessments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Assessment history
+
+  /api/v1/fraud/assess:
+    post:
+      tags: [Fraud]
+      summary: Assess a transaction for fraud
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Risk assessment result (score 0-100, action allow/review/block)
+
+  # ── Multi-Country (Phase 5) ────────────────────────────────────────────
+  /api/v1/countries:
+    get:
+      tags: [Multi-Country]
+      summary: Get supported countries (public)
+      responses:
+        '200':
+          description: Country list (CR, PA, GT)
+
+  /api/v1/exchange-rates:
+    get:
+      tags: [Multi-Country]
+      summary: Get exchange rates (public)
+      responses:
+        '200':
+          description: Exchange rate pairs
+
+  /api/v1/country/wallets:
+    get:
+      tags: [Multi-Country]
+      summary: Get user's regional wallets
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallets by country
+
+  /api/v1/country/wallets/{code}:
+    post:
+      tags: [Multi-Country]
+      summary: Create a regional wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [CR, PA, GT]
+      responses:
+        '201':
+          description: Regional wallet created
+
+  /api/v1/country/convert:
+    post:
+      tags: [Multi-Country]
+      summary: Convert between currencies
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Currency conversion completed
+
+  /api/v1/country/transfer:
+    post:
+      tags: [Multi-Country]
+      summary: Send cross-border transfer (1.5% fee)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Transfer initiated
+
+  /api/v1/country/transfers:
+    get:
+      tags: [Multi-Country]
+      summary: Get cross-border transfer history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Transfer list
+
+  /api/v1/country/transfers/{id}:
+    get:
+      tags: [Multi-Country]
+      summary: Get transfer details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Transfer details
+
+  # ── Admin ──────────────────────────────────────────────────────────────
+  /api/v1/admin/fraud/alerts:
+    get:
+      tags: [Admin]
+      summary: Get open fraud alerts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Open alert list
+
+  /api/v1/admin/fraud/alerts/{id}:
+    patch:
+      tags: [Admin]
+      summary: Resolve a fraud alert
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Alert resolved
+
+  /api/v1/admin/fraud/restrict/{userId}:
+    post:
+      tags: [Admin]
+      summary: Restrict a user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User restricted
+
+  # ── Push Notifications (Phase 9) ──────────────────────────────────
+  /api/v1/push/subscribe:
+    post:
+      tags: [Notifications]
+      summary: Register push subscription
+      description: Register a Web Push subscription endpoint for the authenticated user.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+                keys:
+                  type: object
+                  properties:
+                    p256dh:
+                      type: string
+                    auth:
+                      type: string
+      responses:
+        '201':
+          description: Subscription registered
+        '400':
+          description: Invalid request body
+        '401':
+          description: Unauthorized
+
+  /api/v1/push/unsubscribe:
+    delete:
+      tags: [Notifications]
+      summary: Remove push subscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+      responses:
+        '204':
+          description: Subscription removed
+        '401':
+          description: Unauthorized
+
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notification history
+      description: Returns paginated notification history for the authenticated user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    nullable: true
+                    items: { $ref: '#/components/schemas/NotificationRecord' }
+        '401':
+          description: Unauthorized
+
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Notification marked as read
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+
+  responses:
+    Success:
+      description: Operation successful
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: CSRF validation failed or origin not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Locked:
+      description: Account locked after too many failed login attempts (5 attempts, 15 min lockout)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Request body exceeds 1MB limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          $ref: '#/components/schemas/ApiError'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/schemas/ApiError'
+
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        version:
+          type: string
+        environment:
+          type: string
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+            redis:
+              type: string
+              enum: [ok, error]
+        websocket_clients:
+          type: integer
+
+    RegisterRequest:
+      type: object
+      required: [cedula, full_name, pin, phone]
+      properties:
+        cedula:
+          type: string
+          example: "702650930"
+        full_name:
+          type: string
+          example: "Keilor Martinez"
+        pin:
+          type: string
+          minLength: 4
+          maxLength: 6
+          example: "1234"
+        phone:
+          type: string
+          example: "+50688889999"
+        email:
+          type: string
+          format: email
+
+    LoginRequest:
+      type: object
+      required: [cedula, pin]
+      properties:
+        cedula:
+          type: string
+          example: "702650930"
+        pin:
+          type: string
+          example: "1234"
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                cedula:
+                  type: string
+                full_name:
+                  type: string
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+
+    CreateTransactionRequest:
+      type: object
+      required: [type, amount, currency]
+      properties:
+        type:
+          type: string
+          enum: [deposit, withdrawal, transfer, payment]
+        amount:
+          type: integer
+          description: Amount in centimos
+        currency:
+          type: string
+          default: CRC
+        to_wallet_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+
+    AddSinpeContactRequest:
+      type: object
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+
+    SinpeSendRequest:
+      type: object
+      required: [to_phone, amount]
+      properties:
+        to_phone:
+          type: string
+        amount:
+          type: integer
+          description: Amount in centimos
+        description:
+          type: string
+
+    PayBillRequest:
+      type: object
+      required: [provider, account_number, amount]
+      properties:
+        provider:
+          type: string
+          example: "ICE"
+        account_number:
+          type: string
+        amount:
+          type: integer
+
+    RechargeRequest:
+      type: object
+      required: [operator, phone_number, amount]
+      properties:
+        operator:
+          type: string
+          example: "Kolbi"
+        phone_number:
+          type: string
+        amount:
+          type: integer
+
+    CryptoBuySellRequest:
+      type: object
+      required: [symbol, amount_crc]
+      properties:
+        symbol:
+          type: string
+          example: "BTC"
+        amount_crc:
+          type: integer
+          description: Amount in CRC centimos
+
+    NotificationRecord:
+      type: object
+      required: [id, title, body, type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+          description: Notification kind (transfer, price_alert, fraud_alert, system)
+        data:
+          type: object
+          additionalProperties: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Concrete DTOs surfaced by the live API ────────────────────────────
+    # These mirror what handlers actually return as of 2026-05. Used to
+    # generate TypeScript types in src/api/generated/. When you change a
+    # handler shape, update the matching schema here and re-run gen:api.
+
+    UserRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cedula: { type: string }
+        phone: { type: string }
+        phone_verified: { type: boolean }
+        email: { type: string, format: email }
+        email_verified: { type: boolean }
+        first_name: { type: string }
+        last_name: { type: string }
+        birth_date: { type: string, format: date, nullable: true }
+        profile_picture_url: { type: string }
+        biometric_enabled: { type: boolean }
+        kyc_level: { type: integer }
+        kyc_status: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
+
+    WalletRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        balance_crc: { type: integer, description: "Balance in CRC centimos" }
+        balance_usd: { type: integer, description: "Balance in USD cents" }
+        daily_limit: { type: integer }
+        monthly_limit: { type: integer }
+        daily_spent: { type: integer }
+        monthly_spent: { type: integer }
+        status: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BalanceResponse:
+      type: object
+      description: Shape returned by GET /api/v1/wallets/me/balance
+      properties:
+        crc: { type: integer, description: "CRC centimos" }
+        usd: { type: integer, description: "USD cents" }
+        crc_formatted: { type: string }
+        usd_formatted: { type: string }
+
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_at: { type: integer, description: "Unix epoch seconds (access token)" }
+
+    LoginResponseData:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/UserRecord' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+
+    SinpeContactRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        phone: { type: string }
+        name: { type: string }
+        bank: { type: string }
+        is_favorite: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    SinpeHistoryRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        phone: { type: string }
+        contact_name: { type: string }
+        amount: { type: integer, description: "CRC centimos" }
+        fee: { type: integer }
+        type: { type: string, enum: [sent, received] }
+        status: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+
+    TransactionRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        type: { type: string }
+        amount: { type: integer }
+        currency: { type: string }
+        fee: { type: integer }
+        counterparty_type: { type: string }
+        counterparty_name: { type: string }
+        counterparty_phone: { type: string }
+        status: { type: string }
+        external_reference: { type: string }
+        metadata: { type: string, description: "JSON-encoded extras" }
+        created_at: { type: string, format: date-time }
+        created_date: { type: string, format: date }
+
+    TransactionListResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items: { $ref: '#/components/schemas/TransactionRecord' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    CryptoAssetRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        symbol: { type: string }
+        name: { type: string }
+        balance: { type: number }
+        avg_cost: { type: number }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CryptoTransactionRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        type: { type: string, enum: [buy, sell, convert, send, receive, stake, unstake, reward] }
+        asset: { type: string }
+        amount: { type: number }
+        price: { type: number }
+        total: { type: number }
+        currency: { type: string }
+        fee: { type: number }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+
+    StakingPositionRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        asset: { type: string }
+        amount: { type: number }
+        apy: { type: number }
+        start_date: { type: string, format: date-time }
+        locked: { type: boolean }
+        lock_days: { type: integer }
+        earned: { type: number }
+        status: { type: string }
+
+    PriceAlertRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        asset: { type: string }
+        target_price: { type: number }
+        direction: { type: string, enum: [above, below] }
+        active: { type: boolean }
+
+    BudgetRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        label: { type: string }
+        amount_limit: { type: integer }
+        amount_spent: { type: integer }
+        currency: { type: string }
+        icon: { type: string }
+        color: { type: string }
+        period: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RecurringPaymentRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        label: { type: string }
+        type: { type: string }
+        amount: { type: integer }
+        currency: { type: string }
+        frequency: { type: string }
+        next_date: { type: string, format: date }
+        recipient_phone: { type: string, nullable: true }
+        recipient_name: { type: string, nullable: true }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProofOfReservesResponse:
+      type: object
+      properties:
+        as_of: { type: string }
+        note: { type: string }
+        currencies:
+          type: array
+          items:
+            type: object
+            properties:
+              currency: { type: string }
+              user_liabilities_minor: { type: integer }
+              reserve_balance_minor: { type: integer }
+              ratio_pct: { type: number }

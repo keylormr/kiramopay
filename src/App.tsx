@@ -1,0 +1,461 @@
+
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { useApp } from '@/hooks/useApp';
+import { useSettingsStore } from '@/stores/settings.store';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
+import { storageService } from './services/storage';
+import { LoadingSkeleton } from './components/LoadingSkeleton';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { LoginView } from './views/auth/LoginView';
+import { Icons } from './components/Icons';
+import { biometricService } from './services/biometric';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { User } from './types';
+import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
+import { useAuthStore } from './stores/auth.store';
+
+// Lazy-loaded views (code splitting)
+const HomeView = React.lazy(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
+const ProfileView = React.lazy(() => import('./views/profile/ProfileView').then(m => ({ default: m.ProfileView })));
+const SinpeView = React.lazy(() => import('./views/sinpe/SinpeView').then(m => ({ default: m.SinpeView })));
+const ServicesView = React.lazy(() => import('./views/services/ServicesView').then(m => ({ default: m.ServicesView })));
+const CryptoView = React.lazy(() => import('./views/crypto/CryptoView').then(m => ({ default: m.CryptoView })));
+const NotificationsView = React.lazy(() => import('./views/shared/NotificationsView').then(m => ({ default: m.NotificationsView })));
+const FAQView = React.lazy(() => import('./views/shared/FAQView').then(m => ({ default: m.FAQView })));
+const RegisterView = React.lazy(() => import('./views/auth/RegisterView').then(m => ({ default: m.RegisterView })));
+const BudgetView = React.lazy(() => import('./views/budget/BudgetView').then(m => ({ default: m.BudgetView })));
+const RecurringView = React.lazy(() => import('./views/services/RecurringView').then(m => ({ default: m.RecurringView })));
+const TransactionsView = React.lazy(() => import('./views/home/TransactionsView').then(m => ({ default: m.TransactionsView })));
+const AnalyticsView = React.lazy(() => import('./views/analytics/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const SavingsView = React.lazy(() => import('./views/savings/SavingsView').then(m => ({ default: m.SavingsView })));
+const OnboardingView = React.lazy(() => import('./views/onboarding/OnboardingView').then(m => ({ default: m.OnboardingView })));
+const SplitPayView = React.lazy(() => import('./views/splitpay/SplitPayView').then(m => ({ default: m.SplitPayView })));
+const LoyaltyView = React.lazy(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
+
+// Lock Screen Component — PIN entry for returning users.
+//
+// Security: The PIN is NOT the user's password. It is a 4-6 digit unlock
+// code derived through PBKDF2 (see services/lockKdf.ts). After
+// MAX_PIN_FAILS failed attempts the user is forcibly logged out and must
+// re-enter their full password (online auth round-trip).
+const LockScreen = () => {
+  const { state, dispatch } = useApp();
+  const { t } = useLanguage();
+  const logout = useAuthStore((s) => s.logout);
+  const [pin, setPin] = useState('');
+  const [showPinText, setShowPinText] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [setupMode, setSetupMode] = useState(!isLockPinSet());
+
+  const handleBiometric = useCallback(async () => {
+    try {
+      const result = await biometricService.authenticate(t('unlock_biometric_prompt'));
+      if (result.success) {
+        dispatch({ type: 'TOGGLE_LOCK', payload: false });
+      }
+    } catch {
+      // Biometric auth failed or cancelled
+    }
+  }, [dispatch, t]);
+
+  useEffect(() => {
+    const checkBiometric = async () => {
+      const available = await biometricService.checkAvailability();
+      setBiometricAvailable(available && state.settings.biometricEnabled);
+      if (available && state.settings.biometricEnabled) {
+        handleBiometric();
+      }
+    };
+    checkBiometric();
+  }, [handleBiometric, state.settings.biometricEnabled]);
+
+  const handleSubmit = async () => {
+    setError(null);
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError(t('incorrect_password') || 'PIN must be 4-6 digits');
+      return;
+    }
+    if (setupMode) {
+      try {
+        await setLockPin(pin);
+        setSetupMode(false);
+        dispatch({ type: 'TOGGLE_LOCK', payload: false });
+        setPin('');
+      } catch {
+        setError('Failed to set PIN');
+      }
+      return;
+    }
+    const result = await verifyLockPin(pin);
+    if (result.ok) {
+      dispatch({ type: 'TOGGLE_LOCK', payload: false });
+      setPin('');
+      return;
+    }
+    if (result.exhausted) {
+      // Force full re-auth: clear local state, drop to login screen.
+      logout();
+      dispatch({ type: 'LOGOUT' });
+      return;
+    }
+    setError(`Incorrect PIN (${result.failCount}/${MAX_PIN_FAILS})`);
+    setTimeout(() => {
+      setPin('');
+      setError(null);
+    }, 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+      <div className="mb-8 flex flex-col items-center">
+        <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-3xl mb-6 flex items-center justify-center shadow-2xl shadow-accent/30">
+          <span className="text-3xl font-black">K</span>
+        </div>
+        <h1 className="text-2xl font-bold mb-2">{t('welcome')}</h1>
+        <p className="text-slate-400 text-sm">
+          {state.user?.firstName ? `${t('hello')}, ${state.user.firstName}` : (setupMode ? 'Set your unlock PIN (4-6 digits)' : 'Enter your PIN')}
+        </p>
+      </div>
+
+      <div className="w-72 space-y-4">
+        <div className="relative">
+          <input
+            type={showPinText ? 'text' : 'password'}
+            value={pin}
+            inputMode="numeric"
+            pattern="\d{4,6}"
+            maxLength={6}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+              setPin(digits);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && pin.length >= 4) {
+                handleSubmit();
+              }
+            }}
+            placeholder={setupMode ? 'Choose PIN' : 'Enter PIN'}
+            autoFocus
+            className={`w-full bg-slate-800 pl-4 pr-12 py-4 rounded-xl border text-white text-2xl font-mono tracking-[0.5em] text-center placeholder-gray-500 outline-none transition-colors ${
+              error ? 'border-red-500 animate-shake' : 'border-slate-700 focus:border-primary'
+            }`}
+            aria-label={setupMode ? 'Set unlock PIN' : 'Enter unlock PIN'}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPinText(!showPinText)}
+            aria-label={showPinText ? t('hide_password') : t('show_password')}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+          >
+            {showPinText ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
+          </button>
+        </div>
+
+        {error && (
+          <p aria-live="polite" className="text-red-400 text-sm text-center animate-in fade-in">{error}</p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={pin.length < 4}
+          className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-95 transition-all"
+        >
+          {setupMode ? 'Set PIN' : t('unlock')}
+        </button>
+
+        {!setupMode && (
+          <button
+            onClick={() => {
+              logout();
+              dispatch({ type: 'LOGOUT' });
+            }}
+            className="w-full py-3 text-sm text-slate-400 hover:text-slate-200"
+          >
+            Forgot PIN? Log in with password
+          </button>
+        )}
+
+        {biometricAvailable && (
+          <button
+            onClick={handleBiometric}
+            className="w-full flex items-center justify-center gap-2 py-3 text-primary hover:bg-slate-800 rounded-xl transition-colors"
+          >
+            <Icons.Fingerprint size={24} />
+            <span className="text-sm font-medium">{t('biometric_login')}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Tab definitions
+type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | null;
+
+// Main Layout Component
+const Layout = () => {
+  const [activeTab, setActiveTab] = useState<TabId>('home');
+  const [overlayView, setOverlayView] = useState<OverlayView>(null);
+  const { state } = useApp();
+  const { t } = useLanguage();
+
+  const TABS: { id: TabId; icon: React.FC<{ size?: number; strokeWidth?: number }>; label: string; }[] = [
+    { id: 'home', icon: Icons.Home, label: t('nav_home') },
+    { id: 'sinpe', icon: Icons.Smartphone, label: t('nav_sinpe') },
+    { id: 'crypto', icon: Icons.Bitcoin, label: t('nav_crypto') },
+    { id: 'services', icon: Icons.FileText, label: t('nav_services') },
+    { id: 'profile', icon: Icons.Profile, label: t('nav_profile') },
+  ];
+
+  const notifications = state.notifications || [];
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Show lock screen if locked
+  if (state.settings.isLocked && state.isAuthenticated) {
+    return <LockScreen />;
+  }
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} />;
+      case 'sinpe': return <SinpeView />;
+      case 'crypto': return <CryptoView />;
+      case 'services': return <ServicesView />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} />;
+      default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background dark:bg-background-dark text-slate-900 dark:text-white font-sans">
+      {/* Top Bar */}
+      <div className="sticky top-0 z-30 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center text-white font-black text-sm shadow-sm">
+            K
+          </div>
+          <span className="font-bold text-lg tracking-tight">KiramoPay</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {state.settings.offlineMode && (
+            <span aria-live="polite" className="px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold uppercase rounded-md">
+              Offline
+            </span>
+          )}
+          <button
+            onClick={() => setOverlayView('notifications')}
+            aria-label={t('notifications_setting')}
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative"
+          >
+            <Icons.Bell size={20} />
+            {unreadCount > 0 && (
+              <span aria-label={`${unreadCount} unread`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full border-2 border-white dark:border-surface-dark flex items-center justify-center text-[10px] font-bold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <main className="flex-1 relative max-w-2xl mx-auto w-full overflow-x-hidden">
+        <Suspense fallback={<LoadingSkeleton />}>
+          {renderContent()}
+        </Suspense>
+      </main>
+
+      {/* Bottom Navigation */}
+      <nav role="navigation" aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 pb-safe">
+        <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
+          {TABS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              aria-current={activeTab === item.id ? 'page' : undefined}
+              className={`flex flex-col items-center justify-center w-16 h-full gap-0.5 transition-colors ${
+                activeTab === item.id
+                  ? 'text-primary'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              <item.icon size={22} strokeWidth={activeTab === item.id ? 2.5 : 2} />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Overlay Views */}
+      <Suspense fallback={<LoadingSkeleton />}>
+        {overlayView === 'notifications' && (
+          <NotificationsView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'faq' && (
+          <FAQView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'budget' && (
+          <BudgetView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'recurring' && (
+          <RecurringView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'transactions' && (
+          <TransactionsView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'analytics' && (
+          <AnalyticsView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'savings' && (
+          <SavingsView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'splitpay' && (
+          <SplitPayView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'loyalty' && (
+          <LoyaltyView onClose={() => setOverlayView(null)} />
+        )}
+      </Suspense>
+    </div>
+  );
+};
+
+// Auth Screen Component - handles login/register flow
+const AuthScreen = () => {
+  const { dispatch } = useApp();
+  const [showRegister, setShowRegister] = useState(false);
+
+  const handleLogin = (user: User) => {
+    dispatch({ type: 'LOGIN', payload: user });
+  };
+
+  if (showRegister) {
+    return (
+      <Suspense fallback={<LoadingSkeleton />}>
+        <RegisterView
+          onComplete={() => setShowRegister(false)}
+          onBack={() => setShowRegister(false)}
+        />
+      </Suspense>
+    );
+  }
+
+  return (
+    <LoginView
+      onLogin={handleLogin}
+      onRegister={() => setShowRegister(true)}
+    />
+  );
+};
+
+// App Container - manages auth state
+const AppContainer = () => {
+  const { state } = useApp();
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('kiramopay_onboarded');
+  });
+
+  // Sync data from backend when app mounts with an authenticated user
+  useEffect(() => {
+    if (state.isAuthenticated) {
+      import('@/services/dataSync').then(({ syncAllData }) => {
+        syncAllData().catch(() => {});
+      });
+    }
+  }, [state.isAuthenticated]);
+
+  // If not authenticated, show login
+  if (!state.isAuthenticated) {
+    return <AuthScreen />;
+  }
+
+  // Show onboarding for first-time users after login
+  if (showOnboarding) {
+    return (
+      <Suspense fallback={<LoadingSkeleton />}>
+        <OnboardingView onComplete={() => setShowOnboarding(false)} />
+      </Suspense>
+    );
+  }
+
+  // If authenticated, show main app (Layout handles lock screen)
+  return <Layout />;
+};
+
+// Sync dark mode and initialize users
+const AppInit = () => {
+  const darkMode = useSettingsStore((s) => s.darkMode);
+  const themeSchedule = useSettingsStore((s) => s.themeSchedule);
+  const themeScheduleStart = useSettingsStore((s) => s.themeScheduleStart);
+  const themeScheduleEnd = useSettingsStore((s) => s.themeScheduleEnd);
+  const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
+
+  useEffect(() => {
+    storageService.initializeDefaultUsers();
+    // Hide native splash screen after app is ready
+    SplashScreen.hide().catch(() => {
+      // Not running in Capacitor native context — ignore
+    });
+  }, []);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Theme auto-scheduling: check every minute and toggle dark mode based on time
+  useEffect(() => {
+    if (themeSchedule === 'off') return;
+
+    const checkSchedule = () => {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      let startMinutes: number, endMinutes: number;
+      if (themeSchedule === 'sunrise-sunset') {
+        startMinutes = 17 * 60 + 30; // 17:30
+        endMinutes = 5 * 60 + 30;    // 05:30
+      } else {
+        const [sh, sm] = themeScheduleStart.split(':').map(Number);
+        const [eh, em] = themeScheduleEnd.split(':').map(Number);
+        startMinutes = sh * 60 + sm;
+        endMinutes = eh * 60 + em;
+      }
+
+      let shouldBeDark: boolean;
+      if (startMinutes > endMinutes) {
+        // Overnight range (e.g., 18:00 to 06:00)
+        shouldBeDark = currentMinutes >= startMinutes || currentMinutes < endMinutes;
+      } else {
+        shouldBeDark = currentMinutes >= startMinutes && currentMinutes < endMinutes;
+      }
+
+      if (shouldBeDark !== darkMode) {
+        toggleDarkMode();
+      }
+    };
+
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 60000);
+    return () => clearInterval(interval);
+  }, [themeSchedule, themeScheduleStart, themeScheduleEnd, darkMode, toggleDarkMode]);
+
+  return <AppContainer />;
+};
+
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <LanguageProvider>
+        <AppInit />
+      </LanguageProvider>
+    </ErrorBoundary>
+  );
+};
+
+export default App;

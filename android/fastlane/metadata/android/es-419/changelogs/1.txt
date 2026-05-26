@@ -1,0 +1,7 @@
+Lanzamiento inicial de KiramoPay:
+- SINPE Movil instantaneo
+- Compra y venta de criptomonedas
+- Pagos de servicios
+- Tarjetas virtuales
+- Autenticacion biometrica
+- Soporte multi-idioma (ES, EN, ZH, JA, HI)

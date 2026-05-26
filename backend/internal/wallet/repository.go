@@ -1,0 +1,64 @@
+package wallet
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Repository struct {
+	db *pgxpool.Pool
+}
+
+func NewRepository(db *pgxpool.Pool) *Repository {
+	return &Repository{db: db}
+}
+
+func (r *Repository) CreateForUser(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO wallets (id, user_id) VALUES ($1, $2)`,
+		uuid.New().String(), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("create wallet: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) FindByUserID(ctx context.Context, userID string) (*WalletRecord, error) {
+	w := &WalletRecord{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, user_id, balance_crc, balance_usd, daily_limit, monthly_limit,
+		        daily_spent, monthly_spent, status, version, created_at, updated_at
+		 FROM wallets WHERE user_id = $1`,
+		userID,
+	).Scan(
+		&w.ID, &w.UserID, &w.BalanceCRC, &w.BalanceUSD, &w.DailyLimit, &w.MonthlyLimit,
+		&w.DailySpent, &w.MonthlySpent, &w.Status, &w.Version, &w.CreatedAt, &w.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find wallet: %w", err)
+	}
+	return w, nil
+}
+
+func (r *Repository) UpdateBalance(ctx context.Context, walletID string, amountCRC, amountUSD int64, currentVersion int) error {
+	result, err := r.db.Exec(ctx,
+		`UPDATE wallets
+		 SET balance_crc = balance_crc + $2,
+		     balance_usd = balance_usd + $3,
+		     version = version + 1,
+		     updated_at = NOW()
+		 WHERE id = $1 AND version = $4`,
+		walletID, amountCRC, amountUSD, currentVersion,
+	)
+	if err != nil {
+		return fmt.Errorf("update balance: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("optimistic lock conflict: wallet was modified concurrently")
+	}
+	return nil
+}

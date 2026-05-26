@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kiramopay-partition-mgmt
+  namespace: kiramopay
+spec:
+  schedule: "0 0 1 * *"  # Monthly on the 1st at midnight
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: partition-manager
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  PGPASSWORD=$DB_PASSWORD psql \
+                    -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+                    -c "SELECT create_future_partitions();"
+                  echo "Partition management complete"
+              env:
+                - name: DB_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kiramopay-config
+                      key: DB_HOST
+                - name: DB_PORT
+                  value: "5432"
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: kiramopay-secrets
+                      key: DB_USER
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kiramopay-secrets
+                      key: DB_PASSWORD
+                - name: DB_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kiramopay-config
+                      key: DB_NAME

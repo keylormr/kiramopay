@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kiramopay
+      POSTGRES_PASSWORD: kiramopay_dev
+      POSTGRES_DB: kiramopay
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kiramopay"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kiramopay
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass kiramopay_redis_dev --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "kiramopay_redis_dev", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kiramopay
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=development
+      - SERVER_PORT=8080
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=kiramopay
+      - DB_PASSWORD=kiramopay_dev
+      - DB_NAME=kiramopay
+      - DB_SSL_MODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=kiramopay_redis_dev
+      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_ACCESS_MINUTES=15
+      - JWT_REFRESH_DAYS=7
+      - CORS_ORIGINS=http://localhost:9999
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - kiramopay
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "9999:9999"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - kiramopay
+
+networks:
+  kiramopay:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

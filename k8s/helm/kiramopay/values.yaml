@@ -1,0 +1,128 @@
+# Default values for KiramoPay Helm chart
+
+# API backend
+api:
+  replicaCount: 2
+  image:
+    repository: kiramopay-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 8080
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+  env:
+    ENVIRONMENT: development
+    SERVER_PORT: "8080"
+    DB_SSL_MODE: disable
+    DB_MAX_CONNS: "25"
+    JWT_ACCESS_MINUTES: "15"
+    JWT_REFRESH_DAYS: "7"
+    CORS_ORIGINS: "http://localhost:*,https://localhost:*"
+
+# Frontend web
+web:
+  replicaCount: 2
+  image:
+    repository: kiramopay-web
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 80
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+# PostgreSQL
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  storage: 5Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  auth:
+    username: kiramopay
+    password: kiramopay_dev
+    database: kiramopay
+
+# PgBouncer connection pooler
+pgbouncer:
+  enabled: true
+  image:
+    repository: edoburu/pgbouncer
+    tag: "1.22.0"
+  poolMode: transaction
+  defaultPoolSize: 20
+  maxClientConn: 200
+  maxDbConnections: 50
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+# Redis
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  maxmemory: "256mb"
+  password: kiramopay_redis_dev
+  appendonly: true
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  host: kiramopay.local
+  tls:
+    enabled: false
+    secretName: kiramopay-tls
+
+# Secrets
+secrets:
+  jwtSecret: dev-secret-change-in-production
+  redisPassword: kiramopay_redis_dev
+
+# Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    scrape: true
+
+# Backups
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retentionDays: 30
+
+# Production overrides (use with --values production.yaml)
+# api.env.ENVIRONMENT: production
+# api.env.DB_SSL_MODE: verify-full
+# secrets.jwtSecret: <strong-random-secret>
+# secrets.redisPassword: <strong-random-password>
+# ingress.tls.enabled: true

@@ -1,0 +1,18 @@
+KiramoPay es la super app financiera de Costa Rica que combina todo lo que necesitas en una sola aplicacion:
+
+- SINPE Movil: Envia y recibe dinero al instante con tu numero de telefono
+- Crypto: Compra, vende e intercambia Bitcoin, Ethereum y mas
+- Pagos de servicios: Paga recibos de electricidad, agua, internet y telefono
+- Tarjetas virtuales: Crea tarjetas Visa para compras en linea seguras
+- QR Payments: Paga en comercios escaneando un codigo QR
+- Split Pay: Divide cuentas con amigos de forma facil
+- Marketplace: Pide comida, solicita viajes y mas desde la app
+- Multi-moneda: Maneja CRC, USD, PAB y GTQ en una sola billetera
+
+Seguridad de primer nivel:
+- Autenticacion biometrica (huella digital / Face ID)
+- PIN de 4 digitos
+- Cifrado de extremo a extremo
+- Deteccion de fraude en tiempo real
+
+KiramoPay - Tu dinero, simplificado.

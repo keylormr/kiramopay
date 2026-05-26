@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KiramoPay</string>
+    <string name="title_activity_main">KiramoPay</string>
+    <string name="package_name">com.kiramopay.app</string>
+    <string name="custom_url_scheme">com.kiramopay.app</string>
+</resources>

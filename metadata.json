@@ -1,0 +1,7 @@
+{
+  "name": "Kiramopay",
+  "description": "A high-fidelity fintech mockup featuring multi-currency wallets, QR payments, and budget management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

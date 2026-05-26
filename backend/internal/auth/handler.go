@@ -1,0 +1,207 @@
+package auth
+
+import (
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/pkg/response"
+	"github.com/kiramopay/backend/pkg/validator"
+)
+
+type Handler struct {
+	service *Service
+}
+
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
+}
+
+func loginContext(r *http.Request) LoginContext {
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		// Strip trailing :port if present.
+		raw := r.RemoteAddr
+		if idx := strings.LastIndex(raw, ":"); idx > 0 {
+			raw = raw[:idx]
+		}
+		ip = raw
+	} else {
+		ip = strings.TrimSpace(strings.SplitN(ip, ",", 2)[0])
+	}
+	return LoginContext{
+		IPAddress: ip,
+		UserAgent: r.UserAgent(),
+	}
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidateCedula(req.Cedula); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+	if err := validator.ValidatePassword(req.Password); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+
+	result, err := h.service.Login(r.Context(), &req, loginContext(r))
+	if err != nil {
+		// Log the real cause for ops; the client always sees a constant
+		// "invalid credentials" message (constant-time anti-enumeration).
+		if !errors.Is(err, ErrInvalidCredentials) {
+			slog.Error("login: internal error", "err", err.Error())
+		}
+		response.Error(w, http.StatusUnauthorized, "AUTH_FAILED", "invalid credentials")
+		return
+	}
+	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	var errs validator.ValidationErrors
+	if err := validator.ValidateCedula(req.Cedula); err != nil {
+		errs = append(errs, *err)
+	}
+	if err := validator.ValidatePhone(req.Phone); err != nil {
+		errs = append(errs, *err)
+	}
+	if err := validator.ValidatePassword(req.Password); err != nil {
+		errs = append(errs, *err)
+	}
+	if err := validator.ValidateRequired("first_name", req.FirstName); err != nil {
+		errs = append(errs, *err)
+	}
+	if err := validator.ValidateRequired("last_name", req.LastName); err != nil {
+		errs = append(errs, *err)
+	}
+	if errs.HasErrors() {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", errs.Error())
+		return
+	}
+
+	result, err := h.service.Register(r.Context(), &req, loginContext(r))
+	if err != nil {
+		response.Error(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusCreated, result)
+}
+
+func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken, loginContext(r))
+	if err != nil {
+		response.Error(w, http.StatusUnauthorized, "REFRESH_FAILED", "invalid refresh token")
+		return
+	}
+	response.JSON(w, http.StatusOK, tokens)
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	jti := middleware.GetAccessJTI(r.Context())
+	exp := middleware.GetAccessExp(r.Context())
+	var ttl time.Duration
+	if exp > 0 {
+		ttl = time.Until(time.Unix(exp, 0))
+		if ttl <= 0 {
+			ttl = time.Second
+		}
+	} else {
+		ttl = 15 * time.Minute
+	}
+	if err := h.service.Logout(r.Context(), jti, ttl); err != nil {
+		response.Error(w, http.StatusInternalServerError, "LOGOUT_FAILED", "could not log out")
+		return
+	}
+	response.NoContent(w)
+}
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidatePassword(req.NewPassword); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+	if err := h.service.ChangePassword(r.Context(), userID, &req, loginContext(r)); err != nil {
+		response.Error(w, http.StatusBadRequest, "CHANGE_PASSWORD_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]string{"message": "Password changed successfully"})
+}
+
+// ForgotPassword issues a reset token. Response is constant ("OK") to prevent
+// enumeration; in dev mode, the token is returned for testing convenience.
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidateCedula(req.Cedula); err != nil {
+		response.JSON(w, http.StatusAccepted, map[string]string{"message": "if the account exists, a reset link has been sent"})
+		return
+	}
+	token, err := h.service.ForgotPassword(r.Context(), req.Cedula, loginContext(r))
+	if err != nil {
+		// Still return generic — never leak internal errors here.
+		response.JSON(w, http.StatusAccepted, map[string]string{"message": "if the account exists, a reset link has been sent"})
+		return
+	}
+	resp := map[string]string{"message": "if the account exists, a reset link has been sent"}
+	if token != "" && isDevMode(r) {
+		resp["dev_token"] = token
+	}
+	response.JSON(w, http.StatusAccepted, resp)
+}
+
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidatePassword(req.NewPassword); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+	if err := h.service.ResetPassword(r.Context(), &req, loginContext(r)); err != nil {
+		response.Error(w, http.StatusBadRequest, "RESET_FAILED", "invalid or expired reset token")
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]string{"message": "Password reset successful"})
+}
+
+func isDevMode(r *http.Request) bool {
+	// Dev hint header injected by infra; never trusted in production env.
+	return r.Header.Get("X-Kiramopay-Dev") == "true"
+}

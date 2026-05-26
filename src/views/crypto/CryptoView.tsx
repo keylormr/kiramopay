@@ -1,0 +1,1120 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useApp } from '@/hooks/useApp';
+import { Icons } from '../../components/Icons';
+import { BottomSheet } from '../../components/BottomSheet';
+import { CryptoAsset, CryptoTransaction } from '../../types';
+import { QRCodeSVG } from 'qrcode.react';
+import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
+
+// Static list of crypto symbols to track
+const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'MATIC'];
+
+// Helper function to format large numbers (safer than calling service method)
+const formatLargeNumber = (num: number | undefined | null): string => {
+  if (num === undefined || num === null || isNaN(num)) return '-';
+  if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+  if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+  if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
+  return `$${num.toFixed(2)}`;
+};
+
+// Mini Sparkline Chart Component
+const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean }> = ({ data, positive }) => {
+  // Need at least 2 valid numbers to draw a line
+  const validData = Array.isArray(data) ? data.filter(d => typeof d === 'number' && !isNaN(d)) : [];
+
+  if (validData.length < 2) {
+    // Show a flat line instead of loading skeleton when we have some data
+    return (
+      <svg width={80} height={40} className="overflow-visible">
+        <line x1="0" y1="20" x2="80" y2="20" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4,4" />
+      </svg>
+    );
+  }
+
+  const min = Math.min(...validData);
+  const max = Math.max(...validData);
+  const range = max - min || 1;
+  const height = 40;
+  const width = 80;
+
+  const points = validData.map((value, index) => {
+    const x = (index / (validData.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline
+        fill="none"
+        stroke={positive ? '#10B981' : '#EF4444'}
+        strokeWidth="2"
+        points={points}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+// CRC Exchange rate (real rate updated periodically)
+const CRC_RATE = 515;
+
+export const CryptoView: React.FC = () => {
+  const { state, dispatch } = useApp();
+
+  const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail'>('none');
+  const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
+  const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking'>('portfolio');
+
+  // Form states
+  const [amount, setAmount] = useState('');
+  const [convertTo, setConvertTo] = useState('CRC');
+  const [sendAddress, setSendAddress] = useState('');
+
+  // Real-time price states
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [, setPriceError] = useState<string | null>(null);
+  const [marketData, setMarketData] = useState<Record<string, CryptoPriceData>>({});
+
+  // Calculate totals
+  const totalUsdValue = state.crypto.assets.reduce((acc, asset) =>
+    acc + (asset.balance * asset.currentPrice), 0
+  );
+
+  const totalCrcValue = totalUsdValue * CRC_RATE;
+
+  const totalProfitLoss = state.crypto.assets.reduce((acc, asset) => {
+    if (asset.balance > 0) {
+      const currentValue = asset.balance * asset.currentPrice;
+      const costBasis = asset.balance * asset.avgBuyPrice;
+      return acc + (currentValue - costBasis);
+    }
+    return acc;
+  }, 0);
+
+  const totalProfitLossPercent = totalUsdValue > 0
+    ? (totalProfitLoss / (totalUsdValue - totalProfitLoss)) * 100
+    : 0;
+
+  // Assets with balance
+  const assetsWithBalance = state.crypto.assets.filter(a => a.balance > 0);
+
+  // Use ref for dispatch to avoid re-creating callbacks on every render
+  const dispatchRef = useRef(dispatch);
+  useEffect(() => {
+    dispatchRef.current = dispatch;
+  }, [dispatch]);
+
+  // Fetch prices from simulated service
+  const fetchPrices = useCallback(async () => {
+    try {
+      setPriceError(null);
+      const prices = await cryptoPriceService.getPrices(CRYPTO_SYMBOLS);
+
+      if (prices.length > 0) {
+        // Store full market data
+        const dataMap: Record<string, CryptoPriceData> = {};
+        prices.forEach(p => { dataMap[p.symbol] = p; });
+        setMarketData(dataMap);
+
+        // Update state with new prices
+        const updates = prices.map(p => ({
+          symbol: p.symbol,
+          price: p.price,
+          change24h: p.change24h
+        }));
+        dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
+        setLastUpdated(new Date());
+      }
+      setIsLoading(false);
+    } catch {
+      setPriceError('Error al obtener precios');
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch price history for sparklines
+  const fetchPriceHistories = useCallback(async () => {
+    try {
+      const histories = await cryptoPriceService.getAllPriceHistories(CRYPTO_SYMBOLS);
+
+      // Update assets with price history
+      const updates = Object.entries(histories).map(([symbol, history]) => ({
+        symbol,
+        price: 0,
+        change24h: 0,
+        priceHistory: history
+      })).filter(u => u.priceHistory.length > 0);
+
+      if (updates.length > 0) {
+        dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
+      }
+    } catch {
+      // Price history fetch failed — sparklines will show flat line
+    }
+  }, []);
+
+  // Initial fetch and periodic updates — runs only once on mount
+  useEffect(() => {
+    // Schedule initial fetch asynchronously to avoid synchronous setState in effect
+    const initialTimer = setTimeout(() => {
+      fetchPrices();
+      fetchPriceHistories();
+    }, 0);
+
+    // Update prices every 5 minutes (stable display, manual refresh available)
+    const priceInterval = setInterval(fetchPrices, 300000);
+
+    // Update histories every 10 minutes
+    const historyInterval = setInterval(fetchPriceHistories, 600000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(priceInterval);
+      clearInterval(historyInterval);
+    };
+  }, [fetchPrices, fetchPriceHistories]);
+
+  const formatUsd = (value: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  };
+
+  const formatCrc = (value: number) => {
+    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(value);
+  };
+
+  const formatCrypto = (value: number, decimals: number = 6) => {
+    if (value === 0) return '0';
+    if (value < 0.000001) return value.toExponential(2);
+    return value.toFixed(decimals).replace(/\.?0+$/, '');
+  };
+
+  const handleBuy = () => {
+    if (!selectedAsset || !amount) return;
+    const fiatAmount = parseFloat(amount);
+    const cryptoAmount = fiatAmount / selectedAsset.currentPrice;
+
+    dispatch({
+      type: 'BUY_CRYPTO',
+      payload: {
+        asset: selectedAsset.symbol,
+        amount: cryptoAmount,
+        price: selectedAsset.currentPrice,
+        fromCurrency: 'USD',
+        fromAmount: fiatAmount
+      }
+    });
+    setActiveSheet('none');
+    setAmount('');
+  };
+
+  const handleSell = () => {
+    if (!selectedAsset || !amount) return;
+    const cryptoAmount = parseFloat(amount);
+    const fiatAmount = cryptoAmount * selectedAsset.currentPrice;
+
+    dispatch({
+      type: 'SELL_CRYPTO',
+      payload: {
+        asset: selectedAsset.symbol,
+        amount: cryptoAmount,
+        price: selectedAsset.currentPrice,
+        toCurrency: convertTo,
+        toAmount: convertTo === 'CRC' ? fiatAmount * CRC_RATE : fiatAmount
+      }
+    });
+    setActiveSheet('none');
+    setAmount('');
+  };
+
+  const handleConvert = () => {
+    if (!selectedAsset || !amount || !convertTo) return;
+    const fromAmount = parseFloat(amount);
+    const toAsset = state.crypto.assets.find(a => a.symbol === convertTo);
+    if (!toAsset) return;
+
+    const fromUsd = fromAmount * selectedAsset.currentPrice;
+    const toAmount = fromUsd / toAsset.currentPrice;
+
+    dispatch({
+      type: 'CONVERT_CRYPTO',
+      payload: {
+        fromAsset: selectedAsset.symbol,
+        toAsset: convertTo,
+        fromAmount,
+        toAmount,
+        price: toAsset.currentPrice
+      }
+    });
+    setActiveSheet('none');
+    setAmount('');
+  };
+
+  const handleSend = () => {
+    if (!selectedAsset || !amount || !sendAddress) return;
+    const sendAmount = parseFloat(amount);
+    const fee = sendAmount * 0.0001;
+
+    dispatch({
+      type: 'SEND_CRYPTO',
+      payload: {
+        asset: selectedAsset.symbol,
+        amount: sendAmount,
+        toAddress: sendAddress,
+        fee
+      }
+    });
+    setActiveSheet('none');
+    setAmount('');
+    setSendAddress('');
+  };
+
+  const handleStake = () => {
+    if (!selectedAsset || !amount) return;
+    const stakeAmount = parseFloat(amount);
+    const apyRates: Record<string, number> = { ETH: 4.5, USDT: 8.0, USDC: 6.5, SOL: 7.2 };
+    const apy = apyRates[selectedAsset.symbol] || 3.0;
+
+    dispatch({
+      type: 'STAKE_CRYPTO',
+      payload: {
+        asset: selectedAsset.symbol,
+        amount: stakeAmount,
+        apy,
+        locked: false
+      }
+    });
+    setActiveSheet('none');
+    setAmount('');
+  };
+
+  const getTxIcon = (type: CryptoTransaction['type']) => {
+    switch (type) {
+      case 'buy': return <Icons.ArrowDownLeft size={16} className="text-green-500" />;
+      case 'sell': return <Icons.ArrowUpRight size={16} className="text-red-500" />;
+      case 'send': return <Icons.Send size={16} className="text-orange-500" />;
+      case 'receive': return <Icons.Receive size={16} className="text-green-500" />;
+      case 'convert': return <Icons.RefreshCw size={16} className="text-blue-500" />;
+      case 'stake': return <Icons.Lock size={16} className="text-purple-500" />;
+      case 'unstake': return <Icons.Unlock size={16} className="text-purple-500" />;
+      case 'yield': return <Icons.TrendingUp size={16} className="text-green-500" />;
+      default: return <Icons.Circle size={16} />;
+    }
+  };
+
+  const getTxLabel = (type: CryptoTransaction['type']) => {
+    const labels: Record<string, string> = {
+      buy: 'Compra', sell: 'Venta', send: 'Enviado', receive: 'Recibido',
+      convert: 'Conversión', stake: 'Staking', unstake: 'Unstake', yield: 'Rendimiento'
+    };
+    return labels[type] || type;
+  };
+
+  // Format time ago
+  const formatTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return 'Ahora';
+    if (seconds < 3600) return `Hace ${Math.floor(seconds / 60)}m`;
+    return `Hace ${Math.floor(seconds / 3600)}h`;
+  };
+
+  return (
+    <div className="pb-24 pt-4 space-y-6 px-4">
+
+      {/* Portfolio Header */}
+      <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-purple-200 text-sm font-medium">Portfolio Total</p>
+              <div aria-live="polite">
+                {isLoading ? (
+                  <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Actualizando..." role="status" aria-label="Updating prices" />
+                ) : (
+                  <div className="w-2 h-2 rounded-full bg-green-400" title="Precios actualizados" role="status" aria-label="Prices updated" />
+                )}
+              </div>
+            </div>
+            <h1 className="text-3xl font-black mt-1">{formatUsd(totalUsdValue)}</h1>
+            <p className="text-purple-200 text-sm mt-1">{formatCrc(totalCrcValue)}</p>
+          </div>
+          <div className="text-right">
+            <div className={`px-3 py-1.5 rounded-full text-sm font-bold ${totalProfitLoss >= 0 ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+              {totalProfitLoss >= 0 ? '+' : ''}{formatUsd(totalProfitLoss)} ({totalProfitLossPercent.toFixed(2)}%)
+            </div>
+            {lastUpdated && (
+              <button
+                onClick={() => { setIsLoading(true); fetchPrices(); }}
+                aria-label="Refresh prices"
+                className="flex items-center gap-1 mt-2 text-xs text-purple-300 hover:text-white transition-colors"
+              >
+                <Icons.RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+                {formatTimeAgo(lastUpdated)}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
+            className="flex-1 bg-white/20 backdrop-blur py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+          >
+            <Icons.Plus size={16} /> Comprar
+          </button>
+          <button
+            onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
+            className="flex-1 bg-white/20 backdrop-blur py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+          >
+            <Icons.Minus size={16} /> Vender
+          </button>
+          <button
+            onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('convert'); }}
+            className="flex-1 bg-white/20 backdrop-blur py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+          >
+            <Icons.RefreshCw size={16} /> Convertir
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+        {(['portfolio', 'market', 'staking'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white dark:bg-gray-700 shadow-sm text-slate-900 dark:text-white' : 'text-gray-500'}`}
+          >
+            {tab === 'portfolio' ? 'Mi Portfolio' : tab === 'market' ? 'Mercado' : 'Staking'}
+          </button>
+        ))}
+      </div>
+
+      {/* Portfolio Tab */}
+      {activeTab === 'portfolio' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Mis Activos</h3>
+
+          {assetsWithBalance.length === 0 ? (
+            <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 text-center border border-gray-100 dark:border-gray-800">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icons.Wallet size={28} className="text-gray-400" />
+              </div>
+              <p className="text-gray-500 mb-4">No tienes activos crypto aún</p>
+              <button
+                onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
+                className="bg-primary text-white px-6 py-2 rounded-xl font-bold"
+              >
+                Comprar Crypto
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {assetsWithBalance.map(asset => {
+                const value = asset.balance * asset.currentPrice;
+                const profitLoss = (asset.currentPrice - asset.avgBuyPrice) * asset.balance;
+                const profitLossPercent = ((asset.currentPrice - asset.avgBuyPrice) / asset.avgBuyPrice) * 100;
+
+                return (
+                  <button
+                    key={asset.id}
+                    onClick={() => { setSelectedAsset(asset); setActiveSheet('assetDetail'); }}
+                    className="w-full bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 flex items-center gap-4 hover:shadow-md transition-all"
+                  >
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                      style={{ backgroundColor: asset.color }}
+                    >
+                      {asset.icon}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-900 dark:text-white">{asset.name}</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{formatUsd(value)}</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                        <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Recent Transactions */}
+          {state.crypto.transactions.length > 0 && (
+            <>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mt-6">Transacciones Recientes</h3>
+              <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                {state.crypto.transactions.slice(0, 5).map(tx => (
+                  <button
+                    key={tx.id}
+                    onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
+                    className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mr-3">
+                      {getTxIcon(tx.type)}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">
+                        {getTxLabel(tx.type)} {tx.fromAsset}{tx.toAsset ? ` → ${tx.toAsset}` : ''}
+                      </div>
+                      <div className="text-xs text-gray-500">{tx.date}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-bold text-sm ${tx.type === 'buy' || tx.type === 'receive' || tx.type === 'yield' ? 'text-green-500' : 'text-slate-900 dark:text-white'}`}>
+                        {tx.type === 'buy' || tx.type === 'receive' || tx.type === 'yield' ? '+' : '-'}{formatCrypto(tx.fromAmount)} {tx.fromAsset}
+                      </div>
+                      <div className="text-xs text-gray-500">{formatUsd(tx.fromAmount * tx.price)}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Market Tab */}
+      {activeTab === 'market' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Mercado en Vivo</h3>
+            <button
+              onClick={() => { setIsLoading(true); fetchPrices(); }}
+              aria-label="Refresh prices"
+              className="flex items-center gap-1 text-sm text-primary"
+            >
+              <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              Actualizar
+            </button>
+          </div>
+
+          {(
+            state.crypto.assets.map(asset => {
+              const mktData = marketData[asset.symbol];
+              return (
+                <button
+                  key={asset.id}
+                  onClick={() => { setSelectedAsset(asset); setActiveSheet('assetDetail'); }}
+                  className="w-full bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                      style={{ backgroundColor: asset.color }}
+                    >
+                      {asset.icon}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-900 dark:text-white">{asset.name}</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{formatUsd(asset.currentPrice)}</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-sm text-gray-500">{asset.symbol}</span>
+                        <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
+                        </span>
+                      </div>
+                      {mktData && mktData.marketCap > 0 && (
+                        <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                          <span>Cap: {formatLargeNumber(mktData.marketCap)}</span>
+                          <span>Vol: {formatLargeNumber(mktData.volume24h)}</span>
+                        </div>
+                      )}
+                    </div>
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Staking Tab */}
+      {activeTab === 'staking' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Posiciones de Staking</h3>
+
+          {state.crypto.stakingPositions.length === 0 ? (
+            <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 text-center border border-gray-100 dark:border-gray-800">
+              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icons.Percent size={28} className="text-purple-500" />
+              </div>
+              <p className="text-gray-500 mb-2">Gana rendimientos con tus crypto</p>
+              <p className="text-sm text-gray-400 mb-4">Hasta 8% APY en stablecoins</p>
+              <button
+                onClick={() => { setSelectedAsset(assetsWithBalance.find(a => a.symbol === 'ETH' || a.symbol === 'USDT') || null); setActiveSheet('stake'); }}
+                className="bg-purple-600 text-white px-6 py-2 rounded-xl font-bold"
+                disabled={assetsWithBalance.length === 0}
+              >
+                Comenzar Staking
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {state.crypto.stakingPositions.map(position => {
+                const asset = state.crypto.assets.find(a => a.symbol === position.asset);
+                const valueUsd = position.amount * (asset?.currentPrice || 0);
+                const earnedUsd = position.earned * (asset?.currentPrice || 0);
+
+                return (
+                  <div key={position.id} className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-4 mb-3">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                        style={{ backgroundColor: asset?.color || '#666' }}
+                      >
+                        {asset?.icon}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between">
+                          <span className="font-bold text-slate-900 dark:text-white">{position.asset} Staking</span>
+                          <span className="text-green-500 font-bold">{position.apy}% APY</span>
+                        </div>
+                        <div className="text-sm text-gray-500">Desde {position.startDate}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                      <div>
+                        <p className="text-xs text-gray-500">Stakeado</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{formatCrypto(position.amount)} {position.asset}</p>
+                        <p className="text-xs text-gray-500">{formatUsd(valueUsd)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Ganado</p>
+                        <p className="font-bold text-green-500">{formatCrypto(position.earned)} {position.asset}</p>
+                        <p className="text-xs text-gray-500">{formatUsd(earnedUsd)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-3">
+                      {position.earned > 0 && (
+                        <button
+                          onClick={() => dispatch({ type: 'CLAIM_STAKING_YIELD', payload: { positionId: position.id, amount: position.earned } })}
+                          className="flex-1 bg-green-500 text-white py-2 rounded-xl text-sm font-bold"
+                        >
+                          Reclamar
+                        </button>
+                      )}
+                      {!position.locked && (
+                        <button
+                          onClick={() => dispatch({ type: 'UNSTAKE_CRYPTO', payload: { positionId: position.id } })}
+                          className="flex-1 border border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white py-2 rounded-xl text-sm font-bold"
+                        >
+                          Retirar
+                        </button>
+                      )}
+                      {position.locked && (
+                        <div className="flex-1 flex items-center justify-center gap-2 text-sm text-gray-500">
+                          <Icons.Lock size={14} />
+                          Bloqueado {position.lockPeriodDays} días
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* APY Rates */}
+          <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-2xl p-4">
+            <h4 className="font-bold text-slate-900 dark:text-white mb-3">Tasas de Rendimiento</h4>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { asset: 'ETH', apy: 4.5 },
+                { asset: 'USDT', apy: 8.0 },
+                { asset: 'USDC', apy: 6.5 },
+                { asset: 'SOL', apy: 7.2 },
+              ].map(rate => (
+                <div key={rate.asset} className="flex justify-between items-center bg-white/50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+                  <span className="font-medium text-slate-700 dark:text-gray-300">{rate.asset}</span>
+                  <span className="font-bold text-green-600">{rate.apy}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Bottom Sheets ===== */}
+
+      {/* Asset Detail Sheet */}
+      {selectedAsset && (
+        <BottomSheet
+          isOpen={activeSheet === 'assetDetail'}
+          onClose={() => setActiveSheet('none')}
+          title={selectedAsset.name}
+        >
+          <div className="space-y-6">
+            <div className="text-center py-4">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3"
+                style={{ backgroundColor: selectedAsset.color }}
+              >
+                {selectedAsset.icon}
+              </div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white">{formatUsd(selectedAsset.currentPrice)}</div>
+              <div className={`text-sm font-medium mt-1 ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
+              </div>
+
+              {/* Market Data */}
+              {marketData[selectedAsset.symbol] && marketData[selectedAsset.symbol].marketCap > 0 && (
+                <div className="grid grid-cols-2 gap-3 mt-4 text-left">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500">Cap. de Mercado</p>
+                    <p className="font-bold text-slate-900 dark:text-white">
+                      {formatLargeNumber(marketData[selectedAsset.symbol].marketCap)}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500">Volumen 24h</p>
+                    <p className="font-bold text-slate-900 dark:text-white">
+                      {formatLargeNumber(marketData[selectedAsset.symbol].volume24h)}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500">Máximo 24h</p>
+                    <p className="font-bold text-green-500">{formatUsd(marketData[selectedAsset.symbol].high24h || 0)}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500">Mínimo 24h</p>
+                    <p className="font-bold text-red-500">{formatUsd(marketData[selectedAsset.symbol].low24h || 0)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {selectedAsset.balance > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Tu Balance</p>
+                    <p className="font-bold text-slate-900 dark:text-white">{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</p>
+                    <p className="text-sm text-gray-500">{formatUsd(selectedAsset.balance * selectedAsset.currentPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Precio Promedio</p>
+                    <p className="font-bold text-slate-900 dark:text-white">{formatUsd(selectedAsset.avgBuyPrice)}</p>
+                    <p className={`text-sm ${selectedAsset.currentPrice >= selectedAsset.avgBuyPrice ? 'text-green-500' : 'text-red-500'}`}>
+                      {((selectedAsset.currentPrice - selectedAsset.avgBuyPrice) / selectedAsset.avgBuyPrice * 100).toFixed(2)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setActiveSheet('buy')}
+                className="bg-green-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <Icons.Plus size={18} /> Comprar
+              </button>
+              <button
+                onClick={() => setActiveSheet('sell')}
+                disabled={selectedAsset.balance === 0}
+                className="bg-red-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Icons.Minus size={18} /> Vender
+              </button>
+              <button
+                onClick={() => setActiveSheet('send')}
+                disabled={selectedAsset.balance === 0}
+                className="border border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Icons.Send size={18} /> Enviar
+              </button>
+              <button
+                onClick={() => setActiveSheet('receive')}
+                className="border border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <Icons.Receive size={18} /> Recibir
+              </button>
+            </div>
+
+            {selectedAsset.balance > 0 && (selectedAsset.symbol === 'ETH' || selectedAsset.symbol === 'USDT' || selectedAsset.symbol === 'USDC') && (
+              <button
+                onClick={() => setActiveSheet('stake')}
+                className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <Icons.Percent size={18} /> Hacer Staking
+              </button>
+            )}
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Buy Sheet */}
+      <BottomSheet isOpen={activeSheet === 'buy'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Comprar ${selectedAsset?.symbol || 'Crypto'}`}>
+        <div className="space-y-6">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">Seleccionar Crypto</label>
+            <select
+              className="w-full bg-transparent text-lg font-bold text-slate-900 dark:text-white mt-2 outline-none"
+              value={selectedAsset?.symbol || ''}
+              onChange={(e) => setSelectedAsset(state.crypto.assets.find(a => a.symbol === e.target.value) || null)}
+            >
+              {state.crypto.assets.map(a => (
+                <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol}) - {formatUsd(a.currentPrice)}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="text-center">
+            <label className="text-sm text-gray-500">Monto a invertir (USD)</label>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="text-4xl font-bold text-slate-900 dark:text-white">$</span>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="text-5xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white"
+              />
+            </div>
+            {amount && selectedAsset && (
+              <p className="text-sm text-gray-500 mt-2">
+                ≈ {formatCrypto(parseFloat(amount) / selectedAsset.currentPrice)} {selectedAsset.symbol}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            {[50, 100, 250, 500].map(preset => (
+              <button
+                key={preset}
+                onClick={() => setAmount(preset.toString())}
+                className="flex-1 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-bold text-slate-700 dark:text-gray-300"
+              >
+                ${preset}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={handleBuy}
+            disabled={!amount || parseFloat(amount) <= 0}
+            className="w-full bg-green-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+          >
+            Comprar {selectedAsset?.symbol}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Sell Sheet */}
+      <BottomSheet isOpen={activeSheet === 'sell'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Vender ${selectedAsset?.symbol || ''}`}>
+        <div className="space-y-6">
+          {selectedAsset && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Disponible</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="text-center">
+            <label className="text-sm text-gray-500">Cantidad a vender</label>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="text-5xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white"
+              />
+              <span className="text-2xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
+            </div>
+            {amount && selectedAsset && (
+              <p className="text-sm text-gray-500 mt-2">
+                ≈ {formatUsd(parseFloat(amount) * selectedAsset.currentPrice)}
+              </p>
+            )}
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">Recibir en</label>
+            <div className="flex gap-2 mt-2">
+              {['CRC', 'USD'].map(ccy => (
+                <button
+                  key={ccy}
+                  onClick={() => setConvertTo(ccy)}
+                  className={`flex-1 py-2 rounded-lg font-bold ${convertTo === ccy ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                >
+                  {ccy}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleSell}
+            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            className="w-full bg-red-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+          >
+            Vender y recibir {convertTo}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Convert Sheet */}
+      <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title="Convertir Crypto">
+        <div className="space-y-6">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">De</label>
+            <select
+              className="w-full bg-transparent text-lg font-bold text-slate-900 dark:text-white mt-2 outline-none"
+              value={selectedAsset?.symbol || ''}
+              onChange={(e) => setSelectedAsset(state.crypto.assets.find(a => a.symbol === e.target.value) || null)}
+            >
+              {assetsWithBalance.map(a => (
+                <option key={a.symbol} value={a.symbol}>{a.name} - {formatCrypto(a.balance)} disponible</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="text-center">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="text-4xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div className="flex justify-center">
+            <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+              <Icons.ArrowDownUp size={20} className="text-gray-500" />
+            </div>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">A</label>
+            <select
+              className="w-full bg-transparent text-lg font-bold text-slate-900 dark:text-white mt-2 outline-none"
+              value={convertTo}
+              onChange={(e) => setConvertTo(e.target.value)}
+            >
+              {state.crypto.assets.filter(a => a.symbol !== selectedAsset?.symbol).map(a => (
+                <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol})</option>
+              ))}
+            </select>
+          </div>
+
+          {amount && selectedAsset && convertTo && (
+            <div className="text-center text-gray-500">
+              Recibirás aproximadamente: <span className="font-bold text-slate-900 dark:text-white">
+                {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / (state.crypto.assets.find(a => a.symbol === convertTo)?.currentPrice || 1))} {convertTo}
+              </span>
+            </div>
+          )}
+
+          <button
+            onClick={handleConvert}
+            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            className="w-full bg-blue-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+          >
+            Convertir
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Send Sheet */}
+      <BottomSheet isOpen={activeSheet === 'send'} onClose={() => { setActiveSheet('none'); setAmount(''); setSendAddress(''); }} title={`Enviar ${selectedAsset?.symbol || ''}`}>
+        <div className="space-y-6">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">Dirección destino</label>
+            <input
+              type="text"
+              value={sendAddress}
+              onChange={(e) => setSendAddress(e.target.value)}
+              placeholder="0x... o bc1..."
+              className="w-full bg-transparent text-lg font-mono text-slate-900 dark:text-white mt-2 outline-none"
+            />
+          </div>
+
+          <div className="text-center">
+            <label className="text-sm text-gray-500">Cantidad</label>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="text-4xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white"
+              />
+              <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">Disponible: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
+          </div>
+
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <Icons.AlertTriangle size={20} className="text-yellow-600 mt-0.5" />
+              <div>
+                <p className="font-bold text-yellow-800 dark:text-yellow-200">Verificar dirección</p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">Las transacciones crypto son irreversibles</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSend}
+            disabled={!amount || !sendAddress || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+          >
+            Enviar {selectedAsset?.symbol}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Receive Sheet */}
+      <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`Recibir ${selectedAsset?.symbol || ''}`}>
+        <div className="space-y-6">
+          <div className="flex flex-col items-center py-4">
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-4">
+              <QRCodeSVG value={`${selectedAsset?.symbol?.toLowerCase() || 'crypto'}:0xKiramoPay${selectedAsset?.symbol}Wallet12345`} size={180} />
+            </div>
+
+            <p className="text-xs text-center text-gray-400 mt-2 max-w-[280px]">
+              Escanea este código QR o copia la dirección para recibir {selectedAsset?.symbol}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <label className="text-xs text-gray-500 font-bold">Tu dirección {selectedAsset?.symbol}</label>
+            <div className="flex items-center gap-2 mt-2">
+              <p className="font-mono text-sm text-slate-900 dark:text-white break-all flex-1">
+                0xKiramoPay{selectedAsset?.symbol}Wallet12345abcdef
+              </p>
+              <button aria-label="Copy" className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
+                <Icons.Copy size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Solo envía {selectedAsset?.symbol} a esta dirección. Otros activos podrían perderse permanentemente.
+            </p>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Stake Sheet */}
+      <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Staking ${selectedAsset?.symbol || ''}`}>
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-4">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 dark:text-gray-300">APY Estimado</span>
+              <span className="text-2xl font-black text-green-600">
+                {selectedAsset?.symbol === 'ETH' ? '4.5' : selectedAsset?.symbol === 'USDT' ? '8.0' : '6.5'}%
+              </span>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <label className="text-sm text-gray-500">Cantidad a stakear</label>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="text-4xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white"
+              />
+              <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">Disponible: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
+          </div>
+
+          {amount && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+              <p className="text-sm text-gray-500">Ganancia estimada mensual</p>
+              <p className="font-bold text-green-500">
+                +{formatCrypto(parseFloat(amount) * (selectedAsset?.symbol === 'USDT' ? 0.08 : 0.045) / 12)} {selectedAsset?.symbol}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleStake}
+            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            className="w-full bg-purple-600 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+          >
+            Comenzar Staking
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Transaction Detail Sheet */}
+      {selectedTx && (
+        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title="Detalle de Transacción">
+          <div className="space-y-4">
+            <div className="flex flex-col items-center py-4">
+              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+                {getTxIcon(selectedTx.type)}
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{getTxLabel(selectedTx.type)}</h3>
+              <p className="text-gray-500">{selectedTx.date}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500">Activo</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedTx.fromAsset}{selectedTx.toAsset ? ` → ${selectedTx.toAsset}` : ''}</span>
+              </div>
+              <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500">Cantidad</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatCrypto(selectedTx.fromAmount)} {selectedTx.fromAsset}</span>
+              </div>
+              <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500">Precio</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatUsd(selectedTx.price)}</span>
+              </div>
+              <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500">Comisión</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatUsd(selectedTx.fee)}</span>
+              </div>
+              <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500">Total USD</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatUsd(selectedTx.fromAmount * selectedTx.price)}</span>
+              </div>
+              {selectedTx.txHash && (
+                <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                  <span className="text-gray-500">TX Hash</span>
+                  <span className="font-mono text-xs text-primary">{selectedTx.txHash}</span>
+                </div>
+              )}
+              <div className="flex justify-between py-3">
+                <span className="text-gray-500">Estado</span>
+                <span className="font-bold text-green-500 flex items-center gap-1">
+                  <Icons.Check size={14} /> {selectedTx.status}
+                </span>
+              </div>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+
+    </div>
+  );
+};

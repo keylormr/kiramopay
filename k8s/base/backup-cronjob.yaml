@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kiramopay-db-backup
+  namespace: kiramopay
+spec:
+  schedule: "0 2 * * *"  # Daily at 2:00 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  PGPASSWORD=$DB_PASSWORD pg_dump \
+                    -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+                    --format=custom --compress=9 --no-owner \
+                    -f /backups/kiramopay_${TIMESTAMP}.sql.gz
+                  echo "Backup complete: kiramopay_${TIMESTAMP}.sql.gz"
+                  # Rotate old backups (keep 30 days)
+                  find /backups -name "kiramopay_*.sql.gz" -mtime +30 -delete
+              env:
+                - name: DB_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kiramopay-config
+                      key: DB_HOST
+                - name: DB_PORT
+                  value: "5432"
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: kiramopay-secrets
+                      key: DB_USER
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kiramopay-secrets
+                      key: DB_PASSWORD
+                - name: DB_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kiramopay-config
+                      key: DB_NAME
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: kiramopay-backups

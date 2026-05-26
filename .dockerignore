@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+*.log
+coverage
+.env.local
+android
+ios
+e2e
+backend
+k8s
+*.md
+!package.json
+!package-lock.json
