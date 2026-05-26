@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
@@ -9,7 +8,6 @@ export const CardsView: React.FC = () => {
   const [showLimits, setShowLimits] = useState(false);
   const [showPin, setShowPin] = useState(false);
 
-  // Local state for limits before saving
   const [tempLimits, setTempLimits] = useState(state.cards.limits);
 
   const handleLimitChange = (type: 'online' | 'atm', val: number) => {
@@ -25,148 +23,179 @@ export const CardsView: React.FC = () => {
     <div className="pt-4 px-4 pb-24 space-y-6">
       {/* Card Visual */}
       <div className="relative h-56 w-full max-w-md mx-auto perspective-1000 group">
-        <div className={`
-          relative w-full h-full rounded-3xl p-6 text-white shadow-2xl transition-all duration-500 transform overflow-hidden
-          bg-gradient-to-br from-primary via-blue-600 to-purple-600
-          ${state.cards.frozen ? 'grayscale opacity-90' : ''}
-        `}>
+        <div
+          className={`relative w-full h-full rounded-3xl p-6 text-white uv-shadow-floating transition-all duration-500 transform overflow-hidden uv-gradient-brand ${
+            state.cards.frozen ? 'grayscale opacity-90' : ''
+          }`}
+        >
+          {/* Decorative orb */}
+          <div
+            className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
+            style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
+          />
           {/* Frozen Mask Effect */}
           {state.cards.frozen && (
-            <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
-               <Icons.Lock size={48} className="text-white/50 mb-2" />
-               <span className="font-bold text-white/80 tracking-widest">CARD FROZEN</span>
+            <div className="absolute inset-0 bg-[var(--color-navy-950)]/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center rounded-3xl">
+              <Icons.Lock size={48} className="text-white/60 mb-2" />
+              <span className="font-bold text-white/85 tracking-widest">CARD FROZEN</span>
             </div>
           )}
 
-          <div className="flex justify-between items-start mb-8 relative z-10">
-             <span className="font-bold text-lg tracking-wider opacity-90">Kiramopay</span>
-             <Icons.SignalHigh size={24} className="opacity-70" />
-          </div>
-          
-          <div className="mb-8 relative z-10">
-             <div className="w-12 h-8 bg-yellow-200/80 rounded-md mb-2" /> {/* Chip */}
-             <div className="font-mono text-2xl tracking-widest drop-shadow-md">
-               {state.cards.frozen 
-                 ? '•••• •••• •••• ••••' 
-                 : `•••• •••• •••• ${state.cards.last4}`
-               }
-             </div>
+          <div className="relative flex justify-between items-start mb-8 z-10">
+            <span className="font-bold text-lg tracking-wide opacity-90">KiramoPay</span>
+            <Icons.SignalHigh size={24} className="opacity-70" />
           </div>
 
-          <div className="flex justify-between items-end relative z-10">
+          <div className="relative mb-8 z-10">
+            <div className="w-12 h-8 rounded-md mb-2 bg-gradient-to-br from-amber-200 to-yellow-400 uv-shadow-soft" /> {/* Chip */}
+            <div className="font-mono text-2xl tracking-widest drop-shadow-md tabular-nums">
+              {state.cards.frozen
+                ? '•••• •••• •••• ••••'
+                : `•••• •••• •••• ${state.cards.last4}`}
+            </div>
+          </div>
+
+          <div className="relative flex justify-between items-end z-10">
             <div>
               <div className="text-[10px] opacity-70 uppercase tracking-widest mb-1">Card Holder</div>
               <div className="font-medium tracking-wide">DEMO USER</div>
             </div>
-            <div className="text-2xl font-bold italic opacity-80">VISA</div>
+            <div className="text-2xl font-bold italic opacity-85">VISA</div>
           </div>
         </div>
       </div>
 
       {/* Controls */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-3">Card Controls</h3>
-        <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-          <button 
+        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">Controles de tarjeta</h3>
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          <button
             onClick={() => dispatch({ type: 'TOGGLE_FREEZE' })}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100"
+            className="w-full flex items-center px-4 py-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors active:scale-[0.997]"
           >
-            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center mr-4">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mr-4 shrink-0">
               <Icons.Freeze size={20} />
             </div>
-            <div className="flex-1 text-left">
-              <div className="font-bold text-slate-900 dark:text-white text-sm">{state.cards.frozen ? 'Unfreeze Card' : 'Freeze Card'}</div>
-              <div className="text-xs text-gray-500">Temporarily disable this card</div>
+            <div className="flex-1 text-left min-w-0">
+              <div className="font-semibold uv-text-primary text-sm">
+                {state.cards.frozen ? 'Descongelar tarjeta' : 'Congelar tarjeta'}
+              </div>
+              <div className="text-xs uv-text-muted mt-0.5">Desactivar temporalmente</div>
             </div>
-            <div className={`w-12 h-7 rounded-full p-1 transition-colors ${state.cards.frozen ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}>
-              <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${state.cards.frozen ? 'translate-x-5' : ''}`} />
+            <div
+              className={`w-12 h-7 rounded-full p-1 transition-colors shrink-0 ${
+                state.cards.frozen ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border-strong)] dark:bg-[var(--color-border-dark)]'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 bg-white rounded-full uv-shadow-soft transition-transform ${
+                  state.cards.frozen ? 'translate-x-5' : ''
+                }`}
+              />
             </div>
-          </button>
-          
-          <button 
-            onClick={() => setShowLimits(true)}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100"
-          >
-             <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center mr-4">
-               <Icons.Sliders size={20} />
-             </div>
-             <div className="flex-1 text-left">
-               <div className="font-bold text-slate-900 dark:text-white text-sm">Settings & Limits</div>
-               <div className="text-xs text-gray-500">Online payments, ATM withdrawals</div>
-             </div>
-             <Icons.ChevronRight size={20} className="text-gray-400" />
           </button>
 
-          <button 
-             onClick={() => setShowPin(true)}
-             className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100"
+          <button
+            onClick={() => setShowLimits(true)}
+            className="w-full flex items-center px-4 py-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors active:scale-[0.997]"
           >
-             <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center mr-4">
-               <Icons.Shield size={20} />
-             </div>
-             <div className="flex-1 text-left">
-               <div className="font-bold text-slate-900 dark:text-white text-sm">View PIN</div>
-               <div className="text-xs text-gray-500">Reveal your 4-digit PIN</div>
-             </div>
-             <Icons.ChevronRight size={20} className="text-gray-400" />
+            <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mr-4 shrink-0">
+              <Icons.Sliders size={20} />
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <div className="font-semibold uv-text-primary text-sm">Ajustes y limites</div>
+              <div className="text-xs uv-text-muted mt-0.5">Compras online, retiros en ATM</div>
+            </div>
+            <Icons.ChevronRight size={20} className="uv-text-muted shrink-0" />
+          </button>
+
+          <button
+            onClick={() => setShowPin(true)}
+            className="w-full flex items-center px-4 py-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors active:scale-[0.997]"
+          >
+            <div className="w-10 h-10 rounded-full bg-[var(--color-warning-soft)] text-[var(--color-warning)] flex items-center justify-center mr-4 shrink-0">
+              <Icons.Shield size={20} />
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <div className="font-semibold uv-text-primary text-sm">Ver PIN</div>
+              <div className="text-xs uv-text-muted mt-0.5">Revelar tu PIN de 4 digitos</div>
+            </div>
+            <Icons.ChevronRight size={20} className="uv-text-muted shrink-0" />
           </button>
         </div>
       </div>
 
+      {/* Info card — encourages future virtual cards / bank links */}
+      <div className="uv-surface-2 rounded-2xl p-4 border border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)]">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center shrink-0">
+            <Icons.Plus size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold uv-text-primary text-sm">Agregar tarjeta virtual</div>
+            <div className="text-xs uv-text-muted mt-0.5">Crea una tarjeta desechable para compras online</div>
+          </div>
+          <Icons.ChevronRight size={20} className="uv-text-muted shrink-0" />
+        </div>
+      </div>
+
       {/* Limits Bottom Sheet */}
-      <BottomSheet isOpen={showLimits} onClose={() => setShowLimits(false)} title="Card Limits">
+      <BottomSheet isOpen={showLimits} onClose={() => setShowLimits(false)} title="Limites de tarjeta">
         <div className="space-y-8 p-2">
           <div>
             <div className="flex justify-between mb-2">
-              <label className="font-bold text-slate-900 dark:text-white">Online Spending</label>
-              <span className="text-primary font-bold">${tempLimits.online}</span>
+              <label className="font-semibold uv-text-primary">Compras online</label>
+              <span className="text-[var(--color-primary)] font-bold tabular-nums">${tempLimits.online}</span>
             </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="10000" 
+            <input
+              type="range"
+              min="0"
+              max="10000"
               step="100"
               value={tempLimits.online}
               onChange={(e) => handleLimitChange('online', parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary"
+              className="w-full h-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
             />
-            <p className="text-xs text-gray-500 mt-2">Daily limit for online purchases.</p>
+            <p className="text-xs uv-text-muted mt-2">Limite diario para compras en internet.</p>
           </div>
 
           <div>
             <div className="flex justify-between mb-2">
-              <label className="font-bold text-slate-900 dark:text-white">ATM Withdrawals</label>
-              <span className="text-primary font-bold">${tempLimits.atm}</span>
+              <label className="font-semibold uv-text-primary">Retiros en ATM</label>
+              <span className="text-[var(--color-primary)] font-bold tabular-nums">${tempLimits.atm}</span>
             </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="2000" 
+            <input
+              type="range"
+              min="0"
+              max="2000"
               step="50"
               value={tempLimits.atm}
               onChange={(e) => handleLimitChange('atm', parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary"
+              className="w-full h-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
             />
-            <p className="text-xs text-gray-500 mt-2">Daily limit for cash withdrawals.</p>
+            <p className="text-xs uv-text-muted mt-2">Limite diario para retiros en efectivo.</p>
           </div>
 
-          <button 
+          <button
             onClick={saveLimits}
-            className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold active:scale-[0.98] transition-all uv-shadow-primary"
           >
-            Save Changes
+            Guardar cambios
           </button>
         </div>
       </BottomSheet>
 
-      {/* PIN Display Sheet (Mock) */}
-      <BottomSheet isOpen={showPin} onClose={() => setShowPin(false)} title="Your PIN">
-         <div className="flex flex-col items-center py-8">
-            <div className="text-6xl font-mono font-black tracking-[1rem] text-slate-900 dark:text-white mb-4">
-              8842
-            </div>
-            <p className="text-center text-gray-500 text-sm">Do not share this code with anyone.<br/>This is for ATM and POS transactions.</p>
-         </div>
+      {/* PIN Display Sheet */}
+      <BottomSheet isOpen={showPin} onClose={() => setShowPin(false)} title="Tu PIN">
+        <div className="flex flex-col items-center py-8">
+          <div className="text-6xl font-mono font-black tracking-[1rem] uv-text-primary mb-4">
+            8842
+          </div>
+          <p className="text-center uv-text-muted text-sm">
+            No compartas este codigo con nadie.<br />
+            Es para transacciones en ATM y POS.
+          </p>
+        </div>
       </BottomSheet>
     </div>
   );

@@ -14,7 +14,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
   const viewportHeight = CSS.supports?.('height', '100dvh') ? '100dvh' : '100vh';
   const [visible, setVisible] = useState(isOpen);
 
-  // Sync visible immediately when isOpen becomes true (React 18+ render-time state update)
   if (isOpen && !visible) {
     setVisible(true);
   }
@@ -31,7 +30,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
 
   if (!visible && !isOpen) return null;
 
-  // Use portal to render at document root level
   return ReactDOM.createPortal(
     <div
       className="flex items-end justify-center sm:items-center"
@@ -46,7 +44,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         zIndex: 9999,
       }}
     >
-      {/* Backdrop - covers entire viewport with extra overflow */}
+      {/* Backdrop */}
       <div
         role="presentation"
         onClick={onClose}
@@ -57,9 +55,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
           left: '-100px',
           right: '-100px',
           bottom: '-100px',
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
+          backgroundColor: 'rgba(6, 14, 31, 0.55)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       />
 
@@ -69,18 +67,28 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         aria-modal="true"
         {...(title ? { 'aria-labelledby': 'bottom-sheet-title' } : {})}
         className={`
-          relative w-full max-w-md bg-surface dark:bg-surface-dark rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform duration-300
+          relative w-full max-w-md uv-surface-1 uv-shadow-floating
+          rounded-t-[2.25rem] sm:rounded-3xl p-6 transform transition-transform duration-300
           ${isOpen ? 'translate-y-0 scale-100' : 'translate-y-full sm:translate-y-10 sm:scale-95'}
         `}
         style={{ maxHeight: '85vh' }}
       >
-        {/* Handle for mobile feel */}
-        <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-6 sm:hidden" />
+        {/* Drag handle (mobile only) */}
+        <div className="w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
 
         {title && (
-          <div className="flex justify-between items-center mb-4">
-            <h2 id="bottom-sheet-title" className="text-xl font-bold dark:text-white">{title}</h2>
-            <button onClick={onClose} aria-label={t('close')} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+          <div className="flex justify-between items-center mb-5">
+            <h2
+              id="bottom-sheet-title"
+              className="text-xl font-bold tracking-tight uv-text-primary"
+            >
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              aria-label={t('close')}
+              className="w-9 h-9 flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full uv-text-secondary hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors text-base"
+            >
               ✕
             </button>
           </div>
@@ -91,6 +99,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

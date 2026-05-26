@@ -230,29 +230,29 @@ const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background dark:bg-background-dark text-slate-900 dark:text-white font-sans">
+    <div className="min-h-screen flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between">
+      <div className="sticky top-0 z-30 uv-surface-1/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center text-white font-black text-sm shadow-sm">
+          <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center text-white font-black text-sm uv-shadow-soft">
             K
           </div>
-          <span className="font-bold text-lg tracking-tight">KiramoPay</span>
+          <span className="font-bold text-lg tracking-tight uv-text-primary">KiramoPay</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
-            <span aria-live="polite" className="px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold uppercase rounded-md">
+            <span aria-live="polite" className="px-2 py-0.5 bg-[var(--color-danger-soft)] text-[var(--color-danger)] text-[10px] font-bold uppercase tracking-wider rounded-md">
               Offline
             </span>
           )}
           <button
             onClick={() => setOverlayView('notifications')}
             aria-label={t('notifications_setting')}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative"
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors relative uv-text-secondary"
           >
             <Icons.Bell size={20} />
             {unreadCount > 0 && (
-              <span aria-label={`${unreadCount} unread`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full border-2 border-white dark:border-surface-dark flex items-center justify-center text-[10px] font-bold text-white">
+              <span aria-label={`${unreadCount} unread`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[var(--color-danger)] rounded-full border-2 border-[var(--color-surface-1)] dark:border-[var(--color-surface-1-dark)] flex items-center justify-center text-[10px] font-bold text-white">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -268,23 +268,40 @@ const Layout = () => {
       </main>
 
       {/* Bottom Navigation */}
-      <nav role="navigation" aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 pb-safe">
+      <nav role="navigation" aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
         <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              aria-current={activeTab === item.id ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center w-16 h-full gap-0.5 transition-colors ${
-                activeTab === item.id
-                  ? 'text-primary'
-                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              <item.icon size={22} strokeWidth={activeTab === item.id ? 2.5 : 2} />
-              <span className="text-[10px] font-medium">{item.label}</span>
-            </button>
-          ))}
+          {TABS.map((item) => {
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                aria-current={active ? 'page' : undefined}
+                className="flex flex-col items-center justify-center w-16 h-full gap-1 relative group"
+              >
+                {/* Active indicator pill */}
+                <span
+                  className={`absolute top-2 w-9 h-1 rounded-full transition-all ${
+                    active ? 'bg-[var(--color-primary)]' : 'bg-transparent'
+                  }`}
+                />
+                <item.icon
+                  size={22}
+                  strokeWidth={active ? 2.5 : 2}
+                  className={`mt-1 transition-colors ${
+                    active ? 'text-[var(--color-primary)]' : 'uv-text-muted group-hover:uv-text-secondary'
+                  }`}
+                />
+                <span
+                  className={`text-[10px] font-semibold transition-colors ${
+                    active ? 'text-[var(--color-primary)]' : 'uv-text-muted group-hover:uv-text-secondary'
+                  }`}
+                >
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </nav>
 

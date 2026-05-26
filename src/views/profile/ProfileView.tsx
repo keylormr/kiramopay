@@ -96,32 +96,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
     2: 'Completo',
   };
 
-  const kycLevelColor: Record<number, string> = {
-    0: 'bg-yellow-100 text-yellow-700',
-    1: 'bg-blue-100 text-blue-700',
-    2: 'bg-green-100 text-green-700',
-  };
-
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
-      {/* Profile Header */}
-      <div className="bg-gradient-to-br from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 rounded-3xl p-6">
-        <div className="flex items-center gap-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-lg">
+      {/* Profile Header — Unified Vision hero */}
+      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 text-white uv-shadow-floating">
+        <div
+          className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
+          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
+        />
+        <div className="relative flex items-center gap-4">
+          <div className="w-20 h-20 bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center text-white text-3xl font-black">
             {state.user?.firstName?.charAt(0) || 'K'}
           </div>
-          <div className="flex-1">
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-black truncate tracking-tight">
               {state.user?.firstName} {state.user?.lastName}
             </h2>
-            <p className="text-gray-500">{state.user?.phone}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${kycLevelColor[state.user?.kycLevel || 0]}`}>
+            <p className="text-white/70 text-sm">{state.user?.phone}</p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/15 backdrop-blur-sm border border-white/20">
                 KYC {kycLevelText[state.user?.kycLevel || 0]}
               </span>
               {state.settings.biometricEnabled && (
-                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center gap-1">
-                  <Icons.Fingerprint size={12} />
+                <span className="px-2 py-0.5 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Icons.Fingerprint size={11} />
                   Biometría
                 </span>
               )}
@@ -130,16 +128,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-3 mt-6">
-          <div className="bg-white/50 dark:bg-surface-dark/50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">Balance Total</p>
-            <p className="text-lg font-black text-slate-900 dark:text-white">
+        <div className="relative grid grid-cols-2 gap-3 mt-6">
+          <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">Balance Total</p>
+            <p className="text-lg font-black tabular-nums">
               ~${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
-          <div className="bg-white/50 dark:bg-surface-dark/50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">Este mes</p>
-            <p className="text-lg font-black text-slate-900 dark:text-white">
+          <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">Este mes</p>
+            <p className="text-lg font-black">
               {state.transactions.filter(t => t.type === 'debit').length} gastos
             </p>
           </div>
@@ -148,78 +146,78 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
       {/* Account Section */}
       <div>
-        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
           {t('my_account')}
         </h3>
-        <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
-          <button className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.User size={18} className="text-blue-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('personal_data')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('personal_data')}</p>
               <p className="text-sm text-gray-500">Cédula: {state.user?.cedula}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
-          <button className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
             <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Shield size={18} className="text-green-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('kyc_verification')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('kyc_verification')}</p>
               <p className="text-sm text-gray-500">Nivel {state.user?.kycLevel || 0} - {kycLevelText[state.user?.kycLevel || 0]}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
           <button
             onClick={() => setShowLimitsSheet(true)}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Sliders size={18} className="text-purple-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('transaction_limits')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('transaction_limits')}</p>
               <p className="text-sm text-gray-500">Diario: {formatCurrency(500000)}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
         </div>
       </div>
 
       {/* Security Section */}
       <div>
-        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
           {t('security')}
         </h3>
-        <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
             onClick={() => setShowPasswordSheet(true)}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Lock size={18} className="text-orange-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('change_password')}</p>
-              <p className="text-sm text-gray-500">{t('password_requirements')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('change_password')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('password_requirements')}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
           <button
             onClick={handleBiometricToggle}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Fingerprint size={18} className="text-cyan-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('biometric_auth')}</p>
-              <p className="text-sm text-gray-500">{t('fingerprint_face')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('biometric_auth')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('fingerprint_face')}</p>
             </div>
             <div
               role="switch"
@@ -236,29 +234,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           <button
             onClick={() => dispatch({ type: 'TOGGLE_LOCK', payload: true })}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Lock size={18} className="text-red-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('lock_app')}</p>
-              <p className="text-sm text-gray-500">{t('lock_now')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('lock_app')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('lock_now')}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
         </div>
       </div>
 
       {/* Preferences Section */}
       <div>
-        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
           {t('preferences')}
         </h3>
-        <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
             onClick={() => dispatch({ type: 'TOGGLE_THEME' })}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center mr-3">
               {state.settings.darkMode ? (
@@ -268,8 +266,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
               )}
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('dark_mode')}</p>
-              <p className="text-sm text-gray-500">{state.settings.darkMode ? t('activated') : t('deactivated')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('dark_mode')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{state.settings.darkMode ? t('activated') : t('deactivated')}</p>
             </div>
             <div
               role="switch"
@@ -286,14 +284,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           <button
             onClick={() => dispatch({ type: 'TOGGLE_NOTIFICATIONS' })}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Bell size={18} className="text-pink-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('notifications_setting')}</p>
-              <p className="text-sm text-gray-500">{state.settings.notificationsEnabled ? t('activated') : t('deactivated')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('notifications_setting')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{state.settings.notificationsEnabled ? t('activated') : t('deactivated')}</p>
             </div>
             <div
               role="switch"
@@ -310,63 +308,63 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           <button
             onClick={() => setShowLanguageSheet(true)}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mr-3">
               <span className="text-lg">{currentLanguage.flag}</span>
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('language')}</p>
-              <p className="text-sm text-gray-500">{currentLanguage.nativeName}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('language')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{currentLanguage.nativeName}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
         </div>
       </div>
 
       {/* Support Section */}
       <div>
-        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
           {t('support')}
         </h3>
-        <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
             onClick={onOpenFAQ}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.HelpCircle size={18} className="text-teal-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('help_center')}</p>
-              <p className="text-sm text-gray-500">{t('faq')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('help_center')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('faq')}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
-          <button className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.MessageCircle size={18} className="text-blue-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('chat_support')}</p>
-              <p className="text-sm text-gray-500">{t('available_247')}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('chat_support')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('available_247')}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
           <button
             onClick={() => setShowAboutSheet(true)}
-            className="w-full flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center mr-3">
               <Icons.Info size={18} className="text-gray-600" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-slate-900 dark:text-white">{t('about')}</p>
-              <p className="text-sm text-gray-500">{getVersionString()}</p>
+              <p className="font-semibold uv-text-primary text-sm">{t('about')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{getVersionString()}</p>
             </div>
-            <Icons.ChevronRight size={18} className="text-gray-400" />
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
         </div>
       </div>
@@ -375,14 +373,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
       <button
         onClick={() => dispatch({ type: 'LOGOUT' })}
         aria-label={t('logout')}
-        className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 p-4 rounded-2xl font-bold flex items-center justify-center gap-2"
+        className="w-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98] transition-all"
       >
         <Icons.LogOut size={18} />
         {t('logout')}
       </button>
 
       {/* App info */}
-      <div className="text-center text-gray-400 text-xs pb-4">
+      <div className="text-center uv-text-muted text-xs pb-4">
         <p>KiramoPay {getVersionString()}</p>
         <p>{t('made_in_cr')}</p>
       </div>
@@ -404,10 +402,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 type={showCurrentPwd ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(''); }}
-                className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 pr-12 rounded-xl outline-none"
+                className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
                 placeholder="--------"
               />
-              <button type="button" onClick={() => setShowCurrentPwd(!showCurrentPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button type="button" onClick={() => setShowCurrentPwd(!showCurrentPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 uv-text-muted hover:uv-text-primary">
                 {showCurrentPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
@@ -426,10 +424,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 type={showNewPwd ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 pr-12 rounded-xl outline-none"
+                className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
                 placeholder="--------"
               />
-              <button type="button" onClick={() => setShowNewPwd(!showNewPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button type="button" onClick={() => setShowNewPwd(!showNewPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 uv-text-muted hover:uv-text-primary">
                 {showNewPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
@@ -459,12 +457,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 type={showConfirmPwd ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 pr-12 rounded-xl outline-none ${
-                  confirmPassword && newPassword !== confirmPassword ? 'border-2 border-red-500' : ''
+                className={`w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all ${
+                  confirmPassword && newPassword !== confirmPassword ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                 }`}
                 placeholder="--------"
               />
-              <button type="button" onClick={() => setShowConfirmPwd(!showConfirmPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button type="button" onClick={() => setShowConfirmPwd(!showConfirmPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 uv-text-muted hover:uv-text-primary">
                 {showConfirmPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
@@ -476,7 +474,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
           <button
             onClick={handleChangePassword}
             disabled={!isPasswordValid || newPassword !== confirmPassword || !currentPassword}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed uv-shadow-primary active:scale-[0.98] transition-all"
           >
             {t('change_password')}
           </button>
@@ -490,7 +488,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
         title={t('transaction_limits')}
       >
         <div className="space-y-4">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+          <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-500">Límite diario</span>
               <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(500000)}</span>
@@ -501,7 +499,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
             <p className="text-xs text-gray-500 mt-1">Usado: {formatCurrency(175000)}</p>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+          <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-500">Límite mensual</span>
               <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(5000000)}</span>
@@ -512,7 +510,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
             <p className="text-xs text-gray-500 mt-1">Usado: {formatCurrency(1000000)}</p>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+          <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-500">Por transacción</span>
               <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(200000)}</span>
@@ -530,7 +528,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
             </div>
           </div>
 
-          <button className="w-full bg-primary text-white py-4 rounded-xl font-bold">
+          <button className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all">
             Solicitar aumento
           </button>
         </div>
@@ -581,12 +579,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                     handleConfirmBiometric();
                   }
                 }}
-                className={`w-full bg-gray-100 dark:bg-gray-800 px-4 py-4 pr-12 rounded-xl outline-none ${
-                  biometricError ? 'border-2 border-red-500' : ''
+                className={`w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border uv-text-primary px-4 py-4 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all ${
+                  biometricError ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                 }`}
                 placeholder="--------"
               />
-              <button type="button" onClick={() => setShowBioPwd(!showBioPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button type="button" onClick={() => setShowBioPwd(!showBioPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 uv-text-muted hover:uv-text-primary">
                 {showBioPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
@@ -690,7 +688,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 }`}>
                   {lang.nativeName}
                 </p>
-                <p className="text-sm text-gray-500">{lang.name}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{lang.name}</p>
               </div>
               {language === lang.code && (
                 <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
