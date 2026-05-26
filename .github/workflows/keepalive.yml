@@ -1,0 +1,26 @@
+name: Keep Render backend awake
+
+# Render Free spins down web services after ~15 min of inactivity.
+# A cold start adds ~30-50s to the first request, which makes the
+# Vercel frontend look broken to a fresh visitor. Pinging /health
+# every 14 min keeps the container hot.
+#
+# Cron uses GitHub-hosted runners which are free and unmetered for
+# public repos. Min interval Actions allows on cron is 5 min, we
+# use 14 to stay below the Render idle threshold with margin.
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"  # every 14 minutes
+  workflow_dispatch:         # manual trigger from Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping backend /health
+        run: |
+          curl --silent --show-error --fail --max-time 60 \
+            --retry 2 --retry-delay 5 \
+            https://kiramopay.onrender.com/health
