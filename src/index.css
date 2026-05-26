@@ -2,111 +2,229 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   KiramoPay Unified Vision — design tokens
+   ───────────────────────────────────────────────────────────────────────────
+   Color philosophy:
+   - Deep navy backgrounds → bank-grade stability, low cognitive noise
+   - Electric blue accents → guide attention to the next action
+   - Surface elevation system (s1 base, s2 cards, s3 modals) for depth
+   ═══════════════════════════════════════════════════════════════════════════ */
 @theme {
-  --color-primary: #0A84FF;
-  --color-accent: #FF7A00;
+  /* ── Brand: electric blue (primary action color) ─────────────────────── */
+  --color-primary: #2D7BFF;
+  --color-primary-hover: #1F6BEF;
+  --color-primary-soft: rgba(45, 123, 255, 0.12);
+  --color-primary-50: #EEF4FF;
+  --color-primary-100: #DBE8FF;
+  --color-primary-200: #B6D1FF;
+  --color-primary-300: #82B0FF;
+  --color-primary-400: #4F90FF;
+  --color-primary-500: #2D7BFF;
+  --color-primary-600: #1F6BEF;
+  --color-primary-700: #1858CC;
+  --color-primary-800: #134399;
+  --color-primary-900: #0E3370;
+
+  /* ── Navy: dark surfaces (bank-grade stability) ──────────────────────── */
+  --color-navy-50: #F2F5FA;
+  --color-navy-100: #E1E7F2;
+  --color-navy-200: #B8C5DB;
+  --color-navy-300: #8FA3C2;
+  --color-navy-400: #5E73A0;
+  --color-navy-500: #3A4E78;
+  --color-navy-600: #283A60;
+  --color-navy-700: #1B294A;
+  --color-navy-800: #121E3A;
+  --color-navy-900: #0A152B;
+  --color-navy-950: #060E1F;
+
+  /* ── Accent: warm orange for highlights (cashback, rewards) ─────────── */
+  --color-accent: #FF8A2B;
+  --color-accent-hover: #F07A1B;
+  --color-accent-soft: rgba(255, 138, 43, 0.12);
+
+  /* ── Status (consistent across light + dark) ────────────────────────── */
+  --color-success: #19C37D;
+  --color-success-soft: rgba(25, 195, 125, 0.12);
+  --color-warning: #F5A524;
+  --color-warning-soft: rgba(245, 165, 36, 0.12);
+  --color-danger: #EF4444;
+  --color-danger-soft: rgba(239, 68, 68, 0.12);
+  --color-info: #2D7BFF;
+
+  /* ── Surface elevation (the heart of Unified Vision) ─────────────────
+     Light mode: white → subtle off-white → cool gray
+     Dark mode (via .dark): navy-900 → navy-800 → navy-700                */
   --color-surface: #FFFFFF;
-  --color-surface-dark: #111827;
-  --color-background: #F3F7FF;
-  --color-background-dark: #0B1220;
+  --color-surface-1: #FFFFFF;        /* base card */
+  --color-surface-2: #F7F9FD;        /* elevated section */
+  --color-surface-3: #EEF2F8;        /* top elevation (modals) */
+  --color-surface-muted: #E4EAF3;    /* dividers, chip bg */
+
+  --color-surface-dark: #121E3A;
+  --color-surface-1-dark: #121E3A;
+  --color-surface-2-dark: #1B294A;
+  --color-surface-3-dark: #283A60;
+  --color-surface-muted-dark: #1F2F52;
+
+  /* ── Page background ─────────────────────────────────────────────────── */
+  --color-background: #F2F5FA;       /* light: subtle blue-tinted gray */
+  --color-background-dark: #060E1F;  /* dark: deepest navy */
+
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  --color-text-primary: #0A152B;
+  --color-text-secondary: #3A4E78;
+  --color-text-muted: #5E73A0;
+  --color-text-on-primary: #FFFFFF;
+
+  --color-text-primary-dark: #F2F5FA;
+  --color-text-secondary-dark: #B8C5DB;
+  --color-text-muted-dark: #8FA3C2;
+
+  /* ── Border ──────────────────────────────────────────────────────────── */
+  --color-border: #E4EAF3;
+  --color-border-strong: #C7D2E2;
+  --color-border-dark: #283A60;
+  --color-border-strong-dark: #3A4E78;
+
+  /* ── Radii: deliberately generous; modern mobile aesthetic ──────────── */
+  --radius-sm: 0.5rem;       /* 8px  — chips, badges */
+  --radius-md: 0.75rem;      /* 12px — small buttons */
+  --radius-lg: 1rem;         /* 16px — inputs, std buttons */
+  --radius-xl: 1.25rem;      /* 20px — cards */
+  --radius-2xl: 1.75rem;     /* 28px — feature cards, balance card */
+  --radius-3xl: 2.25rem;     /* 36px — bottom sheets */
+  --radius-pill: 9999px;     /* full pill */
+
+  /* ── Shadows: layered, subtle, never dramatic ────────────────────────── */
+  --shadow-soft:     0 1px 2px rgba(10, 21, 43, 0.04), 0 1px 3px rgba(10, 21, 43, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(10, 21, 43, 0.08), 0 2px 4px rgba(10, 21, 43, 0.04);
+  --shadow-floating: 0 12px 28px rgba(10, 21, 43, 0.12), 0 4px 8px rgba(10, 21, 43, 0.06);
+  --shadow-primary:  0 8px 20px rgba(45, 123, 255, 0.32);
+
+  /* ── Font stack ──────────────────────────────────────────────────────── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-/* Hide scrollbar for IE, Edge and Firefox */
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
+/* ═══════════════════════════════════════════════════════════════════════════
+   Body + reset (keeps the previous mobile-app feel)
+   ═══════════════════════════════════════════════════════════════════════════ */
 body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Scan animation for QR */
+.dark body {
+  background-color: var(--color-background-dark);
+  color: var(--color-text-primary-dark);
+}
+
+/* Hide scrollbar (preserved from previous design) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Utility classes for the Unified Vision surface system
+   ═══════════════════════════════════════════════════════════════════════════ */
+.uv-surface-1 {
+  background-color: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+}
+.dark .uv-surface-1 {
+  background-color: var(--color-surface-1-dark);
+  border-color: var(--color-border-dark);
+}
+.uv-surface-2 {
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+.dark .uv-surface-2 {
+  background-color: var(--color-surface-2-dark);
+  border-color: var(--color-border-dark);
+}
+.uv-surface-3 {
+  background-color: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+}
+.dark .uv-surface-3 {
+  background-color: var(--color-surface-3-dark);
+  border-color: var(--color-border-dark);
+}
+
+.uv-text-primary    { color: var(--color-text-primary); }
+.uv-text-secondary  { color: var(--color-text-secondary); }
+.uv-text-muted      { color: var(--color-text-muted); }
+.dark .uv-text-primary   { color: var(--color-text-primary-dark); }
+.dark .uv-text-secondary { color: var(--color-text-secondary-dark); }
+.dark .uv-text-muted     { color: var(--color-text-muted-dark); }
+
+.uv-shadow-soft     { box-shadow: var(--shadow-soft); }
+.uv-shadow-elevated { box-shadow: var(--shadow-elevated); }
+.uv-shadow-floating { box-shadow: var(--shadow-floating); }
+.uv-shadow-primary  { box-shadow: var(--shadow-primary); }
+
+/* Brand gradient (deep navy → electric blue) — used in hero/balance card */
+.uv-gradient-brand {
+  background-image: linear-gradient(135deg, #1B294A 0%, #2D7BFF 100%);
+}
+.uv-gradient-brand-soft {
+  background-image: linear-gradient(135deg, rgba(27, 41, 74, 0.95) 0%, rgba(45, 123, 255, 0.85) 100%);
+}
+
+/* Focus ring used by Input/Button components */
+.uv-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-soft), 0 0 0 1px var(--color-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Animations (preserved from previous design)
+   ═══════════════════════════════════════════════════════════════════════════ */
 @keyframes scan {
   0% { top: 10px; }
   100% { top: calc(100% - 10px); }
 }
+.animate-scan { animation: scan 2.5s linear infinite; }
 
-.animate-scan {
-  animation: scan 2.5s linear infinite;
-}
-
-/* Staggered fade-in for lists */
 @keyframes stagger-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 .animate-stagger {
   opacity: 0;
   animation: stagger-in 0.4s ease-out forwards;
 }
 
-/* Bar grow animation for progress bars */
 @keyframes bar-grow {
-  from {
-    width: 0%;
-  }
+  from { width: 0%; }
 }
+.animate-bar-grow { animation: bar-grow 0.7s ease-out forwards; }
 
-.animate-bar-grow {
-  animation: bar-grow 0.7s ease-out forwards;
-}
-
-/* Slide up entrance */
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-slide-up { animation: slide-up 0.5s ease-out forwards; }
 
-.animate-slide-up {
-  animation: slide-up 0.5s ease-out forwards;
-}
-
-/* Fade in scale */
 @keyframes fade-in-scale {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
 }
+.animate-fade-in-scale { animation: fade-in-scale 0.3s ease-out forwards; }
 
-.animate-fade-in-scale {
-  animation: fade-in-scale 0.3s ease-out forwards;
-}
-
-/* Subtle pulse glow for active cards */
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.2); }
-  50% { box-shadow: 0 0 20px 4px rgba(10, 132, 255, 0.15); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(45, 123, 255, 0.22); }
+  50%      { box-shadow: 0 0 24px 4px rgba(45, 123, 255, 0.20); }
 }
+.animate-pulse-glow { animation: pulse-glow 2.2s ease-in-out infinite; }
 
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-/* Shake animation for errors */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-8px); }
@@ -114,40 +232,23 @@ body {
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
 }
+.animate-shake { animation: shake 0.5s ease-out; }
 
-.animate-shake {
-  animation: shake 0.5s ease-out;
-}
-
-/* Number counter animation */
 @keyframes count-up {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-count-up { animation: count-up 0.6s ease-out forwards; }
 
-.animate-count-up {
-  animation: count-up 0.6s ease-out forwards;
-}
-
-/* Onboarding page transition */
 @keyframes onboard-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(40px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
+.animate-onboard-slide { animation: onboard-slide-in 0.5s ease-out forwards; }
 
-.animate-onboard-slide {
-  animation: onboard-slide-in 0.5s ease-out forwards;
-}
-
-/* Smooth card hover */
+/* Interactive card press feedback */
 .card-interactive {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 .card-interactive:active {
   transform: scale(0.97);

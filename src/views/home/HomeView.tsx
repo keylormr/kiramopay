@@ -213,32 +213,39 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
       
-      {/* Main Balance Card */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white/60 to-white/30 dark:from-gray-800/60 dark:to-gray-800/30 backdrop-blur-xl border border-white/20 dark:border-gray-700 rounded-3xl p-6 shadow-lg">
-        <div className="flex justify-between items-start mb-2">
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('total_balance')}</span>
-          <div className="px-2 py-1 bg-accent/10 text-accent text-xs font-bold rounded-full">
-            {state.baseCurrency} Base
+      {/* Main Balance Card — Unified Vision hero treatment */}
+      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 uv-shadow-floating text-white">
+        {/* Decorative blur orb */}
+        <div
+          className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
+          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
+        />
+        <div className="relative flex justify-between items-start mb-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-white/70">
+            {t('total_balance')}
+          </span>
+          <div className="px-2.5 py-1 bg-white/15 backdrop-blur-sm text-white text-[11px] font-bold rounded-full">
+            {state.baseCurrency} · Base
           </div>
         </div>
-        <div className="text-4xl font-extrabold text-slate-900 dark:text-white mb-1">
+        <div className="relative text-[2.5rem] leading-tight font-black tracking-tight mb-1 tabular-nums">
           {formatCurrency(baseAccount.balance, baseAccount.ccy)}
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        <div className="relative text-sm text-white/70 mb-6 tabular-nums">
           ≈ ${totalUsdEstimate.toLocaleString('en-US', {minimumFractionDigits: 2})} USD Total
         </div>
 
-        <div className="flex gap-3">
-          <button 
+        <div className="relative flex gap-2.5">
+          <button
             onClick={() => setActiveSheet('addMoney')}
-            className="flex-1 bg-primary text-white h-10 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20 active:scale-95 transition-transform"
+            className="flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl text-sm font-bold active:scale-[0.98] transition-transform"
           >
             Add Money
           </button>
           <button
             onClick={() => setActiveSheet('addAccount')}
             aria-label={t('open_new_account')}
-            className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-transform"
+            className="w-11 h-11 flex items-center justify-center bg-white/15 backdrop-blur-sm rounded-xl border border-white/20 text-white active:scale-[0.98] transition-transform"
           >
             <Icons.Plus size={18} />
           </button>
@@ -247,19 +254,19 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
       {/* Quick Actions Grid */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-3">{t('quick_actions')}</h3>
+        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
         <div className="grid grid-cols-4 gap-3">
           {[
-            { icon: Icons.Send, label: t('send'), color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', action: () => setActiveSheet('send') },
-            { icon: Icons.Receive, label: t('receive'), color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400', action: () => setActiveSheet('request') },
-            { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400', action: startQRScan },
-            { icon: Icons.Card, label: t('card'), color: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400', action: () => {} }, // Handled in CardsView
+            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => setActiveSheet('send') },
+            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => setActiveSheet('request') },
+            { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
+            { icon: Icons.Card, label: t('card'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => {} },
           ].map((action, i) => (
             <button key={i} onClick={action.action} className="flex flex-col items-center gap-2 group">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} shadow-sm border border-transparent group-active:scale-95 transition-all`}>
-                <action.icon size={24} />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} uv-shadow-soft group-active:scale-[0.94] transition-transform`}>
+                <action.icon size={22} />
               </div>
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{action.label}</span>
+              <span className="text-[11px] font-semibold uv-text-secondary">{action.label}</span>
             </button>
           ))}
         </div>
@@ -344,37 +351,40 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
       {/* Accounts List (Horizontal Scroll) */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-3">{t('accounts')}</h3>
-        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('accounts')}>
-          {state.accounts.map((acc) => (
-            <div
-              key={acc.ccy}
-              role="tab"
-              aria-selected={state.baseCurrency === acc.ccy}
-              onClick={() => dispatch({ type: 'SET_BASE_CURRENCY', payload: acc.ccy })}
-              className={`min-w-[160px] p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between h-32 ${
-                state.baseCurrency === acc.ccy
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-900/20'
-                  : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-gray-700 text-slate-800 dark:text-slate-200'
-              }`}
-            >
-              <div className="flex justify-between items-center">
-                <span className="text-2xl">{acc.flag}</span>
-                <span className="text-xs font-bold opacity-60">{acc.ccy}</span>
-              </div>
-              <div>
-                <div className="text-lg font-bold truncate">{formatCurrency(acc.balance, acc.ccy)}</div>
-                <div className="text-xs opacity-60 truncate">{acc.name}</div>
-              </div>
-            </div>
-          ))}
-          
+        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('accounts')}</h3>
+        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('accounts')}>
+          {state.accounts.map((acc) => {
+            const selected = state.baseCurrency === acc.ccy;
+            return (
+              <button
+                key={acc.ccy}
+                role="tab"
+                aria-selected={selected}
+                onClick={() => dispatch({ type: 'SET_BASE_CURRENCY', payload: acc.ccy })}
+                className={`min-w-[160px] p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between h-32 text-left ${
+                  selected
+                    ? 'uv-gradient-brand text-white border-transparent uv-shadow-primary'
+                    : 'uv-surface-1 uv-text-primary uv-shadow-soft hover:uv-shadow-elevated'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="text-2xl">{acc.flag}</span>
+                  <span className={`text-[11px] font-bold uppercase tracking-wider ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.ccy}</span>
+                </div>
+                <div>
+                  <div className="text-lg font-bold truncate tabular-nums">{formatCurrency(acc.balance, acc.ccy)}</div>
+                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.name}</div>
+                </div>
+              </button>
+            );
+          })}
+
           {/* Add Account Button */}
-          <button 
+          <button
             onClick={() => setActiveSheet('addAccount')}
-            className="min-w-[100px] h-32 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="min-w-[100px] h-32 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-muted hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
           >
-            <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-2">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-2">
               <Icons.Plus size={20} />
             </div>
             <span className="text-xs font-bold">{t('add_new')}</span>
@@ -382,36 +392,39 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </div>
 
-      {/* Recent Transactions */}
+      {/* Recent Transactions — cashflow-clear list */}
       <div>
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('recent_transactions')}</h3>
+          <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
           <button
             onClick={onViewAllTransactions}
-            className="text-accent text-sm font-semibold hover:underline"
+            className="text-[var(--color-primary)] text-sm font-semibold hover:underline"
           >
             {t('view_all')}
           </button>
         </div>
-        <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-          {state.transactions.slice(0, 5).map((tx) => (
-            <div 
-              key={tx.id} 
-              onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
-              className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors first:rounded-t-3xl last:rounded-b-3xl cursor-pointer"
-            >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-4 ${tx.amount < 0 ? 'bg-red-100 dark:bg-red-900/20 text-red-600' : 'bg-green-100 dark:bg-green-900/30 text-green-600'}`}>
-                {tx.amount < 0 ? <Icons.ArrowUpRight size={18} /> : <Icons.ArrowDownLeft size={18} />}
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          {state.transactions.slice(0, 5).map((tx) => {
+            const incoming = tx.amount > 0;
+            return (
+              <div
+                key={tx.id}
+                onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
+                className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
+              >
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                  {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold uv-text-primary text-sm truncate">{tx.title}</div>
+                  <div className="text-xs uv-text-muted mt-0.5">{tx.date}</div>
+                </div>
+                <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
+                  {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
+                </div>
               </div>
-              <div className="flex-1">
-                <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">{tx.title}</div>
-                <div className="text-xs text-gray-500">{tx.date}</div>
-              </div>
-              <div className={`font-bold text-sm ${tx.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
