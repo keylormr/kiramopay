@@ -455,7 +455,7 @@ export const SinpeView: React.FC = () => {
               {t('phone_number')}
             </label>
             <div className="flex items-center gap-2 bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 py-3 rounded-xl focus-within:border-[var(--color-primary)] focus-within:ring-[3px] focus-within:ring-[var(--color-primary-soft)] transition-all">
-              <span className="text-gray-500">+506</span>
+              <span className="uv-text-muted">+506</span>
               <input
                 type="tel"
                 value={newContactPhone}
@@ -485,7 +485,7 @@ export const SinpeView: React.FC = () => {
           {/* Favorito */}
           <button
             onClick={() => setNewContactFavorite(!newContactFavorite)}
-            className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
+            className="w-full flex items-center justify-between p-4 uv-surface-2 rounded-xl"
           >
             <div className="flex items-center gap-3">
               <Icons.Star size={20} className={newContactFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'} />
@@ -530,13 +530,13 @@ export const SinpeView: React.FC = () => {
                   {selectedContact.name.charAt(0)}
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-slate-900 dark:text-white">{selectedContact.name}</div>
+                  <div className="font-bold uv-text-primary">{selectedContact.name}</div>
                   <div className="text-sm text-gray-500">{selectedContact.phone}</div>
                 </div>
                 <button
                   onClick={() => { setSelectedContact(null); setPhone(''); }}
                   aria-label={t('close')}
-                  className="text-gray-400"
+                  className="uv-text-muted"
                 >
                   <Icons.X size={18} />
                 </button>
@@ -549,7 +549,7 @@ export const SinpeView: React.FC = () => {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
                   placeholder="8888-0000"
-                  className="flex-1 bg-transparent outline-none text-lg font-semibold text-slate-900 dark:text-white"
+                  className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
                 />
               </div>
             )}
@@ -559,13 +559,13 @@ export const SinpeView: React.FC = () => {
           <div className="text-center">
             <label className="text-sm text-gray-500 mb-2 block">{t('amount_to_send')}</label>
             <div className="flex items-center justify-center gap-2">
-              <span className="text-4xl font-bold text-slate-900 dark:text-white">₡</span>
+              <span className="text-4xl font-bold uv-text-primary">₡</span>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
-                className="text-5xl font-black bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white placeholder-gray-300"
+                className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
               />
             </div>
             <p className={`text-sm mt-2 ${parseFloat(amount || '0') > balance ? 'text-red-500' : 'text-gray-400'}`}>
@@ -596,7 +596,7 @@ export const SinpeView: React.FC = () => {
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder="Ej: Almuerzo, pago deuda..."
-              className="w-full bg-transparent outline-none text-slate-900 dark:text-white"
+              className="w-full bg-transparent outline-none uv-text-primary"
               maxLength={50}
             />
           </div>
@@ -640,7 +640,7 @@ export const SinpeView: React.FC = () => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="8888-0000"
-                className="flex-1 bg-transparent outline-none text-lg font-semibold text-slate-900 dark:text-white"
+                className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
               />
             </div>
           </div>
@@ -648,13 +648,13 @@ export const SinpeView: React.FC = () => {
           <div className="text-center">
             <label className="text-sm text-gray-500 mb-2 block">{t('amount_to_request')}</label>
             <div className="flex items-center justify-center gap-2">
-              <span className="text-4xl font-bold text-slate-900 dark:text-white">₡</span>
+              <span className="text-4xl font-bold uv-text-primary">₡</span>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
-                className="text-5xl font-black bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white placeholder-gray-300"
+                className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
               />
             </div>
           </div>
@@ -668,7 +668,7 @@ export const SinpeView: React.FC = () => {
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder="Ej: Pago de almuerzo..."
-              className="w-full bg-transparent outline-none text-slate-900 dark:text-white"
+              className="w-full bg-transparent outline-none uv-text-primary"
             />
           </div>
 

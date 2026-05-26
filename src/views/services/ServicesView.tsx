@@ -170,26 +170,26 @@ export const ServicesView: React.FC = () => {
     <div className="pb-24 pt-4 space-y-6 px-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white">
+        <h1 className="text-2xl font-black uv-text-primary">
           {t('nav_services')}
         </h1>
         <div className="text-right">
           <p className="text-xs text-gray-500">{t('available')}</p>
-          <p className="text-lg font-bold text-slate-900 dark:text-white">
+          <p className="text-lg font-bold uv-text-primary">
             {formatCurrency(balance)}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl" role="tablist">
+      <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist">
         <button
           onClick={() => setActiveTab('services')}
           role="tab"
           aria-selected={activeTab === 'services'}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
             activeTab === 'services'
-              ? 'bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm'
+              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
               : 'text-gray-500'
           }`}
         >
@@ -202,7 +202,7 @@ export const ServicesView: React.FC = () => {
           aria-selected={activeTab === 'recharge'}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
             activeTab === 'recharge'
-              ? 'bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm'
+              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
               : 'text-gray-500'
           }`}
         >
@@ -215,7 +215,7 @@ export const ServicesView: React.FC = () => {
           aria-selected={activeTab === 'history'}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
             activeTab === 'history'
-              ? 'bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm'
+              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
               : 'text-gray-500'
           }`}
         >
@@ -229,7 +229,7 @@ export const ServicesView: React.FC = () => {
           {/* Servicios guardados */}
           {state.savedServices.length > 0 && (
             <div>
-              <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
                 {t('my_services')}
               </h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
@@ -240,13 +240,13 @@ export const ServicesView: React.FC = () => {
                     <button
                       key={saved.id}
                       onClick={() => handleSelectProvider(provider)}
-                      className="min-w-[140px] bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800"
+                      className="min-w-[140px] uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]"
                     >
                       <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-xl mb-2`}>
                         {provider.logo}
                       </div>
                       <div className="text-left">
-                        <p className="font-bold text-slate-900 dark:text-white text-sm truncate">
+                        <p className="font-bold uv-text-primary text-sm truncate">
                           {saved.nickname || provider.name}
                         </p>
                         <p className="text-xs text-gray-500">{saved.clientId}</p>
@@ -271,7 +271,7 @@ export const ServicesView: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('search_service')}
-              className="w-full bg-gray-100 dark:bg-gray-800 pl-11 pr-4 py-3 rounded-xl outline-none text-slate-900 dark:text-white placeholder-gray-400"
+              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-11 pr-4 py-3 rounded-xl outline-none uv-text-primary placeholder-gray-400"
             />
           </div>
 
@@ -285,8 +285,8 @@ export const ServicesView: React.FC = () => {
                 aria-selected={selectedCategory === cat.id}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
                   selectedCategory === cat.id
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                    ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                    : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
                 }`}
               >
                 <span>{cat.icon}</span>
@@ -301,12 +301,12 @@ export const ServicesView: React.FC = () => {
               <button
                 key={provider.id}
                 onClick={() => handleSelectProvider(provider)}
-                className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 text-left hover:border-primary dark:hover:border-primary transition-colors"
+                className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors"
               >
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-2xl mb-3`}>
                   {provider.logo}
                 </div>
-                <p className="font-bold text-slate-900 dark:text-white">{provider.name}</p>
+                <p className="font-bold uv-text-primary">{provider.name}</p>
                 <p className="text-xs text-gray-500">{provider.code}</p>
               </button>
             ))}
@@ -318,7 +318,7 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {/* Operadores */}
           <div>
-            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
               {t('select_operator')}
             </h3>
             <div className="grid grid-cols-3 gap-3">
@@ -326,12 +326,12 @@ export const ServicesView: React.FC = () => {
                 <button
                   key={op.id}
                   onClick={() => { setSelectedOperator(op); setShowRechargeSheet(true); }}
-                  className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 text-center hover:border-primary transition-colors"
+                  className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors"
                 >
                   <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-3xl mx-auto mb-2`}>
                     {op.logo}
                   </div>
-                  <p className="font-bold text-slate-900 dark:text-white">{op.name}</p>
+                  <p className="font-bold uv-text-primary">{op.name}</p>
                 </button>
               ))}
             </div>
@@ -340,10 +340,10 @@ export const ServicesView: React.FC = () => {
           {/* Recargas recientes */}
           {state.rechargeHistory.length > 0 && (
             <div>
-              <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
                 {t('recent_recharges')}
               </h3>
-              <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.rechargeHistory.slice(0, 5).map((recharge) => {
                   const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
                   return (
@@ -352,10 +352,10 @@ export const ServicesView: React.FC = () => {
                         {op?.logo || '📱'}
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold text-slate-900 dark:text-white">{recharge.phone}</p>
+                        <p className="font-bold uv-text-primary">{recharge.phone}</p>
                         <p className="text-sm text-gray-500">{recharge.date}</p>
                       </div>
-                      <p className="font-bold text-slate-900 dark:text-white">
+                      <p className="font-bold uv-text-primary">
                         {formatCurrency(recharge.amount)}
                       </p>
                     </div>
@@ -371,16 +371,16 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {/* Pagos de servicios */}
           <div>
-            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
               {t('service_payments')}
             </h3>
             {state.billHistory.length === 0 ? (
-              <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 text-center">
+              <div className="uv-surface-1 rounded-2xl p-8 text-center">
                 <Icons.FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">{t('no_service_payments')}</p>
+                <p className="uv-text-muted">{t('no_service_payments')}</p>
               </div>
             ) : (
-              <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.billHistory.map((bill) => {
                   const provider = SERVICE_PROVIDERS.find(p => p.id === bill.providerId);
                   return (
@@ -389,12 +389,12 @@ export const ServicesView: React.FC = () => {
                         {provider?.logo || '📄'}
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold text-slate-900 dark:text-white">{bill.providerName}</p>
+                        <p className="font-bold uv-text-primary">{bill.providerName}</p>
                         <p className="text-sm text-gray-500">{t('client_label')}: {bill.clientId}</p>
                         <p className="text-xs text-gray-400">{bill.period}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-slate-900 dark:text-white">
+                        <p className="font-bold uv-text-primary">
                           {formatCurrency(bill.amount)}
                         </p>
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
@@ -410,16 +410,16 @@ export const ServicesView: React.FC = () => {
 
           {/* Recargas */}
           <div>
-            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
               {t('recharge_label')}
             </h3>
             {state.rechargeHistory.length === 0 ? (
-              <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 text-center">
+              <div className="uv-surface-1 rounded-2xl p-8 text-center">
                 <Icons.Phone size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">{t('no_recharges_yet')}</p>
+                <p className="uv-text-muted">{t('no_recharges_yet')}</p>
               </div>
             ) : (
-              <div className="bg-white dark:bg-surface-dark rounded-2xl divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.rechargeHistory.map((recharge) => {
                   const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
                   return (
@@ -428,12 +428,12 @@ export const ServicesView: React.FC = () => {
                         {op?.logo || '📱'}
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold text-slate-900 dark:text-white">{op?.name || 'Recarga'}</p>
+                        <p className="font-bold uv-text-primary">{op?.name || 'Recarga'}</p>
                         <p className="text-sm text-gray-500">+506 {recharge.phone}</p>
                         <p className="text-xs text-gray-400">{recharge.date}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-slate-900 dark:text-white">
+                        <p className="font-bold uv-text-primary">
                           {formatCurrency(recharge.amount)}
                         </p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -461,12 +461,12 @@ export const ServicesView: React.FC = () => {
       >
         <div className="space-y-6">
           {selectedProvider && (
-            <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+            <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
               <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedProvider.color} flex items-center justify-center text-2xl`}>
                 {selectedProvider.logo}
               </div>
               <div>
-                <p className="font-bold text-slate-900 dark:text-white">{selectedProvider.name}</p>
+                <p className="font-bold uv-text-primary">{selectedProvider.name}</p>
                 <p className="text-sm text-gray-500">{selectedProvider.code}</p>
               </div>
             </div>
@@ -481,7 +481,7 @@ export const ServicesView: React.FC = () => {
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               placeholder="Ej: 1234567"
-              className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-4 rounded-xl outline-none text-lg font-semibold text-slate-900 dark:text-white"
+              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-4 rounded-xl outline-none text-lg font-semibold uv-text-primary"
             />
           </div>
 
@@ -489,14 +489,14 @@ export const ServicesView: React.FC = () => {
             <label className="text-sm text-gray-500 font-medium mb-2 block">
               {t('amount_to_pay')}
             </label>
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 px-4 py-4 rounded-xl">
+            <div className="flex items-center gap-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-4 rounded-xl">
               <span className="text-2xl font-bold text-gray-400">₡</span>
               <input
                 type="number"
                 value={billAmount}
                 onChange={(e) => setBillAmount(e.target.value)}
                 placeholder="0"
-                className="flex-1 bg-transparent outline-none text-2xl font-bold text-slate-900 dark:text-white"
+                className="flex-1 bg-transparent outline-none text-2xl font-bold uv-text-primary"
               />
             </div>
             {parseFloat(billAmount || '0') > balance && (
@@ -507,7 +507,7 @@ export const ServicesView: React.FC = () => {
           <button
             onClick={handlePayService}
             disabled={!clientId || !billAmount || parseFloat(billAmount) > balance || isProcessing}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <>
@@ -531,12 +531,12 @@ export const ServicesView: React.FC = () => {
       >
         <div className="space-y-6">
           {selectedOperator && (
-            <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+            <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
               <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedOperator.color} flex items-center justify-center text-2xl`}>
                 {selectedOperator.logo}
               </div>
               <div>
-                <p className="font-bold text-slate-900 dark:text-white">{selectedOperator.name}</p>
+                <p className="font-bold uv-text-primary">{selectedOperator.name}</p>
                 <p className="text-sm text-gray-500">{t('prepaid_recharge')}</p>
               </div>
             </div>
@@ -547,7 +547,7 @@ export const ServicesView: React.FC = () => {
               {t('number_to_recharge')}
             </label>
             <div className="flex gap-2">
-              <span className="flex items-center bg-gray-100 dark:bg-gray-800 px-4 rounded-xl text-gray-500">
+              <span className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 rounded-xl text-gray-500">
                 +506
               </span>
               <input
@@ -555,7 +555,7 @@ export const ServicesView: React.FC = () => {
                 value={rechargePhone}
                 onChange={(e) => setRechargePhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="8888-0000"
-                className="flex-1 bg-gray-100 dark:bg-gray-800 px-4 py-4 rounded-xl outline-none text-lg font-semibold text-slate-900 dark:text-white"
+                className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-4 rounded-xl outline-none text-lg font-semibold uv-text-primary"
               />
             </div>
           </div>
@@ -571,8 +571,8 @@ export const ServicesView: React.FC = () => {
                   onClick={() => setRechargeAmount(amt)}
                   className={`py-3 rounded-xl font-bold transition-all ${
                     rechargeAmount === amt
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-white'
+                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary'
                   }`}
                 >
                   {formatCurrency(amt).replace(',00', '')}
@@ -584,7 +584,7 @@ export const ServicesView: React.FC = () => {
           <button
             onClick={handleRecharge}
             disabled={!rechargePhone || !rechargeAmount || (rechargeAmount || 0) > balance || isProcessing}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <>
@@ -610,7 +610,7 @@ export const ServicesView: React.FC = () => {
           <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.Check size={40} className="text-green-500" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
+          <h2 className="text-2xl font-black uv-text-primary mb-2">
             {lastPayment?.type === 'recharge' ? t('recharge_success') : t('payment_success')}
           </h2>
           <p className="text-gray-500 mb-6">
@@ -618,8 +618,8 @@ export const ServicesView: React.FC = () => {
           </p>
 
           {lastPayment && (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6 mb-6">
-              <p className="text-4xl font-black text-slate-900 dark:text-white">
+            <div className="uv-surface-2 rounded-2xl p-6 mb-6">
+              <p className="text-4xl font-black uv-text-primary">
                 {formatCurrency(lastPayment.amount)}
               </p>
             </div>
@@ -627,7 +627,7 @@ export const ServicesView: React.FC = () => {
 
           <button
             onClick={() => setShowSuccessSheet(false)}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
           >
             {t('ready')}
           </button>

@@ -173,14 +173,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between px-4 h-14">
           <button
             onClick={onClose}
             aria-label="Back"
-            className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]"
           >
             <Icons.ChevronLeft size={24} />
           </button>
@@ -188,7 +188,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
           <button
             onClick={resetBudgets}
             aria-label="Reset"
-            className="p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+            className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] text-gray-500"
           >
             <Icons.RefreshCw size={18} />
           </button>
@@ -198,23 +198,23 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
       {/* Content */}
       <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-56px)]">
         {/* Total Summary Card */}
-        <div className="bg-white dark:bg-surface-dark rounded-2xl p-5 mb-5 shadow-sm border border-gray-100 dark:border-gray-800">
+        <div className="uv-surface-1 rounded-2xl p-5 mb-5 shadow-sm border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{t('expenses')}</p>
+              <p className="text-sm uv-text-muted">{t('expenses')}</p>
               <p className="text-2xl font-bold">
                 {formatCurrency(totalSpent, 'CRC')}
               </p>
             </div>
             <div className={`text-right ${getProgressTextColor(totalPercentage)}`}>
               <p className="text-3xl font-black">{totalPercentage}%</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs uv-text-muted">
                 / {formatCurrency(totalLimit, 'CRC')}
               </p>
             </div>
           </div>
           {/* Total progress bar */}
-          <div className="w-full h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div className="w-full h-3 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${getProgressColor(totalPercentage)}`}
               style={{ width: `${Math.min(totalPercentage, 100)}%` }}
@@ -225,8 +225,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
         {/* Budget List */}
         {budgets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <Icons.PiggyBank size={40} className="text-gray-400" />
+            <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
+              <Icons.PiggyBank size={40} className="uv-text-muted" />
             </div>
             <h3 className="text-lg font-semibold mb-1">{t('category')}</h3>
             <p className="text-gray-500 text-sm text-center">
@@ -242,18 +242,18 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
               return (
                 <div
                   key={budget.id}
-                  className="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 transition-all"
+                  className="uv-surface-1 rounded-xl p-4 shadow-sm border border-[var(--color-border)] dark:border-[var(--color-border-dark)] transition-all"
                 >
                   {/* Confirm delete overlay */}
                   {confirmDeleteId === budget.id ? (
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm uv-text-secondary">
                         {t('confirm')} {t('delete').toLowerCase()}?
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setConfirmDeleteId(null)}
-                          className="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium"
+                          className="px-3 py-1.5 text-sm rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-600 dark:text-gray-300 font-medium"
                         >
                           {t('cancel')}
                         </button>
@@ -285,7 +285,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                            <span className="text-xs uv-text-muted">
                               {formatCurrency(budget.spent, budget.ccy)} / {formatCurrency(budget.limit, budget.ccy)}
                             </span>
                           </div>
@@ -293,7 +293,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                       </div>
 
                       {/* Progress bar */}
-                      <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-3">
+                      <div className="w-full h-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full overflow-hidden mb-3">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${getProgressColor(percentage)}`}
                           style={{ width: `${Math.min(percentage, 100)}%` }}
@@ -304,7 +304,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                       <div className="flex gap-2 justify-end">
                         <button
                           onClick={() => openEditSheet(budget)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                         >
                           <Icons.Edit size={14} />
                           {t('edit')}
@@ -328,7 +328,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
         {/* Add Budget Button */}
         <button
           onClick={openAddSheet}
-          className="w-full mt-5 py-3.5 bg-gradient-to-r from-primary to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-primary/20"
+          className="w-full mt-5 py-3.5 uv-gradient-brand text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-primary/20"
         >
           <Icons.Plus size={18} />
           {t('category')}
@@ -344,7 +344,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
         <div className="space-y-4">
           {/* Label */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium uv-text-secondary mb-1">
               {t('category')}
             </label>
             <input
@@ -352,13 +352,13 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
               value={formLabel}
               onChange={(e) => setFormLabel(e.target.value)}
               placeholder="Ej: Comida, Transporte..."
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm outline-none focus:border-primary dark:text-white"
+              className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-2 text-sm outline-none focus:border-primary dark:text-white"
             />
           </div>
 
           {/* Limit */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium uv-text-secondary mb-1">
               {t('amount')}
             </label>
             <input
@@ -367,13 +367,13 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
               onChange={(e) => setFormLimit(e.target.value)}
               placeholder="80000"
               min="0"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm outline-none focus:border-primary dark:text-white"
+              className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-2 text-sm outline-none focus:border-primary dark:text-white"
             />
           </div>
 
           {/* Currency */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium uv-text-secondary mb-1">
               Moneda
             </label>
             <div className="flex gap-2">
@@ -383,8 +383,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                   onClick={() => setFormCcy(ccy)}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     formCcy === ccy
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   {ccy}
@@ -395,7 +395,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
 
           {/* Icon selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium uv-text-secondary mb-2">
               Icono
             </label>
             <div className="grid grid-cols-8 gap-2">
@@ -409,10 +409,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                     className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                       formIcon === preset.name
                         ? 'bg-primary/20 ring-2 ring-primary'
-                        : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    <PresetIcon size={18} className="text-gray-700 dark:text-gray-300" />
+                    <PresetIcon size={18} className="uv-text-secondary" />
                   </button>
                 );
               })}
@@ -421,7 +421,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
 
           {/* Color selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium uv-text-secondary mb-2">
               Color
             </label>
             <div className="flex flex-wrap gap-2">
@@ -442,14 +442,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
           <div className="flex gap-3 pt-2">
             <button
               onClick={() => setSheetOpen(false)}
-              className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium text-sm"
+              className="flex-1 py-3 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-600 dark:text-gray-300 font-medium text-sm"
             >
               {t('cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={!formLabel.trim() || !formLimit || parseInt(formLimit, 10) <= 0}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary to-blue-600 text-white font-medium text-sm disabled:opacity-50 active:scale-[0.98] transition-transform"
+              className="flex-1 py-3 rounded-xl uv-gradient-brand text-white font-medium text-sm disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               {t('save')}
             </button>

@@ -107,18 +107,27 @@ const LockScreen = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
-      <div className="mb-8 flex flex-col items-center">
-        <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-3xl mb-6 flex items-center justify-center shadow-2xl shadow-accent/30">
+    <div className="fixed inset-0 z-[100] bg-[var(--color-background-dark)] flex flex-col items-center justify-center text-white animate-fade-in-scale overflow-hidden">
+      {/* Ambient glow */}
+      <div
+        className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[120%] h-[60%] rounded-full pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(closest-side, rgba(45,123,255,0.28) 0%, rgba(45,123,255,0.06) 50%, transparent 80%)',
+          filter: 'blur(20px)',
+        }}
+      />
+      <div className="relative mb-8 flex flex-col items-center">
+        <div className="w-20 h-20 uv-gradient-brand rounded-3xl mb-6 flex items-center justify-center uv-shadow-primary">
           <span className="text-3xl font-black">K</span>
         </div>
-        <h1 className="text-2xl font-bold mb-2">{t('welcome')}</h1>
-        <p className="text-slate-400 text-sm">
+        <h1 className="text-2xl font-bold mb-2 tracking-tight">{t('welcome')}</h1>
+        <p className="text-[var(--color-text-secondary-dark)] text-sm">
           {state.user?.firstName ? `${t('hello')}, ${state.user.firstName}` : (setupMode ? 'Set your unlock PIN (4-6 digits)' : 'Enter your PIN')}
         </p>
       </div>
 
-      <div className="w-72 space-y-4">
+      <div className="relative w-72 space-y-4">
         <div className="relative">
           <input
             type={showPinText ? 'text' : 'password'}
@@ -138,8 +147,8 @@ const LockScreen = () => {
             }}
             placeholder={setupMode ? 'Choose PIN' : 'Enter PIN'}
             autoFocus
-            className={`w-full bg-slate-800 pl-4 pr-12 py-4 rounded-xl border text-white text-2xl font-mono tracking-[0.5em] text-center placeholder-gray-500 outline-none transition-colors ${
-              error ? 'border-red-500 animate-shake' : 'border-slate-700 focus:border-primary'
+            className={`w-full bg-[var(--color-surface-2-dark)] pl-4 pr-12 py-4 rounded-xl border text-white text-2xl font-mono tracking-[0.5em] text-center placeholder:text-[var(--color-text-muted-dark)] outline-none transition-all focus:ring-[3px] focus:ring-[var(--color-primary-soft)] ${
+              error ? 'border-[var(--color-danger)] animate-shake' : 'border-[var(--color-border-dark)] focus:border-[var(--color-primary)]'
             }`}
             aria-label={setupMode ? 'Set unlock PIN' : 'Enter unlock PIN'}
           />
@@ -147,20 +156,20 @@ const LockScreen = () => {
             type="button"
             onClick={() => setShowPinText(!showPinText)}
             aria-label={showPinText ? t('hide_password') : t('show_password')}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
           >
             {showPinText ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
           </button>
         </div>
 
         {error && (
-          <p aria-live="polite" className="text-red-400 text-sm text-center animate-in fade-in">{error}</p>
+          <p aria-live="polite" className="text-[var(--color-danger)] text-sm text-center animate-shake">{error}</p>
         )}
 
         <button
           onClick={handleSubmit}
           disabled={pin.length < 4}
-          className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-95 transition-all"
+          className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all uv-shadow-primary"
         >
           {setupMode ? 'Set PIN' : t('unlock')}
         </button>
@@ -171,7 +180,7 @@ const LockScreen = () => {
               logout();
               dispatch({ type: 'LOGOUT' });
             }}
-            className="w-full py-3 text-sm text-slate-400 hover:text-slate-200"
+            className="w-full py-3 text-sm text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
           >
             Forgot PIN? Log in with password
           </button>
@@ -180,7 +189,7 @@ const LockScreen = () => {
         {biometricAvailable && (
           <button
             onClick={handleBiometric}
-            className="w-full flex items-center justify-center gap-2 py-3 text-primary hover:bg-slate-800 rounded-xl transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-3 text-[var(--color-primary-300)] hover:bg-[var(--color-surface-2-dark)] rounded-xl transition-colors"
           >
             <Icons.Fingerprint size={24} />
             <span className="text-sm font-medium">{t('biometric_login')}</span>

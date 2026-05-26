@@ -91,12 +91,12 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     : 50;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between flex-shrink-0">
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
-          className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
           aria-label={t('back')}
         >
           <Icons.ChevronLeft size={20} />
@@ -108,14 +108,14 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       <div className="flex-1 overflow-y-auto pb-8">
         {/* Period Selector */}
         <div className="px-4 pt-4 pb-2">
-          <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+          <div className="flex p-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl">
             {(['week', 'month', 'all'] as Period[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                   period === p
-                    ? 'bg-white dark:bg-gray-700 shadow-sm text-slate-900 dark:text-white'
+                    ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary'
                     : 'text-gray-500'
                 }`}
               >
@@ -127,11 +127,11 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
         {/* Income vs Expenses Card */}
         <div className="px-4 py-2">
-          <div className="bg-white dark:bg-surface-dark rounded-3xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{t('analytics_flow')}</h3>
+          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
+            <h3 className="text-sm font-bold uv-text-muted mb-4">{t('analytics_flow')}</h3>
 
             {/* Visual ratio bar */}
-            <div className="h-4 rounded-full overflow-hidden flex mb-4 bg-gray-100 dark:bg-gray-800">
+            <div className="h-4 rounded-full overflow-hidden flex mb-4 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]">
               <div
                 className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-700 ease-out rounded-l-full"
                 style={{ width: `${incomeRatio}%` }}
@@ -164,7 +164,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             </div>
 
             {/* Net */}
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <div className="mt-4 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex justify-between items-center">
               <span className="text-sm font-medium text-gray-500">{t('net_balance')}</span>
               <span className={`text-lg font-extrabold ${summary.net >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                 {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
@@ -175,9 +175,9 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
         {/* Category Breakdown */}
         <div className="px-4 py-2">
-          <div className="bg-white dark:bg-surface-dark rounded-3xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
+          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400">{t('analytics_by_category')}</h3>
+              <h3 className="text-sm font-bold uv-text-muted">{t('analytics_by_category')}</h3>
               <span className="text-xs font-bold text-gray-400">{formatCurrency(categoryData.total)}</span>
             </div>
 
@@ -197,17 +197,17 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${config.bg} ${config.darkBg}`}>
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: config.color }} />
                           </div>
-                          <span className="text-sm font-bold text-slate-900 dark:text-white">{item.category}</span>
+                          <span className="text-sm font-bold uv-text-primary">{item.category}</span>
                         </div>
                         <div className="text-right">
-                          <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                          <span className="text-sm font-extrabold uv-text-primary">
                             {formatCurrency(item.amount)}
                           </span>
                           <span className="text-xs text-gray-400 ml-2">{item.percentage.toFixed(1)}%</span>
                         </div>
                       </div>
                       {/* Progress bar */}
-                      <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                      <div className="h-2.5 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-700 ease-out animate-bar-grow"
                           style={{
@@ -233,8 +233,8 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                   <Icons.TrendingUp size={20} className="text-amber-600" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-1">{t('analytics_insight')}</h4>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <h4 className="font-bold uv-text-primary text-sm mb-1">{t('analytics_insight')}</h4>
+                  <p className="text-xs uv-text-secondary leading-relaxed">
                     {t('analytics_top_category')}: <strong>{topCategory.category}</strong> ({topCategory.percentage.toFixed(0)}% {t('analytics_of_spending')})
                   </p>
                 </div>
@@ -245,8 +245,8 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
         {/* Spending Heatmap (Weekly) */}
         <div className="px-4 py-2">
-          <div className="bg-white dark:bg-surface-dark rounded-3xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{t('analytics_weekly_pattern')}</h3>
+          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
+            <h3 className="text-sm font-bold uv-text-muted mb-4">{t('analytics_weekly_pattern')}</h3>
             <div className="flex gap-2 justify-between">
               {weekdaySpending.map((day) => (
                 <div key={day.name} className="flex flex-col items-center gap-2 flex-1">
@@ -268,17 +268,17 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         {/* Transaction Count Stats */}
         <div className="px-4 py-2">
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4 text-center">
+            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
               <div className="text-2xl font-black text-primary mb-1">{transactions.length}</div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('analytics_total_tx')}</div>
             </div>
-            <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4 text-center">
+            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
               <div className="text-2xl font-black text-green-600 mb-1">
                 {transactions.filter((tx: Transaction) => tx.amount > 0).length}
               </div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('analytics_received')}</div>
             </div>
-            <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4 text-center">
+            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
               <div className="text-2xl font-black text-red-500 mb-1">
                 {transactions.filter((tx: Transaction) => tx.amount < 0).length}
               </div>

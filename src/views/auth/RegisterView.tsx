@@ -141,7 +141,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
             <button
               onClick={handleNext}
               disabled={phone.length < 8 || isLoading}
-              className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
             </button>
@@ -179,7 +179,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
             <button
               onClick={handleNext}
               disabled={otp.some(d => !d) || isLoading}
-              className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('verify')}
             </button>
@@ -211,7 +211,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                   onClick={() => setCedula({ ...cedula, type: type.id })}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                     cedula.type === type.id
-                      ? 'bg-primary text-white'
+                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
                       : 'bg-slate-800 text-gray-400'
                   }`}
                 >
@@ -250,7 +250,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
             <button
               onClick={handleNext}
               disabled={!cedula.part1 || cedula.part2.length < 4 || cedula.part3.length < 4 || isLoading}
-              className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
             </button>
@@ -291,7 +291,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
             <button
               onClick={handleNext}
               disabled={!name.firstName || !name.lastName || isLoading}
-              className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
             </button>

@@ -91,12 +91,12 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-4 animate-onboard-slide">
+        <h1 className="text-2xl font-black uv-text-primary text-center mb-4 animate-onboard-slide">
           {titles[currentStep]}
         </h1>
 
         {/* Description */}
-        <p className="text-base text-gray-500 dark:text-gray-400 text-center leading-relaxed max-w-sm animate-onboard-slide" style={{ animationDelay: '100ms' }}>
+        <p className="text-base uv-text-muted text-center leading-relaxed max-w-sm animate-onboard-slide" style={{ animationDelay: '100ms' }}>
           {descriptions[currentStep]}
         </p>
       </div>
@@ -122,7 +122,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
         {/* Action button */}
         <button
           onClick={handleNext}
-          className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
+          className="w-full uv-gradient-brand text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
         >
           {isLast ? t('onboard_get_started') : t('continue')}
         </button>

@@ -247,10 +247,10 @@ export const MarketplaceView: React.FC = () => {
     <div className="pb-24 pt-4 space-y-6 px-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+        <h1 className="text-2xl font-black uv-text-primary mb-1">
           Marketplace
         </h1>
-        <p className="text-gray-500">Paga con KiramoPay en tus apps favoritas</p>
+        <p className="uv-text-muted">Paga con KiramoPay en tus apps favoritas</p>
       </div>
 
       {/* Categories */}
@@ -261,8 +261,8 @@ export const MarketplaceView: React.FC = () => {
             onClick={() => setActiveCategory(cat.id as typeof activeCategory)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
               activeCategory === cat.id
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
             }`}
           >
             <span>{cat.icon}</span>
@@ -274,7 +274,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Connected Apps */}
       {state.connectedPartners.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+          <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
             Apps conectadas
           </h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
@@ -290,7 +290,7 @@ export const MarketplaceView: React.FC = () => {
                   <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${partner.color} flex items-center justify-center text-3xl shadow-lg`}>
                     {partner.logo}
                   </div>
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  <span className="text-xs font-medium uv-text-secondary">
                     {partner.name}
                   </span>
                 </button>
@@ -302,7 +302,7 @@ export const MarketplaceView: React.FC = () => {
 
       {/* Partners Grid */}
       <div>
-        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+        <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
           {activeCategory === 'all' ? 'Todos los servicios' : categories.find(c => c.id === activeCategory)?.label}
         </h3>
         <div className="grid grid-cols-2 gap-3">
@@ -310,7 +310,7 @@ export const MarketplaceView: React.FC = () => {
             <button
               key={partner.id}
               onClick={() => handleSelectPartner(partner)}
-              className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 text-left hover:border-primary transition-colors relative"
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary transition-colors relative"
             >
               {isConnected(partner.id) && (
                 <span className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-surface-dark" />
@@ -318,7 +318,7 @@ export const MarketplaceView: React.FC = () => {
               <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${partner.color} flex items-center justify-center text-3xl mb-3 shadow-md`}>
                 {partner.logo}
               </div>
-              <p className="font-bold text-slate-900 dark:text-white">{partner.name}</p>
+              <p className="font-bold uv-text-primary">{partner.name}</p>
               <p className="text-xs text-gray-500 mt-1">{partner.description}</p>
             </button>
           ))}
@@ -336,7 +336,7 @@ export const MarketplaceView: React.FC = () => {
             <div className={`w-24 h-24 rounded-3xl bg-gradient-to-br ${selectedPartner.color} flex items-center justify-center text-5xl mx-auto mb-4 shadow-xl`}>
               {selectedPartner.logo}
             </div>
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
+            <h2 className="text-2xl font-black uv-text-primary mb-2">
               {selectedPartner.name}
             </h2>
             <p className="text-gray-500 mb-6">{selectedPartner.description}</p>
@@ -357,7 +357,7 @@ export const MarketplaceView: React.FC = () => {
                       setOrderStep('menu');
                     }
                   }}
-                  className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg"
+                  className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
                 >
                   Usar {selectedPartner.name}
                 </button>
@@ -370,11 +370,11 @@ export const MarketplaceView: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left">
-                  <h4 className="font-bold text-slate-900 dark:text-white mb-2">
+                <div className="uv-surface-2 rounded-xl p-4 text-left">
+                  <h4 className="font-bold uv-text-primary mb-2">
                     Al conectar podrás:
                   </h4>
-                  <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                  <ul className="space-y-2 text-sm uv-text-secondary">
                     <li className="flex items-center gap-2">
                       <Icons.Check size={16} className="text-green-500" />
                       Pagar directamente con KiramoPay
@@ -430,7 +430,7 @@ export const MarketplaceView: React.FC = () => {
                     value={pickup}
                     onChange={(e) => setPickup(e.target.value)}
                     placeholder="¿Dónde te recogemos?"
-                    className="w-full bg-gray-100 dark:bg-gray-800 pl-10 pr-4 py-4 rounded-xl outline-none text-slate-900 dark:text-white"
+                    className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-10 pr-4 py-4 rounded-xl outline-none uv-text-primary"
                   />
                 </div>
                 <div className="relative">
@@ -440,7 +440,7 @@ export const MarketplaceView: React.FC = () => {
                     value={destination}
                     onChange={(e) => setDestination(e.target.value)}
                     placeholder="¿A dónde vas?"
-                    className="w-full bg-gray-100 dark:bg-gray-800 pl-10 pr-4 py-4 rounded-xl outline-none text-slate-900 dark:text-white"
+                    className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-10 pr-4 py-4 rounded-xl outline-none uv-text-primary"
                   />
                 </div>
               </div>
@@ -449,32 +449,32 @@ export const MarketplaceView: React.FC = () => {
               <div className="space-y-2">
                 <button
                   onClick={() => setPickup('Mi ubicación actual')}
-                  className="w-full flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl"
+                  className="w-full flex items-center gap-3 p-3 uv-surface-2 rounded-xl"
                 >
-                  <Icons.MapPin size={18} className="text-primary" />
-                  <span className="text-slate-900 dark:text-white">Mi ubicación actual</span>
+                  <Icons.MapPin size={18} className="text-[var(--color-primary)]" />
+                  <span className="uv-text-primary">Mi ubicación actual</span>
                 </button>
                 <button
                   onClick={() => setDestination('Escazú, San José')}
-                  className="w-full flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl"
+                  className="w-full flex items-center gap-3 p-3 uv-surface-2 rounded-xl"
                 >
-                  <Icons.Clock size={18} className="text-gray-400" />
-                  <span className="text-slate-900 dark:text-white">Escazú, San José</span>
+                  <Icons.Clock size={18} className="uv-text-muted" />
+                  <span className="uv-text-primary">Escazú, San José</span>
                 </button>
               </div>
 
               {pickup && destination && (
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                <div className="uv-surface-2 rounded-xl p-4">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-sm text-gray-500">Precio estimado</p>
-                      <p className="text-2xl font-black text-slate-900 dark:text-white">
+                      <p className="text-2xl font-black uv-text-primary">
                         {formatCurrency(5500)}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Tiempo</p>
-                      <p className="font-bold text-slate-900 dark:text-white">12-18 min</p>
+                      <p className="font-bold uv-text-primary">12-18 min</p>
                     </div>
                   </div>
                 </div>
@@ -493,13 +493,13 @@ export const MarketplaceView: React.FC = () => {
           {rideStep === 'searching' && (
             <div className="text-center py-8">
               <div className="w-20 h-20 mx-auto mb-6 relative">
-                <div className="w-full h-full rounded-full border-4 border-gray-200 dark:border-gray-700" />
+                <div className="w-full h-full rounded-full border-4 border-[var(--color-border)] dark:border-[var(--color-border-dark)]" />
                 <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              <h3 className="text-xl font-bold uv-text-primary mb-2">
                 Buscando conductor...
               </h3>
-              <p className="text-gray-500">Esto puede tomar unos segundos</p>
+              <p className="uv-text-muted">Esto puede tomar unos segundos</p>
             </div>
           )}
 
@@ -509,27 +509,27 @@ export const MarketplaceView: React.FC = () => {
                 ¡Conductor encontrado!
               </div>
 
-              <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+              <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
                 <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
                   👨
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-slate-900 dark:text-white">Carlos Ramírez</p>
+                  <p className="font-bold uv-text-primary">Carlos Ramírez</p>
                   <div className="flex items-center gap-1 text-sm text-gray-500">
                     <Icons.Star size={14} className="text-yellow-500 fill-yellow-500" />
                     <span>4.92</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-slate-900 dark:text-white">Toyota Corolla</p>
+                  <p className="font-bold uv-text-primary">Toyota Corolla</p>
                   <p className="text-sm text-gray-500">ABC-123</p>
                 </div>
               </div>
 
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+              <div className="uv-surface-2 rounded-xl p-4">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Total a pagar</span>
-                  <span className="font-black text-xl text-slate-900 dark:text-white">
+                  <span className="uv-text-muted">Total a pagar</span>
+                  <span className="font-black text-xl uv-text-primary">
                     {formatCurrency(5250)}
                   </span>
                 </div>
@@ -547,11 +547,11 @@ export const MarketplaceView: React.FC = () => {
           {rideStep === 'arriving' && (
             <div className="text-center py-8">
               <div className="text-6xl mb-4">🚗</div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              <h3 className="text-xl font-bold uv-text-primary mb-2">
                 Tu conductor viene en camino
               </h3>
               <p className="text-3xl font-black text-primary mb-2">3 min</p>
-              <p className="text-gray-500">Toyota Corolla • ABC-123</p>
+              <p className="uv-text-muted">Toyota Corolla • ABC-123</p>
             </div>
           )}
         </div>
@@ -570,7 +570,7 @@ export const MarketplaceView: React.FC = () => {
                 <input
                   type="text"
                   placeholder="Buscar restaurantes..."
-                  className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-xl outline-none"
+                  className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3 rounded-xl outline-none"
                 />
               </div>
 
@@ -579,13 +579,13 @@ export const MarketplaceView: React.FC = () => {
                   <button
                     key={rest.id}
                     onClick={() => setSelectedRestaurant(rest)}
-                    className="w-full flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl"
+                    className="w-full flex items-center gap-4 uv-surface-2 p-4 rounded-xl"
                   >
                     <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center text-2xl">
                       {rest.logo}
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="font-bold text-slate-900 dark:text-white">{rest.name}</p>
+                      <p className="font-bold uv-text-primary">{rest.name}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <Icons.Star size={12} className="text-yellow-500 fill-yellow-500" />
@@ -597,7 +597,7 @@ export const MarketplaceView: React.FC = () => {
                         <span>Envío {formatCurrency(rest.deliveryFee)}</span>
                       </div>
                     </div>
-                    <Icons.ChevronRight size={18} className="text-gray-400" />
+                    <Icons.ChevronRight size={18} className="uv-text-muted" />
                   </button>
                 ))}
               </div>
@@ -620,14 +620,14 @@ export const MarketplaceView: React.FC = () => {
                     {selectedRestaurant.logo}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-xl font-bold uv-text-primary">
                       {selectedRestaurant.name}
                     </h3>
                     <p className="text-sm text-gray-500">{selectedRestaurant.time}</p>
                   </div>
                 </div>
 
-                <h4 className="font-bold text-slate-900 dark:text-white mb-3">Menú</h4>
+                <h4 className="font-bold uv-text-primary mb-3">Menú</h4>
                 <div className="space-y-2">
                   {[
                     { name: 'Combo 1', price: 4500 },
@@ -638,15 +638,15 @@ export const MarketplaceView: React.FC = () => {
                   ].map((item) => (
                     <div
                       key={item.name}
-                      className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-4 rounded-xl"
+                      className="flex items-center justify-between uv-surface-2 p-4 rounded-xl"
                     >
                       <div>
-                        <p className="font-bold text-slate-900 dark:text-white">{item.name}</p>
+                        <p className="font-bold uv-text-primary">{item.name}</p>
                         <p className="text-sm text-gray-500">{formatCurrency(item.price)}</p>
                       </div>
                       <button
                         onClick={() => addToCart(item)}
-                        className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center"
+                        className="w-8 h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-full flex items-center justify-center"
                       >
                         <Icons.Plus size={16} />
                       </button>
@@ -656,10 +656,10 @@ export const MarketplaceView: React.FC = () => {
               </div>
 
               {cartItems.length > 0 && (
-                <div className="sticky bottom-0 bg-white dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800 p-4">
+                <div className="sticky bottom-0 uv-surface-1 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
                   <button
                     onClick={() => setOrderStep('cart')}
-                    className="w-full bg-primary text-white py-4 rounded-xl font-bold flex items-center justify-between px-4"
+                    className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-between px-4"
                   >
                     <span>Ver carrito ({cartItems.reduce((a, i) => a + i.qty, 0)})</span>
                     <span>{formatCurrency(cartTotal)}</span>
@@ -671,13 +671,13 @@ export const MarketplaceView: React.FC = () => {
 
           {orderStep === 'cart' && (
             <div className="px-2 space-y-4">
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Tu pedido</h3>
+              <h3 className="text-xl font-bold uv-text-primary">Tu pedido</h3>
 
               <div className="space-y-2">
                 {cartItems.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+                  <div key={item.name} className="flex items-center justify-between uv-surface-2 p-4 rounded-xl">
                     <div>
-                      <p className="font-bold text-slate-900 dark:text-white">{item.name}</p>
+                      <p className="font-bold uv-text-primary">{item.name}</p>
                       <p className="text-sm text-gray-500">{item.qty} x {formatCurrency(item.price)}</p>
                     </div>
                     <p className="font-bold">{formatCurrency(item.price * item.qty)}</p>
@@ -685,18 +685,18 @@ export const MarketplaceView: React.FC = () => {
                 ))}
               </div>
 
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-2">
+              <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cartTotal)}</span>
+                  <span className="uv-text-muted">Subtotal</span>
+                  <span className="font-bold uv-text-primary">{formatCurrency(cartTotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Envío</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(deliveryFee)}</span>
+                  <span className="uv-text-muted">Envío</span>
+                  <span className="font-bold uv-text-primary">{formatCurrency(deliveryFee)}</span>
                 </div>
-                <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="font-bold text-slate-900 dark:text-white">Total</span>
-                  <span className="font-black text-xl text-slate-900 dark:text-white">{formatCurrency(cartTotal + deliveryFee)}</span>
+                <div className="flex justify-between pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                  <span className="font-bold uv-text-primary">Total</span>
+                  <span className="font-black text-xl uv-text-primary">{formatCurrency(cartTotal + deliveryFee)}</span>
                 </div>
               </div>
 
@@ -714,23 +714,23 @@ export const MarketplaceView: React.FC = () => {
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Icons.Check size={40} className="text-green-500" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              <h3 className="text-xl font-bold uv-text-primary mb-2">
                 ¡Pedido confirmado!
               </h3>
               <p className="text-gray-500 mb-6">
                 Tu pedido de {selectedRestaurant?.name} está en preparación
               </p>
 
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-6">
+              <div className="uv-surface-2 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-500 mb-1">Tiempo estimado</p>
-                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                <p className="text-2xl font-black uv-text-primary">
                   {selectedRestaurant?.time}
                 </p>
               </div>
 
               <button
                 onClick={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); }}
-                className="w-full bg-primary text-white py-4 rounded-xl font-bold"
+                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
                 Listo
               </button>

@@ -113,14 +113,14 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const disabledPayments = payments.filter((p) => !p.enabled);
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between px-4 h-14">
           <button
             onClick={onClose}
             aria-label={t('back')}
-            className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]"
           >
             <Icons.ChevronLeft size={24} />
           </button>
@@ -133,8 +133,8 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-56px)]">
         {payments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <Icons.RefreshCw size={40} className="text-gray-400" />
+            <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
+              <Icons.RefreshCw size={40} className="uv-text-muted" />
             </div>
             <h3 className="text-lg font-semibold mb-1">Sin pagos recurrentes</h3>
             <p className="text-gray-500 text-sm text-center">
@@ -147,14 +147,14 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             {/* Active payments */}
             {enabledPayments.length > 0 && (
               <div>
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+                <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
                   Activos ({enabledPayments.length})
                 </h3>
                 <div className="space-y-3">
                   {enabledPayments.map((payment) => (
                     <div
                       key={payment.id}
-                      className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm"
+                      className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] shadow-sm"
                     >
                       <div className="flex items-start gap-3">
                         {/* Type icon */}
@@ -167,10 +167,10 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-bold text-slate-900 dark:text-white truncate">
+                            <h4 className="font-bold uv-text-primary truncate">
                               {payment.label}
                             </h4>
-                            <p className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            <p className="font-bold uv-text-primary whitespace-nowrap">
                               {formatCurrency(payment.amount, payment.ccy)}
                             </p>
                           </div>
@@ -201,7 +201,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                       </div>
 
                       {/* Actions row */}
-                      <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
                         {/* Toggle */}
                         <button
                           onClick={() => togglePayment(payment.id)}
@@ -230,14 +230,14 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             {/* Disabled payments */}
             {disabledPayments.length > 0 && (
               <div>
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">
+                <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
                   Inactivos ({disabledPayments.length})
                 </h3>
                 <div className="space-y-3">
                   {disabledPayments.map((payment) => (
                     <div
                       key={payment.id}
-                      className="bg-white dark:bg-surface-dark rounded-2xl p-4 border border-gray-100 dark:border-gray-800 opacity-60"
+                      className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] opacity-60"
                     >
                       <div className="flex items-start gap-3">
                         <div
@@ -248,10 +248,10 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-bold text-slate-900 dark:text-white truncate">
+                            <h4 className="font-bold uv-text-primary truncate">
                               {payment.label}
                             </h4>
-                            <p className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            <p className="font-bold uv-text-primary whitespace-nowrap">
                               {formatCurrency(payment.amount, payment.ccy)}
                             </p>
                           </div>
@@ -266,7 +266,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
                         <button
                           onClick={() => togglePayment(payment.id)}
                           aria-label="Activar pago"
@@ -296,7 +296,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         <div className="fixed bottom-6 left-0 right-0 flex justify-center z-10">
           <button
             onClick={() => setShowAddSheet(true)}
-            className="bg-gradient-to-r from-primary to-blue-600 text-white px-6 py-3.5 rounded-full font-bold text-sm shadow-lg shadow-primary/30 flex items-center gap-2 active:scale-95 transition-transform"
+            className="uv-gradient-brand text-white px-6 py-3.5 rounded-full font-bold text-sm shadow-lg shadow-primary/30 flex items-center gap-2 active:scale-95 transition-transform"
           >
             <Icons.Plus size={18} />
             Agregar pago recurrente
@@ -324,7 +324,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Ej: Pago de luz"
-              className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3.5 rounded-xl outline-none text-slate-900 dark:text-white placeholder-gray-400"
+              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3.5 rounded-xl outline-none uv-text-primary placeholder-gray-400"
             />
           </div>
 
@@ -340,8 +340,8 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                   onClick={() => setNewType(opt.value)}
                   className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
                     newType === opt.value
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-white'
+                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary'
                   }`}
                 >
                   {opt.label}
@@ -355,14 +355,14 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             <label className="text-sm text-gray-500 font-medium mb-2 block">
               {t('amount')}
             </label>
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 px-4 py-3.5 rounded-xl">
+            <div className="flex items-center gap-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3.5 rounded-xl">
               <span className="text-xl font-bold text-gray-400">&#8353;</span>
               <input
                 type="number"
                 value={newAmount}
                 onChange={(e) => setNewAmount(e.target.value)}
                 placeholder="0"
-                className="flex-1 bg-transparent outline-none text-xl font-bold text-slate-900 dark:text-white"
+                className="flex-1 bg-transparent outline-none text-xl font-bold uv-text-primary"
               />
             </div>
           </div>
@@ -379,8 +379,8 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                   onClick={() => setNewFrequency(opt.value)}
                   className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
                     newFrequency === opt.value
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-white'
+                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary'
                   }`}
                 >
                   {opt.label}
@@ -398,7 +398,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               type="date"
               value={newNextDate}
               onChange={(e) => setNewNextDate(e.target.value)}
-              className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3.5 rounded-xl outline-none text-slate-900 dark:text-white"
+              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3.5 rounded-xl outline-none uv-text-primary"
             />
           </div>
 
@@ -406,7 +406,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <button
             onClick={handleAdd}
             disabled={!newLabel || !newAmount || !newNextDate}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-transform"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-transform"
           >
             {t('save')}
           </button>
@@ -426,7 +426,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <div className="flex gap-3">
             <button
               onClick={() => setConfirmDeleteId(null)}
-              className="flex-1 bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-white py-3.5 rounded-xl font-bold"
+              className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-3.5 rounded-xl font-bold"
             >
               {t('cancel')}
             </button>

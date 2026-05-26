@@ -138,13 +138,13 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between px-4 h-14">
           <button
             onClick={onClose}
-            className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]"
           >
             <Icons.ChevronLeft size={24} />
           </button>
@@ -161,7 +161,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
               placeholder="Buscar pregunta..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-10 pr-4 py-2.5 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </div>
@@ -175,8 +175,8 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
                 onClick={() => setSelectedCategory(category)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                   selectedCategory === category
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                    ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                    : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
                 }`}
               >
                 {category}
@@ -190,8 +190,8 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
       <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-200px)]">
         {filteredFAQs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <Icons.HelpCircle size={40} className="text-gray-400" />
+            <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
+              <Icons.HelpCircle size={40} className="uv-text-muted" />
             </div>
             <h3 className="text-lg font-semibold mb-1">Sin resultados</h3>
             <p className="text-gray-500 text-sm text-center">
@@ -203,7 +203,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
             {filteredFAQs.map((item) => (
               <div
                 key={item.id}
-                className="bg-white dark:bg-surface-dark rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+                className="uv-surface-1 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] overflow-hidden"
               >
                 <button
                   onClick={() => toggleExpand(item.id)}
@@ -220,7 +220,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
                 {expandedId === item.id && (
                   <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      <p className="text-sm uv-text-secondary leading-relaxed">
                         {item.answer}
                       </p>
                     </div>

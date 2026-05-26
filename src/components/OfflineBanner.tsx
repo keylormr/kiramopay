@@ -22,7 +22,7 @@ export function OfflineBanner() {
         </div>
       )}
       {updateAvailable && (
-        <div className="bg-primary text-white text-center py-2 px-4 text-sm font-medium">
+        <div className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-center py-2 px-4 text-sm font-medium">
           Nueva versión disponible
           <button
             onClick={update}

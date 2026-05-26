@@ -116,12 +116,12 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between flex-shrink-0">
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
-          className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
           aria-label={t('back')}
         >
           <Icons.ChevronLeft size={20} />
@@ -129,7 +129,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <h1 className="text-lg font-bold">{t('savings_title')}</h1>
         <button
           onClick={() => setShowAddSheet(true)}
-          className="p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-primary"
+          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]"
           aria-label={t('savings_add_goal')}
         >
           <Icons.Plus size={20} />
@@ -143,7 +143,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-xs font-bold text-primary/60 uppercase tracking-wider mb-1">{t('savings_total_saved')}</p>
-                <p className="text-3xl font-black text-slate-900 dark:text-white">{formatCurrency(totalSaved)}</p>
+                <p className="text-3xl font-black uv-text-primary">{formatCurrency(totalSaved)}</p>
               </div>
               {/* Circular progress */}
               <div className="relative w-16 h-16">
@@ -151,19 +151,19 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
                     className="text-gray-200 dark:text-gray-700" />
                   <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-                    className="text-primary"
+                    className="text-[var(--color-primary)]"
                     strokeDasharray={`${overallProgress * 1.76} 176`}
                     strokeLinecap="round"
                     style={{ transition: 'stroke-dasharray 0.7s ease-out' }}
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs font-black text-primary">{Math.round(overallProgress)}%</span>
+                  <span className="text-xs font-black text-[var(--color-primary)]">{Math.round(overallProgress)}%</span>
                 </div>
               </div>
             </div>
             {totalTarget > 0 && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs uv-text-muted">
                 {t('savings_of_target')} {formatCurrency(totalTarget)}
               </p>
             )}
@@ -173,14 +173,14 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         {/* Goals List */}
         {goals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 px-4">
-            <div className="w-24 h-24 rounded-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <div className="w-24 h-24 rounded-3xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-4">
               <Icons.PiggyBank size={48} className="opacity-30" />
             </div>
-            <p className="text-lg font-bold mb-2 text-slate-900 dark:text-white">{t('savings_no_goals')}</p>
+            <p className="text-lg font-bold mb-2 uv-text-primary">{t('savings_no_goals')}</p>
             <p className="text-sm text-gray-400 text-center mb-6">{t('savings_no_goals_desc')}</p>
             <button
               onClick={() => setShowAddSheet(true)}
-              className="px-6 py-3 bg-primary text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
+              className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
             >
               {t('savings_create_first')}
             </button>
@@ -195,7 +195,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               return (
                 <div
                   key={goal.id}
-                  className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4 shadow-sm animate-stagger hover:shadow-md transition-all"
+                  className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger hover:shadow-md transition-all"
                   style={{ animationDelay: `${i * 80}ms` }}
                 >
                   <div className="flex items-start gap-3 mb-3">
@@ -208,7 +208,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate">{goal.name}</h3>
+                          <h3 className="font-bold uv-text-primary text-sm truncate">{goal.name}</h3>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {formatCurrency(goal.saved)} / {formatCurrency(goal.target)}
                           </p>
@@ -227,7 +227,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-3">
+                  <div className="h-2.5 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden mb-3">
                     <div
                       className="h-full rounded-full transition-all duration-700 ease-out animate-bar-grow"
                       style={{
@@ -252,7 +252,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     </button>
                     <button
                       onClick={() => removeGoal(goal.id)}
-                      className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-sm font-bold active:scale-95 transition-all"
+                      className="px-4 py-2.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-500 text-sm font-bold active:scale-95 transition-all"
                     >
                       <Icons.X size={16} />
                     </button>
@@ -275,21 +275,21 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               value={goalName}
               onChange={(e) => setGoalName(e.target.value)}
               placeholder={t('savings_goal_name_placeholder')}
-              className="w-full bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           {/* Target */}
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_target_amount')}</label>
-            <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3">
+            <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
               <span className="text-lg font-bold text-gray-400 mr-2">₡</span>
               <input
                 type="number"
                 value={goalTarget}
                 onChange={(e) => setGoalTarget(e.target.value)}
                 placeholder="0"
-                className="flex-1 bg-transparent text-lg font-bold outline-none text-slate-900 dark:text-white"
+                className="flex-1 bg-transparent text-lg font-bold outline-none uv-text-primary"
               />
             </div>
           </div>
@@ -305,7 +305,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
                     goalIcon === id
                       ? 'border-primary bg-primary/10'
-                      : 'border-transparent bg-gray-50 dark:bg-gray-800'
+                      : 'border-transparent uv-surface-2'
                   }`}
                 >
                   <Icon size={20} className={goalIcon === id ? 'text-primary' : 'text-gray-400'} />
@@ -336,7 +336,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={handleAddGoal}
             disabled={!goalName || !goalTarget}
-            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
           >
             {t('savings_create_goal')}
           </button>
@@ -371,7 +371,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value)}
                     placeholder="0"
-                    className={`text-4xl font-black bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficient ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}
+                    className={`text-4xl font-black bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficient ? 'text-red-500' : 'uv-text-primary'}`}
                     autoFocus
                   />
                 </div>
@@ -387,7 +387,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <button
                       key={amt}
                       onClick={() => setDepositAmount(amt.toString())}
-                      className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-bold text-gray-600 dark:text-gray-400 active:scale-95 transition-transform"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-xs font-bold uv-text-secondary active:scale-95 transition-transform"
                     >
                       ₡{(amt / 1000).toFixed(0)}K
                     </button>
@@ -397,7 +397,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <button
                   onClick={handleDeposit}
                   disabled={!depositAmount || numAmount <= 0 || isInsufficient}
-                  className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
+                  className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {t('savings_deposit')}
                 </button>

@@ -357,7 +357,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
             onClick={() => setShowAboutSheet(true)}
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
-            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center mr-3">
+            <div className="w-10 h-10 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl flex items-center justify-center mr-3">
               <Icons.Info size={18} className="text-gray-600" />
             </div>
             <div className="flex-1 text-left">
@@ -490,8 +490,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
         <div className="space-y-4">
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-500">Límite diario</span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(500000)}</span>
+              <span className="uv-text-muted">Límite diario</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(500000)}</span>
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div className="h-full bg-primary rounded-full" style={{ width: '35%' }} />
@@ -501,8 +501,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-500">Límite mensual</span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(5000000)}</span>
+              <span className="uv-text-muted">Límite mensual</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(5000000)}</span>
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div className="h-full bg-accent rounded-full" style={{ width: '20%' }} />
@@ -512,8 +512,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-500">Por transacción</span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(200000)}</span>
+              <span className="uv-text-muted">Por transacción</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(200000)}</span>
             </div>
           </div>
 
@@ -555,7 +555,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 biometricAction === 'enable' ? 'text-green-600' : 'text-red-600'
               } />
             </div>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="uv-text-secondary">
               {biometricAction === 'enable'
                 ? t('enter_password_to_enable')
                 : t('enter_password_to_disable')}
@@ -616,11 +616,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
         <div className="space-y-6 max-h-[60vh] overflow-y-auto">
           {/* Logo y version */}
           <div className="text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <div className="w-20 h-20 uv-gradient-brand rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <span className="text-3xl font-black text-white">K</span>
             </div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">KiramoPay</h2>
-            <p className="text-gray-500">{getVersionString()}</p>
+            <h2 className="text-xl font-black uv-text-primary">KiramoPay</h2>
+            <p className="uv-text-muted">{getVersionString()}</p>
             <p className="text-xs text-gray-400 mt-1">
               Lanzado: {APP_VERSION.current.releaseDate}
             </p>
@@ -628,14 +628,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
 
           {/* Changelog */}
           {getAllVersions().map((version, index) => (
-            <div key={version.version} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+            <div key={version.version} className="uv-surface-2 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-900 dark:text-white">
+                  <span className="font-bold uv-text-primary">
                     v{version.version}
                   </span>
                   {index === 0 && (
-                    <span className="bg-primary text-white text-xs px-2 py-0.5 rounded-full">
+                    <span className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs px-2 py-0.5 rounded-full">
                       Actual
                     </span>
                   )}
@@ -644,8 +644,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
               </div>
               <ul className="space-y-1.5">
                 {version.changes.map((change, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <span className="text-primary mt-0.5">•</span>
+                  <li key={i} className="flex items-start gap-2 text-sm uv-text-secondary">
+                    <span className="text-[var(--color-primary)] mt-0.5">•</span>
                     {change}
                   </li>
                 ))}
@@ -654,7 +654,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
           ))}
 
           {/* Footer */}
-          <div className="text-center pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="text-center pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
             <p className="text-sm text-gray-500">{t('made_in_cr')}</p>
             <p className="text-xs text-gray-400 mt-1">© 2024 KiramoPay. {t('all_rights')}.</p>
           </div>
@@ -678,13 +678,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
               className={`w-full flex items-center p-4 rounded-xl transition-colors ${
                 language === lang.code
                   ? 'bg-primary/10 border-2 border-primary'
-                  : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'uv-surface-2 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]'
               }`}
             >
               <span className="text-2xl mr-4">{lang.flag}</span>
               <div className="flex-1 text-left">
                 <p className={`font-bold ${
-                  language === lang.code ? 'text-primary' : 'text-slate-900 dark:text-white'
+                  language === lang.code ? 'text-primary' : 'uv-text-primary'
                 }`}>
                   {lang.nativeName}
                 </p>

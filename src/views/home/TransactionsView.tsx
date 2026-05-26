@@ -23,7 +23,7 @@ const CATEGORY_STYLES: Record<string, { icon: React.FC<{ size?: number }>; bg: s
   Transport: { icon: Icons.Car, bg: 'bg-cyan-100 dark:bg-cyan-900/30', text: 'text-cyan-600 dark:text-cyan-400' },
 };
 
-const DEFAULT_STYLE = { icon: Icons.Circle, bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-500' };
+const DEFAULT_STYLE = { icon: Icons.Circle, bg: 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]', text: 'text-gray-500' };
 
 function getCategoryStyle(category?: string) {
   if (!category) return DEFAULT_STYLE;

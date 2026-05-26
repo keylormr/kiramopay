@@ -29,13 +29,13 @@ export const PayView: React.FC = () => {
   return (
     <div className="h-full flex flex-col pt-4 px-4 pb-24">
       {/* Segmented Control */}
-      <div className="bg-gray-100 dark:bg-gray-800 p-1 rounded-xl flex mb-6">
+      <div className="bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl flex mb-6">
         <button
           onClick={() => handleModeChange('scan')}
           className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
             mode === 'scan'
-              ? 'bg-white dark:bg-surface-dark shadow-sm text-slate-900 dark:text-white'
-              : 'text-gray-500 dark:text-gray-400'
+              ? 'uv-surface-1 shadow-sm uv-text-primary'
+              : 'uv-text-muted'
           }`}
         >
           Scan QR
@@ -44,8 +44,8 @@ export const PayView: React.FC = () => {
           onClick={() => handleModeChange('code')}
           className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
             mode === 'code'
-              ? 'bg-white dark:bg-surface-dark shadow-sm text-slate-900 dark:text-white'
-              : 'text-gray-500 dark:text-gray-400'
+              ? 'uv-surface-1 shadow-sm uv-text-primary'
+              : 'uv-text-muted'
           }`}
         >
           My Code
@@ -90,9 +90,9 @@ export const PayView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="w-full max-w-sm bg-white dark:bg-surface-dark p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center animate-in slide-in-from-bottom-4 duration-300">
+          <div className="w-full max-w-sm uv-surface-1 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center animate-in slide-in-from-bottom-4 duration-300">
             <div className="w-16 h-16 bg-gradient-to-tr from-primary to-accent rounded-2xl mb-4 shadow-lg" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Demo User</h3>
+            <h3 className="text-xl font-bold uv-text-primary mb-1">Demo User</h3>
             <p className="text-gray-500 text-sm mb-6">@demouser • {state.baseCurrency}</p>
             
             <div className="p-4 bg-white rounded-2xl shadow-inner border border-gray-100 mb-6">
@@ -100,10 +100,10 @@ export const PayView: React.FC = () => {
             </div>
 
             <div className="flex gap-3 w-full">
-              <button className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-bold text-slate-700 dark:text-slate-300">
+              <button className="flex-1 py-3 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-sm font-bold text-slate-700 dark:text-slate-300">
                 Copy Link
               </button>
-              <button className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-bold text-slate-700 dark:text-slate-300">
+              <button className="flex-1 py-3 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-sm font-bold text-slate-700 dark:text-slate-300">
                 Share
               </button>
             </div>

@@ -11,31 +11,31 @@ interface NotificationsViewProps {
 const getNotificationIcon = (type: Notification['type']) => {
   switch (type) {
     case 'transaction':
-      return <Icons.Banknote size={20} className="text-green-500" />;
+      return <Icons.Banknote size={20} className="text-[var(--color-success)]" />;
     case 'security':
-      return <Icons.Shield size={20} className="text-red-500" />;
+      return <Icons.Shield size={20} className="text-[var(--color-danger)]" />;
     case 'promo':
-      return <Icons.Gift size={20} className="text-purple-500" />;
+      return <Icons.Gift size={20} className="text-[var(--color-accent)]" />;
     case 'warning':
-      return <Icons.AlertCircle size={20} className="text-yellow-500" />;
+      return <Icons.AlertCircle size={20} className="text-[var(--color-warning)]" />;
     default:
-      return <Icons.Info size={20} className="text-blue-500" />;
+      return <Icons.Info size={20} className="text-[var(--color-primary)]" />;
   }
 };
 
 const getNotificationBg = (type: Notification['type'], read: boolean) => {
-  if (read) return 'bg-gray-50 dark:bg-gray-800/50';
+  if (read) return 'uv-surface-1';
   switch (type) {
     case 'transaction':
-      return 'bg-green-50 dark:bg-green-900/20';
+      return 'bg-[var(--color-success-soft)]';
     case 'security':
-      return 'bg-red-50 dark:bg-red-900/20';
+      return 'bg-[var(--color-danger-soft)]';
     case 'promo':
-      return 'bg-purple-50 dark:bg-purple-900/20';
+      return 'bg-[var(--color-accent-soft)]';
     case 'warning':
-      return 'bg-yellow-50 dark:bg-yellow-900/20';
+      return 'bg-[var(--color-warning-soft)]';
     default:
-      return 'bg-blue-50 dark:bg-blue-900/20';
+      return 'bg-[var(--color-primary-soft)]';
   }
 };
 
@@ -57,14 +57,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between px-4 h-14">
           <button
             onClick={onClose}
             aria-label="Back"
-            className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]"
           >
             <Icons.ChevronLeft size={24} />
           </button>
@@ -74,14 +74,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
 
         {/* Actions bar */}
         {notifications.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
             <span className="text-sm text-gray-500">
               {unreadCount > 0 ? `${unreadCount} sin leer` : 'Todas leidas'}
             </span>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="text-sm text-primary font-medium"
+                className="text-sm text-[var(--color-primary)] font-medium"
               >
                 Marcar todas como leidas
               </button>
@@ -94,8 +94,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
       <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-120px)]">
         {notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <Icons.Bell size={40} className="text-gray-400" />
+            <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
+              <Icons.Bell size={40} className="uv-text-muted" />
             </div>
             <h3 className="text-lg font-semibold mb-1">Sin notificaciones</h3>
             <p className="text-gray-500 text-sm text-center">
@@ -125,14 +125,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className={`font-semibold text-sm ${notification.read ? 'text-gray-600 dark:text-gray-400' : ''}`}>
+                      <h4 className={`font-semibold text-sm ${notification.read ? 'uv-text-secondary' : ''}`}>
                         {notification.title}
                       </h4>
                       {!notification.read && (
                         <span className="flex-shrink-0 w-2 h-2 bg-primary rounded-full mt-1.5" />
                       )}
                     </div>
-                    <p className={`text-sm mt-0.5 ${notification.read ? 'text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                    <p className={`text-sm mt-0.5 ${notification.read ? 'text-gray-500' : 'uv-text-secondary'}`}>
                       {notification.message}
                     </p>
                     <span className="text-xs text-gray-400 mt-2 block">
@@ -142,7 +142,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                 </div>
 
                 {notification.action && (
-                  <button className="mt-3 w-full py-2 bg-primary text-white rounded-lg text-sm font-medium">
+                  <button className="mt-3 w-full py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg text-sm font-medium">
                     {notification.action.label}
                   </button>
                 )}

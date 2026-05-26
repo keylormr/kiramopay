@@ -72,10 +72,10 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const formatPoints = (pts: number) => pts.toLocaleString();
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-background-dark flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between flex-shrink-0">
-        <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label={t('back')}>
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
+        <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('loyalty_title')}</h1>
@@ -101,7 +101,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                       <p className="text-xs font-bold uppercase tracking-wider" style={{ color: tierConfig?.color }}>
                         {account?.tier || 'Bronze'} {t('loyalty_tier')}
                       </p>
-                      <p className="text-3xl font-black text-slate-900 dark:text-white">
+                      <p className="text-3xl font-black uv-text-primary">
                         {formatPoints(account?.availablePoints || 0)}
                       </p>
                     </div>
@@ -110,7 +110,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_lifetime')}</p>
-                    <p className="text-sm font-extrabold text-slate-900 dark:text-white">{formatPoints(account?.lifetimePoints || 0)} pts</p>
+                    <p className="text-sm font-extrabold uv-text-primary">{formatPoints(account?.lifetimePoints || 0)} pts</p>
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_available')}</p>
@@ -122,7 +122,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
             {/* Tier Progress */}
             <div className="px-4 py-2">
-              <div className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-bold text-gray-500">{t('loyalty_next_tier')}</span>
                   <span className="text-xs font-bold" style={{ color: tierConfig?.color }}>
@@ -131,7 +131,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                      account?.tier === 'gold' ? 'Platinum: 50,000 pts' : 'Max'}
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                <div className="h-2 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700 animate-bar-grow"
                     style={{
@@ -149,10 +149,10 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
             {/* Tabs */}
             <div className="px-4 py-2">
-              <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+              <div className="flex p-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl">
                 {(['rewards', 'earn', 'history'] as const).map((tab) => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white dark:bg-gray-700 shadow-sm text-slate-900 dark:text-white' : 'text-gray-500'}`}>
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary' : 'text-gray-500'}`}>
                     {tab === 'rewards' ? t('loyalty_rewards') : tab === 'earn' ? t('loyalty_earn') : t('loyalty_history')}
                   </button>
                 ))}
@@ -172,27 +172,27 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     const canAfford = (account?.availablePoints || 0) >= reward.pointsCost;
                     return (
                       <div key={reward.id}
-                        className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 p-4 shadow-sm animate-stagger"
+                        className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger"
                         style={{ animationDelay: `${i * 60}ms` }}>
                         <div className="flex items-start gap-3">
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center flex-shrink-0">
-                            {reward.category === 'discount' && <Icons.Percent size={22} className="text-primary" />}
+                            {reward.category === 'discount' && <Icons.Percent size={22} className="text-[var(--color-primary)]" />}
                             {reward.category === 'voucher' && <Icons.Tag size={22} className="text-accent" />}
                             {reward.category === 'gift_card' && <Icons.Gift size={22} className="text-green-600" />}
                             {reward.category === 'experience' && <Icons.Star size={22} className="text-purple-600" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-slate-900 dark:text-white text-sm">{reward.name}</h3>
+                            <h3 className="font-bold uv-text-primary text-sm">{reward.name}</h3>
                             <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{reward.description}</p>
                             <div className="flex items-center justify-between mt-2">
-                              <span className="text-sm font-extrabold text-primary">{formatPoints(reward.pointsCost)} pts</span>
+                              <span className="text-sm font-extrabold text-[var(--color-primary)]">{formatPoints(reward.pointsCost)} pts</span>
                               <button
                                 onClick={() => handleRedeem(reward.id)}
                                 disabled={!canAfford || redeeming === reward.id}
                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
                                   canAfford
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                                    ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                                    : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
                                 }`}>
                                 {redeeming === reward.id ? '...' : t('loyalty_redeem')}
                               </button>
@@ -233,13 +233,13 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     };
                     return (
                       <div key={rule.id}
-                        className="flex items-center gap-3 p-4 bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800 animate-stagger"
+                        className="flex items-center gap-3 p-4 uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] animate-stagger"
                         style={{ animationDelay: `${i * 60}ms` }}>
                         <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${catColors[rule.category] || 'bg-gray-100'}`}>
                           {catIcons[rule.category] || <Icons.Circle size={20} />}
                         </div>
                         <div className="flex-1">
-                          <p className="font-bold text-slate-900 dark:text-white text-sm capitalize">{rule.category.replace('_', ' ')}</p>
+                          <p className="font-bold uv-text-primary text-sm capitalize">{rule.category.replace('_', ' ')}</p>
                           <p className="text-xs text-gray-400">{t('loyalty_max_per_tx')}: {rule.maxPoints} pts</p>
                         </div>
                         <div className="text-right">
@@ -264,7 +264,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 ) : (
                   history.map((tx, i) => (
                     <div key={tx.id}
-                      className="flex items-center gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl border border-gray-100 dark:border-gray-800 animate-stagger"
+                      className="flex items-center gap-3 p-3 uv-surface-1 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] animate-stagger"
                       style={{ animationDelay: `${i * 40}ms` }}>
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                         tx.type === 'earn' || tx.type === 'bonus'
@@ -276,7 +276,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           : <Icons.ArrowUpRight size={18} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{tx.description}</p>
+                        <p className="text-sm font-bold uv-text-primary truncate">{tx.description}</p>
                         <p className="text-xs text-gray-400">{tx.createdAt}</p>
                       </div>
                       <span className={`text-sm font-extrabold ${

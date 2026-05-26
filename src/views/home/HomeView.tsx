@@ -298,7 +298,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <span className="text-[10px] font-bold text-indigo-600/80 uppercase tracking-wider">{t('home_spending')}</span>
               </div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white truncate">
+              <div className="text-lg font-extrabold uv-text-primary truncate">
                 {formatCurrency(monthlyExpenses, baseAccount.ccy)}
               </div>
               {topCat && <div className="text-[10px] text-gray-500 mt-0.5">{t('home_top_cat')}: {topCat}</div>}
@@ -314,7 +314,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <span className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{t('home_savings')}</span>
               </div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white">{t('home_savings_view')}</div>
+              <div className="text-lg font-extrabold uv-text-primary">{t('home_savings_view')}</div>
               <div className="text-[10px] text-gray-500 mt-0.5">{t('home_savings_desc')}</div>
             </button>
 
@@ -328,7 +328,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <span className="text-[10px] font-bold text-purple-600/80 uppercase tracking-wider">{t('home_split')}</span>
               </div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white">{t('home_split_view')}</div>
+              <div className="text-lg font-extrabold uv-text-primary">{t('home_split_view')}</div>
               <div className="text-[10px] text-gray-500 mt-0.5">{t('home_split_desc')}</div>
             </button>
 
@@ -342,7 +342,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <span className="text-[10px] font-bold text-amber-600/80 uppercase tracking-wider">{t('home_loyalty')}</span>
               </div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white">{t('home_loyalty_view')}</div>
+              <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
               <div className="text-[10px] text-gray-500 mt-0.5">{t('home_loyalty_desc')}</div>
             </button>
           </div>
@@ -436,13 +436,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('amount_to_send')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
-              <span className={`text-4xl font-bold ${isInsufficientFunds ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>{baseAccount.symbol}</span>
+              <span className={`text-4xl font-bold ${isInsufficientFunds ? 'text-red-500' : 'uv-text-primary'}`}>{baseAccount.symbol}</span>
               <input 
                 type="number" 
                 value={amount} 
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className={`text-5xl font-bold bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficientFunds ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}
+                className={`text-5xl font-bold bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficientFunds ? 'text-red-500' : 'uv-text-primary'}`}
                 autoFocus
               />
             </div>
@@ -455,14 +455,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           </div>
 
           <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+            <div className="uv-surface-2 p-4 rounded-xl">
               <label className="text-xs text-gray-500 font-bold uppercase block mb-2">{t('recipient')}</label>
               <input
                 type="text"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 placeholder="Name, @tag, or Email"
-                className="w-full bg-transparent outline-none text-lg font-semibold text-slate-900 dark:text-white"
+                className="w-full bg-transparent outline-none text-lg font-semibold uv-text-primary"
               />
             </div>
 
@@ -483,34 +483,34 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('amount_to_request')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
-              <span className="text-4xl font-bold text-slate-900 dark:text-white">{baseAccount.symbol}</span>
+              <span className="text-4xl font-bold uv-text-primary">{baseAccount.symbol}</span>
               <input 
                 type="number" 
                 value={amount} 
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="text-5xl font-bold bg-transparent w-48 text-center outline-none text-slate-900 dark:text-white placeholder-gray-300"
+                className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
                 autoFocus
               />
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+            <div className="uv-surface-2 p-4 rounded-xl">
               <label className="text-xs text-gray-500 font-bold uppercase block mb-2">{t('from')}</label>
               <input
                 type="text"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 placeholder="Name, @tag, or Email"
-                className="w-full bg-transparent outline-none text-lg font-semibold text-slate-900 dark:text-white"
+                className="w-full bg-transparent outline-none text-lg font-semibold uv-text-primary"
               />
             </div>
 
             <button
               onClick={() => handleTransaction('credit')}
               disabled={!amount || !recipient}
-              className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('request_money')}
             </button>
@@ -521,12 +521,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       {/* Add Money (Crypto) Sheet */}
       <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('deposit_crypto')}>
         <div className="space-y-6">
-          <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+          <div className="flex p-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl">
             {(['BTC', 'ETH', 'USDT'] as const).map((crypto) => (
               <button
                 key={crypto}
                 onClick={() => setSelectedCrypto(crypto)}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${selectedCrypto === crypto ? 'bg-white dark:bg-gray-700 shadow-sm text-slate-900 dark:text-white' : 'text-gray-500'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${selectedCrypto === crypto ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary' : 'text-gray-500'}`}
               >
                 {crypto}
               </button>
@@ -537,7 +537,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-4">
                <QRCodeSVG value={`mock-${selectedCrypto}-address`} size={200} />
             </div>
-            <p className="text-xs text-center text-gray-500 max-w-[250px] break-all font-mono bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
+            <p className="text-xs text-center text-gray-500 max-w-[250px] break-all font-mono bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-3 rounded-lg">
               0x71C7656EC7ab88b098defB751B7401B5f6d8976F
             </p>
             <p className="text-xs text-center text-gray-400 mt-4">
@@ -557,16 +557,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 key={curr.ccy}
                 onClick={() => !exists && handleAddAccount(curr)}
                 disabled={exists}
-                className={`w-full flex items-center p-4 rounded-xl border transition-all ${exists ? 'opacity-50 border-transparent bg-gray-50 dark:bg-gray-800' : 'border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                className={`w-full flex items-center p-4 rounded-xl border transition-all ${exists ? 'opacity-50 border-transparent uv-surface-2' : 'border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
               >
-                <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-2xl mr-4">
+                <div className="w-12 h-12 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-2xl mr-4">
                   {curr.flag}
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="font-bold text-slate-900 dark:text-white">{curr.name}</div>
+                  <div className="font-bold uv-text-primary">{curr.name}</div>
                   <div className="text-xs text-gray-500">1 {curr.ccy} ≈ ${curr.rateToUsd} USD</div>
                 </div>
-                {exists ? <Icons.Check size={20} className="text-green-500" /> : <Icons.Plus size={20} className="text-primary" />}
+                {exists ? <Icons.Check size={20} className="text-green-500" /> : <Icons.Plus size={20} className="text-[var(--color-primary)]" />}
               </button>
              )
           })}
@@ -581,32 +581,32 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 {selectedTx.amount < 0 ? <Icons.Bank size={32} /> : <Icons.Wallet size={32} />}
              </div>
              <div className="text-2xl font-bold mb-1">{selectedTx.title}</div>
-             <div className={`text-3xl font-black mb-6 ${selectedTx.amount < 0 ? 'text-slate-900 dark:text-white' : 'text-green-600'}`}>
+             <div className={`text-3xl font-black mb-6 ${selectedTx.amount < 0 ? 'uv-text-primary' : 'text-green-600'}`}>
                 {selectedTx.amount > 0 ? '+' : ''}{formatCurrency(selectedTx.amount, selectedTx.ccy)}
              </div>
 
              <div className="w-full space-y-4">
-                <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
-                   <span className="text-gray-500">{t('status')}</span>
-                   <span className="font-bold text-slate-900 dark:text-white capitalize flex items-center gap-2">
+                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                   <span className="uv-text-muted">{t('status')}</span>
+                   <span className="font-bold uv-text-primary capitalize flex items-center gap-2">
                      {selectedTx.status} <Icons.Check size={14} className="text-green-500" />
                    </span>
                 </div>
-                <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
-                   <span className="text-gray-500">{t('date')}</span>
-                   <span className="font-bold text-slate-900 dark:text-white">{selectedTx.date}</span>
+                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                   <span className="uv-text-muted">{t('date')}</span>
+                   <span className="font-bold uv-text-primary">{selectedTx.date}</span>
                 </div>
-                <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
-                   <span className="text-gray-500">{t('category')}</span>
-                   <span className="font-bold text-slate-900 dark:text-white">{selectedTx.category || 'General'}</span>
+                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                   <span className="uv-text-muted">{t('category')}</span>
+                   <span className="font-bold uv-text-primary">{selectedTx.category || 'General'}</span>
                 </div>
-                <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
-                   <span className="text-gray-500">{t('transaction_id')}</span>
-                   <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">#{selectedTx.id}</span>
+                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                   <span className="uv-text-muted">{t('transaction_id')}</span>
+                   <span className="font-mono text-xs font-bold uv-text-primary">#{selectedTx.id}</span>
                 </div>
              </div>
 
-             <button className="mt-8 py-3 px-6 rounded-xl bg-gray-100 dark:bg-gray-800 text-slate-700 dark:text-white font-bold text-sm w-full">
+             <button className="mt-8 py-3 px-6 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-slate-700 dark:text-white font-bold text-sm w-full">
                {t('report_issue')}
              </button>
           </div>
@@ -648,7 +648,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <div className="text-center mb-6">
             {isScanning ? (
               <>
-                <p className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                <p className="text-lg font-bold uv-text-primary mb-2">
                   {t('scanning')}
                 </p>
                 <div className="w-48 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -659,7 +659,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
               </>
             ) : (
-              <p className="text-gray-500">{t('point_camera')}</p>
+              <p className="uv-text-muted">{t('point_camera')}</p>
             )}
           </div>
 
@@ -669,7 +669,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               const info = getCurrencyInfo(ccy);
               return (
                 <div key={ccy} className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-lg mb-1">
+                  <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
                     {info.flag}
                   </div>
                   <span className="text-xs text-gray-500">{ccy}</span>
@@ -691,12 +691,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             {/* Payment info */}
             <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-gray-800 flex items-center justify-center text-2xl shadow-sm">
+                <div className="w-14 h-14 rounded-2xl uv-surface-1 flex items-center justify-center text-2xl shadow-sm">
                   {getCurrencyInfo(scannedPayment.currency).flag}
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">{t('recipient')}</p>
-                  <p className="text-xl font-black text-slate-900 dark:text-white">
+                  <p className="text-xl font-black uv-text-primary">
                     {scannedPayment.userName}
                   </p>
                 </div>
@@ -704,14 +704,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">{t('currency')}</span>
-                  <span className="font-bold text-slate-900 dark:text-white">
+                  <span className="uv-text-muted">{t('currency')}</span>
+                  <span className="font-bold uv-text-primary">
                     {getCurrencyInfo(scannedPayment.currency).name} ({scannedPayment.currency})
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">{t('address')}</span>
-                  <span className="font-mono text-xs text-slate-900 dark:text-white truncate max-w-[180px]">
+                  <span className="uv-text-muted">{t('address')}</span>
+                  <span className="font-mono text-xs uv-text-primary truncate max-w-[180px]">
                     {scannedPayment.address}
                   </span>
                 </div>
@@ -723,8 +723,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <label className="text-sm text-gray-500 font-medium mb-2 block">
                 {t('amount')} ({scannedPayment.currency})
               </label>
-              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-4">
-                <span className="text-2xl font-bold text-slate-900 dark:text-white mr-2">
+              <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
+                <span className="text-2xl font-bold uv-text-primary mr-2">
                   {getCurrencyInfo(scannedPayment.currency).symbol}
                 </span>
                 <input
@@ -732,7 +732,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   placeholder="0.00"
-                  className="flex-1 bg-transparent text-2xl font-bold outline-none text-slate-900 dark:text-white"
+                  className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
                   autoFocus
                 />
               </div>
@@ -742,14 +742,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             <div className="flex gap-3">
               <button
                 onClick={() => { setActiveSheet('none'); setScannedPayment(null); }}
-                className="flex-1 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white font-bold"
+                className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-[var(--color-primary)] font-bold"
               >
                 {t('cancel')}
               </button>
               <button
                 onClick={handleScannedPayment}
                 disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                className="flex-1 py-4 rounded-xl bg-primary text-white font-bold disabled:opacity-50"
+                className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50"
               >
                 {t('confirm')}
               </button>
