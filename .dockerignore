@@ -8,7 +8,9 @@ android
 ios
 e2e
 backend
+!backend/docs/openapi.yaml
 k8s
 *.md
 !package.json
 !package-lock.json
+!vercel.json
