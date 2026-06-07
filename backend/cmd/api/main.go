@@ -40,6 +40,7 @@ import (
 	"github.com/kiramopay/backend/internal/splitpay"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/transparency"
+	"github.com/kiramopay/backend/internal/uif"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/internal/wallet"
 	ws "github.com/kiramopay/backend/internal/websocket"
@@ -123,6 +124,7 @@ func main() {
 	cryptoRepo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
 	kycRepo := kyc.NewRepository(pool)
+	uifRepo := uif.NewRepository(pool)
 
 	marketplaceRepo := marketplace.NewRepository(pool)
 	loyaltyRepo := loyalty.NewRepository(pool)
@@ -136,6 +138,7 @@ func main() {
 
 	// ── Services ─────────────────────────────────────────────────────────
 	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
+	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
 		LockoutStore:     lockoutStore,
 		AuditLogger:      auditLogger,
@@ -147,6 +150,7 @@ func main() {
 	txService := transaction.NewService(txRepo, walletRepo, ledgerEngine, &transaction.Options{
 		AuditLogger: auditLogger,
 		MFA:         mfaSvc,
+		UIF:         uifService,
 	})
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
@@ -174,6 +178,7 @@ func main() {
 	cryptoHandler := crypto.NewHandler(cryptoService)
 	mfaHandler := mfa.NewHandler(mfaSvc)
 	kycHandler := kyc.NewHandler(kycService)
+	uifHandler := uif.NewHandler(uifService)
 	transparencyHandler := transparency.NewHandler(pool)
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
@@ -428,6 +433,10 @@ func main() {
 
 				// KYC review
 				r.Post("/admin/kyc/{id}/decision", kycHandler.Decide)
+
+				// UIF / AML reporting queue
+				r.Get("/admin/uif/reports", uifHandler.ListReports)
+				r.Post("/admin/uif/reports/{id}/review", uifHandler.Review)
 
 				// Fraud
 				r.Get("/admin/fraud/alerts", fraudHandler.GetOpenAlerts)

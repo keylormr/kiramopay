@@ -423,6 +423,24 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		screened_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
+	CREATE TABLE IF NOT EXISTS uif_reports (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		tx_id UUID,
+		report_type VARCHAR(20) NOT NULL,
+		amount_minor BIGINT NOT NULL,
+		currency VARCHAR(10) NOT NULL,
+		daily_total_minor BIGINT NOT NULL DEFAULT 0,
+		reason TEXT NOT NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		reviewer_id UUID REFERENCES users(id),
+		reviewer_notes TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		reviewed_at TIMESTAMPTZ
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
+		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
+
 	INSERT INTO sanction_list (source, full_name, normalized_name, nationality, program)
 	SELECT v.source, v.full_name, v.normalized_name, v.nationality, v.program
 	FROM (VALUES
@@ -440,6 +458,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 	tables := []string{
 		"sinpe_history", "sinpe_contacts",
 		"crypto_price_alerts", "crypto_staking", "crypto_transactions", "crypto_assets",
+		"uif_reports",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"journal_entries", "journal_postings",
 		"transactions",
