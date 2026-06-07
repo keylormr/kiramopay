@@ -3,11 +3,11 @@ package crypto
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/shopspring/decimal"
 )
 
 type Service struct {
@@ -20,9 +20,10 @@ func NewService(repo *Repository, prices *PriceService, tx *transaction.Service)
 	return &Service{repo: repo, prices: prices, tx: tx}
 }
 
-// toMinor converts a fiat amount (CRC/USD, 2 decimals) to integer centimos.
-func toMinor(v float64) int64 {
-	return int64(math.Round(v * 100))
+// toMinor converts a fiat amount (CRC/USD, 2 decimals) to integer centimos,
+// exactly (no float round-trip).
+func toMinor(v decimal.Decimal) int64 {
+	return v.Mul(decimal.NewFromInt(100)).Round(0).IntPart()
 }
 
 func (s *Service) GetAssets(ctx context.Context, userID string) ([]AssetRecord, error) {
@@ -34,10 +35,10 @@ func (s *Service) GetTransactions(ctx context.Context, userID string) ([]Transac
 }
 
 func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*TransactionRecord, error) {
-	if req.Amount <= 0 {
+	if !req.Amount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
 	}
-	if req.FromAmount <= 0 {
+	if !req.FromAmount.IsPositive() {
 		return nil, fmt.Errorf("from_amount must be positive")
 	}
 	currency := req.FromCurrency
@@ -87,7 +88,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		Price:    req.Price,
 		Total:    req.FromAmount,
 		Currency: currency,
-		Fee:      0,
+		Fee:      decimal.Zero,
 		Status:   "completed",
 	}
 	if err := s.repo.AddTransaction(ctx, tx); err != nil {
@@ -98,10 +99,10 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 }
 
 func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*TransactionRecord, error) {
-	if req.Amount <= 0 {
+	if !req.Amount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
 	}
-	if req.ToAmount <= 0 {
+	if !req.ToAmount.IsPositive() {
 		return nil, fmt.Errorf("to_amount must be positive")
 	}
 	currency := req.ToCurrency
@@ -115,7 +116,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 
 	// Check balance
 	asset, err := s.repo.GetAsset(ctx, userID, req.Asset)
-	if err != nil || asset.Balance < req.Amount {
+	if err != nil || asset.Balance.LessThan(req.Amount) {
 		return nil, fmt.Errorf("insufficient %s balance", req.Asset)
 	}
 
@@ -125,7 +126,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	}
 
 	// 1. Debit the crypto asset first.
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, -req.Amount, 0); err != nil {
+	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount.Neg(), decimal.Zero); err != nil {
 		return nil, fmt.Errorf("debit crypto asset: %w", err)
 	}
 
@@ -141,7 +142,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Description:      fmt.Sprintf("Sell %s", req.Asset),
 		IdempotencyKey:   idem,
 	}); err != nil {
-		if cerr := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount, 0); cerr != nil {
+		if cerr := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount, decimal.Zero); cerr != nil {
 			return nil, fmt.Errorf("credit fiat failed (%v) AND crypto compensation failed (%v) ref %s", err, cerr, idem)
 		}
 		return nil, fmt.Errorf("credit fiat: %w", err)
@@ -156,7 +157,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Price:    req.Price,
 		Total:    req.ToAmount,
 		Currency: currency,
-		Fee:      0,
+		Fee:      decimal.Zero,
 		Status:   "completed",
 	}
 	if err := s.repo.AddTransaction(ctx, tx); err != nil {
@@ -167,19 +168,19 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 }
 
 func (s *Service) Convert(ctx context.Context, userID string, req *ConvertRequest) (*TransactionRecord, error) {
-	if req.FromAmount <= 0 {
+	if !req.FromAmount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
 	}
 
 	// Check from-asset balance
 	fromAsset, err := s.repo.GetAsset(ctx, userID, req.FromAsset)
-	if err != nil || fromAsset.Balance < req.FromAmount {
+	if err != nil || fromAsset.Balance.LessThan(req.FromAmount) {
 		return nil, fmt.Errorf("insufficient %s balance", req.FromAsset)
 	}
 
 	// Deduct from, add to
 	toName := getAssetName(req.ToAsset)
-	if err := s.repo.UpsertAsset(ctx, userID, req.FromAsset, fromAsset.Name, -req.FromAmount, 0); err != nil {
+	if err := s.repo.UpsertAsset(ctx, userID, req.FromAsset, fromAsset.Name, req.FromAmount.Neg(), decimal.Zero); err != nil {
 		return nil, err
 	}
 	if err := s.repo.UpsertAsset(ctx, userID, req.ToAsset, toName, req.ToAmount, req.Price); err != nil {
@@ -207,18 +208,18 @@ func (s *Service) GetStakingPositions(ctx context.Context, userID string) ([]Sta
 }
 
 func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (*StakingRecord, error) {
-	if req.Amount <= 0 {
+	if !req.Amount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
 	}
 
 	// Check balance
 	asset, err := s.repo.GetAsset(ctx, userID, req.Asset)
-	if err != nil || asset.Balance < req.Amount {
+	if err != nil || asset.Balance.LessThan(req.Amount) {
 		return nil, fmt.Errorf("insufficient %s balance for staking", req.Asset)
 	}
 
 	// Deduct from balance (locked in staking)
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, -req.Amount, 0); err != nil {
+	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount.Neg(), decimal.Zero); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +231,7 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		StartDate: time.Now(),
 		Locked:    req.Locked,
 		LockDays:  req.LockDays,
-		Earned:    0,
+		Earned:    decimal.Zero,
 		Status:    "active",
 	}
 	if err := s.repo.AddStaking(ctx, record); err != nil {
