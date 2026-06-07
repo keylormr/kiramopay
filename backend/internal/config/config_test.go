@@ -21,7 +21,7 @@ func TestValidateForProduction_DBSSLDisable_Error(t *testing.T) {
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "disable", Password: "strong-password"},
 		Redis:    RedisConfig{Password: "redis-pass"},
-		JWT:      JWTConfig{Secret: "a-secure-production-secret-key"},
+		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
 	}
 	if err := cfg.ValidateForProduction(); err == nil {
 		t.Error("expected error for DB SSL disable in production")
@@ -33,7 +33,7 @@ func TestValidateForProduction_RedisNoPassword_Error(t *testing.T) {
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},
 		Redis:    RedisConfig{Password: ""},
-		JWT:      JWTConfig{Secret: "a-secure-production-secret-key"},
+		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
 	}
 	if err := cfg.ValidateForProduction(); err == nil {
 		t.Error("expected error for Redis without password in production")
@@ -57,7 +57,7 @@ func TestValidateForProduction_AllSecure_NoError(t *testing.T) {
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},
 		Redis:    RedisConfig{Password: "redis-pass"},
-		JWT:      JWTConfig{Secret: "a-secure-production-secret-key"},
+		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
 	}
 	if err := cfg.ValidateForProduction(); err != nil {
 		t.Errorf("unexpected error with secure config: %v", err)

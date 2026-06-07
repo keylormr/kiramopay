@@ -18,11 +18,17 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // ── Cards ────────────────────────────────────────────────────────────────────
 
 func (r *Repository) CreateCard(ctx context.Context, card *VirtualCard) error {
+	// PCI-DSS: the full PAN is NEVER persisted. It is returned to the client
+	// exactly once in the creation response (card.CardNumber in memory) and
+	// then discarded. The DB only ever holds the masked form + last4. Real
+	// issuance must hold the PAN at a PCI-Level-1 provider, referenced by
+	// provider_card_id — not in our own database.
+	maskedPAN := "•••• •••• •••• " + card.Last4
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO virtual_cards (id, user_id, card_number, last4, expiry_month, expiry_year,
 		 cardholder_name, brand, type, currency, status, daily_limit, monthly_limit, atm_limit)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		card.ID, card.UserID, card.CardNumber, card.Last4, card.ExpiryMonth, card.ExpiryYear,
+		card.ID, card.UserID, maskedPAN, card.Last4, card.ExpiryMonth, card.ExpiryYear,
 		card.CardholderName, card.Brand, card.Type, card.Currency, card.Status,
 		card.DailyLimit, card.MonthlyLimit, card.AtmLimit)
 	return err

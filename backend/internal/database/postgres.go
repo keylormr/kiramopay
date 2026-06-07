@@ -24,7 +24,7 @@ func NewPostgresPool(cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
 
-	poolCfg.MaxConns = int32(cfg.MaxConns)
+	poolCfg.MaxConns = int32(cfg.MaxConns) // #nosec G115 -- pool size is a small operator-set config value
 	poolCfg.MinConns = 5
 	poolCfg.MaxConnLifetime = 30 * time.Minute
 	poolCfg.MaxConnIdleTime = 5 * time.Minute

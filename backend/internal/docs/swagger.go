@@ -10,7 +10,7 @@ import (
 // ServeOpenAPISpec serves the openapi.yaml file.
 func ServeOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	specPath := findSpecPath()
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) // #nosec G304 -- specPath is resolved internally (findSpecPath), never user input
 	if err != nil {
 		http.Error(w, "OpenAPI spec not found", http.StatusNotFound)
 		return

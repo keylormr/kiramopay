@@ -44,5 +44,7 @@ export interface IAuthRepository {
   register(request: RegisterRequest): Promise<ApiResponse<RegisterResponse>>;
   validatePassword(cedula: string, password: string): Promise<ApiResponse<{ valid: boolean }>>;
   changePassword(request: ChangePasswordRequest): Promise<ApiResponse<{ changed: boolean }>>;
+  /** Exchanges a refresh token for a fresh token pair (rotation). */
+  refresh(refreshToken: string): Promise<ApiResponse<TokenPair>>;
   logout(): Promise<ApiResponse<void>>;
 }

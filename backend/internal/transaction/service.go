@@ -186,22 +186,22 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	}
 
 	senderReq := &CreateTransactionRequest{
-		Type:              req.TxType,
-		Amount:            req.Amount,
-		Currency:          req.Currency,
-		Fee:               req.Fee,
-		CounterpartyType:  "user",
-		CounterpartyName:  "", // populated by caller (sinpe handler resolves)
-		Description:       req.Description,
-		IdempotencyKey:    req.IdempotencyKey,
+		Type:             req.TxType,
+		Amount:           req.Amount,
+		Currency:         req.Currency,
+		Fee:              req.Fee,
+		CounterpartyType: "user",
+		CounterpartyName: "", // populated by caller (sinpe handler resolves)
+		Description:      req.Description,
+		IdempotencyKey:   req.IdempotencyKey,
 	}
 	receiveReq := &CreateTransactionRequest{
-		Type:              req.ReceiveType,
-		Amount:            req.Amount,
-		Currency:          req.Currency,
-		Fee:               0,
-		CounterpartyType:  "user",
-		Description:       req.Description,
+		Type:             req.ReceiveType,
+		Amount:           req.Amount,
+		Currency:         req.Currency,
+		Fee:              0,
+		CounterpartyType: "user",
+		Description:      req.Description,
 		// Receiver idempotency: derive deterministically to avoid double-credit.
 		IdempotencyKey: pairKey(req.IdempotencyKey, "recv"),
 	}
@@ -314,7 +314,7 @@ func pairKey(base, suffix string) string {
 
 func isOutgoing(txType string) bool {
 	switch txType {
-	case TypeSinpeSend, TypeQRPayment, TypeBillPayment, TypeRecharge, TypeWithdrawal, TypeP2PSend:
+	case TypeSinpeSend, TypeQRPayment, TypeBillPayment, TypeRecharge, TypeWithdrawal, TypeP2PSend, TypeCryptoBuy:
 		return true
 	default:
 		return false
