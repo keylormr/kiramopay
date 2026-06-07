@@ -123,13 +123,13 @@ func decodeHash(encodedHash string) (*Argon2Params, []byte, []byte, error) {
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decode salt: %w", err)
 	}
-	params.SaltLength = uint32(len(salt))
+	params.SaltLength = uint32(len(salt)) // #nosec G115 -- salt length is small and bounded
 
 	key, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decode key: %w", err)
 	}
-	params.KeyLength = uint32(len(key))
+	params.KeyLength = uint32(len(key)) // #nosec G115 -- key length is small and bounded
 
 	return params, salt, key, nil
 }

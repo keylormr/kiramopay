@@ -3,18 +3,26 @@ package crypto
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
 type Service struct {
 	repo   *Repository
 	prices *PriceService
+	tx     *transaction.Service
 }
 
-func NewService(repo *Repository, prices *PriceService) *Service {
-	return &Service{repo: repo, prices: prices}
+func NewService(repo *Repository, prices *PriceService, tx *transaction.Service) *Service {
+	return &Service{repo: repo, prices: prices, tx: tx}
+}
+
+// toMinor converts a fiat amount (CRC/USD, 2 decimals) to integer centimos.
+func toMinor(v float64) int64 {
+	return int64(math.Round(v * 100))
 }
 
 func (s *Service) GetAssets(ctx context.Context, userID string) ([]AssetRecord, error) {
@@ -29,16 +37,47 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
-
-	// Get asset name from symbol
-	assetName := getAssetName(req.Asset)
-
-	// Update user's crypto balance
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, assetName, req.Amount, req.Price); err != nil {
-		return nil, fmt.Errorf("update asset balance: %w", err)
+	if req.FromAmount <= 0 {
+		return nil, fmt.Errorf("from_amount must be positive")
+	}
+	currency := req.FromCurrency
+	if currency == "" {
+		currency = "CRC"
+	}
+	fiatMinor := toMinor(req.FromAmount)
+	if fiatMinor <= 0 {
+		return nil, fmt.Errorf("from_amount too small")
 	}
 
-	// Record transaction
+	idem := req.IdempotencyKey
+	if idem == "" {
+		idem = "crypto:buy:" + uuid.New().String()
+	}
+
+	// 1. Debit fiat THROUGH THE LEDGER. Balance check, MFA gating and
+	//    idempotency all live inside the transaction service — no crypto is
+	//    credited unless the fiat actually leaves the wallet.
+	if _, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+		Type:             transaction.TypeCryptoBuy,
+		Amount:           fiatMinor,
+		Currency:         currency,
+		Fee:              0,
+		CounterpartyType: "crypto",
+		CounterpartyName: req.Asset,
+		Description:      fmt.Sprintf("Buy %s", req.Asset),
+		IdempotencyKey:   idem,
+	}); err != nil {
+		return nil, fmt.Errorf("debit fiat: %w", err)
+	}
+
+	// 2. Credit the crypto asset. If this fails after the fiat debit, the
+	//    fiat movement is already recorded in the transactions table + journal
+	//    and is caught by reconciliation (ref = idempotency key).
+	assetName := getAssetName(req.Asset)
+	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, assetName, req.Amount, req.Price); err != nil {
+		return nil, fmt.Errorf("credit crypto asset (fiat already debited, ref %s): %w", idem, err)
+	}
+
 	tx := &TransactionRecord{
 		ID:       uuid.New().String(),
 		UserID:   userID,
@@ -47,8 +86,8 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		Amount:   req.Amount,
 		Price:    req.Price,
 		Total:    req.FromAmount,
-		Currency: req.FromCurrency,
-		Fee:      req.FromAmount * 0.005, // 0.5% fee
+		Currency: currency,
+		Fee:      0,
 		Status:   "completed",
 	}
 	if err := s.repo.AddTransaction(ctx, tx); err != nil {
@@ -62,6 +101,17 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
+	if req.ToAmount <= 0 {
+		return nil, fmt.Errorf("to_amount must be positive")
+	}
+	currency := req.ToCurrency
+	if currency == "" {
+		currency = "CRC"
+	}
+	fiatMinor := toMinor(req.ToAmount)
+	if fiatMinor <= 0 {
+		return nil, fmt.Errorf("to_amount too small")
+	}
 
 	// Check balance
 	asset, err := s.repo.GetAsset(ctx, userID, req.Asset)
@@ -69,9 +119,32 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		return nil, fmt.Errorf("insufficient %s balance", req.Asset)
 	}
 
-	// Deduct from balance
+	idem := req.IdempotencyKey
+	if idem == "" {
+		idem = "crypto:sell:" + uuid.New().String()
+	}
+
+	// 1. Debit the crypto asset first.
 	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, -req.Amount, 0); err != nil {
-		return nil, fmt.Errorf("update asset balance: %w", err)
+		return nil, fmt.Errorf("debit crypto asset: %w", err)
+	}
+
+	// 2. Credit fiat THROUGH THE LEDGER. If this fails, compensate by
+	//    re-crediting the crypto so the user is never left short.
+	if _, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+		Type:             transaction.TypeCryptoSell,
+		Amount:           fiatMinor,
+		Currency:         currency,
+		Fee:              0,
+		CounterpartyType: "crypto",
+		CounterpartyName: req.Asset,
+		Description:      fmt.Sprintf("Sell %s", req.Asset),
+		IdempotencyKey:   idem,
+	}); err != nil {
+		if cerr := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount, 0); cerr != nil {
+			return nil, fmt.Errorf("credit fiat failed (%v) AND crypto compensation failed (%v) ref %s", err, cerr, idem)
+		}
+		return nil, fmt.Errorf("credit fiat: %w", err)
 	}
 
 	tx := &TransactionRecord{
@@ -82,8 +155,8 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Amount:   req.Amount,
 		Price:    req.Price,
 		Total:    req.ToAmount,
-		Currency: req.ToCurrency,
-		Fee:      req.ToAmount * 0.005,
+		Currency: currency,
+		Fee:      0,
 		Status:   "completed",
 	}
 	if err := s.repo.AddTransaction(ctx, tx); err != nil {

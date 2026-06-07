@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
 type Service struct {
 	repo *Repository
+	tx   *transaction.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, tx *transaction.Service) *Service {
+	return &Service{repo: repo, tx: tx}
 }
 
 // ── Merchants ────────────────────────────────────────────────────────────────
@@ -143,9 +145,27 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		}
 	}
 
+	// The currency is defined by the QR creator and must NOT be overridable by
+	// the payer (that would let a payer settle a USD invoice in CRC).
 	currency := qr.Currency
-	if req.Currency != "" {
-		currency = req.Currency
+
+	// Move the money THROUGH THE LEDGER: debit the payer, credit the QR creator
+	// atomically. Idempotency keyed by (qr, payer) prevents a double charge on
+	// a retried scan.
+	idem := fmt.Sprintf("qr:%s:%s", qr.ID, payerID)
+	sender, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+		FromUserID:     payerID,
+		ToUserID:       qr.CreatorID,
+		Amount:         amount,
+		Currency:       currency,
+		Fee:            0,
+		Description:    qr.Note,
+		IdempotencyKey: idem,
+		TxType:         transaction.TypeQRPayment,
+		ReceiveType:    transaction.TypeQRReceive,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("qr payment transfer: %w", err)
 	}
 
 	payment := &QRPaymentRecord{
@@ -158,6 +178,7 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		Currency:   currency,
 		Status:     "completed",
 		Note:       qr.Note,
+		TxID:       sender.ID,
 		CreatedAt:  time.Now(),
 	}
 

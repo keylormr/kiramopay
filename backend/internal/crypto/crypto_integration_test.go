@@ -2,10 +2,15 @@ package crypto_test
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/kiramopay/backend/internal/crypto"
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/testutil"
+	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
 )
 
@@ -15,10 +20,23 @@ func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 
 	repo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
-	svc := crypto.NewService(repo, priceService)
+	txRepo := transaction.NewRepository(pool)
+	walletRepo := wallet.NewRepository(pool)
+	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	txService := transaction.NewService(txRepo, walletRepo, l, nil)
+	svc := crypto.NewService(repo, priceService, txService)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
+
+	// Crypto buys now debit fiat through the ledger; give the wallet enough
+	// balance and limit headroom for the purchases exercised below.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE wallets SET balance_crc = 1000000000000,
+		        daily_limit = 1000000000000, monthly_limit = 1000000000000
+		 WHERE user_id = $1::uuid`, userID); err != nil {
+		t.Fatalf("top up wallet: %v", err)
+	}
 
 	return svc, userID
 }
@@ -138,6 +156,13 @@ func TestStake_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
+	// Fund the asset first (staking requires an existing balance).
+	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset: "ETH", Amount: 2.0, Price: 3000000, FromCurrency: "CRC", FromAmount: 6000000,
+	}); err != nil {
+		t.Fatalf("seed buy: %v", err)
+	}
+
 	staking, err := svc.Stake(ctx, userID, &crypto.StakeRequest{
 		Asset:    "ETH",
 		Amount:   2.0,
@@ -159,6 +184,12 @@ func TestStake_Success(t *testing.T) {
 func TestUnstake_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
+
+	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset: "SOL", Amount: 10.0, Price: 50000, FromCurrency: "CRC", FromAmount: 500000,
+	}); err != nil {
+		t.Fatalf("seed buy: %v", err)
+	}
 
 	staking, err := svc.Stake(ctx, userID, &crypto.StakeRequest{
 		Asset:  "SOL",

@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
 import { getApiLayer } from '@/api';
-import { registerTokenProvider } from '@/api/adapters/http/client';
+import {
+  registerTokenProvider,
+  registerRefreshHandler,
+  registerAuthFailureHandler,
+} from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
 import { clearLockPin } from '@/services/lockKdf';
 
@@ -29,6 +33,10 @@ interface AuthState {
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
+  /** Silently rotate the token pair using the in-memory refresh token. */
+  refresh: () => Promise<boolean>;
+  /** Clear the session locally without a backend call (refresh already failed). */
+  forceLogout: () => void;
   completeOnboarding: () => void;
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
 }
@@ -97,6 +105,31 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      refresh: async () => {
+        const { refreshToken } = get();
+        if (!refreshToken) return false;
+        const api = getApiLayer();
+        const result = await api.auth.refresh(refreshToken);
+        if (result.success && result.data?.access_token) {
+          set({
+            accessToken: result.data.access_token,
+            refreshToken: result.data.refresh_token ?? refreshToken,
+          });
+          return true;
+        }
+        return false;
+      },
+
+      forceLogout: () => {
+        clearLockPin();
+        set({
+          isAuthenticated: false,
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+        });
+      },
+
       completeOnboarding: () => {
         set({ isOnboarded: true });
       },
@@ -131,15 +164,14 @@ export const useAuthStore = create<AuthState>()(
 // inside `create`) so that importing this file ALWAYS registers the
 // provider before the first authenticated request fires. The closure
 // reads `useAuthStore.getState()` lazily on each invocation.
-//
-// Diagnostic log left intentionally (debug-only): if you see this in the
-// console you know the wiring fired. Remove once stable.
 // ────────────────────────────────────────────────────────────────────────
 registerTokenProvider(() => {
   const s = useAuthStore.getState();
   return { accessToken: s.accessToken, refreshToken: s.refreshToken };
 });
-if (typeof window !== 'undefined') {
-  // eslint-disable-next-line no-console
-  console.debug('[auth.store] token provider registered');
-}
+
+// On a 401 the HttpClient asks the store to rotate the token pair; if that
+// fails (no/invalid refresh token, e.g. after a page reload) it forces a
+// logout so the UI stops showing a phantom authenticated session.
+registerRefreshHandler(() => useAuthStore.getState().refresh());
+registerAuthFailureHandler(() => useAuthStore.getState().forceLogout());

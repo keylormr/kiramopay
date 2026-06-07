@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,20 +24,28 @@ import (
 // login (wrong cedula, wrong password, locked, etc.) to prevent enumeration.
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
+// SanctionScreener gates onboarding against a sanction watchlist. Implemented
+// by the kyc service; optional (nil disables the check).
+type SanctionScreener interface {
+	ScreenIsClear(ctx context.Context, fullName string) (bool, error)
+}
+
 type Service struct {
-	authRepo     *Repository
-	userRepo     *user.Repository
-	walletRepo   *wallet.Repository
-	jwt          *jwtpkg.Manager
-	lockoutStore middleware.LockoutStore
-	auditLogger  *audit.Logger
+	authRepo         *Repository
+	userRepo         *user.Repository
+	walletRepo       *wallet.Repository
+	jwt              *jwtpkg.Manager
+	lockoutStore     middleware.LockoutStore
+	auditLogger      *audit.Logger
+	screener         SanctionScreener
 	maxLoginAttempts int
 }
 
 // Options for service wiring.
 type Options struct {
-	LockoutStore middleware.LockoutStore
-	AuditLogger  *audit.Logger
+	LockoutStore     middleware.LockoutStore
+	AuditLogger      *audit.Logger
+	Screener         SanctionScreener
 	MaxLoginAttempts int
 }
 
@@ -54,12 +63,13 @@ func NewService(
 		opts.MaxLoginAttempts = 5
 	}
 	return &Service{
-		authRepo:     authRepo,
-		userRepo:     userRepo,
-		walletRepo:   walletRepo,
-		jwt:          jwt,
-		lockoutStore: opts.LockoutStore,
-		auditLogger:  opts.AuditLogger,
+		authRepo:         authRepo,
+		userRepo:         userRepo,
+		walletRepo:       walletRepo,
+		jwt:              jwt,
+		lockoutStore:     opts.LockoutStore,
+		auditLogger:      opts.AuditLogger,
+		screener:         opts.Screener,
 		maxLoginAttempts: opts.MaxLoginAttempts,
 	}
 }
@@ -157,6 +167,24 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		return nil, fmt.Errorf("user already registered")
 	}
 
+	// AML onboarding gate: refuse registration of sanctioned individuals.
+	// Fail-open on screening *errors* (infra hiccup must not block all signups);
+	// fail-closed on an actual hit.
+	if s.screener != nil {
+		clear, serr := s.screener.ScreenIsClear(ctx, req.FirstName+" "+req.LastName)
+		if serr == nil && !clear {
+			if s.auditLogger != nil {
+				s.auditLogger.Log(audit.Event{
+					Action:    "register_sanction_block",
+					RiskLevel: "high",
+					IPAddress: lc.IPAddress,
+					UserAgent: lc.UserAgent,
+				})
+			}
+			return nil, fmt.Errorf("registration cannot be completed")
+		}
+	}
+
 	pwHash, err := hash.HashPin(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -218,17 +246,12 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	if err := s.userRepo.UpdatePasswordHash(ctx, userID, newHash); err != nil {
-		return err
+	// Atomic: change the hash AND revoke every refresh family + session, or
+	// nothing. A failure here must NOT leave the password changed with stale
+	// sessions still valid.
+	if err := s.authRepo.ChangePasswordAndRevokeSessions(ctx, userID, newHash); err != nil {
+		return fmt.Errorf("change password: %w", err)
 	}
-
-	// Revoke ALL refresh families for this user — force re-login from scratch.
-	_, _ = s.authRepo.db.Exec(ctx,
-		`UPDATE refresh_tokens SET revoked_at = NOW()
-		 WHERE user_id = $1::uuid AND revoked_at IS NULL`, userID)
-	_, _ = s.authRepo.db.Exec(ctx,
-		`UPDATE user_sessions SET revoked_at = NOW()
-		 WHERE user_id = $1::uuid AND revoked_at IS NULL`, userID)
 
 	if s.auditLogger != nil {
 		s.auditLogger.LogPinChange(userID, lc.IPAddress)
@@ -284,15 +307,21 @@ func (s *Service) Logout(ctx context.Context, accessJTI string, accessRemainingT
 	if err := s.authRepo.DenylistAccessJTI(ctx, accessJTI, accessRemainingTTL); err != nil {
 		return err
 	}
-	// Also revoke the refresh family bound to this session, if known.
+	// Also revoke the refresh family bound to this session, if known. This is
+	// best-effort (the access jti is already denylisted above), but a failure
+	// must be logged rather than silently swallowed.
 	var familyID *string
-	_ = s.authRepo.db.QueryRow(ctx,
+	if err := s.authRepo.db.QueryRow(ctx,
 		`SELECT (SELECT family_id::text FROM refresh_tokens WHERE jti =
 		           (SELECT refresh_jti FROM user_sessions WHERE access_jti = $1 LIMIT 1))`,
 		accessJTI,
-	).Scan(&familyID)
+	).Scan(&familyID); err != nil {
+		slog.Warn("logout: could not resolve refresh family", "access_jti", accessJTI, "err", err.Error())
+	}
 	if familyID != nil && *familyID != "" {
-		_ = s.authRepo.RevokeRefreshFamily(ctx, *familyID)
+		if err := s.authRepo.RevokeRefreshFamily(ctx, *familyID); err != nil {
+			slog.Warn("logout: could not revoke refresh family", "family_id", *familyID, "err", err.Error())
+		}
 	}
 	return nil
 }
@@ -351,15 +380,10 @@ func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordRequest, 
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	if err := s.userRepo.UpdatePasswordHash(ctx, userID, newHash); err != nil {
-		return err
+	// Atomic password change + full session/refresh revocation (see ChangePassword).
+	if err := s.authRepo.ChangePasswordAndRevokeSessions(ctx, userID, newHash); err != nil {
+		return fmt.Errorf("reset password: %w", err)
 	}
-	_, _ = s.authRepo.db.Exec(ctx,
-		`UPDATE refresh_tokens SET revoked_at = NOW()
-		 WHERE user_id = $1::uuid AND revoked_at IS NULL`, userID)
-	_, _ = s.authRepo.db.Exec(ctx,
-		`UPDATE user_sessions SET revoked_at = NOW()
-		 WHERE user_id = $1::uuid AND revoked_at IS NULL`, userID)
 	if s.auditLogger != nil {
 		s.auditLogger.Log(audit.Event{
 			UserID:    userID,

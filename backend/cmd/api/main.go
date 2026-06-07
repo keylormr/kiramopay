@@ -25,6 +25,7 @@ import (
 	"github.com/kiramopay/backend/internal/database"
 	"github.com/kiramopay/backend/internal/docs"
 	"github.com/kiramopay/backend/internal/fraud"
+	"github.com/kiramopay/backend/internal/kyc"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/loyalty"
 	"github.com/kiramopay/backend/internal/marketplace"
@@ -33,8 +34,8 @@ import (
 	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/qrpayment"
-	"github.com/kiramopay/backend/internal/recurring"
 	"github.com/kiramopay/backend/internal/reconcile"
+	"github.com/kiramopay/backend/internal/recurring"
 	"github.com/kiramopay/backend/internal/sinpe"
 	"github.com/kiramopay/backend/internal/splitpay"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -121,6 +122,7 @@ func main() {
 	paymentRepo := payment.NewRepository(pool)
 	cryptoRepo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
+	kycRepo := kyc.NewRepository(pool)
 
 	marketplaceRepo := marketplace.NewRepository(pool)
 	loyaltyRepo := loyalty.NewRepository(pool)
@@ -133,9 +135,11 @@ func main() {
 	recurringRepo := recurring.NewRepository(pool)
 
 	// ── Services ─────────────────────────────────────────────────────────
+	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
 		LockoutStore:     lockoutStore,
 		AuditLogger:      auditLogger,
+		Screener:         kycService,
 		MaxLoginAttempts: 5,
 	})
 	userService := user.NewService(userRepo)
@@ -148,12 +152,12 @@ func main() {
 		AuditLogger: auditLogger,
 	})
 	paymentService := payment.NewService(paymentRepo, txService)
-	cryptoService := crypto.NewService(cryptoRepo, priceService)
+	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
 
 	marketplaceService := marketplace.NewService(marketplaceRepo)
 	loyaltyService := loyalty.NewService(loyaltyRepo)
-	qrService := qrpayment.NewService(qrRepo)
-	splitService := splitpay.NewService(splitRepo)
+	qrService := qrpayment.NewService(qrRepo, txService)
+	splitService := splitpay.NewService(splitRepo, txService)
 	cardsService := cards.NewService(cardsRepo)
 	fraudService := fraud.NewService(fraudRepo)
 	countryService := country.NewService(countryRepo)
@@ -169,6 +173,7 @@ func main() {
 	paymentHandler := payment.NewHandler(paymentService)
 	cryptoHandler := crypto.NewHandler(cryptoService)
 	mfaHandler := mfa.NewHandler(mfaSvc)
+	kycHandler := kyc.NewHandler(kycService)
 	transparencyHandler := transparency.NewHandler(pool)
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
@@ -295,6 +300,10 @@ func main() {
 			r.Get("/users/me", userHandler.GetProfile)
 			r.Patch("/users/me", userHandler.UpdateProfile)
 
+			// KYC
+			r.Get("/kyc/status", kycHandler.GetStatus)
+			r.Post("/kyc/submit", kycHandler.Submit)
+
 			// Wallet
 			r.Get("/wallets/me", walletHandler.GetWallet)
 			r.Get("/wallets/me/balance", walletHandler.GetBalance)
@@ -411,22 +420,32 @@ func main() {
 			r.Post("/recurring/{id}/toggle", recurringHandler.Toggle)
 			r.Post("/recurring/{id}/mark-paid", recurringHandler.MarkPaid)
 
-			// Admin: fraud
-			r.Get("/admin/fraud/alerts", fraudHandler.GetOpenAlerts)
-			r.Patch("/admin/fraud/alerts/{id}", fraudHandler.ResolveAlert)
-			r.Post("/admin/fraud/restrict/{userId}", fraudHandler.RestrictUser)
+			// ─────────────────────────────────────────────────────────
+			// Admin-only routes — gated on role = 'admin'.
+			// ─────────────────────────────────────────────────────────
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireAdmin(userRepo))
 
-			// Admin: reconciliation on-demand
-			r.Post("/admin/reconcile", func(w http.ResponseWriter, r *http.Request) {
-				rpt, err := reconcileSvc.RunOnce(r.Context())
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprintf(w, `{"wallets_total":%d,"wallets_bad":%d,"drift_crc":%d,"drift_usd":%d,"duration_ms":%d}`,
-					rpt.WalletsTotal, rpt.WalletsBad, rpt.DriftCRC, rpt.DriftUSD,
-					rpt.FinishedAt.Sub(rpt.StartedAt).Milliseconds())
+				// KYC review
+				r.Post("/admin/kyc/{id}/decision", kycHandler.Decide)
+
+				// Fraud
+				r.Get("/admin/fraud/alerts", fraudHandler.GetOpenAlerts)
+				r.Patch("/admin/fraud/alerts/{id}", fraudHandler.ResolveAlert)
+				r.Post("/admin/fraud/restrict/{userId}", fraudHandler.RestrictUser)
+
+				// Reconciliation on-demand
+				r.Post("/admin/reconcile", func(w http.ResponseWriter, r *http.Request) {
+					rpt, err := reconcileSvc.RunOnce(r.Context())
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprintf(w, `{"wallets_total":%d,"wallets_bad":%d,"drift_crc":%d,"drift_usd":%d,"duration_ms":%d}`,
+						rpt.WalletsTotal, rpt.WalletsBad, rpt.DriftCRC, rpt.DriftUSD,
+						rpt.FinishedAt.Sub(rpt.StartedAt).Milliseconds())
+				})
 			})
 		})
 	})

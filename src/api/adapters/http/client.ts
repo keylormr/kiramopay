@@ -18,6 +18,37 @@ export function registerTokenProvider(p: TokenProvider): void {
   tokenProvider = p;
 }
 
+// Refresh-on-401 wiring. The auth store registers a handler that exchanges the
+// in-memory refresh token for a fresh pair, and a failure handler that forces a
+// logout when refresh is impossible. Both are optional (mock mode leaves them
+// unset, so behaviour is unchanged).
+type RefreshHandler = () => Promise<boolean>;
+type AuthFailureHandler = () => void;
+
+let refreshHandler: RefreshHandler | null = null;
+let authFailureHandler: AuthFailureHandler | null = null;
+// A single in-flight refresh shared by all concurrent 401s, so a burst of
+// expired requests triggers exactly ONE refresh call (no rotation storm).
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function registerRefreshHandler(h: RefreshHandler): void {
+  refreshHandler = h;
+}
+
+export function registerAuthFailureHandler(h: AuthFailureHandler): void {
+  authFailureHandler = h;
+}
+
+function dedupedRefresh(): Promise<boolean> {
+  if (!refreshHandler) return Promise.resolve(false);
+  if (!refreshInFlight) {
+    refreshInFlight = refreshHandler().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
 export class HttpClient {
   private baseUrl: string;
 
@@ -44,6 +75,7 @@ export class HttpClient {
     path: string,
     body?: unknown,
     auth = true,
+    isRetry = false,
   ): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -62,6 +94,18 @@ export class HttpClient {
         headers,
         body: body ? JSON.stringify(body) : undefined,
       });
+
+      // Access token expired/revoked: try ONE silent refresh, then replay the
+      // request. If refresh fails (no/empty/invalid refresh token), force a
+      // logout so the UI stops pretending the user is signed in.
+      if (res.status === 401 && auth && !isRetry && refreshHandler) {
+        const refreshed = await dedupedRefresh();
+        if (refreshed) {
+          return this.request<T>(method, path, body, auth, true);
+        }
+        if (authFailureHandler) authFailureHandler();
+        return apiError<T>('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
+      }
 
       if (res.status === 204) {
         return { success: true } as ApiResponse<T>;

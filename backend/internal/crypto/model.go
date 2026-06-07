@@ -6,10 +6,10 @@ import "time"
 type AssetRecord struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`
-	Symbol    string    `json:"symbol"`    // BTC, ETH, SOL, etc.
-	Name      string    `json:"name"`      // Bitcoin, Ethereum, etc.
-	Balance   float64   `json:"balance"`   // Crypto amount
-	AvgCost   float64   `json:"avg_cost"`  // Average buy price in USD
+	Symbol    string    `json:"symbol"`   // BTC, ETH, SOL, etc.
+	Name      string    `json:"name"`     // Bitcoin, Ethereum, etc.
+	Balance   float64   `json:"balance"`  // Crypto amount
+	AvgCost   float64   `json:"avg_cost"` // Average buy price in USD
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -43,31 +43,33 @@ type StakingRecord struct {
 }
 
 type PriceAlertRecord struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Asset     string    `json:"asset"`
-	TargetPrice float64 `json:"target_price"`
-	Direction string    `json:"direction"` // above, below
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	Asset       string    `json:"asset"`
+	TargetPrice float64   `json:"target_price"`
+	Direction   string    `json:"direction"` // above, below
+	Active      bool      `json:"active"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // API request/response types
 
 type BuyRequest struct {
-	Asset        string  `json:"asset"`
-	Amount       float64 `json:"amount"`
-	Price        float64 `json:"price"`
-	FromCurrency string  `json:"from_currency"`
-	FromAmount   float64 `json:"from_amount"`
+	Asset          string  `json:"asset"`
+	Amount         float64 `json:"amount"`
+	Price          float64 `json:"price"`
+	FromCurrency   string  `json:"from_currency"`
+	FromAmount     float64 `json:"from_amount"`
+	IdempotencyKey string  `json:"idempotency_key,omitempty"`
 }
 
 type SellRequest struct {
-	Asset      string  `json:"asset"`
-	Amount     float64 `json:"amount"`
-	Price      float64 `json:"price"`
-	ToCurrency string  `json:"to_currency"`
-	ToAmount   float64 `json:"to_amount"`
+	Asset          string  `json:"asset"`
+	Amount         float64 `json:"amount"`
+	Price          float64 `json:"price"`
+	ToCurrency     string  `json:"to_currency"`
+	ToAmount       float64 `json:"to_amount"`
+	IdempotencyKey string  `json:"idempotency_key,omitempty"`
 }
 
 type ConvertRequest struct {
