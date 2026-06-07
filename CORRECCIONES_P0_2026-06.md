@@ -159,7 +159,24 @@ build + vet + gofmt limpios. Unit: `RequireAdmin` (4/4), `validCRMobile` (ok). I
 
 ## P1 restantes (pendientes)
 
-decimal en cantidad cripto · reportes UIF + OCR/liveness en KYC.
+OCR/liveness en KYC · proveedores PCI/KYC/VASP · observabilidad (tracing/alerting).
+
+---
+
+# P1 — Reportes UIF / AML por umbrales (Ley 8204)
+
+**Fecha:** 2026-06-07. **Estado:** implementado; evaluador unit-verificado (10/10). Integración pendiente de DB (Docker caído por bug de Docker Desktop).
+
+Nuevo dominio `internal/uif` + migración `027_uif_reports.sql` (cola de revisión de compliance).
+
+- **Evaluador puro** (`uif.Thresholds.Evaluate`): decide si una transacción es reportable por **umbral único** (una tx >= techo) o **estructuración** (el agregado del día CRUZA el techo con esta tx — smurfing). Umbrales por moneda configurables (default ~USD 10,000 / ₡5,5M). Lógica pura, unit-testable sin DB.
+- **`uif_reports`**: cola con tipo (single_threshold/structuring/manual), monto, total diario, razón, estado (pending/reviewed/submitted/dismissed). Índice único `(tx_id, report_type)` evita duplicados por tx.
+- **Hook best-effort**: `transaction.Service` gana una interfaz opcional `UIFReporter`, invocada tras una transacción **saliente** exitosa (como el audit logger). Calcula el total diario, evalúa y persiste si aplica + evento de auditoría de alto riesgo. Nunca bloquea ni revierte un pago liquidado; los fallos se loguean.
+- **Endpoints admin** (gateados por `RequireAdmin`): `GET /admin/uif/reports?status=` y `POST /admin/uif/reports/{id}/review`.
+
+**Verificación:** build + vet + gofmt limpios; `TestThresholds_Evaluate` 10/10 (umbral único, estructuración, precedencia, sin doble-reporte si ya estaba sobre el techo, moneda desconocida). Tablas añadidas a `testutil` para integración futura (`make test-integration`).
+
+**Limitaciones/siguientes:** el reporte es interno (cola de revisión); el envío al portal de la UIF/ICD requiere su formato/integración. Estructuración con ventana de 1 día calendario (afinable). Umbrales a confirmar contra el reglamento vigente.
 
 ---
 

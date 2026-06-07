@@ -18,18 +18,27 @@ type MFAEnforcer interface {
 	HasVerifiedMFA(ctx context.Context, userID, purpose string) (bool, error)
 }
 
+// UIFReporter (optional) is notified, best-effort, after an outgoing
+// transaction posts, so it can evaluate AML/UIF reporting thresholds. It must
+// not block or fail the transaction.
+type UIFReporter interface {
+	Report(ctx context.Context, userID, txID, currency string, amountMinor int64)
+}
+
 type Service struct {
 	repo        *Repository
 	walletRepo  *wallet.Repository
 	ledger      *ledger.Engine
 	auditLogger *audit.Logger
 	mfa         MFAEnforcer
+	uif         UIFReporter
 }
 
 // Options carries optional collaborators.
 type Options struct {
 	AuditLogger *audit.Logger
 	MFA         MFAEnforcer
+	UIF         UIFReporter
 }
 
 func NewService(repo *Repository, walletRepo *wallet.Repository, l *ledger.Engine, opts *Options) *Service {
@@ -42,6 +51,7 @@ func NewService(repo *Repository, walletRepo *wallet.Repository, l *ledger.Engin
 		ledger:      l,
 		auditLogger: opts.AuditLogger,
 		mfa:         opts.MFA,
+		uif:         opts.UIF,
 	}
 }
 
@@ -116,8 +126,13 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		return nil, fmt.Errorf("mark completed: %w", err)
 	}
 
-	if s.auditLogger != nil && isOutgoing(req.Type) {
-		s.auditLogger.LogTransfer(userID, tx.ID, req.Amount, req.Currency, "")
+	if isOutgoing(req.Type) {
+		if s.auditLogger != nil {
+			s.auditLogger.LogTransfer(userID, tx.ID, req.Amount, req.Currency, "")
+		}
+		if s.uif != nil {
+			s.uif.Report(ctx, userID, tx.ID, req.Currency, req.Amount)
+		}
 	}
 	return tx, nil
 }
@@ -253,6 +268,9 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 
 	if s.auditLogger != nil {
 		s.auditLogger.LogTransfer(req.FromUserID, sender.ID, req.Amount, req.Currency, "")
+	}
+	if s.uif != nil {
+		s.uif.Report(ctx, req.FromUserID, sender.ID, req.Currency, req.Amount)
 	}
 	return sender, receiver, nil
 }
