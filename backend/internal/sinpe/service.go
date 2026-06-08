@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,8 +69,20 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	if req.Amount > MaxSinglePaymentCRC {
 		return nil, fmt.Errorf("amount exceeds single-payment ceiling")
 	}
+	if !validCRMobile(req.Phone) {
+		return nil, fmt.Errorf("invalid SINPE Móvil phone number")
+	}
 
-	// Atomic check + reservation of the daily SINPE quota.
+	// Serialize concurrent SINPE sends for THIS user so the daily-limit check
+	// below and the debit further down cannot interleave (two parallel sends
+	// each reading a stale "spent" total and both passing the 500K ceiling).
+	unlock, err := s.repo.AcquireUserSendLock(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("serialize send: %w", err)
+	}
+	defer unlock()
+
+	// Daily SINPE quota check — now race-free under the per-user lock.
 	dailySpent, err := s.repo.GetDailySinpeSpent(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("check daily limit: %w", err)
@@ -145,8 +158,10 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("create transaction: %w", err)
 	}
 
-	// Sender side of sinpe_history.
-	_ = s.repo.AddHistory(ctx, &HistoryRecord{
+	// Sender side of sinpe_history. This row feeds GetDailySinpeSpent, so a
+	// silent failure would let the user undercount toward the daily ceiling —
+	// surface it as a high-risk audit event instead of swallowing it.
+	if err := s.repo.AddHistory(ctx, &HistoryRecord{
 		ID:          uuid.New().String(),
 		UserID:      userID,
 		Phone:       req.Phone,
@@ -157,7 +172,14 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		Status:      "completed",
 		Description: req.Description,
 		CreatedAt:   time.Now(),
-	})
+	}); err != nil && s.auditLogger != nil {
+		s.auditLogger.Log(audit.Event{
+			UserID:    userID,
+			Action:    "sinpe_history_write_failed",
+			RiskLevel: "high",
+			IPAddress: ipAddr,
+		})
+	}
 	// Receiver side (only when internal — for external transfers the bank
 	// keeps the receive record).
 	if internal && receiverTx != nil {
@@ -185,4 +207,31 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		Fee:           fee,
 		Recipient:     contactName,
 	}, nil
+}
+
+// validCRMobile reports whether p is a valid Costa Rican mobile number for
+// SINPE Móvil: 8 digits starting with 6, 7 or 8, with an optional +506 / 506
+// country-code prefix.
+func validCRMobile(p string) bool {
+	d := digitsOnly(p)
+	d = strings.TrimPrefix(d, "506")
+	if len(d) != 8 {
+		return false
+	}
+	switch d[0] {
+	case '6', '7', '8':
+		return true
+	default:
+		return false
+	}
+}
+
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteByte(byte(r))
+		}
+	}
+	return b.String()
 }

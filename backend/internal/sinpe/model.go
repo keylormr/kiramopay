@@ -29,10 +29,10 @@ type SendResponse struct {
 
 // SINPE Móvil limits (per BCCR public reference; kept independently here).
 const (
-	DailyLimitCRC        int64 = 50000000 // 500,000 CRC in centimos
-	MaxSinglePaymentCRC  int64 = 50000000 // 500,000 CRC per single tx
-	TransactionFee       int64 = 15000    // 150 CRC fee for cross-bank
-	MFAThresholdCRC      int64 = 10000000 // 100,000 CRC — MFA gated above this
+	DailyLimitCRC       int64 = 50000000 // 500,000 CRC in centimos
+	MaxSinglePaymentCRC int64 = 50000000 // 500,000 CRC per single tx
+	TransactionFee      int64 = 15000    // 150 CRC fee for cross-bank
+	MFAThresholdCRC     int64 = 10000000 // 100,000 CRC — MFA gated above this
 )
 
 type HistoryRecord struct {

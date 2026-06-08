@@ -2,12 +2,21 @@ package crypto_test
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/kiramopay/backend/internal/crypto"
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/testutil"
+	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
+	"github.com/shopspring/decimal"
 )
+
+// d is a terse helper for decimal literals in test fixtures.
+func d(f float64) decimal.Decimal { return decimal.NewFromFloat(f) }
 
 func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 	t.Helper()
@@ -15,10 +24,23 @@ func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 
 	repo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
-	svc := crypto.NewService(repo, priceService)
+	txRepo := transaction.NewRepository(pool)
+	walletRepo := wallet.NewRepository(pool)
+	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	txService := transaction.NewService(txRepo, walletRepo, l, nil)
+	svc := crypto.NewService(repo, priceService, txService)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
+
+	// Crypto buys now debit fiat through the ledger; give the wallet enough
+	// balance and limit headroom for the purchases exercised below.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE wallets SET balance_crc = 1000000000000,
+		        daily_limit = 1000000000000, monthly_limit = 1000000000000
+		 WHERE user_id = $1::uuid`, userID); err != nil {
+		t.Fatalf("top up wallet: %v", err)
+	}
 
 	return svc, userID
 }
@@ -49,10 +71,10 @@ func TestBuy_Success(t *testing.T) {
 
 	tx, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Amount:       0.001,
-		Price:        50000000,
+		Amount:       d(0.001),
+		Price:        d(50000000),
 		FromCurrency: "CRC",
-		FromAmount:   50000,
+		FromAmount:   d(50000),
 	})
 	if err != nil {
 		t.Fatalf("Buy() error: %v", err)
@@ -72,10 +94,10 @@ func TestSell_Success(t *testing.T) {
 	// Buy first
 	_, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "ETH",
-		Amount:       1.0,
-		Price:        3000000,
+		Amount:       d(1.0),
+		Price:        d(3000000),
 		FromCurrency: "CRC",
-		FromAmount:   3000000,
+		FromAmount:   d(3000000),
 	})
 	if err != nil {
 		t.Fatalf("Buy() error: %v", err)
@@ -84,10 +106,10 @@ func TestSell_Success(t *testing.T) {
 	// Sell
 	tx, err := svc.Sell(ctx, userID, &crypto.SellRequest{
 		Asset:      "ETH",
-		Amount:     0.5,
-		Price:      3000000,
+		Amount:     d(0.5),
+		Price:      d(3000000),
 		ToCurrency: "CRC",
-		ToAmount:   1500000,
+		ToAmount:   d(1500000),
 	})
 	if err != nil {
 		t.Fatalf("Sell() error: %v", err)
@@ -116,10 +138,10 @@ func TestGetAssets_AfterBuy(t *testing.T) {
 
 	_, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Amount:       0.5,
-		Price:        50000000,
+		Amount:       d(0.5),
+		Price:        d(50000000),
 		FromCurrency: "CRC",
-		FromAmount:   25000000,
+		FromAmount:   d(25000000),
 	})
 	if err != nil {
 		t.Fatalf("Buy() error: %v", err)
@@ -138,9 +160,16 @@ func TestStake_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
+	// Fund the asset first (staking requires an existing balance).
+	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset: "ETH", Amount: d(2.0), Price: d(3000000), FromCurrency: "CRC", FromAmount: d(6000000),
+	}); err != nil {
+		t.Fatalf("seed buy: %v", err)
+	}
+
 	staking, err := svc.Stake(ctx, userID, &crypto.StakeRequest{
 		Asset:    "ETH",
-		Amount:   2.0,
+		Amount:   d(2.0),
 		APY:      5.5,
 		Locked:   true,
 		LockDays: 30,
@@ -160,9 +189,15 @@ func TestUnstake_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
+	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset: "SOL", Amount: d(10.0), Price: d(50000), FromCurrency: "CRC", FromAmount: d(500000),
+	}); err != nil {
+		t.Fatalf("seed buy: %v", err)
+	}
+
 	staking, err := svc.Stake(ctx, userID, &crypto.StakeRequest{
 		Asset:  "SOL",
-		Amount: 10.0,
+		Amount: d(10.0),
 		APY:    7.0,
 	})
 	if err != nil {
@@ -182,7 +217,7 @@ func TestPriceAlert_CRUD(t *testing.T) {
 	// Add alert
 	alert, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
 		Asset:       "BTC",
-		TargetPrice: 100000,
+		TargetPrice: d(100000),
 		Direction:   "above",
 	})
 	if err != nil {
@@ -214,17 +249,51 @@ func TestPriceAlert_CRUD(t *testing.T) {
 	}
 }
 
+func TestBuy_DecimalPrecision_Exact(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	ctx := context.Background()
+
+	// The classic float trap: 0.1 + 0.2 == 0.30000000000000004 in float64.
+	// With decimal end-to-end the stored balance must be EXACTLY 0.3.
+	for _, amt := range []float64{0.1, 0.2} {
+		if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+			Asset: "BTC", Amount: d(amt), Price: d(1), FromCurrency: "CRC", FromAmount: d(1000),
+		}); err != nil {
+			t.Fatalf("buy %v: %v", amt, err)
+		}
+	}
+
+	assets, err := svc.GetAssets(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetAssets() error: %v", err)
+	}
+	var btc *crypto.AssetRecord
+	for i := range assets {
+		if assets[i].Symbol == "BTC" {
+			btc = &assets[i]
+			break
+		}
+	}
+	if btc == nil {
+		t.Fatal("BTC asset not found")
+	}
+	want := decimal.RequireFromString("0.3")
+	if !btc.Balance.Equal(want) {
+		t.Fatalf("balance = %s, want exactly 0.3 (float drift?)", btc.Balance.String())
+	}
+}
+
 func TestGetTransactions_AfterBuySell(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
 	// Buy
 	_, _ = svc.Buy(ctx, userID, &crypto.BuyRequest{
-		Asset: "BTC", Amount: 0.1, Price: 50000000, FromCurrency: "CRC", FromAmount: 5000000,
+		Asset: "BTC", Amount: d(0.1), Price: d(50000000), FromCurrency: "CRC", FromAmount: d(5000000),
 	})
 	// Sell
 	_, _ = svc.Sell(ctx, userID, &crypto.SellRequest{
-		Asset: "BTC", Amount: 0.05, Price: 50000000, ToCurrency: "CRC", ToAmount: 2500000,
+		Asset: "BTC", Amount: d(0.05), Price: d(50000000), ToCurrency: "CRC", ToAmount: d(2500000),
 	})
 
 	txs, err := svc.GetTransactions(ctx, userID)

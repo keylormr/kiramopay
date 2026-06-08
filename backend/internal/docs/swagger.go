@@ -10,20 +10,20 @@ import (
 // ServeOpenAPISpec serves the openapi.yaml file.
 func ServeOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	specPath := findSpecPath()
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) // #nosec G304 -- specPath is resolved internally (findSpecPath), never user input
 	if err != nil {
 		http.Error(w, "OpenAPI spec not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // ServeSwaggerUI serves a minimal Swagger UI page.
 func ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(swaggerHTML))
+	_, _ = w.Write([]byte(swaggerHTML))
 }
 
 func findSpecPath() string {

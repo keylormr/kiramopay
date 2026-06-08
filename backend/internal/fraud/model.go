@@ -5,26 +5,26 @@ import "time"
 // ── Risk Assessment ──────────────────────────────────────────────────────────
 
 type RiskAssessment struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	TxType      string    `json:"tx_type"` // transaction, sinpe, qr_payment, crypto, card
-	TxID        string    `json:"tx_id"`
-	Amount      int64     `json:"amount"` // centimos
-	RiskScore   int       `json:"risk_score"` // 0-100
-	RiskLevel   string    `json:"risk_level"` // low, medium, high, critical
-	Factors     []string  `json:"factors"`    // reasons for the score
-	Action      string    `json:"action"`     // allow, review, block
-	ReviewedBy  string    `json:"reviewed_by,omitempty"`
-	ReviewedAt  *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	TxType     string     `json:"tx_type"` // transaction, sinpe, qr_payment, crypto, card
+	TxID       string     `json:"tx_id"`
+	Amount     int64      `json:"amount"`     // centimos
+	RiskScore  int        `json:"risk_score"` // 0-100
+	RiskLevel  string     `json:"risk_level"` // low, medium, high, critical
+	Factors    []string   `json:"factors"`    // reasons for the score
+	Action     string     `json:"action"`     // allow, review, block
+	ReviewedBy string     `json:"reviewed_by,omitempty"`
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 // Risk thresholds
 const (
 	LowThreshold      = 25
-	MediumThreshold    = 50
-	HighThreshold      = 75
-	CriticalThreshold  = 90
+	MediumThreshold   = 50
+	HighThreshold     = 75
+	CriticalThreshold = 90
 
 	ActionAllow  = "allow"
 	ActionReview = "review"
@@ -34,13 +34,13 @@ const (
 // ── Fraud Rule ───────────────────────────────────────────────────────────────
 
 type FraudRule struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Category    string  `json:"category"` // velocity, amount, pattern, device, location
-	Condition   string  `json:"condition"` // JSON-encoded rule logic
-	ScoreWeight int     `json:"score_weight"` // points added to risk score
-	Active      bool    `json:"active"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`     // velocity, amount, pattern, device, location
+	Condition   string `json:"condition"`    // JSON-encoded rule logic
+	ScoreWeight int    `json:"score_weight"` // points added to risk score
+	Active      bool   `json:"active"`
 }
 
 // ── Fraud Alert ──────────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ type FraudAlert struct {
 	ID           string     `json:"id"`
 	UserID       string     `json:"user_id"`
 	AssessmentID string     `json:"assessment_id"`
-	Type         string     `json:"type"` // suspicious_tx, velocity_breach, amount_anomaly, device_change
+	Type         string     `json:"type"`     // suspicious_tx, velocity_breach, amount_anomaly, device_change
 	Severity     string     `json:"severity"` // low, medium, high, critical
 	Message      string     `json:"message"`
 	Status       string     `json:"status"` // open, investigating, resolved, false_positive

@@ -23,9 +23,9 @@ type Metrics struct {
 	requestDurationCounts map[string]*atomic.Int64
 
 	// Global counters
-	totalRequests  atomic.Int64
-	totalErrors    atomic.Int64
-	startTime      time.Time
+	totalRequests atomic.Int64
+	totalErrors   atomic.Int64
+	startTime     time.Time
 }
 
 var globalMetrics = &Metrics{

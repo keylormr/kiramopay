@@ -19,7 +19,7 @@ type APIError struct {
 func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
+	_ = json.NewEncoder(w).Encode(APIResponse{
 		Success: true,
 		Data:    data,
 	})
@@ -28,7 +28,7 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 func Error(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
+	_ = json.NewEncoder(w).Encode(APIResponse{
 		Success: false,
 		Error: &APIError{
 			Code:    code,

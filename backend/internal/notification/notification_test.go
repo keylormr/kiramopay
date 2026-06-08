@@ -52,8 +52,6 @@ func TestNotificationRecord_Fields(t *testing.T) {
 }
 
 func TestService_ListHistoryDefaultLimit(t *testing.T) {
-	s := &Service{repo: nil}
-
 	// Test that invalid limits are corrected
 	// This tests the limit normalization logic without DB
 	limit := 0

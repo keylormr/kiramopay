@@ -3,6 +3,7 @@ package sinpe
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"time"
 
 	"github.com/google/uuid"
@@ -133,4 +134,33 @@ func (r *Repository) GetDailySinpeSpent(ctx context.Context, userID string) (int
 		userID,
 	).Scan(&total)
 	return total, err
+}
+
+// AcquireUserSendLock takes a PostgreSQL session-level advisory lock keyed by
+// the user so that the daily-limit check and the subsequent debit in
+// Service.Send cannot interleave across concurrent requests for the SAME user.
+// The returned function MUST be called to release the lock and the connection.
+func (r *Repository) AcquireUserSendLock(ctx context.Context, userID string) (func(), error) {
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire conn: %w", err)
+	}
+	key := advisoryKey("sinpe:send", userID)
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, key); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("advisory lock: %w", err)
+	}
+	return func() {
+		// Use a detached context so the unlock runs even if the request ctx
+		// was cancelled mid-flight.
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
+		conn.Release()
+	}, nil
+}
+
+// advisoryKey derives a stable int64 advisory-lock key from a namespace + id.
+func advisoryKey(namespace, id string) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(namespace + ":" + id))
+	return int64(h.Sum64()) // #nosec G115 -- advisory-lock key; any int64 value (incl. negative) is valid for pg_advisory_lock
 }

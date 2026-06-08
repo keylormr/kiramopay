@@ -15,6 +15,18 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
+// IsAdmin reports whether the user has the admin role. Satisfies
+// middleware.AdminChecker. Fail-closed: any error surfaces to the caller.
+func (r *Repository) IsAdmin(ctx context.Context, userID string) (bool, error) {
+	var role string
+	if err := r.db.QueryRow(ctx,
+		`SELECT role FROM users WHERE id = $1::uuid`, userID,
+	).Scan(&role); err != nil {
+		return false, err
+	}
+	return role == "admin", nil
+}
+
 func (r *Repository) Create(ctx context.Context, u *UserRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO users (id, cedula, phone, first_name, last_name, email, password_hash, status, kyc_level, kyc_status)

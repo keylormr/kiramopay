@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 )
 
 type Repository struct {
@@ -57,7 +58,7 @@ func (r *Repository) GetAsset(ctx context.Context, userID, symbol string) (*Asse
 	return a, nil
 }
 
-func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name string, balanceDelta, price float64) error {
+func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name string, balanceDelta, price decimal.Decimal) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())

@@ -74,7 +74,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 
 	for _, name := range files {
 		full := filepath.Join(dir, name)
-		body, err := os.ReadFile(full)
+		body, err := os.ReadFile(full) // #nosec G304 -- migration filenames come from the trusted migrations dir listing, not user input
 		if err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
 		}

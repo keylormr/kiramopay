@@ -162,7 +162,7 @@ func (r *Repository) CreateFoodOrder(ctx context.Context, order *FoodOrderRecord
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO food_orders (id, user_id, partner_code, restaurant_name,
