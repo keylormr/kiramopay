@@ -40,7 +40,7 @@ func (r *Repository) GetAssessment(ctx context.Context, assessmentID string) (*R
 	if err != nil {
 		return nil, err
 	}
-	json.Unmarshal([]byte(factorsJSON), &a.Factors)
+	_ = json.Unmarshal([]byte(factorsJSON), &a.Factors)
 	return &a, nil
 }
 
@@ -64,7 +64,7 @@ func (r *Repository) ListUserAssessments(ctx context.Context, userID string, lim
 			&a.ReviewedBy, &a.ReviewedAt, &a.CreatedAt); err != nil {
 			return nil, err
 		}
-		json.Unmarshal([]byte(factorsJSON), &a.Factors)
+		_ = json.Unmarshal([]byte(factorsJSON), &a.Factors)
 		assessments = append(assessments, a)
 	}
 	return assessments, nil

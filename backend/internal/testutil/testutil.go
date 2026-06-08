@@ -441,6 +441,58 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
 
+	-- Fraud (migration 010).
+	CREATE TABLE IF NOT EXISTS fraud_rules (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		name VARCHAR(200) NOT NULL,
+		description TEXT DEFAULT '',
+		category VARCHAR(30) NOT NULL,
+		condition JSONB NOT NULL,
+		score_weight INTEGER NOT NULL,
+		active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS fraud_assessments (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		tx_type VARCHAR(30) NOT NULL,
+		tx_id VARCHAR(100) NOT NULL,
+		amount BIGINT NOT NULL,
+		risk_score INTEGER NOT NULL,
+		risk_level VARCHAR(20) NOT NULL,
+		factors TEXT NOT NULL,
+		action VARCHAR(20) NOT NULL,
+		reviewed_by VARCHAR(100),
+		reviewed_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS fraud_alerts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		assessment_id UUID NOT NULL REFERENCES fraud_assessments(id),
+		type VARCHAR(30) NOT NULL,
+		severity VARCHAR(20) NOT NULL,
+		message TEXT NOT NULL,
+		status VARCHAR(20) DEFAULT 'open',
+		resolved_by VARCHAR(100),
+		resolved_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS user_risk_profiles (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+		overall_risk_score INTEGER DEFAULT 0,
+		total_transactions BIGINT DEFAULT 0,
+		total_flagged BIGINT DEFAULT 0,
+		avg_tx_amount BIGINT DEFAULT 0,
+		max_tx_amount BIGINT DEFAULT 0,
+		last_activity_at TIMESTAMP DEFAULT NOW(),
+		account_age_days INTEGER DEFAULT 0,
+		is_restricted BOOLEAN DEFAULT FALSE,
+		created_at TIMESTAMP DEFAULT NOW(),
+		updated_at TIMESTAMP DEFAULT NOW()
+	);
+
 	INSERT INTO sanction_list (source, full_name, normalized_name, nationality, program)
 	SELECT v.source, v.full_name, v.normalized_name, v.nationality, v.program
 	FROM (VALUES
@@ -459,6 +511,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"sinpe_history", "sinpe_contacts",
 		"crypto_price_alerts", "crypto_staking", "crypto_transactions", "crypto_assets",
 		"uif_reports",
+		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"journal_entries", "journal_postings",
 		"transactions",

@@ -16,6 +16,14 @@ func TestReconcileDetectsDrift(t *testing.T) {
 	userID := testutil.SeedTestUser(t, pool, "702650930", "dummy")
 	ctx := context.Background()
 
+	// The seed sets a cached balance with no matching journal entries; zero the
+	// cache so the baseline matches the (empty) ledger before forcing drift.
+	if _, err := pool.Exec(ctx,
+		`UPDATE wallets SET balance_crc = 0, balance_usd = 0 WHERE user_id = $1::uuid`, userID,
+	); err != nil {
+		t.Fatalf("reset wallet: %v", err)
+	}
+
 	// Force drift: bump cached wallets.balance_crc without writing journal.
 	if _, err := pool.Exec(ctx,
 		`UPDATE wallets SET balance_crc = balance_crc + 5000 WHERE user_id = $1::uuid`,
@@ -39,8 +47,15 @@ func TestReconcileDetectsDrift(t *testing.T) {
 
 func TestReconcileClean(t *testing.T) {
 	pool := testutil.TestDB(t)
-	_ = testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	userID := testutil.SeedTestUser(t, pool, "702650930", "dummy")
 	ctx := context.Background()
+
+	// Zero the seeded cache so it matches the empty ledger (clean baseline).
+	if _, err := pool.Exec(ctx,
+		`UPDATE wallets SET balance_crc = 0, balance_usd = 0 WHERE user_id = $1::uuid`, userID,
+	); err != nil {
+		t.Fatalf("reset wallet: %v", err)
+	}
 
 	svc := reconcile.NewService(pool, nil, time.Hour, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	rpt, err := svc.RunOnce(ctx)
