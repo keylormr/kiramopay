@@ -103,6 +103,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		biometric_enabled BOOLEAN DEFAULT false,
 		kyc_level INT DEFAULT 0,
 		kyc_status VARCHAR(20) DEFAULT 'pending',
+		kyc_verified_at TIMESTAMPTZ,
+		role VARCHAR(20) NOT NULL DEFAULT 'user',
 		status VARCHAR(20) DEFAULT 'active',
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -319,6 +321,185 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		description TEXT,
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
+
+	-- Crypto (NUMERIC precision per migration 019).
+	CREATE TABLE IF NOT EXISTS crypto_assets (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		symbol VARCHAR(20) NOT NULL,
+		name VARCHAR(100) NOT NULL,
+		balance NUMERIC(38,18) DEFAULT 0,
+		avg_cost NUMERIC(38,18) DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW(),
+		UNIQUE(user_id, symbol)
+	);
+
+	CREATE TABLE IF NOT EXISTS crypto_transactions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		type VARCHAR(20) NOT NULL,
+		asset VARCHAR(40) NOT NULL,
+		amount NUMERIC(38,18) NOT NULL,
+		price NUMERIC(38,18) DEFAULT 0,
+		total NUMERIC(38,18) DEFAULT 0,
+		currency VARCHAR(10) NOT NULL,
+		fee NUMERIC(38,18) DEFAULT 0,
+		status VARCHAR(20) DEFAULT 'completed',
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS crypto_staking (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		asset VARCHAR(20) NOT NULL,
+		amount NUMERIC(38,18) NOT NULL,
+		apy NUMERIC(8,4) DEFAULT 0,
+		start_date TIMESTAMPTZ DEFAULT NOW(),
+		locked BOOLEAN DEFAULT false,
+		lock_days INT DEFAULT 0,
+		earned NUMERIC(38,18) DEFAULT 0,
+		status VARCHAR(20) DEFAULT 'active',
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS crypto_price_alerts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		asset VARCHAR(20) NOT NULL,
+		target_price NUMERIC(38,18) NOT NULL,
+		direction VARCHAR(10) NOT NULL,
+		active BOOLEAN DEFAULT true,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
+	-- KYC / AML (migration 025).
+	CREATE TABLE IF NOT EXISTS kyc_verifications (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		level_requested INTEGER NOT NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		full_legal_name VARCHAR(200) NOT NULL,
+		birth_date DATE,
+		nationality VARCHAR(2),
+		document_type VARCHAR(30) NOT NULL,
+		document_number VARCHAR(60) NOT NULL,
+		screening_result VARCHAR(20) NOT NULL DEFAULT 'pending',
+		reviewer_notes TEXT,
+		decided_by UUID REFERENCES users(id),
+		submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		decided_at TIMESTAMPTZ
+	);
+
+	CREATE TABLE IF NOT EXISTS kyc_documents (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		verification_id UUID NOT NULL REFERENCES kyc_verifications(id) ON DELETE CASCADE,
+		doc_type VARCHAR(30) NOT NULL,
+		file_ref TEXT NOT NULL,
+		sha256 VARCHAR(64),
+		uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS sanction_list (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		source VARCHAR(20) NOT NULL,
+		full_name VARCHAR(200) NOT NULL,
+		normalized_name VARCHAR(200) NOT NULL,
+		birth_date DATE,
+		nationality VARCHAR(2),
+		program VARCHAR(100),
+		added_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS sanction_screenings (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID REFERENCES users(id),
+		verification_id UUID REFERENCES kyc_verifications(id) ON DELETE SET NULL,
+		query_name VARCHAR(200) NOT NULL,
+		normalized_query VARCHAR(200) NOT NULL,
+		result VARCHAR(20) NOT NULL,
+		match_count INTEGER NOT NULL DEFAULT 0,
+		matched_ids TEXT,
+		screened_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS uif_reports (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		tx_id UUID,
+		report_type VARCHAR(20) NOT NULL,
+		amount_minor BIGINT NOT NULL,
+		currency VARCHAR(10) NOT NULL,
+		daily_total_minor BIGINT NOT NULL DEFAULT 0,
+		reason TEXT NOT NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		reviewer_id UUID REFERENCES users(id),
+		reviewer_notes TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		reviewed_at TIMESTAMPTZ
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
+		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
+
+	-- Fraud (migration 010).
+	CREATE TABLE IF NOT EXISTS fraud_rules (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		name VARCHAR(200) NOT NULL,
+		description TEXT DEFAULT '',
+		category VARCHAR(30) NOT NULL,
+		condition JSONB NOT NULL,
+		score_weight INTEGER NOT NULL,
+		active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS fraud_assessments (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		tx_type VARCHAR(30) NOT NULL,
+		tx_id VARCHAR(100) NOT NULL,
+		amount BIGINT NOT NULL,
+		risk_score INTEGER NOT NULL,
+		risk_level VARCHAR(20) NOT NULL,
+		factors TEXT NOT NULL,
+		action VARCHAR(20) NOT NULL,
+		reviewed_by VARCHAR(100),
+		reviewed_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS fraud_alerts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		assessment_id UUID NOT NULL REFERENCES fraud_assessments(id),
+		type VARCHAR(30) NOT NULL,
+		severity VARCHAR(20) NOT NULL,
+		message TEXT NOT NULL,
+		status VARCHAR(20) DEFAULT 'open',
+		resolved_by VARCHAR(100),
+		resolved_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS user_risk_profiles (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+		overall_risk_score INTEGER DEFAULT 0,
+		total_transactions BIGINT DEFAULT 0,
+		total_flagged BIGINT DEFAULT 0,
+		avg_tx_amount BIGINT DEFAULT 0,
+		max_tx_amount BIGINT DEFAULT 0,
+		last_activity_at TIMESTAMP DEFAULT NOW(),
+		account_age_days INTEGER DEFAULT 0,
+		is_restricted BOOLEAN DEFAULT FALSE,
+		created_at TIMESTAMP DEFAULT NOW(),
+		updated_at TIMESTAMP DEFAULT NOW()
+	);
+
+	INSERT INTO sanction_list (source, full_name, normalized_name, nationality, program)
+	SELECT v.source, v.full_name, v.normalized_name, v.nationality, v.program
+	FROM (VALUES
+		('OFAC', 'Carlos Sancion Prueba',      'carlos sancion prueba',      'CR', 'SDN-TEST'),
+		('UN',   'Ivan Testovich Blocklisted', 'ivan testovich blocklisted', 'RU', 'UNSC-TEST')
+	) AS v(source, full_name, normalized_name, nationality, program)
+	WHERE NOT EXISTS (SELECT 1 FROM sanction_list);
 	`
 
 	_, err := pool.Exec(ctx, schema)
@@ -328,6 +509,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 	tables := []string{
 		"sinpe_history", "sinpe_contacts",
+		"crypto_price_alerts", "crypto_staking", "crypto_transactions", "crypto_assets",
+		"uif_reports",
+		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
+		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"mfa_challenges", "password_reset_tokens", "refresh_tokens",
@@ -423,8 +608,8 @@ func SeedTestUser2(t *testing.T, pool *pgxpool.Pool) string {
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level)
-		 VALUES ($1, '700000000', '+50688885678', 'Admin', 'User', 'dummy_hash', 'active', 1)
+		`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level, role)
+		 VALUES ($1, '700000000', '+50688885678', 'Admin', 'User', 'dummy_hash', 'active', 1, 'admin')
 		 ON CONFLICT (id) DO NOTHING`,
 		userID,
 	); err != nil {

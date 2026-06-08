@@ -5,14 +5,16 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
 type Service struct {
 	repo *Repository
+	tx   *transaction.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, tx *transaction.Service) *Service {
+	return &Service{repo: repo, tx: tx}
 }
 
 func (s *Service) CreateSplit(ctx context.Context, creatorID string, req *CreateSplitRequest) (*SplitGroup, []SplitShare, error) {
@@ -84,6 +86,45 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 	}
 	if group.Status != "active" {
 		return fmt.Errorf("split is no longer active")
+	}
+
+	// Locate this user's pending share.
+	shares, err := s.repo.GetGroupShares(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	var share *SplitShare
+	for i := range shares {
+		if shares[i].UserID == userID {
+			share = &shares[i]
+			break
+		}
+	}
+	if share == nil {
+		return fmt.Errorf("no share for this user in the split")
+	}
+	if share.Status == "paid" {
+		return nil // idempotent: already settled
+	}
+
+	// Settle the money THROUGH THE LEDGER: the participant pays their share to
+	// the split creator. The creator's own share moves no money. Only mark the
+	// share paid AFTER the transfer succeeds.
+	if userID != group.CreatorID && share.Amount > 0 {
+		idem := fmt.Sprintf("split:%s:%s", groupID, userID)
+		if _, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+			FromUserID:     userID,
+			ToUserID:       group.CreatorID,
+			Amount:         share.Amount,
+			Currency:       group.Currency,
+			Fee:            0,
+			Description:    "Split: " + group.Title,
+			IdempotencyKey: idem,
+			TxType:         transaction.TypeP2PSend,
+			ReceiveType:    transaction.TypeP2PReceive,
+		}); err != nil {
+			return fmt.Errorf("settle split share: %w", err)
+		}
 	}
 
 	if err := s.repo.PayShare(ctx, groupID, userID); err != nil {

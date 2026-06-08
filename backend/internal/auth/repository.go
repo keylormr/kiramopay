@@ -186,6 +186,40 @@ func (r *Repository) RevokeRefreshFamily(ctx context.Context, familyID string) e
 	return err
 }
 
+// ChangePasswordAndRevokeSessions updates the user's password hash and revokes
+// every active refresh-token family and session in a SINGLE serializable
+// transaction. Either all three succeed or none do — there is no window where
+// the password is changed but old sessions survive (account-takeover risk).
+func (r *Repository) ChangePasswordAndRevokeSessions(ctx context.Context, userID, newHash string) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck — no-op once committed
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1::uuid`,
+		userID, newHash,
+	); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW()
+		 WHERE user_id = $1::uuid AND revoked_at IS NULL`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("revoke refresh tokens: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE user_sessions SET revoked_at = NOW()
+		 WHERE user_id = $1::uuid AND revoked_at IS NULL`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("revoke sessions: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 //  Access-jti denylist (Redis, TTL = access token remaining lifetime)
 // ─────────────────────────────────────────────────────────────────────────
@@ -273,11 +307,11 @@ func (r *Repository) VerifyMFAChallenge(ctx context.Context, userID, purpose, co
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var (
-		id           string
-		storedHash   string
-		attempts     int
-		maxAttempts  int
-		verifiedAt   *time.Time
+		id          string
+		storedHash  string
+		attempts    int
+		maxAttempts int
+		verifiedAt  *time.Time
 	)
 	err = tx.QueryRow(ctx,
 		`SELECT id::text, code_hash, attempts, max_attempts, verified_at

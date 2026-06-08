@@ -94,11 +94,15 @@ describe('HttpAuthRepository', () => {
       expect(result.data?.user.firstName).toBe('Administrador');
     });
 
-    it('should store tokens on successful login', async () => {
+    it('returns tokens in the response (kept in memory, never localStorage)', async () => {
       mockLoginSuccess();
-      await repo.login({ cedula: '702650930', password: 'Kiramopay2024!' });
-      expect(localStorage.getItem('kiramopay_access_token')).toBe('test-access-token');
-      expect(localStorage.getItem('kiramopay_refresh_token')).toBe('test-refresh-token');
+      const result = await repo.login({ cedula: '702650930', password: 'Kiramopay2024!' });
+      // Tokens are returned for the store to hold in memory — they must NOT be
+      // written to localStorage (XSS exfiltration risk; Phase 20 hardening).
+      expect(result.data?.tokens?.access_token).toBe('test-access-token');
+      expect(result.data?.tokens?.refresh_token).toBe('test-refresh-token');
+      expect(localStorage.getItem('kiramopay_access_token')).toBeNull();
+      expect(localStorage.getItem('kiramopay_refresh_token')).toBeNull();
     });
   });
 
@@ -199,6 +203,37 @@ describe('HttpAuthRepository', () => {
         password: 'Test2024!',
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('refresh', () => {
+    it('exchanges a refresh token for a fresh pair', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            access_token: 'rotated-access',
+            refresh_token: 'rotated-refresh',
+            expires_at: 123,
+          },
+        }),
+      });
+      const result = await repo.refresh('old-refresh');
+      expect(result.success).toBe(true);
+      expect(result.data?.access_token).toBe('rotated-access');
+      expect(result.data?.refresh_token).toBe('rotated-refresh');
+    });
+
+    it('fails on an invalid/expired refresh token', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: 'REFRESH_FAILED', message: 'invalid refresh token' } }),
+      });
+      const result = await repo.refresh('bad-refresh');
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('REFRESH_FAILED');
     });
   });
 });

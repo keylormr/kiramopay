@@ -4,6 +4,7 @@ import type {
   LoginResponse,
   RegisterRequest,
   ChangePasswordRequest,
+  TokenPair,
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
@@ -133,6 +134,25 @@ export class HttpAuthRepository implements IAuthRepository {
     }
 
     return apiSuccess({ changed: true });
+  }
+
+  async refresh(refreshToken: string): Promise<ApiResponse<TokenPair>> {
+    // auth=false: the refresh token travels in the body, not the Authorization
+    // header — and this MUST NOT trigger the HttpClient's 401 refresh loop.
+    const res = await this.client.post<{
+      access_token: string;
+      refresh_token: string;
+      expires_at?: number;
+    }>('/api/v1/auth/refresh', { refresh_token: refreshToken }, false);
+
+    if (!res.success || !res.data) {
+      return apiError('REFRESH_FAILED', res.error?.message || 'Token refresh failed');
+    }
+    return apiSuccess<TokenPair>({
+      access_token: res.data.access_token,
+      refresh_token: res.data.refresh_token,
+      expires_at: res.data.expires_at,
+    });
   }
 
   async logout(): Promise<ApiResponse<void>> {

@@ -14,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -77,9 +79,10 @@ type Engine struct {
 	logger      *slog.Logger
 }
 
-// NewEngine wires the engine. maxAttempts defaults to 4.
+// NewEngine wires the engine. maxAttempts defaults to 8 — enough headroom for
+// bursts of contending serializable transactions on the same wallet.
 func NewEngine(pool *pgxpool.Pool, logger *slog.Logger) *Engine {
-	return &Engine{pool: pool, maxAttempts: 4, logger: logger}
+	return &Engine{pool: pool, maxAttempts: 8, logger: logger}
 }
 
 // Post writes the posting + entries + updates balance cache inside a
@@ -93,8 +96,8 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 	}
 
 	var (
-		lastErr    error
-		postingID  string
+		lastErr   error
+		postingID string
 	)
 	for attempt := 1; attempt <= e.maxAttempts; attempt++ {
 		postingID, lastErr = e.postOnce(ctx, p)
@@ -104,11 +107,13 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 		if errors.Is(lastErr, ErrIdempotent) {
 			return postingID, lastErr
 		}
-		if !isRetryable(lastErr) {
+		if !isRetryable(lastErr) && !errors.Is(lastErr, errIdempotencyRace) {
 			return "", lastErr
 		}
-		// Exponential backoff with jitter — small (<5ms) to keep latency low.
-		backoff := time.Duration(attempt*attempt) * 2 * time.Millisecond
+		// Exponential backoff with FULL jitter (base + rand[0,base]) so that a
+		// herd of conflicting txs doesn't retry in lockstep and re-collide.
+		base := time.Duration(attempt*attempt) * 3 * time.Millisecond
+		backoff := base + time.Duration(rand.Int63n(int64(base)+1))
 		if e.logger != nil {
 			e.logger.Warn("ledger.post retrying",
 				"attempt", attempt, "err", lastErr.Error(), "backoff", backoff.String())
@@ -125,8 +130,21 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 // ErrIdempotent indicates the IdempotencyKey collided with an existing posting.
 var ErrIdempotent = errors.New("idempotent: posting already recorded")
 
+// errIdempotencyRace is an internal, retryable signal: a concurrent posting
+// won the idempotency-key race. Retrying lets the top-level lookup return the
+// winner's posting id as ErrIdempotent.
+var errIdempotencyRace = errors.New("idempotency race")
+
 func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
-	tx, err := e.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	// READ COMMITTED + explicit `SELECT ... FOR UPDATE` on the affected wallet
+	// rows (below, in sorted order). This is the canonical ledger locking
+	// discipline for hot accounts: contending transfers QUEUE on the row lock
+	// and apply sequentially, instead of aborting with serialization failures
+	// the way SERIALIZABLE does under heavy single-account contention.
+	// Correctness still holds: the per-posting balance is enforced by a
+	// deferred DB trigger, idempotency by a UNIQUE constraint, and the balance
+	// cache is a commutative `+= delta` on a locked row.
+	tx, err := e.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return "", fmt.Errorf("begin tx: %w", err)
 	}
@@ -147,6 +165,29 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 		}
 	}
 
+	// Pre-lock the affected user wallet rows in a deterministic (sorted) order
+	// with SELECT ... FOR UPDATE. Concurrent postings touching the same wallet
+	// then QUEUE on the row lock instead of racing and aborting with a
+	// serialization failure — this is what makes a "hot" account survive a
+	// burst of contending transfers. Sorted order also rules out deadlocks.
+	lockUsers := make([]string, 0, len(p.Entries))
+	seenUser := make(map[string]bool, len(p.Entries))
+	for _, en := range p.Entries {
+		if en.Account.UserID == "" || seenUser[en.Account.UserID] {
+			continue
+		}
+		seenUser[en.Account.UserID] = true
+		lockUsers = append(lockUsers, en.Account.UserID)
+	}
+	sort.Strings(lockUsers)
+	for _, uid := range lockUsers {
+		if _, err := tx.Exec(ctx,
+			`SELECT 1 FROM wallets WHERE user_id = $1::uuid FOR UPDATE`, uid,
+		); err != nil {
+			return "", fmt.Errorf("lock wallet %s: %w", uid, err)
+		}
+	}
+
 	postingID := uuid.New().String()
 	metadataJSON := metadataToJSON(p.Metadata)
 	_, err = tx.Exec(ctx,
@@ -155,6 +196,14 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 		postingID, p.TxID, p.Description, metadataJSON, p.IdempotencyKey, p.CreatedBy,
 	)
 	if err != nil {
+		// Under READ COMMITTED a concurrent insert of the same idempotency key
+		// surfaces as a UNIQUE violation here (the duplicate INSERT blocks until
+		// the winner commits, then fails 23505). Flag it for a retry — the next
+		// attempt's idempotency lookup returns the winner's posting id.
+		var pgErr *pgconn.PgError
+		if p.IdempotencyKey != "" && errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return "", errIdempotencyRace
+		}
 		return "", fmt.Errorf("insert posting: %w", err)
 	}
 
@@ -188,9 +237,23 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 		}
 	}
 
-	// 3. Apply balance-cache deltas.
-	for k, delta := range cacheDelta {
-		if err := applyWalletDelta(ctx, tx, k.userID, k.currency, delta); err != nil {
+	// 3. Apply balance-cache deltas in a DETERMINISTIC order. Go map iteration
+	//    is randomized, so two concurrent postings touching the same wallets
+	//    could lock the rows in opposite order and DEADLOCK (40P01). Sorting by
+	//    account key makes every posting acquire locks in the same order, so
+	//    only clean serialization failures (40001) remain — which we retry.
+	keys := make([]cacheKey, 0, len(cacheDelta))
+	for k := range cacheDelta {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].userID != keys[j].userID {
+			return keys[i].userID < keys[j].userID
+		}
+		return keys[i].currency < keys[j].currency
+	})
+	for _, k := range keys {
+		if err := applyWalletDelta(ctx, tx, k.userID, k.currency, cacheDelta[k]); err != nil {
 			return "", err
 		}
 	}

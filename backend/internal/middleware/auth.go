@@ -12,10 +12,10 @@ import (
 type contextKey string
 
 const (
-	UserIDKey      contextKey = "user_id"
-	AccessJTIKey   contextKey = "access_jti"
-	AccessExpKey   contextKey = "access_exp"
-	AccessRawKey   contextKey = "access_raw"
+	UserIDKey    contextKey = "user_id"
+	AccessJTIKey contextKey = "access_jti"
+	AccessExpKey contextKey = "access_exp"
+	AccessRawKey contextKey = "access_raw"
 )
 
 // JTIChecker validates whether an access-token jti has been revoked.
