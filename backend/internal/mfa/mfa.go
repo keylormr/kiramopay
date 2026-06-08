@@ -11,7 +11,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -196,14 +195,4 @@ func randomSixDigit() (string, error) {
 	// (negligible for 6 digits) — fine for OTP not security key material.
 	n := uint32(b[0])<<16 | uint32(b[1])<<8 | uint32(b[2])
 	return fmt.Sprintf("%06d", n%1_000_000), nil
-}
-
-// Pkg-level helper to base64-encode arbitrary bytes if a non-numeric code is
-// preferred in the future.
-func base64URL(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }
