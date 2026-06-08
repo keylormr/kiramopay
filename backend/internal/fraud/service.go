@@ -102,7 +102,7 @@ func (s *Service) AssessTransaction(ctx context.Context, req *AssessRequest) (*R
 			Message:      fmt.Sprintf("High-risk %s of %d centimos (score: %d)", req.TxType, req.Amount, riskScore),
 			Status:       "open",
 		}
-		s.repo.CreateAlert(ctx, alert)
+		_ = s.repo.CreateAlert(ctx, alert)
 	}
 
 	// Update user risk profile
@@ -117,7 +117,7 @@ func (s *Service) AssessTransaction(ctx context.Context, req *AssessRequest) (*R
 		newMax = req.Amount
 	}
 	newScore := (profile.OverallRiskScore*(int(profile.TotalTransactions)) + riskScore) / int(newTotal)
-	s.repo.UpdateProfile(ctx, req.UserID, newTotal, newFlagged, newAvg, newMax, newScore)
+	_ = s.repo.UpdateProfile(ctx, req.UserID, newTotal, newFlagged, newAvg, newMax, newScore)
 
 	return assessment, nil
 }

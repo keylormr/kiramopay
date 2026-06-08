@@ -51,10 +51,10 @@ type FoodOrderRecord struct {
 	UserID            string     `json:"user_id"`
 	PartnerCode       string     `json:"partner_code"`
 	RestaurantName    string     `json:"restaurant_name"`
-	Subtotal          int64      `json:"subtotal"`      // centimos
-	DeliveryFee       int64      `json:"delivery_fee"`   // centimos
-	Total             int64      `json:"total"`          // centimos
-	Status            string     `json:"status"` // preparing, ready, on_the_way, delivered, cancelled
+	Subtotal          int64      `json:"subtotal"`     // centimos
+	DeliveryFee       int64      `json:"delivery_fee"` // centimos
+	Total             int64      `json:"total"`        // centimos
+	Status            string     `json:"status"`       // preparing, ready, on_the_way, delivered, cancelled
 	EstimatedDelivery string     `json:"estimated_delivery"`
 	CreatedAt         time.Time  `json:"created_at"`
 	CompletedAt       *time.Time `json:"completed_at,omitempty"`
@@ -81,9 +81,9 @@ type CreateRideRequest struct {
 }
 
 type CreateFoodOrderRequest struct {
-	PartnerCode    string              `json:"partner_code"`
-	RestaurantName string              `json:"restaurant_name"`
-	Items          []FoodOrderItemReq  `json:"items"`
+	PartnerCode    string             `json:"partner_code"`
+	RestaurantName string             `json:"restaurant_name"`
+	Items          []FoodOrderItemReq `json:"items"`
 }
 
 type FoodOrderItemReq struct {
