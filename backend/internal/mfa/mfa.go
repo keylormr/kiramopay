@@ -7,6 +7,8 @@ package mfa
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -21,12 +23,13 @@ import (
 )
 
 // Service is the MFA orchestrator: issue + verify challenges, enforce
-// thresholds.
+// thresholds, and manage TOTP (authenticator-app) enrollment.
 type Service struct {
-	db            *pgxpool.Pool
-	thresholdCRC  int64
-	thresholdUSD  int64
-	verifyWindow  time.Duration
+	db           *pgxpool.Pool
+	thresholdCRC int64
+	thresholdUSD int64
+	verifyWindow time.Duration
+	totpAEAD     cipher.AEAD // nil if no encryption key configured → TOTP disabled
 }
 
 // Config knobs.
@@ -34,6 +37,10 @@ type Config struct {
 	ThresholdCRCMinor int64         // default 10,000,000 centimos (100,000 CRC)
 	ThresholdUSDMinor int64         // default 20,000 cents (200 USD)
 	VerifyWindow      time.Duration // how long a verified challenge stays valid
+	// TOTPEncryptionKey encrypts authenticator secrets at rest. Any non-empty
+	// value works (it is hashed to a 32-byte AES-256 key); derive it from
+	// JWT_SECRET in production. Empty disables TOTP enrollment.
+	TOTPEncryptionKey []byte
 }
 
 func NewService(db *pgxpool.Pool, cfg *Config) *Service {
@@ -49,12 +56,22 @@ func NewService(db *pgxpool.Pool, cfg *Config) *Service {
 	if cfg.VerifyWindow <= 0 {
 		cfg.VerifyWindow = 5 * time.Minute
 	}
-	return &Service{
+	s := &Service{
 		db:           db,
 		thresholdCRC: cfg.ThresholdCRCMinor,
 		thresholdUSD: cfg.ThresholdUSDMinor,
 		verifyWindow: cfg.VerifyWindow,
 	}
+	if len(cfg.TOTPEncryptionKey) > 0 {
+		key := sha256.Sum256(cfg.TOTPEncryptionKey)
+		block, err := aes.NewCipher(key[:])
+		if err == nil {
+			if aead, err := cipher.NewGCM(block); err == nil {
+				s.totpAEAD = aead
+			}
+		}
+	}
+	return s
 }
 
 // IsMFARequired implements transaction.MFAEnforcer.
@@ -128,10 +145,10 @@ func (s *Service) VerifyChallenge(ctx context.Context, userID, purpose, code str
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var (
-		id           string
-		storedHash   string
-		attempts     int
-		maxAttempts  int
+		id          string
+		storedHash  string
+		attempts    int
+		maxAttempts int
 	)
 	err = tx.QueryRow(ctx,
 		`SELECT id::text, code_hash, attempts, max_attempts
