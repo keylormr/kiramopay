@@ -11,6 +11,9 @@ export default defineConfig({
     baseURL: 'http://localhost:9999',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Force a Spanish locale so the app's language auto-detection is
+    // deterministic across machines/CI (default es; selectors assume Spanish).
+    locale: 'es-CR',
   },
   projects: [
     {
