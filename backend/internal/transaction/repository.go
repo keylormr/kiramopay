@@ -43,10 +43,6 @@ func (r *Repository) CreateTx(
 	createdDate := now.Format("2006-01-02")
 
 	metadata := "{}"
-	if req.Description != "" {
-		// Stable, minimal JSON. Using PG to_jsonb would be safer; for now we
-		// escape via parameter binding (jsonb cast) below.
-	}
 
 	tx := &TransactionRecord{
 		ID:                id,
@@ -141,6 +137,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 		args = append(args, req.Status)
 		argIdx++
 	}
+	_ = argIdx // optional-filter counter; final value intentionally unused
 
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {

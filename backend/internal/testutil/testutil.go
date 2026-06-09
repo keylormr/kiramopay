@@ -521,10 +521,10 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"users",
 	}
 	for _, t := range tables {
-		pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t))
+		_, _ = pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t)) //nolint:gosec // test-only, fixed table list
 	}
 	// Re-seed system ledger accounts after truncate.
-	pool.Exec(ctx, `
+	_, _ = pool.Exec(ctx, `
 		INSERT INTO ledger_accounts (code, type, currency, normal_balance) VALUES
 			('SYSTEM:FEES:CRC',      'system_fee', 'CRC', 'credit'),
 			('SYSTEM:FEES:USD',      'system_fee', 'USD', 'credit'),

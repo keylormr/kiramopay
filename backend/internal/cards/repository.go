@@ -139,6 +139,7 @@ func (r *Repository) UpdateLimits(ctx context.Context, cardID string, daily, mon
 		args = append(args, *atm)
 		argIdx++
 	}
+	_ = argIdx // optional-field counter; final value intentionally unused
 
 	if updates == "" {
 		return nil
