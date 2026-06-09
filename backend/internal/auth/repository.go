@@ -125,7 +125,7 @@ func (r *Repository) ConsumeRefreshToken(ctx context.Context, jti, hash string) 
 	if err != nil {
 		return nil, false, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck — rollback is no-op if committed
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op once committed
 
 	rec := &RefreshTokenRecord{}
 	err = tx.QueryRow(ctx,
@@ -195,7 +195,7 @@ func (r *Repository) ChangePasswordAndRevokeSessions(ctx context.Context, userID
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck — no-op once committed
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op once committed
 
 	if _, err := tx.Exec(ctx,
 		`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1::uuid`,

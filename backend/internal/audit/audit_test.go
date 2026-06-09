@@ -6,30 +6,6 @@ import (
 	"time"
 )
 
-// mockAuditRepo collects events in memory for testing.
-type mockAuditRepo struct {
-	mu     sync.Mutex
-	events []Event
-}
-
-func (m *mockAuditRepo) collect(evt *Event) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.events = append(m.events, *evt)
-}
-
-func (m *mockAuditRepo) count() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.events)
-}
-
-func (m *mockAuditRepo) get(i int) Event {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.events[i]
-}
-
 func TestLogLogin_GeneratesCorrectAction(t *testing.T) {
 	collected := make([]Event, 0)
 	var mu sync.Mutex

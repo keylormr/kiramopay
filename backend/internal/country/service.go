@@ -106,7 +106,7 @@ func (s *Service) SendCrossBorder(ctx context.Context, senderID string, req *Cro
 	}
 
 	// Auto-complete for now (real system would be async)
-	s.repo.UpdateTransferStatus(ctx, transfer.ID, "completed")
+	_ = s.repo.UpdateTransferStatus(ctx, transfer.ID, "completed") // best-effort
 	transfer.Status = "completed"
 
 	return transfer, nil
