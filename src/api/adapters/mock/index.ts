@@ -15,11 +15,12 @@ import { MockSplitPayRepository } from './splitpay.mock';
 import { MockBudgetRepository } from './budget.mock';
 import { MockRecurringRepository } from './recurring.mock';
 
-// Auth is NOT included here — it always goes through the real backend (HttpAuthRepository).
-// See createApiLayer() in src/api/index.ts.
-export function createMockApiLayer(auth: ApiLayer['auth']): ApiLayer {
+// Auth and MFA are NOT mocked — they always go through the real backend
+// (HttpAuthRepository / HttpMfaRepository). See createApiLayer() in src/api/index.ts.
+export function createMockApiLayer(auth: ApiLayer['auth'], mfa: ApiLayer['mfa']): ApiLayer {
   return {
     auth,
+    mfa,
     accounts: new MockAccountRepository(),
     transactions: new MockTransactionRepository(),
     sinpe: new MockSinpeRepository(),

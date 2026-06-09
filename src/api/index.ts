@@ -1,4 +1,5 @@
 import type { IAuthRepository } from './repositories/auth.repository';
+import type { IMfaRepository } from './repositories/mfa.repository';
 import type { IAccountRepository } from './repositories/account.repository';
 import type { ITransactionRepository } from './repositories/transaction.repository';
 import type { ISinpeRepository } from './repositories/sinpe.repository';
@@ -18,9 +19,11 @@ import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
 import { HttpAuthRepository } from './adapters/http/auth.http';
+import { HttpMfaRepository } from './adapters/http/mfa.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
+  mfa: IMfaRepository;
   accounts: IAccountRepository;
   transactions: ITransactionRepository;
   sinpe: ISinpeRepository;
@@ -54,11 +57,12 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
     return createHttpApiLayer(baseUrl);
   }
 
-  // Mock mode: auth ALWAYS goes through the real backend (DB).
+  // Mock mode: auth + MFA ALWAYS go through the real backend (DB).
   // Other repos use localStorage mock adapters.
   const client = new HttpClient(baseUrl);
   const httpAuth = new HttpAuthRepository(client);
-  return createMockApiLayer(httpAuth);
+  const httpMfa = new HttpMfaRepository(client);
+  return createMockApiLayer(httpAuth, httpMfa);
 }
 
 export function getApiLayer(): ApiLayer {
@@ -76,6 +80,7 @@ export function setApiLayer(layer: ApiLayer): void {
 export type { ApiResponse, ApiError } from './types';
 export { apiSuccess, apiError } from './types';
 export type { IAuthRepository, LoginRequest, LoginResponse } from './repositories/auth.repository';
+export type { IMfaRepository, TotpEnrollResponse } from './repositories/mfa.repository';
 export type { IAccountRepository } from './repositories/account.repository';
 export type { ITransactionRepository } from './repositories/transaction.repository';
 export type { ISinpeRepository, SendSinpeRequest } from './repositories/sinpe.repository';

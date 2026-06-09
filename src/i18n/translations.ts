@@ -107,6 +107,26 @@ type TranslationKeys = {
   change_pin: string;
   biometric_auth: string;
   fingerprint_face: string;
+  // Two-factor (TOTP)
+  two_factor_auth: string;
+  two_factor_desc: string;
+  twofa_on: string;
+  twofa_off: string;
+  twofa_intro_desc: string;
+  twofa_enable_btn: string;
+  twofa_scan_instruction: string;
+  twofa_manual_key: string;
+  twofa_enter_code: string;
+  twofa_verify: string;
+  twofa_recovery_title: string;
+  twofa_recovery_desc: string;
+  twofa_copy: string;
+  twofa_copied: string;
+  twofa_recovery_done: string;
+  twofa_disable_title: string;
+  twofa_disable_desc: string;
+  twofa_disable_btn: string;
+  twofa_invalid_code: string;
   notifications_setting: string;
   dark_mode: string;
   language: string;
@@ -583,6 +603,25 @@ const translations: Record<Language, TranslationKeys> = {
     change_pin: 'Cambiar PIN',
     biometric_auth: 'Autenticacion biometrica',
     fingerprint_face: 'Huella digital / Face ID',
+    two_factor_auth: 'Autenticación en dos pasos',
+    two_factor_desc: 'App de autenticación (TOTP)',
+    twofa_on: 'Activo',
+    twofa_off: 'Inactivo',
+    twofa_intro_desc: 'Agregá una capa extra de seguridad usando una app de autenticación como Google Authenticator o Authy.',
+    twofa_enable_btn: 'Activar',
+    twofa_scan_instruction: 'Escaneá este código QR con tu app de autenticación.',
+    twofa_manual_key: 'O ingresá esta clave manualmente:',
+    twofa_enter_code: 'Ingresá el código de 6 dígitos',
+    twofa_verify: 'Verificar y activar',
+    twofa_recovery_title: '¡Listo! Guardá tus códigos de recuperación',
+    twofa_recovery_desc: 'Cada código sirve una sola vez si perdés acceso a tu autenticador. Guardalos en un lugar seguro.',
+    twofa_copy: 'Copiar códigos',
+    twofa_copied: 'Copiado',
+    twofa_recovery_done: 'Ya los guardé',
+    twofa_disable_title: 'Desactivar 2FA',
+    twofa_disable_desc: 'Ingresá un código de tu autenticador (o de recuperación) para desactivar la verificación en dos pasos.',
+    twofa_disable_btn: 'Desactivar',
+    twofa_invalid_code: 'Código inválido. Intentá de nuevo.',
     notifications_setting: 'Notificaciones',
     dark_mode: 'Modo oscuro',
     language: 'Idioma',
@@ -1033,6 +1072,25 @@ const translations: Record<Language, TranslationKeys> = {
     change_pin: 'Change PIN',
     biometric_auth: 'Biometric Authentication',
     fingerprint_face: 'Fingerprint / Face ID',
+    two_factor_auth: 'Two-factor authentication',
+    two_factor_desc: 'Authenticator app (TOTP)',
+    twofa_on: 'On',
+    twofa_off: 'Off',
+    twofa_intro_desc: 'Add an extra layer of security using an authenticator app like Google Authenticator or Authy.',
+    twofa_enable_btn: 'Enable',
+    twofa_scan_instruction: 'Scan this QR code with your authenticator app.',
+    twofa_manual_key: 'Or enter this key manually:',
+    twofa_enter_code: 'Enter the 6-digit code',
+    twofa_verify: 'Verify and enable',
+    twofa_recovery_title: 'Done! Save your recovery codes',
+    twofa_recovery_desc: 'Each code works once if you lose access to your authenticator. Keep them somewhere safe.',
+    twofa_copy: 'Copy codes',
+    twofa_copied: 'Copied',
+    twofa_recovery_done: 'I saved them',
+    twofa_disable_title: 'Disable 2FA',
+    twofa_disable_desc: 'Enter a code from your authenticator (or a recovery code) to disable two-factor authentication.',
+    twofa_disable_btn: 'Disable',
+    twofa_invalid_code: 'Invalid code. Please try again.',
     notifications_setting: 'Notifications',
     dark_mode: 'Dark Mode',
     language: 'Language',
@@ -1483,6 +1541,25 @@ const translations: Record<Language, TranslationKeys> = {
     change_pin: '更改PIN碼',
     biometric_auth: '生物識別',
     fingerprint_face: '指紋 / Face ID',
+    two_factor_auth: '兩步驗證',
+    two_factor_desc: '驗證器應用程式 (TOTP)',
+    twofa_on: '已啟用',
+    twofa_off: '未啟用',
+    twofa_intro_desc: '使用 Google Authenticator 或 Authy 等驗證器應用程式增加額外的安全層級。',
+    twofa_enable_btn: '啟用',
+    twofa_scan_instruction: '用你的驗證器應用程式掃描此 QR 碼。',
+    twofa_manual_key: '或手動輸入此金鑰：',
+    twofa_enter_code: '輸入 6 位數驗證碼',
+    twofa_verify: '驗證並啟用',
+    twofa_recovery_title: '完成！請儲存你的復原碼',
+    twofa_recovery_desc: '若你失去驗證器的存取權，每個碼只能使用一次。請妥善保存。',
+    twofa_copy: '複製代碼',
+    twofa_copied: '已複製',
+    twofa_recovery_done: '我已儲存',
+    twofa_disable_title: '停用兩步驗證',
+    twofa_disable_desc: '輸入驗證器的代碼（或復原碼）以停用兩步驗證。',
+    twofa_disable_btn: '停用',
+    twofa_invalid_code: '驗證碼無效，請重試。',
     notifications_setting: '通知',
     dark_mode: '深色模式',
     language: '語言',
@@ -1925,6 +2002,25 @@ const translations: Record<Language, TranslationKeys> = {
     change_pin: 'PIN変更',
     biometric_auth: '生体認証',
     fingerprint_face: '指紋 / Face ID',
+    two_factor_auth: '二段階認証',
+    two_factor_desc: '認証アプリ (TOTP)',
+    twofa_on: '有効',
+    twofa_off: '無効',
+    twofa_intro_desc: 'Google Authenticator や Authy などの認証アプリでセキュリティを強化します。',
+    twofa_enable_btn: '有効にする',
+    twofa_scan_instruction: '認証アプリでこの QR コードをスキャンしてください。',
+    twofa_manual_key: 'または、このキーを手動で入力してください：',
+    twofa_enter_code: '6桁のコードを入力',
+    twofa_verify: '確認して有効化',
+    twofa_recovery_title: '完了！リカバリーコードを保存してください',
+    twofa_recovery_desc: '認証アプリにアクセスできなくなった場合、各コードは一度だけ使用できます。安全な場所に保管してください。',
+    twofa_copy: 'コードをコピー',
+    twofa_copied: 'コピーしました',
+    twofa_recovery_done: '保存しました',
+    twofa_disable_title: '二段階認証を無効化',
+    twofa_disable_desc: '二段階認証を無効にするには、認証アプリのコード（またはリカバリーコード）を入力してください。',
+    twofa_disable_btn: '無効にする',
+    twofa_invalid_code: 'コードが無効です。もう一度お試しください。',
     notifications_setting: '通知',
     dark_mode: 'ダークモード',
     language: '言語',
@@ -2367,6 +2463,25 @@ const translations: Record<Language, TranslationKeys> = {
     change_pin: 'पिन बदलें',
     biometric_auth: 'बायोमेट्रिक प्रमाणीकरण',
     fingerprint_face: 'फिंगरप्रिंट / Face ID',
+    two_factor_auth: 'दो-कारक प्रमाणीकरण',
+    two_factor_desc: 'प्रमाणक ऐप (TOTP)',
+    twofa_on: 'चालू',
+    twofa_off: 'बंद',
+    twofa_intro_desc: 'Google Authenticator या Authy जैसे प्रमाणक ऐप से सुरक्षा की एक अतिरिक्त परत जोड़ें।',
+    twofa_enable_btn: 'सक्षम करें',
+    twofa_scan_instruction: 'अपने प्रमाणक ऐप से यह QR कोड स्कैन करें।',
+    twofa_manual_key: 'या यह कुंजी मैन्युअल रूप से दर्ज करें:',
+    twofa_enter_code: '6 अंकों का कोड दर्ज करें',
+    twofa_verify: 'सत्यापित करें और सक्षम करें',
+    twofa_recovery_title: 'हो गया! अपने रिकवरी कोड सहेजें',
+    twofa_recovery_desc: 'यदि आप अपने प्रमाणक तक पहुंच खो देते हैं तो प्रत्येक कोड एक बार काम करता है। इन्हें सुरक्षित स्थान पर रखें।',
+    twofa_copy: 'कोड कॉपी करें',
+    twofa_copied: 'कॉपी किया गया',
+    twofa_recovery_done: 'मैंने सहेज लिया',
+    twofa_disable_title: '2FA अक्षम करें',
+    twofa_disable_desc: 'दो-कारक प्रमाणीकरण अक्षम करने के लिए अपने प्रमाणक से एक कोड (या रिकवरी कोड) दर्ज करें।',
+    twofa_disable_btn: 'अक्षम करें',
+    twofa_invalid_code: 'अमान्य कोड। कृपया पुनः प्रयास करें।',
     notifications_setting: 'सूचनाएं',
     dark_mode: 'डार्क मोड',
     language: 'भाषा',
