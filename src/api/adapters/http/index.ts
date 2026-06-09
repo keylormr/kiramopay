@@ -1,6 +1,7 @@
 import type { ApiLayer } from '../../index';
 import { HttpClient } from './client';
 import { HttpAuthRepository } from './auth.http';
+import { HttpMfaRepository } from './mfa.http';
 import { HttpAccountRepository } from './account.http';
 import { HttpTransactionRepository } from './transaction.http';
 import { HttpSinpeRepository } from './sinpe.http';
@@ -22,6 +23,7 @@ export function createHttpApiLayer(baseUrl: string): ApiLayer {
 
   return {
     auth: new HttpAuthRepository(client),
+    mfa: new HttpMfaRepository(client),
     accounts: new HttpAccountRepository(client),
     transactions: new HttpTransactionRepository(client),
     sinpe: new HttpSinpeRepository(client),
