@@ -30,7 +30,7 @@ func TestBodyLimit_LargeBodyRejected(t *testing.T) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Try to read body — this should trigger the limit
 			buf := make([]byte, limit+100)
-			r.Body.Read(buf)
+			_, _ = r.Body.Read(buf)
 			w.WriteHeader(http.StatusOK)
 		}),
 	)

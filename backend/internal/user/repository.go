@@ -146,6 +146,7 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, req *UpdatePr
 		args = append(args, *req.ProfilePictureURL)
 		argIdx++
 	}
+	_ = argIdx // optional-field counter; final value intentionally unused
 
 	query += " WHERE id = $1"
 	_, err := r.db.Exec(ctx, query, args...)

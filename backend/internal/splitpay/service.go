@@ -137,7 +137,7 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 		return nil // non-critical
 	}
 	if pending == 0 {
-		s.repo.UpdateGroupStatus(ctx, groupID, "settled")
+		_ = s.repo.UpdateGroupStatus(ctx, groupID, "settled") // best-effort; reconciled later
 	}
 
 	return nil

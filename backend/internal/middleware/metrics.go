@@ -224,5 +224,5 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	sb.WriteString("# TYPE kiramopay_go_gc_total counter\n")
 	sb.WriteString(fmt.Sprintf("kiramopay_go_gc_total %d\n", memStats.NumGC))
 
-	w.Write([]byte(sb.String()))
+	_, _ = w.Write([]byte(sb.String()))
 }
