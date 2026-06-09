@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
+import { getApiLayer } from '@/api';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { TwoFactorSheet } from './TwoFactorSheet';
 import { APP_VERSION, getVersionString, getAllVersions } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -18,6 +20,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
   const [showAboutSheet, setShowAboutSheet] = useState(false);
   const [showLanguageSheet, setShowLanguageSheet] = useState(false);
   const [showBiometricConfirmSheet, setShowBiometricConfirmSheet] = useState(false);
+  const [showTwoFactorSheet, setShowTwoFactorSheet] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,6 +33,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
   const [showBioPwd, setShowBioPwd] = useState(false);
+
+  // Load 2FA status once. TOTP always goes through the real backend; in mock
+  // mode (no VITE_API_URL) the call simply fails and 2FA shows as off.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getApiLayer().mfa.totpStatus();
+      if (!cancelled && res.success && res.data) {
+        setTwoFactorEnabled(res.data.enabled);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const getPasswordStrength = (pwd: string): 'weak' | 'medium' | 'strong' => {
     let score = 0;
@@ -230,6 +249,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
                 state.settings.biometricEnabled ? 'translate-x-5' : 'translate-x-0'
               }`} />
             </div>
+          </button>
+
+          <button
+            onClick={() => setShowTwoFactorSheet(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Shield size={18} className="text-indigo-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('two_factor_auth')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('two_factor_desc')}</p>
+            </div>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                twoFactorEnabled
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+              }`}
+            >
+              {twoFactorEnabled ? t('twofa_on') : t('twofa_off')}
+            </span>
           </button>
 
           <button
@@ -606,6 +647,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
           </button>
         </div>
       </BottomSheet>
+
+      {/* Two-factor (TOTP) Sheet */}
+      <TwoFactorSheet
+        isOpen={showTwoFactorSheet}
+        enabled={twoFactorEnabled}
+        onClose={() => setShowTwoFactorSheet(false)}
+        onStatusChange={setTwoFactorEnabled}
+      />
 
       {/* About Sheet */}
       <BottomSheet
