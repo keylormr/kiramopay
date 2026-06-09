@@ -112,6 +112,9 @@ func main() {
 		ThresholdCRCMinor: 10_000_000, // 100,000 CRC
 		ThresholdUSDMinor: 20_000,     // 200 USD
 		VerifyWindow:      5 * time.Minute,
+		// Authenticator secrets are encrypted at rest with a key derived from
+		// JWT_SECRET (already required to be a real 32+ byte value in prod).
+		TOTPEncryptionKey: []byte(cfg.JWT.Secret),
 	})
 
 	// ── Repositories ─────────────────────────────────────────────────────
@@ -203,7 +206,11 @@ func main() {
 	notifHandler := notification.NewHandler(notifService)
 
 	// ── Reconciliation worker ────────────────────────────────────────────
-	reconcileSvc := reconcile.NewService(pool, auditLogger, 1*time.Hour, logger)
+	// Auto-fix snaps the wallets cache to the journal (source of truth) under
+	// the same row lock the ledger uses. Drift above 1,000,000 CRC is alerted
+	// but left for manual review — a gap that large signals a deeper bug.
+	reconcileSvc := reconcile.NewService(pool, auditLogger, 1*time.Hour, logger,
+		reconcile.WithAutoFix(100_000_000))
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
 	defer reconcileCancel()
 	go reconcileSvc.Run(reconcileCtx)
@@ -300,6 +307,12 @@ func main() {
 			// MFA
 			r.Post("/mfa/issue", mfaHandler.Issue)
 			r.Post("/mfa/verify", mfaHandler.Verify)
+			// MFA — TOTP authenticator app
+			r.Get("/mfa/totp/status", mfaHandler.TOTPStatus)
+			r.Post("/mfa/totp/enroll", mfaHandler.TOTPEnroll)
+			r.Post("/mfa/totp/confirm", mfaHandler.TOTPConfirm)
+			r.Post("/mfa/totp/verify", mfaHandler.TOTPVerify)
+			r.Post("/mfa/totp/disable", mfaHandler.TOTPDisable)
 
 			// User
 			r.Get("/users/me", userHandler.GetProfile)
