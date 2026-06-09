@@ -1,0 +1,19 @@
+# golangci-lint configuration for the KiramoPay backend.
+# Pinned to v1.62.x in CI (see .github/workflows/ci.yml). Keep the linter set
+# focused on correctness + dead-code so the job can gate without noise.
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck      # unchecked error returns
+    - govet         # suspicious constructs
+    - ineffassign   # ineffectual assignments
+    - staticcheck   # broad correctness/simplification checks
+    - unused        # dead code
+    - gosimple      # simplifications
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

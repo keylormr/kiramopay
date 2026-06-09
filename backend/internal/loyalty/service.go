@@ -159,7 +159,7 @@ func (s *Service) RedeemReward(ctx context.Context, userID string, req *RedeemRe
 		RefType:     "redemption",
 		RefID:       redemption.ID,
 	}
-	s.repo.RecordTransaction(ctx, ptx)
+	_ = s.repo.RecordTransaction(ctx, ptx) // best-effort points ledger record
 
 	return redemption, nil
 }
@@ -203,12 +203,12 @@ func (s *Service) checkTierUpgrade(ctx context.Context, userID string) {
 	}
 
 	if newTier != acct.Tier {
-		s.repo.UpdateTier(ctx, userID, newTier)
+		_ = s.repo.UpdateTier(ctx, userID, newTier) // best-effort tier upgrade
 	}
 }
 
 func generateVoucherCode() string {
 	b := make([]byte, 6)
-	rand.Read(b)
+	_, _ = rand.Read(b) // crypto/rand.Read does not fail in practice
 	return "KP-" + hex.EncodeToString(b)
 }

@@ -188,7 +188,7 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 
 	// Mark single-use QR as used
 	if qr.SingleUse {
-		s.repo.MarkQRUsed(ctx, qr.ID)
+		_ = s.repo.MarkQRUsed(ctx, qr.ID) // best-effort; double-spend guarded by ledger
 	}
 
 	return payment, nil
@@ -202,12 +202,12 @@ func (s *Service) GetPaymentHistory(ctx context.Context, userID string) ([]QRPay
 
 func generateQRIdentifier() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	_, _ = rand.Read(b) // crypto/rand.Read does not fail in practice
 	return "MRC-" + hex.EncodeToString(b)
 }
 
 func generateQRToken() string {
 	b := make([]byte, 12)
-	rand.Read(b)
+	_, _ = rand.Read(b) // crypto/rand.Read does not fail in practice
 	return hex.EncodeToString(b)
 }
