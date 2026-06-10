@@ -258,8 +258,8 @@ jobs:
   trivy-fs:
     name: Dependency Vulnerability Scan (Trivy)
     runs-on: ubuntu-latest
-    # Report-only for now (pre-existing HIGH/CRITICAL advisories to triage).
-    continue-on-error: true
+    # Re-gated: HIGH/CRITICAL advisories cleared (pgx v5.9.0, x/crypto v0.35.0,
+    # npm prod tree clean); scans go.sum + package-lock with ignore-unfixed.
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy filesystem scan
