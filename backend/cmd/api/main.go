@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
@@ -32,6 +33,7 @@ import (
 	"github.com/kiramopay/backend/internal/mfa"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/notification"
+	"github.com/kiramopay/backend/internal/observability"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
@@ -57,6 +59,25 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+
+	// ── Tracing (OpenTelemetry) ──────────────────────────────────────────
+	// No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
+	tracingShutdown, err := observability.Init(context.Background(), observability.Config{
+		Enabled:     cfg.Telemetry.Endpoint != "",
+		Endpoint:    cfg.Telemetry.Endpoint,
+		Insecure:    cfg.Telemetry.Insecure,
+		ServiceName: "kiramopay-api",
+		Environment: cfg.Server.Environment,
+		SampleRatio: cfg.Telemetry.SampleRatio,
+	}, logger)
+	if err != nil {
+		log.Fatalf("Failed to init tracing: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
 
 	pool, err := database.NewPostgresPool(cfg.Database)
 	if err != nil {
@@ -221,6 +242,7 @@ func main() {
 	// Global middleware
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
+	r.Use(middleware.OtelRouteTag) // refine the otelhttp span name to the chi route
 	r.Use(middleware.RequestTimeout(30 * time.Second))
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
@@ -472,9 +494,18 @@ func main() {
 		})
 	})
 
+	// Wrap the router so every request gets a server span with W3C context
+	// propagation. The OtelRouteTag middleware (added in the chi stack) refines
+	// the span name to the matched route pattern (low cardinality).
+	otelHandler := otelhttp.NewHandler(r, "http.server",
+		otelhttp.WithSpanNameFormatter(func(_ string, req *http.Request) string {
+			return req.Method
+		}),
+	)
+
 	srv := &http.Server{
 		Addr:           fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:        r,
+		Handler:        otelHandler,
 		ReadTimeout:    cfg.Server.ReadTimeout,
 		WriteTimeout:   cfg.Server.WriteTimeout,
 		IdleTimeout:    120 * time.Second,

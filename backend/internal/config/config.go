@@ -9,12 +9,22 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	CORS     CORSConfig
-	VAPID    VAPIDConfig
+	Server    ServerConfig
+	Database  DatabaseConfig
+	Redis     RedisConfig
+	JWT       JWTConfig
+	CORS      CORSConfig
+	VAPID     VAPIDConfig
+	Telemetry TelemetryConfig
+}
+
+// TelemetryConfig controls OpenTelemetry tracing. Tracing is enabled only when
+// an OTLP endpoint is set (auto-enabled if OTEL_EXPORTER_OTLP_ENDPOINT is
+// present), so the service runs identically with no collector in dev/CI.
+type TelemetryConfig struct {
+	Endpoint    string  // OTEL_EXPORTER_OTLP_ENDPOINT (host:port)
+	Insecure    bool    // OTEL_EXPORTER_OTLP_INSECURE
+	SampleRatio float64 // OTEL_TRACES_SAMPLER_RATIO (0<r<=1)
 }
 
 type VAPIDConfig struct {
@@ -118,6 +128,11 @@ func Load() *Config {
 			PublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 			PrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
 		},
+		Telemetry: TelemetryConfig{
+			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+			Insecure:    getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", false),
+			SampleRatio: getEnvFloat("OTEL_TRACES_SAMPLER_RATIO", 1.0),
+		},
 	}
 }
 
@@ -180,6 +195,24 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
 		}
 	}
 	return fallback

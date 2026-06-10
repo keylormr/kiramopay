@@ -6,6 +6,7 @@ import (
 	"time"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type statusWriter struct {
@@ -46,6 +47,14 @@ func Logger(next http.Handler) http.Handler {
 		}
 		if reqID != "" {
 			attrs = append(attrs, slog.String("request_id", reqID))
+		}
+		// Correlate logs with traces: emit the active trace/span IDs when a
+		// recording span is present (no-op when tracing is disabled).
+		if sc := trace.SpanContextFromContext(r.Context()); sc.IsValid() {
+			attrs = append(attrs,
+				slog.String("trace_id", sc.TraceID().String()),
+				slog.String("span_id", sc.SpanID().String()),
+			)
 		}
 		if userAgent := r.UserAgent(); userAgent != "" {
 			attrs = append(attrs, slog.String("user_agent", userAgent))

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/config"
 )
@@ -23,6 +24,11 @@ func NewPostgresPool(cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
+
+	// Attach the OpenTelemetry pgx tracer. It emits DB spans only when a real
+	// tracer provider is installed (observability.Init); otherwise the global
+	// no-op provider makes this effectively free.
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
 	poolCfg.MaxConns = int32(cfg.MaxConns) // #nosec G115 -- pool size is a small operator-set config value
 	poolCfg.MinConns = 5
