@@ -80,7 +80,6 @@ describe('syncAllData', () => {
 
     // Set env so hasBackend is true
     originalEnv = import.meta.env.VITE_API_URL;
-    // @ts-expect-error override env for test
     import.meta.env.VITE_API_URL = 'http://localhost:8080';
   });
 
@@ -89,7 +88,6 @@ describe('syncAllData', () => {
     if (originalEnv === undefined) {
       delete (import.meta.env as Record<string, string>).VITE_API_URL;
     } else {
-      // @ts-expect-error restore env
       import.meta.env.VITE_API_URL = originalEnv;
     }
   });
