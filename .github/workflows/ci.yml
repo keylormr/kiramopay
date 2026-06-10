@@ -113,13 +113,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           working-directory: backend
-          version: v1.62.2
+          version: v2.12.2
 
   backend-test-unit:
     name: Backend Unit Tests
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Run unit tests
         working-directory: backend
@@ -165,7 +165,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Run integration tests
         working-directory: backend
@@ -184,7 +184,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Build binary
         working-directory: backend
@@ -199,14 +199,13 @@ jobs:
   backend-vulncheck:
     name: Backend Vulnerability Scan (govulncheck)
     runs-on: ubuntu-latest
-    # Report-only for now: surfaces pre-existing dependency/stdlib advisories to
-    # triage; flip to gating once the backlog is cleared.
-    continue-on-error: true
+    # Re-gated: dependency advisories bumped (jwt v5.2.2, go-redis v9.7.3) and
+    # the Go toolchain pinned to go1.25.11 (go.mod) clears the stdlib advisories.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -221,7 +220,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -245,8 +244,7 @@ jobs:
   frontend-audit:
     name: Frontend Dependency Audit (npm audit)
     runs-on: ubuntu-latest
-    # Report-only for now (pre-existing transitive advisories to triage).
-    continue-on-error: true
+    # Re-gated: build-only packages moved to devDependencies; prod tree is clean.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -260,12 +258,12 @@ jobs:
   trivy-fs:
     name: Dependency Vulnerability Scan (Trivy)
     runs-on: ubuntu-latest
-    # Report-only for now (pre-existing HIGH/CRITICAL advisories to triage).
-    continue-on-error: true
+    # Re-gated: HIGH/CRITICAL advisories cleared (pgx v5.9.0, x/crypto v0.35.0,
+    # npm prod tree clean); scans go.sum + package-lock with ignore-unfixed.
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .

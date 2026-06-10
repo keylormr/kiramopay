@@ -1,4 +1,6 @@
-FROM golang:1.22-alpine AS builder
+# go.mod pins toolchain go1.25.11; the official image sets GOTOOLCHAIN=local
+# (no auto-download), so the base image's Go must already satisfy it.
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
