@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
-const TIER_CONFIG: Record<string, { color: string; bg: string; icon: React.FC<{ size?: number; className?: string }> }> = {
+const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
   bronze: { color: '#CD7F32', bg: 'from-amber-700/20 to-orange-600/10', icon: Icons.Award },
   silver: { color: '#C0C0C0', bg: 'from-gray-300/20 to-slate-400/10', icon: Icons.Award },
   gold: { color: '#FFD700', bg: 'from-yellow-400/20 to-amber-500/10', icon: Icons.Trophy },
