@@ -1,18 +1,21 @@
-# golangci-lint configuration for the KiramoPay backend.
-# Pinned to v1.62.x in CI (see .github/workflows/ci.yml). Keep the linter set
-# focused on correctness + dead-code so the job can gate without noise.
+# golangci-lint v2 configuration for the KiramoPay backend.
+# Pinned to v2.x in CI (see .github/workflows/ci.yml). The "standard" set
+# (errcheck, govet, ineffassign, staticcheck, unused) keeps the job focused on
+# correctness + dead-code so it can gate without noise. (gosimple merged into
+# staticcheck in v2.)
+version: "2"
+
 run:
   timeout: 5m
   tests: true
 
 linters:
-  enable:
-    - errcheck      # unchecked error returns
-    - govet         # suspicious constructs
-    - ineffassign   # ineffectual assignments
-    - staticcheck   # broad correctness/simplification checks
-    - unused        # dead code
-    - gosimple      # simplifications
+  default: standard
+  exclusions:
+    # Conventional ignored-error sites: deferred Close() on bodies/conns and
+    # Fprintf to an http.ResponseWriter (client may have gone away).
+    presets:
+      - std-error-handling
 
 issues:
   max-issues-per-linter: 0
