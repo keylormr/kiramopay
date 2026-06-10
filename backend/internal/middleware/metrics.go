@@ -146,17 +146,17 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	uptime := time.Since(m.startTime).Seconds()
 	sb.WriteString("# HELP kiramopay_uptime_seconds Time since server start.\n")
 	sb.WriteString("# TYPE kiramopay_uptime_seconds gauge\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_uptime_seconds %.2f\n\n", uptime))
+	fmt.Fprintf(&sb, "kiramopay_uptime_seconds %.2f\n\n", uptime)
 
 	// Total requests
 	sb.WriteString("# HELP kiramopay_http_requests_total Total HTTP requests.\n")
 	sb.WriteString("# TYPE kiramopay_http_requests_total counter\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_http_requests_total %d\n\n", m.totalRequests.Load()))
+	fmt.Fprintf(&sb, "kiramopay_http_requests_total %d\n\n", m.totalRequests.Load())
 
 	// Total errors
 	sb.WriteString("# HELP kiramopay_http_errors_total Total HTTP 5xx errors.\n")
 	sb.WriteString("# TYPE kiramopay_http_errors_total counter\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_http_errors_total %d\n\n", m.totalErrors.Load()))
+	fmt.Fprintf(&sb, "kiramopay_http_errors_total %d\n\n", m.totalErrors.Load())
 
 	// Per-route request counts
 	sb.WriteString("# HELP kiramopay_http_request_count HTTP requests by method, path, status.\n")
@@ -170,10 +170,10 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		parts := strings.SplitN(k, "_", 3)
 		if len(parts) == 3 {
-			sb.WriteString(fmt.Sprintf(
+			fmt.Fprintf(&sb,
 				"kiramopay_http_request_count{method=%q,path=%q,status=%q} %d\n",
 				parts[0], parts[1], parts[2], m.requestCounts[k].Load(),
-			))
+			)
 		}
 	}
 	m.mu.RUnlock()
@@ -194,10 +194,10 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 			avg := float64(m.requestDurationSums[k].Load()) / float64(count)
 			parts := strings.SplitN(k, "_", 2)
 			if len(parts) == 2 {
-				sb.WriteString(fmt.Sprintf(
+				fmt.Fprintf(&sb,
 					"kiramopay_http_request_duration_ms_avg{method=%q,path=%q} %.2f\n",
 					parts[0], parts[1], avg,
-				))
+				)
 			}
 		}
 	}
@@ -210,19 +210,19 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	sb.WriteString("# HELP kiramopay_go_goroutines Number of goroutines.\n")
 	sb.WriteString("# TYPE kiramopay_go_goroutines gauge\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_go_goroutines %d\n\n", runtime.NumGoroutine()))
+	fmt.Fprintf(&sb, "kiramopay_go_goroutines %d\n\n", runtime.NumGoroutine())
 
 	sb.WriteString("# HELP kiramopay_go_heap_alloc_bytes Heap memory allocated in bytes.\n")
 	sb.WriteString("# TYPE kiramopay_go_heap_alloc_bytes gauge\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_go_heap_alloc_bytes %d\n\n", memStats.HeapAlloc))
+	fmt.Fprintf(&sb, "kiramopay_go_heap_alloc_bytes %d\n\n", memStats.HeapAlloc)
 
 	sb.WriteString("# HELP kiramopay_go_heap_sys_bytes Heap memory obtained from OS in bytes.\n")
 	sb.WriteString("# TYPE kiramopay_go_heap_sys_bytes gauge\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_go_heap_sys_bytes %d\n\n", memStats.HeapSys))
+	fmt.Fprintf(&sb, "kiramopay_go_heap_sys_bytes %d\n\n", memStats.HeapSys)
 
 	sb.WriteString("# HELP kiramopay_go_gc_total Total number of GC cycles.\n")
 	sb.WriteString("# TYPE kiramopay_go_gc_total counter\n")
-	sb.WriteString(fmt.Sprintf("kiramopay_go_gc_total %d\n", memStats.NumGC))
+	fmt.Fprintf(&sb, "kiramopay_go_gc_total %d\n", memStats.NumGC)
 
 	_, _ = w.Write([]byte(sb.String()))
 }
