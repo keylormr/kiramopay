@@ -92,9 +92,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           const api = getApiLayer();
           // If frozen after toggle, freeze; otherwise unfreeze
           const willBeFrozen = !accounts.cards.frozen;
-          if (willBeFrozen) {
-            api.cards?.freezeCard('default').catch(() => {});
-          }
+          api.cards?.freezeCard('default', willBeFrozen).catch(() => {});
         }
         break;
       case 'SET_BASE_CURRENCY':
@@ -111,7 +109,13 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         accounts.updateLimits(action.payload);
         if (hasBackend) {
           const api = getApiLayer();
-          api.cards?.updateLimits('default', action.payload).catch(() => {});
+          // Map the local {online, atm} limits to the repository's request shape.
+          api.cards
+            ?.updateLimits('default', {
+              dailyLimit: action.payload.online,
+              atmLimit: action.payload.atm,
+            })
+            .catch(() => {});
         }
         break;
       case 'CHANGE_PASSWORD':

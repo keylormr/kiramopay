@@ -8,6 +8,7 @@ import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
+import type { LucideIcon } from 'lucide-react';
 import { biometricService } from './services/biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { User } from './types';
@@ -211,7 +212,7 @@ const Layout = () => {
   const { state } = useApp();
   const { t } = useLanguage();
 
-  const TABS: { id: TabId; icon: React.FC<{ size?: number; strokeWidth?: number }>; label: string; }[] = [
+  const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
     { id: 'sinpe', icon: Icons.Smartphone, label: t('nav_sinpe') },
     { id: 'crypto', icon: Icons.Bitcoin, label: t('nav_crypto') },
