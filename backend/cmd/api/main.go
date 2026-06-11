@@ -60,7 +60,7 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// ── Tracing (OpenTelemetry) ──────────────────────────────────────────
+	// ── Telemetry (OpenTelemetry traces + metrics) ───────────────────────
 	// No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
 	tracingShutdown, err := observability.Init(context.Background(), observability.Config{
 		Enabled:     cfg.Telemetry.Endpoint != "",

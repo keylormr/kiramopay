@@ -44,6 +44,16 @@ func TestInitEnabledInstallsProvider(t *testing.T) {
 	tr := otel.Tracer("test")
 	_, span := tr.Start(context.Background(), "unit")
 	span.End()
+
+	// The meter provider should also be installed: creating an instrument and
+	// recording against it must work without a live collector (export is
+	// periodic and lazy).
+	meter := otel.Meter("test")
+	counter, err := meter.Int64Counter("unit.test.counter")
+	if err != nil {
+		t.Fatalf("create counter: %v", err)
+	}
+	counter.Add(context.Background(), 1)
 }
 
 func TestInitEndpointMissingDisables(t *testing.T) {
