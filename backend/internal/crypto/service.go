@@ -261,8 +261,8 @@ func (s *Service) RemovePriceAlert(ctx context.Context, alertID string) error {
 	return s.repo.DeactivatePriceAlert(ctx, alertID)
 }
 
-func (s *Service) GetPrices(symbols []string) (map[string]*PriceData, error) {
-	return s.prices.GetPrices(symbols)
+func (s *Service) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
+	return s.prices.GetPrices(ctx, symbols)
 }
 
 func getAssetName(symbol string) string {
