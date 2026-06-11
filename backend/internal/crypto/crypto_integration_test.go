@@ -48,7 +48,7 @@ func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 func TestGetPrices(t *testing.T) {
 	svc, _ := setupCryptoService(t)
 
-	prices, err := svc.GetPrices([]string{"BTC", "ETH", "SOL"})
+	prices, err := svc.GetPrices(context.Background(), []string{"BTC", "ETH", "SOL"})
 	if err != nil {
 		t.Fatalf("GetPrices() error: %v", err)
 	}
