@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -15,7 +16,7 @@ func TestPriceService_CacheRespected(t *testing.T) {
 	ps.lastFetch = time.Now()
 	ps.mu.Unlock()
 
-	prices, err := ps.GetPrices([]string{"BTC"})
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestCircuitBreaker_OpensAfterFailures(t *testing.T) {
 	ps.mu.Unlock()
 
 	// Should return empty when circuit is open
-	prices, err := ps.GetPrices([]string{"BTC"})
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestPriceService_SinglePrice(t *testing.T) {
 	ps.lastFetch = time.Now()
 	ps.mu.Unlock()
 
-	price, err := ps.GetPrice("ETH")
+	price, err := ps.GetPrice(context.Background(), "ETH")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

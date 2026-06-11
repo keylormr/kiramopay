@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kiramopay/backend/internal/observability"
 )
 
 // PriceService fetches real crypto prices from CoinGecko with circuit breaker.
@@ -19,12 +22,14 @@ type PriceService struct {
 	apiKey              string
 	consecutiveFailures int
 	circuitOpenUntil    time.Time
+	client              *http.Client
 }
 
 func NewPriceService() *PriceService {
 	return &PriceService{
 		cache:    make(map[string]*PriceData),
 		cacheTTL: 60 * time.Second, // Increased from 30s for free tier
+		client:   observability.HTTPClient(10 * time.Second),
 	}
 }
 
@@ -49,7 +54,7 @@ var coinGeckoIDs = map[string]string{
 	"ATOM":  "cosmos",
 }
 
-func (ps *PriceService) GetPrices(symbols []string) (map[string]*PriceData, error) {
+func (ps *PriceService) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
 	ps.mu.RLock()
 	if time.Since(ps.lastFetch) < ps.cacheTTL && len(ps.cache) > 0 {
 		result := make(map[string]*PriceData)
@@ -77,10 +82,10 @@ func (ps *PriceService) GetPrices(symbols []string) (map[string]*PriceData, erro
 		return ps.cache, nil
 	}
 
-	return ps.fetchFromAPI(symbols)
+	return ps.fetchFromAPI(ctx, symbols)
 }
 
-func (ps *PriceService) fetchFromAPI(symbols []string) (map[string]*PriceData, error) {
+func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
 	// Build CoinGecko IDs list
 	var ids []string
 	symbolToID := make(map[string]string)
@@ -112,8 +117,7 @@ func (ps *PriceService) fetchFromAPI(symbols []string) (map[string]*PriceData, e
 		)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		ps.recordFailure()
 		ps.mu.RLock()
@@ -125,7 +129,7 @@ func (ps *PriceService) fetchFromAPI(symbols []string) (map[string]*PriceData, e
 		req.Header.Set("x-cg-pro-api-key", apiKey)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := ps.client.Do(req)
 	if err != nil {
 		ps.recordFailure()
 		ps.mu.RLock()
@@ -188,8 +192,8 @@ func (ps *PriceService) recordFailure() {
 	}
 }
 
-func (ps *PriceService) GetPrice(symbol string) (float64, error) {
-	prices, err := ps.GetPrices([]string{symbol})
+func (ps *PriceService) GetPrice(ctx context.Context, symbol string) (float64, error) {
+	prices, err := ps.GetPrices(ctx, []string{symbol})
 	if err != nil {
 		return 0, err
 	}

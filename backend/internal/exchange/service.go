@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/kiramopay/backend/internal/observability"
 )
 
 // Rate represents an exchange rate.
@@ -125,11 +127,15 @@ func (s *Service) GetAllRates() map[string]float64 {
 // ExchangeRateAPIProvider fetches rates from exchangerate-api.com.
 type ExchangeRateAPIProvider struct {
 	apiKey string
+	client *http.Client
 }
 
 // NewExchangeRateAPIProvider creates a new provider.
 func NewExchangeRateAPIProvider(apiKey string) *ExchangeRateAPIProvider {
-	return &ExchangeRateAPIProvider{apiKey: apiKey}
+	return &ExchangeRateAPIProvider{
+		apiKey: apiKey,
+		client: observability.HTTPClient(10 * time.Second),
+	}
 }
 
 // FetchRates fetches exchange rates from the API.
@@ -144,7 +150,7 @@ func (p *ExchangeRateAPIProvider) FetchRates(ctx context.Context, base string, t
 		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("exchange rate API request failed: %w", err)
 	}

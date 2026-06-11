@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -9,8 +10,8 @@ import (
 
 // PriceMessage is the message sent to WebSocket clients.
 type PriceMessage struct {
-	Type      string                    `json:"type"`
-	Timestamp string                    `json:"timestamp"`
+	Type      string                       `json:"type"`
+	Timestamp string                       `json:"timestamp"`
 	Prices    map[string]*crypto.PriceData `json:"prices"`
 }
 
@@ -64,7 +65,7 @@ func (pb *PriceBroadcaster) Stop() {
 }
 
 func (pb *PriceBroadcaster) broadcastPrices() {
-	prices, err := pb.priceService.GetPrices(pb.symbols)
+	prices, err := pb.priceService.GetPrices(context.Background(), pb.symbols)
 	if err != nil {
 		pb.logger.Error("Failed to fetch prices for broadcast", "error", err)
 		return

@@ -165,7 +165,7 @@ func (h *Handler) GetPrices(w http.ResponseWriter, r *http.Request) {
 		symbols = strings.Split(symbolsParam, ",")
 	}
 
-	prices, err := h.service.GetPrices(symbols)
+	prices, err := h.service.GetPrices(r.Context(), symbols)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "PRICE_FAILED", err.Error())
 		return
