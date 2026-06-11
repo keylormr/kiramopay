@@ -59,5 +59,6 @@ playwright-report/
 test-results/
 coverage/
 
-# Claude memory (local-only)
+# Local assistant config/state (not part of the repo)
 .claude/
+CLAUDE.md

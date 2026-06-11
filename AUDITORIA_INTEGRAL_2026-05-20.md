@@ -122,7 +122,7 @@ Super app fintech con origen en Costa Rica, planeada para expansión regional (P
 
 | Métrica | Declarado | Auditado |
 |---------|-----------|----------|
-| Tests | 311 tests / 32 files | ✅ 303 frontend (CLAUDE.md) + N backend |
+| Tests | 311 tests / 32 files | ✅ 303 frontend + N backend |
 | Lint warnings | 0 | ✅ Confirmado |
 | Build pass | Sí | ✅ Confirmado |
 | Dominios backend | 25+ | ✅ Confirmado |
