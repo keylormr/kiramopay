@@ -1,0 +1,107 @@
+# DR: daily encrypted off-site DB backups + monthly restore drill.
+# See DR_RUNBOOK.md for targets (RPO/RTO), setup and the incident procedure.
+#
+# Gated on the repository variable BACKUPS_ENABLED=true so the jobs stay
+# skipped (not failing) until the bucket + secrets are configured:
+#   secrets: DATABASE_URL, BACKUP_ENCRYPTION_KEY, S3_ENDPOINT, S3_BUCKET,
+#            AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+name: DB Backup (DR)
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # daily backup — 02:00 Costa Rica (UTC-6)
+    - cron: '0 9 1 * *'  # monthly restore drill — 1st, 03:00 Costa Rica
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to run
+        type: choice
+        options: [backup, drill]
+        default: backup
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  backup:
+    name: Encrypted off-site backup
+    runs-on: ubuntu-latest
+    if: >-
+      vars.BACKUPS_ENABLED == 'true' &&
+      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * *' ||
+       github.event_name == 'workflow_dispatch' && inputs.action == 'backup')
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install postgresql-client 17 (PGDG)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          pg_dump --version
+      - name: Run backup
+        run: bash scripts/dr/backup.sh
+      - name: Open incident issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "DB backup FAILED $(date -u +%F)" \
+            --body "The scheduled off-site database backup failed. Investigate immediately: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — until this is green there is NO recent off-site backup. See DR_RUNBOOK.md."
+
+  restore-drill:
+    name: Restore drill (latest backup → ephemeral DB → verify)
+    runs-on: ubuntu-latest
+    if: >-
+      vars.BACKUPS_ENABLED == 'true' &&
+      (github.event_name == 'schedule' && github.event.schedule == '0 9 1 * *' ||
+       github.event_name == 'workflow_dispatch' && inputs.action == 'drill')
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: drill
+          POSTGRES_PASSWORD: drill
+          POSTGRES_DB: drill
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U drill"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TARGET_DATABASE_URL: postgres://drill:drill@localhost:5432/drill?sslmode=disable
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      RESTORE_CONFIRM: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install postgresql-client 17 (PGDG)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          pg_restore --version
+      - name: Restore latest backup into ephemeral DB
+        run: bash scripts/dr/restore.sh
+      - name: Verify restored database integrity
+        run: bash scripts/dr/verify.sh
+      - name: Open incident issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "DB restore drill FAILED $(date -u +%F)" \
+            --body "The monthly restore drill failed — the latest backup could not be restored or did not pass integrity verification. Treat as a DR incident: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — see DR_RUNBOOK.md."
