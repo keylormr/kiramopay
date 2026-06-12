@@ -11,4 +11,9 @@ BEGIN;
 ALTER TABLE api_keys
     ADD COLUMN IF NOT EXISTS scopes TEXT NOT NULL DEFAULT 'escrow:read,escrow:write';
 
+-- Encrypted secrets ('enc:' + base64(nonce||ciphertext||tag)) are ~116 chars,
+-- larger than the original VARCHAR(64).
+ALTER TABLE webhook_endpoints
+    ALTER COLUMN secret TYPE TEXT;
+
 COMMIT;
