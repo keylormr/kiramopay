@@ -228,6 +228,42 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit')
 	ON CONFLICT (code) DO NOTHING;
 
+	CREATE TABLE IF NOT EXISTS api_keys (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name VARCHAR(100) NOT NULL,
+		prefix VARCHAR(16) NOT NULL,
+		key_hash VARCHAR(64) NOT NULL UNIQUE,
+		status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+		last_used_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		revoked_at TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_endpoints (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		url TEXT NOT NULL,
+		secret VARCHAR(64) NOT NULL,
+		events TEXT NOT NULL DEFAULT '*',
+		status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+		created_at TIMESTAMP NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_deliveries (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		endpoint_id UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+		event_type VARCHAR(64) NOT NULL,
+		payload JSONB NOT NULL,
+		status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','delivered','failed')),
+		attempts INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		response_code INTEGER,
+		last_error TEXT,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		delivered_at TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS escrow_agreements (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -535,6 +571,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"uif_reports",
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
+		"webhook_deliveries", "webhook_endpoints", "api_keys",
 		"escrow_agreements",
 		"journal_entries", "journal_postings",
 		"transactions",

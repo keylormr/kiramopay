@@ -21,12 +21,20 @@ type UIFReporter interface {
 	Report(ctx context.Context, userID, txID, currency string, amountMinor int64)
 }
 
+// EventSink receives lifecycle events (escrow.funded, escrow.released, …) for
+// fan-out to merchant webhooks. Best-effort: emitting never fails the
+// business operation.
+type EventSink interface {
+	Emit(ctx context.Context, userID, eventType string, payload any)
+}
+
 // Service drives the escrow state machine and its ledger postings.
 type Service struct {
 	repo        *Repository
 	ledger      *ledger.Engine
 	mfa         MFAEnforcer
 	uif         UIFReporter
+	events      EventSink
 	auditLogger *audit.Logger
 }
 
@@ -34,6 +42,7 @@ type Service struct {
 type Options struct {
 	MFA         MFAEnforcer
 	UIF         UIFReporter
+	Events      EventSink
 	AuditLogger *audit.Logger
 }
 
@@ -46,8 +55,18 @@ func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
 		ledger:      eng,
 		mfa:         opts.MFA,
 		uif:         opts.UIF,
+		events:      opts.Events,
 		auditLogger: opts.AuditLogger,
 	}
+}
+
+// emit notifies both parties' webhook endpoints about a lifecycle event.
+func (s *Service) emit(ctx context.Context, a *Agreement, eventType string) {
+	if s.events == nil {
+		return
+	}
+	s.events.Emit(ctx, a.BuyerID, eventType, a)
+	s.events.Emit(ctx, a.SellerID, eventType, a)
 }
 
 // Create opens a pending agreement with the caller as buyer. No money moves.
@@ -71,6 +90,7 @@ func (s *Service) Create(ctx context.Context, buyerID string, req *CreateRequest
 		return nil, fmt.Errorf("create agreement: %w", err)
 	}
 	s.audit(buyerID, a, "escrow_created", "low", nil)
+	s.emit(ctx, a, "escrow.created")
 	return a, nil
 }
 
@@ -184,6 +204,7 @@ func (s *Service) Dispute(ctx context.Context, callerID, id, reason string) (*Ag
 		return nil, err
 	}
 	s.audit(callerID, out, "escrow_disputed", "medium", map[string]interface{}{"reason": reason})
+	s.emit(ctx, out, "escrow.disputed")
 	return out, nil
 }
 
@@ -201,6 +222,7 @@ func (s *Service) Cancel(ctx context.Context, callerID, id string) (*Agreement, 
 		return nil, err
 	}
 	s.audit(callerID, out, "escrow_cancelled", "low", nil)
+	s.emit(ctx, out, "escrow.cancelled")
 	return out, nil
 }
 
@@ -275,6 +297,7 @@ func (s *Service) moveAndTransition(
 	}
 
 	s.audit(a.BuyerID, claimed, "escrow_"+string(to), "medium", nil)
+	s.emit(ctx, claimed, "escrow."+string(to))
 	if onSuccess != nil {
 		onSuccess(claimed)
 	}
