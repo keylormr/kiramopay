@@ -223,8 +223,30 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:SUSPENSE:USD',  'suspense',   'USD', 'credit'),
 		('SYSTEM:EXTERNAL:CRC',  'external',   'CRC', 'credit'),
 		('SYSTEM:RESERVE:CRC',   'reserve',    'CRC', 'debit'),
-		('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit')
+		('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit'),
+		('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
+		('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit')
 	ON CONFLICT (code) DO NOTHING;
+
+	CREATE TABLE IF NOT EXISTS escrow_agreements (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+		seller_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+		amount_minor BIGINT NOT NULL CHECK (amount_minor > 0),
+		currency VARCHAR(3) NOT NULL DEFAULT 'CRC' CHECK (currency IN ('CRC','USD')),
+		status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN
+			('pending','funded','released','refunded','disputed','cancelled')),
+		description TEXT NOT NULL,
+		dispute_reason TEXT,
+		funded_at TIMESTAMP,
+		released_at TIMESTAMP,
+		refunded_at TIMESTAMP,
+		disputed_at TIMESTAMP,
+		cancelled_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		CHECK (buyer_id <> seller_id)
+	);
 
 	CREATE TABLE IF NOT EXISTS journal_postings (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -513,6 +535,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"uif_reports",
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
+		"escrow_agreements",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"mfa_challenges", "password_reset_tokens", "refresh_tokens",
@@ -532,7 +555,9 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 			('SYSTEM:SUSPENSE:USD',  'suspense',   'USD', 'credit'),
 			('SYSTEM:EXTERNAL:CRC',  'external',   'CRC', 'credit'),
 			('SYSTEM:RESERVE:CRC',   'reserve',    'CRC', 'debit'),
-			('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit')
+			('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit'),
+			('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
+			('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit')
 		ON CONFLICT (code) DO NOTHING
 	`)
 }
