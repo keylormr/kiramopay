@@ -234,6 +234,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		name VARCHAR(100) NOT NULL,
 		prefix VARCHAR(16) NOT NULL,
 		key_hash VARCHAR(64) NOT NULL UNIQUE,
+		scopes TEXT NOT NULL DEFAULT 'escrow:read,escrow:write',
 		status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
 		last_used_at TIMESTAMP,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),

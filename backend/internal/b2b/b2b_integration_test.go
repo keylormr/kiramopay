@@ -17,43 +17,64 @@ import (
 	"github.com/kiramopay/backend/internal/testutil"
 )
 
+// testCipher exercises the encrypted-at-rest path in every integration test.
+var testCipher = b2b.NewCipher([]byte("test-secret-key-material"))
+
 func newService(t *testing.T) (*b2b.Service, *b2b.Repository, string) {
 	t.Helper()
 	pool := testutil.TestDB(t)
 	userID := testutil.SeedTestUser(t, pool, "702650930", "dummy")
 	repo := b2b.NewRepository(pool)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	return b2b.NewService(repo, nil, logger), repo, userID
+	return b2b.NewService(repo, testCipher, nil, logger), repo, userID
 }
 
 func TestAPIKeyLifecycle(t *testing.T) {
 	svc, _, userID := newService(t)
 	ctx := context.Background()
 
-	k, full, err := svc.CreateKey(ctx, userID, "checkout backend")
+	k, full, err := svc.CreateKey(ctx, userID, "checkout backend", "")
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 	if full == "" || k.Prefix == "" {
 		t.Fatal("expected full key and prefix")
 	}
+	if k.Scopes != "escrow:read,escrow:write" {
+		t.Errorf("default scopes: got %q", k.Scopes)
+	}
 
-	// The full key authenticates to its owner.
-	got, err := svc.Authenticate(ctx, full)
+	// The full key authenticates to its owner with its scopes.
+	got, scopes, err := svc.Authenticate(ctx, full)
 	if err != nil || got != userID {
 		t.Fatalf("authenticate: got (%q, %v), want (%q, nil)", got, err, userID)
 	}
+	if !b2b.HasScope(scopes, b2b.ScopeEscrowWrite) {
+		t.Errorf("expected write scope, got %q", scopes)
+	}
 
 	// Garbage and near-misses fail.
-	if _, err := svc.Authenticate(ctx, "kp_live_definitely_not_a_real_key_aaaaaaaaaa"); !errors.Is(err, b2b.ErrInvalidKey) {
+	if _, _, err := svc.Authenticate(ctx, "kp_live_definitely_not_a_real_key_aaaaaaaaaa"); !errors.Is(err, b2b.ErrInvalidKey) {
 		t.Errorf("bogus key: expected ErrInvalidKey, got %v", err)
+	}
+
+	// A read-only key carries only its scope; bogus scopes are rejected.
+	ro, _, err := svc.CreateKey(ctx, userID, "reporting", "escrow:read")
+	if err != nil {
+		t.Fatalf("create read-only key: %v", err)
+	}
+	if b2b.HasScope(ro.Scopes, b2b.ScopeEscrowWrite) {
+		t.Errorf("read-only key must not have write scope: %q", ro.Scopes)
+	}
+	if _, _, err := svc.CreateKey(ctx, userID, "bad", "admin:everything"); !errors.Is(err, b2b.ErrInvalid) {
+		t.Errorf("invalid scope: expected ErrInvalid, got %v", err)
 	}
 
 	// Revocation kills it.
 	if err := svc.RevokeKey(ctx, userID, k.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if _, err := svc.Authenticate(ctx, full); !errors.Is(err, b2b.ErrInvalidKey) {
+	if _, _, err := svc.Authenticate(ctx, full); !errors.Is(err, b2b.ErrInvalidKey) {
 		t.Errorf("revoked key: expected ErrInvalidKey, got %v", err)
 	}
 }
@@ -85,7 +106,7 @@ func TestWebhookDeliveryEndToEnd(t *testing.T) {
 	svc.Emit(ctx, userID, "escrow.funded", map[string]string{"id": "abc"})
 	svc.Emit(ctx, userID, "escrow.released", map[string]string{"id": "abc"})
 
-	d := b2b.NewDispatcher(repo, time.Second, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	d := b2b.NewDispatcher(repo, testCipher, time.Second, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	attempted := d.RunOnce(ctx)
 	if attempted != 1 {
 		t.Fatalf("expected 1 delivery attempted, got %d", attempted)
@@ -125,7 +146,7 @@ func TestWebhookRetryOnFailure(t *testing.T) {
 	}
 	svc.Emit(ctx, userID, "escrow.funded", map[string]string{"id": "x"})
 
-	d := b2b.NewDispatcher(repo, time.Second, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	d := b2b.NewDispatcher(repo, testCipher, time.Second, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	if n := d.RunOnce(ctx); n != 1 {
 		t.Fatalf("expected 1 attempt, got %d", n)
 	}
@@ -157,7 +178,7 @@ func TestEscrowEmitsWebhookEvents(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	b2bRepo := b2b.NewRepository(pool)
-	b2bSvc := b2b.NewService(b2bRepo, nil, logger)
+	b2bSvc := b2b.NewService(b2bRepo, testCipher, nil, logger)
 	escrowSvc := escrow.NewService(escrow.NewRepository(pool), ledger.NewEngine(pool, logger),
 		&escrow.Options{Events: b2bSvc})
 

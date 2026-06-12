@@ -11,6 +11,8 @@ import (
 	"github.com/kiramopay/backend/internal/escrow"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/testutil"
+	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/kiramopay/backend/internal/wallet"
 )
 
 // fundWallet gives a user an opening balance through the ledger (debit
@@ -182,6 +184,52 @@ func TestEscrowDisputeAndResolve(t *testing.T) {
 	}
 	if got := walletCRC(t, pool, buyer); got != buyerBefore+50_000 {
 		t.Errorf("buyer wallet after resolution: got %d, want %d", got, buyerBefore+50_000)
+	}
+}
+
+func TestEscrowHistoryRows(t *testing.T) {
+	pool := testutil.TestDB(t)
+	buyer := testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	seller := testutil.SeedTestUser2(t, pool)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	eng := ledger.NewEngine(pool, logger)
+
+	txSvc := transaction.NewService(
+		transaction.NewRepository(pool), wallet.NewRepository(pool), eng,
+		&transaction.Options{})
+	svc := escrow.NewService(escrow.NewRepository(pool), eng,
+		&escrow.Options{History: txSvc})
+	fundWallet(t, eng, buyer, 1_000_000)
+
+	ctx := context.Background()
+	a, err := svc.Create(ctx, buyer, &escrow.CreateRequest{
+		SellerID: seller, AmountMinor: 40_000, Currency: "CRC", Description: "bike",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.Fund(ctx, buyer, a.ID); err != nil {
+		t.Fatalf("fund: %v", err)
+	}
+	if _, err := svc.Release(ctx, buyer, a.ID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	count := func(userID, txType string) int {
+		var n int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM transactions
+			 WHERE user_id = $1::uuid AND type = $2 AND status = 'completed'`,
+			userID, txType).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+	if got := count(buyer, "escrow_fund"); got != 1 {
+		t.Errorf("buyer escrow_fund rows: got %d, want 1", got)
+	}
+	if got := count(seller, "escrow_receive"); got != 1 {
+		t.Errorf("seller escrow_receive rows: got %d, want 1", got)
 	}
 }
 

@@ -278,6 +278,26 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 // ErrMFARequired indicates the user must verify MFA before this tx proceeds.
 var ErrMFARequired = errors.New("mfa challenge required")
 
+// RecordHistory inserts a COMPLETED history row for a movement whose money
+// already moved through the ledger elsewhere (e.g. escrow fund/release/refund
+// post directly against SYSTEM:ESCROW). It performs no balance checks and no
+// posting — it only makes the movement visible in the user's transaction
+// list. Idempotent via the request's IdempotencyKey (duplicates are ignored).
+func (s *Service) RecordHistory(ctx context.Context, userID string, req *CreateTransactionRequest) error {
+	w, err := s.walletRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find wallet: %w", err)
+	}
+	tx, err := s.repo.Create(ctx, userID, w.ID, req)
+	if err != nil {
+		if errors.Is(err, ErrDuplicate) {
+			return nil
+		}
+		return fmt.Errorf("record history: %w", err)
+	}
+	return s.repo.UpdateStatus(ctx, tx.ID, StatusCompleted)
+}
+
 func (s *Service) GetTransaction(ctx context.Context, id string) (*TransactionRecord, error) {
 	return s.repo.FindByID(ctx, id)
 }

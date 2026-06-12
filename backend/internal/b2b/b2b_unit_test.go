@@ -68,6 +68,70 @@ func TestEventMatches(t *testing.T) {
 	}
 }
 
+func TestCipherRoundTripAndLegacy(t *testing.T) {
+	c := NewCipher([]byte("some-key-material"))
+	enc, err := c.Encrypt("whsec_abc123")
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if !strings.HasPrefix(enc, "enc:") {
+		t.Errorf("expected enc: prefix, got %q", enc)
+	}
+	dec, err := c.Decrypt(enc)
+	if err != nil || dec != "whsec_abc123" {
+		t.Fatalf("decrypt round-trip: got (%q, %v)", dec, err)
+	}
+
+	// Legacy plaintext rows pass through untouched.
+	if got, err := c.Decrypt("whsec_legacy_plaintext"); err != nil || got != "whsec_legacy_plaintext" {
+		t.Errorf("legacy passthrough: got (%q, %v)", got, err)
+	}
+
+	// Wrong key fails closed.
+	other := NewCipher([]byte("a-different-key"))
+	if _, err := other.Decrypt(enc); err == nil {
+		t.Error("decrypt with wrong key must fail")
+	}
+
+	// Nil-key cipher is a transparent no-op.
+	noop := NewCipher(nil)
+	if got, _ := noop.Encrypt("plain"); got != "plain" {
+		t.Errorf("noop encrypt: got %q", got)
+	}
+}
+
+func TestNormalizeScopes(t *testing.T) {
+	cases := []struct {
+		in, want string
+		wantErr  bool
+	}{
+		{"", "escrow:read,escrow:write", false},
+		{"escrow:read", "escrow:read", false},
+		{" escrow:write , escrow:read ", "escrow:write,escrow:read", false},
+		{"escrow:read,escrow:read", "escrow:read", false}, // dedup
+		{"admin:everything", "", true},
+		{",,,", "", true},
+	}
+	for _, c := range cases {
+		got, err := NormalizeScopes(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("NormalizeScopes(%q): expected error, got %q", c.in, got)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("NormalizeScopes(%q) = (%q, %v), want %q", c.in, got, err, c.want)
+		}
+	}
+	if !HasScope("escrow:read,escrow:write", "escrow:write") {
+		t.Error("HasScope should find escrow:write")
+	}
+	if HasScope("escrow:read", "escrow:write") {
+		t.Error("HasScope must not find missing scope")
+	}
+}
+
 func TestBackoffProgression(t *testing.T) {
 	if Backoff(1) != 30*time.Second {
 		t.Errorf("attempt 1: got %s", Backoff(1))

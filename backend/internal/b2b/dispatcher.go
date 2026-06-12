@@ -18,18 +18,23 @@ import (
 // the reconcile worker.
 type Dispatcher struct {
 	repo     *Repository
+	cipher   *Cipher
 	client   *http.Client
 	interval time.Duration
 	batch    int
 	logger   *slog.Logger
 }
 
-func NewDispatcher(repo *Repository, interval time.Duration, logger *slog.Logger) *Dispatcher {
+func NewDispatcher(repo *Repository, cipher *Cipher, interval time.Duration, logger *slog.Logger) *Dispatcher {
 	if interval <= 0 {
 		interval = 15 * time.Second
 	}
+	if cipher == nil {
+		cipher = NewCipher(nil)
+	}
 	return &Dispatcher{
 		repo:     repo,
+		cipher:   cipher,
 		client:   observability.HTTPClient(10 * time.Second),
 		interval: interval,
 		batch:    50,
@@ -70,11 +75,16 @@ func (d *Dispatcher) send(ctx context.Context, dd *DueDelivery) {
 		d.fail(ctx, dd, nil, fmt.Sprintf("build request: %v", err))
 		return
 	}
+	secret, err := d.cipher.Decrypt(dd.Secret)
+	if err != nil {
+		d.fail(ctx, dd, nil, fmt.Sprintf("decrypt secret: %v", err))
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "KiramoPay-Webhooks/1.0")
 	req.Header.Set("X-Kiramopay-Event", dd.EventType)
 	req.Header.Set("X-Kiramopay-Delivery", dd.ID)
-	req.Header.Set("X-Kiramopay-Signature", Sign(dd.Secret, dd.Payload))
+	req.Header.Set("X-Kiramopay-Signature", Sign(secret, dd.Payload))
 
 	resp, err := d.client.Do(req)
 	if err != nil {
