@@ -25,6 +25,7 @@ import (
 	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/database"
 	"github.com/kiramopay/backend/internal/docs"
+	"github.com/kiramopay/backend/internal/escrow"
 	"github.com/kiramopay/backend/internal/fraud"
 	"github.com/kiramopay/backend/internal/kyc"
 	"github.com/kiramopay/backend/internal/ledger"
@@ -179,6 +180,12 @@ func main() {
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
 	})
+	escrowRepo := escrow.NewRepository(pool)
+	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
+		MFA:         mfaSvc,
+		UIF:         uifService,
+		AuditLogger: auditLogger,
+	})
 	paymentService := payment.NewService(paymentRepo, txService)
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
 
@@ -201,6 +208,7 @@ func main() {
 	paymentHandler := payment.NewHandler(paymentService)
 	cryptoHandler := crypto.NewHandler(cryptoService)
 	mfaHandler := mfa.NewHandler(mfaSvc)
+	escrowHandler := escrow.NewHandler(escrowService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
 	transparencyHandler := transparency.NewHandler(pool)
@@ -353,6 +361,16 @@ func main() {
 			r.Get("/transactions", txHandler.List)
 			r.Get("/transactions/{id}", txHandler.Get)
 
+			// Escrow
+			r.Post("/escrow", escrowHandler.Create)
+			r.Get("/escrow", escrowHandler.List)
+			r.Get("/escrow/{id}", escrowHandler.Get)
+			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/release", escrowHandler.Release)
+			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
+			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
+			r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+
 			// SINPE
 			r.Get("/sinpe/contacts", sinpeHandler.GetContacts)
 			r.Post("/sinpe/contacts", sinpeHandler.AddContact)
@@ -474,6 +492,8 @@ func main() {
 				r.Post("/admin/uif/reports/{id}/review", uifHandler.Review)
 
 				// Fraud
+				r.Post("/admin/escrow/{id}/resolve", escrowHandler.Resolve)
+
 				r.Get("/admin/fraud/alerts", fraudHandler.GetOpenAlerts)
 				r.Patch("/admin/fraud/alerts/{id}", fraudHandler.ResolveAlert)
 				r.Post("/admin/fraud/restrict/{userId}", fraudHandler.RestrictUser)

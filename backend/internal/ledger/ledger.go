@@ -44,6 +44,8 @@ const (
 	SystemExternalCRC SystemAccountCode = "SYSTEM:EXTERNAL:CRC"
 	SystemReserveCRC  SystemAccountCode = "SYSTEM:RESERVE:CRC"
 	SystemReserveUSD  SystemAccountCode = "SYSTEM:RESERVE:USD"
+	SystemEscrowCRC   SystemAccountCode = "SYSTEM:ESCROW:CRC"
+	SystemEscrowUSD   SystemAccountCode = "SYSTEM:ESCROW:USD"
 )
 
 // Account is a polymorphic reference to either a user wallet account or a
