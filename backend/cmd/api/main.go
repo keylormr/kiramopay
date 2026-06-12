@@ -18,6 +18,7 @@ import (
 
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
+	"github.com/kiramopay/backend/internal/b2b"
 	"github.com/kiramopay/backend/internal/budget"
 	"github.com/kiramopay/backend/internal/cards"
 	"github.com/kiramopay/backend/internal/config"
@@ -180,10 +181,13 @@ func main() {
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
 	})
+	b2bRepo := b2b.NewRepository(pool)
+	b2bService := b2b.NewService(b2bRepo, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
 	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
 		MFA:         mfaSvc,
 		UIF:         uifService,
+		Events:      b2bService, // escrow lifecycle → merchant webhooks
 		AuditLogger: auditLogger,
 	})
 	paymentService := payment.NewService(paymentRepo, txService)
@@ -209,6 +213,7 @@ func main() {
 	cryptoHandler := crypto.NewHandler(cryptoService)
 	mfaHandler := mfa.NewHandler(mfaSvc)
 	escrowHandler := escrow.NewHandler(escrowService)
+	b2bHandler := b2b.NewHandler(b2bService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
 	transparencyHandler := transparency.NewHandler(pool)
@@ -243,6 +248,12 @@ func main() {
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
 	defer reconcileCancel()
 	go reconcileSvc.Run(reconcileCtx)
+
+	// ── Webhook dispatcher ───────────────────────────────────────────────
+	webhookDispatcher := b2b.NewDispatcher(b2bRepo, 15*time.Second, logger)
+	dispatcherCtx, dispatcherCancel := context.WithCancel(context.Background())
+	defer dispatcherCancel()
+	go webhookDispatcher.Run(dispatcherCtx)
 
 	// Router
 	r := chi.NewRouter()
@@ -360,6 +371,15 @@ func main() {
 			r.Post("/transactions", txHandler.Create)
 			r.Get("/transactions", txHandler.List)
 			r.Get("/transactions/{id}", txHandler.Get)
+
+			// B2B platform management (API keys + webhooks)
+			r.Post("/b2b/keys", b2bHandler.CreateKey)
+			r.Get("/b2b/keys", b2bHandler.ListKeys)
+			r.Delete("/b2b/keys/{id}", b2bHandler.RevokeKey)
+			r.Post("/b2b/webhooks", b2bHandler.CreateWebhook)
+			r.Get("/b2b/webhooks", b2bHandler.ListWebhooks)
+			r.Delete("/b2b/webhooks/{id}", b2bHandler.DeleteWebhook)
+			r.Get("/b2b/webhooks/{id}/deliveries", b2bHandler.ListDeliveries)
 
 			// Escrow
 			r.Post("/escrow", escrowHandler.Create)
@@ -512,6 +532,28 @@ func main() {
 				})
 			})
 		})
+	})
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Merchant API (B2B) — authenticated by API key, not JWT. The middleware
+	// injects the key's owning user into the same context slot the JWT auth
+	// uses, so the domain handlers work unchanged.
+	// ─────────────────────────────────────────────────────────────────────
+	r.Route("/api/b2b/v1", func(r chi.Router) {
+		r.Use(b2b.APIKeyAuth(b2bService))
+		r.Use(middleware.UserRateLimit(redisClient, 300, time.Minute))
+
+		r.Get("/ping", b2bHandler.Ping)
+
+		// Escrow, programmatic
+		r.Post("/escrow", escrowHandler.Create)
+		r.Get("/escrow", escrowHandler.List)
+		r.Get("/escrow/{id}", escrowHandler.Get)
+		r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+		r.Post("/escrow/{id}/release", escrowHandler.Release)
+		r.Post("/escrow/{id}/refund", escrowHandler.Refund)
+		r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
+		r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
 	})
 
 	// Wrap the router so every request gets a server span with W3C context
