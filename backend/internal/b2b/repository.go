@@ -19,18 +19,18 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 // ── API keys ──────────────────────────────────────────────────────────────
 
-func (r *Repository) CreateKey(ctx context.Context, userID, name, prefix, hash string) (*APIKey, error) {
+func (r *Repository) CreateKey(ctx context.Context, userID, name, prefix, hash, scopes string) (*APIKey, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO api_keys (user_id, name, prefix, key_hash)
-		VALUES ($1::uuid, $2, $3, $4)
-		RETURNING id::text, user_id::text, name, prefix, status, last_used_at, created_at, revoked_at`,
-		userID, name, prefix, hash)
+		INSERT INTO api_keys (user_id, name, prefix, key_hash, scopes)
+		VALUES ($1::uuid, $2, $3, $4, $5)
+		RETURNING id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at`,
+		userID, name, prefix, hash, scopes)
 	return scanKey(row)
 }
 
 func (r *Repository) ListKeys(ctx context.Context, userID string) ([]APIKey, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, user_id::text, name, prefix, status, last_used_at, created_at, revoked_at
+		SELECT id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at
 		FROM api_keys WHERE user_id = $1::uuid ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -47,18 +47,17 @@ func (r *Repository) ListKeys(ctx context.Context, userID string) ([]APIKey, err
 	return out, rows.Err()
 }
 
-// ResolveKey returns the owning user for an ACTIVE key hash and best-effort
-// stamps last_used_at.
-func (r *Repository) ResolveKey(ctx context.Context, hash string) (string, error) {
-	var userID string
-	err := r.db.QueryRow(ctx, `
+// ResolveKey returns the owning user and scopes for an ACTIVE key hash and
+// best-effort stamps last_used_at.
+func (r *Repository) ResolveKey(ctx context.Context, hash string) (userID, scopes string, err error) {
+	err = r.db.QueryRow(ctx, `
 		UPDATE api_keys SET last_used_at = NOW()
 		WHERE key_hash = $1 AND status = 'active'
-		RETURNING user_id::text`, hash).Scan(&userID)
+		RETURNING user_id::text, scopes`, hash).Scan(&userID, &scopes)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrInvalidKey
+		return "", "", ErrInvalidKey
 	}
-	return userID, err
+	return userID, scopes, err
 }
 
 // RevokeKey revokes a key owned by userID.
@@ -78,7 +77,7 @@ func (r *Repository) RevokeKey(ctx context.Context, userID, keyID string) error 
 
 func scanKey(row pgx.Row) (*APIKey, error) {
 	var k APIKey
-	err := row.Scan(&k.ID, &k.UserID, &k.Name, &k.Prefix, &k.Status,
+	err := row.Scan(&k.ID, &k.UserID, &k.Name, &k.Prefix, &k.Scopes, &k.Status,
 		&k.LastUsedAt, &k.CreatedAt, &k.RevokedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

@@ -181,13 +181,17 @@ func main() {
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
 	})
+	// Webhook signing secrets are encrypted at rest with a key derived from
+	// JWT_SECRET (same scheme as TOTP secrets).
+	b2bCipher := b2b.NewCipher([]byte(cfg.JWT.Secret))
 	b2bRepo := b2b.NewRepository(pool)
-	b2bService := b2b.NewService(b2bRepo, auditLogger, logger)
+	b2bService := b2b.NewService(b2bRepo, b2bCipher, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
 	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
 		MFA:         mfaSvc,
 		UIF:         uifService,
 		Events:      b2bService, // escrow lifecycle → merchant webhooks
+		History:     txService,  // fund/release/refund visible in tx history
 		AuditLogger: auditLogger,
 	})
 	paymentService := payment.NewService(paymentRepo, txService)
@@ -250,7 +254,7 @@ func main() {
 	go reconcileSvc.Run(reconcileCtx)
 
 	// ── Webhook dispatcher ───────────────────────────────────────────────
-	webhookDispatcher := b2b.NewDispatcher(b2bRepo, 15*time.Second, logger)
+	webhookDispatcher := b2b.NewDispatcher(b2bRepo, b2bCipher, 15*time.Second, logger)
 	dispatcherCtx, dispatcherCancel := context.WithCancel(context.Background())
 	defer dispatcherCancel()
 	go webhookDispatcher.Run(dispatcherCtx)
@@ -545,15 +549,21 @@ func main() {
 
 		r.Get("/ping", b2bHandler.Ping)
 
-		// Escrow, programmatic
-		r.Post("/escrow", escrowHandler.Create)
-		r.Get("/escrow", escrowHandler.List)
-		r.Get("/escrow/{id}", escrowHandler.Get)
-		r.Post("/escrow/{id}/fund", escrowHandler.Fund)
-		r.Post("/escrow/{id}/release", escrowHandler.Release)
-		r.Post("/escrow/{id}/refund", escrowHandler.Refund)
-		r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
-		r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+		// Escrow, programmatic — read vs write gated by the key's scopes.
+		r.Group(func(r chi.Router) {
+			r.Use(b2b.RequireScope(b2b.ScopeEscrowRead))
+			r.Get("/escrow", escrowHandler.List)
+			r.Get("/escrow/{id}", escrowHandler.Get)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(b2b.RequireScope(b2b.ScopeEscrowWrite))
+			r.Post("/escrow", escrowHandler.Create)
+			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/release", escrowHandler.Release)
+			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
+			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
+			r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+		})
 	})
 
 	// Wrap the router so every request gets a server span with W3C context

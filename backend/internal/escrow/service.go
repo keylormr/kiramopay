@@ -8,6 +8,7 @@ import (
 
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
 // MFAEnforcer gates high-value funding, same contract as transfers.
@@ -28,6 +29,12 @@ type EventSink interface {
 	Emit(ctx context.Context, userID, eventType string, payload any)
 }
 
+// HistoryRecorder makes escrow money movements visible in the user's
+// transaction list (the ledger posting itself happens here, in escrow).
+type HistoryRecorder interface {
+	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
+}
+
 // Service drives the escrow state machine and its ledger postings.
 type Service struct {
 	repo        *Repository
@@ -35,6 +42,7 @@ type Service struct {
 	mfa         MFAEnforcer
 	uif         UIFReporter
 	events      EventSink
+	history     HistoryRecorder
 	auditLogger *audit.Logger
 }
 
@@ -43,6 +51,7 @@ type Options struct {
 	MFA         MFAEnforcer
 	UIF         UIFReporter
 	Events      EventSink
+	History     HistoryRecorder
 	AuditLogger *audit.Logger
 }
 
@@ -56,6 +65,7 @@ func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
 		mfa:         opts.MFA,
 		uif:         opts.UIF,
 		events:      opts.Events,
+		history:     opts.History,
 		auditLogger: opts.AuditLogger,
 	}
 }
@@ -298,10 +308,39 @@ func (s *Service) moveAndTransition(
 
 	s.audit(a.BuyerID, claimed, "escrow_"+string(to), "medium", nil)
 	s.emit(ctx, claimed, "escrow."+string(to))
+	s.recordHistory(ctx, claimed, action)
 	if onSuccess != nil {
 		onSuccess(claimed)
 	}
 	return claimed, nil
+}
+
+// recordHistory mirrors the movement into the affected user's transaction
+// list, best-effort. Deterministic idempotency keys make retries no-ops.
+func (s *Service) recordHistory(ctx context.Context, a *Agreement, action string) {
+	if s.history == nil {
+		return
+	}
+	var userID, txType string
+	switch action {
+	case "fund":
+		userID, txType = a.BuyerID, "escrow_fund"
+	case "release":
+		userID, txType = a.SellerID, "escrow_receive"
+	case "refund":
+		userID, txType = a.BuyerID, "escrow_refund"
+	default:
+		return
+	}
+	_ = s.history.RecordHistory(ctx, userID, &transaction.CreateTransactionRequest{
+		Type:             txType,
+		Amount:           a.AmountMinor,
+		Currency:         a.Currency,
+		CounterpartyType: "escrow",
+		CounterpartyName: a.Description,
+		Description:      "Escrow: " + a.Description,
+		IdempotencyKey:   "escrow:" + action + ":" + a.ID,
+	})
 }
 
 func escrowAccount(currency string) ledger.Account {

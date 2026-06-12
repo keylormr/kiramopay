@@ -23,10 +23,60 @@ type APIKey struct {
 	UserID     string     `json:"-"`
 	Name       string     `json:"name"`
 	Prefix     string     `json:"prefix"` // displayable identifier, e.g. "kp_live_a1b2c3"
+	Scopes     string     `json:"scopes"` // comma-separated allowlist
 	Status     string     `json:"status"` // active | revoked
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// Known scopes for the merchant API.
+const (
+	ScopeEscrowRead  = "escrow:read"
+	ScopeEscrowWrite = "escrow:write"
+)
+
+// AllScopes is the valid-scope allowlist (also the default for new keys).
+var AllScopes = []string{ScopeEscrowRead, ScopeEscrowWrite}
+
+// NormalizeScopes validates and canonicalizes a comma-separated scope list.
+// Empty input grants every scope (sensible default for v1 keys).
+func NormalizeScopes(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return strings.Join(AllScopes, ","), nil
+	}
+	valid := make(map[string]bool, len(AllScopes))
+	for _, s := range AllScopes {
+		valid[s] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			continue
+		}
+		if !valid[s] {
+			return "", ErrInvalid
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return "", ErrInvalid
+	}
+	return strings.Join(out, ","), nil
+}
+
+// HasScope reports whether a canonical scope list contains the scope.
+func HasScope(scopes, scope string) bool {
+	for _, s := range strings.Split(scopes, ",") {
+		if strings.TrimSpace(s) == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // WebhookEndpoint is a merchant-registered notification target.

@@ -14,32 +14,45 @@ import (
 // fans escrow (and future) events out into the delivery outbox.
 type Service struct {
 	repo        *Repository
+	cipher      *Cipher
 	auditLogger *audit.Logger
 	logger      *slog.Logger
 }
 
-func NewService(repo *Repository, auditLogger *audit.Logger, logger *slog.Logger) *Service {
-	return &Service{repo: repo, auditLogger: auditLogger, logger: logger}
+// NewService wires the platform service. cipher encrypts webhook secrets at
+// rest; pass NewCipher(nil) for plaintext (legacy) behaviour.
+func NewService(repo *Repository, cipher *Cipher, auditLogger *audit.Logger, logger *slog.Logger) *Service {
+	if cipher == nil {
+		cipher = NewCipher(nil)
+	}
+	return &Service{repo: repo, cipher: cipher, auditLogger: auditLogger, logger: logger}
 }
 
 // ── API keys ──────────────────────────────────────────────────────────────
 
 // CreateKey mints a key for the user. The returned `full` value is the only
-// time the plaintext key ever exists outside the merchant's hands.
-func (s *Service) CreateKey(ctx context.Context, userID, name string) (key *APIKey, full string, err error) {
+// time the plaintext key ever exists outside the merchant's hands. scopes is
+// a comma-separated subset of AllScopes; empty grants everything.
+func (s *Service) CreateKey(ctx context.Context, userID, name, scopes string) (key *APIKey, full string, err error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 100 {
 		return nil, "", ErrInvalid
+	}
+	scopes, err = NormalizeScopes(scopes)
+	if err != nil {
+		return nil, "", err
 	}
 	fullKey, prefix, hash, err := GenerateKey()
 	if err != nil {
 		return nil, "", err
 	}
-	k, err := s.repo.CreateKey(ctx, userID, name, prefix, hash)
+	k, err := s.repo.CreateKey(ctx, userID, name, prefix, hash, scopes)
 	if err != nil {
 		return nil, "", err
 	}
-	s.auditEvent(userID, "api_key_created", k.ID, map[string]interface{}{"name": name, "prefix": prefix})
+	s.auditEvent(userID, "api_key_created", k.ID, map[string]interface{}{
+		"name": name, "prefix": prefix, "scopes": scopes,
+	})
 	return k, fullKey, nil
 }
 
@@ -55,10 +68,10 @@ func (s *Service) RevokeKey(ctx context.Context, userID, keyID string) error {
 	return nil
 }
 
-// Authenticate resolves a presented key to its owning user.
-func (s *Service) Authenticate(ctx context.Context, presented string) (string, error) {
+// Authenticate resolves a presented key to its owning user and scope list.
+func (s *Service) Authenticate(ctx context.Context, presented string) (userID, scopes string, err error) {
 	if !LooksLikeKey(presented) {
-		return "", ErrInvalidKey
+		return "", "", ErrInvalidKey
 	}
 	return s.repo.ResolveKey(ctx, HashKey(presented))
 }
@@ -79,10 +92,17 @@ func (s *Service) CreateEndpoint(ctx context.Context, userID, rawURL, events str
 	if err != nil {
 		return nil, err
 	}
-	e, err := s.repo.CreateEndpoint(ctx, userID, u.String(), secret, events)
+	stored, err := s.cipher.Encrypt(secret)
 	if err != nil {
 		return nil, err
 	}
+	e, err := s.repo.CreateEndpoint(ctx, userID, u.String(), stored, events)
+	if err != nil {
+		return nil, err
+	}
+	// Hand the PLAINTEXT secret back to the caller (shown once); at rest only
+	// the encrypted form exists.
+	e.Secret = secret
 	s.auditEvent(userID, "webhook_endpoint_created", e.ID, map[string]interface{}{"url": u.String()})
 	return e, nil
 }

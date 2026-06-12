@@ -27,13 +27,14 @@ func (h *Handler) CreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Scopes string `json:"scopes"` // comma-separated; empty = all
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	k, full, err := h.service.CreateKey(r.Context(), userID, body.Name)
+	k, full, err := h.service.CreateKey(r.Context(), userID, body.Name, body.Scopes)
 	if err != nil {
 		h.writeError(w, err)
 		return
