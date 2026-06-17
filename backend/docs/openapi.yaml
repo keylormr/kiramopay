@@ -45,6 +45,12 @@ tags:
     description: Cross-border and multi-currency operations
   - name: Notifications
     description: Push notifications and notification history
+  - name: MFA
+    description: Multi-factor authentication (OTP challenges + TOTP authenticator)
+  - name: Escrow
+    description: Ledger-backed escrow agreements (buyer-funded holds)
+  - name: B2B
+    description: Merchant platform — API keys, webhooks and the API-key-authenticated merchant API
   - name: Admin
     description: Administrative endpoints
   - name: System
@@ -1240,12 +1246,361 @@ paths:
         '401':
           description: Unauthorized
 
+  # ── MFA: TOTP authenticator ───────────────────────────────────────
+  /api/v1/mfa/totp/status:
+    get:
+      tags: [MFA]
+      summary: Whether the caller has an active authenticator enrollment
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: '{ enabled: boolean }'
+
+  /api/v1/mfa/totp/enroll:
+    post:
+      tags: [MFA]
+      summary: Start TOTP enrollment (returns secret + otpauth URL for QR)
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: '{ secret, otpauth_url } — shown once'
+
+  /api/v1/mfa/totp/confirm:
+    post:
+      tags: [MFA]
+      summary: Confirm the first code; activates 2FA and returns recovery codes
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+      responses:
+        '200':
+          description: '{ status: enabled, recovery_codes: [...] } — shown once'
+
+  /api/v1/mfa/totp/verify:
+    post:
+      tags: [MFA]
+      summary: Verify a TOTP or recovery code (records a verified MFA challenge)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                purpose: { type: string, default: high_value_tx }
+      responses:
+        '200':
+          description: Verified
+
+  /api/v1/mfa/totp/disable:
+    post:
+      tags: [MFA]
+      summary: Disable 2FA after re-verifying a current code
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+      responses:
+        '200':
+          description: Disabled
+
+  # ── Escrow ────────────────────────────────────────────────────────
+  /api/v1/escrow:
+    post:
+      tags: [Escrow]
+      summary: Create a pending escrow agreement (caller = buyer; no money moves)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscrowCreateRequest'
+      responses:
+        '201':
+          description: Agreement created (status pending)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
+    get:
+      tags: [Escrow]
+      summary: List the caller's agreements (as buyer or seller)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Agreement list
+
+  /api/v1/escrow/{id}:
+    get:
+      tags: [Escrow]
+      summary: Get one agreement (parties only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Agreement
+        '403':
+          description: Not a party to this agreement
+
+  /api/v1/escrow/{id}/fund:
+    post:
+      tags: [Escrow]
+      summary: Fund the agreement (buyer only; debits buyer → SYSTEM:ESCROW; MFA ≥100K CRC)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Funded
+        '403':
+          description: Buyer only / MFA required
+        '409':
+          description: Not in a fundable state
+        '422':
+          description: Insufficient balance
+
+  /api/v1/escrow/{id}/release:
+    post:
+      tags: [Escrow]
+      summary: Release held funds to the seller (buyer only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Released
+
+  /api/v1/escrow/{id}/refund:
+    post:
+      tags: [Escrow]
+      summary: Return held funds to the buyer (seller only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Refunded
+
+  /api/v1/escrow/{id}/dispute:
+    post:
+      tags: [Escrow]
+      summary: Freeze a funded agreement pending admin resolution (either party)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Disputed
+
+  /api/v1/escrow/{id}/cancel:
+    post:
+      tags: [Escrow]
+      summary: Cancel a pending (unfunded) agreement (either party)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Cancelled
+
+  /api/v1/admin/escrow/{id}/resolve:
+    post:
+      tags: [Admin]
+      summary: Resolve a disputed agreement (admin; outcome released|refunded)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                outcome: { type: string, enum: [released, refunded] }
+      responses:
+        '200':
+          description: Resolved
+
+  # ── B2B platform management (JWT-authenticated) ────────────────────
+  /api/v1/b2b/keys:
+    post:
+      tags: [B2B]
+      summary: Create an API key (full key returned ONCE)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                scopes: { type: string, description: 'comma-separated; empty = all (escrow:read,escrow:write)' }
+      responses:
+        '201':
+          description: '{ key, full } — store `full` now, it is never shown again'
+    get:
+      tags: [B2B]
+      summary: List the caller's API keys (prefixes only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Key list
+
+  /api/v1/b2b/keys/{id}:
+    delete:
+      tags: [B2B]
+      summary: Revoke an API key
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Revoked
+
+  /api/v1/b2b/webhooks:
+    post:
+      tags: [B2B]
+      summary: Register a webhook endpoint (signing secret returned at creation)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                events: { type: string, description: 'comma-separated event list, or * (default)' }
+      responses:
+        '201':
+          description: '{ endpoint, secret }'
+    get:
+      tags: [B2B]
+      summary: List webhook endpoints
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Endpoint list
+
+  /api/v1/b2b/webhooks/{id}:
+    delete:
+      tags: [B2B]
+      summary: Delete a webhook endpoint
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Deleted
+
+  /api/v1/b2b/webhooks/{id}/deliveries:
+    get:
+      tags: [B2B]
+      summary: Recent deliveries for an endpoint (debugging)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Delivery list with status/attempts/response codes
+
+  # ── Merchant API (API-key-authenticated) ────────────────────────────
+  # Same escrow operations as /api/v1/escrow but authenticated with an API
+  # key (Authorization: Bearer kp_live_… or X-API-Key) and gated by the
+  # key's scopes: GETs need escrow:read, POSTs escrow:write.
+  /api/b2b/v1/ping:
+    get:
+      tags: [B2B]
+      summary: Verify an API key works
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: '{ status: ok, merchant_id }'
+
+  /api/b2b/v1/escrow:
+    post:
+      tags: [B2B]
+      summary: Create an escrow agreement programmatically (scope escrow:write)
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscrowCreateRequest'
+      responses:
+        '201':
+          description: Agreement created
+        '403':
+          description: Key lacks escrow:write
+    get:
+      tags: [B2B]
+      summary: List the merchant's agreements (scope escrow:read)
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Agreement list
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Merchant API key (kp_live_…); also accepted as `Authorization Bearer`
 
   parameters:
     ResourceId:
@@ -1314,6 +1669,29 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    EscrowCreateRequest:
+      type: object
+      required: [seller_id, amount_minor, description]
+      properties:
+        seller_id: { type: string, format: uuid }
+        amount_minor: { type: integer, format: int64, description: amount in centimos/cents }
+        currency: { type: string, enum: [CRC, USD], default: CRC }
+        description: { type: string }
+
+    EscrowAgreement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        buyer_id: { type: string, format: uuid }
+        seller_id: { type: string, format: uuid }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { type: string, enum: [pending, funded, released, refunded, disputed, cancelled] }
+        description: { type: string }
+        dispute_reason: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
     ApiResponse:
       type: object
       properties:
