@@ -1,0 +1,215 @@
+# Roadmap de mejoras de código — KiramoPay
+
+Plan accionable para arrancar, en sesiones siguientes, cada mejora de código
+que quedó identificada. Cada ítem está dimensionado para iniciarse en frío:
+objetivo, estado actual, alcance, archivos clave, enfoque, pruebas, bloqueos y
+esfuerzo. Complementa la visión de `ESTRATEGIA_PRODUCTO_MARCA.md` (el *por qué*
+de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
+
+## Convenciones por sesión (recordatorio)
+
+- Rama nueva desde `origin/main`, **sin prefijo `claude/`**; nombre descriptivo.
+- Ciclo por fase: implementar → `go build/vet/test` + `golangci-lint` (backend,
+  `GOTOOLCHAIN=go1.25.11`) y/o `npm run typecheck/lint/test:run/build`
+  (frontend) → si verde, **commit sin atribución** → PR → CI → merge.
+- Backend lint corre con golangci-lint **v2** (`backend/.golangci.yml`).
+- **Sin `Co-Authored-By` ni footers de IA** en commits/PRs.
+
+## Prioridad recomendada
+
+| # | Mejora | Esfuerzo | Bloqueos | Valor |
+|---|---|---|---|---|
+| 1 | Frontend de escrow + API keys (Fase C) | M | requiere deploy de migraciones 029–031 | Alto (cierra el bloque B2B end-to-end) |
+| 2 | `PayoutRail` + adapter mock | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
+| 3 | Chatbot conversacional (Gemini) | L | decisión de alcance | Alto (diferenciador de marca) |
+| 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
+
+> Empezar por **#1** (producto visible, ya hay backend), intercalar **#2** (rápido
+> y desbloquea narrativa de remesas), luego **#3** (el grande), y **#4** cuando
+> haya infra de observabilidad levantada.
+
+---
+
+## 1. Frontend de escrow + gestión de API keys (Fase C)
+
+**Objetivo.** Dar UI a las dos features B2B que ya existen en backend (escrow,
+API keys + webhooks), de modo que un usuario/comercio las use sin curl.
+
+**Estado actual.** Backend completo (PRs #12, #13, #15). Frontend: solo existe
+`src/api/repositories/mfa.repository.ts` como precedente HTTP-only. **No hay
+repos/adapters/vistas de escrow ni de B2B.** El trabajo de TOTP
+(`TwoFactorSheet.tsx`, `mfa.http.ts`, wiring en `ApiLayer`) es **la plantilla
+exacta a espejar**.
+
+**Alcance.**
+- Repos + adapters HTTP para `escrow` y `b2b` (keys/webhooks). Patrón
+  repository, registrados en `src/api/index.ts` (`ApiLayer`) y en
+  `adapters/http/index.ts` + `adapters/mock/index.ts`.
+- Vistas:
+  - Escrow: lista de acuerdos, detalle con acciones según rol/estado
+    (fund/release/refund/dispute/cancel), crear acuerdo. Reusar `BottomSheet`.
+  - Seguridad/Comercio: crear/listar/revocar API keys (mostrar `full` una sola
+    vez con copy-to-clipboard, como los recovery codes de TOTP); registrar/
+    listar/borrar webhooks; ver deliveries.
+- i18n en los 5 idiomas (`src/i18n/translations.ts`).
+- Entradas de navegación (en ProfileView para keys/webhooks; vista propia o tab
+  para escrow).
+
+**Archivos clave.**
+- `src/api/repositories/{escrow,b2b}.repository.ts` (nuevos)
+- `src/api/adapters/http/{escrow,b2b}.http.ts` (nuevos)
+- `src/api/index.ts`, `src/api/adapters/{http,mock}/index.ts` (wiring)
+- `src/views/...` (vistas nuevas; espejar `src/views/profile/TwoFactorSheet.tsx`)
+- `src/i18n/translations.ts`
+- Backend de referencia: `backend/internal/{escrow,b2b}/handler.go`,
+  `backend/docs/openapi.yaml`
+
+**Enfoque.** 1) Generar tipos desde openapi (`npm run gen:api`) y/o tipar a
+mano. 2) Repos + adapters (HTTP-only, sin mock para keys por seguridad, igual
+que auth/mfa). 3) Vistas + estado (Zustand store si hace falta). 4) i18n. 5)
+Tests de adapter (espejar `mfa.http.test.ts`).
+
+**Pruebas / aceptación.** `npm run typecheck/lint/test:run/build` verde; flujo
+manual escrow create→fund→release visible en historial (ya emite filas de
+`transactions`); key creada se muestra una vez; webhook registrado aparece en
+lista.
+
+**Bloqueos.** Para verlo en prod hace falta **deploy de migraciones 028–031**
+(`RUN_MIGRATIONS=true` en Render una vez). En local con `VITE_API_URL` apuntando
+al backend, funciona sin deploy.
+
+**Esfuerzo.** M (1 sesión por feature; escrow y B2B pueden ir en PRs separados).
+
+---
+
+## 2. `PayoutRail` — interfaz de rieles de pago + adapter mock
+
+**Objetivo.** Dejar lista la **interoperabilidad de transferencias** (ver
+`ESTRATEGIA_PRODUCTO_MARCA.md` §2): una abstracción de "riel de pago" para que
+sumar SINPE/dLocal/Circle/USDC sea agregar un adapter, sin tocar el resto.
+
+**Estado actual.** Existen el dominio `country` (cross-border CR/PA/GT) y el
+`ledger`, pero no hay una interfaz de salida unificada. SINPE externo hoy
+contabiliza contra `SYSTEM:EXTERNAL:CRC`.
+
+**Alcance.**
+- Paquete `backend/internal/payout` con:
+  - `type Rail interface { Send(ctx, PayoutRequest) (PayoutResult, error); Status(ctx, id) (Status, error); Name() string }`.
+  - `PayoutRequest` (monto minor, moneda, destino tipado por riel, idempotency
+    key), `PayoutResult` (id externo, estado).
+  - `MockRail` (determinista, para tests y dev) + un `registry` por nombre.
+- Contabilidad por ledger: débito wallet del usuario / crédito cuenta de sistema
+  del riel (`SYSTEM:EXTERNAL:<RAIL>:<CUR>`), con idempotency.
+- Endpoint `POST /api/v1/payouts` (y/o exponer en el API B2B con scope nuevo
+  `payout:write`).
+
+**Archivos clave.** `backend/internal/payout/*` (nuevo); referencia de patrón:
+`internal/sinpe/service.go`, `internal/escrow/service.go` (claim+post+
+compensación, idempotency), `internal/ledger/ledger.go` (cuentas de sistema).
+Migración nueva para las cuentas `SYSTEM:EXTERNAL:<RAIL>` y, si se gatea por
+scope, ampliar `b2b` scopes.
+
+**Pruebas / aceptación.** Unit del registry/mock; integration: payout vía
+`MockRail` debita la wallet y acredita la cuenta de sistema, idempotente; saldos
+verificados contra el journal.
+
+**Bloqueos.** Ninguno para el mock. Los adapters reales (dLocal, Circle, SINPE
+participante) requieren **contratos/licencias** — fuera de código.
+
+**Esfuerzo.** S–M (1 sesión para interfaz + mock + ledger + tests).
+
+---
+
+## 3. Chatbot conversacional (Gemini)
+
+**Objetivo.** Asistente que vende servicios basado en el usuario (ver
+`ESTRATEGIA_PRODUCTO_MARCA.md` §1): comercio conversacional + cross-sell
+contextual sobre el historial.
+
+**Estado actual.** Solo `GEMINI_API_KEY` cableado en `vite.config.ts`. No hay
+código de chatbot. Existen todos los dominios que el bot operaría
+(transaction, sinpe, payment, crypto, qrpayment, splitpay, budget, recurring,
+loyalty).
+
+**Decisión de arquitectura (recomendada).** **Proxy por backend**, NO llamar a
+Gemini desde el cliente: (a) no exponer la API key, (b) aplicar los gates de
+dinero del lado servidor. El LLM hace *tool-calling* sobre funciones acotadas
+que mapean a los servicios existentes; **toda función que mueve dinero devuelve
+una propuesta que el usuario confirma de forma determinista** y pasa por
+MFA(≥100K)/fraude/límites ya existentes. El LLM nunca autoriza.
+
+**Alcance (MVP recomendado, iterativo).**
+- Fase 3a (read-only, bajo riesgo): `internal/assistant` con un endpoint
+  `POST /api/v1/assistant/chat` que responde consultas ("¿cuánto gasté en
+  comida?", "¿cuál es mi saldo?", "explicá este cobro") usando tools de solo
+  lectura sobre transaction/budget/audit. Sin mover dinero.
+- Fase 3b (acciones con confirmación): tools de escritura que **devuelven una
+  intención** (no ejecutan); el frontend muestra una tarjeta de confirmación;
+  al confirmar, se llama al endpoint real existente (con sus gates).
+- Frontend: vista de chat + repo `assistant` HTTP-only.
+
+**Archivos clave.** `backend/internal/assistant/*` (nuevo: cliente Gemini, tool
+definitions, orquestación); cablear en `main.go`. Frontend: repo/adapter +
+vista de chat + i18n. Config: `GEMINI_API_KEY` al backend
+(`internal/config/config.go`).
+
+**Pruebas / aceptación.** Unit de la capa de tools (intención → operación
+correcta, montos, moneda); que ninguna tool de escritura ejecute sin
+confirmación; e2e read-only con respuestas deterministas mockeando Gemini.
+
+**Bloqueos / riesgos.** Cumplimiento (no "asesoría financiera"); costo de
+tokens; prompt-injection (sanitizar, límites de scope de tools). Decidir alcance
+3a vs 3a+3b antes de arrancar.
+
+**Esfuerzo.** L (3a en 1 sesión; 3b otra; frontend otra).
+
+---
+
+## 4. Dashboards Grafana + alerting + SLOs (Fase D)
+
+**Objetivo.** Cerrar la pata de **operación** de observabilidad: visualizar las
+métricas RED ya exportadas, alertar sobre síntomas y declarar SLOs.
+
+**Estado actual.** Tracing + métricas OTel ya emitidas (PRs #8, #9, #11):
+histogramas `http.server.*` dimensionados por ruta (RED) + runtime de Go.
+Endpoint `/metrics` Prometheus manual. `k8s/monitoring/` tiene base de
+Prometheus + Grafana (`grafana-config.yaml`, `prometheus-config.yaml`) pero
+**sin dashboards ni reglas de alerta versionados**.
+
+**Alcance.**
+- Dashboard Grafana (JSON versionado) con: rate/errors/duration por ruta
+  (p50/p95/p99), error-rate 5xx, throughput, saturación (goroutines, heap, GC),
+  y panel de negocio (drift de reconcile, entregas de webhook).
+- Reglas de alerta (PrometheusRule o Grafana alerting): error-rate alto,
+  latencia p99 sobre umbral, drift de reconcile > 0, fallos de webhook
+  acumulados, target caído.
+- `SLO.md`: definir SLIs/SLOs (p.ej. disponibilidad 99.5%, p99 < 500ms en
+  endpoints de dinero) y error budgets.
+
+**Archivos clave.** `k8s/monitoring/` (dashboard JSON + PrometheusRule nuevos),
+`k8s/monitoring/deploy-monitoring.sh` (cablear), `SLO.md` (nuevo). Métricas de
+referencia: las de `internal/observability` + el `/metrics` manual.
+
+**Pruebas / aceptación.** Validar que el dashboard JSON importa sin error y los
+queries matchean nombres de métricas reales; reglas con `promtool check rules`.
+La validación end-to-end real requiere datos → necesita colector/infra.
+
+**Bloqueos.** Para datos reales hace falta **levantar un colector OTLP +
+Prometheus/Tempo/Grafana** (o Grafana Cloud free) — infra/ops, no código. El
+código (dashboards + reglas + SLO) se puede versionar igual.
+
+**Esfuerzo.** M.
+
+---
+
+## Notas de estado (para arrancar en frío)
+
+- **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029
+  (escrow), 030 (B2B), 031 (scopes/secret TEXT)** → `RUN_MIGRATIONS=true` en
+  Render y quitar. Afecta a la Fase C (verla en prod) y a cualquier prueba en
+  prod de escrow/B2B.
+- **DR pendiente de activación** (manual, sin costo): bucket + 6 secrets +
+  `BACKUPS_ENABLED=true` (ver `DR_RUNBOOK.md`).
+- **Entorno backend local**: Go portable 1.23.4 con `GOTOOLCHAIN=go1.25.11`;
+  golangci-lint v2 en `$HOME/go/bin`; tests de integración necesitan
+  Postgres+Redis (`make docker-up`, correr con `-p 1`).
