@@ -1,0 +1,141 @@
+# Grafana dashboard: RED (Rate/Errors/Duration) + SLO, computed from the manual
+# /metrics counters (kiramopay_*). Mounts at /var/lib/grafana/dashboards via the
+# grafana-dashboards-provider (see grafana-config.yaml). Targets are in /SLO.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-red-slo
+  namespace: kiramopay
+data:
+  red-slo.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Availability (5m, SLO 99.5%)",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "100 * (1 - (sum(rate(kiramopay_http_errors_total[5m])) / clamp_min(sum(rate(kiramopay_http_requests_total[5m])), 1)))",
+              "legendFormat": "availability"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 95,
+              "max": 100,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 99.0 },
+                  { "color": "green", "value": 99.5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Request rate",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+          "targets": [
+            { "expr": "sum(rate(kiramopay_http_requests_total[5m]))", "legendFormat": "req/s" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "reqps" } }
+        },
+        {
+          "title": "Error rate (5xx)",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "100 * (sum(rate(kiramopay_http_errors_total[5m])) / clamp_min(sum(rate(kiramopay_http_requests_total[5m])), 1))",
+              "legendFormat": "error %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Uptime",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+          "targets": [
+            { "expr": "max(kiramopay_uptime_seconds)", "legendFormat": "uptime" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "title": "Avg request duration (ms, SLO < 500)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [
+            { "expr": "avg(kiramopay_http_request_duration_ms_avg)", "legendFormat": "avg ms" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 500 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Goroutines",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [
+            { "expr": "max(kiramopay_go_goroutines)", "legendFormat": "goroutines" }
+          ]
+        },
+        {
+          "title": "Heap memory",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "targets": [
+            { "expr": "max(kiramopay_go_heap_alloc_bytes)", "legendFormat": "heap alloc" },
+            { "expr": "max(kiramopay_go_heap_sys_bytes)", "legendFormat": "heap sys" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" } }
+        },
+        {
+          "title": "GC rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "targets": [
+            { "expr": "rate(kiramopay_go_gc_total[5m])", "legendFormat": "gc/s" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ops" } }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["kiramopay", "red", "slo"],
+      "templating": { "list": [] },
+      "time": { "from": "now-6h", "to": "now" },
+      "title": "KiramoPay — RED & SLO",
+      "uid": "kiramopay-red-slo"
+    }

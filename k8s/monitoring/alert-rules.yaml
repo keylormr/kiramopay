@@ -1,0 +1,118 @@
+# Prometheus alerting rules for KiramoPay, mounted into Prometheus at
+# /etc/prometheus/rules and loaded via `rule_files` in prometheus-config.yaml.
+#
+# Symptom-based: availability + latency page; saturation warns. SLO targets are
+# defined in /SLO.md. Rules use the manual /metrics counters/gauges
+# (kiramopay_*), which are scraped directly — no OTLP collector required.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: kiramopay
+data:
+  kiramopay-rules.yml: |
+    groups:
+      # ── Availability (SLO 99.5%) ──────────────────────────────────────────
+      - name: kiramopay-availability
+        rules:
+          - alert: HighErrorRate
+            expr: |
+              sum(rate(kiramopay_http_errors_total[5m]))
+                / sum(rate(kiramopay_http_requests_total[5m])) > 0.05
+            for: 5m
+            labels:
+              severity: page
+            annotations:
+              summary: "High 5xx error rate (>5%)"
+              description: "5xx error ratio has exceeded 5% for 5m. Check the latest deploy and upstream dependencies."
+
+          # Multi-window burn-rate: fast burn of the 0.5% / 30d error budget.
+          # 14.4x burn over both a 5m and 1h window pages early.
+          - alert: ErrorBudgetFastBurn
+            expr: |
+              (
+                sum(rate(kiramopay_http_errors_total[5m]))
+                  / sum(rate(kiramopay_http_requests_total[5m])) > (14.4 * 0.005)
+              )
+              and
+              (
+                sum(rate(kiramopay_http_errors_total[1h]))
+                  / sum(rate(kiramopay_http_requests_total[1h])) > (14.4 * 0.005)
+              )
+            for: 2m
+            labels:
+              severity: page
+            annotations:
+              summary: "Error budget burning fast"
+              description: "Availability error budget (99.5% / 30d) is burning >14x. At this rate the monthly budget is exhausted in hours."
+
+          - alert: TargetDown
+            expr: up{job=~"kiramopay-api.*"} == 0
+            for: 2m
+            labels:
+              severity: page
+            annotations:
+              summary: "KiramoPay API target is down"
+              description: "Prometheus cannot scrape {{ $labels.instance }} (job {{ $labels.job }}) for 2m."
+
+      # ── Latency (SLO: money endpoints p99 < 500ms) ────────────────────────
+      - name: kiramopay-latency
+        rules:
+          # Proxy on the manual avg gauge; with an OTLP collector, prefer a
+          # histogram_quantile(0.99, ...) over http_server_request_duration_*.
+          - alert: HighRequestLatency
+            expr: avg(kiramopay_http_request_duration_ms_avg) > 500
+            for: 10m
+            labels:
+              severity: page
+            annotations:
+              summary: "High average request latency (>500ms)"
+              description: "Average request duration has exceeded 500ms for 10m."
+
+      # ── Saturation (warn — diagnostic, not paging) ────────────────────────
+      - name: kiramopay-saturation
+        rules:
+          - alert: HighGoroutines
+            expr: max(kiramopay_go_goroutines) > 5000
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Goroutine count high (>5000)"
+              description: "Possible goroutine leak or overload on {{ $labels.instance }}."
+
+          - alert: HighHeapAlloc
+            expr: max(kiramopay_go_heap_alloc_bytes) > 1.5e9
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Heap allocation high (>1.5GB)"
+              description: "Sustained high heap usage on {{ $labels.instance }} — watch for OOM."
+
+          - alert: HighGCRate
+            expr: rate(kiramopay_go_gc_total[5m]) > 5
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "GC running frequently (>5/s)"
+              description: "High allocation pressure causing frequent GC cycles."
+
+      # ── Business invariants (require exporting these as metrics first) ─────
+      # The ledger drift and webhook-delivery signals live in audit/DB today, not
+      # /metrics. Once an exporter publishes them, enable these (see SLO.md).
+      # - name: kiramopay-business
+      #   rules:
+      #     - alert: LedgerDrift
+      #       expr: max(kiramopay_ledger_drift_crc) > 0
+      #       for: 1m
+      #       labels: { severity: page }
+      #       annotations:
+      #         summary: "Ledger cache↔journal drift detected"
+      #     - alert: WebhookDeliveryBacklog
+      #       expr: sum(kiramopay_webhook_deliveries_failed) > 50
+      #       for: 15m
+      #       labels: { severity: warning }
+      #       annotations:
+      #         summary: "Webhook delivery failures accumulating"

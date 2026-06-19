@@ -22,7 +22,7 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 | 1 | ~~Frontend de escrow + API keys (Fase C)~~ ✅ HECHO | M | deploy de migr. para prod | Alto (cierra el bloque B2B end-to-end) |
 | 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
 | 3 | Chatbot Gemini — Fase 3a ✅ HECHO (read-only); falta 3b (acciones c/confirmación) | L | activar `GEMINI_API_KEY` | Alto (diferenciador de marca) |
-| 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
+| 4 | ~~Dashboards Grafana + alerting + SLOs (Fase D)~~ ✅ HECHO (código) | M | infra (Prometheus/Grafana/AM) para datos reales | Medio (operación) |
 
 > Empezar por **#1** (producto visible, ya hay backend), intercalar **#2** (rápido
 > y desbloquea narrativa de remesas), luego **#3** (el grande), y **#4** cuando
@@ -207,7 +207,24 @@ tokens; prompt-injection (sanitizar, límites de scope de tools). Decidir alcanc
 
 ---
 
-## 4. Dashboards Grafana + alerting + SLOs (Fase D)
+## 4. Dashboards Grafana + alerting + SLOs (Fase D) ✅ HECHO (código versionado)
+
+> **Implementado el código versionable.** `SLO.md` (SLIs/SLOs/error budgets +
+> política de alertas + burn-rate). `k8s/monitoring/alert-rules.yaml` (ConfigMap
+> `prometheus-rules`: 7 alertas en 3 grupos — disponibilidad con burn-rate
+> multi-ventana, latencia, saturación; reglas de negocio drift/webhooks
+> comentadas hasta exponerlas como métrica) + `rule_files` cableado en
+> `prometheus-config.yaml`. Dashboard `dashboard-red-slo.yaml` (ConfigMap, 8
+> paneles RED **computados**: disponibilidad vs SLO 99.5%, rate, error %, latencia
+> avg, saturación). `deploy-monitoring.sh` aplica ambos. Todo validado (YAML/JSON
+> parseables; reglas y dashboard bien formados). Construido sobre las métricas
+> **fiables** del `/metrics` manual (`kiramopay_*`) → funciona scrapeando el
+> endpoint, **sin colector**. **Pendiente (infra/ops, no código)**: levantar
+> Prometheus/Grafana/Alertmanager (o Grafana Cloud), montar los ConfigMaps
+> (`prometheus-rules` en `/etc/prometheus/rules`, dashboards en
+> `/var/lib/grafana/dashboards`), `promtool check rules`, y exportar drift/webhooks
+> como métricas para activar esas alertas. Percentiles p95/p99 por ruta requieren
+> el colector OTLP (`http.server.*`).
 
 **Objetivo.** Cerrar la pata de **operación** de observabilidad: visualizar las
 métricas RED ya exportadas, alertar sobre síntomas y declarar SLOs.
