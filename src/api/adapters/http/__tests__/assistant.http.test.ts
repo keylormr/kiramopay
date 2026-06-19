@@ -42,6 +42,33 @@ describe('HttpAssistantRepository', () => {
     });
   });
 
+  it('maps proposals snake_case → camelCase', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        reply: "I've prepared a SINPE.",
+        tools_used: ['propose_sinpe_transfer'],
+        proposals: [
+          { kind: 'sinpe_transfer', summary: 'SINPE ₡5000 → 8888-7777', amount_minor: 500000, currency: 'CRC', phone: '88887777' },
+        ],
+      },
+    });
+    const repo = new HttpAssistantRepository(fakeClient({ post }));
+    const res = await repo.chat('send 5000');
+    expect(res.data?.proposals).toHaveLength(1);
+    expect(res.data?.proposals[0].kind).toBe('sinpe_transfer');
+    expect(res.data?.proposals[0].amountMinor).toBe(500000);
+    expect(res.data?.proposals[0].phone).toBe('88887777');
+  });
+
+  it('defaults proposals to an empty array', async () => {
+    const repo = new HttpAssistantRepository(
+      fakeClient({ post: vi.fn().mockResolvedValue({ success: true, data: { reply: 'hi' } }) }),
+    );
+    const res = await repo.chat('hi');
+    expect(res.data?.proposals).toEqual([]);
+  });
+
   it('surfaces a chat error', async () => {
     const repo = new HttpAssistantRepository(
       fakeClient({ post: vi.fn().mockResolvedValue({ success: false, error: { code: 'X', message: 'nope' } }) }),

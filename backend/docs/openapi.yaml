@@ -1897,6 +1897,25 @@ components:
         tools_used:
           type: array
           items: { type: string }
+        proposals:
+          type: array
+          description: >-
+            Prepared money actions (Phase 3b). NOT executed — the client renders a
+            confirmation card; only the user's confirm calls the real gated endpoint.
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [sinpe_transfer, bill_payment, recharge] }
+              summary: { type: string }
+              amount_minor: { type: integer, format: int64 }
+              currency: { type: string }
+              phone: { type: string }
+              description: { type: string }
+              provider_code: { type: string }
+              provider_name: { type: string }
+              client_id: { type: string }
+              period: { type: string }
+              operator: { type: string }
 
     ApiResponse:
       type: object

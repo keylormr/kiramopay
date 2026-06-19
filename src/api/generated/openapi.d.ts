@@ -4424,6 +4424,22 @@ export interface components {
         AssistantChatResponse: {
             reply?: string;
             tools_used?: string[];
+            /** @description Prepared money actions (Phase 3b). NOT executed — the client renders a confirmation card; only the user's confirm calls the real gated endpoint. */
+            proposals?: {
+                /** @enum {string} */
+                kind?: "sinpe_transfer" | "bill_payment" | "recharge";
+                summary?: string;
+                /** Format: int64 */
+                amount_minor?: number;
+                currency?: string;
+                phone?: string;
+                description?: string;
+                provider_code?: string;
+                provider_name?: string;
+                client_id?: string;
+                period?: string;
+                operator?: string;
+            }[];
         };
         ApiResponse: {
             success?: boolean;

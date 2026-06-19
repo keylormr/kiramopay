@@ -235,7 +235,7 @@ func main() {
 	}
 	assistantService := assistant.NewService(
 		assistantLLM,
-		assistant.NewTools(walletService, txService, budgetService),
+		assistant.NewTools(walletService, txService, budgetService, paymentService),
 		auditLogger,
 	)
 

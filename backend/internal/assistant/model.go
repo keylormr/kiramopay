@@ -36,8 +36,31 @@ type ChatRequest struct {
 
 // ChatResponse is the assistant's answer.
 type ChatResponse struct {
-	Reply     string   `json:"reply"`
-	ToolsUsed []string `json:"tools_used,omitempty"`
+	Reply     string     `json:"reply"`
+	ToolsUsed []string   `json:"tools_used,omitempty"`
+	Proposals []Proposal `json:"proposals,omitempty"`
+}
+
+// Proposal is a money-moving action the assistant has PREPARED but NOT executed
+// (Phase 3b). The propose_* tools only validate and echo — they never touch a
+// money service. The client renders a confirmation card; only on explicit user
+// confirmation does it call the real, fully-gated endpoint (which re-enforces
+// auth/MFA/limits/fraud). The assistant never authorizes a movement.
+type Proposal struct {
+	Kind        string `json:"kind"` // sinpe_transfer | bill_payment | recharge
+	Summary     string `json:"summary"`
+	AmountMinor int64  `json:"amount_minor"`
+	Currency    string `json:"currency"`
+	// sinpe_transfer
+	Phone       string `json:"phone,omitempty"`
+	Description string `json:"description,omitempty"`
+	// bill_payment
+	ProviderCode string `json:"provider_code,omitempty"`
+	ProviderName string `json:"provider_name,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	Period       string `json:"period,omitempty"`
+	// recharge
+	Operator string `json:"operator,omitempty"`
 }
 
 // Domain errors mapped to HTTP statuses by the handler.

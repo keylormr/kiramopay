@@ -133,4 +133,5 @@ export type {
   IAssistantRepository,
   AssistantTurn,
   AssistantReply,
+  AssistantProposal,
 } from './repositories/assistant.repository';
