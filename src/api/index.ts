@@ -17,6 +17,7 @@ import type { IBudgetRepository } from './repositories/budget.repository';
 import type { IRecurringRepository } from './repositories/recurring.repository';
 import type { IEscrowRepository } from './repositories/escrow.repository';
 import type { IB2BRepository } from './repositories/b2b.repository';
+import type { IAssistantRepository } from './repositories/assistant.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -24,6 +25,7 @@ import { HttpAuthRepository } from './adapters/http/auth.http';
 import { HttpMfaRepository } from './adapters/http/mfa.http';
 import { HttpEscrowRepository } from './adapters/http/escrow.http';
 import { HttpB2BRepository } from './adapters/http/b2b.http';
+import { HttpAssistantRepository } from './adapters/http/assistant.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -40,6 +42,7 @@ export interface ApiLayer {
   // Phase F — B2B / escrow (HTTP-only, like mfa)
   escrow: IEscrowRepository;
   b2b: IB2BRepository;
+  assistant: IAssistantRepository;
   // Phase 5
   marketplace?: IMarketplaceRepository;
   loyalty?: ILoyaltyRepository;
@@ -71,7 +74,8 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   const httpMfa = new HttpMfaRepository(client);
   const httpEscrow = new HttpEscrowRepository(client);
   const httpB2B = new HttpB2BRepository(client);
-  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpB2B);
+  const httpAssistant = new HttpAssistantRepository(client);
+  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpB2B, httpAssistant);
 }
 
 export function getApiLayer(): ApiLayer {
@@ -125,3 +129,8 @@ export type {
   B2BScope,
 } from './repositories/b2b.repository';
 export { B2B_SCOPES } from './repositories/b2b.repository';
+export type {
+  IAssistantRepository,
+  AssistantTurn,
+  AssistantReply,
+} from './repositories/assistant.repository';

@@ -23,12 +23,14 @@ export function createMockApiLayer(
   mfa: ApiLayer['mfa'],
   escrow: ApiLayer['escrow'],
   b2b: ApiLayer['b2b'],
+  assistant: ApiLayer['assistant'],
 ): ApiLayer {
   return {
     auth,
     mfa,
     escrow,
     b2b,
+    assistant,
     accounts: new MockAccountRepository(),
     transactions: new MockTransactionRepository(),
     sinpe: new MockSinpeRepository(),

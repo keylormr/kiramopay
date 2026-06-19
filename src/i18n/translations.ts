@@ -513,6 +513,17 @@ type TranslationKeys = {
   home_loyalty: string;
   home_loyalty_view: string;
   home_loyalty_desc: string;
+  // Assistant (Phase 3a)
+  assistant_title: string;
+  assistant_card_desc: string;
+  assistant_unavailable: string;
+  assistant_greeting: string;
+  assistant_disclaimer: string;
+  assistant_example_1: string;
+  assistant_example_2: string;
+  assistant_placeholder: string;
+  assistant_send: string;
+  assistant_error: string;
   // Phase F — escrow + API keys + webhooks
   merchant_tools: string;
   escrow_menu: string;
@@ -1056,6 +1067,17 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Puntos',
     home_loyalty_view: 'Recompensas',
     home_loyalty_desc: 'Gana y canjea puntos',
+    // Assistant (Phase 3a)
+    assistant_title: 'Asistente',
+    assistant_card_desc: 'Pregúntame sobre tus finanzas',
+    assistant_unavailable: 'El asistente no está disponible por ahora.',
+    assistant_greeting: '¡Hola! ¿En qué puedo ayudarte con tus finanzas?',
+    assistant_disclaimer: 'No doy asesoría financiera y no puedo mover dinero.',
+    assistant_example_1: '¿Cuánto gasté este mes?',
+    assistant_example_2: '¿Cuál es mi saldo?',
+    assistant_placeholder: 'Escribe tu pregunta…',
+    assistant_send: 'Enviar',
+    assistant_error: 'No pude responder. Inténtalo de nuevo.',
     // Phase F — escrow + API keys + webhooks
     merchant_tools: 'Herramientas de comercio',
     escrow_menu: 'Pagos protegidos',
@@ -1598,6 +1620,17 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Points',
     home_loyalty_view: 'Rewards',
     home_loyalty_desc: 'Earn and redeem points',
+    // Assistant (Phase 3a)
+    assistant_title: 'Assistant',
+    assistant_card_desc: 'Ask me about your finances',
+    assistant_unavailable: 'The assistant is not available right now.',
+    assistant_greeting: 'Hi! How can I help with your finances?',
+    assistant_disclaimer: 'I don\'t give financial advice and can\'t move money.',
+    assistant_example_1: 'How much did I spend this month?',
+    assistant_example_2: 'What\'s my balance?',
+    assistant_placeholder: 'Type your question…',
+    assistant_send: 'Send',
+    assistant_error: 'I couldn\'t answer. Please try again.',
     // Phase F — escrow + API keys + webhooks
     merchant_tools: 'Merchant tools',
     escrow_menu: 'Protected payments',
@@ -2132,6 +2165,17 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: '積分',
     home_loyalty_view: '獎勵',
     home_loyalty_desc: '賺取和兌換積分',
+    // Assistant (Phase 3a)
+    assistant_title: '助理',
+    assistant_card_desc: '向我詢問你的財務狀況',
+    assistant_unavailable: '助理目前無法使用。',
+    assistant_greeting: '嗨！我能如何協助你的財務呢？',
+    assistant_disclaimer: '我不提供理財建議，也無法轉移資金。',
+    assistant_example_1: '我這個月花了多少錢？',
+    assistant_example_2: '我的餘額是多少？',
+    assistant_placeholder: '輸入你的問題…',
+    assistant_send: '傳送',
+    assistant_error: '我無法回答，請再試一次。',
     // Phase F — escrow + API keys + webhooks
     merchant_tools: '商家工具',
     escrow_menu: '保障付款',
@@ -2666,6 +2710,17 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'ポイント',
     home_loyalty_view: '特典',
     home_loyalty_desc: 'ポイントを貯めて交換',
+    // Assistant (Phase 3a)
+    assistant_title: 'アシスタント',
+    assistant_card_desc: '家計について質問できます',
+    assistant_unavailable: '現在アシスタントはご利用いただけません。',
+    assistant_greeting: 'こんにちは！家計について何かお手伝いできますか？',
+    assistant_disclaimer: '資産運用のアドバイスや送金はできません。',
+    assistant_example_1: '今月はいくら使いましたか？',
+    assistant_example_2: '残高はいくらですか？',
+    assistant_placeholder: '質問を入力…',
+    assistant_send: '送信',
+    assistant_error: '回答できませんでした。もう一度お試しください。',
     // Phase F — escrow + API keys + webhooks
     merchant_tools: '加盟店ツール',
     escrow_menu: 'エスクロー決済',
@@ -3200,6 +3255,17 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'पॉइंट्स',
     home_loyalty_view: 'रिवॉर्ड्स',
     home_loyalty_desc: 'पॉइंट्स कमाएं और रिडीम करें',
+    // Assistant (Phase 3a)
+    assistant_title: 'सहायक',
+    assistant_card_desc: 'अपने वित्त के बारे में मुझसे पूछें',
+    assistant_unavailable: 'सहायक अभी उपलब्ध नहीं है।',
+    assistant_greeting: 'नमस्ते! मैं आपके वित्त में कैसे मदद करूँ?',
+    assistant_disclaimer: 'मैं वित्तीय सलाह नहीं देता और पैसे ट्रांसफर नहीं कर सकता।',
+    assistant_example_1: 'इस महीने मैंने कितना खर्च किया?',
+    assistant_example_2: 'मेरा बैलेंस क्या है?',
+    assistant_placeholder: 'अपना सवाल लिखें…',
+    assistant_send: 'भेजें',
+    assistant_error: 'मैं जवाब नहीं दे सका। कृपया फिर से कोशिश करें।',
     // Phase F — escrow + API keys + webhooks
     merchant_tools: 'मर्चेंट टूल्स',
     escrow_menu: 'सुरक्षित भुगतान',

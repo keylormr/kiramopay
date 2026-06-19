@@ -16,6 +16,15 @@ type Config struct {
 	CORS      CORSConfig
 	VAPID     VAPIDConfig
 	Telemetry TelemetryConfig
+	Gemini    GeminiConfig
+}
+
+// GeminiConfig controls the conversational assistant. The assistant is a no-op
+// (returns "unavailable") unless GEMINI_API_KEY is set — same gating discipline
+// as telemetry, so the service runs identically with no key in dev/CI.
+type GeminiConfig struct {
+	APIKey string // GEMINI_API_KEY
+	Model  string // GEMINI_MODEL
 }
 
 // TelemetryConfig controls OpenTelemetry tracing. Tracing is enabled only when
@@ -132,6 +141,10 @@ func Load() *Config {
 			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 			Insecure:    getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", false),
 			SampleRatio: getEnvFloat("OTEL_TRACES_SAMPLER_RATIO", 1.0),
+		},
+		Gemini: GeminiConfig{
+			APIKey: getEnv("GEMINI_API_KEY", ""),
+			Model:  getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
 		},
 	}
 }

@@ -52,9 +52,10 @@ interface HomeViewProps {
   onOpenSavings?: () => void;
   onOpenSplitPay?: () => void;
   onOpenLoyalty?: () => void;
+  onOpenAssistant?: () => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
 
@@ -288,6 +289,19 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         })();
         return (
           <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={onOpenAssistant}
+              className="col-span-2 bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-900/20 dark:to-fuchsia-900/10 rounded-2xl p-4 border border-violet-100 dark:border-violet-800/30 text-left active:scale-[0.98] transition-all flex items-center gap-3"
+            >
+              <div className="w-10 h-10 shrink-0 rounded-xl uv-gradient-brand flex items-center justify-center">
+                <Icons.MessageCircle size={20} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-base font-extrabold uv-text-primary">{t('assistant_title')}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">{t('assistant_card_desc')}</div>
+              </div>
+            </button>
+
             <button
               onClick={onOpenAnalytics}
               className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/10 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-800/30 text-left active:scale-[0.98] transition-all"

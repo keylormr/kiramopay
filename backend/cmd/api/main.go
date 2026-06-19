@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/kiramopay/backend/internal/assistant"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
@@ -225,6 +226,19 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 
+	// Conversational assistant (read-only). The LLM stays a true nil interface
+	// when GEMINI_API_KEY is unset, so the service reports itself unavailable
+	// instead of wrapping a nil pointer.
+	var assistantLLM assistant.LLM
+	if cfg.Gemini.APIKey != "" {
+		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
+	}
+	assistantService := assistant.NewService(
+		assistantLLM,
+		assistant.NewTools(walletService, txService, budgetService),
+		auditLogger,
+	)
+
 	// ── Handlers ─────────────────────────────────────────────────────────
 	authHandler := auth.NewHandler(authService)
 	userHandler := user.NewHandler(userService)
@@ -236,6 +250,7 @@ func main() {
 	mfaHandler := mfa.NewHandler(mfaSvc)
 	escrowHandler := escrow.NewHandler(escrowService)
 	payoutHandler := payout.NewHandler(payoutService)
+	assistantHandler := assistant.NewHandler(assistantService)
 	b2bHandler := b2b.NewHandler(b2bService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
@@ -422,6 +437,10 @@ func main() {
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
 			r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+
+			// Conversational assistant (read-only).
+			r.Get("/assistant/status", assistantHandler.Status)
+			r.Post("/assistant/chat", assistantHandler.Chat)
 
 			// Payouts — ledger-backed outbound payments over pluggable rails.
 			r.Get("/payouts/rails", payoutHandler.Rails)
