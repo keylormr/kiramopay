@@ -19,7 +19,7 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 
 | # | Mejora | Esfuerzo | Bloqueos | Valor |
 |---|---|---|---|---|
-| 1 | Frontend de escrow + API keys (Fase C) | M | requiere deploy de migraciones 029–031 | Alto (cierra el bloque B2B end-to-end) |
+| 1 | ~~Frontend de escrow + API keys (Fase C)~~ ✅ HECHO | M | deploy de migr. para prod | Alto (cierra el bloque B2B end-to-end) |
 | 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
 | 3 | Chatbot conversacional (Gemini) | L | decisión de alcance | Alto (diferenciador de marca) |
 | 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
@@ -30,7 +30,18 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 
 ---
 
-## 1. Frontend de escrow + gestión de API keys (Fase C)
+## 1. Frontend de escrow + gestión de API keys (Fase C) ✅ HECHO
+
+> **Implementado.** Repos+adapters HTTP-only para `escrow` y `b2b` (espejan
+> `mfa`), registrados en el `ApiLayer` (http y mock enrutan al backend real).
+> `src/views/escrow/EscrowView.tsx` (overlay desde Perfil): lista, crear, y
+> acciones según rol/estado (fund/release/refund/dispute/cancel). `ApiKeysSheet`
+> + `WebhooksSheet` (Perfil › Herramientas de comercio): crear/listar/revocar
+> keys y registrar/listar/borrar webhooks, mostrando el secreto **una sola vez**
+> con copy (como los recovery codes de TOTP) + entregas recientes. i18n: 72
+> claves nuevas ×5 idiomas. Tests de adapter (espejan `mfa.http.test.ts`).
+> typecheck/lint/test(341)/build **verdes**. Para verlo en prod: deploy de
+> migraciones 028–032; en local funciona con `VITE_API_URL` al backend.
 
 **Objetivo.** Dar UI a las dos features B2B que ya existen en backend (escrow,
 API keys + webhooks), de modo que un usuario/comercio las use sin curl.
