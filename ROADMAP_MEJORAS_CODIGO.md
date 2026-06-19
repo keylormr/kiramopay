@@ -21,7 +21,7 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 |---|---|---|---|---|
 | 1 | ~~Frontend de escrow + API keys (Fase C)~~ ✅ HECHO | M | deploy de migr. para prod | Alto (cierra el bloque B2B end-to-end) |
 | 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
-| 3 | Chatbot conversacional (Gemini) | L | decisión de alcance | Alto (diferenciador de marca) |
+| 3 | Chatbot Gemini — Fase 3a ✅ HECHO (read-only); falta 3b (acciones c/confirmación) | L | activar `GEMINI_API_KEY` | Alto (diferenciador de marca) |
 | 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
 
 > Empezar por **#1** (producto visible, ya hay backend), intercalar **#2** (rápido
@@ -146,7 +146,23 @@ participante) requieren **contratos/licencias** — fuera de código.
 
 ---
 
-## 3. Chatbot conversacional (Gemini)
+## 3. Chatbot conversacional (Gemini) — Fase 3a ✅ HECHO (read-only)
+
+> **Fase 3a implementada** (read-only). Backend `internal/assistant`: interfaz
+> `LLM` neutral + cliente Gemini `generateContent` con function-calling, **gated
+> por `GEMINI_API_KEY`** (interfaz nil real si falta → el servicio se reporta no
+> disponible, como telemetría). **Tools SOLO lectura** (balance, transacciones,
+> resumen de gasto, presupuestos) → sin tools de escritura, la inyección no puede
+> mover dinero. Loop de tool-calling acotado + system prompt anti-inyección que
+> rehúsa asesoría/mover dinero + audit + límites de tamaño/historial. Endpoints
+> `GET /assistant/status` + `POST /assistant/chat`; config `GEMINI_API_KEY` +
+> `GEMINI_MODEL`. Frontend: repo/adapter HTTP-only + `AssistantView` (chat overlay
+> desde tarjeta en Home, input gated por status) + i18n (10 claves ×5) + tests.
+> Verde: backend build/vet/lint/10 unit (fake LLM); frontend typecheck/lint/build/
+> 345 tests. **Pendiente Fase 3b**: tools de escritura que devuelven una
+> *intención* que el usuario confirma de forma determinista (pasando MFA/límites/
+> fraude); el LLM nunca autoriza. **Activación**: setear `GEMINI_API_KEY` en el
+> backend (sin la var el asistente queda no disponible, sin romper nada).
 
 **Objetivo.** Asistente que vende servicios basado en el usuario (ver
 `ESTRATEGIA_PRODUCTO_MARCA.md` §1): comercio conversacional + cross-sell
