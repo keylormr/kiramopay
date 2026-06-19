@@ -222,9 +222,18 @@ func TestToGeminiContentsRoles(t *testing.T) {
 	}
 }
 
-func TestNewGeminiClientDefaultsModel(t *testing.T) {
-	c := NewGeminiClient("key", "", 0)
-	if c.model != "gemini-2.0-flash" {
-		t.Errorf("default model = %q", c.model)
+func TestNewGeminiClientValidatesModel(t *testing.T) {
+	if c := NewGeminiClient("key", "", 0); c.model != defaultModel {
+		t.Errorf("empty model = %q, want default", c.model)
+	}
+	if c := NewGeminiClient("key", "gemini-2.5-flash", 0); c.model != "gemini-2.5-flash" {
+		t.Errorf("valid model rejected: %q", c.model)
+	}
+	// A model with URL metacharacters is rejected (falls back to default) so it
+	// can never alter the request URL.
+	for _, bad := range []string{"../../evil", "host/path", "a:b", "x?y=1", "http://evil"} {
+		if c := NewGeminiClient("key", bad, 0); c.model != defaultModel {
+			t.Errorf("unsafe model %q accepted as %q", bad, c.model)
+		}
 	}
 }

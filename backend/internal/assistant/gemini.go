@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/kiramopay/backend/internal/observability"
@@ -23,11 +24,18 @@ type GeminiClient struct {
 	client  *http.Client
 }
 
-// NewGeminiClient wires the client. model defaults to a current flash model.
-// The caller must ensure apiKey is non-empty.
+const defaultModel = "gemini-2.0-flash"
+
+// safeModel matches a bare model id (no slashes, no scheme, no URL metacharacters)
+// so the operator-supplied GEMINI_MODEL can only ever be a path segment of the
+// fixed Gemini host — it cannot redirect the request elsewhere.
+var safeModel = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// NewGeminiClient wires the client. model defaults to a current flash model and
+// is allowlist-validated. The caller must ensure apiKey is non-empty.
 func NewGeminiClient(apiKey, model string, timeout time.Duration) *GeminiClient {
-	if model == "" {
-		model = "gemini-2.0-flash"
+	if model == "" || !safeModel.MatchString(model) {
+		model = defaultModel
 	}
 	if timeout <= 0 {
 		timeout = 20 * time.Second
@@ -119,8 +127,11 @@ func (g *GeminiClient) Generate(ctx context.Context, system string, history []Me
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
+	// The host is a hardcoded constant and g.model is allowlist-validated in the
+	// constructor (no slashes/scheme), so the URL cannot be redirected — this is
+	// not user-controllable SSRF.
 	url := fmt.Sprintf("%s/models/%s:generateContent", g.baseURL, g.model)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload)) // #nosec G704 -- fixed host + allowlist-validated model
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -128,7 +139,7 @@ func (g *GeminiClient) Generate(ctx context.Context, system string, history []Me
 	// Header (not query param) so the key never lands in URLs, logs, or spans.
 	httpReq.Header.Set("x-goog-api-key", g.apiKey)
 
-	resp, err := g.client.Do(httpReq)
+	resp, err := g.client.Do(httpReq) // #nosec G704 -- fixed host + allowlist-validated model
 	if err != nil {
 		return nil, fmt.Errorf("gemini request: %w", err)
 	}
