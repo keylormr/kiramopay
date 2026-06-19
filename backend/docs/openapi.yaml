@@ -49,6 +49,8 @@ tags:
     description: Multi-factor authentication (OTP challenges + TOTP authenticator)
   - name: Escrow
     description: Ledger-backed escrow agreements (buyer-funded holds)
+  - name: Payouts
+    description: Ledger-backed outbound payments over pluggable settlement rails
   - name: B2B
     description: Merchant platform — API keys, webhooks and the API-key-authenticated merchant API
   - name: Admin
@@ -1458,6 +1460,85 @@ paths:
         '200':
           description: Resolved
 
+  # ── Payouts (JWT-authenticated) ────────────────────────────────────
+  /api/v1/payouts/rails:
+    get:
+      tags: [Payouts]
+      summary: List the available settlement rails
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: '{ rails: [string] }'
+
+  /api/v1/payouts:
+    post:
+      tags: [Payouts]
+      summary: >-
+        Create and submit a payout (debits the caller → SYSTEM:EXTERNAL:<RAIL>;
+        idempotent on idempotency_key; MFA ≥100K CRC). The response status is
+        the terminal/interim state — completed, processing (settling), or failed
+        (funds already refunded).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayoutCreateRequest'
+      responses:
+        '201':
+          description: Payout created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '400':
+          description: Invalid request / unknown rail
+        '403':
+          description: MFA required
+        '422':
+          description: Insufficient balance
+    get:
+      tags: [Payouts]
+      summary: List the caller's payouts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payout list
+
+  /api/v1/payouts/{id}:
+    get:
+      tags: [Payouts]
+      summary: Get one payout (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Payout
+        '403':
+          description: Not the owner
+
+  /api/v1/payouts/{id}/refresh:
+    post:
+      tags: [Payouts]
+      summary: >-
+        Reconcile a processing payout against its rail (resolve an async
+        settlement to completed/failed). No-op for terminal payouts.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Current payout state
+
   # ── B2B platform management (JWT-authenticated) ────────────────────
   /api/v1/b2b/keys:
     post:
@@ -1473,7 +1554,7 @@ paths:
               type: object
               properties:
                 name: { type: string }
-                scopes: { type: string, description: 'comma-separated; empty = all (escrow:read,escrow:write)' }
+                scopes: { type: string, description: 'comma-separated; empty = all (escrow:read,escrow:write,payout:read,payout:write)' }
       responses:
         '201':
           description: '{ key, full } — store `full` now, it is never shown again'
@@ -1590,6 +1671,32 @@ paths:
         '200':
           description: Agreement list
 
+  /api/b2b/v1/payouts:
+    post:
+      tags: [B2B]
+      summary: Create a payout programmatically (scope payout:write)
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayoutCreateRequest'
+      responses:
+        '201':
+          description: Payout created
+        '403':
+          description: Key lacks payout:write
+    get:
+      tags: [B2B]
+      summary: List the merchant's payouts (scope payout:read)
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Payout list
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1689,6 +1796,42 @@ components:
         status: { type: string, enum: [pending, funded, released, refunded, disputed, cancelled] }
         description: { type: string }
         dispute_reason: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PayoutDestination:
+      type: object
+      required: [account, name]
+      description: Rail-typed beneficiary; each rail reads the fields it needs.
+      properties:
+        type: { type: string, description: 'e.g. bank_account, sinpe_phone, crypto_address' }
+        account: { type: string, description: account number / IBAN / phone / address }
+        name: { type: string, description: beneficiary name }
+        bank: { type: string }
+        country: { type: string, description: ISO-3166 alpha-2 }
+
+    PayoutCreateRequest:
+      type: object
+      required: [rail, amount_minor, destination, idempotency_key]
+      properties:
+        rail: { type: string, description: 'a registered rail name (see GET /payouts/rails)' }
+        amount_minor: { type: integer, format: int64, description: amount in centimos/cents }
+        currency: { type: string, enum: [CRC, USD], default: CRC }
+        destination: { $ref: '#/components/schemas/PayoutDestination' }
+        idempotency_key: { type: string, description: required; makes a retried POST safe }
+
+    Payout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        rail: { type: string }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { type: string, enum: [pending, processing, completed, failed] }
+        destination: { $ref: '#/components/schemas/PayoutDestination' }
+        external_id: { type: string, description: the rail's id, once known }
+        failure_reason: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 

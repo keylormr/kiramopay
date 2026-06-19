@@ -20,7 +20,7 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 | # | Mejora | Esfuerzo | Bloqueos | Valor |
 |---|---|---|---|---|
 | 1 | Frontend de escrow + API keys (Fase C) | M | requiere deploy de migraciones 029–031 | Alto (cierra el bloque B2B end-to-end) |
-| 2 | `PayoutRail` + adapter mock | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
+| 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
 | 3 | Chatbot conversacional (Gemini) | L | decisión de alcance | Alto (diferenciador de marca) |
 | 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
 
@@ -82,7 +82,22 @@ al backend, funciona sin deploy.
 
 ---
 
-## 2. `PayoutRail` — interfaz de rieles de pago + adapter mock
+## 2. `PayoutRail` — interfaz de rieles de pago + adapter mock ✅ HECHO
+
+> **Implementado** (dominio `backend/internal/payout`). Quedó: interfaz `Rail`
+> (`Send`/`Status`/`Name`) + `Registry` + `MockRail` determinista; payouts
+> ledger-backed (débito user / crédito `SYSTEM:EXTERNAL:<RAIL>:<CUR>`) con el
+> patrón claim→post→compensación de escrow; idempotencia por
+> `(user, idempotency_key)` y claves de ledger `payout:{debit,refund}:<id>`;
+> manejo **seguro ante doble-pago** (error de transporte ambiguo NO reembolsa,
+> lo resuelve el poller; rechazo definitivo sí reembolsa, reclamando `failed`
+> antes de postear); gates MFA ≥100K + reporte UIF + audit por transición +
+> eventos `payout.*` a webhooks + historial en `transactions`. Endpoints
+> `/api/v1/payouts*` (+ `GET /payouts/rails`) y B2B `/api/b2b/v1/payouts` con
+> scopes nuevos `payout:read|write`. Poller de liquidación en background
+> (reconcilia/auto-sana procesando). Migración **032** (cuentas MOCK + tabla
+> `payouts`). Tests unit + integración + openapi documentado. Sumar un riel real
+> = registrar el adapter + sembrar sus cuentas `SYSTEM:EXTERNAL:<RAIL>:<CUR>`.
 
 **Objetivo.** Dejar lista la **interoperabilidad de transferencias** (ver
 `ESTRATEGIA_PRODUCTO_MARCA.md` §2): una abstracción de "riel de pago" para que
@@ -205,9 +220,9 @@ código (dashboards + reglas + SLO) se puede versionar igual.
 ## Notas de estado (para arrancar en frío)
 
 - **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029
-  (escrow), 030 (B2B), 031 (scopes/secret TEXT)** → `RUN_MIGRATIONS=true` en
-  Render y quitar. Afecta a la Fase C (verla en prod) y a cualquier prueba en
-  prod de escrow/B2B.
+  (escrow), 030 (B2B), 031 (scopes/secret TEXT), 032 (payouts)** →
+  `RUN_MIGRATIONS=true` en Render y quitar. Afecta a la Fase C (verla en prod) y
+  a cualquier prueba en prod de escrow/B2B/payouts.
 - **DR pendiente de activación** (manual, sin costo): bucket + 6 secrets +
   `BACKUPS_ENABLED=true` (ver `DR_RUNBOOK.md`).
 - **Entorno backend local**: Go portable 1.23.4 con `GOTOOLCHAIN=go1.25.11`;
