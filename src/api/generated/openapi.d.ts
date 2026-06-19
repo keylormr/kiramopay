@@ -3645,6 +3645,200 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payouts/rails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the available settlement rails */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description { rails: [string] } */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's payouts */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Payout list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create and submit a payout (debits the caller → SYSTEM:EXTERNAL:<RAIL>; idempotent on idempotency_key; MFA ≥100K CRC). The response status is the terminal/interim state — completed, processing (settling), or failed (funds already refunded). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PayoutCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Payout created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Payout"];
+                    };
+                };
+                /** @description Invalid request / unknown rail */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MFA required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Insufficient balance */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payouts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one payout (owner only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Payout */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not the owner */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payouts/{id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconcile a processing payout against its rail (resolve an async settlement to completed/failed). No-op for terminal payouts. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current payout state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/b2b/keys": {
         parameters: {
             query?: never;
@@ -3684,7 +3878,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         name?: string;
-                        /** @description comma-separated; empty = all (escrow:read,escrow:write) */
+                        /** @description comma-separated; empty = all (escrow:read,escrow:write,payout:read,payout:write) */
                         scopes?: string;
                     };
                 };
@@ -3972,6 +4166,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/b2b/v1/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the merchant's payouts (scope payout:read) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Payout list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create a payout programmatically (scope payout:write) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PayoutCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Payout created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Key lacks payout:write */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4005,6 +4262,55 @@ export interface components {
             status?: "pending" | "funded" | "released" | "refunded" | "disputed" | "cancelled";
             description?: string;
             dispute_reason?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
+        PayoutDestination: {
+            /** @description e.g. bank_account, sinpe_phone, crypto_address */
+            type?: string;
+            /** @description account number / IBAN / phone / address */
+            account: string;
+            /** @description beneficiary name */
+            name: string;
+            bank?: string;
+            /** @description ISO-3166 alpha-2 */
+            country?: string;
+        };
+        PayoutCreateRequest: {
+            /** @description a registered rail name (see GET /payouts/rails) */
+            rail: string;
+            /**
+             * Format: int64
+             * @description amount in centimos/cents
+             */
+            amount_minor: number;
+            /**
+             * @default CRC
+             * @enum {string}
+             */
+            currency: "CRC" | "USD";
+            destination: components["schemas"]["PayoutDestination"];
+            /** @description required; makes a retried POST safe */
+            idempotency_key: string;
+        };
+        Payout: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            user_id?: string;
+            rail?: string;
+            /** Format: int64 */
+            amount_minor?: number;
+            currency?: string;
+            /** @enum {string} */
+            status?: "pending" | "processing" | "completed" | "failed";
+            destination?: components["schemas"]["PayoutDestination"];
+            /** @description the rail's id */
+            external_id?: string;
+            failure_reason?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

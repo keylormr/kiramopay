@@ -513,6 +513,79 @@ type TranslationKeys = {
   home_loyalty: string;
   home_loyalty_view: string;
   home_loyalty_desc: string;
+  // Phase F — escrow + API keys + webhooks
+  merchant_tools: string;
+  escrow_menu: string;
+  escrow_menu_desc: string;
+  apikeys_menu: string;
+  apikeys_menu_desc: string;
+  webhooks_menu: string;
+  webhooks_menu_desc: string;
+  escrow_title: string;
+  escrow_subtitle: string;
+  escrow_empty: string;
+  escrow_empty_desc: string;
+  escrow_new: string;
+  escrow_create_title: string;
+  escrow_seller: string;
+  escrow_seller_hint: string;
+  escrow_amount: string;
+  escrow_desc_label: string;
+  escrow_desc_hint: string;
+  escrow_create_btn: string;
+  escrow_role_buyer: string;
+  escrow_role_seller: string;
+  escrow_you_buyer: string;
+  escrow_you_seller: string;
+  escrow_status_pending: string;
+  escrow_status_funded: string;
+  escrow_status_released: string;
+  escrow_status_refunded: string;
+  escrow_status_disputed: string;
+  escrow_status_cancelled: string;
+  escrow_fund: string;
+  escrow_release: string;
+  escrow_refund: string;
+  escrow_dispute: string;
+  escrow_cancel_agreement: string;
+  escrow_dispute_title: string;
+  escrow_dispute_reason: string;
+  escrow_dispute_submit: string;
+  escrow_action_failed: string;
+  apikeys_title: string;
+  apikeys_desc: string;
+  apikeys_empty: string;
+  apikeys_new: string;
+  apikeys_name: string;
+  apikeys_name_hint: string;
+  apikeys_scopes: string;
+  apikeys_create_btn: string;
+  apikeys_full_title: string;
+  apikeys_full_desc: string;
+  apikeys_copy: string;
+  apikeys_copied: string;
+  apikeys_done: string;
+  apikeys_revoke: string;
+  apikeys_revoke_confirm: string;
+  apikeys_revoked: string;
+  apikeys_active: string;
+  apikeys_created: string;
+  webhooks_title: string;
+  webhooks_desc: string;
+  webhooks_empty: string;
+  webhooks_new: string;
+  webhooks_url: string;
+  webhooks_events: string;
+  webhooks_events_hint: string;
+  webhooks_create_btn: string;
+  webhooks_secret_title: string;
+  webhooks_secret_desc: string;
+  webhooks_delete: string;
+  webhooks_delete_confirm: string;
+  webhooks_deliveries: string;
+  webhooks_no_deliveries: string;
+  webhooks_active: string;
+  webhooks_disabled: string;
 };
 
 const translations: Record<Language, TranslationKeys> = {
@@ -983,6 +1056,79 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Puntos',
     home_loyalty_view: 'Recompensas',
     home_loyalty_desc: 'Gana y canjea puntos',
+    // Phase F — escrow + API keys + webhooks
+    merchant_tools: 'Herramientas de comercio',
+    escrow_menu: 'Pagos protegidos',
+    escrow_menu_desc: 'Acuerdos con garantía (escrow)',
+    apikeys_menu: 'Claves API',
+    apikeys_menu_desc: 'Acceso programático para comercios',
+    webhooks_menu: 'Webhooks',
+    webhooks_menu_desc: 'Notificaciones de eventos',
+    escrow_title: 'Pagos protegidos',
+    escrow_subtitle: 'El dinero se retiene de forma segura hasta que ambas partes cumplan',
+    escrow_empty: 'Aún no tienes acuerdos',
+    escrow_empty_desc: 'Crea un acuerdo para retener un pago de forma segura',
+    escrow_new: 'Nuevo acuerdo',
+    escrow_create_title: 'Crear acuerdo',
+    escrow_seller: 'ID del vendedor',
+    escrow_seller_hint: 'UUID del usuario que recibirá el pago',
+    escrow_amount: 'Monto',
+    escrow_desc_label: 'Descripción',
+    escrow_desc_hint: '¿Qué se está comprando?',
+    escrow_create_btn: 'Crear acuerdo',
+    escrow_role_buyer: 'Comprador',
+    escrow_role_seller: 'Vendedor',
+    escrow_you_buyer: 'Eres el comprador',
+    escrow_you_seller: 'Eres el vendedor',
+    escrow_status_pending: 'Pendiente',
+    escrow_status_funded: 'Fondeado',
+    escrow_status_released: 'Liberado',
+    escrow_status_refunded: 'Reembolsado',
+    escrow_status_disputed: 'En disputa',
+    escrow_status_cancelled: 'Cancelado',
+    escrow_fund: 'Fondear',
+    escrow_release: 'Liberar al vendedor',
+    escrow_refund: 'Reembolsar al comprador',
+    escrow_dispute: 'Abrir disputa',
+    escrow_cancel_agreement: 'Cancelar acuerdo',
+    escrow_dispute_title: 'Abrir disputa',
+    escrow_dispute_reason: 'Motivo',
+    escrow_dispute_submit: 'Enviar disputa',
+    escrow_action_failed: 'No se pudo completar la acción',
+    apikeys_title: 'Claves API',
+    apikeys_desc: 'Autentican el acceso programático a tu cuenta',
+    apikeys_empty: 'No tienes claves',
+    apikeys_new: 'Crear clave',
+    apikeys_name: 'Nombre',
+    apikeys_name_hint: 'Para identificarla (ej. "Tienda en línea")',
+    apikeys_scopes: 'Permisos',
+    apikeys_create_btn: 'Crear clave',
+    apikeys_full_title: 'Guarda tu clave',
+    apikeys_full_desc: 'Esta es la única vez que se mostrará. Guárdala en un lugar seguro.',
+    apikeys_copy: 'Copiar',
+    apikeys_copied: 'Copiada',
+    apikeys_done: 'Listo',
+    apikeys_revoke: 'Revocar',
+    apikeys_revoke_confirm: '¿Revocar esta clave? Dejará de funcionar de inmediato.',
+    apikeys_revoked: 'Revocada',
+    apikeys_active: 'Activa',
+    apikeys_created: 'Creada',
+    webhooks_title: 'Webhooks',
+    webhooks_desc: 'Recibe notificaciones de eventos firmadas',
+    webhooks_empty: 'No tienes webhooks',
+    webhooks_new: 'Agregar webhook',
+    webhooks_url: 'URL del endpoint',
+    webhooks_events: 'Eventos',
+    webhooks_events_hint: 'Separados por coma, o * para todos',
+    webhooks_create_btn: 'Registrar webhook',
+    webhooks_secret_title: 'Guarda tu secreto',
+    webhooks_secret_desc: 'Úsalo para verificar la firma. Solo se muestra una vez.',
+    webhooks_delete: 'Eliminar',
+    webhooks_delete_confirm: '¿Eliminar este webhook?',
+    webhooks_deliveries: 'Entregas recientes',
+    webhooks_no_deliveries: 'Sin entregas todavía',
+    webhooks_active: 'Activo',
+    webhooks_disabled: 'Deshabilitado',
   },
 
   en: {
@@ -1452,6 +1598,79 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Points',
     home_loyalty_view: 'Rewards',
     home_loyalty_desc: 'Earn and redeem points',
+    // Phase F — escrow + API keys + webhooks
+    merchant_tools: 'Merchant tools',
+    escrow_menu: 'Protected payments',
+    escrow_menu_desc: 'Escrow agreements',
+    apikeys_menu: 'API keys',
+    apikeys_menu_desc: 'Programmatic merchant access',
+    webhooks_menu: 'Webhooks',
+    webhooks_menu_desc: 'Event notifications',
+    escrow_title: 'Protected payments',
+    escrow_subtitle: 'Funds are held safely until both parties are satisfied',
+    escrow_empty: 'No agreements yet',
+    escrow_empty_desc: 'Create an agreement to hold a payment safely',
+    escrow_new: 'New agreement',
+    escrow_create_title: 'Create agreement',
+    escrow_seller: 'Seller ID',
+    escrow_seller_hint: 'UUID of the user who will receive the payment',
+    escrow_amount: 'Amount',
+    escrow_desc_label: 'Description',
+    escrow_desc_hint: 'What is being purchased?',
+    escrow_create_btn: 'Create agreement',
+    escrow_role_buyer: 'Buyer',
+    escrow_role_seller: 'Seller',
+    escrow_you_buyer: 'You are the buyer',
+    escrow_you_seller: 'You are the seller',
+    escrow_status_pending: 'Pending',
+    escrow_status_funded: 'Funded',
+    escrow_status_released: 'Released',
+    escrow_status_refunded: 'Refunded',
+    escrow_status_disputed: 'Disputed',
+    escrow_status_cancelled: 'Cancelled',
+    escrow_fund: 'Fund',
+    escrow_release: 'Release to seller',
+    escrow_refund: 'Refund to buyer',
+    escrow_dispute: 'Open dispute',
+    escrow_cancel_agreement: 'Cancel agreement',
+    escrow_dispute_title: 'Open dispute',
+    escrow_dispute_reason: 'Reason',
+    escrow_dispute_submit: 'Submit dispute',
+    escrow_action_failed: 'Could not complete the action',
+    apikeys_title: 'API keys',
+    apikeys_desc: 'Authenticate programmatic access to your account',
+    apikeys_empty: 'No keys yet',
+    apikeys_new: 'Create key',
+    apikeys_name: 'Name',
+    apikeys_name_hint: 'To identify it (e.g. "Online store")',
+    apikeys_scopes: 'Scopes',
+    apikeys_create_btn: 'Create key',
+    apikeys_full_title: 'Save your key',
+    apikeys_full_desc: 'This is the only time it will be shown. Store it somewhere safe.',
+    apikeys_copy: 'Copy',
+    apikeys_copied: 'Copied',
+    apikeys_done: 'Done',
+    apikeys_revoke: 'Revoke',
+    apikeys_revoke_confirm: 'Revoke this key? It will stop working immediately.',
+    apikeys_revoked: 'Revoked',
+    apikeys_active: 'Active',
+    apikeys_created: 'Created',
+    webhooks_title: 'Webhooks',
+    webhooks_desc: 'Receive signed event notifications',
+    webhooks_empty: 'No webhooks yet',
+    webhooks_new: 'Add webhook',
+    webhooks_url: 'Endpoint URL',
+    webhooks_events: 'Events',
+    webhooks_events_hint: 'Comma-separated, or * for all',
+    webhooks_create_btn: 'Register webhook',
+    webhooks_secret_title: 'Save your secret',
+    webhooks_secret_desc: 'Use it to verify the signature. Shown only once.',
+    webhooks_delete: 'Delete',
+    webhooks_delete_confirm: 'Delete this webhook?',
+    webhooks_deliveries: 'Recent deliveries',
+    webhooks_no_deliveries: 'No deliveries yet',
+    webhooks_active: 'Active',
+    webhooks_disabled: 'Disabled',
   },
 
   'zh-tw': {
@@ -1913,6 +2132,79 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: '積分',
     home_loyalty_view: '獎勵',
     home_loyalty_desc: '賺取和兌換積分',
+    // Phase F — escrow + API keys + webhooks
+    merchant_tools: '商家工具',
+    escrow_menu: '保障付款',
+    escrow_menu_desc: '第三方保管協議',
+    apikeys_menu: 'API 金鑰',
+    apikeys_menu_desc: '商家程式化存取',
+    webhooks_menu: 'Webhook',
+    webhooks_menu_desc: '事件通知',
+    escrow_title: '保障付款',
+    escrow_subtitle: '資金將安全保管，直到雙方都滿意為止',
+    escrow_empty: '尚無協議',
+    escrow_empty_desc: '建立協議以安全保管款項',
+    escrow_new: '新增協議',
+    escrow_create_title: '建立協議',
+    escrow_seller: '賣方 ID',
+    escrow_seller_hint: '將收款使用者的 UUID',
+    escrow_amount: '金額',
+    escrow_desc_label: '說明',
+    escrow_desc_hint: '購買的內容是什麼？',
+    escrow_create_btn: '建立協議',
+    escrow_role_buyer: '買方',
+    escrow_role_seller: '賣方',
+    escrow_you_buyer: '您是買方',
+    escrow_you_seller: '您是賣方',
+    escrow_status_pending: '待處理',
+    escrow_status_funded: '已撥款',
+    escrow_status_released: '已放款',
+    escrow_status_refunded: '已退款',
+    escrow_status_disputed: '爭議中',
+    escrow_status_cancelled: '已取消',
+    escrow_fund: '撥款',
+    escrow_release: '放款給賣方',
+    escrow_refund: '退款給買方',
+    escrow_dispute: '提出爭議',
+    escrow_cancel_agreement: '取消協議',
+    escrow_dispute_title: '提出爭議',
+    escrow_dispute_reason: '原因',
+    escrow_dispute_submit: '送出爭議',
+    escrow_action_failed: '無法完成此操作',
+    apikeys_title: 'API 金鑰',
+    apikeys_desc: '驗證對您帳戶的程式化存取',
+    apikeys_empty: '尚無金鑰',
+    apikeys_new: '建立金鑰',
+    apikeys_name: '名稱',
+    apikeys_name_hint: '用於識別（例如「網路商店」）',
+    apikeys_scopes: '權限範圍',
+    apikeys_create_btn: '建立金鑰',
+    apikeys_full_title: '儲存您的金鑰',
+    apikeys_full_desc: '金鑰僅顯示這一次，請妥善保存於安全處。',
+    apikeys_copy: '複製',
+    apikeys_copied: '已複製',
+    apikeys_done: '完成',
+    apikeys_revoke: '撤銷',
+    apikeys_revoke_confirm: '要撤銷此金鑰嗎？將立即停止運作。',
+    apikeys_revoked: '已撤銷',
+    apikeys_active: '使用中',
+    apikeys_created: '建立時間',
+    webhooks_title: 'Webhook',
+    webhooks_desc: '接收已簽署的事件通知',
+    webhooks_empty: '尚無 Webhook',
+    webhooks_new: '新增 Webhook',
+    webhooks_url: '端點網址',
+    webhooks_events: '事件',
+    webhooks_events_hint: '以逗號分隔，或輸入 * 代表全部',
+    webhooks_create_btn: '註冊 Webhook',
+    webhooks_secret_title: '儲存您的密鑰',
+    webhooks_secret_desc: '用於驗證簽章。僅顯示一次。',
+    webhooks_delete: '刪除',
+    webhooks_delete_confirm: '要刪除此 Webhook 嗎？',
+    webhooks_deliveries: '最近的傳送紀錄',
+    webhooks_no_deliveries: '尚無傳送紀錄',
+    webhooks_active: '使用中',
+    webhooks_disabled: '已停用',
   },
 
   ja: {
@@ -2374,6 +2666,79 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'ポイント',
     home_loyalty_view: '特典',
     home_loyalty_desc: 'ポイントを貯めて交換',
+    // Phase F — escrow + API keys + webhooks
+    merchant_tools: '加盟店ツール',
+    escrow_menu: 'エスクロー決済',
+    escrow_menu_desc: 'エスクロー契約',
+    apikeys_menu: 'APIキー',
+    apikeys_menu_desc: 'プログラムによる加盟店アクセス',
+    webhooks_menu: 'Webhook',
+    webhooks_menu_desc: 'イベント通知',
+    escrow_title: 'エスクロー決済',
+    escrow_subtitle: '双方が合意するまで資金を安全に保管します',
+    escrow_empty: '契約はまだありません',
+    escrow_empty_desc: '契約を作成して支払いを安全に保管しましょう',
+    escrow_new: '新規契約',
+    escrow_create_title: '契約の作成',
+    escrow_seller: '販売者ID',
+    escrow_seller_hint: '支払いを受け取るユーザーのUUID',
+    escrow_amount: '金額',
+    escrow_desc_label: '説明',
+    escrow_desc_hint: '何を購入しますか？',
+    escrow_create_btn: '契約を作成',
+    escrow_role_buyer: '購入者',
+    escrow_role_seller: '販売者',
+    escrow_you_buyer: 'あなたは購入者です',
+    escrow_you_seller: 'あなたは販売者です',
+    escrow_status_pending: '保留中',
+    escrow_status_funded: '入金済み',
+    escrow_status_released: '支払い完了',
+    escrow_status_refunded: '返金済み',
+    escrow_status_disputed: '異議申立中',
+    escrow_status_cancelled: 'キャンセル済み',
+    escrow_fund: '入金',
+    escrow_release: '販売者へ支払う',
+    escrow_refund: '購入者へ返金',
+    escrow_dispute: '異議を申し立てる',
+    escrow_cancel_agreement: '契約をキャンセル',
+    escrow_dispute_title: '異議の申立て',
+    escrow_dispute_reason: '理由',
+    escrow_dispute_submit: '異議を送信',
+    escrow_action_failed: '操作を完了できませんでした',
+    apikeys_title: 'APIキー',
+    apikeys_desc: 'アカウントへのプログラムアクセスを認証します',
+    apikeys_empty: 'キーはまだありません',
+    apikeys_new: 'キーを作成',
+    apikeys_name: '名前',
+    apikeys_name_hint: '識別用（例：「オンラインストア」）',
+    apikeys_scopes: 'スコープ',
+    apikeys_create_btn: 'キーを作成',
+    apikeys_full_title: 'キーを保存してください',
+    apikeys_full_desc: '表示されるのはこの一度きりです。安全な場所に保管してください。',
+    apikeys_copy: 'コピー',
+    apikeys_copied: 'コピーしました',
+    apikeys_done: '完了',
+    apikeys_revoke: '無効化',
+    apikeys_revoke_confirm: 'このキーを無効化しますか？すぐに使用できなくなります。',
+    apikeys_revoked: '無効化済み',
+    apikeys_active: '有効',
+    apikeys_created: '作成日',
+    webhooks_title: 'Webhook',
+    webhooks_desc: '署名付きのイベント通知を受信します',
+    webhooks_empty: 'Webhookはまだありません',
+    webhooks_new: 'Webhookを追加',
+    webhooks_url: 'エンドポイントURL',
+    webhooks_events: 'イベント',
+    webhooks_events_hint: 'カンマ区切り、またはすべての場合は *',
+    webhooks_create_btn: 'Webhookを登録',
+    webhooks_secret_title: 'シークレットを保存してください',
+    webhooks_secret_desc: '署名の検証に使用します。表示は一度きりです。',
+    webhooks_delete: '削除',
+    webhooks_delete_confirm: 'このWebhookを削除しますか？',
+    webhooks_deliveries: '最近の配信',
+    webhooks_no_deliveries: '配信はまだありません',
+    webhooks_active: '有効',
+    webhooks_disabled: '無効',
   },
 
   hi: {
@@ -2835,6 +3200,79 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'पॉइंट्स',
     home_loyalty_view: 'रिवॉर्ड्स',
     home_loyalty_desc: 'पॉइंट्स कमाएं और रिडीम करें',
+    // Phase F — escrow + API keys + webhooks
+    merchant_tools: 'मर्चेंट टूल्स',
+    escrow_menu: 'सुरक्षित भुगतान',
+    escrow_menu_desc: 'एस्क्रो समझौते',
+    apikeys_menu: 'API कीज़',
+    apikeys_menu_desc: 'प्रोग्रामैटिक मर्चेंट एक्सेस',
+    webhooks_menu: 'वेबहुक',
+    webhooks_menu_desc: 'इवेंट सूचनाएँ',
+    escrow_title: 'सुरक्षित भुगतान',
+    escrow_subtitle: 'दोनों पक्षों के संतुष्ट होने तक धनराशि सुरक्षित रखी जाती है',
+    escrow_empty: 'अभी कोई समझौता नहीं',
+    escrow_empty_desc: 'भुगतान सुरक्षित रखने के लिए एक समझौता बनाएँ',
+    escrow_new: 'नया समझौता',
+    escrow_create_title: 'समझौता बनाएँ',
+    escrow_seller: 'विक्रेता ID',
+    escrow_seller_hint: 'भुगतान प्राप्त करने वाले उपयोगकर्ता का UUID',
+    escrow_amount: 'राशि',
+    escrow_desc_label: 'विवरण',
+    escrow_desc_hint: 'क्या खरीदा जा रहा है?',
+    escrow_create_btn: 'समझौता बनाएँ',
+    escrow_role_buyer: 'खरीदार',
+    escrow_role_seller: 'विक्रेता',
+    escrow_you_buyer: 'आप खरीदार हैं',
+    escrow_you_seller: 'आप विक्रेता हैं',
+    escrow_status_pending: 'लंबित',
+    escrow_status_funded: 'वित्तपोषित',
+    escrow_status_released: 'जारी किया गया',
+    escrow_status_refunded: 'वापस किया गया',
+    escrow_status_disputed: 'विवादित',
+    escrow_status_cancelled: 'रद्द किया गया',
+    escrow_fund: 'वित्तपोषित करें',
+    escrow_release: 'विक्रेता को जारी करें',
+    escrow_refund: 'खरीदार को वापस करें',
+    escrow_dispute: 'विवाद खोलें',
+    escrow_cancel_agreement: 'समझौता रद्द करें',
+    escrow_dispute_title: 'विवाद खोलें',
+    escrow_dispute_reason: 'कारण',
+    escrow_dispute_submit: 'विवाद सबमिट करें',
+    escrow_action_failed: 'कार्रवाई पूरी नहीं हो सकी',
+    apikeys_title: 'API कीज़',
+    apikeys_desc: 'अपने खाते तक प्रोग्रामैटिक एक्सेस को प्रमाणित करें',
+    apikeys_empty: 'अभी कोई की नहीं',
+    apikeys_new: 'की बनाएँ',
+    apikeys_name: 'नाम',
+    apikeys_name_hint: 'इसे पहचानने के लिए (जैसे "ऑनलाइन स्टोर")',
+    apikeys_scopes: 'स्कोप',
+    apikeys_create_btn: 'की बनाएँ',
+    apikeys_full_title: 'अपनी की सहेजें',
+    apikeys_full_desc: 'यह केवल एक बार दिखाई देगी। इसे किसी सुरक्षित जगह सहेजें।',
+    apikeys_copy: 'कॉपी करें',
+    apikeys_copied: 'कॉपी हो गई',
+    apikeys_done: 'हो गया',
+    apikeys_revoke: 'रद्द करें',
+    apikeys_revoke_confirm: 'यह की रद्द करें? यह तुरंत काम करना बंद कर देगी।',
+    apikeys_revoked: 'रद्द कर दी गई',
+    apikeys_active: 'सक्रिय',
+    apikeys_created: 'बनाई गई',
+    webhooks_title: 'वेबहुक',
+    webhooks_desc: 'हस्ताक्षरित इवेंट सूचनाएँ प्राप्त करें',
+    webhooks_empty: 'अभी कोई वेबहुक नहीं',
+    webhooks_new: 'वेबहुक जोड़ें',
+    webhooks_url: 'एंडपॉइंट URL',
+    webhooks_events: 'इवेंट्स',
+    webhooks_events_hint: 'कॉमा से अलग करें, या सभी के लिए *',
+    webhooks_create_btn: 'वेबहुक रजिस्टर करें',
+    webhooks_secret_title: 'अपना सीक्रेट सहेजें',
+    webhooks_secret_desc: 'हस्ताक्षर सत्यापित करने के लिए इसका उपयोग करें। केवल एक बार दिखाया जाएगा।',
+    webhooks_delete: 'हटाएँ',
+    webhooks_delete_confirm: 'यह वेबहुक हटाएँ?',
+    webhooks_deliveries: 'हाल की डिलीवरी',
+    webhooks_no_deliveries: 'अभी कोई डिलीवरी नहीं',
+    webhooks_active: 'सक्रिय',
+    webhooks_disabled: 'अक्षम',
   },
 };
 

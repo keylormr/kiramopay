@@ -15,11 +15,15 @@ import type { ICardsRepository } from './repositories/cards.repository';
 import type { ICountryRepository } from './repositories/country.repository';
 import type { IBudgetRepository } from './repositories/budget.repository';
 import type { IRecurringRepository } from './repositories/recurring.repository';
+import type { IEscrowRepository } from './repositories/escrow.repository';
+import type { IB2BRepository } from './repositories/b2b.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
 import { HttpAuthRepository } from './adapters/http/auth.http';
 import { HttpMfaRepository } from './adapters/http/mfa.http';
+import { HttpEscrowRepository } from './adapters/http/escrow.http';
+import { HttpB2BRepository } from './adapters/http/b2b.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -33,6 +37,9 @@ export interface ApiLayer {
   settings: ISettingsRepository;
   budgets: IBudgetRepository;
   recurring: IRecurringRepository;
+  // Phase F — B2B / escrow (HTTP-only, like mfa)
+  escrow: IEscrowRepository;
+  b2b: IB2BRepository;
   // Phase 5
   marketplace?: IMarketplaceRepository;
   loyalty?: ILoyaltyRepository;
@@ -57,12 +64,14 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
     return createHttpApiLayer(baseUrl);
   }
 
-  // Mock mode: auth + MFA ALWAYS go through the real backend (DB).
-  // Other repos use localStorage mock adapters.
+  // Mock mode: auth + MFA + escrow + B2B ALWAYS go through the real backend
+  // (DB / money). Other repos use localStorage mock adapters.
   const client = new HttpClient(baseUrl);
   const httpAuth = new HttpAuthRepository(client);
   const httpMfa = new HttpMfaRepository(client);
-  return createMockApiLayer(httpAuth, httpMfa);
+  const httpEscrow = new HttpEscrowRepository(client);
+  const httpB2B = new HttpB2BRepository(client);
+  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpB2B);
 }
 
 export function getApiLayer(): ApiLayer {
@@ -100,3 +109,19 @@ export type { ICardsRepository } from './repositories/cards.repository';
 export type { ICountryRepository } from './repositories/country.repository';
 export type { IBudgetRepository } from './repositories/budget.repository';
 export type { IRecurringRepository } from './repositories/recurring.repository';
+export type {
+  IEscrowRepository,
+  EscrowAgreement,
+  EscrowStatus,
+  CreateEscrowRequest,
+} from './repositories/escrow.repository';
+export type {
+  IB2BRepository,
+  ApiKey,
+  CreateApiKeyResult,
+  WebhookEndpoint,
+  CreateWebhookResult,
+  WebhookDelivery,
+  B2BScope,
+} from './repositories/b2b.repository';
+export { B2B_SCOPES } from './repositories/b2b.repository';

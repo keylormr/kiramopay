@@ -5,14 +5,17 @@ import { getApiLayer } from '@/api';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
+import { ApiKeysSheet } from './ApiKeysSheet';
+import { WebhooksSheet } from './WebhooksSheet';
 import { APP_VERSION, getVersionString, getAllVersions } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 interface ProfileViewProps {
   onOpenFAQ?: () => void;
+  onOpenEscrow?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow }) => {
   const { state, dispatch } = useApp();
   const { t, language, setLanguage, languages, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
@@ -21,6 +24,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
   const [showLanguageSheet, setShowLanguageSheet] = useState(false);
   const [showBiometricConfirmSheet, setShowBiometricConfirmSheet] = useState(false);
   const [showTwoFactorSheet, setShowTwoFactorSheet] = useState(false);
+  const [showApiKeysSheet, setShowApiKeysSheet] = useState(false);
+  const [showWebhooksSheet, setShowWebhooksSheet] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -283,6 +288,56 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('lock_app')}</p>
               <p className="text-xs uv-text-muted mt-0.5">{t('lock_now')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+        </div>
+      </div>
+
+      {/* Merchant tools Section */}
+      <div>
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+          {t('merchant_tools')}
+        </h3>
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          <button
+            onClick={() => onOpenEscrow?.()}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Shield size={18} className="text-teal-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('escrow_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('escrow_menu_desc')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
+          <button
+            onClick={() => setShowApiKeysSheet(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Lock size={18} className="text-amber-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('apikeys_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('apikeys_menu_desc')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
+          <button
+            onClick={() => setShowWebhooksSheet(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Globe size={18} className="text-violet-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('webhooks_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('webhooks_menu_desc')}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -655,6 +710,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ }) => {
         onClose={() => setShowTwoFactorSheet(false)}
         onStatusChange={setTwoFactorEnabled}
       />
+
+      {/* Merchant API keys + webhooks */}
+      <ApiKeysSheet isOpen={showApiKeysSheet} onClose={() => setShowApiKeysSheet(false)} />
+      <WebhooksSheet isOpen={showWebhooksSheet} onClose={() => setShowWebhooksSheet(false)} />
 
       {/* About Sheet */}
       <BottomSheet
