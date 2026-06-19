@@ -21,7 +21,7 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 |---|---|---|---|---|
 | 1 | ~~Frontend de escrow + API keys (Fase C)~~ ✅ HECHO | M | deploy de migr. para prod | Alto (cierra el bloque B2B end-to-end) |
 | 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
-| 3 | Chatbot Gemini — Fase 3a ✅ HECHO (read-only); falta 3b (acciones c/confirmación) | L | activar `GEMINI_API_KEY` | Alto (diferenciador de marca) |
+| 3 | ~~Chatbot Gemini — Fases 3a + 3b~~ ✅ HECHO | L | activar `GEMINI_API_KEY` | Alto (diferenciador de marca) |
 | 4 | ~~Dashboards Grafana + alerting + SLOs (Fase D)~~ ✅ HECHO (código) | M | infra (Prometheus/Grafana/AM) para datos reales | Medio (operación) |
 
 > Empezar por **#1** (producto visible, ya hay backend), intercalar **#2** (rápido
@@ -146,7 +146,19 @@ participante) requieren **contratos/licencias** — fuera de código.
 
 ---
 
-## 3. Chatbot conversacional (Gemini) — Fase 3a ✅ HECHO (read-only)
+## 3. Chatbot conversacional (Gemini) — Fases 3a + 3b ✅ HECHO
+
+> **Fase 3b implementada** (acciones con confirmación). Tools `propose_sinpe_transfer`
+> / `propose_bill_payment` / `propose_recharge` (+ `list_saved_services` read-only):
+> el LLM **prepara** una intención validada y la devuelve como *proposal*; **nunca
+> ejecuta ni confirma**. `Tools.Invoke` devuelve un `*Proposal` opcional que el
+> orquestador acumula en `ChatResponse.Proposals` sin tocar ningún servicio de
+> dinero. El frontend (`AssistantView`) muestra una **tarjeta de confirmación** por
+> propuesta; al confirmar, llama al endpoint real existente (`sinpe.send` /
+> `services.payBill` / `services.recharge`) con todos sus gates (MFA/límites/
+> fraude). System prompt reforzado (no ejecuta, no auto-confirma, no adivina
+> montos/destinatarios; rehúsa inyección). Verde: backend tests (incl. "el dinero
+> nunca se mueve") + gosec 0; frontend 347 tests.
 
 > **Fase 3a implementada** (read-only). Backend `internal/assistant`: interfaz
 > `LLM` neutral + cliente Gemini `generateContent` con function-calling, **gated
