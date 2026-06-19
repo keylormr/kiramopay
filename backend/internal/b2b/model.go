@@ -34,10 +34,14 @@ type APIKey struct {
 const (
 	ScopeEscrowRead  = "escrow:read"
 	ScopeEscrowWrite = "escrow:write"
+	ScopePayoutRead  = "payout:read"
+	ScopePayoutWrite = "payout:write"
 )
 
 // AllScopes is the valid-scope allowlist (also the default for new keys).
-var AllScopes = []string{ScopeEscrowRead, ScopeEscrowWrite}
+// Existing keys keep their stored scope set; only keys created with an empty
+// scope list (the v1 "grant everything" default) pick up newly added scopes.
+var AllScopes = []string{ScopeEscrowRead, ScopeEscrowWrite, ScopePayoutRead, ScopePayoutWrite}
 
 // NormalizeScopes validates and canonicalizes a comma-separated scope list.
 // Empty input grants every scope (sensible default for v1 keys).

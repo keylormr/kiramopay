@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/kiramopay/backend/internal/assistant"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
@@ -37,6 +38,7 @@ import (
 	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/observability"
 	"github.com/kiramopay/backend/internal/payment"
+	"github.com/kiramopay/backend/internal/payout"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
 	"github.com/kiramopay/backend/internal/recurring"
@@ -194,6 +196,23 @@ func main() {
 		History:     txService,  // fund/release/refund visible in tx history
 		AuditLogger: auditLogger,
 	})
+	// Payouts — ledger-backed outbound payments over pluggable rails. Only the
+	// deterministic mock rail is registered today; real rails (SINPE
+	// participant, dLocal, Circle/USDC) are added by registering an adapter and
+	// seeding its SYSTEM:EXTERNAL:<RAIL>:<CUR> accounts.
+	payoutRegistry := payout.NewRegistry()
+	if err := payoutRegistry.Register(payout.NewMockRail()); err != nil {
+		log.Fatalf("register mock payout rail: %v", err)
+	}
+	payoutRepo := payout.NewRepository(pool)
+	payoutService := payout.NewService(payoutRepo, ledgerEngine, payoutRegistry, &payout.Options{
+		MFA:         mfaSvc,
+		UIF:         uifService,
+		Events:      b2bService, // payout lifecycle → merchant webhooks
+		History:     txService,  // payout_sent / payout_refund visible in tx history
+		AuditLogger: auditLogger,
+		Logger:      logger,
+	})
 	paymentService := payment.NewService(paymentRepo, txService)
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
 
@@ -207,6 +226,19 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 
+	// Conversational assistant (read-only). The LLM stays a true nil interface
+	// when GEMINI_API_KEY is unset, so the service reports itself unavailable
+	// instead of wrapping a nil pointer.
+	var assistantLLM assistant.LLM
+	if cfg.Gemini.APIKey != "" {
+		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
+	}
+	assistantService := assistant.NewService(
+		assistantLLM,
+		assistant.NewTools(walletService, txService, budgetService),
+		auditLogger,
+	)
+
 	// ── Handlers ─────────────────────────────────────────────────────────
 	authHandler := auth.NewHandler(authService)
 	userHandler := user.NewHandler(userService)
@@ -217,6 +249,8 @@ func main() {
 	cryptoHandler := crypto.NewHandler(cryptoService)
 	mfaHandler := mfa.NewHandler(mfaSvc)
 	escrowHandler := escrow.NewHandler(escrowService)
+	payoutHandler := payout.NewHandler(payoutService)
+	assistantHandler := assistant.NewHandler(assistantService)
 	b2bHandler := b2b.NewHandler(b2bService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
@@ -258,6 +292,15 @@ func main() {
 	dispatcherCtx, dispatcherCancel := context.WithCancel(context.Background())
 	defer dispatcherCancel()
 	go webhookDispatcher.Run(dispatcherCtx)
+
+	// ── Payout settlement poller ─────────────────────────────────────────
+	// Reconciles processing payouts against their rail: drives async
+	// settlements to terminal and self-heals any payout that crashed between
+	// its debit and its Send (Rail.Send is idempotent, so re-dispatch is safe).
+	payoutPoller := payout.NewPoller(payoutService, 30*time.Second, logger)
+	payoutPollerCtx, payoutPollerCancel := context.WithCancel(context.Background())
+	defer payoutPollerCancel()
+	go payoutPoller.Run(payoutPollerCtx)
 
 	// Router
 	r := chi.NewRouter()
@@ -394,6 +437,17 @@ func main() {
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
 			r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+
+			// Conversational assistant (read-only).
+			r.Get("/assistant/status", assistantHandler.Status)
+			r.Post("/assistant/chat", assistantHandler.Chat)
+
+			// Payouts — ledger-backed outbound payments over pluggable rails.
+			r.Get("/payouts/rails", payoutHandler.Rails)
+			r.Post("/payouts", payoutHandler.Create)
+			r.Get("/payouts", payoutHandler.List)
+			r.Get("/payouts/{id}", payoutHandler.Get)
+			r.Post("/payouts/{id}/refresh", payoutHandler.Refresh)
 
 			// SINPE
 			r.Get("/sinpe/contacts", sinpeHandler.GetContacts)
@@ -563,6 +617,18 @@ func main() {
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
 			r.Post("/escrow/{id}/cancel", escrowHandler.Cancel)
+		})
+
+		// Payouts, programmatic — read vs write gated by the key's scopes.
+		r.Group(func(r chi.Router) {
+			r.Use(b2b.RequireScope(b2b.ScopePayoutRead))
+			r.Get("/payouts", payoutHandler.List)
+			r.Get("/payouts/{id}", payoutHandler.Get)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(b2b.RequireScope(b2b.ScopePayoutWrite))
+			r.Post("/payouts", payoutHandler.Create)
+			r.Post("/payouts/{id}/refresh", payoutHandler.Refresh)
 		})
 	})
 

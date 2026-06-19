@@ -17,6 +17,9 @@ import { HttpCardsRepository } from './cards.http';
 import { HttpCountryRepository } from './country.http';
 import { HttpBudgetRepository } from './budget.http';
 import { HttpRecurringRepository } from './recurring.http';
+import { HttpEscrowRepository } from './escrow.http';
+import { HttpB2BRepository } from './b2b.http';
+import { HttpAssistantRepository } from './assistant.http';
 
 export function createHttpApiLayer(baseUrl: string): ApiLayer {
   const client = new HttpClient(baseUrl);
@@ -24,6 +27,9 @@ export function createHttpApiLayer(baseUrl: string): ApiLayer {
   return {
     auth: new HttpAuthRepository(client),
     mfa: new HttpMfaRepository(client),
+    escrow: new HttpEscrowRepository(client),
+    b2b: new HttpB2BRepository(client),
+    assistant: new HttpAssistantRepository(client),
     accounts: new HttpAccountRepository(client),
     transactions: new HttpTransactionRepository(client),
     sinpe: new HttpSinpeRepository(client),

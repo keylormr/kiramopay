@@ -225,7 +225,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:RESERVE:CRC',   'reserve',    'CRC', 'debit'),
 		('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit'),
 		('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
-		('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit')
+		('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit'),
+		('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
+		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -283,6 +285,26 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		CHECK (buyer_id <> seller_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS payouts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+		rail VARCHAR(32) NOT NULL,
+		amount_minor BIGINT NOT NULL CHECK (amount_minor > 0),
+		currency VARCHAR(3) NOT NULL DEFAULT 'CRC' CHECK (currency IN ('CRC','USD')),
+		status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN
+			('pending','processing','completed','failed')),
+		destination JSONB NOT NULL,
+		external_id TEXT,
+		failure_reason TEXT,
+		idempotency_key TEXT NOT NULL,
+		processing_at TIMESTAMP,
+		completed_at TIMESTAMP,
+		failed_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		CONSTRAINT uq_payout_idempotency UNIQUE (user_id, idempotency_key)
 	);
 
 	CREATE TABLE IF NOT EXISTS journal_postings (
@@ -574,6 +596,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
 		"escrow_agreements",
+		"payouts",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"mfa_challenges", "password_reset_tokens", "refresh_tokens",
@@ -595,7 +618,9 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 			('SYSTEM:RESERVE:CRC',   'reserve',    'CRC', 'debit'),
 			('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit'),
 			('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
-			('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit')
+			('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit'),
+			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
+			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
 		ON CONFLICT (code) DO NOTHING
 	`)
 }

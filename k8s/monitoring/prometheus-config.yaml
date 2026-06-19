@@ -9,6 +9,11 @@ data:
       scrape_interval: 15s
       evaluation_interval: 15s
 
+    # Alerting rules from the `prometheus-rules` ConfigMap (alert-rules.yaml),
+    # mounted at /etc/prometheus/rules. See SLO.md for the targets behind them.
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
     scrape_configs:
       - job_name: 'kiramopay-api'
         kubernetes_sd_configs:

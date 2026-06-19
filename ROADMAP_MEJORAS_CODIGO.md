@@ -19,10 +19,10 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 
 | # | Mejora | Esfuerzo | Bloqueos | Valor |
 |---|---|---|---|---|
-| 1 | Frontend de escrow + API keys (Fase C) | M | requiere deploy de migraciones 029–031 | Alto (cierra el bloque B2B end-to-end) |
-| 2 | `PayoutRail` + adapter mock | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
-| 3 | Chatbot conversacional (Gemini) | L | decisión de alcance | Alto (diferenciador de marca) |
-| 4 | Dashboards Grafana + alerting + SLOs (Fase D) | M | requiere colector OTLP/infra para datos reales | Medio (operación) |
+| 1 | ~~Frontend de escrow + API keys (Fase C)~~ ✅ HECHO | M | deploy de migr. para prod | Alto (cierra el bloque B2B end-to-end) |
+| 2 | ~~`PayoutRail` + adapter mock~~ ✅ HECHO | S–M | ninguno (mock) | Medio (deja lista la interoperabilidad) |
+| 3 | Chatbot Gemini — Fase 3a ✅ HECHO (read-only); falta 3b (acciones c/confirmación) | L | activar `GEMINI_API_KEY` | Alto (diferenciador de marca) |
+| 4 | ~~Dashboards Grafana + alerting + SLOs (Fase D)~~ ✅ HECHO (código) | M | infra (Prometheus/Grafana/AM) para datos reales | Medio (operación) |
 
 > Empezar por **#1** (producto visible, ya hay backend), intercalar **#2** (rápido
 > y desbloquea narrativa de remesas), luego **#3** (el grande), y **#4** cuando
@@ -30,7 +30,18 @@ de negocio) y `ROADMAP_JPC.md` (la ruta regulatoria, que NO es código).
 
 ---
 
-## 1. Frontend de escrow + gestión de API keys (Fase C)
+## 1. Frontend de escrow + gestión de API keys (Fase C) ✅ HECHO
+
+> **Implementado.** Repos+adapters HTTP-only para `escrow` y `b2b` (espejan
+> `mfa`), registrados en el `ApiLayer` (http y mock enrutan al backend real).
+> `src/views/escrow/EscrowView.tsx` (overlay desde Perfil): lista, crear, y
+> acciones según rol/estado (fund/release/refund/dispute/cancel). `ApiKeysSheet`
+> + `WebhooksSheet` (Perfil › Herramientas de comercio): crear/listar/revocar
+> keys y registrar/listar/borrar webhooks, mostrando el secreto **una sola vez**
+> con copy (como los recovery codes de TOTP) + entregas recientes. i18n: 72
+> claves nuevas ×5 idiomas. Tests de adapter (espejan `mfa.http.test.ts`).
+> typecheck/lint/test(341)/build **verdes**. Para verlo en prod: deploy de
+> migraciones 028–032; en local funciona con `VITE_API_URL` al backend.
 
 **Objetivo.** Dar UI a las dos features B2B que ya existen en backend (escrow,
 API keys + webhooks), de modo que un usuario/comercio las use sin curl.
@@ -82,7 +93,22 @@ al backend, funciona sin deploy.
 
 ---
 
-## 2. `PayoutRail` — interfaz de rieles de pago + adapter mock
+## 2. `PayoutRail` — interfaz de rieles de pago + adapter mock ✅ HECHO
+
+> **Implementado** (dominio `backend/internal/payout`). Quedó: interfaz `Rail`
+> (`Send`/`Status`/`Name`) + `Registry` + `MockRail` determinista; payouts
+> ledger-backed (débito user / crédito `SYSTEM:EXTERNAL:<RAIL>:<CUR>`) con el
+> patrón claim→post→compensación de escrow; idempotencia por
+> `(user, idempotency_key)` y claves de ledger `payout:{debit,refund}:<id>`;
+> manejo **seguro ante doble-pago** (error de transporte ambiguo NO reembolsa,
+> lo resuelve el poller; rechazo definitivo sí reembolsa, reclamando `failed`
+> antes de postear); gates MFA ≥100K + reporte UIF + audit por transición +
+> eventos `payout.*` a webhooks + historial en `transactions`. Endpoints
+> `/api/v1/payouts*` (+ `GET /payouts/rails`) y B2B `/api/b2b/v1/payouts` con
+> scopes nuevos `payout:read|write`. Poller de liquidación en background
+> (reconcilia/auto-sana procesando). Migración **032** (cuentas MOCK + tabla
+> `payouts`). Tests unit + integración + openapi documentado. Sumar un riel real
+> = registrar el adapter + sembrar sus cuentas `SYSTEM:EXTERNAL:<RAIL>:<CUR>`.
 
 **Objetivo.** Dejar lista la **interoperabilidad de transferencias** (ver
 `ESTRATEGIA_PRODUCTO_MARCA.md` §2): una abstracción de "riel de pago" para que
@@ -120,7 +146,23 @@ participante) requieren **contratos/licencias** — fuera de código.
 
 ---
 
-## 3. Chatbot conversacional (Gemini)
+## 3. Chatbot conversacional (Gemini) — Fase 3a ✅ HECHO (read-only)
+
+> **Fase 3a implementada** (read-only). Backend `internal/assistant`: interfaz
+> `LLM` neutral + cliente Gemini `generateContent` con function-calling, **gated
+> por `GEMINI_API_KEY`** (interfaz nil real si falta → el servicio se reporta no
+> disponible, como telemetría). **Tools SOLO lectura** (balance, transacciones,
+> resumen de gasto, presupuestos) → sin tools de escritura, la inyección no puede
+> mover dinero. Loop de tool-calling acotado + system prompt anti-inyección que
+> rehúsa asesoría/mover dinero + audit + límites de tamaño/historial. Endpoints
+> `GET /assistant/status` + `POST /assistant/chat`; config `GEMINI_API_KEY` +
+> `GEMINI_MODEL`. Frontend: repo/adapter HTTP-only + `AssistantView` (chat overlay
+> desde tarjeta en Home, input gated por status) + i18n (10 claves ×5) + tests.
+> Verde: backend build/vet/lint/10 unit (fake LLM); frontend typecheck/lint/build/
+> 345 tests. **Pendiente Fase 3b**: tools de escritura que devuelven una
+> *intención* que el usuario confirma de forma determinista (pasando MFA/límites/
+> fraude); el LLM nunca autoriza. **Activación**: setear `GEMINI_API_KEY` en el
+> backend (sin la var el asistente queda no disponible, sin romper nada).
 
 **Objetivo.** Asistente que vende servicios basado en el usuario (ver
 `ESTRATEGIA_PRODUCTO_MARCA.md` §1): comercio conversacional + cross-sell
@@ -165,7 +207,24 @@ tokens; prompt-injection (sanitizar, límites de scope de tools). Decidir alcanc
 
 ---
 
-## 4. Dashboards Grafana + alerting + SLOs (Fase D)
+## 4. Dashboards Grafana + alerting + SLOs (Fase D) ✅ HECHO (código versionado)
+
+> **Implementado el código versionable.** `SLO.md` (SLIs/SLOs/error budgets +
+> política de alertas + burn-rate). `k8s/monitoring/alert-rules.yaml` (ConfigMap
+> `prometheus-rules`: 7 alertas en 3 grupos — disponibilidad con burn-rate
+> multi-ventana, latencia, saturación; reglas de negocio drift/webhooks
+> comentadas hasta exponerlas como métrica) + `rule_files` cableado en
+> `prometheus-config.yaml`. Dashboard `dashboard-red-slo.yaml` (ConfigMap, 8
+> paneles RED **computados**: disponibilidad vs SLO 99.5%, rate, error %, latencia
+> avg, saturación). `deploy-monitoring.sh` aplica ambos. Todo validado (YAML/JSON
+> parseables; reglas y dashboard bien formados). Construido sobre las métricas
+> **fiables** del `/metrics` manual (`kiramopay_*`) → funciona scrapeando el
+> endpoint, **sin colector**. **Pendiente (infra/ops, no código)**: levantar
+> Prometheus/Grafana/Alertmanager (o Grafana Cloud), montar los ConfigMaps
+> (`prometheus-rules` en `/etc/prometheus/rules`, dashboards en
+> `/var/lib/grafana/dashboards`), `promtool check rules`, y exportar drift/webhooks
+> como métricas para activar esas alertas. Percentiles p95/p99 por ruta requieren
+> el colector OTLP (`http.server.*`).
 
 **Objetivo.** Cerrar la pata de **operación** de observabilidad: visualizar las
 métricas RED ya exportadas, alertar sobre síntomas y declarar SLOs.
@@ -205,9 +264,9 @@ código (dashboards + reglas + SLO) se puede versionar igual.
 ## Notas de estado (para arrancar en frío)
 
 - **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029
-  (escrow), 030 (B2B), 031 (scopes/secret TEXT)** → `RUN_MIGRATIONS=true` en
-  Render y quitar. Afecta a la Fase C (verla en prod) y a cualquier prueba en
-  prod de escrow/B2B.
+  (escrow), 030 (B2B), 031 (scopes/secret TEXT), 032 (payouts)** →
+  `RUN_MIGRATIONS=true` en Render y quitar. Afecta a la Fase C (verla en prod) y
+  a cualquier prueba en prod de escrow/B2B/payouts.
 - **DR pendiente de activación** (manual, sin costo): bucket + 6 secrets +
   `BACKUPS_ENABLED=true` (ver `DR_RUNBOOK.md`).
 - **Entorno backend local**: Go portable 1.23.4 con `GOTOOLCHAIN=go1.25.11`;

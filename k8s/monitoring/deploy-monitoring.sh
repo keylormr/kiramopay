@@ -8,15 +8,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Deploying Monitoring Stack ==="
 
-# Apply Prometheus
+# Apply Prometheus (config + alerting rules)
 echo "[1/4] Deploying Prometheus..."
 kubectl apply -f "$SCRIPT_DIR/prometheus-config.yaml"
+kubectl apply -f "$SCRIPT_DIR/alert-rules.yaml"
 kubectl apply -f "$SCRIPT_DIR/prometheus.yaml"
+# NOTE: the prometheus Deployment must mount the `prometheus-rules` ConfigMap at
+# /etc/prometheus/rules (loaded via rule_files in prometheus-config.yaml). See
+# prometheus.yaml — add a volume/volumeMount if not already present.
 
-# Apply Grafana
+# Apply Grafana (datasource, provider, dashboards)
 echo "[2/4] Deploying Grafana..."
 kubectl apply -f "$SCRIPT_DIR/grafana-config.yaml"
+kubectl apply -f "$SCRIPT_DIR/dashboard-red-slo.yaml"
 kubectl apply -f "$SCRIPT_DIR/grafana.yaml"
+# NOTE: each grafana-dashboard-* ConfigMap must be mounted under
+# /var/lib/grafana/dashboards for the file provider to pick it up.
 
 # Wait for pods
 echo "[3/4] Waiting for pods..."

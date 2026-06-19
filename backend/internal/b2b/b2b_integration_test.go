@@ -40,7 +40,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 	if full == "" || k.Prefix == "" {
 		t.Fatal("expected full key and prefix")
 	}
-	if k.Scopes != "escrow:read,escrow:write" {
+	if k.Scopes != "escrow:read,escrow:write,payout:read,payout:write" {
 		t.Errorf("default scopes: got %q", k.Scopes)
 	}
 

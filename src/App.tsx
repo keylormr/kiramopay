@@ -32,6 +32,8 @@ const SavingsView = React.lazy(() => import('./views/savings/SavingsView').then(
 const OnboardingView = React.lazy(() => import('./views/onboarding/OnboardingView').then(m => ({ default: m.OnboardingView })));
 const SplitPayView = React.lazy(() => import('./views/splitpay/SplitPayView').then(m => ({ default: m.SplitPayView })));
 const LoyaltyView = React.lazy(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
+const EscrowView = React.lazy(() => import('./views/escrow/EscrowView').then(m => ({ default: m.EscrowView })));
+const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 
 // Lock Screen Component — PIN entry for returning users.
 //
@@ -203,7 +205,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'assistant' | null;
 
 // Main Layout Component
 const Layout = () => {
@@ -230,11 +232,11 @@ const Layout = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} />;
+      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} />;
       case 'sinpe': return <SinpeView />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -343,6 +345,12 @@ const Layout = () => {
         )}
         {overlayView === 'loyalty' && (
           <LoyaltyView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'escrow' && (
+          <EscrowView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'assistant' && (
+          <AssistantView onClose={() => setOverlayView(null)} />
         )}
       </Suspense>
     </div>

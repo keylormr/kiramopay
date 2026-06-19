@@ -105,10 +105,11 @@ func TestNormalizeScopes(t *testing.T) {
 		in, want string
 		wantErr  bool
 	}{
-		{"", "escrow:read,escrow:write", false},
+		{"", "escrow:read,escrow:write,payout:read,payout:write", false}, // empty = all scopes
 		{"escrow:read", "escrow:read", false},
 		{" escrow:write , escrow:read ", "escrow:write,escrow:read", false},
 		{"escrow:read,escrow:read", "escrow:read", false}, // dedup
+		{"payout:write", "payout:write", false},
 		{"admin:everything", "", true},
 		{",,,", "", true},
 	}
