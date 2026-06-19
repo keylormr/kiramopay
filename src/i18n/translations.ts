@@ -513,6 +513,10 @@ type TranslationKeys = {
   home_loyalty: string;
   home_loyalty_view: string;
   home_loyalty_desc: string;
+  // Assistant Phase 3b (confirmation)
+  assistant_confirm: string;
+  assistant_confirmed: string;
+  assistant_action_failed: string;
   // Assistant (Phase 3a)
   assistant_title: string;
   assistant_card_desc: string;
@@ -1067,6 +1071,10 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Puntos',
     home_loyalty_view: 'Recompensas',
     home_loyalty_desc: 'Gana y canjea puntos',
+    // Assistant Phase 3b (confirmation)
+    assistant_confirm: 'Confirmar',
+    assistant_confirmed: 'Confirmado',
+    assistant_action_failed: 'No se pudo completar la acción',
     // Assistant (Phase 3a)
     assistant_title: 'Asistente',
     assistant_card_desc: 'Pregúntame sobre tus finanzas',
@@ -1620,6 +1628,10 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'Points',
     home_loyalty_view: 'Rewards',
     home_loyalty_desc: 'Earn and redeem points',
+    // Assistant Phase 3b (confirmation)
+    assistant_confirm: 'Confirm',
+    assistant_confirmed: 'Confirmed',
+    assistant_action_failed: 'Could not complete the action',
     // Assistant (Phase 3a)
     assistant_title: 'Assistant',
     assistant_card_desc: 'Ask me about your finances',
@@ -2165,6 +2177,10 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: '積分',
     home_loyalty_view: '獎勵',
     home_loyalty_desc: '賺取和兌換積分',
+    // Assistant Phase 3b (confirmation)
+    assistant_confirm: '確認',
+    assistant_confirmed: '已確認',
+    assistant_action_failed: '無法完成此操作',
     // Assistant (Phase 3a)
     assistant_title: '助理',
     assistant_card_desc: '向我詢問你的財務狀況',
@@ -2710,6 +2726,10 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'ポイント',
     home_loyalty_view: '特典',
     home_loyalty_desc: 'ポイントを貯めて交換',
+    // Assistant Phase 3b (confirmation)
+    assistant_confirm: '確認',
+    assistant_confirmed: '確認済み',
+    assistant_action_failed: '操作を完了できませんでした',
     // Assistant (Phase 3a)
     assistant_title: 'アシスタント',
     assistant_card_desc: '家計について質問できます',
@@ -3255,6 +3275,10 @@ const translations: Record<Language, TranslationKeys> = {
     home_loyalty: 'पॉइंट्स',
     home_loyalty_view: 'रिवॉर्ड्स',
     home_loyalty_desc: 'पॉइंट्स कमाएं और रिडीम करें',
+    // Assistant Phase 3b (confirmation)
+    assistant_confirm: 'पुष्टि करें',
+    assistant_confirmed: 'पुष्टि हो गई',
+    assistant_action_failed: 'कार्रवाई पूरी नहीं हो सकी',
     // Assistant (Phase 3a)
     assistant_title: 'सहायक',
     assistant_card_desc: 'अपने वित्त के बारे में मुझसे पूछें',

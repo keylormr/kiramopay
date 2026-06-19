@@ -2,14 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
-import type { AssistantTurn } from '@/api';
+import type { AssistantTurn, AssistantProposal } from '@/api';
+
+type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
+type ProposalState = 'idle' | 'pending' | 'done' | 'error';
 
 export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
   const [available, setAvailable] = useState<boolean | null>(null);
-  const [messages, setMessages] = useState<AssistantTurn[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  // Per-proposal confirmation status, keyed by "<msgIndex>:<proposalIndex>".
+  const [pstate, setPstate] = useState<Record<string, { status: ProposalState; error?: string }>>({});
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -31,15 +36,45 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
-    const history = messages;
-    const next: AssistantTurn[] = [...messages, { role: 'user', text: trimmed }];
+    const history: AssistantTurn[] = messages.map((m) => ({ role: m.role, text: m.text }));
+    const next: ChatMsg[] = [...messages, { role: 'user', text: trimmed }];
     setMessages(next);
     setInput('');
     setSending(true);
     const res = await getApiLayer().assistant.chat(trimmed, history);
     setSending(false);
-    const reply = res.success && res.data ? res.data.reply : res.error?.message || t('assistant_error');
-    setMessages([...next, { role: 'assistant', text: reply }]);
+    if (res.success && res.data) {
+      setMessages([...next, { role: 'assistant', text: res.data.reply, proposals: res.data.proposals }]);
+    } else {
+      setMessages([...next, { role: 'assistant', text: res.error?.message || t('assistant_error') }]);
+    }
+  };
+
+  // Confirm executes the REAL, fully-gated endpoint — the assistant only proposed.
+  const confirmProposal = async (key: string, p: AssistantProposal) => {
+    setPstate((s) => ({ ...s, [key]: { status: 'pending' } }));
+    const api = getApiLayer();
+    const amount = p.amountMinor / 100; // repos take major units
+    let res;
+    if (p.kind === 'sinpe_transfer') {
+      res = await api.sinpe.send({ phone: p.phone || '', amount, description: p.description });
+    } else if (p.kind === 'recharge') {
+      res = await api.services.recharge({ operatorId: p.operator || '', phone: p.phone || '', amount });
+    } else {
+      res = await api.services.payBill({
+        providerId: p.providerCode || '',
+        providerName: p.providerName || '',
+        clientId: p.clientId || '',
+        amount,
+        period: p.period || '',
+      });
+    }
+    setPstate((s) => ({
+      ...s,
+      [key]: res.success
+        ? { status: 'done' }
+        : { status: 'error', error: res.error?.message || t('assistant_action_failed') },
+    }));
   };
 
   const examples = [t('assistant_example_1'), t('assistant_example_2')];
@@ -91,17 +126,64 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
-                m.role === 'user'
-                  ? 'bg-[var(--color-primary)] text-white rounded-br-sm'
-                  : 'uv-surface-2 uv-text-primary rounded-bl-sm'
-              }`}
-            >
-              {m.text}
+        {messages.map((m, mi) => (
+          <div key={mi} className="space-y-2">
+            <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
+                  m.role === 'user'
+                    ? 'bg-[var(--color-primary)] text-white rounded-br-sm'
+                    : 'uv-surface-2 uv-text-primary rounded-bl-sm'
+                }`}
+              >
+                {m.text}
+              </div>
             </div>
+
+            {/* Confirmation cards for prepared actions */}
+            {m.proposals?.map((p, pi) => {
+              const key = `${mi}:${pi}`;
+              const st = pstate[key] || { status: 'idle' as ProposalState };
+              return (
+                <div
+                  key={key}
+                  className="max-w-[90%] uv-surface-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] rounded-2xl p-4 shadow-sm"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icons.Send size={16} className="text-[var(--color-primary)]" />
+                    <span className="text-sm font-bold uv-text-primary">{p.summary}</span>
+                  </div>
+                  {st.status === 'done' ? (
+                    <div className="flex items-center gap-2 text-green-600 text-sm font-semibold">
+                      <Icons.Check size={16} />
+                      {t('assistant_confirmed')}
+                    </div>
+                  ) : (
+                    <>
+                      {st.status === 'error' && (
+                        <p className="text-red-500 text-xs mb-2">{st.error}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setPstate((s) => ({ ...s, [key]: { status: 'idle' } }))}
+                          disabled={st.status === 'pending'}
+                          className="flex-1 uv-surface-2 uv-text-secondary py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                        >
+                          {t('cancel')}
+                        </button>
+                        <button
+                          onClick={() => confirmProposal(key, p)}
+                          disabled={st.status === 'pending'}
+                          className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                        >
+                          {st.status === 'pending' ? t('loading') : t('assistant_confirm')}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
 

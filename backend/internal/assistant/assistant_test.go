@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kiramopay/backend/internal/budget"
+	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/wallet"
 )
@@ -52,8 +53,16 @@ func (f *fakeBudget) List(_ context.Context, _ string) ([]budget.BudgetRecord, e
 	}, nil
 }
 
+type fakeSaved struct{}
+
+func (f *fakeSaved) GetSavedServices(_ context.Context, _ string) ([]payment.SavedServiceRecord, error) {
+	return []payment.SavedServiceRecord{
+		{ProviderCode: "ICE", ProviderName: "ICE Electricidad", ClientID: "123456"},
+	}, nil
+}
+
 func newTestTools(w *fakeWallet, tx *fakeTx) *Tools {
-	return NewTools(w, tx, &fakeBudget{})
+	return NewTools(w, tx, &fakeBudget{}, &fakeSaved{})
 }
 
 // ── service gating & validation ───────────────────────────────────────────────
@@ -115,6 +124,26 @@ func TestChatRunsToolThenAnswers(t *testing.T) {
 	}
 }
 
+func TestChatSurfacesProposalsWithoutMovingMoney(t *testing.T) {
+	llm := &fakeLLM{results: []*LLMResult{
+		{ToolCalls: []ToolCall{{Name: "propose_sinpe_transfer", Args: map[string]any{"phone": "88887777", "amount": 5000.0}}}},
+		{Text: "I've prepared a ₡5,000 SINPE to 8888-7777 — please confirm below."},
+	}}
+	// Money services are nil: if a propose tool ever tried to move money it would
+	// panic. It must not.
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "send 5000 to 8888-7777"})
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if len(res.Proposals) != 1 || res.Proposals[0].Kind != "sinpe_transfer" {
+		t.Fatalf("expected 1 sinpe proposal, got %+v", res.Proposals)
+	}
+	if res.Proposals[0].AmountMinor != 500_000 {
+		t.Errorf("amount = %d", res.Proposals[0].AmountMinor)
+	}
+}
+
 func TestChatHandlesUnknownToolGracefully(t *testing.T) {
 	llm := &fakeLLM{results: []*LLMResult{
 		{ToolCalls: []ToolCall{{Name: "transfer_money", Args: map[string]any{"to": "x"}}}}, // not a real tool
@@ -151,19 +180,22 @@ func TestChatTerminatesAtTurnBudget(t *testing.T) {
 
 // ── tools ─────────────────────────────────────────────────────────────────────
 
-func TestToolsDeclarationsAreReadOnly(t *testing.T) {
+func TestToolsDeclarations(t *testing.T) {
 	decls := newTestTools(&fakeWallet{}, &fakeTx{}).Declarations()
-	allowed := map[string]bool{"get_balance": true, "list_transactions": true, "spending_summary": true, "list_budgets": true}
+	names := map[string]bool{}
 	for _, d := range decls {
-		if !allowed[d.Name] {
-			t.Errorf("unexpected tool advertised: %q", d.Name)
+		names[d.Name] = true
+	}
+	for _, want := range []string{
+		"get_balance", "list_transactions", "spending_summary", "list_budgets",
+		"list_saved_services", "propose_sinpe_transfer", "propose_bill_payment", "propose_recharge",
+	} {
+		if !names[want] {
+			t.Errorf("missing tool %q", want)
 		}
 	}
-	if len(decls) != len(allowed) {
-		t.Errorf("declared %d tools, want %d", len(decls), len(allowed))
-	}
-	// A write-sounding tool is simply unknown.
-	if _, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(context.Background(), "u1", "send_money", nil); !errors.Is(err, ErrUnknownTool) {
+	// A non-tool is unknown — and never moves money.
+	if _, _, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(context.Background(), "u1", "delete_account", nil); !errors.Is(err, ErrUnknownTool) {
 		t.Errorf("expected ErrUnknownTool, got %v", err)
 	}
 }
@@ -176,7 +208,7 @@ func TestSpendingSummaryAggregates(t *testing.T) {
 		{Type: "sinpe_receive", Amount: 999_000, Status: "completed"}, // incoming — excluded
 		{Type: "qr_payment", Amount: 50_000, Status: "pending"},       // not completed — excluded
 	}}
-	out, err := newTestTools(&fakeWallet{}, tx).Invoke(context.Background(), "u1", "spending_summary", nil)
+	out, _, err := newTestTools(&fakeWallet{}, tx).Invoke(context.Background(), "u1", "spending_summary", nil)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
@@ -187,13 +219,81 @@ func TestSpendingSummaryAggregates(t *testing.T) {
 }
 
 func TestGetBalanceConvertsToMajorUnits(t *testing.T) {
-	out, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(context.Background(), "u1", "get_balance", nil)
+	out, _, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(context.Background(), "u1", "get_balance", nil)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
 	m := out.(map[string]any)
 	if m["crc"].(float64) != 15000 || m["usd"].(float64) != 50 {
 		t.Errorf("balance = %v", m)
+	}
+}
+
+// ── propose_* tools (Phase 3b) — prepare, never execute ───────────────────────
+
+func TestProposeSinpeReturnsIntentNotExecution(t *testing.T) {
+	out, proposal, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(
+		context.Background(), "u1", "propose_sinpe_transfer",
+		map[string]any{"phone": "88887777", "amount": 5000.0, "description": "almuerzo"},
+	)
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if proposal == nil || proposal.Kind != "sinpe_transfer" {
+		t.Fatalf("expected a sinpe_transfer proposal, got %+v", proposal)
+	}
+	if proposal.AmountMinor != 500_000 || proposal.Phone != "88887777" {
+		t.Errorf("proposal = %+v", proposal)
+	}
+	// The model-facing result must say it is awaiting confirmation, not done.
+	m := out.(map[string]any)
+	if m["awaiting_user_confirmation"] != true {
+		t.Errorf("result should await confirmation: %v", m)
+	}
+}
+
+func TestProposeBillUsesSavedProvider(t *testing.T) {
+	_, proposal, err := newTestTools(&fakeWallet{}, &fakeTx{}).Invoke(
+		context.Background(), "u1", "propose_bill_payment",
+		map[string]any{"provider_code": "ICE", "provider_name": "ICE Electricidad", "client_id": "123456", "amount": 12000.0},
+	)
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if proposal.Kind != "bill_payment" || proposal.ProviderCode != "ICE" || proposal.ClientID != "123456" {
+		t.Errorf("proposal = %+v", proposal)
+	}
+}
+
+func TestProposeRechargeValidatesOperator(t *testing.T) {
+	tools := newTestTools(&fakeWallet{}, &fakeTx{})
+	if _, p, err := tools.Invoke(context.Background(), "u1", "propose_recharge",
+		map[string]any{"operator": "kolbi", "phone": "70001111", "amount": 3000.0}); err != nil || p == nil {
+		t.Fatalf("valid recharge: err=%v p=%v", err, p)
+	}
+	// Bad operator / non-positive amount are rejected without a proposal.
+	for _, bad := range []map[string]any{
+		{"operator": "evil", "phone": "70001111", "amount": 3000.0},
+		{"operator": "kolbi", "phone": "70001111", "amount": 0.0},
+		{"operator": "kolbi", "phone": "", "amount": 3000.0},
+	} {
+		if _, p, err := tools.Invoke(context.Background(), "u1", "propose_recharge", bad); err == nil || p != nil {
+			t.Errorf("expected rejection for %v (err=%v p=%v)", bad, err, p)
+		}
+	}
+}
+
+func TestProposeToolsDisabledWhenNotAllowed(t *testing.T) {
+	tools := newTestTools(&fakeWallet{}, &fakeTx{})
+	tools.allowAct = false
+	if _, _, err := tools.Invoke(context.Background(), "u1", "propose_sinpe_transfer",
+		map[string]any{"phone": "88887777", "amount": 5000.0}); !errors.Is(err, ErrUnknownTool) {
+		t.Errorf("propose disabled: expected ErrUnknownTool, got %v", err)
+	}
+	for _, d := range tools.Declarations() {
+		if d.Name == "propose_sinpe_transfer" {
+			t.Errorf("propose tool advertised while disabled")
+		}
 	}
 }
 

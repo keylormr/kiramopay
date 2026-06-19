@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 
 	"github.com/kiramopay/backend/internal/budget"
+	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/wallet"
 )
@@ -22,21 +26,30 @@ type (
 	BudgetReader interface {
 		List(ctx context.Context, userID string) ([]budget.BudgetRecord, error)
 	}
+	// SavedServicesReader is read-only — it lets the model reference a user's
+	// saved bill provider when *proposing* a payment, but cannot pay anything.
+	SavedServicesReader interface {
+		GetSavedServices(ctx context.Context, userID string) ([]payment.SavedServiceRecord, error)
+	}
 )
 
 // ErrUnknownTool is returned when the model requests a tool that isn't
-// registered (or, by construction, isn't read-only).
+// registered (or, by construction, isn't read-only/propose-only).
 var ErrUnknownTool = errors.New("assistant: unknown tool")
 
-// Tools is the read-only tool set bound to the signed-in user's services.
+// Tools is the tool set bound to the signed-in user's services. Read tools
+// fetch data; propose_* tools (Phase 3b) validate and return an intent — they
+// NEVER call a money service.
 type Tools struct {
-	wallet WalletReader
-	tx     TransactionReader
-	budget BudgetReader
+	wallet   WalletReader
+	tx       TransactionReader
+	budget   BudgetReader
+	saved    SavedServicesReader
+	allowAct bool // whether propose_* (write-intent) tools are advertised
 }
 
-func NewTools(w WalletReader, tx TransactionReader, b BudgetReader) *Tools {
-	return &Tools{wallet: w, tx: tx, budget: b}
+func NewTools(w WalletReader, tx TransactionReader, b BudgetReader, saved SavedServicesReader) *Tools {
+	return &Tools{wallet: w, tx: tx, budget: b, saved: saved, allowAct: true}
 }
 
 // minorToMajor converts integer minor units (céntimos) to a major-unit float
@@ -46,7 +59,7 @@ func minorToMajor(minor int64) float64 { return float64(minor) / 100 }
 // Declarations advertises the available tools to the model.
 func (t *Tools) Declarations() []FunctionDecl {
 	emptyObject := map[string]any{"type": "object", "properties": map[string]any{}}
-	return []FunctionDecl{
+	decls := []FunctionDecl{
 		{
 			Name:        "get_balance",
 			Description: "Get the user's current wallet balance in CRC and USD.",
@@ -78,23 +91,90 @@ func (t *Tools) Declarations() []FunctionDecl {
 			Description: "List the user's budgets with their limit and amount spent.",
 			Parameters:  emptyObject,
 		},
+		{
+			Name:        "list_saved_services",
+			Description: "List the user's saved bill providers (name, provider code, client id) so a bill payment can reference one.",
+			Parameters:  emptyObject,
+		},
 	}
+	if !t.allowAct {
+		return decls
+	}
+	// Phase 3b: write-INTENT tools. They PREPARE an action and return a proposal
+	// the user must confirm; they never move money themselves.
+	decls = append(decls,
+		FunctionDecl{
+			Name:        "propose_sinpe_transfer",
+			Description: "Prepare a SINPE transfer for the user to confirm. Does NOT send money — the user confirms it in the app. Use only when you have a phone number and an amount.",
+			Parameters: map[string]any{
+				"type":     "object",
+				"required": []any{"phone", "amount"},
+				"properties": map[string]any{
+					"phone":       map[string]any{"type": "string", "description": "Costa Rican phone number of the recipient (8 digits)."},
+					"amount":      map[string]any{"type": "number", "description": "Amount in colones (major units), > 0."},
+					"description": map[string]any{"type": "string", "description": "Optional note."},
+				},
+			},
+		},
+		FunctionDecl{
+			Name:        "propose_bill_payment",
+			Description: "Prepare a bill payment for the user to confirm. Does NOT pay — the user confirms it. Use a provider from list_saved_services.",
+			Parameters: map[string]any{
+				"type":     "object",
+				"required": []any{"provider_code", "client_id", "amount"},
+				"properties": map[string]any{
+					"provider_code": map[string]any{"type": "string", "description": "Provider code from list_saved_services."},
+					"provider_name": map[string]any{"type": "string", "description": "Provider display name."},
+					"client_id":     map[string]any{"type": "string", "description": "The user's client/account id with that provider."},
+					"amount":        map[string]any{"type": "number", "description": "Amount in colones (major units), > 0."},
+					"period":        map[string]any{"type": "string", "description": "Optional billing period."},
+				},
+			},
+		},
+		FunctionDecl{
+			Name:        "propose_recharge",
+			Description: "Prepare a mobile top-up (recharge) for the user to confirm. Does NOT recharge — the user confirms it.",
+			Parameters: map[string]any{
+				"type":     "object",
+				"required": []any{"operator", "phone", "amount"},
+				"properties": map[string]any{
+					"operator": map[string]any{"type": "string", "enum": []any{"kolbi", "claro", "movistar"}, "description": "Mobile operator."},
+					"phone":    map[string]any{"type": "string", "description": "Phone number to top up (8 digits)."},
+					"amount":   map[string]any{"type": "number", "description": "Amount in colones (major units), > 0."},
+				},
+			},
+		},
+	)
+	return decls
 }
 
-// Invoke runs a read-only tool for the given user and returns a
-// JSON-serializable result.
-func (t *Tools) Invoke(ctx context.Context, userID, name string, args map[string]any) (any, error) {
+// Invoke runs a tool and returns its LLM-facing result plus, for propose_*
+// tools, the Proposal to surface to the client. Read tools return a nil
+// Proposal. Propose tools NEVER move money — they only validate and echo.
+func (t *Tools) Invoke(ctx context.Context, userID, name string, args map[string]any) (any, *Proposal, error) {
 	switch name {
 	case "get_balance":
-		return t.getBalance(ctx, userID)
+		r, err := t.getBalance(ctx, userID)
+		return r, nil, err
 	case "list_transactions":
-		return t.listTransactions(ctx, userID, args)
+		r, err := t.listTransactions(ctx, userID, args)
+		return r, nil, err
 	case "spending_summary":
-		return t.spendingSummary(ctx, userID, args)
+		r, err := t.spendingSummary(ctx, userID, args)
+		return r, nil, err
 	case "list_budgets":
-		return t.listBudgets(ctx, userID)
+		r, err := t.listBudgets(ctx, userID)
+		return r, nil, err
+	case "list_saved_services":
+		r, err := t.listSavedServices(ctx, userID)
+		return r, nil, err
+	case "propose_sinpe_transfer", "propose_bill_payment", "propose_recharge":
+		if !t.allowAct {
+			return nil, nil, ErrUnknownTool
+		}
+		return t.propose(name, args)
 	default:
-		return nil, ErrUnknownTool
+		return nil, nil, ErrUnknownTool
 	}
 }
 
@@ -219,6 +299,111 @@ func (t *Tools) listBudgets(ctx context.Context, userID string) (any, error) {
 		})
 	}
 	return map[string]any{"budgets": items}, nil
+}
+
+func (t *Tools) listSavedServices(ctx context.Context, userID string) (any, error) {
+	if t.saved == nil {
+		return nil, ErrUnknownTool
+	}
+	svcs, err := t.saved.GetSavedServices(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(svcs))
+	for _, s := range svcs {
+		items = append(items, map[string]any{
+			"provider_code": s.ProviderCode,
+			"provider_name": s.ProviderName,
+			"client_id":     s.ClientID,
+			"nickname":      s.Nickname,
+		})
+	}
+	return map[string]any{"saved_services": items}, nil
+}
+
+// propose validates a write-intent tool call and returns (a) a result the model
+// sees (so it tells the user a confirmation is pending) and (b) the Proposal the
+// client renders. It NEVER calls a money service.
+func (t *Tools) propose(name string, args map[string]any) (any, *Proposal, error) {
+	amountMajor, ok := argFloat(args, "amount")
+	if !ok || amountMajor <= 0 {
+		return nil, nil, ErrInvalidRequest
+	}
+	minor := int64(math.Round(amountMajor * 100))
+	const cur = "CRC"
+
+	switch name {
+	case "propose_sinpe_transfer":
+		phone := strings.TrimSpace(argString(args, "phone"))
+		if phone == "" {
+			return nil, nil, ErrInvalidRequest
+		}
+		p := &Proposal{
+			Kind: "sinpe_transfer", AmountMinor: minor, Currency: cur,
+			Phone: phone, Description: strings.TrimSpace(argString(args, "description")),
+			Summary: fmt.Sprintf("SINPE ₡%.2f → %s", amountMajor, phone),
+		}
+		return proposedResult(p), p, nil
+
+	case "propose_bill_payment":
+		code := strings.TrimSpace(argString(args, "provider_code"))
+		client := strings.TrimSpace(argString(args, "client_id"))
+		if code == "" || client == "" {
+			return nil, nil, ErrInvalidRequest
+		}
+		pname := strings.TrimSpace(argString(args, "provider_name"))
+		display := pname
+		if display == "" {
+			display = code
+		}
+		p := &Proposal{
+			Kind: "bill_payment", AmountMinor: minor, Currency: cur,
+			ProviderCode: code, ProviderName: pname, ClientID: client,
+			Period:  strings.TrimSpace(argString(args, "period")),
+			Summary: fmt.Sprintf("Pago ₡%.2f a %s (%s)", amountMajor, display, client),
+		}
+		return proposedResult(p), p, nil
+
+	case "propose_recharge":
+		op := strings.ToLower(strings.TrimSpace(argString(args, "operator")))
+		phone := strings.TrimSpace(argString(args, "phone"))
+		if phone == "" || (op != "kolbi" && op != "claro" && op != "movistar") {
+			return nil, nil, ErrInvalidRequest
+		}
+		p := &Proposal{
+			Kind: "recharge", AmountMinor: minor, Currency: cur,
+			Operator: op, Phone: phone,
+			Summary: fmt.Sprintf("Recarga ₡%.2f %s → %s", amountMajor, op, phone),
+		}
+		return proposedResult(p), p, nil
+	}
+	return nil, nil, ErrUnknownTool
+}
+
+// proposedResult is what the model sees after a propose_* tool: it must convey
+// that the action is PENDING the user's confirmation, not done.
+func proposedResult(p *Proposal) map[string]any {
+	return map[string]any{
+		"status":                     "proposed",
+		"summary":                    p.Summary,
+		"awaiting_user_confirmation": true,
+	}
+}
+
+func argFloat(args map[string]any, key string) (float64, bool) {
+	switch x := args[key].(type) {
+	case float64:
+		return x, true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 // isOutgoing classifies a transaction type as money leaving the user — a small
