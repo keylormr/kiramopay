@@ -273,6 +273,60 @@ código (dashboards + reglas + SLO) se puede versionar igual.
 
 ---
 
+# Segunda tanda
+
+Mejoras de código posteriores a los 4 ítems de arriba. Estado actual:
+
+| # | Mejora | Esfuerzo | Estado |
+|---|---|---|---|
+| 5 | Frontend de Payouts | M | ✅ HECHO |
+| 6 | Logging del error del LLM en el asistente | S | ✅ HECHO |
+| 7 | Métricas de negocio (drift + webhooks) + reglas | S–M | ✅ HECHO |
+| 8 | Tests E2E (escrow/payouts/asistente) | M | ✅ HECHO |
+| 9 | Adapter real de `PayoutRail` | M | ⛔ BLOQUEADO (contrato/credenciales de partner) |
+
+## 5. Frontend de Payouts ✅ HECHO
+
+UI de usuario para el backend `PayoutRail` (no existía). Espeja el patrón de
+escrow: repo + adapter **HTTP-only** (`payout.repository.ts` / `payout.http.ts`,
+mueven dinero → sin mock), cableado en el `ApiLayer` (http + mock). `PayoutView`
+(overlay desde **Perfil › Herramientas de comercio**): lista, crea sobre un riel
+elegido de `GET /payouts/rails`, y refresca un payout `processing` contra el
+riel; idempotency key generada en el cliente. i18n 24 claves ×5. Tests de
+adapter (espejan `escrow.http.test.ts`). MFA ≥100K se surface como error (como
+escrow). typecheck/lint(0)/test(352)/build verdes.
+
+## 6. Logging del error del LLM ✅ HECHO
+
+`assistant.Service` se tragaba la causa del fallo del proveedor (el handler
+mapea a un 502 opaco). Se inyecta un `*slog.Logger` y se loguea la causa con
+`WarnContext` en los 2 sitios de `llm.Generate`. El 502 al cliente no cambia.
+Test que verifica que la causa se loguea.
+
+## 7. Métricas de negocio + reglas ✅ HECHO
+
+Se exponen en `/metrics`: `kiramopay_ledger_drift_crc` (gauge; el worker
+`reconcile` publica el drift residual tras auto-fix) y
+`kiramopay_webhook_deliveries_failed` (counter; el dispatcher de webhooks lo
+incrementa por intento fallido). Se habilitan las reglas `LedgerDrift` y
+`WebhookDeliveryBacklog` (grupo `kiramopay-business` en
+`k8s/monitoring/alert-rules.yaml`; el backlog usa `increase(...[15m]) > 50` para
+ser auto-clearing). `SLO.md` actualizado.
+
+## 8. Tests E2E ✅ HECHO
+
+Specs Playwright para escrow, payouts y asistente (`e2e/{escrow,payout,assistant}.spec.ts`),
+espejando `stubBackend` (red stubeada en el browser, sin backend). 19 E2E verdes
+(14 previos + 5 nuevos).
+
+## 9. Adapter real de `PayoutRail` ⛔ BLOQUEADO
+
+Implementar un `Rail` real (SINPE participante / dLocal / Circle) + sembrar sus
+cuentas `SYSTEM:EXTERNAL:<RAIL>:<CUR>` en una migración. **Bloqueado**: requiere
+contrato/credenciales del partner, no es solo código.
+
+---
+
 ## Notas de estado (para arrancar en frío)
 
 - **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029
