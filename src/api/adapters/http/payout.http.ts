@@ -97,7 +97,9 @@ export class HttpPayoutRepository implements IPayoutRepository {
       idempotency_key: req.idempotencyKey,
     });
     if (!res.success || !res.data) {
-      return apiError('PAYOUT_CREATE_FAILED', res.error?.message || 'Could not create payout');
+      // Preserve MFA_REQUIRED so the UI can prompt for a TOTP code and retry.
+      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'PAYOUT_CREATE_FAILED';
+      return apiError(code, res.error?.message || 'Could not create payout');
     }
     return apiSuccess(mapPayout(res.data));
   }

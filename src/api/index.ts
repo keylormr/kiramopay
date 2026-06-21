@@ -98,6 +98,7 @@ export type { ApiResponse, ApiError } from './types';
 export { apiSuccess, apiError } from './types';
 export type { IAuthRepository, LoginRequest, LoginResponse } from './repositories/auth.repository';
 export type { IMfaRepository, TotpEnrollResponse } from './repositories/mfa.repository';
+export { MFA_REQUIRED } from './repositories/mfa.repository';
 export type { IAccountRepository } from './repositories/account.repository';
 export type { ITransactionRepository } from './repositories/transaction.repository';
 export type { ISinpeRepository, SendSinpeRequest } from './repositories/sinpe.repository';

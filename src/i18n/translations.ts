@@ -118,6 +118,8 @@ type TranslationKeys = {
   twofa_manual_key: string;
   twofa_enter_code: string;
   twofa_verify: string;
+  mfa_challenge_title: string;
+  mfa_challenge_desc: string;
   twofa_recovery_title: string;
   twofa_recovery_desc: string;
   twofa_copy: string;
@@ -725,6 +727,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'O ingresá esta clave manualmente:',
     twofa_enter_code: 'Ingresá el código de 6 dígitos',
     twofa_verify: 'Verificar y activar',
+    mfa_challenge_title: 'Verificación requerida',
+    mfa_challenge_desc: 'Esta operación de alto monto requiere tu código de doble factor (2FA).',
     twofa_recovery_title: '¡Listo! Guardá tus códigos de recuperación',
     twofa_recovery_desc: 'Cada código sirve una sola vez si perdés acceso a tu autenticador. Guardalos en un lugar seguro.',
     twofa_copy: 'Copiar códigos',
@@ -1306,6 +1310,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'Or enter this key manually:',
     twofa_enter_code: 'Enter the 6-digit code',
     twofa_verify: 'Verify and enable',
+    mfa_challenge_title: 'Verification required',
+    mfa_challenge_desc: 'This high-value action requires your two-factor (2FA) code.',
     twofa_recovery_title: 'Done! Save your recovery codes',
     twofa_recovery_desc: 'Each code works once if you lose access to your authenticator. Keep them somewhere safe.',
     twofa_copy: 'Copy codes',
@@ -1887,6 +1893,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: '或手動輸入此金鑰：',
     twofa_enter_code: '輸入 6 位數驗證碼',
     twofa_verify: '驗證並啟用',
+    mfa_challenge_title: '需要驗證',
+    mfa_challenge_desc: '此大額操作需要你的雙重驗證 (2FA) 代碼。',
     twofa_recovery_title: '完成！請儲存你的復原碼',
     twofa_recovery_desc: '若你失去驗證器的存取權，每個碼只能使用一次。請妥善保存。',
     twofa_copy: '複製代碼',
@@ -2460,6 +2468,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'または、このキーを手動で入力してください：',
     twofa_enter_code: '6桁のコードを入力',
     twofa_verify: '確認して有効化',
+    mfa_challenge_title: '確認が必要です',
+    mfa_challenge_desc: 'この高額の操作には二要素認証 (2FA) コードが必要です。',
     twofa_recovery_title: '完了！リカバリーコードを保存してください',
     twofa_recovery_desc: '認証アプリにアクセスできなくなった場合、各コードは一度だけ使用できます。安全な場所に保管してください。',
     twofa_copy: 'コードをコピー',
@@ -3033,6 +3043,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'या यह कुंजी मैन्युअल रूप से दर्ज करें:',
     twofa_enter_code: '6 अंकों का कोड दर्ज करें',
     twofa_verify: 'सत्यापित करें और सक्षम करें',
+    mfa_challenge_title: 'सत्यापन आवश्यक',
+    mfa_challenge_desc: 'इस बड़ी राशि की कार्रवाई के लिए आपका दो-कारक (2FA) कोड आवश्यक है।',
     twofa_recovery_title: 'हो गया! अपने रिकवरी कोड सहेजें',
     twofa_recovery_desc: 'यदि आप अपने प्रमाणक तक पहुंच खो देते हैं तो प्रत्येक कोड एक बार काम करता है। इन्हें सुरक्षित स्थान पर रखें।',
     twofa_copy: 'कोड कॉपी करें',

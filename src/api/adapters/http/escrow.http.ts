@@ -71,7 +71,9 @@ export class HttpEscrowRepository implements IEscrowRepository {
   private async action(id: string, verb: string, body?: unknown): Promise<ApiResponse<EscrowAgreement>> {
     const res = await this.client.post<RawAgreement>(`/api/v1/escrow/${id}/${verb}`, body);
     if (!res.success || !res.data) {
-      return apiError('ESCROW_ACTION_FAILED', res.error?.message || 'Action failed');
+      // Preserve MFA_REQUIRED so the UI can prompt for a TOTP code and retry.
+      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'ESCROW_ACTION_FAILED';
+      return apiError(code, res.error?.message || 'Action failed');
     }
     return apiSuccess(mapAgreement(res.data));
   }

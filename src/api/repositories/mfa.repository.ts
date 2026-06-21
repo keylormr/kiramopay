@@ -1,5 +1,12 @@
 import type { ApiResponse } from '../types';
 
+/**
+ * Backend error code returned (HTTP 403) when a high-value action requires a
+ * fresh, verified MFA challenge. The UI catches this to prompt for a TOTP code
+ * (purpose `high_value_tx`) and retry the action.
+ */
+export const MFA_REQUIRED = 'MFA_REQUIRED';
+
 export interface TotpEnrollResponse {
   /** Base32 secret to type manually into an authenticator app. */
   secret: string;
