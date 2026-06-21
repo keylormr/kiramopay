@@ -226,11 +226,15 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 
-	// Conversational assistant (read-only). The LLM stays a true nil interface
-	// when GEMINI_API_KEY is unset, so the service reports itself unavailable
-	// instead of wrapping a nil pointer.
+	// Conversational assistant. The LLM stays a true nil interface when no
+	// provider key is set, so the service reports itself unavailable instead of
+	// wrapping a nil pointer. ANTHROPIC_API_KEY (Claude) takes precedence over
+	// GEMINI_API_KEY when both are present.
 	var assistantLLM assistant.LLM
-	if cfg.Gemini.APIKey != "" {
+	switch {
+	case cfg.Anthropic.APIKey != "":
+		assistantLLM = assistant.NewClaudeClient(cfg.Anthropic.APIKey, cfg.Anthropic.Model, 30*time.Second)
+	case cfg.Gemini.APIKey != "":
 		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
 	}
 	assistantService := assistant.NewService(

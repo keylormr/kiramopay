@@ -17,6 +17,7 @@ type Config struct {
 	VAPID     VAPIDConfig
 	Telemetry TelemetryConfig
 	Gemini    GeminiConfig
+	Anthropic AnthropicConfig
 }
 
 // GeminiConfig controls the conversational assistant. The assistant is a no-op
@@ -25,6 +26,13 @@ type Config struct {
 type GeminiConfig struct {
 	APIKey string // GEMINI_API_KEY
 	Model  string // GEMINI_MODEL
+}
+
+// AnthropicConfig is the alternative assistant LLM provider. If ANTHROPIC_API_KEY
+// is set it takes precedence over Gemini (see cmd/api wiring).
+type AnthropicConfig struct {
+	APIKey string // ANTHROPIC_API_KEY
+	Model  string // ANTHROPIC_MODEL
 }
 
 // TelemetryConfig controls OpenTelemetry tracing. Tracing is enabled only when
@@ -145,6 +153,10 @@ func Load() *Config {
 		Gemini: GeminiConfig{
 			APIKey: getEnv("GEMINI_API_KEY", ""),
 			Model:  getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+		},
+		Anthropic: AnthropicConfig{
+			APIKey: getEnv("ANTHROPIC_API_KEY", ""),
+			Model:  getEnv("ANTHROPIC_MODEL", "claude-opus-4-8"),
 		},
 	}
 }

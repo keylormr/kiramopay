@@ -159,6 +159,14 @@ participante) requieren **contratos/licencias** — fuera de código.
 > fraude). System prompt reforzado (no ejecuta, no auto-confirma, no adivina
 > montos/destinatarios; rehúsa inyección). Verde: backend tests (incl. "el dinero
 > nunca se mueve") + gosec 0; frontend 347 tests.
+>
+> **Proveedor de LLM intercambiable.** La interfaz neutral `LLM` permite elegir
+> proveedor por env var: `ANTHROPIC_API_KEY` → **Claude** (Messages API + tool
+> use; default `claude-opus-4-8`, `ANTHROPIC_MODEL` para cambiar, p.ej.
+> `claude-haiku-4-5`) tiene precedencia; si no, `GEMINI_API_KEY` → Gemini. Sin
+> ninguna, el asistente queda "no disponible". Cliente Claude por HTTP crudo
+> (espeja `gemini.go`, mismo `observability.HTTPClient` con tracing) + tests
+> (httptest e2e + mapeo de mensajes/tool-use).
 
 > **Fase 3a implementada** (read-only). Backend `internal/assistant`: interfaz
 > `LLM` neutral + cliente Gemini `generateContent` con function-calling, **gated
