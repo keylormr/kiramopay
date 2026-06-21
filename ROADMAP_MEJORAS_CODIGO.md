@@ -281,6 +281,94 @@ código (dashboards + reglas + SLO) se puede versionar igual.
 
 ---
 
+# Segunda tanda — pendientes de código (próximas sesiones)
+
+Los 4 ítems de arriba están **HECHOS**. Lo siguiente son extensiones/polish, sin
+bloqueos regulatorios. Lo que falta vs JPC (licencia PSP, KYC real, VASP cripto,
+emisor de tarjetas, IBAN/sponsor bank, monetización) **no es código** — ver
+`ROADMAP_JPC.md`.
+
+## 5. Frontend de Payouts (vista de usuario)
+
+**Objetivo.** Dar UI en la app a `PayoutRail` (backend ya listo), para que un
+usuario cree/vea payouts sin la API B2B.
+
+**Estado.** Backend completo: `POST /api/v1/payouts`, `GET /payouts`,
+`GET /payouts/{id}`, `POST /payouts/{id}/refresh`, `GET /payouts/rails`. **No hay
+frontend.** El bloque escrow (`src/views/escrow/EscrowView.tsx` +
+`src/api/repositories/escrow.repository.ts` + `adapters/http/escrow.http.ts` +
+wiring en `src/api/index.ts`/`adapters/{http,mock}/index.ts` + overlay en
+`src/App.tsx` + i18n) es **la plantilla exacta a espejar**.
+
+**Alcance.** Repo+adapter HTTP-only `payout`; `PayoutsView` (lista + crear con
+selector de riel desde `GET /payouts/rails` + estado + `refresh`); entrada de nav
+(overlay como escrow, o tarjeta en Home). Payout JSON: `id, rail, amount_minor,
+currency, status(pending|processing|completed|failed), destination{type,account,
+name,bank?,country?}, external_id, failure_reason`. Montos a/desde el repo en
+unidades **mayores** (el adapter ×100). i18n ×5; test de adapter.
+
+**Esfuerzo.** M. **Bloqueos.** Ninguno (mock rail funciona).
+
+## 6. Logging del error del LLM en el asistente
+
+**Objetivo.** Que cuando Gemini/Claude falle, el error real aparezca en logs
+(hoy el 502 sale sin causa → debug a ciegas, justo lo que costó al activar).
+
+**Estado.** `internal/assistant/service.go` hace
+`return nil, fmt.Errorf("%w: %v", ErrLLM, err)` en los 2 sitios de
+`s.llm.Generate` **sin loguear**. El `Service` no tiene logger.
+
+**Enfoque.** Agregar `slog.Warn("assistant: LLM call failed", "error", err)` en
+ambos sitios (package-level `slog`, o un campo `logger` cableado desde `main.go`).
+El error de los clientes ya trae el detalle (`gemini/anthropic %d: %s`).
+
+**Esfuerzo.** S. **Bloqueos.** Ninguno.
+
+## 7. Métricas de negocio para activar alertas
+
+**Objetivo.** Exponer drift de ledger y backlog de webhooks como métricas
+Prometheus para **activar las 2 reglas comentadas** en
+`k8s/monitoring/alert-rules.yaml` (grupo `kiramopay-business`).
+
+**Estado.** Las señales viven en audit/DB, no en `/metrics`. El `/metrics` manual
+es `internal/middleware/metrics.go` (prefijo `kiramopay_`).
+
+**Alcance.** Agregar `kiramopay_ledger_drift_crc` (de `internal/reconcile`, p.ej.
+`LastFixedCRC()`/drift de la vista `wallet_journal_drift`) y
+`kiramopay_webhook_deliveries_failed` (count de `webhook_deliveries` con
+status='failed', vía `internal/b2b`). Descomentar las reglas. `promtool check
+rules`.
+
+**Esfuerzo.** S–M. **Bloqueos.** Ninguno (la activación end-to-end de las alertas
+sí requiere levantar Prometheus/Alertmanager — infra).
+
+## 8. Tests E2E (Playwright) de las features nuevas
+
+**Objetivo.** Cobertura E2E de escrow, payouts y asistente (hoy: unit + adapter).
+
+**Estado.** Suite en `e2e/` con `e2e/helpers.ts` (`stubBackend()` intercepta
+`**/api/v1/**`, locale `es-CR`). Espejar para stubear `/api/v1/{escrow,payouts,
+assistant}*` y validar los flujos (crear escrow→fund; payout→confirmar; chat con
+propuesta→confirmar).
+
+**Esfuerzo.** M. **Bloqueos.** Ninguno.
+
+## 9. Adapters reales de `PayoutRail`
+
+**Objetivo.** Sumar un riel real (SINPE participante / dLocal / Circle-USDC).
+
+**Estado.** `internal/payout/rail.go` define `Rail`+`Registry`+`MockRail`. Sumar
+uno = implementar `Rail`, registrarlo en `main.go`, y **sembrar sus cuentas
+`SYSTEM:EXTERNAL:<RAIL>:<CUR>`** en una migración nueva (espejar la 032).
+
+**Esfuerzo.** M (el adapter). **Bloqueos.** Requiere **contrato/credenciales del
+partner** — eso no es código.
+
+> **Recomendación de arranque**: #6 (rápido, evita debug a ciegas) → #5 (cierra
+> payout end-to-end, visible) → #7/#8 (operación/calidad). #9 cuando haya partner.
+
+---
+
 ## Notas de estado (para arrancar en frío)
 
 - **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029
