@@ -60,11 +60,12 @@ budget_consumed   = (1 − availability) / error_budget
 
 ## Notas de implementación
 
-- Las alertas de **drift** y **webhooks** requieren exponer esas señales como
-  métricas Prometheus (hoy viven en audit/DB). Pendiente: un exportador que
-  publique `kiramopay_ledger_drift_crc` y `kiramopay_webhook_deliveries_failed`
-  en `/metrics`. Las reglas correspondientes quedan documentadas y comentadas en
-  `alert-rules.yaml` hasta que la métrica exista.
+- Las alertas de **drift** y **webhooks** ya están **activas**: el worker
+  `reconcile` publica `kiramopay_ledger_drift_crc` (gauge del drift residual tras
+  auto-fix) y el dispatcher de webhooks incrementa
+  `kiramopay_webhook_deliveries_failed` (counter de intentos fallidos) en
+  `/metrics`. Las reglas `LedgerDrift` y `WebhookDeliveryBacklog` viven en el
+  grupo `kiramopay-business` de `alert-rules.yaml`.
 - Los percentiles p95/p99 por ruta requieren el **colector OTLP** (métricas
   `http.server.*`). Sin colector, se usa el proxy `*_duration_ms_avg`.
 - Revisar SLOs trimestralmente con datos reales una vez haya 30 días de serie.

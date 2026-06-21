@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/observability"
 )
 
@@ -105,6 +106,7 @@ func (d *Dispatcher) send(ctx context.Context, dd *DueDelivery) {
 }
 
 func (d *Dispatcher) fail(ctx context.Context, dd *DueDelivery, code *int, msg string) {
+	middleware.RecordWebhookDeliveryFailed()
 	retryIn := int(Backoff(dd.Attempts + 1).Seconds())
 	if err := d.repo.MarkAttemptFailed(ctx, dd.ID, code, msg, retryIn); err != nil {
 		d.log("mark attempt failed", "error", err, "delivery", dd.ID)
