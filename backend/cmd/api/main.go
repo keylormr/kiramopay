@@ -237,6 +237,7 @@ func main() {
 		assistantLLM,
 		assistant.NewTools(walletService, txService, budgetService, paymentService),
 		auditLogger,
+		logger,
 	)
 
 	// ── Handlers ─────────────────────────────────────────────────────────
