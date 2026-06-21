@@ -16,6 +16,7 @@ import type { ICountryRepository } from './repositories/country.repository';
 import type { IBudgetRepository } from './repositories/budget.repository';
 import type { IRecurringRepository } from './repositories/recurring.repository';
 import type { IEscrowRepository } from './repositories/escrow.repository';
+import type { IPayoutRepository } from './repositories/payout.repository';
 import type { IB2BRepository } from './repositories/b2b.repository';
 import type { IAssistantRepository } from './repositories/assistant.repository';
 import { createMockApiLayer } from './adapters/mock';
@@ -24,6 +25,7 @@ import { HttpClient } from './adapters/http/client';
 import { HttpAuthRepository } from './adapters/http/auth.http';
 import { HttpMfaRepository } from './adapters/http/mfa.http';
 import { HttpEscrowRepository } from './adapters/http/escrow.http';
+import { HttpPayoutRepository } from './adapters/http/payout.http';
 import { HttpB2BRepository } from './adapters/http/b2b.http';
 import { HttpAssistantRepository } from './adapters/http/assistant.http';
 
@@ -41,6 +43,7 @@ export interface ApiLayer {
   recurring: IRecurringRepository;
   // Phase F — B2B / escrow (HTTP-only, like mfa)
   escrow: IEscrowRepository;
+  payout: IPayoutRepository;
   b2b: IB2BRepository;
   assistant: IAssistantRepository;
   // Phase 5
@@ -73,9 +76,10 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   const httpAuth = new HttpAuthRepository(client);
   const httpMfa = new HttpMfaRepository(client);
   const httpEscrow = new HttpEscrowRepository(client);
+  const httpPayout = new HttpPayoutRepository(client);
   const httpB2B = new HttpB2BRepository(client);
   const httpAssistant = new HttpAssistantRepository(client);
-  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpB2B, httpAssistant);
+  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpPayout, httpB2B, httpAssistant);
 }
 
 export function getApiLayer(): ApiLayer {
@@ -119,6 +123,13 @@ export type {
   EscrowStatus,
   CreateEscrowRequest,
 } from './repositories/escrow.repository';
+export type {
+  IPayoutRepository,
+  Payout,
+  PayoutStatus,
+  PayoutDestination,
+  CreatePayoutRequest,
+} from './repositories/payout.repository';
 export type {
   IB2BRepository,
   ApiKey,

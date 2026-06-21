@@ -33,6 +33,7 @@ const OnboardingView = React.lazy(() => import('./views/onboarding/OnboardingVie
 const SplitPayView = React.lazy(() => import('./views/splitpay/SplitPayView').then(m => ({ default: m.SplitPayView })));
 const LoyaltyView = React.lazy(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
 const EscrowView = React.lazy(() => import('./views/escrow/EscrowView').then(m => ({ default: m.EscrowView })));
+const PayoutView = React.lazy(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
 const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 
 // Lock Screen Component — PIN entry for returning users.
@@ -205,7 +206,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'assistant' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'assistant' | null;
 
 // Main Layout Component
 const Layout = () => {
@@ -236,7 +237,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -348,6 +349,9 @@ const Layout = () => {
         )}
         {overlayView === 'escrow' && (
           <EscrowView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'payout' && (
+          <PayoutView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'assistant' && (
           <AssistantView onClose={() => setOverlayView(null)} />
