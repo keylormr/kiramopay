@@ -3,6 +3,8 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { SinpeContact, SinpeTransaction } from '../../types';
 
 // Bancos de Costa Rica para selección
@@ -36,6 +38,8 @@ export const SinpeView: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [showMfa, setShowMfa] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<SinpeTransaction | null>(null);
 
   // Add contact form states
@@ -57,38 +61,50 @@ export const SinpeView: React.FC = () => {
     setShowSendSheet(true);
   };
 
-  const handleSendMoney = () => {
+  const handleSendMoney = async () => {
     if (!amount || !phone) return;
 
     const numAmount = parseFloat(amount);
     if (numAmount > balance) return;
 
     setIsProcessing(true);
+    setSendError('');
+    // Real transfer through the API layer: the mock adapter records it locally,
+    // the HTTP adapter moves money on the backend (and may require MFA).
+    const res = await getApiLayer().sinpe.send({ phone, amount: numAmount, description: reference });
+    setIsProcessing(false);
 
-    setTimeout(() => {
-      const tx: SinpeTransaction = {
-        id: Date.now().toString(),
-        type: 'sent',
-        amount: numAmount,
-        phone,
-        name: selectedContact?.name || phone,
-        date: 'Ahora',
-        status: 'completed',
-        reference,
-      };
+    if (!res.success || !res.data) {
+      // High-value transfer: prompt for a TOTP code, then retry (form persists).
+      if (res.error?.code === MFA_REQUIRED) {
+        setShowMfa(true);
+        return;
+      }
+      setSendError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
 
-      dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
-      setLastTransaction(tx);
-      setIsProcessing(false);
-      setShowSendSheet(false);
-      setShowSuccessSheet(true);
+    const tx: SinpeTransaction = {
+      id: res.data.id,
+      type: 'sent',
+      amount: numAmount,
+      phone,
+      name: selectedContact?.name || res.data.name || phone,
+      date: 'Ahora',
+      status: res.data.status,
+      reference,
+    };
 
-      // Reset form
-      setAmount('');
-      setPhone('');
-      setReference('');
-      setSelectedContact(null);
-    }, 2000);
+    dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
+    setLastTransaction(tx);
+    setShowSendSheet(false);
+    setShowSuccessSheet(true);
+
+    // Reset form
+    setAmount('');
+    setPhone('');
+    setReference('');
+    setSelectedContact(null);
   };
 
   const handleRequestMoney = () => {
@@ -601,6 +617,8 @@ export const SinpeView: React.FC = () => {
             />
           </div>
 
+          {sendError && <p className="text-red-500 text-sm text-center">{sendError}</p>}
+
           {/* Boton enviar */}
           <button
             onClick={handleSendMoney}
@@ -764,6 +782,16 @@ export const SinpeView: React.FC = () => {
           </div>
         </div>
       </BottomSheet>
+
+      {/* High-value MFA challenge → on verify, retry the transfer */}
+      <MfaChallengeSheet
+        isOpen={showMfa}
+        onClose={() => setShowMfa(false)}
+        onVerified={() => {
+          setShowMfa(false);
+          handleSendMoney();
+        }}
+      />
     </div>
   );
 };

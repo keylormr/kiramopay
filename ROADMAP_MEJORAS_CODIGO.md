@@ -362,16 +362,17 @@ Ahora:
 - Los adapters HTTP que aplanaban el código de error (`escrow`, `payout`, `sinpe`,
   `services` payBill/recharge) ahora **preservan** `MFA_REQUIRED`; se exporta la
   constante `MFA_REQUIRED` desde `@/api`.
-- Cableado en `EscrowView` (fund), `PayoutView` (create) y `AssistantView`
+- Cableado en `EscrowView` (fund), `PayoutView` (create), `AssistantView`
   (`confirmProposal` → SINPE / recarga / pago de servicios de las propuestas
-  confirmadas — el **path real** de dinero del asistente).
+  confirmadas) y **`SinpeView`** (envío directo).
 
-> **Nota sobre SINPE**: `SinpeView.handleSendMoney` NO llama al backend — es una
-> simulación local (`setTimeout` + reducer), así que nunca dispara MFA. El envío
-> SINPE real ocurre en `AssistantView` (propuestas confirmadas) y `useOfflineQueue`,
-> que es donde se cableó el MFA. Convertir `SinpeView` a una llamada real al API es
-> un cambio mayor de comportamiento (toca modo mock/offline, balance, UX de éxito)
-> y queda como tarea aparte.
+> **Nota sobre SINPE**: antes `SinpeView.handleSendMoney` NO llamaba al backend
+> (simulación local con `setTimeout` + reducer). Ahora invoca
+> `getApiLayer().sinpe.send(...)`: el adapter **mock** lo registra localmente y el
+> adapter **HTTP** mueve dinero en el backend (y puede pedir MFA). En MFA_REQUIRED
+> abre el challenge y reintenta; mantiene la UX de éxito (dispatch local +
+> success sheet). El saldo global sigue refrescándose por el sync existente
+> (igual que escrow/payout).
 
 ## D. Tests de componente
 
