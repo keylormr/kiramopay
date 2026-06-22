@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/kiramopay/backend/internal/audit"
@@ -33,11 +34,12 @@ type Service struct {
 	llm      LLM // nil ⇒ assistant disabled (no API key)
 	tools    *Tools
 	audit    *audit.Logger
+	logger   *slog.Logger // nil ⇒ no logging
 	maxTurns int
 }
 
-func NewService(llm LLM, tools *Tools, auditLogger *audit.Logger) *Service {
-	return &Service{llm: llm, tools: tools, audit: auditLogger, maxTurns: defaultMaxTurns}
+func NewService(llm LLM, tools *Tools, auditLogger *audit.Logger, logger *slog.Logger) *Service {
+	return &Service{llm: llm, tools: tools, audit: auditLogger, logger: logger, maxTurns: defaultMaxTurns}
 }
 
 // Available reports whether the assistant is configured.
@@ -67,6 +69,7 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 	for i := 0; i < s.maxTurns; i++ {
 		result, err := s.llm.Generate(ctx, systemPrompt, history, decls)
 		if err != nil {
+			s.logLLMError(ctx, err)
 			return nil, fmt.Errorf("%w: %v", ErrLLM, err)
 		}
 		if len(result.ToolCalls) == 0 {
@@ -95,9 +98,19 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 	// Turn budget exhausted — force a final answer with tools withheld.
 	result, err := s.llm.Generate(ctx, systemPrompt, history, nil)
 	if err != nil {
+		s.logLLMError(ctx, err)
 		return nil, fmt.Errorf("%w: %v", ErrLLM, err)
 	}
 	return s.finish(userID, result.Text, toolsUsed, proposals), nil
+}
+
+// logLLMError records the provider failure server-side. The handler returns an
+// opaque 502 to the client, so without this the cause (auth failure, timeout,
+// quota) is invisible to operators.
+func (s *Service) logLLMError(ctx context.Context, err error) {
+	if s.logger != nil {
+		s.logger.WarnContext(ctx, "assistant llm generate failed", "error", err.Error())
+	}
 }
 
 func (s *Service) finish(userID, reply string, toolsUsed []string, proposals []Proposal) *ChatResponse {

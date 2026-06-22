@@ -103,7 +103,8 @@ export class HttpServicesRepository implements IServicesRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('PAYMENT_FAILED', res.error?.message || 'Bill payment failed');
+      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'PAYMENT_FAILED';
+      return apiError(code, res.error?.message || 'Bill payment failed');
     }
 
     const bill: Bill = {
@@ -165,7 +166,8 @@ export class HttpServicesRepository implements IServicesRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('RECHARGE_FAILED', res.error?.message || 'Recharge failed');
+      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'RECHARGE_FAILED';
+      return apiError(code, res.error?.message || 'Recharge failed');
     }
 
     const recharge: Recharge = {

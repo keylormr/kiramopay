@@ -25,7 +25,12 @@ type Metrics struct {
 	// Global counters
 	totalRequests atomic.Int64
 	totalErrors   atomic.Int64
-	startTime     time.Time
+
+	// Business-invariant signals, set out-of-band by background workers.
+	ledgerDriftCRC          atomic.Int64 // residual cache↔journal CRC drift (abs minor units)
+	webhookDeliveriesFailed atomic.Int64 // cumulative failed webhook delivery attempts
+
+	startTime time.Time
 }
 
 var globalMetrics = &Metrics{
@@ -33,6 +38,20 @@ var globalMetrics = &Metrics{
 	requestDurationSums:   make(map[string]*atomic.Int64),
 	requestDurationCounts: make(map[string]*atomic.Int64),
 	startTime:             time.Now(),
+}
+
+// SetLedgerDriftCRC publishes the residual cache↔journal CRC drift (minor units,
+// magnitude) observed by the reconciliation worker. Surfaced as the
+// kiramopay_ledger_drift_crc gauge: a non-zero value means the wallets cache and
+// the immutable journal disagree after reconciliation and a human should look.
+func SetLedgerDriftCRC(driftMinor int64) {
+	globalMetrics.ledgerDriftCRC.Store(driftMinor)
+}
+
+// RecordWebhookDeliveryFailed increments the count of failed webhook delivery
+// attempts. Surfaced as the kiramopay_webhook_deliveries_failed counter.
+func RecordWebhookDeliveryFailed() {
+	globalMetrics.webhookDeliveriesFailed.Add(1)
 }
 
 // RecordRequest records an HTTP request in metrics.
@@ -203,6 +222,15 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	m.mu.RUnlock()
 	sb.WriteString("\n")
+
+	// Business-invariant signals (set by background workers; default 0).
+	sb.WriteString("# HELP kiramopay_ledger_drift_crc Residual cache vs journal CRC drift (minor units) from the last reconcile.\n")
+	sb.WriteString("# TYPE kiramopay_ledger_drift_crc gauge\n")
+	fmt.Fprintf(&sb, "kiramopay_ledger_drift_crc %d\n\n", m.ledgerDriftCRC.Load())
+
+	sb.WriteString("# HELP kiramopay_webhook_deliveries_failed Total failed webhook delivery attempts.\n")
+	sb.WriteString("# TYPE kiramopay_webhook_deliveries_failed counter\n")
+	fmt.Fprintf(&sb, "kiramopay_webhook_deliveries_failed %d\n\n", m.webhookDeliveriesFailed.Load())
 
 	// Go runtime metrics
 	var memStats runtime.MemStats

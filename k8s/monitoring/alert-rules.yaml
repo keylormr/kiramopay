@@ -99,20 +99,30 @@ data:
               summary: "GC running frequently (>5/s)"
               description: "High allocation pressure causing frequent GC cycles."
 
-      # ── Business invariants (require exporting these as metrics first) ─────
-      # The ledger drift and webhook-delivery signals live in audit/DB today, not
-      # /metrics. Once an exporter publishes them, enable these (see SLO.md).
-      # - name: kiramopay-business
-      #   rules:
-      #     - alert: LedgerDrift
-      #       expr: max(kiramopay_ledger_drift_crc) > 0
-      #       for: 1m
-      #       labels: { severity: page }
-      #       annotations:
-      #         summary: "Ledger cache↔journal drift detected"
-      #     - alert: WebhookDeliveryBacklog
-      #       expr: sum(kiramopay_webhook_deliveries_failed) > 50
-      #       for: 15m
-      #       labels: { severity: warning }
-      #       annotations:
-      #         summary: "Webhook delivery failures accumulating"
+      # ── Business invariants ───────────────────────────────────────────────
+      # Backed by the manual /metrics signals the reconcile worker and webhook
+      # dispatcher publish (kiramopay_ledger_drift_crc gauge,
+      # kiramopay_webhook_deliveries_failed counter). See SLO.md.
+      - name: kiramopay-business
+        rules:
+          - alert: LedgerDrift
+            # Residual (post-auto-fix) cache↔journal drift. Any non-zero value
+            # means the wallets cache and the immutable journal disagree.
+            expr: max(kiramopay_ledger_drift_crc) > 0
+            for: 1m
+            labels:
+              severity: page
+            annotations:
+              summary: "Ledger cache↔journal drift detected"
+              description: "Reconciliation observed residual CRC drift it could not auto-correct. Inspect wallet vs journal balances immediately."
+
+          - alert: WebhookDeliveryBacklog
+            # >50 failed webhook delivery attempts in the last 15m (self-clearing,
+            # unlike a raw counter threshold).
+            expr: increase(kiramopay_webhook_deliveries_failed[15m]) > 50
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Webhook delivery failures accumulating"
+              description: "More than 50 webhook delivery attempts failed in 15m. Check endpoint health and the dispatcher logs."

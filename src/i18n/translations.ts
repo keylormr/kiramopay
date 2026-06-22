@@ -118,6 +118,8 @@ type TranslationKeys = {
   twofa_manual_key: string;
   twofa_enter_code: string;
   twofa_verify: string;
+  mfa_challenge_title: string;
+  mfa_challenge_desc: string;
   twofa_recovery_title: string;
   twofa_recovery_desc: string;
   twofa_copy: string;
@@ -567,6 +569,30 @@ type TranslationKeys = {
   escrow_dispute_reason: string;
   escrow_dispute_submit: string;
   escrow_action_failed: string;
+  payout_menu: string;
+  payout_menu_desc: string;
+  payout_title: string;
+  payout_subtitle: string;
+  payout_empty: string;
+  payout_empty_desc: string;
+  payout_new: string;
+  payout_create_title: string;
+  payout_rail: string;
+  payout_amount: string;
+  payout_beneficiary: string;
+  payout_account: string;
+  payout_account_hint: string;
+  payout_create_btn: string;
+  payout_status_pending: string;
+  payout_status_processing: string;
+  payout_status_completed: string;
+  payout_status_failed: string;
+  payout_refresh: string;
+  payout_failure_reason: string;
+  payout_destination: string;
+  payout_no_rails: string;
+  payout_mfa_required: string;
+  payout_action_failed: string;
   apikeys_title: string;
   apikeys_desc: string;
   apikeys_empty: string;
@@ -701,6 +727,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'O ingresá esta clave manualmente:',
     twofa_enter_code: 'Ingresá el código de 6 dígitos',
     twofa_verify: 'Verificar y activar',
+    mfa_challenge_title: 'Verificación requerida',
+    mfa_challenge_desc: 'Esta operación de alto monto requiere tu código de doble factor (2FA).',
     twofa_recovery_title: '¡Listo! Guardá tus códigos de recuperación',
     twofa_recovery_desc: 'Cada código sirve una sola vez si perdés acceso a tu autenticador. Guardalos en un lugar seguro.',
     twofa_copy: 'Copiar códigos',
@@ -1125,6 +1153,30 @@ const translations: Record<Language, TranslationKeys> = {
     escrow_dispute_reason: 'Motivo',
     escrow_dispute_submit: 'Enviar disputa',
     escrow_action_failed: 'No se pudo completar la acción',
+    payout_menu: 'Pagos salientes',
+    payout_menu_desc: 'Envía dinero a cuentas externas',
+    payout_title: 'Pagos salientes',
+    payout_subtitle: 'Envía fondos a cuentas externas mediante un riel de pago.',
+    payout_empty: 'Sin pagos salientes',
+    payout_empty_desc: 'Cuando envíes fondos a una cuenta externa, aparecerán aquí.',
+    payout_new: 'Nuevo pago',
+    payout_create_title: 'Nuevo pago saliente',
+    payout_rail: 'Riel de pago',
+    payout_amount: 'Monto',
+    payout_beneficiary: 'Nombre del beneficiario',
+    payout_account: 'Cuenta de destino',
+    payout_account_hint: 'Número de cuenta, IBAN, teléfono o dirección según el riel.',
+    payout_create_btn: 'Enviar pago',
+    payout_status_pending: 'Pendiente',
+    payout_status_processing: 'Procesando',
+    payout_status_completed: 'Completado',
+    payout_status_failed: 'Fallido',
+    payout_refresh: 'Actualizar estado',
+    payout_failure_reason: 'Motivo del fallo',
+    payout_destination: 'Destino',
+    payout_no_rails: 'No hay rieles de pago disponibles.',
+    payout_mfa_required: 'Para montos altos, verifica primero tu doble factor (2FA) en tu perfil.',
+    payout_action_failed: 'No se pudo completar la acción',
     apikeys_title: 'Claves API',
     apikeys_desc: 'Autentican el acceso programático a tu cuenta',
     apikeys_empty: 'No tienes claves',
@@ -1258,6 +1310,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'Or enter this key manually:',
     twofa_enter_code: 'Enter the 6-digit code',
     twofa_verify: 'Verify and enable',
+    mfa_challenge_title: 'Verification required',
+    mfa_challenge_desc: 'This high-value action requires your two-factor (2FA) code.',
     twofa_recovery_title: 'Done! Save your recovery codes',
     twofa_recovery_desc: 'Each code works once if you lose access to your authenticator. Keep them somewhere safe.',
     twofa_copy: 'Copy codes',
@@ -1682,6 +1736,30 @@ const translations: Record<Language, TranslationKeys> = {
     escrow_dispute_reason: 'Reason',
     escrow_dispute_submit: 'Submit dispute',
     escrow_action_failed: 'Could not complete the action',
+    payout_menu: 'Payouts',
+    payout_menu_desc: 'Send money to external accounts',
+    payout_title: 'Payouts',
+    payout_subtitle: 'Send funds to external accounts through a payment rail.',
+    payout_empty: 'No payouts yet',
+    payout_empty_desc: 'When you send funds to an external account, they will show up here.',
+    payout_new: 'New payout',
+    payout_create_title: 'New payout',
+    payout_rail: 'Payment rail',
+    payout_amount: 'Amount',
+    payout_beneficiary: 'Beneficiary name',
+    payout_account: 'Destination account',
+    payout_account_hint: 'Account number, IBAN, phone or address, depending on the rail.',
+    payout_create_btn: 'Send payout',
+    payout_status_pending: 'Pending',
+    payout_status_processing: 'Processing',
+    payout_status_completed: 'Completed',
+    payout_status_failed: 'Failed',
+    payout_refresh: 'Refresh status',
+    payout_failure_reason: 'Failure reason',
+    payout_destination: 'Destination',
+    payout_no_rails: 'No payment rails available.',
+    payout_mfa_required: 'For high amounts, verify your two-factor (2FA) in your profile first.',
+    payout_action_failed: 'Could not complete the action',
     apikeys_title: 'API keys',
     apikeys_desc: 'Authenticate programmatic access to your account',
     apikeys_empty: 'No keys yet',
@@ -1815,6 +1893,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: '或手動輸入此金鑰：',
     twofa_enter_code: '輸入 6 位數驗證碼',
     twofa_verify: '驗證並啟用',
+    mfa_challenge_title: '需要驗證',
+    mfa_challenge_desc: '此大額操作需要你的雙重驗證 (2FA) 代碼。',
     twofa_recovery_title: '完成！請儲存你的復原碼',
     twofa_recovery_desc: '若你失去驗證器的存取權，每個碼只能使用一次。請妥善保存。',
     twofa_copy: '複製代碼',
@@ -2231,6 +2311,30 @@ const translations: Record<Language, TranslationKeys> = {
     escrow_dispute_reason: '原因',
     escrow_dispute_submit: '送出爭議',
     escrow_action_failed: '無法完成此操作',
+    payout_menu: '對外付款',
+    payout_menu_desc: '將資金匯至外部帳戶',
+    payout_title: '對外付款',
+    payout_subtitle: '透過付款管道將資金匯至外部帳戶。',
+    payout_empty: '尚無對外付款',
+    payout_empty_desc: '當你將資金匯至外部帳戶時，會顯示在此處。',
+    payout_new: '新增付款',
+    payout_create_title: '新增對外付款',
+    payout_rail: '付款管道',
+    payout_amount: '金額',
+    payout_beneficiary: '收款人姓名',
+    payout_account: '目標帳戶',
+    payout_account_hint: '依管道而定，可為帳號、IBAN、電話或地址。',
+    payout_create_btn: '送出付款',
+    payout_status_pending: '待處理',
+    payout_status_processing: '處理中',
+    payout_status_completed: '已完成',
+    payout_status_failed: '失敗',
+    payout_refresh: '更新狀態',
+    payout_failure_reason: '失敗原因',
+    payout_destination: '目的地',
+    payout_no_rails: '沒有可用的付款管道。',
+    payout_mfa_required: '大額付款請先在個人資料中完成雙重驗證 (2FA)。',
+    payout_action_failed: '無法完成此操作',
     apikeys_title: 'API 金鑰',
     apikeys_desc: '驗證對您帳戶的程式化存取',
     apikeys_empty: '尚無金鑰',
@@ -2364,6 +2468,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'または、このキーを手動で入力してください：',
     twofa_enter_code: '6桁のコードを入力',
     twofa_verify: '確認して有効化',
+    mfa_challenge_title: '確認が必要です',
+    mfa_challenge_desc: 'この高額の操作には二要素認証 (2FA) コードが必要です。',
     twofa_recovery_title: '完了！リカバリーコードを保存してください',
     twofa_recovery_desc: '認証アプリにアクセスできなくなった場合、各コードは一度だけ使用できます。安全な場所に保管してください。',
     twofa_copy: 'コードをコピー',
@@ -2780,6 +2886,30 @@ const translations: Record<Language, TranslationKeys> = {
     escrow_dispute_reason: '理由',
     escrow_dispute_submit: '異議を送信',
     escrow_action_failed: '操作を完了できませんでした',
+    payout_menu: '送金（出金）',
+    payout_menu_desc: '外部口座へ送金します',
+    payout_title: '送金（出金）',
+    payout_subtitle: '送金レールを通じて外部口座へ資金を送ります。',
+    payout_empty: '送金はまだありません',
+    payout_empty_desc: '外部口座へ送金すると、ここに表示されます。',
+    payout_new: '新しい送金',
+    payout_create_title: '新しい送金',
+    payout_rail: '送金レール',
+    payout_amount: '金額',
+    payout_beneficiary: '受取人名',
+    payout_account: '送金先口座',
+    payout_account_hint: 'レールに応じて、口座番号・IBAN・電話番号・アドレスなど。',
+    payout_create_btn: '送金する',
+    payout_status_pending: '保留中',
+    payout_status_processing: '処理中',
+    payout_status_completed: '完了',
+    payout_status_failed: '失敗',
+    payout_refresh: 'ステータスを更新',
+    payout_failure_reason: '失敗理由',
+    payout_destination: '送金先',
+    payout_no_rails: '利用できる送金レールがありません。',
+    payout_mfa_required: '高額の送金は、先にプロフィールで二要素認証 (2FA) を確認してください。',
+    payout_action_failed: '操作を完了できませんでした',
     apikeys_title: 'APIキー',
     apikeys_desc: 'アカウントへのプログラムアクセスを認証します',
     apikeys_empty: 'キーはまだありません',
@@ -2913,6 +3043,8 @@ const translations: Record<Language, TranslationKeys> = {
     twofa_manual_key: 'या यह कुंजी मैन्युअल रूप से दर्ज करें:',
     twofa_enter_code: '6 अंकों का कोड दर्ज करें',
     twofa_verify: 'सत्यापित करें और सक्षम करें',
+    mfa_challenge_title: 'सत्यापन आवश्यक',
+    mfa_challenge_desc: 'इस बड़ी राशि की कार्रवाई के लिए आपका दो-कारक (2FA) कोड आवश्यक है।',
     twofa_recovery_title: 'हो गया! अपने रिकवरी कोड सहेजें',
     twofa_recovery_desc: 'यदि आप अपने प्रमाणक तक पहुंच खो देते हैं तो प्रत्येक कोड एक बार काम करता है। इन्हें सुरक्षित स्थान पर रखें।',
     twofa_copy: 'कोड कॉपी करें',
@@ -3329,6 +3461,30 @@ const translations: Record<Language, TranslationKeys> = {
     escrow_dispute_reason: 'कारण',
     escrow_dispute_submit: 'विवाद सबमिट करें',
     escrow_action_failed: 'कार्रवाई पूरी नहीं हो सकी',
+    payout_menu: 'भुगतान (आउटगोइंग)',
+    payout_menu_desc: 'बाहरी खातों में पैसे भेजें',
+    payout_title: 'भुगतान (आउटगोइंग)',
+    payout_subtitle: 'भुगतान रेल के ज़रिए बाहरी खातों में धन भेजें।',
+    payout_empty: 'अभी कोई भुगतान नहीं',
+    payout_empty_desc: 'जब आप किसी बाहरी खाते में धन भेजेंगे, तो वे यहाँ दिखेंगे।',
+    payout_new: 'नया भुगतान',
+    payout_create_title: 'नया भुगतान',
+    payout_rail: 'भुगतान रेल',
+    payout_amount: 'राशि',
+    payout_beneficiary: 'लाभार्थी का नाम',
+    payout_account: 'गंतव्य खाता',
+    payout_account_hint: 'रेल के अनुसार खाता संख्या, IBAN, फ़ोन या पता।',
+    payout_create_btn: 'भुगतान भेजें',
+    payout_status_pending: 'लंबित',
+    payout_status_processing: 'प्रक्रियाधीन',
+    payout_status_completed: 'पूर्ण',
+    payout_status_failed: 'विफल',
+    payout_refresh: 'स्थिति ताज़ा करें',
+    payout_failure_reason: 'विफलता का कारण',
+    payout_destination: 'गंतव्य',
+    payout_no_rails: 'कोई भुगतान रेल उपलब्ध नहीं है।',
+    payout_mfa_required: 'बड़ी राशि के लिए पहले अपनी प्रोफ़ाइल में दो-कारक (2FA) सत्यापित करें।',
+    payout_action_failed: 'कार्रवाई पूरी नहीं हो सकी',
     apikeys_title: 'API कीज़',
     apikeys_desc: 'अपने खाते तक प्रोग्रामैटिक एक्सेस को प्रमाणित करें',
     apikeys_empty: 'अभी कोई की नहीं',

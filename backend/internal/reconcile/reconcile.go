@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/middleware"
 )
 
 type Service struct {
@@ -160,6 +161,10 @@ func (s *Service) runOnceErr(ctx context.Context) (*Report, error) {
 	rpt.FinishedAt = time.Now()
 	s.lastDrift.Store(rpt.DriftCRC)
 	s.lastFixed.Store(rpt.FixedDriftCRC)
+	// Publish the residual (observed minus auto-corrected) CRC drift as a metric.
+	// When auto-fix clears everything this is 0; capped/un-fixable drift keeps it
+	// non-zero so the LedgerDrift alert pages a human. (See k8s/monitoring.)
+	middleware.SetLedgerDriftCRC(abs(rpt.DriftCRC - rpt.FixedDriftCRC))
 	if s.logger != nil {
 		s.logger.Info("reconcile complete",
 			"wallets_total", rpt.WalletsTotal,

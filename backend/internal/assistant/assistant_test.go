@@ -1,8 +1,10 @@
 package assistant
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 
 type fakeLLM struct {
 	results     []*LLMResult
+	err         error // when set, Generate fails with it
 	calls       int
 	lastTools   []FunctionDecl
 	lastHistory []Message
@@ -26,6 +29,9 @@ func (f *fakeLLM) Generate(_ context.Context, _ string, history []Message, tools
 	f.calls++
 	f.lastTools = tools
 	f.lastHistory = history
+	if f.err != nil {
+		return nil, f.err
+	}
 	if i < len(f.results) {
 		return f.results[i], nil
 	}
@@ -68,7 +74,7 @@ func newTestTools(w *fakeWallet, tx *fakeTx) *Tools {
 // ── service gating & validation ───────────────────────────────────────────────
 
 func TestChatUnavailableWithoutLLM(t *testing.T) {
-	svc := NewService(nil, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	svc := NewService(nil, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil)
 	if svc.Available() {
 		t.Fatal("expected Available() == false with nil LLM")
 	}
@@ -78,13 +84,31 @@ func TestChatUnavailableWithoutLLM(t *testing.T) {
 }
 
 func TestChatRejectsEmptyAndOversized(t *testing.T) {
-	svc := NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	svc := NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil)
 	if _, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "   "}); !errors.Is(err, ErrInvalidRequest) {
 		t.Errorf("empty: expected ErrInvalidRequest, got %v", err)
 	}
 	big := strings.Repeat("x", maxMessageLen+1)
 	if _, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: big}); !errors.Is(err, ErrInvalidRequest) {
 		t.Errorf("oversized: expected ErrInvalidRequest, got %v", err)
+	}
+}
+
+func TestChatLogsLLMErrorCause(t *testing.T) {
+	// The handler maps ErrLLM to an opaque 502; the underlying cause must still
+	// be logged server-side so operators can diagnose it.
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	llm := &fakeLLM{err: errors.New("anthropic 401 unauthorized")}
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, logger)
+
+	_, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "hi"})
+	if !errors.Is(err, ErrLLM) {
+		t.Fatalf("expected ErrLLM, got %v", err)
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "anthropic 401 unauthorized") {
+		t.Errorf("expected the cause to be logged, got %q", logged)
 	}
 }
 
@@ -96,7 +120,7 @@ func TestChatRunsToolThenAnswers(t *testing.T) {
 		{ToolCalls: []ToolCall{{Name: "get_balance"}}}, // round 1: ask for balance
 		{Text: "You have ₡15,000."},                     // round 2: final answer
 	}}
-	svc := NewService(llm, newTestTools(w, &fakeTx{}), nil)
+	svc := NewService(llm, newTestTools(w, &fakeTx{}), nil, nil)
 
 	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "what's my balance?"})
 	if err != nil {
@@ -131,7 +155,7 @@ func TestChatSurfacesProposalsWithoutMovingMoney(t *testing.T) {
 	}}
 	// Money services are nil: if a propose tool ever tried to move money it would
 	// panic. It must not.
-	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil)
 	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "send 5000 to 8888-7777"})
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -149,7 +173,7 @@ func TestChatHandlesUnknownToolGracefully(t *testing.T) {
 		{ToolCalls: []ToolCall{{Name: "transfer_money", Args: map[string]any{"to": "x"}}}}, // not a real tool
 		{Text: "I can't move money, but here's your balance."},
 	}}
-	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil)
 	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "send 1000"})
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -166,7 +190,7 @@ func TestChatTerminatesAtTurnBudget(t *testing.T) {
 	for i := 0; i < defaultMaxTurns+2; i++ {
 		llm.results = append(llm.results, &LLMResult{ToolCalls: []ToolCall{{Name: "get_balance"}}})
 	}
-	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil)
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil)
 	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "loop"})
 	if err != nil {
 		t.Fatalf("chat: %v", err)

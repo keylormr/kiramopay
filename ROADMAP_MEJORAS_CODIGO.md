@@ -273,6 +273,115 @@ código (dashboards + reglas + SLO) se puede versionar igual.
 
 ---
 
+# Segunda tanda
+
+Mejoras de código posteriores a los 4 ítems de arriba. Estado actual:
+
+| # | Mejora | Esfuerzo | Estado |
+|---|---|---|---|
+| 5 | Frontend de Payouts | M | ✅ HECHO |
+| 6 | Logging del error del LLM en el asistente | S | ✅ HECHO |
+| 7 | Métricas de negocio (drift + webhooks) + reglas | S–M | ✅ HECHO |
+| 8 | Tests E2E (escrow/payouts/asistente) | M | ✅ HECHO |
+| 9 | Adapter real de `PayoutRail` | M | ⛔ BLOQUEADO (contrato/credenciales de partner) |
+
+## 5. Frontend de Payouts ✅ HECHO
+
+UI de usuario para el backend `PayoutRail` (no existía). Espeja el patrón de
+escrow: repo + adapter **HTTP-only** (`payout.repository.ts` / `payout.http.ts`,
+mueven dinero → sin mock), cableado en el `ApiLayer` (http + mock). `PayoutView`
+(overlay desde **Perfil › Herramientas de comercio**): lista, crea sobre un riel
+elegido de `GET /payouts/rails`, y refresca un payout `processing` contra el
+riel; idempotency key generada en el cliente. i18n 24 claves ×5. Tests de
+adapter (espejan `escrow.http.test.ts`). MFA ≥100K se resuelve con el challenge
+inline (ver «Mejoras de seguimiento › C»). typecheck/lint(0)/build verdes.
+
+## 6. Logging del error del LLM ✅ HECHO
+
+`assistant.Service` se tragaba la causa del fallo del proveedor (el handler
+mapea a un 502 opaco). Se inyecta un `*slog.Logger` y se loguea la causa con
+`WarnContext` en los 2 sitios de `llm.Generate`. El 502 al cliente no cambia.
+Test que verifica que la causa se loguea.
+
+## 7. Métricas de negocio + reglas ✅ HECHO
+
+Se exponen en `/metrics`: `kiramopay_ledger_drift_crc` (gauge; el worker
+`reconcile` publica el drift residual tras auto-fix) y
+`kiramopay_webhook_deliveries_failed` (counter; el dispatcher de webhooks lo
+incrementa por intento fallido). Se habilitan las reglas `LedgerDrift` y
+`WebhookDeliveryBacklog` (grupo `kiramopay-business` en
+`k8s/monitoring/alert-rules.yaml`; el backlog usa `increase(...[15m]) > 50` para
+ser auto-clearing). `SLO.md` actualizado.
+
+## 8. Tests E2E ✅ HECHO
+
+Specs Playwright para escrow, payouts y asistente (`e2e/{escrow,payout,assistant}.spec.ts`),
+espejando `stubBackend` (red stubeada en el browser, sin backend). 19 E2E verdes
+(14 previos + 5 nuevos).
+
+## 9. Adapter real de `PayoutRail` ⛔ BLOQUEADO
+
+Implementar un `Rail` real (SINPE participante / dLocal / Circle) + sembrar sus
+cuentas `SYSTEM:EXTERNAL:<RAIL>:<CUR>` en una migración. **Bloqueado**: requiere
+contrato/credenciales del partner, no es solo código.
+
+---
+
+# Mejoras de seguimiento ✅ HECHO
+
+Set posterior a la segunda tanda (mismo PR), todo verificado en verde.
+
+## A. Paneles de dashboard de negocio
+
+`k8s/monitoring/dashboard-red-slo.yaml`: paneles para `kiramopay_ledger_drift_crc`
+(stat, rojo ante cualquier drift residual) y `kiramopay_webhook_deliveries_failed`
+(timeseries, `increase(...[15m])`). Cierra el loop del #7 (las métricas pasan de
+solo-alertables a visibles).
+
+## B. Proveedor Claude (Anthropic) para el asistente
+
+`internal/assistant/claude.go`: cliente de la Messages API (`/v1/messages`, HTTP
+crudo como `gemini.go`, vía el cliente HTTP con tracing) detrás de la interfaz
+`LLM` neutral. Mapea la historia neutral a Anthropic (turno de tool-calls →
+`assistant` con bloques `tool_use` de ids `toolu_N`; resultados → `user` con
+`tool_result` casados **posicionalmente**); tools con `input_schema`; sin sampling
+params (Opus 4.7+ los rechaza); refusal (200 + `stop_reason`) → texto neutral.
+Config `AnthropicConfig` (`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`, default
+`claude-opus-4-8`). `main.go`: **precedencia Claude > Gemini**; sin ninguna key el
+asistente queda no disponible. `.env.example` documenta ambos proveedores. 5 tests.
+
+## C. MFA inline para acciones de dinero de alto monto
+
+Antes, una acción de alto monto (≥100K CRC) que el backend gateaba con
+`MFA_REQUIRED` **moría en el error** — no había forma de completarla desde la UI.
+Ahora:
+
+- `src/components/MfaChallengeSheet.tsx` (compartido): pide el código TOTP y llama
+  a `mfa.totpVerify(code, 'high_value_tx')`; al verificar, el caller **reintenta**
+  la acción original (que ahora pasa el gate del backend).
+- Los adapters HTTP que aplanaban el código de error (`escrow`, `payout`, `sinpe`,
+  `services` payBill/recharge) ahora **preservan** `MFA_REQUIRED`; se exporta la
+  constante `MFA_REQUIRED` desde `@/api`.
+- Cableado en `EscrowView` (fund), `PayoutView` (create), `AssistantView`
+  (`confirmProposal` → SINPE / recarga / pago de servicios de las propuestas
+  confirmadas) y **`SinpeView`** (envío directo).
+
+> **Nota sobre SINPE**: antes `SinpeView.handleSendMoney` NO llamaba al backend
+> (simulación local con `setTimeout` + reducer). Ahora invoca
+> `getApiLayer().sinpe.send(...)`: el adapter **mock** lo registra localmente y el
+> adapter **HTTP** mueve dinero en el backend (y puede pedir MFA). En MFA_REQUIRED
+> abre el challenge y reintenta; mantiene la UX de éxito (dispatch local +
+> success sheet). El saldo global sigue refrescándose por el sync existente
+> (igual que escrow/payout).
+
+## D. Tests de componente
+
+`PayoutView`, `EscrowView` y `AssistantView`: tests de React (render + interacción
++ flujo MFA completo: acción → `MFA_REQUIRED` → challenge → verify → reintento).
+Antes solo había tests de adapter. Frontend total **358** tests.
+
+---
+
 ## Notas de estado (para arrancar en frío)
 
 - **Deploy pendiente** (manual, una vez): migraciones **028 (TOTP), 029

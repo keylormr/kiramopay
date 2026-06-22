@@ -15,13 +15,14 @@ import { MockSplitPayRepository } from './splitpay.mock';
 import { MockBudgetRepository } from './budget.mock';
 import { MockRecurringRepository } from './recurring.mock';
 
-// Auth, MFA, escrow and B2B are NOT mocked — they always go through the real
-// backend (they move money / hold secrets). See createApiLayer() in
+// Auth, MFA, escrow, payout and B2B are NOT mocked — they always go through the
+// real backend (they move money / hold secrets). See createApiLayer() in
 // src/api/index.ts.
 export function createMockApiLayer(
   auth: ApiLayer['auth'],
   mfa: ApiLayer['mfa'],
   escrow: ApiLayer['escrow'],
+  payout: ApiLayer['payout'],
   b2b: ApiLayer['b2b'],
   assistant: ApiLayer['assistant'],
 ): ApiLayer {
@@ -29,6 +30,7 @@ export function createMockApiLayer(
     auth,
     mfa,
     escrow,
+    payout,
     b2b,
     assistant,
     accounts: new MockAccountRepository(),

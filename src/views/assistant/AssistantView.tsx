@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
-import { getApiLayer } from '@/api';
+import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
 import type { AssistantTurn, AssistantProposal } from '@/api';
 
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
@@ -15,6 +16,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const [sending, setSending] = useState(false);
   // Per-proposal confirmation status, keyed by "<msgIndex>:<proposalIndex>".
   const [pstate, setPstate] = useState<Record<string, { status: ProposalState; error?: string }>>({});
+  const [showMfa, setShowMfa] = useState(false);
+  // The proposal whose confirmation hit the high-value MFA gate, retried after verify.
+  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -68,6 +72,13 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         amount,
         period: p.period || '',
       });
+    }
+    // High-value action: prompt for a TOTP code, then retry this same proposal.
+    if (!res.success && res.error?.code === MFA_REQUIRED) {
+      mfaRetryRef.current = { key, p };
+      setShowMfa(true);
+      setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
+      return;
     }
     setPstate((s) => ({
       ...s,
@@ -226,6 +237,18 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <Icons.Send size={18} />
         </button>
       </div>
+
+      {/* High-value MFA challenge → on verify, retry the pending proposal */}
+      <MfaChallengeSheet
+        isOpen={showMfa}
+        onClose={() => setShowMfa(false)}
+        onVerified={() => {
+          setShowMfa(false);
+          const pending = mfaRetryRef.current;
+          mfaRetryRef.current = null;
+          if (pending) confirmProposal(pending.key, pending.p);
+        }}
+      />
     </div>
   );
 };

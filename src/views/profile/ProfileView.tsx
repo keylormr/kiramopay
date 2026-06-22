@@ -13,9 +13,10 @@ import { useLanguage } from '../../i18n/LanguageContext';
 interface ProfileViewProps {
   onOpenFAQ?: () => void;
   onOpenEscrow?: () => void;
+  onOpenPayout?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout }) => {
   const { state, dispatch } = useApp();
   const { t, language, setLanguage, languages, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
@@ -310,6 +311,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('escrow_menu')}</p>
               <p className="text-xs uv-text-muted mt-0.5">{t('escrow_menu_desc')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
+          <button
+            onClick={() => onOpenPayout?.()}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Send size={18} className="text-indigo-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('payout_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('payout_menu_desc')}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>

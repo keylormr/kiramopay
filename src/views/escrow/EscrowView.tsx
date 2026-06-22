@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
-import { getApiLayer } from '@/api';
+import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { EscrowAgreement, EscrowStatus } from '@/api';
+
+type EscrowActionResult = { success: boolean; data?: EscrowAgreement; error?: { code?: string; message: string } };
 
 const STATUS_COLOR: Record<EscrowStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -43,6 +46,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [acting, setActing] = useState(false);
   const [disputing, setDisputing] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
+  const [showMfa, setShowMfa] = useState(false);
+  // The money action (e.g. fund) that returned MFA_REQUIRED, retried after verify.
+  const pendingActionRef = useRef<((id: string) => Promise<EscrowActionResult>) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,15 +93,19 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   };
 
   // run a money-moving action against the selected agreement.
-  const runAction = async (
-    fn: (id: string) => Promise<{ success: boolean; data?: EscrowAgreement; error?: { message: string } }>,
-  ) => {
+  const runAction = async (fn: (id: string) => Promise<EscrowActionResult>) => {
     if (!selected) return;
     setActing(true);
     setError('');
     const res = await fn(selected.id);
     setActing(false);
     if (!res.success || !res.data) {
+      // High-value funding: prompt for a TOTP code, then retry this same action.
+      if (res.error?.code === MFA_REQUIRED) {
+        pendingActionRef.current = fn;
+        setShowMfa(true);
+        return;
+      }
       setError(res.error?.message || t('escrow_action_failed'));
       return;
     }
@@ -355,6 +365,18 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         )}
       </BottomSheet>
+
+      {/* High-value MFA challenge → on verify, retry the pending action (fund) */}
+      <MfaChallengeSheet
+        isOpen={showMfa}
+        onClose={() => setShowMfa(false)}
+        onVerified={() => {
+          setShowMfa(false);
+          const fn = pendingActionRef.current;
+          pendingActionRef.current = null;
+          if (fn) runAction(fn);
+        }}
+      />
     </div>
   );
 };
