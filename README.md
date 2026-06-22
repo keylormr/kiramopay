@@ -225,8 +225,12 @@ VITE_API_URL=http://localhost:8080
 # Push notifications (opcional, necesitas generar claves VAPID)
 VITE_VAPID_PUBLIC_KEY=
 
-# API key de Gemini (para chatbot IA, opcional)
+# Proveedor del asistente IA (opcional). Claude tiene precedencia sobre Gemini
+# si ambas keys están. Sin ninguna, el asistente queda "no disponible".
+ANTHROPIC_API_KEY=
+# ANTHROPIC_MODEL=claude-opus-4-8   # opcional
 GEMINI_API_KEY=
+# GEMINI_MODEL=gemini-2.0-flash     # opcional
 ```
 
 ### Estructura del frontend
