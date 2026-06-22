@@ -104,7 +104,9 @@ export class HttpSinpeRepository implements ISinpeRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('SINPE_FAILED', res.error?.message || 'SINPE transfer failed');
+      // Preserve MFA_REQUIRED so callers can prompt for a TOTP code and retry.
+      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'SINPE_FAILED';
+      return apiError(code, res.error?.message || 'SINPE transfer failed');
     }
 
     const tx: SinpeTransaction = {
