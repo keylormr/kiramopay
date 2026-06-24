@@ -9,16 +9,25 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
 )
+
+// Broadcaster fans a real-time message out to all of a user's live WebSocket
+// connections. Implemented by the websocket hub; optional so notifications keep
+// working (history + web-push) when no hub is wired (e.g. in tests).
+type Broadcaster interface {
+	SendToUser(userID string, data any)
+}
 
 // Service handles push notification operations.
 type Service struct {
 	repo            *Repository
 	vapidPublicKey  string
 	vapidPrivateKey string
+	broadcaster     Broadcaster
 }
 
 // NewService creates a new notification service.
@@ -28,6 +37,12 @@ func NewService(repo *Repository, vapidPublicKey, vapidPrivateKey string) *Servi
 		vapidPublicKey:  vapidPublicKey,
 		vapidPrivateKey: vapidPrivateKey,
 	}
+}
+
+// SetBroadcaster wires the real-time WebSocket hub. Once set, SendToUser also
+// pushes each notification live to the user's open sockets.
+func (s *Service) SetBroadcaster(b Broadcaster) {
+	s.broadcaster = b
 }
 
 // Subscribe saves or updates a push subscription.
@@ -47,23 +62,32 @@ func (s *Service) Unsubscribe(ctx context.Context, userID, endpoint string) erro
 	return s.repo.DeleteSubscription(ctx, userID, endpoint)
 }
 
-// SendToUser sends a push notification to all of a user's subscriptions.
+// SendToUser persists a notification, pushes it live over any open WebSocket
+// connections, and delivers web push to the user's registered subscriptions.
 func (s *Service) SendToUser(ctx context.Context, userID string, payload *NotificationPayload) error {
-	subs, err := s.repo.GetSubscriptionsByUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	// Persist notification history
+	// Persist to history first; the id generated here is reused for the live WS
+	// push so the client can reconcile it against the record it later syncs.
 	record := &NotificationRecord{
-		ID:     uuid.New().String(),
-		UserID: userID,
-		Title:  payload.Title,
-		Body:   payload.Body,
-		Type:   payload.Tag,
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		Title:     payload.Title,
+		Body:      payload.Body,
+		Type:      payload.Tag,
+		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.repo.InsertNotification(ctx, record); err != nil {
 		slog.Error("failed to save notification history", "error", err)
+	}
+
+	// Real-time delivery to any open sockets for this user. Independent of
+	// web-push subscriptions, so a foregrounded app gets it instantly even
+	// without a registered push endpoint.
+	s.broadcast(userID, record)
+
+	// Best-effort web push to registered browser subscriptions.
+	subs, err := s.repo.GetSubscriptionsByUser(ctx, userID)
+	if err != nil {
+		return err
 	}
 
 	payloadBytes, _ := json.Marshal(payload)
@@ -78,6 +102,47 @@ func (s *Service) SendToUser(ctx context.Context, userID string, payload *Notifi
 	}
 
 	return nil
+}
+
+// realtimeNotification mirrors the frontend Notification shape exactly so the
+// WebSocket payload is consumed without any client-side remapping (see
+// src/hooks/useNotificationsWs.ts and src/types/notification.types.ts).
+type realtimeNotification struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Date    string `json:"date"`
+	Read    bool   `json:"read"`
+}
+
+// realtimeEnvelope is the {type:"notification", notification:{…}} frame the
+// frontend WebSocket hook expects.
+type realtimeEnvelope struct {
+	Type         string               `json:"type"`
+	Notification realtimeNotification `json:"notification"`
+}
+
+// broadcast pushes a just-created notification to the user's live WebSocket
+// connections in the exact shape the frontend renders. No-op when no hub is
+// wired.
+func (s *Service) broadcast(userID string, record *NotificationRecord) {
+	if s.broadcaster == nil {
+		return
+	}
+	s.broadcaster.SendToUser(userID, realtimeEnvelope{
+		Type: "notification",
+		Notification: realtimeNotification{
+			ID:      record.ID,
+			Title:   record.Title,
+			Message: record.Body,
+			Type:    record.Type,
+			// Matches the REST adapter's es-CR short date (d/m/yyyy) so a live
+			// notification renders identically to one synced from history.
+			Date: record.CreatedAt.Format("2/1/2006"),
+			Read: false,
+		},
+	})
 }
 
 // sendWebPush delivers a web push notification to a single subscription using
