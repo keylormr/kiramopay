@@ -179,11 +179,21 @@ func (c *Config) ValidateForProduction() error {
 	if len(c.JWT.Secret) < 32 {
 		errs = append(errs, "JWT_SECRET must be at least 32 characters (use `openssl rand -base64 48`)")
 	}
-	if c.Database.SSLMode == "disable" {
-		errs = append(errs, "DB_SSL_MODE must not be 'disable' in production")
-	}
-	if c.Database.Password == "kiramopay_dev" {
-		errs = append(errs, "DB_PASSWORD is set to the development default — set a real database password")
+	// The individual DB_* credentials are only used when DATABASE_URL is unset
+	// (database.NewPostgresPool prefers DATABASE_URL). When DATABASE_URL is set
+	// — the usual managed-Postgres setup — DB_PASSWORD / DB_SSL_MODE are unused,
+	// so validate the URL's sslmode instead of gating on the dead vars.
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		if strings.Contains(dbURL, "sslmode=disable") {
+			errs = append(errs, "DATABASE_URL must not use sslmode=disable in production")
+		}
+	} else {
+		if c.Database.SSLMode == "disable" {
+			errs = append(errs, "DB_SSL_MODE must not be 'disable' in production")
+		}
+		if c.Database.Password == "kiramopay_dev" {
+			errs = append(errs, "DB_PASSWORD is set to the development default — set a real database password")
+		}
 	}
 	if c.Redis.Password == "" {
 		errs = append(errs, "REDIS_PASSWORD must be set in production")
