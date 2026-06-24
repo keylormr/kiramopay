@@ -312,6 +312,9 @@ func main() {
 	go broadcaster.Start()
 
 	// ── Notifications ────────────────────────────────────────────────────
+	// Wire the hub so SendToUser also fans out live over /ws/notifications, in
+	// addition to web-push delivery and history persistence.
+	notifService.SetBroadcaster(wsHub)
 	notifHandler := notification.NewHandler(notifService)
 
 	// ── Reconciliation worker ────────────────────────────────────────────
@@ -400,6 +403,13 @@ func main() {
 
 	r.Get("/ws/prices", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWs(wsHub, logger, w, r)
+	})
+
+	// Per-user real-time channel. The client authenticates over the socket with
+	// its access token (validated + session-checked like the REST API); the
+	// notification service then fans deliveries here via the hub.
+	r.Get("/ws/notifications", func(w http.ResponseWriter, r *http.Request) {
+		ws.ServeWsAuthenticated(wsHub, logger, jwtManager, authRepo, w, r)
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
