@@ -176,6 +176,17 @@ func (s *Service) Release(ctx context.Context, callerID, id string) (*Agreement,
 		}
 		return nil, ErrNotParty
 	}
+	// High-value step-up: releasing held funds to the seller is an outbound
+	// money movement and is gated like the equivalent transfer/fund.
+	if s.mfa != nil && s.mfa.IsMFARequired(a.AmountMinor, a.Currency) {
+		ok, err := s.mfa.HasVerifiedMFA(ctx, a.BuyerID, "high_value_tx")
+		if err != nil {
+			return nil, fmt.Errorf("mfa check: %w", err)
+		}
+		if !ok {
+			return nil, ErrMFARequired
+		}
+	}
 	return s.moveAndTransition(ctx, a, StatusFunded, StatusReleased, "release",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.SellerID}, nil)
 }
@@ -192,6 +203,17 @@ func (s *Service) Refund(ctx context.Context, callerID, id string) (*Agreement, 
 			return nil, ErrNotSeller
 		}
 		return nil, ErrNotParty
+	}
+	// High-value step-up: refunding held funds to the buyer is an outbound
+	// money movement and is gated like the equivalent transfer/fund.
+	if s.mfa != nil && s.mfa.IsMFARequired(a.AmountMinor, a.Currency) {
+		ok, err := s.mfa.HasVerifiedMFA(ctx, a.SellerID, "high_value_tx")
+		if err != nil {
+			return nil, fmt.Errorf("mfa check: %w", err)
+		}
+		if !ok {
+			return nil, ErrMFARequired
+		}
 	}
 	return s.moveAndTransition(ctx, a, StatusFunded, StatusRefunded, "refund",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.BuyerID}, nil)
@@ -306,6 +328,10 @@ func (s *Service) moveAndTransition(
 		return nil, fmt.Errorf("escrow %s posting: %w", action, err)
 	}
 
+	// Money moved (or was already posted): mark settled so the reconcile poller
+	// won't re-drive it. Best-effort — if this fails the poller re-posts
+	// idempotently (a no-op) and marks it then.
+	_ = s.repo.MarkSettled(ctx, claimed.ID)
 	s.audit(a.BuyerID, claimed, "escrow_"+string(to), "medium", nil)
 	s.emit(ctx, claimed, "escrow."+string(to))
 	s.recordHistory(ctx, claimed, action)
@@ -313,6 +339,53 @@ func (s *Service) moveAndTransition(
 		onSuccess(claimed)
 	}
 	return claimed, nil
+}
+
+// ReconcileStuck re-drives terminal agreements whose settlement was never
+// confirmed — e.g. the posting failed AND its compensating revert also failed,
+// leaving funds stuck in SYSTEM:ESCROW with the agreement in a terminal state.
+// Re-posting uses the original idempotency key, so it completes a genuinely
+// stuck transfer or is a no-op (ErrIdempotent) for one that actually settled.
+// Returns how many agreements it confirmed/healed.
+func (s *Service) ReconcileStuck(ctx context.Context, limit int) (int, error) {
+	stuck, err := s.repo.ListUnsettledTerminal(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	healed := 0
+	for i := range stuck {
+		a := &stuck[i]
+		var action string
+		var debit, credit ledger.Account
+		switch a.Status {
+		case StatusReleased:
+			action, debit, credit = "release", escrowAccount(a.Currency), ledger.Account{UserID: a.SellerID}
+		case StatusRefunded:
+			action, debit, credit = "refund", escrowAccount(a.Currency), ledger.Account{UserID: a.BuyerID}
+		default:
+			continue
+		}
+		_, perr := s.ledger.Post(ctx, &ledger.Posting{
+			Description:    fmt.Sprintf("escrow %s (reconcile): %s", action, a.ID),
+			IdempotencyKey: fmt.Sprintf("escrow:%s:%s", action, a.ID),
+			CreatedBy:      a.BuyerID,
+			Metadata:       map[string]any{"escrow_id": a.ID, "action": action, "reconcile": true},
+			Entries: []ledger.Entry{
+				{Account: debit, Side: ledger.Debit, AmountMinor: a.AmountMinor, Currency: a.Currency},
+				{Account: credit, Side: ledger.Credit, AmountMinor: a.AmountMinor, Currency: a.Currency},
+			},
+		})
+		if perr != nil && !errors.Is(perr, ledger.ErrIdempotent) {
+			s.audit(a.BuyerID, a, "escrow_reconcile_failed", "high",
+				map[string]interface{}{"action": action, "error": perr.Error()})
+			continue
+		}
+		if err := s.repo.MarkSettled(ctx, a.ID); err != nil {
+			continue
+		}
+		healed++
+	}
+	return healed, nil
 }
 
 // recordHistory mirrors the movement into the affected user's transaction

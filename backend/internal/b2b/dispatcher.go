@@ -7,10 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/kiramopay/backend/internal/middleware"
-	"github.com/kiramopay/backend/internal/observability"
 )
 
 // Dispatcher drains the webhook outbox: every tick it leases a batch of due
@@ -36,7 +36,7 @@ func NewDispatcher(repo *Repository, cipher *Cipher, interval time.Duration, log
 	return &Dispatcher{
 		repo:     repo,
 		cipher:   cipher,
-		client:   observability.HTTPClient(10 * time.Second),
+		client:   newWebhookClient(10 * time.Second),
 		interval: interval,
 		batch:    50,
 		logger:   logger,
@@ -81,11 +81,13 @@ func (d *Dispatcher) send(ctx context.Context, dd *DueDelivery) {
 		d.fail(ctx, dd, nil, fmt.Sprintf("decrypt secret: %v", err))
 		return
 	}
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "KiramoPay-Webhooks/1.0")
 	req.Header.Set("X-Kiramopay-Event", dd.EventType)
 	req.Header.Set("X-Kiramopay-Delivery", dd.ID)
-	req.Header.Set("X-Kiramopay-Signature", Sign(secret, dd.Payload))
+	req.Header.Set("X-Kiramopay-Timestamp", ts)
+	req.Header.Set("X-Kiramopay-Signature", SignWithTimestamp(secret, ts, dd.Payload))
 
 	resp, err := d.client.Do(req)
 	if err != nil {

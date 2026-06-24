@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,7 +49,15 @@ var DefaultTestUsers = []TestUser{
 	},
 }
 
-func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool) error {
+// SeedDevelopment provisions the demo users. devMode is true only when the
+// server runs in the `development` environment. The built-in demo passwords are
+// used ONLY in development; when seeding is forced in any other environment
+// (SEED_DEMO=true), each user's password MUST be supplied via
+// SEED_PASSWORD_<CEDULA> with no hardcoded fallback — otherwise that user is
+// skipped. This guarantees the repository never ships usable production
+// credentials (the cedula 700000000 account is promoted to admin by migration
+// 026, so a known password there is a full admin takeover).
+func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) error {
 	for _, u := range DefaultTestUsers {
 		// Check if user already exists
 		var exists bool
@@ -60,8 +70,15 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool) error {
 			continue
 		}
 
+		password, ok := resolveSeedPassword(u, devMode)
+		if !ok {
+			log.Printf("Seed: skipping %s (%s) — set SEED_PASSWORD_%s to seed it outside development",
+				u.Cedula, u.FirstName, u.Cedula)
+			continue
+		}
+
 		// Hash password with Argon2id
-		pinHash, err := hash.HashPin(u.Password)
+		pinHash, err := hash.HashPin(password)
 		if err != nil {
 			return fmt.Errorf("hash password for %s: %w", u.Cedula, err)
 		}
@@ -119,6 +136,20 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	return nil
+}
+
+// resolveSeedPassword returns the password to seed a demo user with, and false
+// to skip the user. Outside development the password must come from
+// SEED_PASSWORD_<CEDULA> (no hardcoded fallback); in development the built-in
+// demo password is used for local convenience.
+func resolveSeedPassword(u TestUser, devMode bool) (string, bool) {
+	if envPw := strings.TrimSpace(os.Getenv("SEED_PASSWORD_" + u.Cedula)); envPw != "" {
+		return envPw, true
+	}
+	if devMode {
+		return u.Password, true
+	}
+	return "", false
 }
 
 // seedOpeningPosting writes one balanced double-entry posting that mirrors

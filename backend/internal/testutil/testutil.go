@@ -175,8 +175,29 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		attempts INT DEFAULT 0,
 		max_attempts INT DEFAULT 3,
 		verified_at TIMESTAMPTZ,
+		consumed_at TIMESTAMPTZ,
 		expires_at TIMESTAMPTZ NOT NULL,
 		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS user_totp (
+		user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		secret_enc BYTEA NOT NULL,
+		enabled BOOLEAN NOT NULL DEFAULT FALSE,
+		last_used_step BIGINT NOT NULL DEFAULT 0,
+		failed_attempts INT NOT NULL DEFAULT 0,
+		locked_until TIMESTAMPTZ,
+		confirmed_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS totp_recovery_codes (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		code_hash VARCHAR(64) NOT NULL,
+		used_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
 	CREATE TABLE IF NOT EXISTS transactions (
@@ -240,7 +261,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
 		last_used_at TIMESTAMP,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-		revoked_at TIMESTAMP
+		revoked_at TIMESTAMP,
+		expires_at TIMESTAMPTZ
 	);
 
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
@@ -284,6 +306,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		cancelled_at TIMESTAMP,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		settled_at TIMESTAMPTZ,
 		CHECK (buyer_id <> seller_id)
 	);
 
@@ -583,7 +606,29 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	WHERE NOT EXISTS (SELECT 1 FROM sanction_list);
 	`
 
-	_, err := pool.Exec(ctx, schema)
+	if _, err := pool.Exec(ctx, schema); err != nil {
+		return err
+	}
+	// Mirror migration 034: convert any naive TIMESTAMP column to TIMESTAMPTZ so
+	// the test schema matches production and is immune to the DB server timezone.
+	_, err := pool.Exec(ctx, `
+	DO $$
+	DECLARE r RECORD;
+	BEGIN
+		FOR r IN
+			SELECT c.table_name, c.column_name
+			FROM information_schema.columns c
+			JOIN information_schema.tables t
+				ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+			WHERE c.table_schema = 'public'
+				AND t.table_type = 'BASE TABLE'
+				AND c.data_type = 'timestamp without time zone'
+		LOOP
+			EXECUTE format(
+				'ALTER TABLE public.%I ALTER COLUMN %I TYPE timestamptz USING %I AT TIME ZONE ''UTC''',
+				r.table_name, r.column_name, r.column_name);
+		END LOOP;
+	END $$;`)
 	return err
 }
 
@@ -599,6 +644,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"payouts",
 		"journal_entries", "journal_postings",
 		"transactions",
+		"totp_recovery_codes", "user_totp",
 		"mfa_challenges", "password_reset_tokens", "refresh_tokens",
 		"user_sessions", "wallets",
 		"ledger_accounts",

@@ -28,6 +28,7 @@ type APIKey struct {
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 // Known scopes for the merchant API.
@@ -153,6 +154,19 @@ func GenerateSecret() (string, error) {
 // hex(HMAC-SHA256(secret, body)). Merchants recompute it to verify origin.
 func Sign(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignWithTimestamp binds the signature to a point in time by signing
+// "<unix_ts>.<body>" (Stripe-style). The timestamp is also sent in the
+// X-Kiramopay-Timestamp header so receivers can reject deliveries outside a
+// tolerance window and thereby detect replays of captured (body, signature)
+// pairs (the body-only Sign has no expiry).
+func SignWithTimestamp(secret, timestamp string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("."))
 	mac.Write(body)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }

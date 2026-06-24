@@ -82,6 +82,41 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, limit int) (
 	return out, rows.Err()
 }
 
+// MarkSettled records that an agreement's money movement completed, so the
+// reconcile poller stops re-driving it. Idempotent (only sets it once).
+func (r *Repository) MarkSettled(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE escrow_agreements SET settled_at = NOW()
+		 WHERE id = $1::uuid AND settled_at IS NULL`, id)
+	return err
+}
+
+// ListUnsettledTerminal returns agreements in a terminal money-moving state
+// (released/refunded) whose settlement is not yet confirmed — candidates for the
+// poller to re-drive.
+func (r *Repository) ListUnsettledTerminal(ctx context.Context, limit int) ([]Agreement, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT `+agreementCols+` FROM escrow_agreements
+		 WHERE status IN ('released','refunded') AND settled_at IS NULL
+		 ORDER BY updated_at ASC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Agreement, 0, limit)
+	for rows.Next() {
+		a, err := scanAgreement(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *a)
+	}
+	return out, rows.Err()
+}
+
 // Transition atomically moves an agreement from → to, stamping the matching
 // timestamp column. Returns ErrBadTransition if the row was not in `from`
 // (someone else transitioned it first) — this is the concurrency guard.

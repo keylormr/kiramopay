@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/kiramopay/backend/internal/audit"
@@ -81,8 +80,11 @@ func (s *Service) Authenticate(ctx context.Context, presented string) (userID, s
 // CreateEndpoint registers a webhook URL. The signing secret is generated
 // server-side and returned in the response (it stays readable to the owner).
 func (s *Service) CreateEndpoint(ctx context.Context, userID, rawURL, events string) (*WebhookEndpoint, error) {
-	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+	// Reject non-public destinations (SSRF guard): no loopback/private/
+	// link-local/cloud-metadata hosts. Re-validated at dial time in the
+	// dispatcher to defeat DNS-rebinding.
+	normalizedURL, err := validateWebhookURL(rawURL)
+	if err != nil {
 		return nil, ErrInvalid
 	}
 	if events = strings.TrimSpace(events); events == "" {
@@ -96,14 +98,14 @@ func (s *Service) CreateEndpoint(ctx context.Context, userID, rawURL, events str
 	if err != nil {
 		return nil, err
 	}
-	e, err := s.repo.CreateEndpoint(ctx, userID, u.String(), stored, events)
+	e, err := s.repo.CreateEndpoint(ctx, userID, normalizedURL, stored, events)
 	if err != nil {
 		return nil, err
 	}
 	// Hand the PLAINTEXT secret back to the caller (shown once); at rest only
 	// the encrypted form exists.
 	e.Secret = secret
-	s.auditEvent(userID, "webhook_endpoint_created", e.ID, map[string]interface{}{"url": u.String()})
+	s.auditEvent(userID, "webhook_endpoint_created", e.ID, map[string]interface{}{"url": normalizedURL})
 	return e, nil
 }
 

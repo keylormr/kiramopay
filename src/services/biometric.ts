@@ -100,13 +100,13 @@ class BiometricService {
   // Guardar credenciales de forma segura (solo nativo)
   async setCredentials(server: string, username: string, password: string): Promise<boolean> {
     if (!this.isNative) {
-      // En web, usar localStorage como fallback
-      try {
-        localStorage.setItem(`bio_cred_${server}`, JSON.stringify({ username, password }));
-        return true;
-      } catch {
-        return false;
-      }
+      // Web has no secure credential store. NEVER persist the password in
+      // localStorage (plaintext-at-rest, readable by any XSS). Biometric
+      // "remember me" is a native-only feature backed by the OS Keychain/
+      // Keystore; on web we degrade to asking for the password each time.
+      void username;
+      void password;
+      return false;
     }
 
     try {
@@ -124,12 +124,15 @@ class BiometricService {
   // Obtener credenciales guardadas
   async getCredentials(server: string): Promise<{ username: string; password: string } | null> {
     if (!this.isNative) {
+      // No web credential storage (see setCredentials). Purge any plaintext
+      // credentials a previous build may have left behind, then report none so
+      // the caller falls back to the password prompt.
       try {
-        const data = localStorage.getItem(`bio_cred_${server}`);
-        return data ? JSON.parse(data) : null;
+        localStorage.removeItem(`bio_cred_${server}`);
       } catch {
-        return null;
+        /* ignore */
       }
+      return null;
     }
 
     try {

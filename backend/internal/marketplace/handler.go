@@ -72,9 +72,18 @@ func (h *Handler) CreateRideRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetRideRequest(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	rideID := chi.URLParam(r, "id")
 	ride, err := h.service.GetRideRequest(r.Context(), rideID)
 	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
+		return
+	}
+	if ride.UserID != userID {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
 		return
 	}
@@ -82,7 +91,22 @@ func (h *Handler) GetRideRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateRideStatus(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	rideID := chi.URLParam(r, "id")
+	// Ownership check: only the requesting user may change their own ride (IDOR).
+	ride, err := h.service.GetRideRequest(r.Context(), rideID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
+		return
+	}
+	if ride.UserID != userID {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
+		return
+	}
 	var body struct {
 		Status string `json:"status"`
 	}
@@ -125,9 +149,18 @@ func (h *Handler) CreateFoodOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetFoodOrder(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	orderID := chi.URLParam(r, "id")
 	order, items, err := h.service.GetFoodOrder(r.Context(), orderID)
 	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
+		return
+	}
+	if order.UserID != userID {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
 		return
 	}
@@ -138,7 +171,22 @@ func (h *Handler) GetFoodOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateFoodOrderStatus(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	orderID := chi.URLParam(r, "id")
+	// Ownership check: only the ordering user may change their own order (IDOR).
+	order, _, err := h.service.GetFoodOrder(r.Context(), orderID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
+		return
+	}
+	if order.UserID != userID {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
+		return
+	}
 	var body struct {
 		Status string `json:"status"`
 	}

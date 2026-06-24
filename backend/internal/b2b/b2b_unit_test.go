@@ -150,3 +150,37 @@ func TestBackoffProgression(t *testing.T) {
 		t.Errorf("attempt 0 clamps to first step: got %s", Backoff(0))
 	}
 }
+
+func TestValidateWebhookURL_BlocksSSRF(t *testing.T) {
+	// All use literal IPs / bad schemes so no DNS resolution is needed.
+	blocked := []string{
+		"http://169.254.169.254/latest/meta-data/", // cloud metadata
+		"http://127.0.0.1/admin",                   // loopback
+		"http://10.0.0.5:6379/",                    // private (RFC1918)
+		"http://192.168.1.1/",                      // private
+		"http://[::1]:8080/",                       // IPv6 loopback
+		"http://100.64.0.1/",                       // CGNAT
+		"http://0.0.0.0/",                          // unspecified
+		"ftp://8.8.8.8/x",                          // non-http scheme
+		"http://user:pass@8.8.8.8/",                // embedded credentials
+		"not a url",
+		"",
+	}
+	for _, raw := range blocked {
+		if _, err := validateWebhookURL(raw); err == nil {
+			t.Errorf("expected %q to be rejected by the SSRF guard", raw)
+		}
+	}
+
+	// A literal public IP is accepted (no DNS lookup required).
+	if _, err := validateWebhookURL("https://8.8.8.8/hook"); err != nil {
+		t.Errorf("public host should be accepted, got %v", err)
+	}
+}
+
+func TestPrivateWebhookTargetsAllowed_BypassesGuard(t *testing.T) {
+	t.Setenv("B2B_ALLOW_PRIVATE_WEBHOOK_TARGETS", "1")
+	if _, err := validateWebhookURL("http://127.0.0.1:9000/hook"); err != nil {
+		t.Errorf("loopback should be allowed when the test bypass is set, got %v", err)
+	}
+}

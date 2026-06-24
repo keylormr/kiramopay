@@ -61,12 +61,14 @@ func (c *Client) readPump() {
 			break
 		}
 
-		// Handle auth messages
+		// /ws/prices is a PUBLIC price feed and carries no per-user data, so the
+		// token in an auth message is NOT trusted, validated, or logged and grants
+		// no identity (the client is never registered to a user). To add an
+		// authenticated per-user channel later, validate the JWT here and call
+		// hub.RegisterUserClient with the verified subject before using SendToUser.
 		var msg AuthMessage
-		if err := json.Unmarshal(message, &msg); err == nil && msg.Type == "auth" && msg.Token != "" {
-			// In production, validate the JWT token here
-			// For now, we trust the token and extract a user ID from it
-			c.logger.Info("WebSocket client authenticated", "user_id_prefix", msg.Token[:min(16, len(msg.Token))])
+		if err := json.Unmarshal(message, &msg); err == nil && msg.Type == "auth" {
+			c.logger.Debug("WebSocket auth message ignored (public price feed)")
 		}
 	}
 }
@@ -133,11 +135,4 @@ func ServeWs(hub *Hub, logger *slog.Logger, w http.ResponseWriter, r *http.Reque
 
 	go client.writePump()
 	go client.readPump()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

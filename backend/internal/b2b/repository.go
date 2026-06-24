@@ -21,16 +21,16 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) CreateKey(ctx context.Context, userID, name, prefix, hash, scopes string) (*APIKey, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO api_keys (user_id, name, prefix, key_hash, scopes)
-		VALUES ($1::uuid, $2, $3, $4, $5)
-		RETURNING id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at`,
+		INSERT INTO api_keys (user_id, name, prefix, key_hash, scopes, expires_at)
+		VALUES ($1::uuid, $2, $3, $4, $5, NOW() + INTERVAL '365 days')
+		RETURNING id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at, expires_at`,
 		userID, name, prefix, hash, scopes)
 	return scanKey(row)
 }
 
 func (r *Repository) ListKeys(ctx context.Context, userID string) ([]APIKey, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at
+		SELECT id::text, user_id::text, name, prefix, scopes, status, last_used_at, created_at, revoked_at, expires_at
 		FROM api_keys WHERE user_id = $1::uuid ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -53,6 +53,7 @@ func (r *Repository) ResolveKey(ctx context.Context, hash string) (userID, scope
 	err = r.db.QueryRow(ctx, `
 		UPDATE api_keys SET last_used_at = NOW()
 		WHERE key_hash = $1 AND status = 'active'
+		  AND (expires_at IS NULL OR expires_at > NOW())
 		RETURNING user_id::text, scopes`, hash).Scan(&userID, &scopes)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", ErrInvalidKey
@@ -78,7 +79,7 @@ func (r *Repository) RevokeKey(ctx context.Context, userID, keyID string) error 
 func scanKey(row pgx.Row) (*APIKey, error) {
 	var k APIKey
 	err := row.Scan(&k.ID, &k.UserID, &k.Name, &k.Prefix, &k.Scopes, &k.Status,
-		&k.LastUsedAt, &k.CreatedAt, &k.RevokedAt)
+		&k.LastUsedAt, &k.CreatedAt, &k.RevokedAt, &k.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

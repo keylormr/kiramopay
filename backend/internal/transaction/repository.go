@@ -221,6 +221,26 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error 
 	return r.UpdateStatusTx(ctx, r.db, id, status)
 }
 
+// DailyOutgoingMinor sums today's completed outgoing transactions (minor units)
+// for the user in the given currency. The per-wallet daily limit is enforced
+// against this computed value because wallets.daily_spent is no longer
+// maintained after the journal-ledger refactor (migration 020 dropped its only
+// writer), which had silently disabled the cumulative daily cap.
+func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
+	var total int64
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(amount), 0)
+		 FROM transactions
+		 WHERE user_id = $1
+		   AND currency = $2
+		   AND status = 'completed'
+		   AND created_date = CURRENT_DATE
+		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy')`,
+		userID, currency,
+	).Scan(&total)
+	return total, err
+}
+
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,

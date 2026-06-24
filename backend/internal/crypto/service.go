@@ -242,7 +242,7 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID string) error {
-	return s.repo.UpdateStakingStatus(ctx, positionID, "completed")
+	return s.repo.UpdateStakingStatus(ctx, positionID, userID, "completed")
 }
 
 func (s *Service) GetPriceAlerts(ctx context.Context, userID string) ([]PriceAlertRecord, error) {
@@ -257,8 +257,8 @@ func (s *Service) AddPriceAlert(ctx context.Context, userID string, alert *Price
 	return alert, nil
 }
 
-func (s *Service) RemovePriceAlert(ctx context.Context, alertID string) error {
-	return s.repo.DeactivatePriceAlert(ctx, alertID)
+func (s *Service) RemovePriceAlert(ctx context.Context, userID, alertID string) error {
+	return s.repo.DeactivatePriceAlert(ctx, alertID, userID)
 }
 
 func (s *Service) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
