@@ -67,6 +67,15 @@ func (s *Service) GetHistory(ctx context.Context, userID string) ([]HistoryRecor
 	return s.repo.GetHistory(ctx, userID, 50)
 }
 
+// notifyReceiver delivers the "SINPE received" notification on a context
+// detached from the (already-completed) request, bounded by its own timeout.
+// Best-effort: never blocks or fails the transfer.
+func (s *Service) notifyReceiver(userID, body string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = s.notifier.NotifyUser(ctx, userID, "SINPE recibido", body, "transaction")
+}
+
 // Send transfers CRC to a recipient phone. If the phone belongs to a
 // KiramoPay user, the transfer is INTERNAL: both legs are booked atomically
 // against the ledger and the receiver's wallet is credited. If the phone is
@@ -208,9 +217,11 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		// fails the transfer). This is the first real notification trigger.
 		if s.notifier != nil {
 			body := fmt.Sprintf("Recibiste ₡%d.%02d por SINPE Móvil", req.Amount/100, req.Amount%100)
-			go func(uid, b string) {
-				_ = s.notifier.NotifyUser(context.Background(), uid, "SINPE recibido", b, "transaction")
-			}(peer.ID, body)
+			// #nosec G118 -- intentionally detached: the request context is
+			// cancelled when the response returns, but this best-effort
+			// notification must outlive the request (notifyReceiver uses its own
+			// bounded context).
+			go s.notifyReceiver(peer.ID, body)
 		}
 	}
 
