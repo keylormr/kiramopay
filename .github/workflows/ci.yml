@@ -188,6 +188,28 @@ jobs:
         # packages must run serially (parallel packages race on the same rows).
         run: go test ./internal/... -p 1 -count=1 -timeout=300s
 
+      # Gate the real deploy migration path: apply the full chain (RunMigrations)
+      # against a fresh DB, exactly as the API does on boot with RUN_MIGRATIONS=true.
+      # This is what catches a migration that breaks production before it merges.
+      - name: Create migration-chain test database
+        env:
+          PGPASSWORD: kiramopay_dev
+        run: |
+          psql -h localhost -U kiramopay -d postgres -v ON_ERROR_STOP=1 \
+            -c "DROP DATABASE IF EXISTS kiramopay_migtest;" \
+            -c "CREATE DATABASE kiramopay_migtest;"
+          # Migration 024 reads the PII encryption key from this database-level
+          # GUC (>=32 chars). Setting it mirrors the production prerequisite so
+          # the chain — including the 024 PII backfill — runs as it does on deploy.
+          psql -h localhost -U kiramopay -d postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE kiramopay_migtest SET kiramopay.encryption_key = 'kiramopay-ci-migtest-encryption-key-deadbeefcafe';"
+
+      - name: Validate full migration chain (RunMigrations + idempotency)
+        working-directory: backend
+        env:
+          MIGTEST_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_migtest?sslmode=disable
+        run: go test ./internal/database/ -run TestRunAllMigrations -count=1 -v
+
   backend-build:
     name: Backend Build
     runs-on: ubuntu-latest
