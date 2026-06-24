@@ -87,8 +87,14 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		if req.Currency == "USD" && w.BalanceUSD < totalCost {
 			return nil, fmt.Errorf("insufficient balance")
 		}
-		if w.DailySpent+req.Amount > w.DailyLimit {
-			return nil, fmt.Errorf("daily spending limit exceeded")
+		if w.DailyLimit > 0 {
+			spentToday, err := s.repo.DailyOutgoingMinor(ctx, userID, req.Currency)
+			if err != nil {
+				return nil, fmt.Errorf("daily spend check: %w", err)
+			}
+			if spentToday+req.Amount > w.DailyLimit {
+				return nil, fmt.Errorf("daily spending limit exceeded")
+			}
 		}
 
 		if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {
@@ -186,8 +192,14 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.Currency == "USD" && senderWallet.BalanceUSD < total {
 		return nil, nil, fmt.Errorf("insufficient balance")
 	}
-	if senderWallet.DailySpent+req.Amount > senderWallet.DailyLimit {
-		return nil, nil, fmt.Errorf("daily spending limit exceeded")
+	if senderWallet.DailyLimit > 0 {
+		spentToday, err := s.repo.DailyOutgoingMinor(ctx, req.FromUserID, req.Currency)
+		if err != nil {
+			return nil, nil, fmt.Errorf("daily spend check: %w", err)
+		}
+		if spentToday+req.Amount > senderWallet.DailyLimit {
+			return nil, nil, fmt.Errorf("daily spending limit exceeded")
+		}
 	}
 
 	if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {

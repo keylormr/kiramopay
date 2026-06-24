@@ -53,6 +53,22 @@ import (
 	jwtpkg "github.com/kiramopay/backend/pkg/jwt"
 )
 
+// metricsAuth optionally protects /metrics with a bearer token. When token is
+// empty the endpoint stays open; when set, callers must present it as either an
+// "Authorization: Bearer <token>" header or a ?token= query parameter.
+func metricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
+	if token == "" {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+token && r.URL.Query().Get("token") != token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func main() {
 	cfg := config.Load()
 	if err := cfg.ValidateForProduction(); err != nil {
@@ -114,7 +130,7 @@ func main() {
 	// environment if SEED_DEMO=true. Used to populate Keilor + Admin on
 	// the free-tier deploy.
 	if cfg.Server.Environment == "development" || os.Getenv("SEED_DEMO") == "true" {
-		if err := database.SeedDevelopment(context.Background(), pool); err != nil {
+		if err := database.SeedDevelopment(context.Background(), pool, cfg.Server.Environment == "development"); err != nil {
 			log.Printf("Warning: seed failed: %v", err)
 		}
 	}
@@ -138,8 +154,10 @@ func main() {
 		ThresholdUSDMinor: 20_000,     // 200 USD
 		VerifyWindow:      5 * time.Minute,
 		// Authenticator secrets are encrypted at rest with a key derived from
-		// JWT_SECRET (already required to be a real 32+ byte value in prod).
-		TOTPEncryptionKey: []byte(cfg.JWT.Secret),
+		// JWT_SECRET. The domain prefix keeps this AES key distinct from the
+		// webhook-secret key and from the JWT signing secret (key separation),
+		// so analysis of one ciphertext domain never reveals another's key.
+		TOTPEncryptionKey: []byte("kiramopay-totp-secret\x00" + cfg.JWT.Secret),
 	})
 
 	// ── Repositories ─────────────────────────────────────────────────────
@@ -184,8 +202,9 @@ func main() {
 		AuditLogger: auditLogger,
 	})
 	// Webhook signing secrets are encrypted at rest with a key derived from
-	// JWT_SECRET (same scheme as TOTP secrets).
-	b2bCipher := b2b.NewCipher([]byte(cfg.JWT.Secret))
+	// JWT_SECRET. The domain prefix keeps this AES key distinct from the
+	// TOTP-secret key (key separation).
+	b2bCipher := b2b.NewCipher([]byte("kiramopay-webhook-secret\x00" + cfg.JWT.Secret))
 	b2bRepo := b2b.NewRepository(pool)
 	b2bService := b2b.NewService(b2bRepo, b2bCipher, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
@@ -201,8 +220,17 @@ func main() {
 	// participant, dLocal, Circle/USDC) are added by registering an adapter and
 	// seeding its SYSTEM:EXTERNAL:<RAIL>:<CUR> accounts.
 	payoutRegistry := payout.NewRegistry()
-	if err := payoutRegistry.Register(payout.NewMockRail()); err != nil {
-		log.Fatalf("register mock payout rail: %v", err)
+	// The mock rail debits the user's real wallet but never actually disburses,
+	// so it must NEVER be reachable in production. Only register it outside
+	// production; with an empty registry in prod the payout routes reject every
+	// request (Service.Create validates the rail is registered) until a real
+	// rail (SINPE participant / dLocal / Circle) is wired.
+	if cfg.Server.Environment != "production" {
+		if err := payoutRegistry.Register(payout.NewMockRail()); err != nil {
+			log.Fatalf("register mock payout rail: %v", err)
+		}
+	} else {
+		log.Println("payout: no real rail configured for production — payout endpoints will reject requests")
 	}
 	payoutRepo := payout.NewRepository(pool)
 	payoutService := payout.NewService(payoutRepo, ledgerEngine, payoutRegistry, &payout.Options{
@@ -350,7 +378,10 @@ func main() {
 			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC())
 	})
 
-	r.Get("/metrics", middleware.MetricsHandler)
+	// /metrics exposes internal counters (incl. ledger drift). Optionally gate it
+	// behind METRICS_TOKEN; left open when unset so Prometheus scraping works
+	// out of the box.
+	r.Get("/metrics", metricsAuth(os.Getenv("METRICS_TOKEN"), middleware.MetricsHandler))
 	r.Get("/api/docs", docs.ServeSwaggerUI)
 	r.Get("/api/docs/openapi.yaml", docs.ServeOpenAPISpec)
 

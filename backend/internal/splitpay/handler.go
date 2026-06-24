@@ -38,10 +38,27 @@ func (h *Handler) CreateSplit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetSplit(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	groupID := chi.URLParam(r, "id")
 	group, shares, err := h.service.GetSplit(r.Context(), groupID)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	// Ownership check: only the creator or a participant may read the split (IDOR).
+	allowed := group.CreatorID == userID
+	for _, s := range shares {
+		if s.UserID == userID {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "split not found")
 		return
 	}
 

@@ -22,6 +22,9 @@ var testCipher = b2b.NewCipher([]byte("test-secret-key-material"))
 
 func newService(t *testing.T) (*b2b.Service, *b2b.Repository, string) {
 	t.Helper()
+	// Allow loopback/private webhook targets so the httptest delivery tests can
+	// register and reach a local server (SSRF guard is otherwise on by default).
+	t.Setenv("B2B_ALLOW_PRIVATE_WEBHOOK_TARGETS", "1")
 	pool := testutil.TestDB(t)
 	userID := testutil.SeedTestUser(t, pool, "702650930", "dummy")
 	repo := b2b.NewRepository(pool)
@@ -84,7 +87,7 @@ func TestWebhookDeliveryEndToEnd(t *testing.T) {
 	ctx := context.Background()
 
 	var received atomic.Int32
-	var gotSig, gotEvent string
+	var gotSig, gotEvent, gotTs string
 	var gotBody []byte
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, r.ContentLength)
@@ -92,6 +95,7 @@ func TestWebhookDeliveryEndToEnd(t *testing.T) {
 		gotBody = body
 		gotSig = r.Header.Get("X-Kiramopay-Signature")
 		gotEvent = r.Header.Get("X-Kiramopay-Event")
+		gotTs = r.Header.Get("X-Kiramopay-Timestamp")
 		received.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -117,7 +121,10 @@ func TestWebhookDeliveryEndToEnd(t *testing.T) {
 	if gotEvent != "escrow.funded" {
 		t.Errorf("event header: got %q", gotEvent)
 	}
-	if want := b2b.Sign(ep.Secret, gotBody); gotSig != want {
+	if gotTs == "" {
+		t.Error("expected X-Kiramopay-Timestamp header to be set")
+	}
+	if want := b2b.SignWithTimestamp(ep.Secret, gotTs, gotBody); gotSig != want {
 		t.Errorf("signature mismatch: got %q want %q", gotSig, want)
 	}
 
@@ -172,6 +179,7 @@ func TestWebhookRetryOnFailure(t *testing.T) {
 }
 
 func TestEscrowEmitsWebhookEvents(t *testing.T) {
+	t.Setenv("B2B_ALLOW_PRIVATE_WEBHOOK_TARGETS", "1")
 	pool := testutil.TestDB(t)
 	buyer := testutil.SeedTestUser(t, pool, "702650930", "dummy")
 	seller := testutil.SeedTestUser2(t, pool)

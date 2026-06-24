@@ -109,30 +109,36 @@ acuerdo reciben el evento en sus propios endpoints.
 ```
 X-Kiramopay-Event:     escrow.funded
 X-Kiramopay-Delivery:  <uuid único de esta entrega>
-X-Kiramopay-Signature: sha256=<hex(HMAC-SHA256(secret, body))>
+X-Kiramopay-Timestamp: <unix seconds del envío>
+X-Kiramopay-Signature: sha256=<hex(HMAC-SHA256(secret, "<timestamp>.<body>"))>
 ```
 
-Respondé `2xx` en <10s. Si no, se reintenta con backoff exponencial
-(30s → 1h, máximo 8 intentos) y podés inspeccionar el estado en
-`GET /api/v1/b2b/webhooks/{id}/deliveries`.
+La firma cubre `"<timestamp>.<body>"` (estilo Stripe), no solo el body, para que
+puedas rechazar entregas viejas (replay). Respondé `2xx` en <10s. Si no, se
+reintenta con backoff exponencial (30s → 1h, máximo 8 intentos) y podés
+inspeccionar el estado en `GET /api/v1/b2b/webhooks/{id}/deliveries`.
 
 **Verificación de firma** (Node.js):
 
 ```js
 const crypto = require("node:crypto");
 
-function verify(secret, rawBody, signatureHeader) {
+function verify(secret, rawBody, timestamp, signatureHeader) {
+  // Rechazá entregas fuera de una tolerancia (p. ej. 5 min) para evitar replay.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
   const expected = "sha256=" +
-    crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+    crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader));
 }
 ```
 
-(Go): 
+(Go):
 
 ```go
-func verify(secret string, body []byte, header string) bool {
+func verify(secret string, body []byte, timestamp, header string) bool {
     mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write([]byte(timestamp))
+    mac.Write([]byte("."))
     mac.Write(body)
     expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
     return hmac.Equal([]byte(expected), []byte(header))
@@ -140,9 +146,15 @@ func verify(secret string, body []byte, header string) bool {
 ```
 
 **Recomendaciones**: verificá la firma sobre el body CRUDO (antes de parsear
-JSON); deduplicá por `X-Kiramopay-Delivery` (los reintentos reutilizan el
-mismo id); tratá los webhooks como señal y confirmá el estado con
+JSON); rechazá entregas con `X-Kiramopay-Timestamp` fuera de una ventana de
+tolerancia (anti-replay) y compará la firma en tiempo constante (`hmac.Equal` /
+`timingSafeEqual`); deduplicá por `X-Kiramopay-Delivery` (los reintentos
+reutilizan el mismo id); tratá los webhooks como señal y confirmá el estado con
 `GET /api/b2b/v1/escrow/{id}` antes de despachar mercadería.
+
+> **Nota**: la URL del endpoint debe apuntar a un host público. Se rechazan
+> destinos privados/loopback/link-local/metadata de nube (protección SSRF), y no
+> se siguen redirects.
 
 ## 5. Sandbox / pruebas
 

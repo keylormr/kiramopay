@@ -160,8 +160,8 @@ func (r *Repository) AddStaking(ctx context.Context, s *StakingRecord) error {
 	return err
 }
 
-func (r *Repository) UpdateStakingStatus(ctx context.Context, id, status string) error {
-	_, err := r.db.Exec(ctx, `UPDATE crypto_staking SET status = $2 WHERE id = $1`, id, status)
+func (r *Repository) UpdateStakingStatus(ctx context.Context, id, userID, status string) error {
+	_, err := r.db.Exec(ctx, `UPDATE crypto_staking SET status = $3 WHERE id = $1 AND user_id = $2`, id, userID, status)
 	return err
 }
 
@@ -205,7 +205,7 @@ func (r *Repository) AddPriceAlert(ctx context.Context, a *PriceAlertRecord) err
 	return err
 }
 
-func (r *Repository) DeactivatePriceAlert(ctx context.Context, id string) error {
-	_, err := r.db.Exec(ctx, `UPDATE crypto_price_alerts SET active = false WHERE id = $1`, id)
+func (r *Repository) DeactivatePriceAlert(ctx context.Context, id, userID string) error {
+	_, err := r.db.Exec(ctx, `UPDATE crypto_price_alerts SET active = false WHERE id = $1 AND user_id = $2`, id, userID)
 	return err
 }

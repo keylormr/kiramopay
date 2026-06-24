@@ -182,8 +182,19 @@ func (c *Config) ValidateForProduction() error {
 	if c.Database.SSLMode == "disable" {
 		errs = append(errs, "DB_SSL_MODE must not be 'disable' in production")
 	}
+	if c.Database.Password == "kiramopay_dev" {
+		errs = append(errs, "DB_PASSWORD is set to the development default — set a real database password")
+	}
 	if c.Redis.Password == "" {
 		errs = append(errs, "REDIS_PASSWORD must be set in production")
+	}
+	// A wildcard origin combined with AllowCredentials:true (main.go) would
+	// reflect credentials to any site. Require an explicit allowlist.
+	for _, o := range c.CORS.Origins {
+		if o == "*" {
+			errs = append(errs, "CORS_ORIGINS must not be '*' in production (set an explicit allowlist)")
+			break
+		}
 	}
 	if c.JWT.AccessDuration > 60*time.Minute {
 		errs = append(errs, "JWT_ACCESS_MINUTES should be <= 60 in production (short-lived access tokens)")

@@ -176,6 +176,17 @@ func (s *Service) Release(ctx context.Context, callerID, id string) (*Agreement,
 		}
 		return nil, ErrNotParty
 	}
+	// High-value step-up: releasing held funds to the seller is an outbound
+	// money movement and is gated like the equivalent transfer/fund.
+	if s.mfa != nil && s.mfa.IsMFARequired(a.AmountMinor, a.Currency) {
+		ok, err := s.mfa.HasVerifiedMFA(ctx, a.BuyerID, "high_value_tx")
+		if err != nil {
+			return nil, fmt.Errorf("mfa check: %w", err)
+		}
+		if !ok {
+			return nil, ErrMFARequired
+		}
+	}
 	return s.moveAndTransition(ctx, a, StatusFunded, StatusReleased, "release",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.SellerID}, nil)
 }
@@ -192,6 +203,17 @@ func (s *Service) Refund(ctx context.Context, callerID, id string) (*Agreement, 
 			return nil, ErrNotSeller
 		}
 		return nil, ErrNotParty
+	}
+	// High-value step-up: refunding held funds to the buyer is an outbound
+	// money movement and is gated like the equivalent transfer/fund.
+	if s.mfa != nil && s.mfa.IsMFARequired(a.AmountMinor, a.Currency) {
+		ok, err := s.mfa.HasVerifiedMFA(ctx, a.SellerID, "high_value_tx")
+		if err != nil {
+			return nil, fmt.Errorf("mfa check: %w", err)
+		}
+		if !ok {
+			return nil, ErrMFARequired
+		}
 	}
 	return s.moveAndTransition(ctx, a, StatusFunded, StatusRefunded, "refund",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.BuyerID}, nil)

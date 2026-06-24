@@ -106,9 +106,19 @@ func (h *Handler) GetTransferHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTransfer(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	transferID := chi.URLParam(r, "id")
 	transfer, err := h.service.GetTransfer(r.Context(), transferID)
 	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "transfer not found")
+		return
+	}
+	// Ownership check: only the sender or receiver may read the transfer (IDOR).
+	if transfer.SenderID != userID && transfer.ReceiverID != userID {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "transfer not found")
 		return
 	}

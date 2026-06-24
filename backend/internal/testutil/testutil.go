@@ -175,6 +175,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		attempts INT DEFAULT 0,
 		max_attempts INT DEFAULT 3,
 		verified_at TIMESTAMPTZ,
+		consumed_at TIMESTAMPTZ,
 		expires_at TIMESTAMPTZ NOT NULL,
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);

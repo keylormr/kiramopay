@@ -85,29 +85,38 @@ func (s *Service) IsMFARequired(amountMinor int64, currency string) bool {
 	}
 }
 
-// HasVerifiedMFA returns true if there is a recently-verified challenge for
-// the (user, purpose) tuple still within the verify window.
+// HasVerifiedMFA atomically CONSUMES one recently-verified, not-yet-consumed
+// challenge for the (user, purpose) tuple still within the verify window, and
+// reports whether one was found. Consuming makes each verification single-use:
+// one OTP/TOTP verification authorizes exactly ONE high-value money movement,
+// instead of an unbounded series of movements during the time window. The
+// FOR UPDATE SKIP LOCKED claim means two concurrent high-value actions cannot
+// both ride the same verification.
 func (s *Service) HasVerifiedMFA(ctx context.Context, userID, purpose string) (bool, error) {
-	var verifiedAt *time.Time
+	var id string
 	err := s.db.QueryRow(ctx,
-		`SELECT verified_at FROM mfa_challenges
-		 WHERE user_id = $1::uuid
-		   AND purpose = $2
-		   AND verified_at IS NOT NULL
-		 ORDER BY verified_at DESC
-		 LIMIT 1`,
-		userID, purpose,
-	).Scan(&verifiedAt)
+		`UPDATE mfa_challenges SET consumed_at = NOW()
+		 WHERE id = (
+		     SELECT id FROM mfa_challenges
+		     WHERE user_id = $1::uuid
+		       AND purpose = $2
+		       AND verified_at IS NOT NULL
+		       AND consumed_at IS NULL
+		       AND verified_at > NOW() - make_interval(secs => $3)
+		     ORDER BY verified_at DESC
+		     LIMIT 1
+		     FOR UPDATE SKIP LOCKED
+		 )
+		 RETURNING id::text`,
+		userID, purpose, s.verifyWindow.Seconds(),
+	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if verifiedAt == nil {
-		return false, nil
-	}
-	return time.Since(*verifiedAt) <= s.verifyWindow, nil
+	return true, nil
 }
 
 // IssueChallenge generates a 6-digit code and stores the hash. The plaintext

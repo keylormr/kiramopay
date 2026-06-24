@@ -150,8 +150,9 @@ func (h *Handler) AddPriceAlert(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RemovePriceAlert(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	alertID := chi.URLParam(r, "id")
-	if err := h.service.RemovePriceAlert(r.Context(), alertID); err != nil {
+	if err := h.service.RemovePriceAlert(r.Context(), userID, alertID); err != nil {
 		response.Error(w, http.StatusBadRequest, "REMOVE_FAILED", err.Error())
 		return
 	}

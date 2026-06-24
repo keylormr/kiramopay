@@ -77,6 +77,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
+
 	txID := chi.URLParam(r, "id")
 	if txID == "" {
 		response.Error(w, http.StatusBadRequest, "MISSING_ID", "transaction ID required")
@@ -85,6 +91,11 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.GetTransaction(r.Context(), txID)
 	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "transaction not found")
+		return
+	}
+	// Ownership check: never expose another user's transaction (IDOR).
+	if tx.UserID != userID {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "transaction not found")
 		return
 	}

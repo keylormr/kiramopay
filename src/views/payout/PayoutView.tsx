@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -53,6 +53,10 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [selected, setSelected] = useState<Payout | null>(null);
   const [acting, setActing] = useState(false);
   const [showMfa, setShowMfa] = useState(false);
+  // Stable idempotency key for the in-flight payout: generated once and reused
+  // across the MFA retry so the original attempt and the retry are the SAME
+  // payout, not two. Reset on success and whenever a fresh create form opens.
+  const idempotencyKeyRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -84,16 +88,20 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     if (!rail || !beneficiary.trim() || !account.trim() || !Number.isFinite(value) || value <= 0) return;
     setCreating(true);
     setError('');
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = newIdempotencyKey();
+    }
     const res = await api.payout.create({
       rail,
       amountMinor: Math.round(value * 100),
       currency: 'CRC',
       destination: { type: DESTINATION_TYPE, account: account.trim(), name: beneficiary.trim() },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: idempotencyKeyRef.current,
     });
     setCreating(false);
     if (!res.success) {
-      // High-value payout: prompt for a TOTP code, then retry (form state persists).
+      // High-value payout: prompt for a TOTP code, then retry (form state and the
+      // idempotency key persist, so the retry is the SAME payout).
       if (res.error?.code === MFA_REQUIRED) {
         setShowMfa(true);
         return;
@@ -101,6 +109,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       setError(res.error?.message || t('payout_action_failed'));
       return;
     }
+    idempotencyKeyRef.current = '';
     setShowCreate(false);
     setBeneficiary('');
     setAccount('');
@@ -142,6 +151,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <h1 className="text-lg font-bold">{t('payout_title')}</h1>
         <button
           onClick={() => {
+            idempotencyKeyRef.current = '';
             setShowCreate(true);
             setError('');
           }}
@@ -173,6 +183,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             ) : (
               <button
                 onClick={() => {
+                  idempotencyKeyRef.current = '';
                   setShowCreate(true);
                   setError('');
                 }}

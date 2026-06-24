@@ -234,7 +234,7 @@ func TestPriceAlert_CRUD(t *testing.T) {
 	}
 
 	// Remove alert
-	err = svc.RemovePriceAlert(ctx, alert.ID)
+	err = svc.RemovePriceAlert(ctx, userID, alert.ID)
 	if err != nil {
 		t.Fatalf("RemovePriceAlert() error: %v", err)
 	}
