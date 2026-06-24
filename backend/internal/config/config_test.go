@@ -17,6 +17,7 @@ func TestValidateForProduction_DefaultJWTSecret_Error(t *testing.T) {
 }
 
 func TestValidateForProduction_DBSSLDisable_Error(t *testing.T) {
+	t.Setenv("DATABASE_URL", "") // exercise the individual DB_* var checks
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "disable", Password: "strong-password"},
@@ -25,6 +26,35 @@ func TestValidateForProduction_DBSSLDisable_Error(t *testing.T) {
 	}
 	if err := cfg.ValidateForProduction(); err == nil {
 		t.Error("expected error for DB SSL disable in production")
+	}
+}
+
+func TestValidateForProduction_DatabaseURL_SkipsDBVarChecks(t *testing.T) {
+	// With DATABASE_URL set, the individual DB_PASSWORD/DB_SSL_MODE are unused
+	// (database.NewPostgresPool prefers DATABASE_URL), so their checks must not
+	// gate startup even at their development defaults.
+	t.Setenv("DATABASE_URL", "postgres://u:p@neon.example/db?sslmode=require")
+	cfg := &Config{
+		Server:   ServerConfig{Environment: "production"},
+		Database: DatabaseConfig{SSLMode: "disable", Password: "kiramopay_dev"},
+		Redis:    RedisConfig{Password: "redis-pass"},
+		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
+	}
+	if err := cfg.ValidateForProduction(); err != nil {
+		t.Errorf("DATABASE_URL set should skip the DB_* var checks, got: %v", err)
+	}
+}
+
+func TestValidateForProduction_DatabaseURL_RejectsSSLDisable(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://u:p@neon.example/db?sslmode=disable")
+	cfg := &Config{
+		Server:   ServerConfig{Environment: "production"},
+		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},
+		Redis:    RedisConfig{Password: "redis-pass"},
+		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
+	}
+	if err := cfg.ValidateForProduction(); err == nil {
+		t.Error("expected error for DATABASE_URL with sslmode=disable")
 	}
 }
 
@@ -53,6 +83,7 @@ func TestValidateForProduction_Development_NoError(t *testing.T) {
 }
 
 func TestValidateForProduction_AllSecure_NoError(t *testing.T) {
+	t.Setenv("DATABASE_URL", "") // individual DB_* vars are the connection source here
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},
