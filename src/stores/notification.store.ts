@@ -44,6 +44,11 @@ export const useNotificationStore = create<NotificationState>()(
     }),
     {
       name: 'kiramopay-notifications',
+      // With a backend, notifications are server-truth — don't cache them in
+      // localStorage. A stale cache made read state "flash back" to unread on
+      // start before the sync overwrote it. Mock mode still persists for an
+      // offline demo experience.
+      partialize: (s) => (hasBackend ? {} : { notifications: s.notifications }),
     },
   ),
 );

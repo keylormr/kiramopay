@@ -24,6 +24,7 @@ import {
   refreshAccounts,
   refreshTransactions,
   refreshSinpe,
+  refreshNotifications,
 } from '@/services/dataSync';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
@@ -249,17 +250,27 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         notifications.addNotification(action.payload);
         break;
       case 'MARK_NOTIFICATION_READ':
-        notifications.markRead(action.payload);
+        notifications.markRead(action.payload); // optimistic
         if (hasBackend) {
-          const api = getApiLayer();
-          api.notifications.markRead(action.payload).catch(() => {});
+          // Reconcile from the backend if the write didn't persist, so the read
+          // state can't silently revert on the next sync.
+          getApiLayer()
+            .notifications.markRead(action.payload)
+            .then((res) => {
+              if (!res.success) refreshNotifications();
+            })
+            .catch(() => refreshNotifications());
         }
         break;
       case 'MARK_ALL_NOTIFICATIONS_READ':
-        notifications.markAllRead();
+        notifications.markAllRead(); // optimistic
         if (hasBackend) {
-          const api = getApiLayer();
-          api.notifications.markAllRead().catch(() => {});
+          getApiLayer()
+            .notifications.markAllRead()
+            .then((res) => {
+              if (!res.success) refreshNotifications();
+            })
+            .catch(() => refreshNotifications());
         }
         break;
       case 'DELETE_NOTIFICATION':

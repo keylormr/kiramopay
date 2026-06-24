@@ -91,3 +91,15 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 
 	response.NoContent(w)
 }
+
+// MarkAllRead marks all of the user's notifications as read.
+func (h *Handler) MarkAllRead(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	if err := h.service.MarkAllRead(r.Context(), userID); err != nil {
+		response.Error(w, http.StatusInternalServerError, "MARK_ALL_READ_FAILED", err.Error())
+		return
+	}
+
+	response.NoContent(w)
+}

@@ -1250,6 +1250,18 @@ paths:
         '401':
           description: Unauthorized
 
+  /api/v1/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Mark all of the caller's notifications as read
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: All notifications marked as read
+        '401':
+          description: Unauthorized
+
   # ── MFA: TOTP authenticator ───────────────────────────────────────
   /api/v1/mfa/totp/status:
     get:

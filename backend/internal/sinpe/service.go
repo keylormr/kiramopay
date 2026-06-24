@@ -14,17 +14,25 @@ import (
 	"github.com/kiramopay/backend/internal/wallet"
 )
 
+// Notifier delivers a user-facing notification (history + push). Implemented by
+// the notification service; optional so sinpe works without it.
+type Notifier interface {
+	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+}
+
 type Service struct {
 	repo        *Repository
 	txService   *transaction.Service
 	walletRepo  *wallet.Repository
 	userRepo    *user.Repository
 	auditLogger *audit.Logger
+	notifier    Notifier
 }
 
 // Options bundles optional collaborators.
 type Options struct {
 	AuditLogger *audit.Logger
+	Notifier    Notifier
 }
 
 func NewService(
@@ -43,6 +51,7 @@ func NewService(
 		walletRepo:  walletRepo,
 		userRepo:    userRepo,
 		auditLogger: opts.AuditLogger,
+		notifier:    opts.Notifier,
 	}
 }
 
@@ -56,6 +65,15 @@ func (s *Service) AddContact(ctx context.Context, userID, phone, name, bank stri
 
 func (s *Service) GetHistory(ctx context.Context, userID string) ([]HistoryRecord, error) {
 	return s.repo.GetHistory(ctx, userID, 50)
+}
+
+// notifyReceiver delivers the "SINPE received" notification on a context
+// detached from the (already-completed) request, bounded by its own timeout.
+// Best-effort: never blocks or fails the transfer.
+func (s *Service) notifyReceiver(userID, body string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = s.notifier.NotifyUser(ctx, userID, "SINPE recibido", body, "transaction")
 }
 
 // Send transfers CRC to a recipient phone. If the phone belongs to a
@@ -195,6 +213,16 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			Description: req.Description,
 			CreatedAt:   time.Now(),
 		})
+		// Notify the recipient (best-effort, detached so it never blocks or
+		// fails the transfer). This is the first real notification trigger.
+		if s.notifier != nil {
+			body := fmt.Sprintf("Recibiste ₡%d.%02d por SINPE Móvil", req.Amount/100, req.Amount%100)
+			// #nosec G118 -- intentionally detached: the request context is
+			// cancelled when the response returns, but this best-effort
+			// notification must outlive the request (notifyReceiver uses its own
+			// bounded context).
+			go s.notifyReceiver(peer.ID, body)
+		}
 	}
 
 	if s.auditLogger != nil {

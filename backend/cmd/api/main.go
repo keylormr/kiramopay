@@ -198,8 +198,14 @@ func main() {
 		MFA:         mfaSvc,
 		UIF:         uifService,
 	})
+	// Notification service is created early so domains (e.g. SINPE) can notify
+	// users on real events. Web push is gated on VAPID config; history is always
+	// persisted.
+	notifRepo := notification.NewRepository(pool)
+	notifService := notification.NewService(notifRepo, cfg.VAPID.PublicKey, cfg.VAPID.PrivateKey)
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
+		Notifier:    notifService,
 	})
 	// Webhook signing secrets are encrypted at rest with a key derived from
 	// JWT_SECRET. The domain prefix keeps this AES key distinct from the
@@ -306,8 +312,6 @@ func main() {
 	go broadcaster.Start()
 
 	// ── Notifications ────────────────────────────────────────────────────
-	notifRepo := notification.NewRepository(pool)
-	notifService := notification.NewService(notifRepo, cfg.VAPID.PublicKey, cfg.VAPID.PrivateKey)
 	notifHandler := notification.NewHandler(notifService)
 
 	// ── Reconciliation worker ────────────────────────────────────────────
@@ -585,6 +589,7 @@ func main() {
 			r.Delete("/push/unsubscribe", notifHandler.Unsubscribe)
 			r.Get("/notifications", notifHandler.ListNotifications)
 			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
+			r.Post("/notifications/read-all", notifHandler.MarkAllRead)
 
 			// Budgets
 			r.Get("/budgets", budgetHandler.List)
