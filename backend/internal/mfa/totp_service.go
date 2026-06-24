@@ -25,6 +25,13 @@ var (
 
 const recoveryCodeCount = 10
 
+// Brute-force lockout for TOTP / recovery-code verification: after this many
+// consecutive failures, verification is locked for the window.
+const (
+	maxTOTPAttempts   = 5
+	totpLockoutWindow = 15 * time.Minute
+)
+
 // TOTPEnabled reports whether the user has an active authenticator enrollment.
 func (s *Service) TOTPEnabled(ctx context.Context, userID string) (bool, error) {
 	var enabled bool
@@ -154,11 +161,13 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 	var enc []byte
 	var enabled bool
 	var lastStep int64
+	var failedAttempts int
+	var lockedUntil *time.Time
 	err = tx.QueryRow(ctx,
-		`SELECT secret_enc, enabled, last_used_step FROM user_totp
-		 WHERE user_id = $1::uuid FOR UPDATE`,
+		`SELECT secret_enc, enabled, last_used_step, failed_attempts, locked_until
+		 FROM user_totp WHERE user_id = $1::uuid FOR UPDATE`,
 		userID,
-	).Scan(&enc, &enabled, &lastStep)
+	).Scan(&enc, &enabled, &lastStep, &failedAttempts, &lockedUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, ErrTOTPNotEnrolled
 	}
@@ -168,6 +177,10 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 	if !enabled {
 		return false, ErrTOTPNotEnrolled
 	}
+	// Locked out by repeated failures — reject without consuming an attempt.
+	if lockedUntil != nil && lockedUntil.After(time.Now()) {
+		return false, tx.Commit(ctx)
+	}
 
 	secret, derr := s.decryptSecret(enc)
 	if derr != nil {
@@ -175,10 +188,9 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 	}
 
 	matched := false
-	if step, ok := validateTOTP(secret, code, time.Now()); ok {
-		if step <= lastStep {
-			return false, nil // replayed code within window — reject
-		}
+	if step, ok := validateTOTP(secret, code, time.Now()); ok && step > lastStep {
+		// Valid, non-replayed TOTP code (a replayed step <= lastStep stays
+		// matched=false and counts as a failure below).
 		if _, err := tx.Exec(ctx,
 			`UPDATE user_totp SET last_used_step = $2, updated_at = NOW() WHERE user_id = $1::uuid`,
 			userID, step,
@@ -186,8 +198,8 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 			return false, err
 		}
 		matched = true
-	} else {
-		// Fall back to a single-use recovery code.
+	} else if !ok {
+		// Not a TOTP code — fall back to a single-use recovery code.
 		used, rerr := s.consumeRecoveryCode(ctx, tx, userID, code)
 		if rerr != nil {
 			return false, rerr
@@ -195,16 +207,36 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 		matched = used
 	}
 
-	if !matched {
-		return false, tx.Commit(ctx)
+	if matched {
+		if _, err := tx.Exec(ctx,
+			`UPDATE user_totp SET failed_attempts = 0, locked_until = NULL, updated_at = NOW()
+			 WHERE user_id = $1::uuid`, userID,
+		); err != nil {
+			return false, err
+		}
+		if err := s.markChallengeVerified(ctx, tx, userID, purpose); err != nil {
+			return false, err
+		}
+		return true, tx.Commit(ctx)
 	}
-	if err := s.markChallengeVerified(ctx, tx, userID, purpose); err != nil {
+
+	// Failure: count it; lock verification after too many consecutive failures.
+	if newFailed := failedAttempts + 1; newFailed >= maxTOTPAttempts {
+		if _, err := tx.Exec(ctx,
+			`UPDATE user_totp SET failed_attempts = 0,
+			        locked_until = NOW() + make_interval(secs => $2),
+			        updated_at = NOW() WHERE user_id = $1::uuid`,
+			userID, totpLockoutWindow.Seconds(),
+		); err != nil {
+			return false, err
+		}
+	} else if _, err := tx.Exec(ctx,
+		`UPDATE user_totp SET failed_attempts = $2, updated_at = NOW() WHERE user_id = $1::uuid`,
+		userID, newFailed,
+	); err != nil {
 		return false, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, err
-	}
-	return true, nil
+	return false, tx.Commit(ctx)
 }
 
 // DisableTOTP turns off authenticator MFA after re-verifying a current code

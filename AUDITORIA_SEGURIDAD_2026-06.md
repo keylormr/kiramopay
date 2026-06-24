@@ -42,10 +42,11 @@ interno, DoS persistente) · **P2** = hardening.
 | 14 | Auth de WebSocket "confiaba" cualquier token (y logueaba parte de él) | P2 | ✅ Corregido |
 | 15 | Biometría web guardaba usuario+password en plano en `localStorage` | P2 | ✅ Corregido |
 | 16 | Payout regeneraba la idempotency-key en cada reintento de MFA | P2 | ✅ Corregido |
-| 17 | API keys B2B nunca expiran (`ResolveKey` solo mira `status='active'`) | P2 | ⏳ Diferido |
-| 18 | Rate-limiter y lockout fallan-abierto si Redis cae | P2 | ⏳ Diferido |
-| 19 | TOTP/recovery sin lockout dedicado de fuerza bruta | P2 | ⏳ Diferido |
-| 20 | Compensación de escrow puede dejar fondos atrapados en estado terminal | P2 | ⏳ Diferido |
+| 17 | API keys B2B nunca expiran (`ResolveKey` solo mira `status='active'`) | P2 | ✅ Corregido |
+| 18 | Rate-limiter falla-abierto si Redis cae | P2 | ✅ Corregido |
+| 19 | TOTP/recovery sin lockout dedicado de fuerza bruta | P2 | ✅ Corregido |
+| 20 | Compensación de escrow puede dejar fondos atrapados en estado terminal | P2 | ✅ Corregido |
+| 21 | Columnas `TIMESTAMP` sin zona → desfase de scheduling/expiry si la DB no está en UTC | P2 | ✅ Corregido |
 
 **Refutados (verificados y descartados):** "redirects del webhook como bypass del
 allowlist" (no había allowlist; el SSRF real es directo, ya cubierto en #5) y "TOTP
@@ -126,23 +127,31 @@ una vez y se reusa en el reintento de MFA (mismo payout).
 
 ---
 
-## 3. Pendientes (diferidos, con razón)
+## 3. Correcciones (segundo lote — P2 restantes + TZ)
 
-- **#17 Expiración de API keys** — requiere columna `expires_at` (migración) +
-  cambio en `ResolveKey`. Mitigación actual: solo hash en DB, secreto una vez,
-  revocación manual.
-- **#18 Rate-limit/lockout fail-open** — decisión de diseño: conviene un fallback
-  in-process (fail-degraded) en rutas sensibles; solo se manifiesta con Redis caído.
-- **#19 Lockout de TOTP/recovery** — añadir contador de fallos + límite dedicado
-  (espejar el patrón del OTP). Mitigado parcialmente por replay-protection
-  (`last_used_step`) y entropía de recovery (~40 bits, no fuerza-bruteable).
-- **#20 Compensación de escrow** — añadir estado "reconciling" o un poller que
-  re-drene postings ausentes (espejar el poller de payouts). Requiere doble fallo
-  raro (Post + revert) que un atacante no dispara a demanda.
+**#17 Expiración de API keys** — migración `035` (`expires_at`) + `ResolveKey`
+exige `(expires_at IS NULL OR expires_at > NOW())`; `CreateKey` setea +365 días;
+keys existentes backfilleadas. Bounded el blast-radius de un leak.
 
-Estos cuatro tocan migraciones/diseño y se difirieron por no poder compilar/probar
-el backend en este entorno; recomendado abordarlos con la suite de integración
-disponible.
+**#18 Rate-limit fail-degraded** — `internal/middleware/ratelimit.go`: si Redis
+cae, en vez de fallar-abierto, se degrada a un limiter in-process (fixed-window,
+por-proceso) como backstop; el throttle de fuerza bruta no desaparece.
+
+**#19 Lockout de TOTP** — migración `036` (`failed_attempts`, `locked_until`) +
+`VerifyTOTP` cuenta fallos consecutivos y bloquea la verificación tras 5 por 15
+min (un código válido se rechaza mientras está bloqueado). Test de integración.
+
+**#20 Poller de escrow** — migración `037` (`settled_at`) + `escrow.Service.
+ReconcileStuck` (re-postea con la idempotency key original: completa un movimiento
+atascado o es no-op) + `escrow.Poller` cableado en `main.go` (espeja el de payout).
+Test de integración que simula un release atascado y verifica que se sana.
+
+**#21 TIMESTAMP→TIMESTAMPTZ** — migración `034` (data-driven: convierte toda
+columna `timestamp` naive a `timestamptz` interpretando lo guardado como UTC) +
+la misma conversión en el esquema de `testutil`. Cierra el desfase de
+scheduling/expiry cuando el servidor DB no está en UTC. **Probado**: con el server
+en zona `America/Costa_Rica`, `TestWebhookRetryOnFailure` (que fallaba con el bug)
+ahora pasa.
 
 ---
 
@@ -150,19 +159,10 @@ disponible.
 
 - **Frontend:** `npm run typecheck` ✅ · `eslint` ✅ · `vitest run` **360/360** ✅
   · `npm run build` ✅.
-- **Backend (local, Postgres real):** `go build` ✅ · `go vet` ✅ · `gosec` ✅ (0) ·
-  `golangci-lint` v2 ✅ (0) · `go test ./... -p 1` ✅ (todos los paquetes). Migración
-  nueva `033_mfa_single_use.sql` (aditiva) + `consumed_at` en `testutil`. Tests
-  actualizados/añadidos: firma de webhook con timestamp; `RemovePriceAlert` con
-  `userID`; seam SSRF en integración B2B; **nuevo** test de single-use del gate MFA.
-- **Deploy:** las migraciones pendientes ahora incluyen la **033** (junto a
-  028–032). Activación de seeding en prod requiere `SEED_PASSWORD_<CEDULA>`.
-
-### Hallazgo colateral (preexistente, fuera de alcance)
-
-Al correr la integración contra Postgres en zona horaria local (UTC-6) afloró que
-`webhook_deliveries.next_attempt_at` es `TIMESTAMP` (sin zona) en vez de
-`TIMESTAMPTZ`: con el servidor DB fuera de UTC, el backoff de reintento de
-webhooks se calcula mal (6h de desfase). **No es de seguridad ni regresión** —
-reproduce en el código original y no se manifiesta con la DB en UTC (CI/Render).
-Recomendado migrar esa columna (y revisar otras `TIMESTAMP`) a `TIMESTAMPTZ`.
+- **Backend (local, Postgres 16.8 real):** `go build` ✅ · `go vet` ✅ · `gosec` ✅
+  (0) · `golangci-lint` v2 ✅ (0) · `go test ./... -p 1` ✅ (todos los paquetes;
+  `TestPayoutMFAGate` flaqueó una vez por saturación de la máquina, verde aislado).
+  Tests de integración añadidos: single-use del gate MFA, lockout de TOTP, reconcile
+  de escrow atascado; y la inmunidad TZ probada bajo zona `America/Costa_Rica`.
+- **Deploy:** las migraciones pendientes ahora son **028–037** (`RUN_MIGRATIONS=true`
+  una vez). Activación de seeding en prod requiere `SEED_PASSWORD_<CEDULA>`.

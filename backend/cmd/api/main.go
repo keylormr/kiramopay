@@ -335,6 +335,15 @@ func main() {
 	defer payoutPollerCancel()
 	go payoutPoller.Run(payoutPollerCtx)
 
+	// ── Escrow settlement poller ─────────────────────────────────────────
+	// Re-drives any escrow agreement left in a terminal state with funds stuck
+	// in SYSTEM:ESCROW (release/refund posting failed and its revert also
+	// failed). Re-posting is idempotent, so a settled agreement is a no-op.
+	escrowPoller := escrow.NewPoller(escrowService, 60*time.Second, logger)
+	escrowPollerCtx, escrowPollerCancel := context.WithCancel(context.Background())
+	defer escrowPollerCancel()
+	go escrowPoller.Run(escrowPollerCtx)
+
 	// Router
 	r := chi.NewRouter()
 
