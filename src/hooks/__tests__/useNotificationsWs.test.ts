@@ -5,11 +5,14 @@ import { useNotificationsWs } from '../useNotificationsWs';
 // Mock stores
 const mockAddNotification = vi.fn();
 let mockIsAuthenticated = true;
+let mockAccessToken: string | null = 'test-jwt-token';
 
-vi.mock('@/stores/auth.store', () => ({
-  useAuthStore: (selector: (s: { isAuthenticated: boolean }) => boolean) =>
-    selector({ isAuthenticated: mockIsAuthenticated }),
-}));
+vi.mock('@/stores/auth.store', () => {
+  const useAuthStore = (selector: (s: { isAuthenticated: boolean }) => boolean) =>
+    selector({ isAuthenticated: mockIsAuthenticated });
+  useAuthStore.getState = () => ({ accessToken: mockAccessToken });
+  return { useAuthStore };
+});
 
 vi.mock('@/stores/notification.store', () => ({
   useNotificationStore: (selector: (s: { addNotification: typeof mockAddNotification }) => typeof mockAddNotification) =>
@@ -51,14 +54,13 @@ describe('useNotificationsWs', () => {
     MockWebSocket.instances = [];
     mockAddNotification.mockClear();
     mockIsAuthenticated = true;
+    mockAccessToken = 'test-jwt-token';
     // Set API URL for tests
     import.meta.env.VITE_API_URL = 'http://localhost:8080';
-    localStorage.setItem('kiramopay-token', 'test-jwt-token');
   });
 
   afterEach(() => {
     import.meta.env.VITE_API_URL = originalEnv;
-    localStorage.removeItem('kiramopay-token');
     vi.restoreAllMocks();
   });
 

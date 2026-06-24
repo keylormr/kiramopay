@@ -33,8 +33,10 @@ export function useNotificationsWs(options: UseNotificationsWsOptions = {}) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // Send auth token after connecting
-        const token = localStorage.getItem('kiramopay-token');
+        // Authenticate with the in-memory access token (tokens are no longer
+        // kept in localStorage). Without a token the server keeps the socket
+        // unauthenticated and sends nothing user-specific.
+        const token = useAuthStore.getState().accessToken;
         if (token) {
           ws.send(JSON.stringify({ type: 'auth', token }));
         }

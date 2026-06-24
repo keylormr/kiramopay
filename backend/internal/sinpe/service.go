@@ -14,17 +14,25 @@ import (
 	"github.com/kiramopay/backend/internal/wallet"
 )
 
+// Notifier delivers a user-facing notification (history + push). Implemented by
+// the notification service; optional so sinpe works without it.
+type Notifier interface {
+	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+}
+
 type Service struct {
 	repo        *Repository
 	txService   *transaction.Service
 	walletRepo  *wallet.Repository
 	userRepo    *user.Repository
 	auditLogger *audit.Logger
+	notifier    Notifier
 }
 
 // Options bundles optional collaborators.
 type Options struct {
 	AuditLogger *audit.Logger
+	Notifier    Notifier
 }
 
 func NewService(
@@ -43,6 +51,7 @@ func NewService(
 		walletRepo:  walletRepo,
 		userRepo:    userRepo,
 		auditLogger: opts.AuditLogger,
+		notifier:    opts.Notifier,
 	}
 }
 
@@ -195,6 +204,14 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			Description: req.Description,
 			CreatedAt:   time.Now(),
 		})
+		// Notify the recipient (best-effort, detached so it never blocks or
+		// fails the transfer). This is the first real notification trigger.
+		if s.notifier != nil {
+			body := fmt.Sprintf("Recibiste ₡%d.%02d por SINPE Móvil", req.Amount/100, req.Amount%100)
+			go func(uid, b string) {
+				_ = s.notifier.NotifyUser(context.Background(), uid, "SINPE recibido", b, "transaction")
+			}(peer.ID, body)
+		}
 	}
 
 	if s.auditLogger != nil {

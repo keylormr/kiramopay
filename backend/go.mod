@@ -5,6 +5,7 @@ go 1.25.0
 toolchain go1.25.11
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/exaring/otelpgx v0.11.1
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-chi/cors v1.2.1
