@@ -49,8 +49,10 @@ export class HttpNotificationRepository implements INotificationRepository {
   }
 
   async markAllRead(): Promise<ApiResponse<void>> {
-    // Backend doesn't have a bulk endpoint yet — mark individually
-    // For now, return success and let the store handle it optimistically
+    const res = await this.client.post<void>('/api/v1/notifications/read-all');
+    if (!res.success) {
+      return apiError('UPDATE_FAILED', res.error?.message || 'Failed to mark all read');
+    }
     return apiSuccess(undefined as unknown as void);
   }
 

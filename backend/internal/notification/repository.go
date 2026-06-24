@@ -106,3 +106,13 @@ func (r *Repository) MarkRead(ctx context.Context, userID, notifID string) error
 	)
 	return err
 }
+
+// MarkAllRead marks every unread notification for the user as read.
+func (r *Repository) MarkAllRead(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE notification_history SET read_at = NOW()
+		 WHERE user_id = $1 AND read_at IS NULL`,
+		userID,
+	)
+	return err
+}

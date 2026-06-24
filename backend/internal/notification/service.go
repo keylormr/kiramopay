@@ -98,3 +98,8 @@ func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset 
 func (s *Service) MarkRead(ctx context.Context, userID, notifID string) error {
 	return s.repo.MarkRead(ctx, userID, notifID)
 }
+
+// MarkAllRead marks all of the user's unread notifications as read.
+func (s *Service) MarkAllRead(ctx context.Context, userID string) error {
+	return s.repo.MarkAllRead(ctx, userID)
+}

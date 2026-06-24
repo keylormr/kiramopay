@@ -585,6 +585,7 @@ func main() {
 			r.Delete("/push/unsubscribe", notifHandler.Unsubscribe)
 			r.Get("/notifications", notifHandler.ListNotifications)
 			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
+			r.Post("/notifications/read-all", notifHandler.MarkAllRead)
 
 			// Budgets
 			r.Get("/budgets", budgetHandler.List)
