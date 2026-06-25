@@ -66,7 +66,7 @@ describe('ErrorBoundary', () => {
     expect(screen.queryByText('All good')).not.toBeInTheDocument();
   });
 
-  it('should show English error UI when language is set to en', () => {
+  it('should show English error UI when language is set to en', async () => {
     localStorage.setItem('kiramopay_language', 'en');
 
     render(
@@ -75,7 +75,9 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    // The English chunk is loaded lazily in componentDidMount; the UI falls back
+    // to Spanish until it resolves, so wait for the English text to appear.
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
     expect(screen.getByText('Retry')).toBeInTheDocument();
     expect(screen.getByText('Home')).toBeInTheDocument();
   });

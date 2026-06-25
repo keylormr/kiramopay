@@ -1,15 +1,21 @@
 import React from 'react';
-import translations, { Language, LANGUAGES } from '../i18n/translations';
+import {
+  Language,
+  LANGUAGES,
+  TranslationKeys,
+  defaultTranslations,
+  loadLanguage,
+} from '../i18n/translations';
 
-const getTranslation = (key: string): string => {
+function savedLanguage(): Language {
   const saved = localStorage.getItem('kiramopay_language');
-  const lang: Language = (saved && LANGUAGES.some(l => l.code === saved) ? saved : 'es') as Language;
-  return (translations[lang] as Record<string, string>)[key] || key;
-};
+  return (saved && LANGUAGES.some((l) => l.code === saved) ? saved : 'es') as Language;
+}
 
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
+  messages: TranslationKeys;
 }
 
 interface ErrorBoundaryProps {
@@ -19,10 +25,20 @@ interface ErrorBoundaryProps {
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    // Spanish is bundled; the saved language (if any) is preloaded in
+    // componentDidMount so a later crash screen is still localized.
+    this.state = { hasError: false, error: null, messages: defaultTranslations };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  componentDidMount() {
+    loadLanguage(savedLanguage())
+      .then((messages) => this.setState({ messages }))
+      .catch(() => {
+        /* keep the bundled Spanish fallback */
+      });
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 
@@ -36,6 +52,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   render() {
     if (this.state.hasError) {
+      const t = (key: string): string =>
+        (this.state.messages as Record<string, string>)[key] || key;
       return (
         <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center text-white px-6">
           <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mb-6">
@@ -45,9 +63,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold mb-2">{getTranslation('error_title')}</h1>
+          <h1 className="text-2xl font-bold mb-2">{t('error_title')}</h1>
           <p className="text-gray-400 text-center mb-8 max-w-sm">
-            {getTranslation('error_desc')}
+            {t('error_desc')}
           </p>
 
           {import.meta.env.DEV && this.state.error && (
@@ -63,13 +81,13 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               onClick={this.handleRetry}
               className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold active:scale-95 transition-all"
             >
-              {getTranslation('error_retry')}
+              {t('error_retry')}
             </button>
             <button
               onClick={this.handleGoHome}
               className="flex-1 bg-slate-700 text-white py-3 rounded-xl font-bold active:scale-95 transition-all"
             >
-              {getTranslation('error_home')}
+              {t('error_home')}
             </button>
           </div>
         </div>
