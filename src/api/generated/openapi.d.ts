@@ -4444,7 +4444,7 @@ export interface components {
             /** @enum {string} */
             status?: "pending" | "processing" | "completed" | "failed";
             destination?: components["schemas"]["PayoutDestination"];
-            /** @description the rail's id */
+            /** @description the rail's id, once known */
             external_id?: string;
             failure_reason?: string;
             /** Format: date-time */
@@ -4508,6 +4508,8 @@ export interface components {
                 redis?: "ok" | "error";
             };
             websocket_clients?: number;
+            /** @description Residual cache-vs-journal drift (minor units) from the last reconcile. */
+            last_drift_crc?: number;
         };
         RegisterRequest: {
             /** @example 702650930 */

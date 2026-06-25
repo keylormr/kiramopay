@@ -1883,7 +1883,7 @@ components:
         currency: { type: string }
         status: { type: string, enum: [pending, processing, completed, failed] }
         destination: { $ref: '#/components/schemas/PayoutDestination' }
-        external_id: { type: string, description: the rail's id, once known }
+        external_id: { type: string, description: "the rail's id, once known" }
         failure_reason: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -1977,6 +1977,9 @@ components:
               enum: [ok, error]
         websocket_clients:
           type: integer
+        last_drift_crc:
+          type: integer
+          description: Residual cache-vs-journal drift (minor units) from the last reconcile.
 
     RegisterRequest:
       type: object
