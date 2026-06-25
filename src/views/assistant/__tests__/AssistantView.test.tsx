@@ -15,6 +15,10 @@ vi.mock('@/api', () => ({
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 
+// Spy the global-balance refetch the view fires after a confirmed proposal succeeds.
+const mockDataSync = vi.hoisted(() => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/services/dataSync', () => mockDataSync);
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -48,6 +52,7 @@ beforeEach(() => {
   });
   mockApi.sinpe.send.mockReset();
   mockApi.mfa.totpVerify.mockReset();
+  mockDataSync.refreshAccounts.mockClear();
 });
 
 describe('AssistantView — confirming a high-value proposal', () => {
@@ -73,6 +78,20 @@ describe('AssistantView — confirming a high-value proposal', () => {
       expect(mockApi.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2);
     });
+    expect(await screen.findByText('Confirmado')).toBeInTheDocument();
+  });
+
+  it('refetches the global wallet balance after a confirmed proposal succeeds', async () => {
+    mockApi.sinpe.send.mockResolvedValue({ success: true, data: { id: 't1' } });
+    const user = userEvent.setup();
+    setup();
+
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'envía 200000 a 8888-7777{Enter}');
+    await user.click(await screen.findByText('Confirmar'));
+
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
+    expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
     expect(await screen.findByText('Confirmado')).toBeInTheDocument();
   });
 });
