@@ -98,27 +98,30 @@ escrituras), por eso separar `NOT VALID` de `VALIDATE` es lo que evita el lock.
 
 ---
 
-## 5. Cambios necesarios en el runner (`migrate.go`)
+## 5. Soporte del runner (`migrate.go`)
 
-Para habilitar las recetas de §4:
-
-1. **Migraciones no-transaccionales** (para `CONCURRENTLY`): una convención
-   —p. ej. sufijo `NNN_name.notx.sql` o una directiva de cabecera
-   `-- migrate:no-transaction`— que le indique al runner **no** envolver ese
-   archivo en una transacción. Es el cambio clave. Riesgo: una migración no-tx
-   que falla a la mitad deja estado parcial, así que debe ser **idempotente /
-   reanudable** (`CREATE INDEX CONCURRENTLY IF NOT EXISTS`; limpiar un índice
-   `INVALID` si una corrida previa abortó).
-2. **Guards de timeout**: el runner debería `SET lock_timeout` y
-   `SET statement_timeout` antes de aplicar cada migración, para que una DDL
-   bloqueante **falle rápido** en vez de encolarse y tumbar el tráfico. Reintentar
-   con backoff.
-3. **Single-runner gate**: garantizar que **un solo** proceso corra las
-   migraciones (un job/paso de release dedicado, o el advisory-lock de
-   `internal/cluster`). No correrlas en el boot de cada instancia.
-4. **Separar `NOT VALID` de `VALIDATE`**: como hoy cada archivo es una sola tx,
-   ambas quedan juntas. Para tablas grandes, ponerlas en migraciones (archivos)
-   separadas para que `VALIDATE` corra en su propia tx con lock débil.
+1. **Migraciones no-transaccionales** (para `CONCURRENTLY`) — **IMPLEMENTADO**.
+   Una migración que incluye la línea directiva `-- migrate:no-transaction` se
+   aplica **sin** transacción envolvente. Como el cuerpo y el registro en
+   `schema_migrations` no son atómicos, la migración **debe ser idempotente** y
+   **contener una sola sentencia** (un *simple query* multi-sentencia es a su vez
+   una transacción implícita, lo que anularía el propósito). Patrón:
+   `CREATE INDEX CONCURRENTLY IF NOT EXISTS …`.
+2. **Guard de `lock_timeout`** — **IMPLEMENTADO**. El runner hace
+   `SET lock_timeout` en la sesión de migración (env `MIGRATION_LOCK_TIMEOUT_MS`,
+   default 3000 ms, `0` lo desactiva) para que una DDL que no consigue el lock
+   **falle rápido** en vez de encolarse y tumbar el tráfico. *(No se setea
+   `statement_timeout`: los backfills de 020/024 pueden tardar y no deben morir;
+   queda como override manual si se necesita.)*
+3. **Single-runner gate** — **IMPLEMENTADO**. Toda la corrida sostiene un
+   `pg_advisory_lock` de sesión, así que instancias que arrancan a la vez
+   serializan: una espera, y al obtener el lock encuentra todo aplicado y no hace
+   nada. *(Ideal complementario, no-código: mover las migraciones a un job/paso
+   de release dedicado en vez de `RUN_MIGRATIONS` en cada instancia.)*
+4. **Separar `NOT VALID` de `VALIDATE`** — *guía de autoría* (no es cambio de
+   runner): como cada archivo transaccional es una sola tx, ambas quedan juntas.
+   Para tablas grandes, ponerlas en migraciones (archivos) separadas para que
+   `VALIDATE` corra en su propia tx con lock débil.
 
 ---
 
