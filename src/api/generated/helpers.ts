@@ -34,7 +34,6 @@ export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
  *   type Out = ApiData<'/api/v1/wallets/me', 'get'>;
  *   // Out is the `data` field shape inside ApiResponse<T>.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiData<
   P extends keyof paths,
   M extends HttpMethod,
@@ -46,7 +45,6 @@ export type ApiData<
   : never;
 
 /** Request body shape for a (path, method). Useful for POST/PATCH/PUT. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiBody<P extends keyof paths, M extends HttpMethod> = paths[P] extends Record<
   M,
   { requestBody?: { content: { 'application/json': infer B } } }
