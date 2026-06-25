@@ -319,6 +319,26 @@ El pipeline de GitHub Actions (`.github/workflows/ci.yml`) ejecuta automaticamen
 
 Todos los checks deben pasar antes de merge a `develop` o `main`.
 
+### Security gates y triage
+
+Los escaneos de seguridad son **gating** (bloquean el merge), no informativos. Las
+versiones de las herramientas estan pineadas para que el resultado sea reproducible
+y un update silencioso no rompa un PR antes verde. Cuando un escaneo falle, **arregla
+primero** (sube la dependencia); usa el allowlist solo para un hallazgo confirmado que
+no se puede accionar todavia, siempre justificado y con fecha.
+
+| Job | Que bloquea | Como triar / allowlist |
+|-----|-------------|------------------------|
+| `backend-vulncheck` (govulncheck) | Vulnerabilidades **alcanzables** desde nuestro codigo | No tiene allowlist por diseno: sube la dependencia o refactoriza el call path. El toolchain de Go esta pineado (`go.mod`) para cubrir advisories de la stdlib. |
+| `backend-gosec` (SAST) | Hallazgos de codigo severidad >= medium | Suprime un hallazgo puntual **inline** con `#nosec <REGLA> -- <justificacion>`. Nunca ampliar el `-exclude` global sin revision. |
+| `secret-scan` (gitleaks) | Secretos en el historial/diff | Falso positivo confirmado: allowlist en `.gitleaks.toml` o marca inline `gitleaks:allow`. Un secreto real se **rota**, no se silencia. |
+| `frontend-audit` (npm audit) | Advisories `high`+ en deps de **produccion** (`--omit=dev`) | Sube la dependencia; para una transitiva usa `overrides` en `package.json`. Mover un paquete solo de build a `devDependencies` lo saca del arbol de produccion. |
+| `trivy-fs` (Trivy) | CVE HIGH/CRITICAL con fix disponible (`ignore-unfixed:true`) | Agrega el CVE a `.trivyignore` (raiz, se lee automatico) con razon, responsable, fecha e issue. Re-revisar en cada bump y en el repaso trimestral. |
+
+Pinear versiones: `golangci-lint` v2.12.2 (input `version` de
+`golangci-lint-action@v7`) + `backend/.golangci.yml`, `govulncheck@v1.4.0`,
+`gosec@v2.27.1`. Subirlas es un cambio deliberado en `ci.yml`.
+
 ## Kubernetes (Desarrollo Local)
 
 Para probar despliegues:

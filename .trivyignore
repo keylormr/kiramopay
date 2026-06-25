@@ -1,0 +1,22 @@
+# Trivy allowlist — vulnerability triage
+#
+# Read automatically by the `trivy-fs` CI job (severity HIGH,CRITICAL,
+# ignore-unfixed). This file is the auditable escape hatch for a CVE that is
+# confirmed but cannot be acted on right now, so a single unfixable advisory
+# does not block every PR.
+#
+# Policy:
+#   1. FIX FIRST. Bump the dependency (go.mod / package.json) before suppressing.
+#      ignore-unfixed:true already skips advisories with no upstream fix.
+#   2. Only add an entry for a HIGH/CRITICAL with a fix that we cannot take yet
+#      (breaking bump, transitive pin pending, not reachable in our usage).
+#   3. Every entry MUST carry: the reason, who triaged it, the date, and a
+#      tracking issue. Re-review on each dependency bump and on a quarterly pass.
+#   4. Prefer scoping with an expiry: an entry with no removal plan rots into a
+#      silent blind spot.
+#
+# Format (one ID per line, `#` comments allowed):
+#   CVE-2025-XXXXX  # reason; <owner> <YYYY-MM-DD>; tracking: <issue-url>
+#
+# --- Active suppressions ---
+# (none — keep this list empty; the gate is clean)

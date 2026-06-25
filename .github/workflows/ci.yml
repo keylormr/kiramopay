@@ -242,8 +242,14 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # Pinned for reproducible runs; bump deliberately. The advisory database
+        # is fetched at scan time, so a pinned binary still checks current CVEs.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
       - name: Run govulncheck
+        # Gating. govulncheck only reports vulnerabilities that are actually
+        # reachable from our code, so there is no allowlist to maintain: triage
+        # by bumping the dependency or refactoring the call path. See the
+        # "Security gates y triage" section of CONTRIBUTING.md.
         working-directory: backend
         run: govulncheck ./...
 
@@ -257,10 +263,15 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: backend/go.sum
       - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+        # Pinned for reproducible runs; a floating @latest can ship new rules
+        # that break a previously-green PR mid-review. Bump deliberately.
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
       - name: Run gosec
         working-directory: backend
-        # G404 (math/rand): our only uses are non-cryptographic jitter / ETAs.
+        # Gating. G404 (math/rand) is globally excluded — our only uses are
+        # non-cryptographic jitter / ETAs. Triage a specific finding inline with
+        # `#nosec <RULE> -- <justification>`, never by broadening this exclude
+        # list. See the "Security gates y triage" section of CONTRIBUTING.md.
         run: gosec -severity=medium -exclude=G404 -exclude-dir=internal/testutil ./...
 
   secret-scan:
@@ -294,6 +305,9 @@ jobs:
     runs-on: ubuntu-latest
     # Re-gated: HIGH/CRITICAL advisories cleared (pgx v5.9.0, x/crypto v0.35.0,
     # npm prod tree clean); scans go.sum + package-lock with ignore-unfixed.
+    # Triage path: a confirmed-but-unactionable CVE is allowlisted in the
+    # repo-root .trivyignore (read automatically), each entry justified and
+    # dated. See the "Security gates y triage" section of CONTRIBUTING.md.
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy filesystem scan
@@ -303,6 +317,7 @@ jobs:
           scan-ref: .
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: '1'
 
   # ── Docker ───────────────────────────────────────────────────────────
