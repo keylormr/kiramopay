@@ -1,4 +1,19 @@
-import translations, { LANGUAGES, type Language } from '../translations';
+import { LANGUAGES, type Language } from '../translations';
+import es from '../languages/es';
+import en from '../languages/en';
+import zhTw from '../languages/zh-tw';
+import ja from '../languages/ja';
+import hi from '../languages/hi';
+
+// The languages are now split into lazily-loaded chunks; import them directly
+// here so the cross-language key-consistency checks still cover all of them.
+const translations: Record<Language, Record<string, string>> = {
+  es,
+  en,
+  'zh-tw': zhTw,
+  ja,
+  hi,
+};
 
 describe('Translations', () => {
   const languages = LANGUAGES.map((l) => l.code);

@@ -181,10 +181,11 @@ describe('HomeView', () => {
     expect(screen.getByText('Add Money')).toBeInTheDocument();
   });
 
-  it('should render in English when language is set to en', () => {
+  it('should render in English when language is set to en', async () => {
     localStorage.setItem('kiramopay_language', 'en');
     renderHomeView();
-    expect(screen.getByText('Total Balance')).toBeInTheDocument();
+    // English ships as a lazily-loaded chunk; wait for it before asserting.
+    expect(await screen.findByText('Total Balance')).toBeInTheDocument();
     expect(screen.getByText('Quick Actions')).toBeInTheDocument();
     expect(screen.getByText('Accounts')).toBeInTheDocument();
     expect(screen.getByText('Recent Transactions')).toBeInTheDocument();
