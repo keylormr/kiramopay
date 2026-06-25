@@ -86,18 +86,33 @@ describe('HttpPayoutRepository', () => {
     expect(client.get).toHaveBeenCalledWith('/api/v1/payouts/rails');
   });
 
-  it('surfaces backend errors', async () => {
-    const client = fakeClient({
-      post: vi.fn().mockResolvedValue({ success: false, error: { code: 'X', message: 'nope' } }),
-    });
-    const repo = new HttpPayoutRepository(client);
-    const res = await repo.create({
+  const createWith = (errorResult: unknown) => {
+    const client = fakeClient({ post: vi.fn().mockResolvedValue(errorResult) });
+    return new HttpPayoutRepository(client).create({
       rail: 'mock',
       amountMinor: 100,
       destination: { type: 'bank_account', account: '1', name: 'X' },
       idempotencyKey: 'idem-2',
     });
+  };
+
+  it('preserves the backend error code (not just the message)', async () => {
+    const res = await createWith({
+      success: false,
+      error: { code: 'INSUFFICIENT_FUNDS', message: 'Saldo insuficiente' },
+    });
     expect(res.success).toBe(false);
-    expect(res.error?.message).toBe('nope');
+    expect(res.error?.code).toBe('INSUFFICIENT_FUNDS');
+    expect(res.error?.message).toBe('Saldo insuficiente');
+  });
+
+  it('still preserves MFA_REQUIRED', async () => {
+    const res = await createWith({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa' } });
+    expect(res.error?.code).toBe('MFA_REQUIRED');
+  });
+
+  it('falls back to a generic code when the backend gives none', async () => {
+    const res = await createWith({ success: false });
+    expect(res.error?.code).toBe('PAYOUT_CREATE_FAILED');
   });
 });

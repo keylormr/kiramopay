@@ -103,7 +103,9 @@ export class HttpServicesRepository implements IServicesRepository {
     });
 
     if (!res.success || !res.data) {
-      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'PAYMENT_FAILED';
+      // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
+      // limit, fraud block, …) so the UI can react; only fall back when absent.
+      const code = res.error?.code || 'PAYMENT_FAILED';
       return apiError(code, res.error?.message || 'Bill payment failed');
     }
 
@@ -166,7 +168,9 @@ export class HttpServicesRepository implements IServicesRepository {
     });
 
     if (!res.success || !res.data) {
-      const code = res.error?.code === 'MFA_REQUIRED' ? 'MFA_REQUIRED' : 'RECHARGE_FAILED';
+      // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
+      // limit, fraud block, …) so the UI can react; only fall back when absent.
+      const code = res.error?.code || 'RECHARGE_FAILED';
       return apiError(code, res.error?.message || 'Recharge failed');
     }
 
