@@ -321,6 +321,8 @@ func main() {
 	// Auto-fix snaps the wallets cache to the journal (source of truth) under
 	// the same row lock the ledger uses. Drift above 1,000,000 CRC is alerted
 	// but left for manual review — a gap that large signals a deeper bug.
+	// Each periodic pass runs under a cluster-wide advisory lock so only one
+	// instance surveys every wallet when the API is scaled horizontally.
 	reconcileSvc := reconcile.NewService(pool, auditLogger, 1*time.Hour, logger,
 		reconcile.WithAutoFix(100_000_000))
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
@@ -337,7 +339,9 @@ func main() {
 	// Reconciles processing payouts against their rail: drives async
 	// settlements to terminal and self-heals any payout that crashed between
 	// its debit and its Send (Rail.Send is idempotent, so re-dispatch is safe).
-	payoutPoller := payout.NewPoller(payoutService, 30*time.Second, logger)
+	// Each tick runs under a cluster-wide advisory lock so only one instance
+	// re-dispatches a batch when the API is scaled horizontally.
+	payoutPoller := payout.NewPoller(payoutService, pool, 30*time.Second, logger)
 	payoutPollerCtx, payoutPollerCancel := context.WithCancel(context.Background())
 	defer payoutPollerCancel()
 	go payoutPoller.Run(payoutPollerCtx)
@@ -346,7 +350,9 @@ func main() {
 	// Re-drives any escrow agreement left in a terminal state with funds stuck
 	// in SYSTEM:ESCROW (release/refund posting failed and its revert also
 	// failed). Re-posting is idempotent, so a settled agreement is a no-op.
-	escrowPoller := escrow.NewPoller(escrowService, 60*time.Second, logger)
+	// Each tick runs under a cluster-wide advisory lock so only one instance
+	// re-drives a batch when the API is scaled horizontally.
+	escrowPoller := escrow.NewPoller(escrowService, pool, 60*time.Second, logger)
 	escrowPollerCtx, escrowPollerCancel := context.WithCancel(context.Background())
 	defer escrowPollerCancel()
 	go escrowPoller.Run(escrowPollerCtx)

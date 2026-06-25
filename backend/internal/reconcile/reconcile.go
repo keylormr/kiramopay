@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/cluster"
 	"github.com/kiramopay/backend/internal/middleware"
 )
 
@@ -69,14 +70,35 @@ func (s *Service) Run(ctx context.Context) {
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
 	// Run immediately at startup so drift surfaces fast.
-	s.runOnce(ctx)
+	s.runGuarded(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			s.runOnce(ctx)
+			s.runGuarded(ctx)
 		}
+	}
+}
+
+// runGuarded executes one reconcile pass only if this instance wins the
+// cluster-wide advisory lock, so that with the API scaled to multiple instances
+// they do not all survey every wallet in parallel (which would duplicate drift
+// alerts and waste work). The admin-triggered RunOnce path is intentionally NOT
+// gated — an operator asking for a reconcile gets one on the spot.
+func (s *Service) runGuarded(ctx context.Context) {
+	ran, err := cluster.TryRunExclusive(ctx, s.db, cluster.KeyReconcile, func(c context.Context) error {
+		s.runOnce(c)
+		return nil
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("reconcile leader lock failed", "error", err)
+		}
+		return
+	}
+	if !ran && s.logger != nil {
+		s.logger.Debug("reconcile tick skipped; another instance is leader")
 	}
 }
 
