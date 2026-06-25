@@ -4,6 +4,7 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
 import { useAuthStore } from '@/stores/auth.store';
 import type { EscrowAgreement, EscrowStatus } from '@/api';
 
@@ -111,6 +112,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
     setSelected(res.data);
     refresh();
+    // Funds moved on the ledger (fund/release/refund): refetch the global
+    // wallet balance so the home balance is not left stale.
+    refreshAccounts().catch(() => {});
   };
 
   const api = getApiLayer();
@@ -129,6 +133,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setDisputing(false);
     setDisputeReason('');
     refresh();
+    // Dispute does not move funds today, but refetch keeps the home balance
+    // uniformly fresh across every escrow transition.
+    refreshAccounts().catch(() => {});
   };
 
   const isBuyer = selected && currentUserId === selected.buyerId;

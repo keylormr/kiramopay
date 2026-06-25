@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
 import type { AssistantTurn, AssistantProposal } from '@/api';
 
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
@@ -79,6 +80,11 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       setShowMfa(true);
       setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
       return;
+    }
+    if (res.success) {
+      // The confirmed proposal moved money (SINPE / recharge / bill payment):
+      // refetch the global wallet balance so it is not left stale.
+      refreshAccounts().catch(() => {});
     }
     setPstate((s) => ({
       ...s,

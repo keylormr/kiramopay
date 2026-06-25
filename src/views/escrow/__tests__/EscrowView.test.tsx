@@ -28,6 +28,10 @@ vi.mock('@/stores/auth.store', () => ({
     selector({ user: { id: 'buyer-1' } }),
 }));
 
+// Spy the global-balance refetch the view fires after a successful money action.
+const mockDataSync = vi.hoisted(() => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/services/dataSync', () => mockDataSync);
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -54,6 +58,7 @@ beforeEach(() => {
   mockApi.escrow.list.mockResolvedValue({ success: true, data: [pendingAgreement] });
   mockApi.escrow.fund.mockReset();
   mockApi.mfa.totpVerify.mockReset();
+  mockDataSync.refreshAccounts.mockClear();
 });
 
 describe('EscrowView', () => {
@@ -83,5 +88,20 @@ describe('EscrowView', () => {
       expect(mockApi.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mockApi.escrow.fund).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('refetches the global wallet balance after a successful money action', async () => {
+    mockApi.escrow.fund.mockResolvedValue({
+      success: true,
+      data: { ...pendingAgreement, status: 'funded' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByText('Laptop'));
+    await user.click(await screen.findByText('Fondear'));
+
+    await waitFor(() => expect(mockApi.escrow.fund).toHaveBeenCalledTimes(1));
+    expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
   });
 });

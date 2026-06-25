@@ -4,6 +4,7 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
 import type { Payout, PayoutStatus } from '@/api';
 
 const STATUS_COLOR: Record<PayoutStatus, string> = {
@@ -115,6 +116,8 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setAccount('');
     setAmount('');
     refresh();
+    // The payout debited the wallet: refetch the global balance so it is fresh.
+    refreshAccounts().catch(() => {});
   };
 
   const runRefresh = async () => {
@@ -129,6 +132,9 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
     setSelected(res.data);
     refresh();
+    // Refreshing a processing payout can settle it to failed and refund the
+    // wallet, so re-pull the global balance.
+    refreshAccounts().catch(() => {});
   };
 
   const statusBadge = (s: PayoutStatus) => (

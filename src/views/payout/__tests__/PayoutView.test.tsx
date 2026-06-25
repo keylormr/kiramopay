@@ -20,6 +20,10 @@ vi.mock('@/api', () => ({
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 
+// Spy the global-balance refetch the view fires after a successful payout.
+const mockDataSync = vi.hoisted(() => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/services/dataSync', () => mockDataSync);
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -47,6 +51,7 @@ beforeEach(() => {
   mockApi.payout.rails.mockResolvedValue({ success: true, data: ['mock'] });
   mockApi.payout.create.mockReset();
   mockApi.mfa.totpVerify.mockReset();
+  mockDataSync.refreshAccounts.mockClear();
 });
 
 describe('PayoutView', () => {
@@ -100,5 +105,21 @@ describe('PayoutView', () => {
       expect(mockApi.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mockApi.payout.create).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('refetches the global wallet balance after a successful payout', async () => {
+    mockApi.payout.create.mockResolvedValue({ success: true, data: donePayout });
+    const user = userEvent.setup();
+    setup();
+    await screen.findByText('Sin pagos salientes');
+
+    await user.click(screen.getByLabelText('Nuevo pago'));
+    await user.type(screen.getByPlaceholderText('Nombre del beneficiario'), 'Acme SA');
+    await user.type(screen.getByPlaceholderText('CR00000000000000000000'), '123456');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByText('Enviar pago'));
+
+    await waitFor(() => expect(mockApi.payout.create).toHaveBeenCalledTimes(1));
+    expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
   });
 });
