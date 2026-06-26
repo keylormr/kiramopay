@@ -15,10 +15,17 @@ import (
 
 type Handler struct {
 	service *Service
+	cookies CookieConfig
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, cookies CookieConfig) *Handler {
+	return &Handler{service: service, cookies: cookies}
+}
+
+// noStore marks an auth response uncacheable so tokens are never written to a
+// shared or browser cache (OWASP).
+func noStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
 }
 
 func loginContext(r *http.Request) LoginContext {
@@ -64,6 +71,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusUnauthorized, "AUTH_FAILED", "invalid credentials")
 		return
 	}
+	// Issue the refresh token as an HttpOnly cookie (the secure transport). The
+	// body still carries the tokens for backward compatibility with clients that
+	// have not migrated to the cookie yet.
+	h.cookies.setRefreshCookie(w, result.Tokens.RefreshToken, result.Tokens.RefreshExpiry)
+	noStore(w)
 	response.JSON(w, http.StatusOK, result)
 }
 
@@ -99,26 +111,50 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
 		return
 	}
+	h.cookies.setRefreshCookie(w, result.Tokens.RefreshToken, result.Tokens.RefreshExpiry)
+	noStore(w)
 	response.JSON(w, http.StatusCreated, result)
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
+	// Prefer the HttpOnly cookie (the secure path); fall back to the JSON body so
+	// clients that have not migrated to the cookie keep working.
+	refreshRaw := h.cookies.refreshTokenFromCookie(r)
+	fromCookie := refreshRaw != ""
+	if !fromCookie {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+			response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+			return
+		}
+		refreshRaw = req.RefreshToken
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
-		return
-	}
-	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken, loginContext(r))
+	tokens, err := h.service.Refresh(r.Context(), refreshRaw, loginContext(r))
 	if err != nil {
+		// A cookie-borne token that no longer validates is stale — clear it so the
+		// browser stops replaying it on every request.
+		if fromCookie {
+			h.cookies.clearRefreshCookie(w)
+		}
+		noStore(w)
 		response.Error(w, http.StatusUnauthorized, "REFRESH_FAILED", "invalid refresh token")
 		return
 	}
+	h.cookies.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiry)
+	noStore(w)
 	response.JSON(w, http.StatusOK, tokens)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Clear the session cookie and ask the browser to drop cached site data,
+	// regardless of the backend revocation outcome below — the client intends to
+	// be logged out.
+	h.cookies.clearRefreshCookie(w)
+	w.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
+	noStore(w)
+
 	jti := middleware.GetAccessJTI(r.Context())
 	exp := middleware.GetAccessExp(r.Context())
 	var ttl time.Duration
