@@ -39,6 +39,8 @@ type Service struct {
 	auditLogger      *audit.Logger
 	screener         SanctionScreener
 	maxLoginAttempts int
+	idleTimeout      time.Duration
+	absoluteTimeout  time.Duration
 }
 
 // Options for service wiring.
@@ -47,6 +49,11 @@ type Options struct {
 	AuditLogger      *audit.Logger
 	Screener         SanctionScreener
 	MaxLoginAttempts int
+	// IdleTimeout ends a session after this much inactivity (no refresh).
+	// AbsoluteTimeout caps the total session age from the original login.
+	// Zero falls back to 30 minutes / 7 days respectively.
+	IdleTimeout     time.Duration
+	AbsoluteTimeout time.Duration
 }
 
 func NewService(
@@ -62,6 +69,12 @@ func NewService(
 	if opts.MaxLoginAttempts <= 0 {
 		opts.MaxLoginAttempts = 5
 	}
+	if opts.IdleTimeout <= 0 {
+		opts.IdleTimeout = 30 * time.Minute
+	}
+	if opts.AbsoluteTimeout <= 0 {
+		opts.AbsoluteTimeout = 7 * 24 * time.Hour
+	}
 	return &Service{
 		authRepo:         authRepo,
 		userRepo:         userRepo,
@@ -71,7 +84,23 @@ func NewService(
 		auditLogger:      opts.AuditLogger,
 		screener:         opts.Screener,
 		maxLoginAttempts: opts.MaxLoginAttempts,
+		idleTimeout:      opts.IdleTimeout,
+		absoluteTimeout:  opts.AbsoluteTimeout,
 	}
+}
+
+// sessionWindowExceeded reports whether a session must end: either the presented
+// refresh token was issued longer ago than the idle window (inactivity), or the
+// family/login origin is older than the absolute window (max session age). A
+// non-positive window disables that particular check.
+func sessionWindowExceeded(now, tokenIssuedAt, familyOrigin time.Time, idle, absolute time.Duration) bool {
+	if idle > 0 && now.Sub(tokenIssuedAt) > idle {
+		return true
+	}
+	if absolute > 0 && now.Sub(familyOrigin) > absolute {
+		return true
+	}
+	return false
 }
 
 type LoginRequest struct {
@@ -282,6 +311,30 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 			}
 		}
 		return nil, fmt.Errorf("invalid refresh token")
+	}
+
+	// Enforce the idle and absolute session windows. The presented token's
+	// issued_at is the last activity; the family origin is the original login.
+	// On a violation, revoke the family so the stale token can't be retried and
+	// force a fresh login.
+	familyOrigin := rec.IssuedAt
+	if fo, ferr := s.authRepo.FamilyOrigin(ctx, rec.FamilyID); ferr == nil && !fo.IsZero() {
+		familyOrigin = fo
+	}
+	if sessionWindowExceeded(time.Now(), rec.IssuedAt, familyOrigin, s.idleTimeout, s.absoluteTimeout) {
+		if rerr := s.authRepo.RevokeRefreshFamily(ctx, rec.FamilyID); rerr != nil {
+			slog.Warn("refresh: revoke on session timeout failed", "family_id", rec.FamilyID, "err", rerr.Error())
+		}
+		if s.auditLogger != nil {
+			s.auditLogger.Log(audit.Event{
+				UserID:    rec.UserID,
+				Action:    "session_timeout",
+				RiskLevel: "low",
+				IPAddress: lc.IPAddress,
+				UserAgent: lc.UserAgent,
+			})
+		}
+		return nil, fmt.Errorf("session timed out")
 	}
 
 	// Rotate.

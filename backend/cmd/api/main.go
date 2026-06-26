@@ -190,6 +190,8 @@ func main() {
 		AuditLogger:      auditLogger,
 		Screener:         kycService,
 		MaxLoginAttempts: 5,
+		IdleTimeout:      cfg.JWT.IdleTimeout,
+		AbsoluteTimeout:  cfg.JWT.RefreshDuration,
 	})
 	userService := user.NewService(userRepo)
 	walletService := wallet.NewService(walletRepo)

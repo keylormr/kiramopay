@@ -102,6 +102,10 @@ type JWTConfig struct {
 	Secret          string
 	AccessDuration  time.Duration
 	RefreshDuration time.Duration
+	// IdleTimeout ends a session after this much inactivity (no refresh), even
+	// while the refresh token is still within RefreshDuration. RefreshDuration
+	// doubles as the absolute session cap (max age from the original login).
+	IdleTimeout time.Duration
 }
 
 type CORSConfig struct {
@@ -138,6 +142,7 @@ func Load() *Config {
 			Secret:          getEnv("JWT_SECRET", "dev-secret-change-in-production"),
 			AccessDuration:  time.Duration(getEnvInt("JWT_ACCESS_MINUTES", 15)) * time.Minute,
 			RefreshDuration: time.Duration(getEnvInt("JWT_REFRESH_DAYS", 7)) * 24 * time.Hour,
+			IdleTimeout:     time.Duration(getEnvInt("JWT_IDLE_MINUTES", 30)) * time.Minute,
 		},
 		CORS: CORSConfig{
 			Origins: parseCORSOrigins(getEnv("CORS_ORIGINS", "http://localhost:*,https://localhost:*")),
