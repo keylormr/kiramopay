@@ -1365,6 +1365,12 @@ paths:
       responses:
         '200':
           description: Agreement list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EscrowAgreement'
 
   /api/v1/escrow/{id}:
     get:
@@ -1377,6 +1383,10 @@ paths:
       responses:
         '200':
           description: Agreement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
         '403':
           description: Not a party to this agreement
 
@@ -1544,6 +1554,12 @@ paths:
       responses:
         '200':
           description: Payout list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payout'
 
   /api/v1/payouts/{id}:
     get:
@@ -1556,6 +1572,10 @@ paths:
       responses:
         '200':
           description: Payout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
         '403':
           description: Not the owner
 
@@ -1572,6 +1592,10 @@ paths:
       responses:
         '200':
           description: Current payout state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
 
   # ── Assistant (JWT-authenticated, read-only) ───────────────────────
   /api/v1/assistant/status:
