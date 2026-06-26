@@ -1391,6 +1391,10 @@ paths:
       responses:
         '200':
           description: Funded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
         '403':
           description: Buyer only / MFA required
         '409':
@@ -1409,6 +1413,10 @@ paths:
       responses:
         '200':
           description: Released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
 
   /api/v1/escrow/{id}/refund:
     post:
@@ -1421,6 +1429,10 @@ paths:
       responses:
         '200':
           description: Refunded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
 
   /api/v1/escrow/{id}/dispute:
     post:
@@ -1441,6 +1453,10 @@ paths:
       responses:
         '200':
           description: Disputed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
 
   /api/v1/escrow/{id}/cancel:
     post:
@@ -1453,6 +1469,10 @@ paths:
       responses:
         '200':
           description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
 
   /api/v1/admin/escrow/{id}/resolve:
     post:
