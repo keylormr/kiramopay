@@ -186,6 +186,20 @@ func (r *Repository) RevokeRefreshFamily(ctx context.Context, familyID string) e
 	return err
 }
 
+// FamilyOrigin returns the issue time of the oldest token in a refresh family —
+// i.e. when the session originally started at login. Used to enforce the
+// absolute session lifetime regardless of how many times the token has rotated.
+func (r *Repository) FamilyOrigin(ctx context.Context, familyID string) (time.Time, error) {
+	var origin time.Time
+	if err := r.db.QueryRow(ctx,
+		`SELECT MIN(issued_at) FROM refresh_tokens WHERE family_id = $1::uuid`,
+		familyID,
+	).Scan(&origin); err != nil {
+		return time.Time{}, fmt.Errorf("family origin: %w", err)
+	}
+	return origin, nil
+}
+
 // ChangePasswordAndRevokeSessions updates the user's password hash and revokes
 // every active refresh-token family and session in a SINGLE serializable
 // transaction. Either all three succeed or none do — there is no window where
