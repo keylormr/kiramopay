@@ -10,6 +10,11 @@ import {
 import { syncAllData } from '@/services/dataSync';
 import { clearLockPin } from '@/services/lockKdf';
 
+// With a real backend the session is restored on cold start from the HttpOnly
+// refresh cookie (see bootstrap), so isAuthenticated must NOT be persisted. In
+// mock mode there is no cookie, so it stays persisted as before.
+const hasBackend = !!import.meta.env.VITE_API_URL;
+
 interface RegisterParams {
   cedula: string;
   phone: string;
@@ -35,6 +40,13 @@ interface AuthState {
   logout: () => void;
   /** Silently rotate the token pair using the in-memory refresh token. */
   refresh: () => Promise<boolean>;
+  /**
+   * Cold-start session restore: exchange the HttpOnly refresh cookie for a fresh
+   * access token. Called once on app boot. If there is no valid cookie the
+   * refresh fails and the user stays logged out (clean login screen) — this is
+   * what replaces the persisted "phantom" authenticated flag.
+   */
+  bootstrap: () => Promise<void>;
   /** Clear the session locally without a backend call (refresh already failed). */
   forceLogout: () => void;
   completeOnboarding: () => void;
@@ -130,6 +142,25 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      bootstrap: async () => {
+        const api = getApiLayer();
+        // The refresh token rides in the HttpOnly cookie (sent automatically on
+        // same-origin requests); the empty body argument is ignored when the
+        // cookie is present. No cookie / invalid token => failure => logged out.
+        const result = await api.auth.refresh('');
+        if (result.success && result.data?.access_token) {
+          set({
+            isAuthenticated: true,
+            isOnboarded: true,
+            accessToken: result.data.access_token,
+            refreshToken: result.data.refresh_token ?? null,
+          });
+          syncAllData().catch(() => {});
+        } else {
+          set({ isAuthenticated: false, accessToken: null, refreshToken: null });
+        }
+      },
+
       completeOnboarding: () => {
         set({ isOnboarded: true });
       },
@@ -151,9 +182,13 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         // Note: tokens are intentionally NOT persisted. PIN/biometric path
         // is the local re-auth; password is the cold-start re-auth.
-        isAuthenticated: state.isAuthenticated,
         isOnboarded: state.isOnboarded,
         user: state.user,
+        // With a backend, isAuthenticated is derived from the boot-time cookie
+        // refresh (bootstrap), never persisted — persisting it was the phantom
+        // session that flashed "logged in" then bounced to login. In mock mode
+        // (no cookie) keep persisting it so a refresh stays logged in.
+        ...(hasBackend ? {} : { isAuthenticated: state.isAuthenticated }),
       }),
     },
   ),

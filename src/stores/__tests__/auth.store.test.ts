@@ -1,8 +1,12 @@
 import { useAuthStore } from '../auth.store';
 
+// Stable mock for the refresh call so bootstrap tests can drive its result.
+const { mockRefresh } = vi.hoisted(() => ({ mockRefresh: vi.fn() }));
+
 vi.mock('@/api', () => ({
   getApiLayer: () => ({
     auth: {
+      refresh: mockRefresh,
       login: vi.fn().mockImplementation(async ({ cedula, password }: { cedula: string; password: string }) => {
         if (cedula === '702650930' && password === 'Kiramopay2024!') {
           return {
@@ -48,6 +52,7 @@ vi.mock('@/services/lockKdf', () => ({
 
 describe('useAuthStore', () => {
   beforeEach(() => {
+    mockRefresh.mockReset();
     useAuthStore.setState({
       isAuthenticated: false,
       isOnboarded: false,
@@ -109,5 +114,28 @@ describe('useAuthStore', () => {
     await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
     const ok = await useAuthStore.getState().changePassword('Kiramopay2024!', 'NewPass2024!');
     expect(ok).toBe(true);
+  });
+
+  it('bootstrap restores the session when the refresh cookie is valid', async () => {
+    mockRefresh.mockResolvedValue({
+      success: true,
+      data: { access_token: 'fresh-access', refresh_token: 'fresh-refresh' },
+    });
+    await useAuthStore.getState().bootstrap();
+    const s = useAuthStore.getState();
+    expect(s.isAuthenticated).toBe(true);
+    expect(s.accessToken).toBe('fresh-access');
+    expect(s.refreshToken).toBe('fresh-refresh');
+  });
+
+  it('bootstrap stays logged out when there is no valid cookie', async () => {
+    mockRefresh.mockResolvedValue({
+      success: false,
+      error: { code: 'REFRESH_FAILED', message: 'invalid refresh token' },
+    });
+    await useAuthStore.getState().bootstrap();
+    const s = useAuthStore.getState();
+    expect(s.isAuthenticated).toBe(false);
+    expect(s.accessToken).toBeNull();
   });
 });

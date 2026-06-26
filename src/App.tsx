@@ -389,12 +389,34 @@ const AuthScreen = () => {
   );
 };
 
+// When a backend is configured the session lives in an HttpOnly cookie, so on
+// cold start we must ask the backend to restore it rather than trust a persisted
+// flag. In mock mode there is no cookie and nothing to restore.
+const hasBackend = !!import.meta.env.VITE_API_URL;
+
 // App Container - manages auth state
 const AppContainer = () => {
   const { state } = useApp();
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('kiramopay_onboarded');
   });
+  // Block the first paint on the cookie-based session restore so we never flash
+  // the login screen (or a phantom authenticated shell) before we know.
+  const [booting, setBooting] = useState(hasBackend);
+
+  useEffect(() => {
+    if (!hasBackend) return;
+    let cancelled = false;
+    useAuthStore
+      .getState()
+      .bootstrap()
+      .finally(() => {
+        if (!cancelled) setBooting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync data from backend when app mounts with an authenticated user
   useEffect(() => {
@@ -404,6 +426,10 @@ const AppContainer = () => {
       });
     }
   }, [state.isAuthenticated]);
+
+  if (booting) {
+    return <LoadingSkeleton />;
+  }
 
   // If not authenticated, show login
   if (!state.isAuthenticated) {
