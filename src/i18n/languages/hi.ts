@@ -328,6 +328,7 @@ const hi: TranslationKeys = {
   error_desc: 'एक अप्रत्याशित त्रुटि हुई। आप पुनः प्रयास कर सकते हैं या होम पर लौट सकते हैं।',
   error_retry: 'पुनः प्रयास करें',
   error_home: 'होम',
+  error_details: 'तकनीकी विवरण',
   unlock: 'अनलॉक करें',
   unlock_biometric_prompt: 'KiramoPay अनलॉक करें',
   nav_crypto: 'क्रिप्टो',

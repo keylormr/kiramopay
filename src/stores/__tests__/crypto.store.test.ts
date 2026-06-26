@@ -90,4 +90,35 @@ describe('useCryptoStore', () => {
     useCryptoStore.getState().removePriceAlert('alert-1');
     expect(useCryptoStore.getState().priceAlerts).toHaveLength(0);
   });
+
+  it('coerces a corrupt persisted blob back to safe arrays on rehydrate', async () => {
+    // An older/corrupt localStorage blob could carry null/missing array fields.
+    // Before the persist `merge` guard, rehydrating this left e.g. assets=null,
+    // which crashed CryptoView's .reduce/.map/.filter at render (the "Algo
+    // salió mal" screen). stakingPositions is omitted to cover the missing case.
+    localStorage.setItem(
+      'kiramopay-crypto',
+      JSON.stringify({
+        state: {
+          assets: null,
+          transactions: null,
+          priceAlerts: null,
+          favoriteAssets: null,
+          defaultConvertCurrency: 'USD',
+        },
+        version: 0,
+      }),
+    );
+
+    await useCryptoStore.persist.rehydrate();
+
+    const s = useCryptoStore.getState();
+    expect(Array.isArray(s.assets)).toBe(true);
+    expect(Array.isArray(s.transactions)).toBe(true);
+    expect(Array.isArray(s.stakingPositions)).toBe(true);
+    expect(Array.isArray(s.priceAlerts)).toBe(true);
+    expect(Array.isArray(s.favoriteAssets)).toBe(true);
+    // Valid scalar fields still rehydrate normally.
+    expect(s.defaultConvertCurrency).toBe('USD');
+  });
 });

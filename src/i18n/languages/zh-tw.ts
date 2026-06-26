@@ -328,6 +328,7 @@ const zhTw: TranslationKeys = {
   error_desc: '發生了意外錯誤。您可以重試或返回首頁。',
   error_retry: '重試',
   error_home: '首頁',
+  error_details: '技術細節',
   unlock: '解鎖',
   unlock_biometric_prompt: '解鎖KiramoPay',
   nav_crypto: '加密貨幣',

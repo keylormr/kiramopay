@@ -58,11 +58,16 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
     connectedPartners: services.connectedPartners,
     rechargeHistory: services.rechargeHistory,
     crypto: {
-      assets: crypto.assets,
-      transactions: crypto.transactions,
-      stakingPositions: crypto.stakingPositions,
-      priceAlerts: crypto.priceAlerts,
-      favoriteAssets: crypto.favoriteAssets,
+      // Default to [] so a missing/corrupt persisted crypto slice (e.g. an old
+      // localStorage blob where an array rehydrated as null/undefined) can never
+      // crash a consumer that calls .reduce/.filter/.map on it — an empty
+      // portfolio is a valid, already-handled state. Mirrors the `|| []` guard
+      // used for state.notifications in App.tsx.
+      assets: crypto.assets ?? [],
+      transactions: crypto.transactions ?? [],
+      stakingPositions: crypto.stakingPositions ?? [],
+      priceAlerts: crypto.priceAlerts ?? [],
+      favoriteAssets: crypto.favoriteAssets ?? [],
       defaultConvertCurrency: crypto.defaultConvertCurrency,
     },
     notifications: notifications.notifications,

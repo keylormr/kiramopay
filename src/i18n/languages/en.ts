@@ -329,6 +329,7 @@ const en: TranslationKeys = {
   error_desc: 'An unexpected error occurred. You can try again or go back to the home screen.',
   error_retry: 'Retry',
   error_home: 'Home',
+  error_details: 'Technical details',
   unlock: 'Unlock',
   unlock_biometric_prompt: 'Unlock KiramoPay',
   nav_crypto: 'Crypto',

@@ -42,6 +42,13 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Always log — in production the on-screen details are collapsed, so the
+    // console is how a crash gets diagnosed. Previously the error was only
+    // shown in DEV builds, making production crashes a black box.
+    console.error('[KiramoPay] Uncaught render error:', error, errorInfo?.componentStack);
+  }
+
   handleRetry = () => {
     this.setState({ hasError: false, error: null });
   };
@@ -68,12 +75,16 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             {t('error_desc')}
           </p>
 
-          {import.meta.env.DEV && this.state.error && (
-            <pre className="mb-6 p-4 bg-slate-800 rounded-xl text-red-300 text-xs max-w-full overflow-auto max-h-40 w-full">
-              {this.state.error.message}
-              {'\n'}
-              {this.state.error.stack}
-            </pre>
+          {this.state.error && (
+            <details className="mb-6 w-full max-w-md text-left">
+              <summary className="cursor-pointer text-gray-500 text-xs select-none">
+                {t('error_details')}
+              </summary>
+              <pre className="mt-2 p-4 bg-slate-800 rounded-xl text-red-300 text-xs max-w-full overflow-auto max-h-40 w-full whitespace-pre-wrap break-words">
+                {this.state.error.message}
+                {import.meta.env.DEV && this.state.error.stack ? `\n\n${this.state.error.stack}` : ''}
+              </pre>
+            </details>
           )}
 
           <div className="flex gap-3 w-full max-w-xs">
