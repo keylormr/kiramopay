@@ -319,6 +319,7 @@ const zhTw: TranslationKeys = {
   login_enter: '登入',
   login_no_account: '還沒有帳戶？',
   login_wrong_credentials: '身份證或密碼錯誤',
+  login_rate_limited: '嘗試次數過多。請稍候再試。',
   login_biometric_failed: '生物識別認證失敗',
   login_biometric_prompt: '使用指紋或Face ID登入',
   login_terms: '繼續即表示您接受我們的服務條款和隱私政策',

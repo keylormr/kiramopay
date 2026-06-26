@@ -111,6 +111,12 @@ export class HttpClient {
         return { success: true } as ApiResponse<T>;
       }
 
+      // Rate limited: surface a distinct code so the UI doesn't mistake it for
+      // bad credentials, and don't try to parse a possibly non-JSON body.
+      if (res.status === 429) {
+        return apiError<T>('RATE_LIMITED', 'Demasiadas solicitudes. Espera un momento e intenta de nuevo.');
+      }
+
       const json = await res.json();
 
       if (!res.ok) {

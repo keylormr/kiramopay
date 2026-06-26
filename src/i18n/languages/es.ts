@@ -320,6 +320,7 @@ const es: TranslationKeys = {
   login_enter: 'Ingresar',
   login_no_account: '¿No tienes cuenta?',
   login_wrong_credentials: 'Cedula o contrasena incorrecta',
+  login_rate_limited: 'Demasiados intentos. Espera un momento e intenta de nuevo.',
   login_biometric_failed: 'Autenticacion biometrica fallida',
   login_biometric_prompt: 'Ingresa con tu huella o Face ID',
   login_terms: 'Al continuar, aceptas nuestros Terminos de Servicio y Politica de Privacidad',

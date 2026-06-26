@@ -320,6 +320,7 @@ const en: TranslationKeys = {
   login_enter: 'Log in',
   login_no_account: 'Don\'t have an account?',
   login_wrong_credentials: 'ID or password incorrect',
+  login_rate_limited: 'Too many attempts. Wait a moment and try again.',
   login_biometric_failed: 'Biometric authentication failed',
   login_biometric_prompt: 'Log in with fingerprint or Face ID',
   login_terms: 'By continuing, you accept our Terms of Service and Privacy Policy',

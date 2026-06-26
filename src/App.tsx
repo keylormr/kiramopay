@@ -400,12 +400,15 @@ const AppContainer = () => {
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('kiramopay_onboarded');
   });
-  // Block the first paint on the cookie-based session restore so we never flash
-  // the login screen (or a phantom authenticated shell) before we know.
-  const [booting, setBooting] = useState(hasBackend);
+  // Only attempt the cookie-based session restore when there is a hint a session
+  // ever existed (a persisted user). A never-logged-in visitor skips the refresh
+  // call entirely — going straight to login — so boot doesn't spend an /auth/*
+  // request (which counts against the auth rate limit). Block the first paint
+  // only while that restore is in flight.
+  const [booting, setBooting] = useState(() => hasBackend && !!useAuthStore.getState().user);
 
   useEffect(() => {
-    if (!hasBackend) return;
+    if (!hasBackend || !useAuthStore.getState().user) return;
     let cancelled = false;
     useAuthStore
       .getState()

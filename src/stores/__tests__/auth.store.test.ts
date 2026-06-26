@@ -71,7 +71,7 @@ describe('useAuthStore', () => {
 
   it('logs in with valid credentials and stores tokens in memory', async () => {
     const ok = await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
-    expect(ok).toBe(true);
+    expect(ok.success).toBe(true);
     const s = useAuthStore.getState();
     expect(s.isAuthenticated).toBe(true);
     expect(s.user?.firstName).toBe('Keilor');
@@ -92,7 +92,7 @@ describe('useAuthStore', () => {
 
   it('fails login with invalid credentials', async () => {
     const ok = await useAuthStore.getState().login('702650930', 'WrongPass1!');
-    expect(ok).toBe(false);
+    expect(ok.success).toBe(false);
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 

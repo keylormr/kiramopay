@@ -341,6 +341,7 @@ export type TranslationKeys = {
   login_enter: string;
   login_no_account: string;
   login_wrong_credentials: string;
+  login_rate_limited: string;
   login_biometric_failed: string;
   login_biometric_prompt: string;
   login_terms: string;
