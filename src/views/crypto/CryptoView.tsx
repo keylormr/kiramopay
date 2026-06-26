@@ -10,8 +10,9 @@ import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices
 const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'MATIC'];
 
 // Helper function to format large numbers (safer than calling service method)
-const formatLargeNumber = (num: number | undefined | null): string => {
-  if (num === undefined || num === null || isNaN(num)) return '-';
+const formatLargeNumber = (value: number | string | undefined | null): string => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
   if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
   if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
   if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
@@ -189,9 +190,10 @@ export const CryptoView: React.FC = () => {
   };
 
   const formatCrypto = (value: number, decimals: number = 6) => {
-    if (value === 0) return '0';
-    if (value < 0.000001) return value.toExponential(2);
-    return value.toFixed(decimals).replace(/\.?0+$/, '');
+    const n = Number(value);
+    if (!Number.isFinite(n) || n === 0) return '0';
+    if (n < 0.000001) return n.toExponential(2);
+    return n.toFixed(decimals).replace(/\.?0+$/, '');
   };
 
   const handleBuy = () => {
