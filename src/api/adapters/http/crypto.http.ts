@@ -10,6 +10,15 @@ import type { CryptoAsset, CryptoTransaction, StakingPosition, PriceAlert } from
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
 
+// Backend money/amount fields are decimal.Decimal, which serialize to JSON as
+// quoted strings (e.g. "1.5"). Coerce to a finite number so the UI's arithmetic
+// and .toFixed() never receive a string — that crashed CryptoView with
+// "x.toFixed is not a function".
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 export class HttpCryptoRepository implements ICryptoRepository {
   constructor(private client: HttpClient) {}
 
@@ -19,8 +28,8 @@ export class HttpCryptoRepository implements ICryptoRepository {
         id: string;
         symbol: string;
         name: string;
-        balance: number;
-        avg_cost: number;
+        balance: number | string;
+        avg_cost: number | string;
       }>
     >('/api/v1/crypto/assets');
 
@@ -33,8 +42,8 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: a.id,
       symbol: a.symbol,
       name: a.name,
-      balance: a.balance,
-      avgBuyPrice: a.avg_cost,
+      balance: num(a.balance),
+      avgBuyPrice: num(a.avg_cost),
       currentPrice: 0, // Will be filled by price service
       priceChange24h: 0,
       priceHistory: [],
@@ -51,11 +60,11 @@ export class HttpCryptoRepository implements ICryptoRepository {
         id: string;
         type: string;
         asset: string;
-        amount: number;
-        price: number;
-        total: number;
+        amount: number | string;
+        price: number | string;
+        total: number | string;
         currency: string;
-        fee: number;
+        fee: number | string;
         status: string;
         created_at: string;
       }>
@@ -70,9 +79,9 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: t.id,
       type: t.type as CryptoTransaction['type'],
       fromAsset: t.asset,
-      fromAmount: t.amount,
-      price: t.price,
-      fee: t.fee,
+      fromAmount: num(t.amount),
+      price: num(t.price),
+      fee: num(t.fee),
       date: new Date(t.created_at).toISOString(),
       status: t.status as 'completed' | 'pending' | 'failed',
     }));
@@ -85,9 +94,9 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: string;
       type: string;
       asset: string;
-      amount: number;
-      price: number;
-      total: number;
+      amount: number | string;
+      price: number | string;
+      total: number | string;
       currency: string;
       status: string;
       created_at: string;
@@ -107,8 +116,8 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: res.data.id,
       type: 'buy',
       fromAsset: res.data.asset,
-      fromAmount: res.data.amount,
-      price: res.data.price,
+      fromAmount: num(res.data.amount),
+      price: num(res.data.price),
       fee: 0,
       date: res.data.created_at,
       status: 'completed',
@@ -119,9 +128,9 @@ export class HttpCryptoRepository implements ICryptoRepository {
     const res = await this.client.post<{
       id: string;
       asset: string;
-      amount: number;
-      price: number;
-      total: number;
+      amount: number | string;
+      price: number | string;
+      total: number | string;
       currency: string;
       created_at: string;
     }>('/api/v1/crypto/sell', {
@@ -140,8 +149,8 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: res.data.id,
       type: 'sell',
       fromAsset: res.data.asset,
-      fromAmount: res.data.amount,
-      price: res.data.price,
+      fromAmount: num(res.data.amount),
+      price: num(res.data.price),
       fee: 0,
       date: res.data.created_at,
       status: 'completed',
@@ -152,9 +161,9 @@ export class HttpCryptoRepository implements ICryptoRepository {
     const res = await this.client.post<{
       id: string;
       asset: string;
-      amount: number;
-      price: number;
-      total: number;
+      amount: number | string;
+      price: number | string;
+      total: number | string;
       currency: string;
       created_at: string;
     }>('/api/v1/crypto/convert', {
@@ -173,8 +182,8 @@ export class HttpCryptoRepository implements ICryptoRepository {
       id: res.data.id,
       type: 'convert',
       fromAsset: res.data.asset,
-      fromAmount: res.data.amount,
-      price: res.data.price,
+      fromAmount: num(res.data.amount),
+      price: num(res.data.price),
       fee: 0,
       date: res.data.created_at,
       status: 'completed',
@@ -186,12 +195,12 @@ export class HttpCryptoRepository implements ICryptoRepository {
       Array<{
         id: string;
         asset: string;
-        amount: number;
+        amount: number | string;
         apy: number;
         start_date: string;
         locked: boolean;
         lock_days: number;
-        earned: number;
+        earned: number | string;
         status: string;
       }>
     >('/api/v1/crypto/staking');
@@ -204,12 +213,12 @@ export class HttpCryptoRepository implements ICryptoRepository {
     const positions: StakingPosition[] = res.data.map((p) => ({
       id: p.id,
       asset: p.asset,
-      amount: p.amount,
-      apy: p.apy,
+      amount: num(p.amount),
+      apy: num(p.apy),
       startDate: p.start_date,
       locked: p.locked,
       lockPeriodDays: p.lock_days,
-      earned: p.earned,
+      earned: num(p.earned),
     }));
 
     return apiSuccess(positions);
@@ -235,12 +244,12 @@ export class HttpCryptoRepository implements ICryptoRepository {
     return apiSuccess({
       id: res.data.id,
       asset: res.data.asset,
-      amount: res.data.amount,
-      apy: res.data.apy,
+      amount: num(res.data.amount),
+      apy: num(res.data.apy),
       startDate: res.data.start_date,
       locked: res.data.locked,
       lockPeriodDays: res.data.lock_days,
-      earned: res.data.earned,
+      earned: num(res.data.earned),
     });
   }
 
