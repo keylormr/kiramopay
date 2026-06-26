@@ -319,6 +319,7 @@ const hi: TranslationKeys = {
   login_enter: 'लॉग इन करें',
   login_no_account: 'खाता नहीं है?',
   login_wrong_credentials: 'पहचान या पासवर्ड गलत है',
+  login_rate_limited: 'बहुत अधिक प्रयास। कृपया थोड़ी देर बाद पुनः प्रयास करें।',
   login_biometric_failed: 'बायोमेट्रिक प्रमाणीकरण विफल',
   login_biometric_prompt: 'फिंगरप्रिंट या Face ID से लॉगिन करें',
   login_terms: 'जारी रखकर, आप हमारी सेवा की शर्तें और गोपनीयता नीति स्वीकार करते हैं',

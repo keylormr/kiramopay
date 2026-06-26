@@ -35,7 +35,7 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
 
-  login: (cedula: string, password: string) => Promise<boolean>;
+  login: (cedula: string, password: string) => Promise<{ success: boolean; code?: string }>;
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
@@ -78,9 +78,11 @@ export const useAuthStore = create<AuthState>()(
           // web, where the HttpOnly cookie is the transport).
           secureTokenStore.setRefreshToken(result.data.tokens?.refresh_token ?? null);
           syncAllData().catch(() => {});
-          return true;
+          return { success: true };
         }
-        return false;
+        // Surface the failure code so the UI can tell "wrong password" apart
+        // from "rate limited" (429) and similar.
+        return { success: false, code: result.error?.code };
       },
 
       register: async ({ cedula, phone, firstName, lastName, password, email }) => {
@@ -201,6 +203,19 @@ export const useAuthStore = create<AuthState>()(
         // (no cookie) keep persisting it so a refresh stays logged in.
         ...(hasBackend ? {} : { isAuthenticated: state.isAuthenticated }),
       }),
+      // Sanitize what rehydrates: a localStorage written by an OLDER build still
+      // has isAuthenticated:true. With a backend that stale flag must be ignored
+      // — otherwise on boot the app fires authenticated data calls with no token
+      // (401 storm) and a refresh (helping trip the auth rate limit → 429) before
+      // bootstrap() runs. The session is proven only by bootstrap's cookie refresh.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AuthState>;
+        return {
+          ...current,
+          ...p,
+          isAuthenticated: hasBackend ? false : (p.isAuthenticated ?? false),
+        };
+      },
     },
   ),
 );

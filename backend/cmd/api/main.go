@@ -443,7 +443,10 @@ func main() {
 		// Auth endpoints — tighter rate limit, lockout for login.
 		// ─────────────────────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RateLimit(redisClient, 10, time.Minute)) // 10/min/IP for /auth/*
+			// 20/min/IP for /auth/* — headroom for the per-load cookie refresh
+			// on boot; brute-force is bounded separately by the per-account
+			// lockout below (5 failed logins).
+			r.Use(middleware.RateLimit(redisClient, 20, time.Minute))
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)

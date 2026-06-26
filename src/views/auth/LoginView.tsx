@@ -43,8 +43,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     setIsLoading(true);
     setError('');
 
-    const success = await useAuthStore.getState().login(userCedula, userPassword);
-    if (success) {
+    const res = await useAuthStore.getState().login(userCedula, userPassword);
+    if (res.success) {
       const user = useAuthStore.getState().user;
       if (user) {
         localStorage.setItem('kiramopay_last_cedula', userCedula);
@@ -52,7 +52,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         onLogin(user);
       }
     } else {
-      setError(t('login_wrong_credentials'));
+      setError(res.code === 'RATE_LIMITED' ? t('login_rate_limited') : t('login_wrong_credentials'));
       setPassword('');
     }
     setIsLoading(false);
@@ -240,57 +240,71 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('cedula')}: <span className="text-white">{cedula}</span>
             </p>
 
-            {/* Password input */}
-            <div className="mb-6">
-              <div className="relative">
-                <Icons.Lock
-                  size={20}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] pointer-events-none z-10"
-                />
-                <input
-                  type={showPasswordText ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && password.length > 0) {
-                      handleLogin(cedula, password);
-                    }
-                  }}
-                  placeholder={t('password')}
-                  autoFocus
-                  className={`w-full h-14 pl-12 pr-12 rounded-xl text-white text-lg font-semibold placeholder:text-[var(--color-text-muted-dark)] placeholder:font-normal bg-[var(--color-surface-2-dark)] border ${
-                    error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border-dark)]'
-                  } focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] outline-none transition-all`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordText(!showPasswordText)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
-                  aria-label={showPasswordText ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPasswordText ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
-                </button>
-              </div>
-              {error && (
-                <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
-                  <Icons.AlertCircle size={14} />
-                  {error}
-                </p>
-              )}
-            </div>
-
-            <Button
-              size="lg"
-              fullWidth
-              loading={isLoading}
-              onClick={() => handleLogin(cedula, password)}
-              disabled={password.length === 0 || isLoading}
+            {/* Password form — a real <form> so browsers/password managers can
+                offer autofill and save (and to drop the "field not in a form"
+                warning). The cedula rides along as the hidden username. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (password.length > 0 && !isLoading) handleLogin(cedula, password);
+              }}
             >
-              {isLoading ? t('login_verifying') : t('login_enter')}
-            </Button>
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                value={cedula}
+                readOnly
+                hidden
+              />
+              <div className="mb-6">
+                <div className="relative">
+                  <Icons.Lock
+                    size={20}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] pointer-events-none z-10"
+                  />
+                  <input
+                    type={showPasswordText ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError('');
+                    }}
+                    placeholder={t('password')}
+                    autoFocus
+                    className={`w-full h-14 pl-12 pr-12 rounded-xl text-white text-lg font-semibold placeholder:text-[var(--color-text-muted-dark)] placeholder:font-normal bg-[var(--color-surface-2-dark)] border ${
+                      error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border-dark)]'
+                    } focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] outline-none transition-all`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordText(!showPasswordText)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
+                    aria-label={showPasswordText ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showPasswordText ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
+                  </button>
+                </div>
+                {error && (
+                  <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
+                    <Icons.AlertCircle size={14} />
+                    {error}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                fullWidth
+                loading={isLoading}
+                disabled={password.length === 0 || isLoading}
+              >
+                {isLoading ? t('login_verifying') : t('login_enter')}
+              </Button>
+            </form>
 
             {biometricAvailable && (
               <Button

@@ -91,7 +91,7 @@ describe('LoginView', () => {
     // After login succeeds, getState returns user
     mockLogin.mockImplementation(async () => {
       mockUser = { firstName: 'Keilor', lastName: 'Martinez', cedula: '702650930' };
-      return true;
+      return { success: true };
     });
 
     const user = userEvent.setup();
