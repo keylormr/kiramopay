@@ -328,6 +328,7 @@ const ja: TranslationKeys = {
   error_desc: '予期しないエラーが発生しました。再試行するかホームに戻ることができます。',
   error_retry: '再試行',
   error_home: 'ホーム',
+  error_details: '技術的な詳細',
   unlock: 'ロック解除',
   unlock_biometric_prompt: 'KiramoPay のロックを解除',
   nav_crypto: '暗号資産',

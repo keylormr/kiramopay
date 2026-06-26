@@ -329,6 +329,7 @@ const es: TranslationKeys = {
   error_desc: 'Ocurrio un error inesperado. Puedes intentar de nuevo o volver al inicio.',
   error_retry: 'Reintentar',
   error_home: 'Inicio',
+  error_details: 'Detalles técnicos',
   unlock: 'Desbloquear',
   unlock_biometric_prompt: 'Desbloquear KiramoPay',
   nav_crypto: 'Crypto',

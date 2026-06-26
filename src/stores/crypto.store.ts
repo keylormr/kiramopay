@@ -184,6 +184,26 @@ export const useCryptoStore = create<CryptoStoreState>()(
     }),
     {
       name: 'kiramopay-crypto',
+      // Guard rehydration: an older or corrupt persisted blob could carry a
+      // null/missing array, which would then crash any .map/.reduce/.filter on
+      // it (in the store actions below and in CryptoView). Coerce each array
+      // field back to the initial value when the persisted one isn't an array.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<CryptoStoreState>;
+        return {
+          ...current,
+          ...p,
+          assets: Array.isArray(p.assets) ? p.assets : current.assets,
+          transactions: Array.isArray(p.transactions) ? p.transactions : current.transactions,
+          stakingPositions: Array.isArray(p.stakingPositions)
+            ? p.stakingPositions
+            : current.stakingPositions,
+          priceAlerts: Array.isArray(p.priceAlerts) ? p.priceAlerts : current.priceAlerts,
+          favoriteAssets: Array.isArray(p.favoriteAssets)
+            ? p.favoriteAssets
+            : current.favoriteAssets,
+        };
+      },
     },
   ),
 );

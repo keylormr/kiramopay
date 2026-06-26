@@ -352,6 +352,7 @@ export type TranslationKeys = {
   error_desc: string;
   error_retry: string;
   error_home: string;
+  error_details: string;
 
   // Lock Screen
   unlock: string;
