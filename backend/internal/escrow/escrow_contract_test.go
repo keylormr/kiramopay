@@ -98,3 +98,60 @@ func TestEscrowResponseContract(t *testing.T) {
 		t.Errorf("escrow fund response violates the EscrowAgreement schema: %v", err)
 	}
 }
+
+// TestEscrowReadResponseContract drives the read endpoints — list and get one —
+// through the HTTP handlers and asserts each `data` payload conforms to the
+// schema documented in openapi.yaml (an array of EscrowAgreement for the list,
+// a single EscrowAgreement for get).
+func TestEscrowReadResponseContract(t *testing.T) {
+	_, svc, buyer, seller := setup(t)
+	h := escrow.NewHandler(svc)
+
+	doc, err := contract.LoadSpec(specPath)
+	if err != nil {
+		t.Fatalf("load spec: %v", err)
+	}
+	router, err := contract.NewRouter(doc)
+	if err != nil {
+		t.Fatalf("router: %v", err)
+	}
+
+	// Seed one real agreement so the list and get responses are non-empty.
+	const createURL = "http://localhost:8080/api/v1/escrow"
+	createBody := `{"seller_id":"` + seller + `","amount_minor":50000,"currency":"CRC","description":"read contract test"}`
+	rec := httptest.NewRecorder()
+	h.Create(rec, reqWithUser(http.MethodPost, createURL, createBody, buyer, ""))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create returned %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	id, _ := decodeData(t, rec).(map[string]interface{})["id"].(string)
+	if id == "" {
+		t.Fatalf("no agreement id in create response")
+	}
+
+	// List (200) — GET /escrow → array of EscrowAgreement.
+	listURL := "http://localhost:8080/api/v1/escrow"
+	rec = httptest.NewRecorder()
+	h.List(rec, reqWithUser(http.MethodGet, listURL, "", buyer, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list returned %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	list := decodeData(t, rec)
+	if items, ok := list.([]interface{}); !ok || len(items) == 0 {
+		t.Fatalf("expected a non-empty agreement list, got: %s", rec.Body.String())
+	}
+	if err := contract.ValidateData(router, http.MethodGet, listURL, http.StatusOK, list); err != nil {
+		t.Errorf("escrow list response violates the EscrowAgreement array schema: %v", err)
+	}
+
+	// Get (200) — GET /escrow/{id} → a single EscrowAgreement.
+	getURL := "http://localhost:8080/api/v1/escrow/" + id
+	rec = httptest.NewRecorder()
+	h.Get(rec, reqWithUser(http.MethodGet, getURL, "", buyer, id))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get returned %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if err := contract.ValidateData(router, http.MethodGet, getURL, http.StatusOK, decodeData(t, rec)); err != nil {
+		t.Errorf("escrow get response violates the EscrowAgreement schema: %v", err)
+	}
+}

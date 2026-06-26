@@ -3357,7 +3357,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["EscrowAgreement"][];
+                    };
                 };
             };
         };
@@ -3417,7 +3419,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["EscrowAgreement"];
+                    };
                 };
                 /** @description Not a party to this agreement */
                 403: {
@@ -3754,7 +3758,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["Payout"][];
+                    };
                 };
             };
         };
@@ -3835,7 +3841,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["Payout"];
+                    };
                 };
                 /** @description Not the owner */
                 403: {
@@ -3880,7 +3888,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["Payout"];
+                    };
                 };
             };
         };
