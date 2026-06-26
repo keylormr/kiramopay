@@ -279,7 +279,11 @@ func main() {
 	)
 
 	// ── Handlers ─────────────────────────────────────────────────────────
-	authHandler := auth.NewHandler(authService)
+	// Mark the session cookie Secure (and use the __Host- name) outside of local
+	// development, where the API is served over HTTPS.
+	authHandler := auth.NewHandler(authService, auth.CookieConfig{
+		Secure: cfg.Server.Environment != "development",
+	})
 	userHandler := user.NewHandler(userService)
 	walletHandler := wallet.NewHandler(walletService)
 	txHandler := transaction.NewHandler(txService)
