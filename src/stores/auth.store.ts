@@ -9,6 +9,7 @@ import {
 } from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
 import { clearLockPin } from '@/services/lockKdf';
+import { secureTokenStore } from '@/services/secureTokenStore';
 
 // With a real backend the session is restored on cold start from the HttpOnly
 // refresh cookie (see bootstrap), so isAuthenticated must NOT be persisted. In
@@ -73,6 +74,9 @@ export const useAuthStore = create<AuthState>()(
             accessToken: result.data.tokens?.access_token ?? null,
             refreshToken: result.data.tokens?.refresh_token ?? null,
           });
+          // On native, stash the refresh token in OS secure storage (no-op on
+          // web, where the HttpOnly cookie is the transport).
+          secureTokenStore.setRefreshToken(result.data.tokens?.refresh_token ?? null);
           syncAllData().catch(() => {});
           return true;
         }
@@ -90,6 +94,7 @@ export const useAuthStore = create<AuthState>()(
             accessToken: result.data.tokens?.access_token ?? null,
             refreshToken: result.data.tokens?.refresh_token ?? null,
           });
+          secureTokenStore.setRefreshToken(result.data.tokens?.refresh_token ?? null);
           syncAllData().catch(() => {});
           return { success: true };
         }
@@ -109,6 +114,7 @@ export const useAuthStore = create<AuthState>()(
         const api = getApiLayer();
         api.auth.logout?.().catch(() => {});
         clearLockPin();
+        secureTokenStore.clear();
         set({
           isAuthenticated: false,
           user: null,
@@ -134,6 +140,7 @@ export const useAuthStore = create<AuthState>()(
 
       forceLogout: () => {
         clearLockPin();
+        secureTokenStore.clear();
         set({
           isAuthenticated: false,
           user: null,
@@ -144,10 +151,12 @@ export const useAuthStore = create<AuthState>()(
 
       bootstrap: async () => {
         const api = getApiLayer();
-        // The refresh token rides in the HttpOnly cookie (sent automatically on
-        // same-origin requests); the empty body argument is ignored when the
-        // cookie is present. No cookie / invalid token => failure => logged out.
-        const result = await api.auth.refresh('');
+        // Web: the refresh token rides in the HttpOnly cookie (sent automatically
+        // on same-origin requests) and the empty argument is ignored. Native: no
+        // cookie applies, so we pass the token read from OS secure storage. No
+        // valid token either way => failure => logged out.
+        const stored = await secureTokenStore.getRefreshToken();
+        const result = await api.auth.refresh(stored ?? '');
         if (result.success && result.data?.access_token) {
           set({
             isAuthenticated: true,
@@ -155,6 +164,8 @@ export const useAuthStore = create<AuthState>()(
             accessToken: result.data.access_token,
             refreshToken: result.data.refresh_token ?? null,
           });
+          // Persist the rotated refresh token on native (no-op on web).
+          secureTokenStore.setRefreshToken(result.data.refresh_token ?? null);
           syncAllData().catch(() => {});
         } else {
           set({ isAuthenticated: false, accessToken: null, refreshToken: null });
