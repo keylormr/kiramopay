@@ -137,7 +137,7 @@ describe('HomeView', () => {
     expect(screen.getByText('Enviar')).toBeInTheDocument();
     expect(screen.getByText('Recibir')).toBeInTheDocument();
     expect(screen.getByText('Escanear QR')).toBeInTheDocument();
-    expect(screen.getByText('Tarjeta')).toBeInTheDocument();
+    expect(screen.getByText('Cobrar con QR')).toBeInTheDocument();
   });
 
   it('should render the accounts section with all accounts', () => {

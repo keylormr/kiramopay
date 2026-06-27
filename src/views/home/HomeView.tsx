@@ -6,6 +6,8 @@ import { BottomSheet } from '../../components/BottomSheet';
 import { Account, Transaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { getApiLayer } from '@/api';
+import type { QRPaymentCode } from '@/api/repositories/qrpayment.repository';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -60,8 +62,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const { t } = useLanguage();
 
   // Sheet States
-  const [activeSheet, setActiveSheet] = useState<'none' | 'send' | 'request' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'send' | 'request' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar'>('none');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
+  // "Cobrar con QR" — genera un QR de cobro REAL via la API (riel QR del backend,
+  // contabilizado en el ledger). Generar el codigo no mueve dinero; el pago
+  // ocurre cuando alguien lo escanea (scanAndPay). Inspirado en el modelo
+  // China/Pix: cobrar por QR, sin datafono.
+  const [cobrarAmount, setCobrarAmount] = useState('');
+  const [cobrarCode, setCobrarCode] = useState<QRPaymentCode | null>(null);
+  const [cobrarLoading, setCobrarLoading] = useState(false);
+  const [cobrarError, setCobrarError] = useState('');
 
   // Form States
   const [amount, setAmount] = useState('');
@@ -201,6 +212,36 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     setPaymentAmount('');
   };
 
+  // Genera un QR de cobro real contra el riel QR del backend.
+  const handleGenerateCobrar = async () => {
+    setCobrarLoading(true);
+    setCobrarError('');
+    setCobrarCode(null);
+    try {
+      const api = getApiLayer();
+      if (!api.qrPayments) {
+        setCobrarError(t('qr_gen_error'));
+        return;
+      }
+      const amt = parseFloat(cobrarAmount);
+      const res = await api.qrPayments.createQRCode({
+        type: 'p2p_receive',
+        amount: Number.isFinite(amt) && amt > 0 ? amt : undefined,
+        currency: baseAccount?.ccy ?? 'CRC',
+        singleUse: false,
+      });
+      if (res.success && res.data) {
+        setCobrarCode(res.data);
+      } else {
+        setCobrarError(res.error?.message || t('qr_gen_error'));
+      }
+    } catch {
+      setCobrarError(t('qr_gen_error'));
+    } finally {
+      setCobrarLoading(false);
+    }
+  };
+
   const getCurrencyInfo = (ccy: QRCurrency) => {
     const info: Record<QRCurrency, { symbol: string; flag: string; name: string }> = {
       BTC: { symbol: '₿', flag: '🟠', name: 'Bitcoin' },
@@ -261,7 +302,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => setActiveSheet('send') },
             { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => setActiveSheet('request') },
             { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
-            { icon: Icons.Card, label: t('card'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => {} },
+            { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
           ].map((action, i) => (
             <button key={i} onClick={action.action} className="flex flex-col items-center gap-2 group">
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} uv-shadow-soft group-active:scale-[0.94] transition-transform`}>
@@ -529,6 +570,73 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               {t('request_money')}
             </button>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* Cobrar con QR — genera un QR de cobro real (modelo China/Pix: sin datafono) */}
+      <BottomSheet
+        isOpen={activeSheet === 'cobrar'}
+        onClose={() => { setActiveSheet('none'); setCobrarAmount(''); setCobrarCode(null); setCobrarError(''); }}
+        title={t('charge_qr')}
+      >
+        <div className="p-2 space-y-6">
+          {!cobrarCode ? (
+            <>
+              <div className="text-center">
+                <label className="text-sm text-gray-500">{t('charge_amount_optional')}</label>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <span className="text-4xl font-bold uv-text-primary">{baseAccount?.symbol ?? '₡'}</span>
+                  <input
+                    type="number"
+                    value={cobrarAmount}
+                    onChange={(e) => setCobrarAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2">{t('charge_amount_hint')}</p>
+              </div>
+
+              {cobrarError && (
+                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{cobrarError}</p>
+              )}
+
+              <button
+                onClick={handleGenerateCobrar}
+                disabled={cobrarLoading}
+                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cobrarLoading ? t('generating') : t('generate_qr')}
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col items-center space-y-4">
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
+                <QRCodeSVG value={cobrarCode.qrData} size={200} />
+              </div>
+              {cobrarCode.amount > 0 && (
+                <p className="text-3xl font-black uv-text-primary tabular-nums">
+                  {baseAccount?.symbol ?? '₡'}{cobrarCode.amount}
+                </p>
+              )}
+              <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('charge_qr_help')}</p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(cobrarCode.qrData); }}
+                  className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <Icons.Copy size={18} /> {t('copy')}
+                </button>
+                <button
+                  onClick={() => { setCobrarCode(null); setCobrarAmount(''); }}
+                  className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
+                >
+                  {t('new_qr')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </BottomSheet>
 
