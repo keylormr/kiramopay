@@ -173,6 +173,71 @@ Prometer de más en fintech es como llega la clausura.
 
 ---
 
+## El modelo de referencia: China (Alipay/WeChat) — y su sucesor abierto, Pix
+
+La inspiración correcta es el modelo de pagos chino, pero leído con cuidado y con
+una corrección importante.
+
+**Qué demostró China.** Alipay (~54%) y WeChat Pay (~42%) concentran ~90% de los
+pagos móviles **por QR — no por datafono** — con comisión al comercio de
+~0.5-0.6% (vs 2-3% de Visa/MC, que históricamente casi no se usaron adentro). El
+QR sin hardware es lo que desbloqueó la adopción masiva y el costo bajo.
+
+**Dos matices para no equivocarse en una mesa:**
+
+- **UnionPay NO es solo nacional.** Se acepta en ~183 países, tiene 230M+
+  tarjetas emitidas fuera de China y es el 2º esquema del mundo por volumen
+  (detrás de Visa). Adentro domina; afuera su aceptación es menor que Visa/MC. Un
+  esquema "nacional" sí puede globalizarse — pero le tomó ~20 años y como red de
+  tarjetas (cara y lenta).
+- **El gran error de China fueron los silos cerrados.** Alipay y WeChat no se
+  pagaban entre sí; el regulador tuvo que **forzar la interoperabilidad de sus QR
+  en 2021**. El modelo cerrado fue su límite, no su fortaleza.
+
+**El sucesor ya existe en LatAm y está mejor diseñado: Pix (Brasil).** Banco
+central, **gratis para personas / 0.33% al comercio** (vs 2.34% crédito), QR,
+150M+ usuarios, y ya procesa **más transacciones que Visa+MC juntas en Brasil** —
+pero **nació abierto e interoperable**, evitando el error chino. Pix prueba que el
+modelo funciona en un mercado parecido al nuestro, sobre un **riel del banco
+central** (el equivalente a SINPE en CR).
+
+### Qué copiar
+
+1. **QR, no datafono** — alta del comercio con una calcomanía, cero hardware.
+2. **Comisión baja como cuña** (~0.5-1% vs 2-3% de tarjetas).
+3. **Cuenta-a-cuenta (A2A)** sobre el riel instantáneo local, salteando a Visa/MC.
+4. **Super-app** — el pago es el gancho; arriba, los servicios (ya el ADN del producto).
+
+### En qué diferir (la ventaja, no la copia)
+
+1. **Abierto e interoperable desde el día uno** — lo que China corrige a la fuerza
+   y Pix hizo de entrada. Es exactamente el posicionamiento de **rieles
+   intercambiables**: ser la capa, no el silo.
+2. **Montarse sobre el riel del Estado, no reemplazarlo** — en CR, SINPE; en BR,
+   Pix. La super-app encima del riel del banco central alinea con el regulador
+   (clave para la licencia) en vez de competir contra él.
+3. **Multi-mercado por software** — enchufar el sistema instantáneo de cada país
+   (SINPE, Pix, SPEI...) con "registrar un adaptador, no rehacer", en vez de
+   construir una red de tarjetas global como UnionPay.
+4. **Cross-border vía stablecoins** — donde China usa e-CNY adentro y Alipay+ para
+   viajeros, el diferencial global es el riel de stablecoins para lo transfronterizo
+   (lo que tarjetas/UnionPay hacen caro y lento).
+5. **Privacidad + trazabilidad como marca** — el modelo chino es vigilancia +
+   duopolio de datos; una super-app de LatAm puede diferenciarse en privacidad y
+   en el libro contable auditable (confianza sin vigilancia).
+
+> Conclusión operativa, la misma de todo el documento: **el destino (QR-first,
+> A2A, comisión baja, super-app abierta) es alcanzable; el cuello de botella no es
+> el código, es el riel regulado** (SINPE/PSP — ver `ROADMAP_JPC.md`). Pix prueba
+> que cuando el riel está, el modelo escala.
+
+> Fuentes: UnionPay International (alcance ~183 países); Visual Capitalist
+> (volúmenes Visa/Mastercard/UnionPay, 2023); Banco Central do Brasil (Pix) y
+> reporte de Pix superando a Visa+MC en Brasil. Comisiones: Alipay/WeChat ~0.6%;
+> Pix 0.33% comercio / gratis personas; Visa/MC ~2-3%.
+
+---
+
 ## Secuencia recomendada
 
 1. **Lanzar el wedge B2B** (escrow + cobros QR para PYMEs) — ya construido y
