@@ -68,6 +68,14 @@ export type TranslationKeys = {
   accounts: string;
   quick_actions: string;
   scan_qr: string;
+  charge_qr: string;
+  charge_amount_optional: string;
+  charge_amount_hint: string;
+  generate_qr: string;
+  generating: string;
+  charge_qr_help: string;
+  new_qr: string;
+  qr_gen_error: string;
   send_money: string;
   request_money: string;
   pay_services: string;
