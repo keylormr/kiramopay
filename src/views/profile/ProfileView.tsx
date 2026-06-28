@@ -15,10 +15,25 @@ interface ProfileViewProps {
   onOpenEscrow?: () => void;
   onOpenPayout?: () => void;
   onOpenMerchant?: () => void;
+  onOpenAdminMerchants?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenMerchant }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenMerchant, onOpenAdminMerchants }) => {
   const { state, dispatch } = useApp();
+
+  // Admin entry is gated by a server-side probe: the role lives only on the
+  // backend (no role is exposed to the client), so we surface the menu item only
+  // when the admin-only endpoint answers successfully for this user.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const api = getApiLayer();
+    if (!api.qrPayments) return;
+    api.qrPayments.listPendingMerchants().then((res) => {
+      if (!cancelled && res.success) setIsAdmin(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const { t, language, setLanguage, languages, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [showLimitsSheet, setShowLimitsSheet] = useState(false);
@@ -371,6 +386,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => onOpenAdminMerchants?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Shield size={18} className="text-rose-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('merchant_admin_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('merchant_admin_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
         </div>
       </div>
 
