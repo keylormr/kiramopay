@@ -153,6 +153,13 @@ export type TranslationKeys = {
   scanning: string;
   point_camera: string;
   payment_detected: string;
+  camera_unavailable: string;
+  enter_code_manually: string;
+  qr_code: string;
+  payment_done: string;
+  amount_qr_hint: string;
+  paying: string;
+  qr_pay_error: string;
   recipient: string;
   currency: string;
 

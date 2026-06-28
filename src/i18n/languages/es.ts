@@ -134,6 +134,13 @@ const es: TranslationKeys = {
   scanning: 'Escaneando...',
   point_camera: 'Apunta la camara al codigo QR',
   payment_detected: 'Pago detectado',
+  camera_unavailable: 'No se pudo abrir la cámara. Ingresá el código manualmente.',
+  enter_code_manually: 'O ingresá el código manualmente',
+  qr_code: 'Código QR',
+  payment_done: 'Pago realizado',
+  amount_qr_hint: 'Si el QR ya tiene un monto fijo, se respeta ese monto.',
+  paying: 'Pagando...',
+  qr_pay_error: 'No se pudo completar el pago',
   recipient: 'Destinatario',
   currency: 'Moneda',
 

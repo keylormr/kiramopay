@@ -134,6 +134,13 @@ const ja: TranslationKeys = {
   scanning: 'スキャン中...',
   point_camera: 'カメラをQRコードに向けてください',
   payment_detected: '支払いを検出しました',
+  camera_unavailable: 'カメラを開けませんでした。コードを手動で入力してください。',
+  enter_code_manually: 'またはコードを手動で入力',
+  qr_code: 'QRコード',
+  payment_done: '支払い完了',
+  amount_qr_hint: 'QRに固定金額がある場合はその金額が使われます。',
+  paying: '支払い中...',
+  qr_pay_error: '支払いを完了できませんでした',
   recipient: '受取人',
   currency: '通貨',
 

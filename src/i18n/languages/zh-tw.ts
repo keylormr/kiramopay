@@ -134,6 +134,13 @@ const zhTw: TranslationKeys = {
   scanning: '掃描中...',
   point_camera: '將相機對準QR碼',
   payment_detected: '偵測到付款',
+  camera_unavailable: '無法開啟相機，請手動輸入代碼。',
+  enter_code_manually: '或手動輸入代碼',
+  qr_code: 'QR 代碼',
+  payment_done: '付款完成',
+  amount_qr_hint: '若 QR 已設定固定金額，將以該金額為準。',
+  paying: '付款中...',
+  qr_pay_error: '無法完成付款',
   recipient: '收款人',
   currency: '貨幣',
 

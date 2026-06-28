@@ -134,6 +134,13 @@ const en: TranslationKeys = {
   scanning: 'Scanning...',
   point_camera: 'Point camera at QR code',
   payment_detected: 'Payment Detected',
+  camera_unavailable: 'Could not open the camera. Enter the code manually.',
+  enter_code_manually: 'Or enter the code manually',
+  qr_code: 'QR code',
+  payment_done: 'Payment completed',
+  amount_qr_hint: 'If the QR has a fixed amount, that amount is used.',
+  paying: 'Paying...',
+  qr_pay_error: 'Could not complete the payment',
   recipient: 'Recipient',
   currency: 'Currency',
 

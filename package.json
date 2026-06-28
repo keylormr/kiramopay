@@ -31,6 +31,7 @@
     "@capacitor/splash-screen": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
     "capacitor-native-biometric": "^4.2.2",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.554.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
