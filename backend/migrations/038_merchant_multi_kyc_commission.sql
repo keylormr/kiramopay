@@ -46,6 +46,12 @@ ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES users(id);
 ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS rejection_reason TEXT NOT NULL DEFAULT '';
 
+-- Grandfather legacy merchants: any row that exists at migration time predates
+-- the verification requirement, so mark it verified instead of leaving it
+-- 'pending' (which would block its existing QR payments under the new gate).
+-- New merchants registered after this migration get 'pending' via the default.
+UPDATE qr_merchants SET verification_status = 'verified' WHERE verification_status = 'pending';
+
 DO $$
 BEGIN
     IF NOT EXISTS (
