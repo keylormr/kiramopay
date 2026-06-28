@@ -657,6 +657,15 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMP DEFAULT NOW(),
 		completed_at TIMESTAMP
 	);
+
+	-- Minimal service_providers (migration 001) — just the columns PayBill reads.
+	CREATE TABLE IF NOT EXISTS service_providers (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		code VARCHAR(20) UNIQUE NOT NULL,
+		name VARCHAR(100) NOT NULL,
+		category VARCHAR(50) NOT NULL DEFAULT 'telecom',
+		is_active BOOLEAN DEFAULT TRUE
+	);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -696,6 +705,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"escrow_agreements",
 		"payouts",
 		"qr_payments", "qr_payment_codes", "qr_merchants",
+		"service_providers",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"totp_recovery_codes", "user_totp",

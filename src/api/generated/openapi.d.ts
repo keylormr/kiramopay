@@ -686,7 +686,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["SinpeSendResponse"];
+                    };
                 };
             };
         };
@@ -758,7 +760,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PayBillResponse"];
+                    };
                 };
             };
         };
@@ -796,7 +800,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["RechargeResponse"];
+                    };
                 };
             };
         };
@@ -4589,11 +4595,39 @@ export interface components {
             amount: number;
             description?: string;
         };
+        SinpeSendResponse: {
+            transaction_id: string;
+            /** @example completed */
+            status: string;
+            /** @description Amount sent, in centimos */
+            amount: number;
+            /** @description Fee charged, in centimos */
+            fee: number;
+            recipient: string;
+        };
         PayBillRequest: {
             /** @example ICE */
             provider: string;
             account_number: string;
             amount: number;
+        };
+        PayBillResponse: {
+            transaction_id: string;
+            receipt_number: string;
+            provider_name: string;
+            /** @description Amount paid, in centimos */
+            amount: number;
+            /** @example completed */
+            status: string;
+        };
+        RechargeResponse: {
+            transaction_id: string;
+            operator: string;
+            phone: string;
+            /** @description Amount recharged, in centimos */
+            amount: number;
+            /** @example completed */
+            status: string;
         };
         RechargeRequest: {
             /** @example Kolbi */

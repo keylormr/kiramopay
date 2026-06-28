@@ -382,6 +382,10 @@ paths:
       responses:
         '200':
           description: Transfer completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SinpeSendResponse'
 
   /api/v1/sinpe/history:
     get:
@@ -409,6 +413,10 @@ paths:
       responses:
         '200':
           description: Bill paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayBillResponse'
 
   /api/v1/services/recharge:
     post:
@@ -425,6 +433,10 @@ paths:
       responses:
         '200':
           description: Recharge completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RechargeResponse'
 
   /api/v1/services/saved:
     get:
@@ -2132,6 +2144,24 @@ components:
         description:
           type: string
 
+    SinpeSendResponse:
+      type: object
+      required: [transaction_id, status, amount, fee, recipient]
+      properties:
+        transaction_id:
+          type: string
+        status:
+          type: string
+          example: completed
+        amount:
+          type: integer
+          description: Amount sent, in centimos
+        fee:
+          type: integer
+          description: Fee charged, in centimos
+        recipient:
+          type: string
+
     PayBillRequest:
       type: object
       required: [provider, account_number, amount]
@@ -2143,6 +2173,40 @@ components:
           type: string
         amount:
           type: integer
+
+    PayBillResponse:
+      type: object
+      required: [transaction_id, receipt_number, provider_name, amount, status]
+      properties:
+        transaction_id:
+          type: string
+        receipt_number:
+          type: string
+        provider_name:
+          type: string
+        amount:
+          type: integer
+          description: Amount paid, in centimos
+        status:
+          type: string
+          example: completed
+
+    RechargeResponse:
+      type: object
+      required: [transaction_id, operator, phone, amount, status]
+      properties:
+        transaction_id:
+          type: string
+        operator:
+          type: string
+        phone:
+          type: string
+        amount:
+          type: integer
+          description: Amount recharged, in centimos
+        status:
+          type: string
+          example: completed
 
     RechargeRequest:
       type: object
