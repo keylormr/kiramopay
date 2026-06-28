@@ -46,6 +46,7 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   // Detail / QR
   const [selected, setSelected] = useState<QRMerchant | null>(null);
   const [payments, setPayments] = useState<QRPayment[]>([]);
+  const [codes, setCodes] = useState<QRPaymentCode[]>([]);
   const [qrAmount, setQrAmount] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<QRPaymentCode | null>(null);
@@ -111,11 +112,18 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setQrAmount('');
     setDetailError('');
     setPayments([]);
+    setCodes([]);
     const api = getApiLayer();
     if (!api.qrPayments) return;
-    const res = await api.qrPayments.getPaymentHistory();
-    if (res.success && res.data) {
-      setPayments(res.data.filter((p) => p.merchantId === m.id));
+    const [histRes, codesRes] = await Promise.all([
+      api.qrPayments.getPaymentHistory(),
+      api.qrPayments.getQRCodes(),
+    ]);
+    if (histRes.success && histRes.data) {
+      setPayments(histRes.data.filter((p) => p.merchantId === m.id));
+    }
+    if (codesRes.success && codesRes.data) {
+      setCodes(codesRes.data.filter((c) => c.merchantId === m.id));
     }
   };
 
@@ -136,8 +144,12 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         singleUse: false,
         merchantId: selected.id,
       });
-      if (res.success && res.data) setGenerated(res.data);
-      else setDetailError(res.error?.message || t('merchant_qr_error'));
+      if (res.success && res.data) {
+        setGenerated(res.data);
+        setCodes((cs) => [res.data as QRPaymentCode, ...cs]);
+      } else {
+        setDetailError(res.error?.message || t('merchant_qr_error'));
+      }
     } catch {
       setDetailError(t('merchant_qr_error'));
     } finally {
@@ -288,6 +300,26 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   <button onClick={() => { setGenerated(null); setQrAmount(''); }} className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold">
                     {t('merchant_generate_qr')}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Merchant QR codes */}
+            {codes.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-2">{t('merchant_codes')}</h3>
+                <div className="space-y-2">
+                  {codes.map((c) => (
+                    <div key={c.id} className="uv-surface-1 rounded-xl p-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold uv-text-primary">
+                        {c.type === 'merchant_fixed' ? t('merchant_qr_fixed') : t('merchant_qr_dynamic')}
+                        {c.amount > 0 ? ` · ${money(c.amount)}` : ''}
+                      </p>
+                      <button onClick={() => { navigator.clipboard?.writeText(c.qrData); }} className="uv-text-muted" aria-label={t('copy')}>
+                        <Icons.Copy size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

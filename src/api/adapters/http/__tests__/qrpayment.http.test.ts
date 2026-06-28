@@ -6,6 +6,7 @@ function fakeClient(overrides: Partial<HttpClient>): HttpClient {
   return {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
     del: vi.fn(),
     ...overrides,
   } as unknown as HttpClient;
@@ -91,5 +92,24 @@ describe('HttpQRPaymentRepository', () => {
     expect(res.success).toBe(true);
     expect(res.data?.verificationStatus).toBe('rejected');
     expect(post).toHaveBeenCalledWith('/api/v1/admin/merchants/m1/reject', { reason: 'docs' });
+  });
+
+  it('admin: sets a merchant commission via PATCH', async () => {
+    const patch = vi.fn().mockResolvedValue({ success: true, data: { ...rawMerchant, commission_bps: 100 } });
+    const res = await new HttpQRPaymentRepository(fakeClient({ patch })).setMerchantCommission('m1', 100);
+    expect(res.success).toBe(true);
+    expect(res.data?.commissionBps).toBe(100);
+    expect(patch).toHaveBeenCalledWith('/api/v1/admin/merchants/m1/commission', { commission_bps: 100 });
+  });
+
+  it('maps merchantId on listed codes', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: [{ id: 'q1', type: 'merchant_fixed', amount: 100000, currency: 'CRC', note: '', qr_data: 'KP:...', single_use: false, used: false, expires_at: '', merchant_id: 'm1' }],
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ get })).getQRCodes();
+    expect(res.success).toBe(true);
+    expect(res.data?.[0].merchantId).toBe('m1');
+    expect(res.data?.[0].amount).toBe(1000);
   });
 });

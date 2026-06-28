@@ -265,6 +265,15 @@ func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reaso
 	return s.repo.UpdateVerification(ctx, merchantID, "rejected", adminID, reason)
 }
 
+// SetCommission updates a merchant's commission rate (basis points). The platform
+// sets the rate, so this is an admin action.
+func (s *Service) SetCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
+	if bps < 0 || bps > 10000 {
+		return nil, fmt.Errorf("commission must be between 0 and 10000 bps")
+	}
+	return s.repo.UpdateCommission(ctx, merchantID, bps)
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // commissionFee returns the merchant commission in centimos for a gross amount,

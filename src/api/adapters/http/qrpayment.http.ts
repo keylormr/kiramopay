@@ -74,6 +74,34 @@ function mapPayment(d: PaymentDTO): QRPayment {
   };
 }
 
+interface QRCodeDTO {
+  id: string;
+  type: string;
+  amount: number;
+  currency: string;
+  note: string;
+  qr_data: string;
+  single_use: boolean;
+  used: boolean;
+  expires_at: string;
+  merchant_id?: string;
+}
+
+function mapCode(d: QRCodeDTO): QRPaymentCode {
+  return {
+    id: d.id,
+    type: d.type as QRPaymentCode['type'],
+    amount: d.amount / 100,
+    currency: d.currency,
+    note: d.note || undefined,
+    qrData: d.qr_data,
+    singleUse: d.single_use,
+    used: d.used,
+    expiresAt: d.expires_at || undefined,
+    merchantId: d.merchant_id || undefined,
+  };
+}
+
 export class HttpQRPaymentRepository implements IQRPaymentRepository {
   constructor(private client: HttpClient) {}
 
@@ -98,10 +126,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   }
 
   async createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>> {
-    const res = await this.client.post<{
-      id: string; type: string; amount: number; currency: string;
-      note: string; qr_data: string; single_use: boolean; used: boolean; expires_at: string;
-    }>('/api/v1/qr/codes', {
+    const res = await this.client.post<QRCodeDTO>('/api/v1/qr/codes', {
       type: request.type,
       amount: request.amount ? request.amount * 100 : 0,
       currency: request.currency,
@@ -111,39 +136,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     });
 
     if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
-
-    return apiSuccess({
-      id: res.data.id,
-      type: res.data.type as QRPaymentCode['type'],
-      amount: res.data.amount / 100,
-      currency: res.data.currency,
-      note: res.data.note || undefined,
-      qrData: res.data.qr_data,
-      singleUse: res.data.single_use,
-      used: res.data.used,
-      expiresAt: res.data.expires_at || undefined,
-    });
+    return apiSuccess(mapCode(res.data));
   }
 
   async getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>> {
-    const res = await this.client.get<Array<{
-      id: string; type: string; amount: number; currency: string;
-      note: string; qr_data: string; single_use: boolean; used: boolean; expires_at: string;
-    }>>('/api/v1/qr/codes');
-
+    const res = await this.client.get<QRCodeDTO[]>('/api/v1/qr/codes');
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch QR codes');
-
-    return apiSuccess(res.data.map((q) => ({
-      id: q.id,
-      type: q.type as QRPaymentCode['type'],
-      amount: q.amount / 100,
-      currency: q.currency,
-      note: q.note || undefined,
-      qrData: q.qr_data,
-      singleUse: q.single_use,
-      used: q.used,
-      expiresAt: q.expires_at || undefined,
-    })));
+    return apiSuccess(res.data.map(mapCode));
   }
 
   async scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>> {
@@ -180,6 +179,12 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   async rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/reject`, { reason });
     if (!res.success || !res.data) return apiError('REJECT_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapMerchant(res.data));
+  }
+
+  async setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>> {
+    const res = await this.client.patch<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/commission`, { commission_bps: commissionBps });
+    if (!res.success || !res.data) return apiError('SET_COMMISSION_FAILED', res.error?.message || 'Failed');
     return apiSuccess(mapMerchant(res.data));
   }
 }

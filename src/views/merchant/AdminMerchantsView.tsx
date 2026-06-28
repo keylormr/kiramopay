@@ -15,9 +15,10 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
 
   const [rejecting, setRejecting] = useState<QRMerchant | null>(null);
   const [reason, setReason] = useState('');
+  // Editable commission per merchant (in percent), defaulted from each row.
+  const [commission, setCommission] = useState<Record<string, string>>({});
 
   const cat = (c: string) => t(`merchant_cat_${c}` as Parameters<typeof t>[0]);
-  const pct = (bps: number) => `${(bps / 100).toFixed(2)}%`;
 
   useEffect(() => {
     let cancelled = false;
@@ -27,23 +28,48 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       if (!api.qrPayments) { if (!cancelled) { setLoading(false); } return; }
       const res = await api.qrPayments.listPendingMerchants();
       if (cancelled) return;
-      if (res.success && res.data) setMerchants(res.data);
-      else setError(res.error?.message || '');
+      if (res.success && res.data) {
+        setMerchants(res.data);
+        setCommission(Object.fromEntries(res.data.map((m) => [m.id, (m.commissionBps / 100).toString()])));
+      } else {
+        setError(res.error?.message || '');
+      }
       setLoading(false);
     };
     run();
     return () => { cancelled = true; };
   }, [reload]);
 
-  const decide = async (m: QRMerchant, approve: boolean, why = '') => {
+  // Approve, first applying an edited commission if the admin changed it.
+  const approve = async (m: QRMerchant) => {
     setActing(m.id);
     setError('');
     try {
       const api = getApiLayer();
       if (!api.qrPayments) return;
-      const res = approve
-        ? await api.qrPayments.approveMerchant(m.id)
-        : await api.qrPayments.rejectMerchant(m.id, why);
+      const pctVal = parseFloat(commission[m.id] ?? '');
+      const bps = Number.isFinite(pctVal) && pctVal >= 0 ? Math.round(pctVal * 100) : m.commissionBps;
+      if (bps !== m.commissionBps) {
+        const cr = await api.qrPayments.setMerchantCommission(m.id, bps);
+        if (!cr.success) { setError(cr.error?.message || t('merchant_admin_action_failed')); return; }
+      }
+      const res = await api.qrPayments.approveMerchant(m.id);
+      if (res.success) setReload((n) => n + 1);
+      else setError(res.error?.message || t('merchant_admin_action_failed'));
+    } catch {
+      setError(t('merchant_admin_action_failed'));
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const reject = async (m: QRMerchant, why: string) => {
+    setActing(m.id);
+    setError('');
+    try {
+      const api = getApiLayer();
+      if (!api.qrPayments) return;
+      const res = await api.qrPayments.rejectMerchant(m.id, why);
       if (res.success) {
         setRejecting(null);
         setReason('');
@@ -87,16 +113,24 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
           <div className="px-4 py-4 space-y-3">
             {merchants.map((m) => (
               <div key={m.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-bold uv-text-primary truncate">{m.name}</p>
-                  <span className="text-xs uv-text-muted">{t('merchant_commission')}: {pct(m.commissionBps)}</span>
-                </div>
+                <p className="font-bold uv-text-primary truncate">{m.name}</p>
                 <p className="text-xs uv-text-muted mt-1">{cat(m.category)} · {m.legalName}</p>
                 <p className="text-xs uv-text-muted">
                   {m.cedulaType === 'juridica' ? t('merchant_cedula_juridica') : t('merchant_cedula_fisica')}: {m.cedula}
                 </p>
+                <label className="flex items-center gap-2 mt-3 text-sm">
+                  <span className="uv-text-secondary">{t('merchant_commission')}</span>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={commission[m.id] ?? ''}
+                    onChange={(e) => setCommission((c) => ({ ...c, [m.id]: e.target.value }))}
+                    className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
+                    aria-label={t('merchant_commission')}
+                  />
+                  <span className="uv-text-muted">%</span>
+                </label>
                 <div className="flex gap-2 mt-3">
-                  <button onClick={() => decide(m, true)} disabled={acting === m.id} className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl font-bold disabled:opacity-50">
+                  <button onClick={() => approve(m)} disabled={acting === m.id} className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl font-bold disabled:opacity-50">
                     {t('merchant_admin_approve')}
                   </button>
                   <button onClick={() => { setReason(''); setRejecting(m); }} disabled={acting === m.id} className="flex-1 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50">
@@ -116,7 +150,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('merchant_admin_reject_reason')}</label>
               <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)] resize-none" />
             </div>
-            <button onClick={() => decide(rejecting, false, reason.trim())} disabled={acting === rejecting.id} className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
+            <button onClick={() => reject(rejecting, reason.trim())} disabled={acting === rejecting.id} className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
               {acting === rejecting.id ? t('loading') : t('merchant_admin_reject')}
             </button>
           </div>

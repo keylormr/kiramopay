@@ -542,6 +542,7 @@ const hi: TranslationKeys = {
   merchant_qr_error: 'QR नहीं बनाया जा सका',
   merchant_history: 'वसूली इतिहास',
   merchant_history_empty: 'अभी कोई वसूली नहीं',
+  merchant_codes: 'वसूली कोड',
   merchant_gross: 'सकल',
   merchant_fee_label: 'कमीशन',
   merchant_net_received: 'शुद्ध प्राप्त',

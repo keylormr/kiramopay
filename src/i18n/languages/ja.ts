@@ -542,6 +542,7 @@ const ja: TranslationKeys = {
   merchant_qr_error: 'QRを生成できませんでした',
   merchant_history: '集金履歴',
   merchant_history_empty: 'まだ集金がありません',
+  merchant_codes: '集金コード',
   merchant_gross: '総額',
   merchant_fee_label: '手数料',
   merchant_net_received: '受取純額',

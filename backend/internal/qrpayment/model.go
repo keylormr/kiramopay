@@ -90,6 +90,11 @@ type VerificationDecisionRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// SetCommissionRequest is the admin payload to change a merchant's commission.
+type SetCommissionRequest struct {
+	CommissionBps int `json:"commission_bps"`
+}
+
 type ScanQRPaymentRequest struct {
 	QRData   string `json:"qr_data"`
 	Amount   int64  `json:"amount,omitempty"` // centimos, required if QR has no fixed amount

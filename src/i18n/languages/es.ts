@@ -550,6 +550,7 @@ const es: TranslationKeys = {
   merchant_qr_error: 'No se pudo generar el QR',
   merchant_history: 'Historial de cobros',
   merchant_history_empty: 'Aún no tienes cobros',
+  merchant_codes: 'Códigos de cobro',
   merchant_gross: 'Bruto',
   merchant_fee_label: 'Comisión',
   merchant_net_received: 'Neto recibido',

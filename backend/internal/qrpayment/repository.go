@@ -98,6 +98,21 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 	return m, nil
 }
 
+// UpdateCommission sets a merchant's commission rate (admin action) and returns
+// the updated row.
+func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
+	m, err := scanMerchant(r.db.QueryRow(ctx,
+		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 RETURNING `+merchantCols,
+		merchantID, bps))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("merchant not found")
+		}
+		return nil, err
+	}
+	return m, nil
+}
+
 func collectMerchants(rows pgx.Rows) ([]Merchant, error) {
 	var out []Merchant
 	for rows.Next() {
