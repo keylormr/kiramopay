@@ -115,7 +115,7 @@ func collectMerchants(rows pgx.Rows) ([]Merchant, error) {
 func (r *Repository) CreateQRCode(ctx context.Context, qr *QRPaymentCode) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO qr_payment_codes (id, creator_id, type, amount, currency, merchant_id, note, qr_data, single_use, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10)`,
+		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, $7, $8, $9, $10)`,
 		qr.ID, qr.CreatorID, qr.Type, qr.Amount, qr.Currency, qr.MerchantID,
 		qr.Note, qr.QRData, qr.SingleUse, qr.ExpiresAt)
 	return err
@@ -169,7 +169,7 @@ func (r *Repository) GetUserQRCodes(ctx context.Context, userID string) ([]QRPay
 func (r *Repository) CreatePayment(ctx context.Context, p *QRPaymentRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO qr_payments (id, qr_code_id, payer_id, receiver_id, merchant_id, amount, fee, currency, status, note, tx_id)
-		 VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, NULLIF($11, ''))`,
+		 VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8, $9, $10, NULLIF($11, ''))`,
 		p.ID, p.QRCodeID, p.PayerID, p.ReceiverID, p.MerchantID,
 		p.Amount, p.Fee, p.Currency, p.Status, p.Note, p.TxID)
 	return err
@@ -187,6 +187,25 @@ func (r *Repository) UpdatePaymentStatus(ctx context.Context, paymentID, status,
 		return fmt.Errorf("payment not found")
 	}
 	return nil
+}
+
+// GetPaymentByTxID returns the payment linked to a ledger transaction, used to
+// keep ScanAndPay idempotent (a retried scan reuses the same transfer, so it
+// must not insert a second history row).
+func (r *Repository) GetPaymentByTxID(ctx context.Context, txID string) (*QRPaymentRecord, error) {
+	var p QRPaymentRecord
+	err := r.db.QueryRow(ctx,
+		`SELECT id, qr_code_id, payer_id, receiver_id, COALESCE(merchant_id::text, ''),
+		 amount, fee, currency, status, COALESCE(note, ''), COALESCE(tx_id, ''),
+		 created_at, completed_at
+		 FROM qr_payments WHERE tx_id = $1`, txID).Scan(
+		&p.ID, &p.QRCodeID, &p.PayerID, &p.ReceiverID, &p.MerchantID,
+		&p.Amount, &p.Fee, &p.Currency, &p.Status, &p.Note, &p.TxID,
+		&p.CreatedAt, &p.CompletedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 func (r *Repository) GetUserPayments(ctx context.Context, userID string, limit int) ([]QRPaymentRecord, error) {

@@ -185,10 +185,13 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		req.Currency = "CRC"
 	}
 
-	// Idempotency: if already done, return existing rows.
+	// Idempotency: if already done, return BOTH existing rows. The receiver leg
+	// was stored under the derived "recv" key, so look it up too — callers that
+	// record a follow-on row keyed off the receiver can then detect the replay.
 	if req.IdempotencyKey != "" {
 		if existing, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey); existing != nil {
-			return existing, nil, nil
+			recv, _ := s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
+			return existing, recv, nil
 		}
 	}
 

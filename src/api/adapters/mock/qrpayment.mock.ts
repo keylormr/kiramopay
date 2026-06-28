@@ -100,8 +100,10 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
 
     const amount = request.amount ?? qrInfo.amount ?? 0;
     // Mirror the server: merchant codes carry a commission absorbed by the merchant.
+    // The backend computes the fee in centimos (floored), so compute it there too
+    // and express it back in colones — the unit the mock stores amounts in.
     const isMerchant = qrInfo.type === 'merchant_fixed' || qrInfo.type === 'merchant_dynamic';
-    const fee = isMerchant ? Math.floor((amount * DEFAULT_COMMISSION_BPS) / 10000) : 0;
+    const fee = isMerchant ? Math.floor((amount * 100 * DEFAULT_COMMISSION_BPS) / 10000) / 100 : 0;
 
     const payment: QRPayment = {
       id: `qrpay-${Date.now()}`,

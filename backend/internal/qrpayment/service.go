@@ -213,6 +213,13 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		return nil, fmt.Errorf("qr payment transfer: %w", err)
 	}
 
+	// Idempotent on the history row too: the transfer above is idempotent, so a
+	// retried scan returns the same sender tx. Guard on its ID to avoid inserting
+	// a duplicate qr_payments row.
+	if existing, _ := s.repo.GetPaymentByTxID(ctx, sender.ID); existing != nil {
+		return existing, nil
+	}
+
 	payment := &QRPaymentRecord{
 		ID:         uuid.New().String(),
 		QRCodeID:   qr.ID,

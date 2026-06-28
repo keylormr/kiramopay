@@ -215,7 +215,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		status VARCHAR(20) DEFAULT 'pending',
 		external_reference VARCHAR(100),
 		metadata JSONB DEFAULT '{}',
-		idempotency_key VARCHAR(80),
+		idempotency_key VARCHAR(120),
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		processed_at TIMESTAMPTZ,
 		completed_at TIMESTAMPTZ,
@@ -604,6 +604,59 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('UN',   'Ivan Testovich Blocklisted', 'ivan testovich blocklisted', 'RU', 'UNSC-TEST')
 	) AS v(source, full_name, normalized_name, nationality, program)
 	WHERE NOT EXISTS (SELECT 1 FROM sanction_list);
+
+	-- QR merchant payment tables (migrations 007 + 038). FKs use ON DELETE CASCADE
+	-- so the truncate-on-each-test cleanup cascades cleanly.
+	CREATE TABLE IF NOT EXISTS qr_merchants (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name VARCHAR(200) NOT NULL,
+		description TEXT DEFAULT '',
+		category VARCHAR(30) NOT NULL,
+		logo_url VARCHAR(500),
+		qr_code VARCHAR(50) NOT NULL UNIQUE,
+		active BOOLEAN DEFAULT TRUE,
+		cedula VARCHAR(50) NOT NULL DEFAULT '',
+		cedula_type VARCHAR(20) NOT NULL DEFAULT 'fisica',
+		legal_name VARCHAR(200) NOT NULL DEFAULT '',
+		verification_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		reviewed_at TIMESTAMP,
+		reviewed_by UUID REFERENCES users(id),
+		rejection_reason TEXT NOT NULL DEFAULT '',
+		commission_bps INTEGER NOT NULL DEFAULT 50,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS qr_payment_codes (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		type VARCHAR(30) NOT NULL,
+		amount BIGINT DEFAULT 0,
+		currency VARCHAR(10) DEFAULT 'CRC',
+		merchant_id UUID REFERENCES qr_merchants(id) ON DELETE CASCADE,
+		note TEXT,
+		qr_data TEXT NOT NULL UNIQUE,
+		single_use BOOLEAN DEFAULT FALSE,
+		used BOOLEAN DEFAULT FALSE,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS qr_payments (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		qr_code_id UUID NOT NULL REFERENCES qr_payment_codes(id) ON DELETE CASCADE,
+		payer_id UUID NOT NULL REFERENCES users(id),
+		receiver_id UUID NOT NULL REFERENCES users(id),
+		merchant_id UUID REFERENCES qr_merchants(id) ON DELETE CASCADE,
+		amount BIGINT NOT NULL,
+		fee BIGINT NOT NULL DEFAULT 0,
+		currency VARCHAR(10) DEFAULT 'CRC',
+		status VARCHAR(20) DEFAULT 'pending',
+		note TEXT,
+		tx_id VARCHAR(100),
+		created_at TIMESTAMP DEFAULT NOW(),
+		completed_at TIMESTAMP
+	);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -642,6 +695,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
 		"escrow_agreements",
 		"payouts",
+		"qr_payments", "qr_payment_codes", "qr_merchants",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"totp_recovery_codes", "user_totp",
