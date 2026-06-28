@@ -351,6 +351,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         if (hasBackend) {
           const api = getApiLayer();
           api.crypto.convert({ fromAsset, toAsset, fromAmount, toAmount, price }).catch(() => {});
+          refreshAccounts().catch(() => {});
         }
         break;
       }
@@ -414,6 +415,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         if (hasBackend) {
           const api = getApiLayer();
           api.crypto.stake({ asset, amount, apy, locked, lockDays }).catch(() => {});
+          refreshAccounts().catch(() => {});
         }
         break;
       }
@@ -438,6 +440,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           if (hasBackend) {
             const api = getApiLayer();
             api.crypto.unstake(action.payload.positionId).catch(() => {});
+            refreshAccounts().catch(() => {});
           }
         }
         break;
@@ -462,6 +465,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           if (hasBackend) {
             const api = getApiLayer();
             api.crypto.claimYield(positionId).catch(() => {});
+            refreshAccounts().catch(() => {});
           }
         }
         break;
