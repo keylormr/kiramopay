@@ -20,30 +20,46 @@ func NewService(repo *Repository, tx *transaction.Service) *Service {
 	return &Service{repo: repo, tx: tx}
 }
 
+// defaultCommissionBps is the merchant commission applied to new merchants
+// (50 basis points = 0.50%), mirroring the DB column default.
+const defaultCommissionBps = 50
+
 // ── Merchants ────────────────────────────────────────────────────────────────
 
 func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *RegisterMerchantRequest) (*Merchant, error) {
 	if req.Name == "" {
 		return nil, fmt.Errorf("merchant name is required")
 	}
-
-	// Check if user already has a merchant profile
-	existing, _ := s.repo.GetMerchantByUserID(ctx, userID)
-	if existing != nil {
-		return nil, fmt.Errorf("user already has a merchant profile")
+	if req.Cedula == "" {
+		return nil, fmt.Errorf("cedula is required")
+	}
+	if req.LegalName == "" {
+		return nil, fmt.Errorf("legal name is required")
+	}
+	cedulaType := req.CedulaType
+	if cedulaType == "" {
+		cedulaType = "fisica"
+	}
+	if cedulaType != "fisica" && cedulaType != "juridica" {
+		return nil, fmt.Errorf("invalid cedula type")
 	}
 
-	qrCode := generateQRIdentifier()
-
+	// A user may run several businesses, so there is no "already registered"
+	// guard. The merchant starts pending until an admin verifies it.
 	merchant := &Merchant{
-		ID:          uuid.New().String(),
-		UserID:      userID,
-		Name:        req.Name,
-		Description: req.Description,
-		Category:    req.Category,
-		QRCode:      qrCode,
-		Active:      true,
-		CreatedAt:   time.Now(),
+		ID:                 uuid.New().String(),
+		UserID:             userID,
+		Name:               req.Name,
+		Description:        req.Description,
+		Category:           req.Category,
+		QRCode:             generateQRIdentifier(),
+		Active:             true,
+		Cedula:             req.Cedula,
+		CedulaType:         cedulaType,
+		LegalName:          req.LegalName,
+		VerificationStatus: "pending",
+		CommissionBps:      defaultCommissionBps,
+		CreatedAt:          time.Now(),
 	}
 
 	if err := s.repo.CreateMerchant(ctx, merchant); err != nil {
@@ -53,8 +69,9 @@ func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *Regi
 	return merchant, nil
 }
 
-func (s *Service) GetMerchant(ctx context.Context, userID string) (*Merchant, error) {
-	return s.repo.GetMerchantByUserID(ctx, userID)
+// GetMerchants returns every merchant profile the user owns.
+func (s *Service) GetMerchants(ctx context.Context, userID string) ([]Merchant, error) {
+	return s.repo.GetMerchantsByUserID(ctx, userID)
 }
 
 // ── QR Codes ─────────────────────────────────────────────────────────────────
@@ -74,9 +91,18 @@ func (s *Service) CreateQRCode(ctx context.Context, userID string, req *CreateQR
 
 	var merchantID string
 	if req.Type == "merchant_fixed" || req.Type == "merchant_dynamic" {
-		merchant, err := s.repo.GetMerchantByUserID(ctx, userID)
+		if req.MerchantID == "" {
+			return nil, fmt.Errorf("merchant_id is required for merchant QR codes")
+		}
+		merchant, err := s.repo.GetMerchant(ctx, req.MerchantID)
 		if err != nil {
 			return nil, fmt.Errorf("merchant profile not found")
+		}
+		if merchant.UserID != userID {
+			return nil, fmt.Errorf("merchant does not belong to user")
+		}
+		if merchant.VerificationStatus != "verified" {
+			return nil, fmt.Errorf("merchant is pending verification")
 		}
 		merchantID = merchant.ID
 	}
@@ -149,20 +175,39 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	// the payer (that would let a payer settle a USD invoice in CRC).
 	currency := qr.Currency
 
+	// Merchant commission (absorbed by the merchant): when the QR belongs to a
+	// merchant, carve commission_bps of the amount and route it to SYSTEM:FEES.
+	// The payer still pays exactly `amount`; the merchant is credited amount-fee.
+	// P2P codes carry no merchant, so they stay 1:1.
+	var fee int64
+	feeFromReceiver := false
+	if qr.MerchantID != "" {
+		merchant, err := s.repo.GetMerchant(ctx, qr.MerchantID)
+		if err != nil {
+			return nil, fmt.Errorf("merchant not found")
+		}
+		if merchant.VerificationStatus != "verified" {
+			return nil, fmt.Errorf("merchant is not available")
+		}
+		fee = commissionFee(amount, merchant.CommissionBps)
+		feeFromReceiver = fee > 0
+	}
+
 	// Move the money THROUGH THE LEDGER: debit the payer, credit the QR creator
 	// atomically. Idempotency keyed by (qr, payer) prevents a double charge on
 	// a retried scan.
 	idem := fmt.Sprintf("qr:%s:%s", qr.ID, payerID)
 	sender, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-		FromUserID:     payerID,
-		ToUserID:       qr.CreatorID,
-		Amount:         amount,
-		Currency:       currency,
-		Fee:            0,
-		Description:    qr.Note,
-		IdempotencyKey: idem,
-		TxType:         transaction.TypeQRPayment,
-		ReceiveType:    transaction.TypeQRReceive,
+		FromUserID:      payerID,
+		ToUserID:        qr.CreatorID,
+		Amount:          amount,
+		Currency:        currency,
+		Fee:             fee,
+		FeeFromReceiver: feeFromReceiver,
+		Description:     qr.Note,
+		IdempotencyKey:  idem,
+		TxType:          transaction.TypeQRPayment,
+		ReceiveType:     transaction.TypeQRReceive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("qr payment transfer: %w", err)
@@ -175,6 +220,7 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		ReceiverID: qr.CreatorID,
 		MerchantID: qr.MerchantID,
 		Amount:     amount,
+		Fee:        fee,
 		Currency:   currency,
 		Status:     "completed",
 		Note:       qr.Note,
@@ -198,7 +244,31 @@ func (s *Service) GetPaymentHistory(ctx context.Context, userID string) ([]QRPay
 	return s.repo.GetUserPayments(ctx, userID, 50)
 }
 
+// ── Admin verification ───────────────────────────────────────────────────────
+
+func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {
+	return s.repo.ListPendingMerchants(ctx)
+}
+
+func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string) (*Merchant, error) {
+	return s.repo.UpdateVerification(ctx, merchantID, "verified", adminID, "")
+}
+
+func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string) (*Merchant, error) {
+	return s.repo.UpdateVerification(ctx, merchantID, "rejected", adminID, reason)
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// commissionFee returns the merchant commission in centimos for a gross amount,
+// floored to the centimo so the ledger math stays exact (no floats). bps is
+// basis points: 50 = 0.50%.
+func commissionFee(amount int64, bps int) int64 {
+	if amount <= 0 || bps <= 0 {
+		return 0
+	}
+	return amount * int64(bps) / 10000
+}
 
 func generateQRIdentifier() string {
 	b := make([]byte, 8)

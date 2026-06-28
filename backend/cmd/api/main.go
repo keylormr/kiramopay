@@ -573,7 +573,7 @@ func main() {
 
 			// QR
 			r.Post("/qr/merchant", qrHandler.RegisterMerchant)
-			r.Get("/qr/merchant", qrHandler.GetMerchant)
+			r.Get("/qr/merchants", qrHandler.GetMerchants)
 			r.Post("/qr/codes", qrHandler.CreateQRCode)
 			r.Get("/qr/codes", qrHandler.GetUserQRCodes)
 			r.Post("/qr/pay", qrHandler.ScanAndPay)
@@ -639,6 +639,11 @@ func main() {
 
 				// KYC review
 				r.Post("/admin/kyc/{id}/decision", kycHandler.Decide)
+
+				// Merchant verification (light KYC review)
+				r.Get("/admin/merchants/pending", qrHandler.ListPendingMerchants)
+				r.Post("/admin/merchants/{id}/approve", qrHandler.ApproveMerchant)
+				r.Post("/admin/merchants/{id}/reject", qrHandler.RejectMerchant)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)

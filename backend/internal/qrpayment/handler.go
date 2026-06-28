@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -34,11 +35,53 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, merchant)
 }
 
-func (h *Handler) GetMerchant(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
-	merchant, err := h.service.GetMerchant(r.Context(), userID)
+	merchants, err := h.service.GetMerchants(r.Context(), userID)
 	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", "merchant profile not found")
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	if merchants == nil {
+		merchants = []Merchant{}
+	}
+	response.JSON(w, http.StatusOK, merchants)
+}
+
+// ── Admin: merchant verification ─────────────────────────────────────────────
+
+func (h *Handler) ListPendingMerchants(w http.ResponseWriter, r *http.Request) {
+	merchants, err := h.service.ListPendingMerchants(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	if merchants == nil {
+		merchants = []Merchant{}
+	}
+	response.JSON(w, http.StatusOK, merchants)
+}
+
+func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id := chi.URLParam(r, "id")
+	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, merchant)
+}
+
+func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id := chi.URLParam(r, "id")
+	var req VerificationDecisionRequest
+	// Body is optional; an empty/invalid body just means no reason was given.
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
