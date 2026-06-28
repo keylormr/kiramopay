@@ -77,6 +77,7 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
       singleUse: request.singleUse,
       used: false,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      merchantId: request.merchantId,
     };
     const state = getState();
     const codes: QRPaymentCode[] = state?.qrCodes ?? [];
@@ -141,6 +142,15 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
 
   async rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
     return this.setStatus(merchantId, 'rejected', reason);
+  }
+
+  async setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>> {
+    const merchants = readMerchants();
+    const idx = merchants.findIndex((m) => m.id === merchantId);
+    if (idx === -1) return apiError('NOT_FOUND', 'Merchant not found');
+    merchants[idx] = { ...merchants[idx], commissionBps };
+    saveField('qrMerchants', merchants);
+    return apiSuccess(merchants[idx]);
   }
 
   private setStatus(

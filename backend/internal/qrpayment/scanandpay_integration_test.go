@@ -180,6 +180,60 @@ func TestCreateQRCode_RequiresVerifiedMerchant(t *testing.T) {
 	}
 }
 
+// An admin can change a merchant's commission, and the new rate applies to the
+// next payment.
+func TestSetCommission_AppliesToNextPayment(t *testing.T) {
+	svc, pool, payer, owner := setupQR(t)
+	ctx := context.Background()
+
+	m, err := svc.RegisterMerchant(ctx, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Soda Tica", Category: "restaurant", Cedula: "3-101", CedulaType: "juridica", LegalName: "Soda Tica SA",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := svc.ApproveMerchant(ctx, m.ID, owner); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	// Bump the commission to 1.00% (100 bps).
+	updated, err := svc.SetCommission(ctx, m.ID, 100)
+	if err != nil {
+		t.Fatalf("set commission: %v", err)
+	}
+	if updated.CommissionBps != 100 {
+		t.Fatalf("commission_bps = %d, want 100", updated.CommissionBps)
+	}
+
+	qr, err := svc.CreateQRCode(ctx, owner, &qrpayment.CreateQRCodeRequest{
+		Type: "merchant_fixed", Amount: 100000, Currency: "CRC", MerchantID: m.ID,
+	})
+	if err != nil {
+		t.Fatalf("create qr: %v", err)
+	}
+	pay, err := svc.ScanAndPay(ctx, payer, &qrpayment.ScanQRPaymentRequest{QRData: qr.QRData, Currency: "CRC"})
+	if err != nil {
+		t.Fatalf("pay: %v", err)
+	}
+	if pay.Fee != 1000 { // 1.00% of 100000 centimos
+		t.Fatalf("fee = %d, want 1000", pay.Fee)
+	}
+	_ = pool
+}
+
+func TestSetCommission_RejectsOutOfRange(t *testing.T) {
+	svc, _, _, owner := setupQR(t)
+	ctx := context.Background()
+	m, err := svc.RegisterMerchant(ctx, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "X", Category: "retail", Cedula: "1-1-1", CedulaType: "fisica", LegalName: "X",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := svc.SetCommission(ctx, m.ID, 20000); err == nil {
+		t.Fatal("expected error for out-of-range commission (>10000 bps)")
+	}
+}
+
 // A user cannot bind a QR code to a merchant they do not own.
 func TestCreateQRCode_RejectsForeignMerchant(t *testing.T) {
 	svc, _, payer, owner := setupQR(t)

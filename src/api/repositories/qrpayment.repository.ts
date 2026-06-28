@@ -27,6 +27,7 @@ export interface QRPaymentCode {
   singleUse: boolean;
   used: boolean;
   expiresAt?: string;
+  merchantId?: string;
 }
 
 export interface QRPayment {
@@ -78,4 +79,5 @@ export interface IQRPaymentRepository {
   listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>>;
   approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>>;
   rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>>;
+  setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>>;
 }

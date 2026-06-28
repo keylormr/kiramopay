@@ -644,6 +644,7 @@ func main() {
 				r.Get("/admin/merchants/pending", qrHandler.ListPendingMerchants)
 				r.Post("/admin/merchants/{id}/approve", qrHandler.ApproveMerchant)
 				r.Post("/admin/merchants/{id}/reject", qrHandler.RejectMerchant)
+				r.Patch("/admin/merchants/{id}/commission", qrHandler.SetCommission)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)

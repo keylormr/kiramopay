@@ -542,6 +542,7 @@ const zhTw: TranslationKeys = {
   merchant_qr_error: '無法產生 QR',
   merchant_history: '收款記錄',
   merchant_history_empty: '你還沒有收款',
+  merchant_codes: '收款碼',
   merchant_gross: '總額',
   merchant_fee_label: '手續費',
   merchant_net_received: '實收淨額',

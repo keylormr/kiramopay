@@ -87,6 +87,21 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, merchant)
 }
 
+func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req SetCommissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	merchant, err := h.service.SetCommission(r.Context(), id, req.CommissionBps)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, merchant)
+}
+
 // ── QR Codes ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) CreateQRCode(w http.ResponseWriter, r *http.Request) {

@@ -595,6 +595,7 @@ export type TranslationKeys = {
   merchant_qr_error: string;
   merchant_history: string;
   merchant_history_empty: string;
+  merchant_codes: string;
   merchant_gross: string;
   merchant_fee_label: string;
   merchant_net_received: string;
