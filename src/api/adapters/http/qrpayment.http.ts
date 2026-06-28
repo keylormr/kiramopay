@@ -3,6 +3,7 @@ import type {
   QRMerchant,
   QRPaymentCode,
   QRPayment,
+  MerchantVerificationStatus,
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
@@ -11,43 +12,89 @@ import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
 
+interface MerchantDTO {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  qr_code: string;
+  active: boolean;
+  cedula?: string;
+  cedula_type?: string;
+  legal_name?: string;
+  verification_status?: string;
+  rejection_reason?: string;
+  commission_bps?: number;
+}
+
+function mapMerchant(d: MerchantDTO): QRMerchant {
+  return {
+    id: d.id,
+    name: d.name,
+    description: d.description,
+    category: d.category,
+    qrCode: d.qr_code,
+    active: d.active,
+    cedula: d.cedula ?? '',
+    cedulaType: (d.cedula_type === 'juridica' ? 'juridica' : 'fisica'),
+    legalName: d.legal_name ?? '',
+    verificationStatus: (d.verification_status as MerchantVerificationStatus) ?? 'pending',
+    rejectionReason: d.rejection_reason || undefined,
+    commissionBps: d.commission_bps ?? 0,
+  };
+}
+
+interface PaymentDTO {
+  id: string;
+  qr_code_id: string;
+  payer_id: string;
+  receiver_id: string;
+  merchant_id: string;
+  amount: number;
+  fee?: number;
+  currency: string;
+  status: string;
+  note: string;
+  created_at: string;
+}
+
+function mapPayment(d: PaymentDTO): QRPayment {
+  return {
+    id: d.id,
+    qrCodeId: d.qr_code_id,
+    payerId: d.payer_id,
+    receiverId: d.receiver_id,
+    merchantId: d.merchant_id || undefined,
+    amount: d.amount / 100,
+    fee: (d.fee ?? 0) / 100,
+    currency: d.currency,
+    status: d.status as QRPayment['status'],
+    note: d.note || undefined,
+    createdAt: d.created_at,
+  };
+}
+
 export class HttpQRPaymentRepository implements IQRPaymentRepository {
   constructor(private client: HttpClient) {}
 
   async registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
-    const res = await this.client.post<{
-      id: string; name: string; description: string; category: string;
-      qr_code: string; active: boolean;
-    }>('/api/v1/qr/merchant', request);
+    const res = await this.client.post<MerchantDTO>('/api/v1/qr/merchant', {
+      name: request.name,
+      description: request.description,
+      category: request.category,
+      cedula: request.cedula,
+      cedula_type: request.cedulaType,
+      legal_name: request.legalName,
+    });
 
     if (!res.success || !res.data) return apiError('REGISTER_FAILED', res.error?.message || 'Failed');
-
-    return apiSuccess({
-      id: res.data.id,
-      name: res.data.name,
-      description: res.data.description,
-      category: res.data.category,
-      qrCode: res.data.qr_code,
-      active: res.data.active,
-    });
+    return apiSuccess(mapMerchant(res.data));
   }
 
-  async getMerchant(): Promise<ApiResponse<QRMerchant>> {
-    const res = await this.client.get<{
-      id: string; name: string; description: string; category: string;
-      qr_code: string; active: boolean;
-    }>('/api/v1/qr/merchant');
-
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Merchant not found');
-
-    return apiSuccess({
-      id: res.data.id,
-      name: res.data.name,
-      description: res.data.description,
-      category: res.data.category,
-      qrCode: res.data.qr_code,
-      active: res.data.active,
-    });
+  async getMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    const res = await this.client.get<MerchantDTO[]>('/api/v1/qr/merchants');
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch merchants');
+    return apiSuccess(res.data.map(mapMerchant));
   }
 
   async createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>> {
@@ -60,6 +107,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       currency: request.currency,
       note: request.note,
       single_use: request.singleUse,
+      merchant_id: request.merchantId,
     });
 
     if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
@@ -99,52 +147,39 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   }
 
   async scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>> {
-    const res = await this.client.post<{
-      id: string; qr_code_id: string; payer_id: string; receiver_id: string;
-      merchant_id: string; amount: number; currency: string; status: string;
-      note: string; created_at: string;
-    }>('/api/v1/qr/pay', {
+    const res = await this.client.post<PaymentDTO>('/api/v1/qr/pay', {
       qr_data: request.qrData,
       amount: request.amount ? request.amount * 100 : 0,
       currency: request.currency,
     });
 
     if (!res.success || !res.data) return apiError('PAYMENT_FAILED', res.error?.message || 'Failed');
-
-    return apiSuccess({
-      id: res.data.id,
-      qrCodeId: res.data.qr_code_id,
-      payerId: res.data.payer_id,
-      receiverId: res.data.receiver_id,
-      merchantId: res.data.merchant_id || undefined,
-      amount: res.data.amount / 100,
-      currency: res.data.currency,
-      status: res.data.status as QRPayment['status'],
-      note: res.data.note || undefined,
-      createdAt: res.data.created_at,
-    });
+    return apiSuccess(mapPayment(res.data));
   }
 
   async getPaymentHistory(): Promise<ApiResponse<QRPayment[]>> {
-    const res = await this.client.get<Array<{
-      id: string; qr_code_id: string; payer_id: string; receiver_id: string;
-      merchant_id: string; amount: number; currency: string; status: string;
-      note: string; created_at: string;
-    }>>('/api/v1/qr/history');
-
+    const res = await this.client.get<PaymentDTO[]>('/api/v1/qr/history');
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch history');
+    return apiSuccess(res.data.map(mapPayment));
+  }
 
-    return apiSuccess(res.data.map((p) => ({
-      id: p.id,
-      qrCodeId: p.qr_code_id,
-      payerId: p.payer_id,
-      receiverId: p.receiver_id,
-      merchantId: p.merchant_id || undefined,
-      amount: p.amount / 100,
-      currency: p.currency,
-      status: p.status as QRPayment['status'],
-      note: p.note || undefined,
-      createdAt: p.created_at,
-    })));
+  // ── Admin ──────────────────────────────────────────────────────────────────
+
+  async listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    const res = await this.client.get<MerchantDTO[]>('/api/v1/admin/merchants/pending');
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.map(mapMerchant));
+  }
+
+  async approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>> {
+    const res = await this.client.post<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/approve`, {});
+    if (!res.success || !res.data) return apiError('APPROVE_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapMerchant(res.data));
+  }
+
+  async rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
+    const res = await this.client.post<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/reject`, { reason });
+    if (!res.success || !res.data) return apiError('REJECT_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapMerchant(res.data));
   }
 }

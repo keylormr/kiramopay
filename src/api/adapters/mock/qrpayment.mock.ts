@@ -11,6 +11,7 @@ import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
 
 const STORAGE_KEY = 'kiramopay_app_state';
+const DEFAULT_COMMISSION_BPS = 50; // 0.50%
 
 function getState() {
   try {
@@ -27,6 +28,11 @@ function saveField(field: string, value: unknown) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function readMerchants(): QRMerchant[] {
+  const state = getState();
+  return Array.isArray(state?.qrMerchants) ? state.qrMerchants : [];
+}
+
 export class MockQRPaymentRepository implements IQRPaymentRepository {
   async registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
     const merchant: QRMerchant = {
@@ -34,31 +40,39 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
       name: request.name,
       description: request.description,
       category: request.category,
-      qrCode: `MERCH-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      qrCode: `MRC-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
       active: true,
+      cedula: request.cedula,
+      cedulaType: request.cedulaType,
+      legalName: request.legalName,
+      // The mock has no admin, so it auto-verifies to keep the demo flow working.
+      verificationStatus: 'verified',
+      commissionBps: DEFAULT_COMMISSION_BPS,
     };
-    saveField('qrMerchant', merchant);
+    const merchants = readMerchants();
+    merchants.push(merchant);
+    saveField('qrMerchants', merchants);
     return apiSuccess(merchant);
   }
 
-  async getMerchant(): Promise<ApiResponse<QRMerchant>> {
-    const state = getState();
-    if (!state?.qrMerchant) return apiError('NOT_FOUND', 'No eres un comercio registrado');
-    return apiSuccess(state.qrMerchant);
+  async getMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    return apiSuccess(readMerchants());
   }
 
   async createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>> {
+    const id = `qr-${Date.now()}`;
     const code: QRPaymentCode = {
-      id: `qr-${Date.now()}`,
+      id,
       type: request.type as QRPaymentCode['type'],
       amount: request.amount ?? 0,
       currency: request.currency,
       note: request.note,
       qrData: JSON.stringify({
-        id: `qr-${Date.now()}`,
+        id,
         type: request.type,
         amount: request.amount,
         currency: request.currency,
+        merchantId: request.merchantId,
       }),
       singleUse: request.singleUse,
       used: false,
@@ -77,19 +91,26 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   }
 
   async scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>> {
-    let qrInfo: { id?: string; amount?: number; type?: string };
+    let qrInfo: { id?: string; amount?: number; type?: string; merchantId?: string };
     try {
       qrInfo = JSON.parse(request.qrData);
     } catch {
       return apiError('INVALID_QR', 'Codigo QR invalido');
     }
 
+    const amount = request.amount ?? qrInfo.amount ?? 0;
+    // Mirror the server: merchant codes carry a commission absorbed by the merchant.
+    const isMerchant = qrInfo.type === 'merchant_fixed' || qrInfo.type === 'merchant_dynamic';
+    const fee = isMerchant ? Math.floor((amount * DEFAULT_COMMISSION_BPS) / 10000) : 0;
+
     const payment: QRPayment = {
       id: `qrpay-${Date.now()}`,
       qrCodeId: qrInfo.id ?? 'unknown',
       payerId: 'current-user',
       receiverId: 'merchant',
-      amount: request.amount ?? qrInfo.amount ?? 0,
+      merchantId: qrInfo.merchantId,
+      amount,
+      fee,
       currency: request.currency,
       status: 'completed',
       createdAt: new Date().toISOString(),
@@ -104,5 +125,32 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   async getPaymentHistory(): Promise<ApiResponse<QRPayment[]>> {
     const state = getState();
     return apiSuccess(state?.qrPayments ?? []);
+  }
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+
+  async listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    return apiSuccess(readMerchants().filter((m) => m.verificationStatus === 'pending'));
+  }
+
+  async approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>> {
+    return this.setStatus(merchantId, 'verified', '');
+  }
+
+  async rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
+    return this.setStatus(merchantId, 'rejected', reason);
+  }
+
+  private setStatus(
+    merchantId: string,
+    status: QRMerchant['verificationStatus'],
+    reason: string,
+  ): ApiResponse<QRMerchant> {
+    const merchants = readMerchants();
+    const idx = merchants.findIndex((m) => m.id === merchantId);
+    if (idx === -1) return apiError('NOT_FOUND', 'Merchant not found');
+    merchants[idx] = { ...merchants[idx], verificationStatus: status, rejectionReason: reason || undefined };
+    saveField('qrMerchants', merchants);
+    return apiSuccess(merchants[idx]);
   }
 }

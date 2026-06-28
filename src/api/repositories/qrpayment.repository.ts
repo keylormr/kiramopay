@@ -1,5 +1,7 @@
 import type { ApiResponse } from '../types';
 
+export type MerchantVerificationStatus = 'pending' | 'verified' | 'rejected';
+
 export interface QRMerchant {
   id: string;
   name: string;
@@ -7,6 +9,12 @@ export interface QRMerchant {
   category: string;
   qrCode: string;
   active: boolean;
+  cedula: string;
+  cedulaType: 'fisica' | 'juridica';
+  legalName: string;
+  verificationStatus: MerchantVerificationStatus;
+  rejectionReason?: string;
+  commissionBps: number;
 }
 
 export interface QRPaymentCode {
@@ -28,6 +36,7 @@ export interface QRPayment {
   receiverId: string;
   merchantId?: string;
   amount: number;
+  fee: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   note?: string;
@@ -38,6 +47,9 @@ export interface RegisterMerchantRequest {
   name: string;
   description: string;
   category: string;
+  cedula: string;
+  cedulaType: 'fisica' | 'juridica';
+  legalName: string;
 }
 
 export interface CreateQRCodeRequest {
@@ -46,6 +58,7 @@ export interface CreateQRCodeRequest {
   currency: string;
   note?: string;
   singleUse: boolean;
+  merchantId?: string;
 }
 
 export interface ScanQRPayRequest {
@@ -56,9 +69,13 @@ export interface ScanQRPayRequest {
 
 export interface IQRPaymentRepository {
   registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>>;
-  getMerchant(): Promise<ApiResponse<QRMerchant>>;
+  getMerchants(): Promise<ApiResponse<QRMerchant[]>>;
   createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>>;
   getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>>;
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;
   getPaymentHistory(): Promise<ApiResponse<QRPayment[]>>;
+  // Admin (gated server-side by the admin role).
+  listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>>;
+  approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>>;
+  rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>>;
 }

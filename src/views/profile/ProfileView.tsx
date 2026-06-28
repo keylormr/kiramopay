@@ -14,9 +14,10 @@ interface ProfileViewProps {
   onOpenFAQ?: () => void;
   onOpenEscrow?: () => void;
   onOpenPayout?: () => void;
+  onOpenMerchant?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenMerchant }) => {
   const { state, dispatch } = useApp();
   const { t, language, setLanguage, languages, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
@@ -301,6 +302,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {t('merchant_tools')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          <button
+            onClick={() => onOpenMerchant?.()}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.ShoppingCart size={18} className="text-emerald-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('merchant_panel_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('merchant_panel_menu_desc')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
           <button
             onClick={() => onOpenEscrow?.()}
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
