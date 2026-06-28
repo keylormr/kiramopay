@@ -34,6 +34,8 @@ const SplitPayView = React.lazy(() => import('./views/splitpay/SplitPayView').th
 const LoyaltyView = React.lazy(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
 const EscrowView = React.lazy(() => import('./views/escrow/EscrowView').then(m => ({ default: m.EscrowView })));
 const PayoutView = React.lazy(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
+const MerchantView = React.lazy(() => import('./views/merchant/MerchantView').then(m => ({ default: m.MerchantView })));
+const AdminMerchantsView = React.lazy(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
 const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 
 // Lock Screen Component — PIN entry for returning users.
@@ -206,7 +208,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'assistant' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'merchant' | 'adminMerchants' | 'assistant' | null;
 
 // Main Layout Component
 const Layout = () => {
@@ -237,7 +239,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenMerchant={() => setOverlayView('merchant')} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -352,6 +354,12 @@ const Layout = () => {
         )}
         {overlayView === 'payout' && (
           <PayoutView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'merchant' && (
+          <MerchantView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'adminMerchants' && (
+          <AdminMerchantsView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'assistant' && (
           <AssistantView onClose={() => setOverlayView(null)} />

@@ -1,0 +1,11 @@
+-- Migration 039: widen transactions.idempotency_key so QR payment keys fit.
+-- Phase: H — China/Pix merchant model
+--
+-- A QR transfer uses the idempotency key "qr:{qr_uuid}:{payer_uuid}" (76 chars),
+-- and CreateTransfer derives the receiver leg's key by appending ":recv"
+-- (81 chars). That overflowed the VARCHAR(80) column (migration 018) and made
+-- EVERY QR payment fail on the receiver-transaction insert (SQLSTATE 22001) — a
+-- latent bug that never surfaced because QR pay was never exercised end to end
+-- against Postgres. Widening to 120 leaves headroom for all callers. Increasing a
+-- VARCHAR length is a metadata-only change (no table rewrite, indexes preserved).
+ALTER TABLE transactions ALTER COLUMN idempotency_key TYPE VARCHAR(120);

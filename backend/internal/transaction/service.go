@@ -154,6 +154,14 @@ type CreateTransferRequest struct {
 	IdempotencyKey string
 	TxType         string // for the sender's transactions row
 	ReceiveType    string // for the receiver's transactions row (e.g. p2p_receive)
+
+	// FeeFromReceiver selects who absorbs Fee. Default (false) is the historical
+	// payer-absorbed model: the payer pays Amount + Fee, the receiver is credited
+	// the full Amount, and Fee is booked to SYSTEM:FEES. When true (merchant
+	// model), the payer pays exactly Amount, the receiver is credited
+	// Amount - Fee, and Fee is booked to SYSTEM:FEES. Either way the posting is
+	// balanced and Fee always lands in SYSTEM:FEES.
+	FeeFromReceiver bool
 }
 
 // CreateTransfer atomically debits sender, credits receiver, books fee to
@@ -165,14 +173,25 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.FromUserID == req.ToUserID {
 		return nil, nil, fmt.Errorf("sender and receiver must differ")
 	}
+	if req.Fee < 0 {
+		return nil, nil, fmt.Errorf("fee must not be negative")
+	}
+	// In the merchant model the fee is carved out of the amount, so it must leave
+	// a positive credit for the receiver (the ledger rejects non-positive entries).
+	if req.FeeFromReceiver && req.Fee >= req.Amount {
+		return nil, nil, fmt.Errorf("fee must be less than amount")
+	}
 	if req.Currency == "" {
 		req.Currency = "CRC"
 	}
 
-	// Idempotency: if already done, return existing rows.
+	// Idempotency: if already done, return BOTH existing rows. The receiver leg
+	// was stored under the derived "recv" key, so look it up too — callers that
+	// record a follow-on row keyed off the receiver can then detect the replay.
 	if req.IdempotencyKey != "" {
 		if existing, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey); existing != nil {
-			return existing, nil, nil
+			recv, _ := s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
+			return existing, recv, nil
 		}
 	}
 
@@ -185,11 +204,16 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		return nil, nil, fmt.Errorf("receiver wallet not found")
 	}
 
-	total := req.Amount + req.Fee
-	if req.Currency == "CRC" && senderWallet.BalanceCRC < total {
+	// The payer only funds the fee when it is payer-absorbed; in the merchant
+	// model the fee comes out of the receiver's credit, so the payer needs Amount.
+	senderTotal := req.Amount
+	if !req.FeeFromReceiver {
+		senderTotal += req.Fee
+	}
+	if req.Currency == "CRC" && senderWallet.BalanceCRC < senderTotal {
 		return nil, nil, fmt.Errorf("insufficient balance")
 	}
-	if req.Currency == "USD" && senderWallet.BalanceUSD < total {
+	if req.Currency == "USD" && senderWallet.BalanceUSD < senderTotal {
 		return nil, nil, fmt.Errorf("insufficient balance")
 	}
 	if senderWallet.DailyLimit > 0 {
@@ -212,11 +236,18 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		}
 	}
 
+	// The fee shows on whichever party absorbs it: the payer's row in the classic
+	// model, the receiver's row (a deduction from what they collect) in the
+	// merchant model.
+	senderFee, receiverFee := req.Fee, int64(0)
+	if req.FeeFromReceiver {
+		senderFee, receiverFee = 0, req.Fee
+	}
 	senderReq := &CreateTransactionRequest{
 		Type:             req.TxType,
 		Amount:           req.Amount,
 		Currency:         req.Currency,
-		Fee:              req.Fee,
+		Fee:              senderFee,
 		CounterpartyType: "user",
 		CounterpartyName: "", // populated by caller (sinpe handler resolves)
 		Description:      req.Description,
@@ -226,7 +257,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Type:             req.ReceiveType,
 		Amount:           req.Amount,
 		Currency:         req.Currency,
-		Fee:              0,
+		Fee:              receiverFee,
 		CounterpartyType: "user",
 		Description:      req.Description,
 		// Receiver idempotency: derive deterministically to avoid double-credit.
@@ -242,19 +273,31 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		return nil, nil, fmt.Errorf("create receiver tx: %w", err)
 	}
 
-	entries := []ledger.Entry{
-		{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
-		{Account: ledger.Account{UserID: req.ToUserID}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+	// Build the balanced posting. Two fee models, both booking Fee to SYSTEM:FEES:
+	//   payer-absorbed (default): payer -Amount-Fee, receiver +Amount, fees +Fee.
+	//   merchant-absorbed (FeeFromReceiver): payer -Amount, receiver +Amount-Fee, fees +Fee.
+	feeAccount := ledger.SystemFeesCRC
+	if req.Currency == "USD" {
+		feeAccount = ledger.SystemFeesUSD
 	}
-	if req.Fee > 0 {
-		feeAccount := ledger.SystemFeesCRC
-		if req.Currency == "USD" {
-			feeAccount = ledger.SystemFeesUSD
+	var entries []ledger.Entry
+	if req.Fee > 0 && req.FeeFromReceiver {
+		entries = []ledger.Entry{
+			{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
+			{Account: ledger.Account{UserID: req.ToUserID}, Side: ledger.Credit, AmountMinor: req.Amount - req.Fee, Currency: req.Currency},
+			{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
 		}
-		entries = append(entries,
-			ledger.Entry{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Fee, Currency: req.Currency},
-			ledger.Entry{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
-		)
+	} else {
+		entries = []ledger.Entry{
+			{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
+			{Account: ledger.Account{UserID: req.ToUserID}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+		}
+		if req.Fee > 0 {
+			entries = append(entries,
+				ledger.Entry{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Fee, Currency: req.Currency},
+				ledger.Entry{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
+			)
+		}
 	}
 
 	p := &ledger.Posting{
