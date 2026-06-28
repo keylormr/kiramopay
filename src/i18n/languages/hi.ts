@@ -134,6 +134,13 @@ const hi: TranslationKeys = {
   scanning: 'स्कैन हो रहा है...',
   point_camera: 'कैमरा QR कोड की ओर करें',
   payment_detected: 'भुगतान पता चला',
+  camera_unavailable: 'कैमरा नहीं खुल सका। कोड मैन्युअल रूप से दर्ज करें।',
+  enter_code_manually: 'या कोड मैन्युअल रूप से दर्ज करें',
+  qr_code: 'QR कोड',
+  payment_done: 'भुगतान पूर्ण',
+  amount_qr_hint: 'यदि QR में निश्चित राशि है, तो वही राशि उपयोग होगी।',
+  paying: 'भुगतान हो रहा है...',
+  qr_pay_error: 'भुगतान पूरा नहीं हो सका',
   recipient: 'प्राप्तकर्ता',
   currency: 'मुद्रा',
 

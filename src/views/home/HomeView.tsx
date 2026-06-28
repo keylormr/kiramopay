@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -7,7 +7,8 @@ import { Account, Transaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
-import type { QRPaymentCode } from '@/api/repositories/qrpayment.repository';
+import { refreshAccounts } from '@/services/dataSync';
+import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -16,37 +17,7 @@ const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'ETH', symbol: 'Ξ', flag: '🔷', name: 'Ethereum', type: 'crypto', rateToUsd: 2250 },
 ];
 
-// QR codes simulados para cada usuario y moneda
-const USER_QR_ACCOUNTS = {
-  'user-001': { // Keilor Martinez
-    name: 'Keilor Martinez',
-    accounts: {
-      BTC: { address: 'bc1qkeilor7026509308btc4f2k9', balance: 0.0523 },
-      ETH: { address: '0xKeilor7026509eth30F4a2B1c9', balance: 1.245 },
-      CRC: { address: 'CR-SINPE-70265-0930-CRC', balance: 850000 },
-      USD: { address: 'US-ACH-70265-0930-USD', balance: 1250.50 },
-    }
-  },
-  'user-002': { // Administrador
-    name: 'Admin Sistema',
-    accounts: {
-      BTC: { address: 'bc1qadmin7000000008btc9x3m7', balance: 0.1500 },
-      ETH: { address: '0xAdmin70000000eth00C8b3D2e7', balance: 5.000 },
-      CRC: { address: 'CR-SINPE-70000-0000-CRC', balance: 2500000 },
-      USD: { address: 'US-ACH-70000-0000-USD', balance: 5000.00 },
-    }
-  }
-};
-
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
-
-interface ScannedPayment {
-  userId: string;
-  userName: string;
-  currency: QRCurrency;
-  address: string;
-  suggestedAmount?: number;
-}
 
 interface HomeViewProps {
   onViewAllTransactions?: () => void;
@@ -79,11 +50,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [recipient, setRecipient] = useState('');
   const [selectedCrypto, setSelectedCrypto] = useState<'BTC' | 'ETH' | 'USDT'>('BTC');
 
-  // Scanner States
+  // Scanner / pay-by-QR states. The scanner reads a real QR via the camera
+  // (or manual entry) and pays it through the backend QR rail (scanAndPay),
+  // which moves money atomically on the ledger.
   const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const [scannedPayment, setScannedPayment] = useState<ScannedPayment | null>(null);
+  const [cameraFailed, setCameraFailed] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [scannedQrData, setScannedQrData] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [payLoading, setPayLoading] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [payResult, setPayResult] = useState<QRPayment | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
@@ -145,71 +125,120 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     setActiveSheet('none');
   };
 
-  // Simular escaneo de QR
+  // Abre la hoja del escáner; la cámara arranca en el efecto de abajo.
   const startQRScan = () => {
+    setCameraFailed(false);
+    setManualCode('');
     setActiveSheet('scanner');
-    setIsScanning(true);
-    setScanProgress(0);
-
-    // Simular progreso de escaneo
-    const progressInterval = setInterval(() => {
-      setScanProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 5;
-      });
-    }, 100);
-
-    // Simular deteccion de QR despues de 2-3 segundos
-    const scanTime = 2000 + Math.random() * 1000;
-    setTimeout(() => {
-      clearInterval(progressInterval);
-      setScanProgress(100);
-
-      // Seleccionar usuario aleatorio (diferente al actual)
-      const currentUserId = state.user?.id || 'user-001';
-      const targetUserId = currentUserId === 'user-001' ? 'user-002' : 'user-001';
-      const targetUser = USER_QR_ACCOUNTS[targetUserId as keyof typeof USER_QR_ACCOUNTS];
-
-      // Seleccionar moneda aleatoria
-      const currencies: QRCurrency[] = ['BTC', 'ETH', 'CRC', 'USD'];
-      const randomCurrency = currencies[Math.floor(Math.random() * currencies.length)];
-      const account = targetUser.accounts[randomCurrency];
-
-      setScannedPayment({
-        userId: targetUserId,
-        userName: targetUser.name,
-        currency: randomCurrency,
-        address: account.address,
-      });
-
-      setIsScanning(false);
-      setActiveSheet('scanResult');
-    }, scanTime);
   };
 
-  // Procesar pago escaneado
-  const handleScannedPayment = () => {
-    if (!scannedPayment || !paymentAmount) return;
+  // Escaneo real con la cámara, atado a que la hoja del escáner esté abierta. El
+  // cleanup detiene la cámara y el loop de decodificación → sin fugas al cerrar
+  // o al detectar un código.
+  useEffect(() => {
+    if (activeSheet !== 'scanner') return;
+    let cancelled = false;
+    const canvas = document.createElement('canvas');
 
-    const amt = parseFloat(paymentAmount);
-    const tx: Transaction = {
-      id: Date.now().toString(),
-      title: `Pago QR a ${scannedPayment.userName}`,
-      amount: -amt,
-      ccy: scannedPayment.currency,
-      date: 'Ahora',
-      type: 'debit',
-      category: 'QR Payment',
-      status: 'completed'
+    const start = async () => {
+      try {
+        // jsQR (~110KB) se carga lazy solo al abrir el escáner, fuera del chunk
+        // de HomeView.
+        const jsQR = (await import('jsqr')).default;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((tr) => tr.stop());
+          return;
+        }
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
+        setIsScanning(true);
+        const tick = () => {
+          if (cancelled) return;
+          const v = videoRef.current;
+          if (v && v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth > 0) {
+            canvas.width = v.videoWidth;
+            canvas.height = v.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+              const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+              if (code && code.data) {
+                setScannedQrData(code.data);
+                setPaymentAmount('');
+                setPayError('');
+                setPayResult(null);
+                setActiveSheet('scanResult'); // el cleanup detiene la cámara
+                return;
+              }
+            }
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch {
+        if (!cancelled) setCameraFailed(true);
+      }
     };
+    start();
 
-    dispatch({ type: 'ADD_TRANSACTION', payload: tx });
-    setActiveSheet('none');
-    setScannedPayment(null);
+    return () => {
+      cancelled = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((tr) => tr.stop());
+        streamRef.current = null;
+      }
+      setIsScanning(false);
+    };
+  }, [activeSheet]);
+
+  // Fallback manual: el pagador pega/ingresa el código del QR.
+  const submitManualCode = () => {
+    if (!manualCode.trim()) return;
+    setScannedQrData(manualCode.trim());
+    setManualCode('');
     setPaymentAmount('');
+    setPayError('');
+    setPayResult(null);
+    setActiveSheet('scanResult');
+  };
+
+  // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
+  // el ledger). Generar el código no movía dinero; esto sí.
+  const handleScannedPayment = async () => {
+    if (!scannedQrData) return;
+    setPayLoading(true);
+    setPayError('');
+    try {
+      const api = getApiLayer();
+      if (!api.qrPayments) {
+        setPayError(t('qr_pay_error'));
+        return;
+      }
+      const amt = parseFloat(paymentAmount);
+      const res = await api.qrPayments.scanAndPay({
+        qrData: scannedQrData,
+        amount: Number.isFinite(amt) && amt > 0 ? amt : undefined,
+        currency: baseAccount?.ccy ?? 'CRC',
+      });
+      if (res.success && res.data) {
+        setPayResult(res.data);
+        refreshAccounts().catch(() => {});
+      } else {
+        setPayError(res.error?.message || t('qr_pay_error'));
+      }
+    } catch {
+      setPayError(t('qr_pay_error'));
+    } finally {
+      setPayLoading(false);
+    }
   };
 
   // Genera un QR de cobro real contra el riel QR del backend.
@@ -735,58 +764,69 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </BottomSheet>
       )}
 
-      {/* QR Scanner Sheet */}
+      {/* QR Scanner Sheet — cámara real (jsQR) con fallback manual */}
       <BottomSheet
         isOpen={activeSheet === 'scanner'}
-        onClose={() => { setActiveSheet('none'); setIsScanning(false); }}
+        onClose={() => setActiveSheet('none')}
         title={t('qr_scanner')}
       >
         <div className="flex flex-col items-center py-6">
-          {/* Scanner Viewport */}
+          {/* Scanner Viewport — feed real de la cámara */}
           <div className="relative w-64 h-64 bg-slate-900 rounded-3xl overflow-hidden mb-6">
-            {/* Grid overlay */}
+            <video
+              ref={videoRef}
+              className="absolute inset-0 w-full h-full object-cover"
+              muted
+              playsInline
+            />
             <div className="absolute inset-4 border-2 border-white/30 rounded-2xl">
-              {/* Corner markers */}
               <div className="absolute -top-0.5 -left-0.5 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg" />
               <div className="absolute -top-0.5 -right-0.5 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg" />
               <div className="absolute -bottom-0.5 -left-0.5 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg" />
               <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg" />
             </div>
-
-            {/* Scanning line animation */}
             {isScanning && (
-              <div
-                className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent animate-scan"
-              />
+              <div className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent animate-scan" />
             )}
-
-            {/* Center icon */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Icons.Scan size={48} className="text-white/20" />
-            </div>
+            {!isScanning && !cameraFailed && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Icons.Scan size={48} className="text-white/20" />
+              </div>
+            )}
           </div>
 
           {/* Status */}
           <div className="text-center mb-6">
-            {isScanning ? (
-              <>
-                <p className="text-lg font-bold uv-text-primary mb-2">
-                  {t('scanning')}
-                </p>
-                <div className="w-48 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-100"
-                    style={{ width: `${scanProgress}%` }}
-                  />
-                </div>
-              </>
+            {cameraFailed ? (
+              <p className="text-[var(--color-danger)] text-sm">{t('camera_unavailable')}</p>
             ) : (
-              <p className="uv-text-muted">{t('point_camera')}</p>
+              <p className="uv-text-muted">{isScanning ? t('scanning') : t('point_camera')}</p>
             )}
           </div>
 
-          {/* Supported currencies */}
-          <div className="flex gap-4 justify-center">
+          {/* Fallback manual: pegar el código del QR */}
+          <div className="w-full max-w-xs space-y-2">
+            <label className="text-xs text-gray-500 font-medium">{t('enter_code_manually')}</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder={t('qr_code')}
+                className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-3 py-2 text-sm outline-none uv-text-primary"
+              />
+              <button
+                onClick={submitManualCode}
+                disabled={!manualCode.trim()}
+                className="px-4 rounded-xl bg-[var(--color-primary)] text-white font-bold text-sm disabled:opacity-50"
+              >
+                {t('continue')}
+              </button>
+            </div>
+          </div>
+
+          {/* Monedas soportadas */}
+          <div className="flex gap-4 justify-center mt-6">
             {(['BTC', 'ETH', 'CRC', 'USD'] as QRCurrency[]).map((ccy) => {
               const info = getCurrencyInfo(ccy);
               return (
@@ -802,81 +842,75 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Scan Result Sheet */}
-      {scannedPayment && (
+      {/* Scan Result / Pay Sheet — pago real via scanAndPay (mueve dinero en el ledger) */}
+      {scannedQrData && (
         <BottomSheet
           isOpen={activeSheet === 'scanResult'}
-          onClose={() => { setActiveSheet('none'); setScannedPayment(null); setPaymentAmount(''); }}
-          title={t('payment_detected')}
+          onClose={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); setPayResult(null); }}
+          title={payResult ? t('payment_done') : t('payment_detected')}
         >
-          <div className="space-y-6">
-            {/* Payment info */}
-            <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl uv-surface-1 flex items-center justify-center text-2xl shadow-sm">
-                  {getCurrencyInfo(scannedPayment.currency).flag}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">{t('recipient')}</p>
-                  <p className="text-xl font-black uv-text-primary">
-                    {scannedPayment.userName}
-                  </p>
-                </div>
+          {payResult ? (
+            <div className="flex flex-col items-center space-y-4 py-4">
+              <div className="w-16 h-16 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
+                <Icons.Check size={32} className="text-[var(--color-success)]" />
               </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="uv-text-muted">{t('currency')}</span>
-                  <span className="font-bold uv-text-primary">
-                    {getCurrencyInfo(scannedPayment.currency).name} ({scannedPayment.currency})
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="uv-text-muted">{t('address')}</span>
-                  <span className="font-mono text-xs uv-text-primary truncate max-w-[180px]">
-                    {scannedPayment.address}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Amount input */}
-            <div>
-              <label className="text-sm text-gray-500 font-medium mb-2 block">
-                {t('amount')} ({scannedPayment.currency})
-              </label>
-              <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
-                <span className="text-2xl font-bold uv-text-primary mr-2">
-                  {getCurrencyInfo(scannedPayment.currency).symbol}
-                </span>
-                <input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-3">
+              <p className="text-3xl font-black uv-text-primary tabular-nums">
+                {payResult.currency} {payResult.amount}
+              </p>
+              <p className="uv-text-muted text-sm">{t('payment_done')}</p>
               <button
-                onClick={() => { setActiveSheet('none'); setScannedPayment(null); }}
-                className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-[var(--color-primary)] font-bold"
+                onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
+                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
               >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={handleScannedPayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50"
-              >
-                {t('confirm')}
+                {t('done')}
               </button>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-6">
+                <p className="text-sm text-gray-500 mb-1">{t('qr_code')}</p>
+                <p className="font-mono text-xs uv-text-primary break-all">{scannedQrData}</p>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-500 font-medium mb-2 block">
+                  {t('amount')} ({baseAccount?.ccy ?? 'CRC'})
+                </label>
+                <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
+                  <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2">{t('amount_qr_hint')}</p>
+              </div>
+
+              {payError && (
+                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{payError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
+                  className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  onClick={handleScannedPayment}
+                  disabled={payLoading}
+                  className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50"
+                >
+                  {payLoading ? t('paying') : t('pay')}
+                </button>
+              </div>
+            </div>
+          )}
         </BottomSheet>
       )}
 
