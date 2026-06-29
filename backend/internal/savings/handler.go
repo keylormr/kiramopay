@@ -66,14 +66,15 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request, deposit bool) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
+	idemKey := r.Header.Get("Idempotency-Key")
 	var (
 		g   *Goal
 		err error
 	)
 	if deposit {
-		g, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor)
+		g, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor, idemKey)
 	} else {
-		g, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor)
+		g, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor, idemKey)
 	}
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "SAVINGS_FAILED", err.Error())

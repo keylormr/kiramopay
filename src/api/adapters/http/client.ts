@@ -76,9 +76,11 @@ export class HttpClient {
     body?: unknown,
     auth = true,
     isRetry = false,
+    extraHeaders?: Record<string, string>,
   ): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...extraHeaders,
     };
 
     if (auth) {
@@ -105,7 +107,7 @@ export class HttpClient {
       if (res.status === 401 && auth && !isRetry && refreshHandler) {
         const refreshed = await dedupedRefresh();
         if (refreshed) {
-          return this.request<T>(method, path, body, auth, true);
+          return this.request<T>(method, path, body, auth, true, extraHeaders);
         }
         if (authFailureHandler) authFailureHandler();
         return apiError<T>('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
@@ -143,8 +145,13 @@ export class HttpClient {
     return this.request<T>('GET', path, undefined, auth);
   }
 
-  async post<T>(path: string, body?: unknown, auth = true): Promise<ApiResponse<T>> {
-    return this.request<T>('POST', path, body, auth);
+  async post<T>(
+    path: string,
+    body?: unknown,
+    auth = true,
+    extraHeaders?: Record<string, string>,
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>('POST', path, body, auth, false, extraHeaders);
   }
 
   async patch<T>(path: string, body?: unknown, auth = true): Promise<ApiResponse<T>> {

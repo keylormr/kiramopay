@@ -74,14 +74,17 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 		return err
 	}
 	if g.SavedMinor > 0 {
-		if _, err := s.move(ctx, userID, g, g.SavedMinor, false); err != nil {
+		if _, err := s.move(ctx, userID, g, g.SavedMinor, false, ""); err != nil {
 			return err
 		}
 	}
 	return s.repo.Delete(ctx, id, userID)
 }
 
-func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64) (*Goal, error) {
+// Deposit/Withdraw accept an optional idemKey (the request's Idempotency-Key
+// header). When set, an exact retry of the same request is a no-op instead of a
+// second money movement.
+func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
@@ -101,10 +104,10 @@ func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64) 
 	if bal < amount {
 		return nil, fmt.Errorf("insufficient balance")
 	}
-	return s.move(ctx, userID, g, amount, true)
+	return s.move(ctx, userID, g, amount, true, idemKey)
 }
 
-func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64) (*Goal, error) {
+func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
@@ -118,7 +121,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64)
 		return nil, err
 	}
 	// The authoritative balance gate is the guarded DeductSaved inside move.
-	return s.move(ctx, userID, g, amount, false)
+	return s.move(ctx, userID, g, amount, false, idemKey)
 }
 
 // move posts the balanced ledger transfer between the wallet and SYSTEM:SAVINGS
@@ -132,7 +135,22 @@ func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64)
 //     first, so an overdraft is impossible; saved_minor is then incremented.
 //
 // Callers hold AcquireUserSavingsLock, so the whole sequence is serialized per user.
-func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool) (*Goal, error) {
+func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool, idemKey string) (*Goal, error) {
+	// Idempotent retry: a client-supplied key whose posting already exists means
+	// this exact request was already applied — return the current goal unchanged
+	// rather than moving the money a second time. Safe under the per-user lock.
+	ledgerKey := "savings:" + uuid.NewString()
+	if idemKey != "" {
+		ledgerKey = "savings:" + idemKey
+		done, err := s.ledger.PostingExists(ctx, ledgerKey)
+		if err != nil {
+			return nil, fmt.Errorf("idempotency check: %w", err)
+		}
+		if done {
+			return g, nil
+		}
+	}
+
 	savingsAcct := ledger.Account{SystemCode: ledger.SystemSavingsCRC}
 	if g.Currency == "USD" {
 		savingsAcct = ledger.Account{SystemCode: ledger.SystemSavingsUSD}
@@ -157,11 +175,10 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 		}
 	}
 
-	postID := uuid.NewString()
 	if _, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    desc,
-		IdempotencyKey: "savings:" + postID,
-		TxID:           postID,
+		IdempotencyKey: ledgerKey,
+		TxID:           uuid.NewString(),
 		CreatedBy:      userID,
 		Entries: []ledger.Entry{
 			{Account: debit, Side: ledger.Debit, AmountMinor: amount, Currency: g.Currency},
