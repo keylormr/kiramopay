@@ -248,7 +248,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
 		('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit'),
 		('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
-		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
+		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
+		('SYSTEM:SAVINGS:CRC', 'savings', 'CRC', 'credit'),
+		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -724,6 +726,18 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		quantity INTEGER NOT NULL DEFAULT 1,
 		price BIGINT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS savings_goals (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name VARCHAR(120) NOT NULL,
+		target_minor BIGINT NOT NULL,
+		saved_minor BIGINT NOT NULL DEFAULT 0,
+		currency VARCHAR(3) NOT NULL DEFAULT 'CRC',
+		icon VARCHAR(40) NOT NULL DEFAULT 'piggy-bank',
+		color VARCHAR(20) NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -766,6 +780,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"service_providers",
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
+		"savings_goals",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"totp_recovery_codes", "user_totp",
@@ -789,6 +804,8 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 			('SYSTEM:RESERVE:USD',   'reserve',    'USD', 'debit'),
 			('SYSTEM:ESCROW:CRC',    'escrow',     'CRC', 'credit'),
 			('SYSTEM:ESCROW:USD',    'escrow',     'USD', 'credit'),
+			('SYSTEM:SAVINGS:CRC',   'savings',    'CRC', 'credit'),
+			('SYSTEM:SAVINGS:USD',   'savings',    'USD', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
 		ON CONFLICT (code) DO NOTHING

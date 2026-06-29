@@ -21,6 +21,7 @@ import { HttpEscrowRepository } from './escrow.http';
 import { HttpPayoutRepository } from './payout.http';
 import { HttpB2BRepository } from './b2b.http';
 import { HttpAssistantRepository } from './assistant.http';
+import { HttpSavingsRepository } from './savings.http';
 
 export function createHttpApiLayer(baseUrl: string): ApiLayer {
   const client = new HttpClient(baseUrl);
@@ -48,5 +49,6 @@ export function createHttpApiLayer(baseUrl: string): ApiLayer {
     splitPay: new HttpSplitPayRepository(client),
     cards: new HttpCardsRepository(client),
     country: new HttpCountryRepository(client),
+    savings: new HttpSavingsRepository(client),
   };
 }
