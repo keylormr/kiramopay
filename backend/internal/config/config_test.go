@@ -37,7 +37,7 @@ func TestValidateForProduction_DatabaseURL_SkipsDBVarChecks(t *testing.T) {
 	t.Setenv("METRICS_TOKEN", "metrics-secret")
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
-		Database: DatabaseConfig{SSLMode: "disable", Password: "kiramopay_dev"},
+		Database: DatabaseConfig{SSLMode: "disable", Password: "kiramopay_dev", PIIEncryptionKey: "a-secure-production-pii-key-with-length"},
 		Redis:    RedisConfig{Password: "redis-pass"},
 		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
 	}
@@ -88,7 +88,7 @@ func TestValidateForProduction_AllSecure_NoError(t *testing.T) {
 	t.Setenv("METRICS_TOKEN", "metrics-secret")
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
-		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},
+		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password", PIIEncryptionKey: "a-secure-production-pii-key-with-length"},
 		Redis:    RedisConfig{Password: "redis-pass"},
 		JWT:      JWTConfig{Secret: "a-secure-production-secret-key-with-enough-length"},
 	}

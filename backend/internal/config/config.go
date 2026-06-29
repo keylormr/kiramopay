@@ -68,7 +68,15 @@ type DatabaseConfig struct {
 	SSLRootCert string
 	SSLCert     string
 	SSLKey      string
+	// PIIEncryptionKey is set as the `kiramopay.encryption_key` GUC on every
+	// pooled connection (AfterConnect), so pgcrypto fn_pii_* can encrypt/decrypt
+	// user PII at rest. Required in production (fail-closed).
+	PIIEncryptionKey string
 }
+
+// DevPIIKey is the development default for PII_ENCRYPTION_KEY. Rejected in
+// production by ValidateForProduction, mirroring the JWT secret discipline.
+const DevPIIKey = "dev-pii-encryption-key-change-me-000"
 
 func (d DatabaseConfig) DSN() string {
 	dsn := fmt.Sprintf(
@@ -128,9 +136,10 @@ func Load() *Config {
 			DBName:      getEnv("DB_NAME", "kiramopay"),
 			SSLMode:     getEnv("DB_SSL_MODE", "disable"),
 			MaxConns:    getEnvInt("DB_MAX_CONNS", 50),
-			SSLRootCert: getEnv("DB_SSL_ROOT_CERT", ""),
-			SSLCert:     getEnv("DB_SSL_CERT", ""),
-			SSLKey:      getEnv("DB_SSL_KEY", ""),
+			SSLRootCert:      getEnv("DB_SSL_ROOT_CERT", ""),
+			SSLCert:          getEnv("DB_SSL_CERT", ""),
+			SSLKey:           getEnv("DB_SSL_KEY", ""),
+			PIIEncryptionKey: getEnv("PII_ENCRYPTION_KEY", DevPIIKey),
 		},
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
@@ -202,6 +211,14 @@ func (c *Config) ValidateForProduction() error {
 	}
 	if c.Redis.Password == "" {
 		errs = append(errs, "REDIS_PASSWORD must be set in production")
+	}
+	// PII at rest is encrypted with this key; without it pgcrypto fn_pii_* raises
+	// and every user lookup/registration fails — fail closed at startup instead.
+	if c.Database.PIIEncryptionKey == DevPIIKey {
+		errs = append(errs, "PII_ENCRYPTION_KEY is set to the development default — generate a fresh 32+ byte value")
+	}
+	if len(c.Database.PIIEncryptionKey) < 32 {
+		errs = append(errs, "PII_ENCRYPTION_KEY must be at least 32 characters")
 	}
 	// /metrics is left open when METRICS_TOKEN is unset; require it in production
 	// so operational telemetry (incl. ledger drift) is never internet-exposed.

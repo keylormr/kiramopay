@@ -10,9 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
+
+// testPIIKey is the fixed PII encryption key for tests, set as the
+// kiramopay.encryption_key GUC on every connection so pgcrypto fn_pii_* work.
+const testPIIKey = "test-pii-encryption-key-0123456789ab"
 
 // TestDB returns a pgxpool connected to the test database.
 // It creates all tables and truncates them after the test.
@@ -27,7 +32,17 @@ func TestDB(t *testing.T) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, dsn)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Skipf("Skipping integration test: cannot parse test DB DSN: %v", err)
+	}
+	// Set the PII encryption GUC per connection so pgcrypto fn_pii_* can
+	// encrypt/decrypt user PII (mirrors the app's NewPostgresPool AfterConnect).
+	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `SELECT set_config('kiramopay.encryption_key', $1, false)`, testPIIKey)
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		t.Skipf("Skipping integration test: cannot connect to test DB: %v", err)
 	}
@@ -88,16 +103,43 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	schema := `
 	CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+	-- PII-at-rest helpers (mirror migration 024). The encryption key is read from
+	-- the kiramopay.encryption_key GUC, set per connection in TestDB.
+	CREATE OR REPLACE FUNCTION fn_encryption_key() RETURNS TEXT AS $FN$
+	DECLARE k TEXT;
+	BEGIN
+		BEGIN k := current_setting('kiramopay.encryption_key'); EXCEPTION WHEN OTHERS THEN k := NULL; END;
+		IF k IS NULL OR length(k) < 32 THEN RAISE EXCEPTION 'kiramopay.encryption_key not set'; END IF;
+		RETURN k;
+	END; $FN$ LANGUAGE plpgsql STABLE;
+
+	CREATE OR REPLACE FUNCTION fn_pii_hmac(p_value TEXT) RETURNS VARCHAR(64) AS $FN$
+		SELECT encode(hmac(lower(trim(p_value)), fn_encryption_key() || ':pii', 'sha256'), 'hex');
+	$FN$ LANGUAGE sql STABLE;
+
+	CREATE OR REPLACE FUNCTION fn_pii_encrypt(p_value TEXT) RETURNS BYTEA AS $FN$
+		SELECT CASE WHEN p_value IS NULL OR p_value = '' THEN NULL
+		            ELSE pgp_sym_encrypt(p_value, fn_encryption_key(), 'compress-algo=2, cipher-algo=aes256') END;
+	$FN$ LANGUAGE sql STABLE;
+
+	CREATE OR REPLACE FUNCTION fn_pii_decrypt(p_blob BYTEA) RETURNS TEXT AS $FN$
+		SELECT CASE WHEN p_blob IS NULL THEN NULL ELSE pgp_sym_decrypt(p_blob, fn_encryption_key()) END;
+	$FN$ LANGUAGE sql STABLE;
+
 	CREATE TABLE IF NOT EXISTS users (
 		id UUID PRIMARY KEY,
-		cedula VARCHAR(20) UNIQUE NOT NULL,
-		phone VARCHAR(20) NOT NULL,
+		cedula_enc BYTEA NOT NULL,
+		cedula_hash VARCHAR(64) UNIQUE NOT NULL,
+		phone_enc BYTEA NOT NULL,
+		phone_hash VARCHAR(64) UNIQUE NOT NULL,
 		phone_verified BOOLEAN DEFAULT false,
-		email VARCHAR(255),
+		email_enc BYTEA,
+		email_hash VARCHAR(64),
 		email_verified BOOLEAN DEFAULT false,
 		first_name VARCHAR(100) NOT NULL,
 		last_name VARCHAR(100) NOT NULL,
 		birth_date DATE,
+		birth_date_enc BYTEA,
 		profile_picture_url TEXT,
 		password_hash TEXT NOT NULL,
 		biometric_enabled BOOLEAN DEFAULT false,
@@ -822,8 +864,8 @@ func SeedTestUser(t *testing.T, pool *pgxpool.Pool, cedula, passwordHash string)
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level)
-		 VALUES ($1, $2, '+50688881234', 'Test', 'User', $3, 'active', 1)
+		`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level)
+		 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt('+50688881234'), fn_pii_hmac('+50688881234'), 'Test', 'User', $3, 'active', 1)
 		 ON CONFLICT (id) DO NOTHING`,
 		userID, cedula, passwordHash,
 	); err != nil {
@@ -883,8 +925,8 @@ func SeedTestUser2(t *testing.T, pool *pgxpool.Pool) string {
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level, role)
-		 VALUES ($1, '700000000', '+50688885678', 'Admin', 'User', 'dummy_hash', 'active', 1, 'admin')
+		`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, role)
+		 VALUES ($1, fn_pii_encrypt('700000000'), fn_pii_hmac('700000000'), fn_pii_encrypt('+50688885678'), fn_pii_hmac('+50688885678'), 'Admin', 'User', 'dummy_hash', 'active', 1, 'admin')
 		 ON CONFLICT (id) DO NOTHING`,
 		userID,
 	); err != nil {

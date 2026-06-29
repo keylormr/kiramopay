@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/exaring/otelpgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/config"
 )
@@ -35,6 +36,16 @@ func NewPostgresPool(cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
 	poolCfg.MaxConnLifetime = 30 * time.Minute
 	poolCfg.MaxConnIdleTime = 5 * time.Minute
 	poolCfg.HealthCheckPeriod = 30 * time.Second
+
+	// Set the PII encryption key as a session GUC on every connection so pgcrypto
+	// fn_pii_* can encrypt/decrypt user PII at rest. Parameterized via set_config
+	// (never string-interpolated). The key lives only in app config, never on disk.
+	if key := cfg.PIIEncryptionKey; key != "" {
+		poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+			_, err := conn.Exec(ctx, `SELECT set_config('kiramopay.encryption_key', $1, false)`, key)
+			return err
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
