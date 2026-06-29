@@ -42,6 +42,7 @@ import (
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
 	"github.com/kiramopay/backend/internal/recurring"
+	"github.com/kiramopay/backend/internal/savings"
 	"github.com/kiramopay/backend/internal/sinpe"
 	"github.com/kiramopay/backend/internal/splitpay"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -181,6 +182,7 @@ func main() {
 	countryRepo := country.NewRepository(pool)
 	budgetRepo := budget.NewRepository(pool)
 	recurringRepo := recurring.NewRepository(pool)
+	savingsRepo := savings.NewRepository(pool)
 
 	// ── Services ─────────────────────────────────────────────────────────
 	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
@@ -261,6 +263,7 @@ func main() {
 	countryService := country.NewService(countryRepo)
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
+	savingsService := savings.NewService(savingsRepo, ledgerEngine, txService)
 
 	// Conversational assistant. The LLM stays a true nil interface when no
 	// provider key is set, so the service reports itself unavailable instead of
@@ -310,6 +313,7 @@ func main() {
 	countryHandler := country.NewHandler(countryService)
 	budgetHandler := budget.NewHandler(budgetService)
 	recurringHandler := recurring.NewHandler(recurringService)
+	savingsHandler := savings.NewHandler(savingsService)
 
 	// ── WebSocket + price broadcaster ────────────────────────────────────
 	wsHub := ws.NewHub(logger)
@@ -630,6 +634,13 @@ func main() {
 			r.Delete("/recurring/{id}", recurringHandler.Delete)
 			r.Post("/recurring/{id}/toggle", recurringHandler.Toggle)
 			r.Post("/recurring/{id}/mark-paid", recurringHandler.MarkPaid)
+
+			// Savings goals (deposit/withdraw move money via the ledger)
+			r.Get("/savings/goals", savingsHandler.List)
+			r.Post("/savings/goals", savingsHandler.Create)
+			r.Delete("/savings/goals/{id}", savingsHandler.Delete)
+			r.Post("/savings/goals/{id}/deposit", savingsHandler.Deposit)
+			r.Post("/savings/goals/{id}/withdraw", savingsHandler.Withdraw)
 
 			// ─────────────────────────────────────────────────────────
 			// Admin-only routes — gated on role = 'admin'.

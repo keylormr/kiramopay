@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { useSavingsStore, SavingsGoal } from '@/stores/savings.store';
 import { useApp } from '@/hooks/useApp';
+import { getApiLayer } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
 import type { Transaction } from '@/types';
+
+const hasBackend = !!import.meta.env.VITE_API_URL;
 
 const GOAL_ICONS = [
   { id: 'piggy-bank', Icon: Icons.PiggyBank, label: 'Ahorro' },
@@ -36,7 +40,36 @@ const iconLookup: Record<string, React.FC<{ size?: number; className?: string; s
 export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
   const { state, dispatch } = useApp();
-  const { goals, addGoal, addToGoal, removeGoal } = useSavingsStore();
+  const { goals, addGoal, removeGoal, setGoals, updateGoal } = useSavingsStore();
+
+  // Load goals from the backend (real) or the local mock adapter on open.
+  useEffect(() => {
+    const api = getApiLayer();
+    if (!api.savings) return;
+    let cancelled = false;
+    api.savings.getGoals().then((res) => {
+      if (!cancelled && res.success && res.data) setGoals(res.data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [setGoals]);
+
+  // In mock mode there is no backend ledger, so the view mirrors the wallet
+  // movement locally; in http mode the backend moves the money and we refresh.
+  const localWalletTx = (amount: number, label: string, credit: boolean) => {
+    const acct = state.accounts.find((a) => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
+    if (!acct) return;
+    const tx: Transaction = {
+      id: Date.now().toString(),
+      title: label,
+      amount: credit ? amount : -amount,
+      ccy: acct.ccy,
+      date: new Date().toLocaleDateString(),
+      type: credit ? 'credit' : 'debit',
+      category: 'Savings',
+      status: 'completed',
+    };
+    dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+  };
 
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showDepositSheet, setShowDepositSheet] = useState(false);
@@ -61,17 +94,17 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
   };
 
-  const handleAddGoal = () => {
+  const handleAddGoal = async () => {
     if (!goalName || !goalTarget) return;
-    addGoal({
-      id: Date.now().toString(),
+    const api = getApiLayer();
+    if (!api.savings) return;
+    const res = await api.savings.createGoal({
       name: goalName,
       target: parseFloat(goalTarget),
-      saved: 0,
       icon: goalIcon,
       color: goalColor,
-      createdAt: new Date().toISOString(),
     });
+    if (res.success && res.data) addGoal(res.data);
     setGoalName('');
     setGoalTarget('');
     setGoalIcon('piggy-bank');
@@ -79,34 +112,41 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setShowAddSheet(false);
   };
 
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     if (!selectedGoal || !depositAmount) return;
     const amount = parseFloat(depositAmount);
     if (amount <= 0) return;
 
-    // Check sufficient funds
+    // Check sufficient funds against the displayed wallet balance.
     const baseAccount = state.accounts.find(a => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
     if (!baseAccount || amount > baseAccount.balance) return;
 
-    // Add to savings goal
-    addToGoal(selectedGoal.id, amount);
-
-    // Deduct from account balance via transaction
-    const tx: Transaction = {
-      id: Date.now().toString(),
-      title: `${t('savings_title')}: ${selectedGoal.name}`,
-      amount: -amount,
-      ccy: baseAccount.ccy,
-      date: new Date().toLocaleDateString(),
-      type: 'debit',
-      category: 'Savings',
-      status: 'completed',
-    };
-    dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+    const api = getApiLayer();
+    if (!api.savings) return;
+    const res = await api.savings.deposit(selectedGoal.id, amount);
+    if (res.success && res.data) {
+      updateGoal(selectedGoal.id, { saved: res.data.saved });
+      // http: the backend moved the money; sync the real balance.
+      // mock: mirror the wallet debit locally.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+    }
 
     setDepositAmount('');
     setShowDepositSheet(false);
     setSelectedGoal(null);
+  };
+
+  const handleDelete = async (goal: SavingsGoal) => {
+    const api = getApiLayer();
+    if (!api.savings) return;
+    const res = await api.savings.deleteGoal(goal.id);
+    if (res.success) {
+      removeGoal(goal.id);
+      // Deleting returns any held savings to the wallet.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
+    }
   };
 
   const openDeposit = (goal: SavingsGoal) => {
@@ -251,7 +291,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                       {t('savings_add_money')}
                     </button>
                     <button
-                      onClick={() => removeGoal(goal.id)}
+                      onClick={() => handleDelete(goal)}
                       className="px-4 py-2.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-500 text-sm font-bold active:scale-95 transition-all"
                     >
                       <Icons.X size={16} />

@@ -46,6 +46,8 @@ const (
 	SystemReserveUSD  SystemAccountCode = "SYSTEM:RESERVE:USD"
 	SystemEscrowCRC   SystemAccountCode = "SYSTEM:ESCROW:CRC"
 	SystemEscrowUSD   SystemAccountCode = "SYSTEM:ESCROW:USD"
+	SystemSavingsCRC  SystemAccountCode = "SYSTEM:SAVINGS:CRC"
+	SystemSavingsUSD  SystemAccountCode = "SYSTEM:SAVINGS:USD"
 )
 
 // Account is a polymorphic reference to either a user wallet account or a
