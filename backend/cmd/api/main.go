@@ -284,18 +284,21 @@ func main() {
 	)
 
 	// ── Handlers ─────────────────────────────────────────────────────────
+	// devMode gates dev-only secret echoes (password-reset token, MFA code).
+	// It is derived from trusted server config, NEVER from a request header.
+	devMode := cfg.Server.Environment == "development"
 	// Mark the session cookie Secure (and use the __Host- name) outside of local
 	// development, where the API is served over HTTPS.
 	authHandler := auth.NewHandler(authService, auth.CookieConfig{
 		Secure: cfg.Server.Environment != "development",
-	})
+	}, devMode)
 	userHandler := user.NewHandler(userService)
 	walletHandler := wallet.NewHandler(walletService)
 	txHandler := transaction.NewHandler(txService)
 	sinpeHandler := sinpe.NewHandler(sinpeService)
 	paymentHandler := payment.NewHandler(paymentService)
 	cryptoHandler := crypto.NewHandler(cryptoService)
-	mfaHandler := mfa.NewHandler(mfaSvc)
+	mfaHandler := mfa.NewHandler(mfaSvc, devMode)
 	escrowHandler := escrow.NewHandler(escrowService)
 	payoutHandler := payout.NewHandler(payoutService)
 	assistantHandler := assistant.NewHandler(assistantService)
@@ -316,6 +319,7 @@ func main() {
 	savingsHandler := savings.NewHandler(savingsService)
 
 	// ── WebSocket + price broadcaster ────────────────────────────────────
+	ws.SetAllowedOrigins(cfg.CORS.Origins) // Origin allowlist for the WS handshake (CSWSH defense)
 	wsHub := ws.NewHub(logger)
 	go wsHub.Run()
 	broadcaster := ws.NewPriceBroadcaster(wsHub, priceService, logger)

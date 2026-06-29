@@ -34,6 +34,7 @@ func TestValidateForProduction_DatabaseURL_SkipsDBVarChecks(t *testing.T) {
 	// (database.NewPostgresPool prefers DATABASE_URL), so their checks must not
 	// gate startup even at their development defaults.
 	t.Setenv("DATABASE_URL", "postgres://u:p@neon.example/db?sslmode=require")
+	t.Setenv("METRICS_TOKEN", "metrics-secret")
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "disable", Password: "kiramopay_dev"},
@@ -84,6 +85,7 @@ func TestValidateForProduction_Development_NoError(t *testing.T) {
 
 func TestValidateForProduction_AllSecure_NoError(t *testing.T) {
 	t.Setenv("DATABASE_URL", "") // individual DB_* vars are the connection source here
+	t.Setenv("METRICS_TOKEN", "metrics-secret")
 	cfg := &Config{
 		Server:   ServerConfig{Environment: "production"},
 		Database: DatabaseConfig{SSLMode: "verify-full", Password: "strong-password"},

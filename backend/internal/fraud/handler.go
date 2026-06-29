@@ -17,18 +17,26 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// AssessTransaction is called internally by other services before processing a transaction.
-// Can also be called via API for manual assessment.
+// AssessTransaction assesses the AUTHENTICATED caller's own transaction. The
+// subject is taken from the session, never the request body, so a user cannot
+// assess, mutate the risk profile of, or probe the restricted state of another
+// account (IDOR).
 func (h *Handler) AssessTransaction(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
 	var req AssessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
+	req.UserID = userID // bind to the caller; ignore any body-supplied user_id
 
 	assessment, err := h.service.AssessTransaction(r.Context(), &req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "ASSESS_FAILED", err.Error())
+		response.Error(w, http.StatusInternalServerError, "ASSESS_FAILED", "could not assess transaction")
 		return
 	}
 	response.JSON(w, http.StatusOK, assessment)

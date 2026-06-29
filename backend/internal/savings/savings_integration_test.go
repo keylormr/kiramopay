@@ -122,6 +122,36 @@ func TestSavings_Withdraw_ExceedsSaved(t *testing.T) {
 	}
 }
 
+// The guarded decrement makes saved_minor the authoritative gate: once a goal is
+// emptied, a repeat withdraw of the same amount fails instead of fabricating a
+// second wallet credit (the TOCTOU money-creation path).
+func TestSavings_Withdraw_NoDoubleSpend(t *testing.T) {
+	svc, pool, user := setupSavings(t)
+	ctx := context.Background()
+	g := newGoal(t, svc, user)
+	const amt int64 = 30000
+	if _, err := svc.Deposit(ctx, user, g.ID, amt); err != nil {
+		t.Fatalf("deposit: %v", err)
+	}
+	wMid := walletCRC(t, pool, user)
+
+	if _, err := svc.Withdraw(ctx, user, g.ID, amt); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	// A second withdraw of the same amount must fail — the goal is empty.
+	if _, err := svc.Withdraw(ctx, user, g.ID, amt); err == nil {
+		t.Fatal("expected second withdraw to fail (no funds to double-spend)")
+	}
+	// The wallet was credited exactly once.
+	if got := walletCRC(t, pool, user); got != wMid+amt {
+		t.Fatalf("wallet = %d, want %d (single credit)", got, wMid+amt)
+	}
+	// SYSTEM:SAVINGS was not driven negative.
+	if got := savingsHeldCRC(t, pool); got < 0 {
+		t.Fatalf("savings held went negative: %d", got)
+	}
+}
+
 // Deleting a goal returns any held savings to the wallet — nothing is stranded.
 func TestSavings_Delete_RefundsHeld(t *testing.T) {
 	svc, pool, user := setupSavings(t)

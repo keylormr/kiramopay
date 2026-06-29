@@ -225,3 +225,32 @@ func TestServeWs_PublicFeed_IgnoresAuth(t *testing.T) {
 		t.Fatalf("got %q, want price_update", got)
 	}
 }
+
+func TestOriginAllowed(t *testing.T) {
+	SetAllowedOrigins([]string{"https://kiramopay.vercel.app"})
+	defer SetAllowedOrigins(nil)
+	cases := []struct {
+		origin string
+		want   bool
+	}{
+		{"", true},                             // native / non-browser (no Origin)
+		{"https://kiramopay.vercel.app", true}, // allowlisted
+		{"capacitor://localhost", true},        // native webview
+		{"ionic://localhost", true},
+		{"http://localhost:9999", true}, // local dev
+		{"http://127.0.0.1:9999", true},
+		{"https://evil.com", false},                     // cross-origin
+		{"https://localhost.evil.com", false},           // prefix-bypass attempt
+		{"http://localhostevil.com", false},             // prefix-bypass attempt
+		{"https://kiramopay.vercel.app.evil.com", false}, // suffix-bypass attempt
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest(http.MethodGet, "/ws/notifications", nil)
+		if c.origin != "" {
+			r.Header.Set("Origin", c.origin)
+		}
+		if got := originAllowed(r); got != c.want {
+			t.Errorf("originAllowed(%q) = %v, want %v", c.origin, got, c.want)
+		}
+	}
+}

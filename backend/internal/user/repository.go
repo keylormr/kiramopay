@@ -27,6 +27,13 @@ func (r *Repository) IsAdmin(ctx context.Context, userID string) (bool, error) {
 	return role == "admin", nil
 }
 
+// SECURITY / KNOWN GAP: PII (cedula, phone, email) is currently stored and
+// queried in PLAINTEXT. Migration 024 added *_enc/*_hash columns and pgcrypto
+// helpers (fn_pii_encrypt/fn_pii_hmac) for encryption-at-rest, but the app does
+// NOT yet write or read them — so the encryption is inert. Wiring it (write
+// *_enc on create, look up by fn_pii_hmac, decrypt on read, then drop the
+// plaintext columns) plus a fail-closed startup guard for kiramopay.encryption_key
+// is tracked as a follow-up. Until then, do not claim PII-at-rest is protected.
 func (r *Repository) Create(ctx context.Context, u *UserRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO users (id, cedula, phone, first_name, last_name, email, password_hash, status, kyc_level, kyc_status)

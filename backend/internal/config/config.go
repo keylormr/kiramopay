@@ -203,6 +203,11 @@ func (c *Config) ValidateForProduction() error {
 	if c.Redis.Password == "" {
 		errs = append(errs, "REDIS_PASSWORD must be set in production")
 	}
+	// /metrics is left open when METRICS_TOKEN is unset; require it in production
+	// so operational telemetry (incl. ledger drift) is never internet-exposed.
+	if os.Getenv("METRICS_TOKEN") == "" {
+		errs = append(errs, "METRICS_TOKEN must be set in production (else /metrics is publicly exposed)")
+	}
 	// A wildcard origin combined with AllowCredentials:true (main.go) would
 	// reflect credentials to any site. Require an explicit allowlist.
 	for _, o := range c.CORS.Origins {

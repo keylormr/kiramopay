@@ -16,10 +16,11 @@ import (
 type Handler struct {
 	service *Service
 	cookies CookieConfig
+	devMode bool // server runs in development; gates the dev-token echo
 }
 
-func NewHandler(service *Service, cookies CookieConfig) *Handler {
-	return &Handler{service: service, cookies: cookies}
+func NewHandler(service *Service, cookies CookieConfig, devMode bool) *Handler {
+	return &Handler{service: service, cookies: cookies, devMode: devMode}
 }
 
 // noStore marks an auth response uncacheable so tokens are never written to a
@@ -214,7 +215,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]string{"message": "if the account exists, a reset link has been sent"}
-	if token != "" && isDevMode(r) {
+	if token != "" && h.isDevMode(r) {
 		resp["dev_token"] = token
 	}
 	response.JSON(w, http.StatusAccepted, resp)
@@ -237,7 +238,10 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"message": "Password reset successful"})
 }
 
-func isDevMode(r *http.Request) bool {
-	// Dev hint header injected by infra; never trusted in production env.
-	return r.Header.Get("X-Kiramopay-Dev") == "true"
+// isDevMode reports whether the dev-only token echo is allowed. It is gated on
+// the SERVER's environment (set at construction from config) — the request
+// header alone is never trusted, so a client cannot turn on dev mode in
+// production and exfiltrate the reset token.
+func (h *Handler) isDevMode(r *http.Request) bool {
+	return h.devMode && r.Header.Get("X-Kiramopay-Dev") == "true"
 }

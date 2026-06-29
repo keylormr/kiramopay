@@ -64,6 +64,11 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateGoalRequ
 // Delete refunds any held savings back to the wallet, then removes the goal — so
 // money is never stranded in SYSTEM:SAVINGS.
 func (s *Service) Delete(ctx context.Context, userID, id string) error {
+	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	g, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
 		return err
@@ -80,6 +85,11 @@ func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64) 
 	if amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
+	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	g, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
 		return nil, err
@@ -98,18 +108,30 @@ func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64)
 	if amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
+	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	g, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
 		return nil, err
 	}
-	if g.SavedMinor < amount {
-		return nil, fmt.Errorf("amount exceeds amount saved")
-	}
+	// The authoritative balance gate is the guarded DeductSaved inside move.
 	return s.move(ctx, userID, g, amount, false)
 }
 
 // move posts the balanced ledger transfer between the wallet and SYSTEM:SAVINGS
 // and updates the goal. deposit=true: wallet -> savings; false: savings -> wallet.
+//
+// Ordering is deliberate so no path can fabricate money:
+//   - Withdraw: the guarded saved_minor decrement runs BEFORE the (irreversible)
+//     wallet credit. SYSTEM:SAVINGS has no floor, so saved_minor is the only gate;
+//     claiming it first means two concurrent withdrawals can't double-credit.
+//   - Deposit: the wallet debit (gated by the ledger's non-negative floor) runs
+//     first, so an overdraft is impossible; saved_minor is then incremented.
+//
+// Callers hold AcquireUserSavingsLock, so the whole sequence is serialized per user.
 func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool) (*Goal, error) {
 	savingsAcct := ledger.Account{SystemCode: ledger.SystemSavingsCRC}
 	if g.Currency == "USD" {
@@ -118,14 +140,21 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 	userAcct := ledger.Account{UserID: userID}
 
 	debit, credit := userAcct, savingsAcct
-	delta := amount
 	txType := transaction.TypeSavingsDeposit
 	desc := "savings deposit: " + g.Name
 	if !deposit {
 		debit, credit = savingsAcct, userAcct
-		delta = -amount
 		txType = transaction.TypeSavingsWithdraw
 		desc = "savings withdraw: " + g.Name
+	}
+
+	var updated *Goal
+	if !deposit {
+		// Claim the held funds atomically before any irreversible money movement.
+		var err error
+		if updated, err = s.repo.DeductSaved(ctx, g.ID, userID, amount); err != nil {
+			return nil, err
+		}
 	}
 
 	postID := uuid.NewString()
@@ -139,12 +168,18 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 			{Account: credit, Side: ledger.Credit, AmountMinor: amount, Currency: g.Currency},
 		},
 	}); err != nil {
+		if !deposit {
+			// Compensate the decrement: the wallet credit never happened.
+			_, _ = s.repo.AddSaved(ctx, g.ID, userID, amount)
+		}
 		return nil, fmt.Errorf("savings ledger post: %w", err)
 	}
 
-	updated, err := s.repo.AddSaved(ctx, g.ID, userID, delta)
-	if err != nil {
-		return nil, err
+	if deposit {
+		var err error
+		if updated, err = s.repo.AddSaved(ctx, g.ID, userID, amount); err != nil {
+			return nil, err
+		}
 	}
 
 	if s.history != nil {

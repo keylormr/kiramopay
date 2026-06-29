@@ -11,9 +11,10 @@ import (
 
 type Handler struct {
 	service *Service
+	devMode bool // server runs in development; gates the dev-code echo
 }
 
-func NewHandler(s *Service) *Handler { return &Handler{service: s} }
+func NewHandler(s *Service, devMode bool) *Handler { return &Handler{service: s, devMode: devMode} }
 
 type issueRequest struct {
 	Purpose string `json:"purpose"`
@@ -43,8 +44,9 @@ func (h *Handler) Issue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]string{"status": "issued"}
-	// Dev-mode echo via header (never in prod).
-	if r.Header.Get("X-Kiramopay-Dev") == "true" {
+	// Dev-mode echo: gated on the SERVER environment, never the request header
+	// alone — otherwise a client could read the step-up code and bypass MFA.
+	if h.devMode && r.Header.Get("X-Kiramopay-Dev") == "true" {
 		resp["dev_code"] = code
 	}
 	response.JSON(w, http.StatusCreated, resp)

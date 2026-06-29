@@ -3,6 +3,7 @@ package savings
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -89,6 +90,51 @@ func (r *Repository) AddSaved(ctx context.Context, id, userID string, delta int6
 		return nil, err
 	}
 	return g, nil
+}
+
+// DeductSaved atomically decrements saved_minor by amount, but ONLY if the goal
+// currently holds at least that much. Returns the updated goal, or an error when
+// the amount exceeds what is saved (0 rows). This is the authoritative gate for
+// withdrawals: because the check and the decrement are one atomic UPDATE,
+// concurrent withdrawals cannot both pass and double-spend a goal's balance.
+func (r *Repository) DeductSaved(ctx context.Context, id, userID string, amount int64) (*Goal, error) {
+	g, err := scanGoal(r.db.QueryRow(ctx,
+		`UPDATE savings_goals SET saved_minor = saved_minor - $3
+		 WHERE id = $1 AND user_id = $2 AND saved_minor >= $3 RETURNING `+goalCols,
+		id, userID, amount))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("amount exceeds amount saved")
+		}
+		return nil, err
+	}
+	return g, nil
+}
+
+// AcquireUserSavingsLock takes a session-level advisory lock keyed by the user
+// so a deposit/withdraw and its ledger posting form one critical section per
+// user. The returned function MUST be called to release the lock and connection.
+func (r *Repository) AcquireUserSavingsLock(ctx context.Context, userID string) (func(), error) {
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire conn: %w", err)
+	}
+	key := advisoryKey("savings:move", userID)
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, key); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("advisory lock: %w", err)
+	}
+	return func() {
+		// Detached context so the unlock runs even if the request ctx was cancelled.
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
+		conn.Release()
+	}, nil
+}
+
+func advisoryKey(namespace, id string) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(namespace + ":" + id))
+	return int64(h.Sum64()) // #nosec G115 -- advisory-lock key; any int64 value is valid for pg_advisory_lock
 }
 
 // WalletBalance returns the user's spendable balance in the given currency.

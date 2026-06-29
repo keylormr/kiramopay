@@ -92,6 +92,10 @@ export class HttpClient {
       const res = await fetch(`${this.baseUrl}${path}`, {
         method,
         headers,
+        // Send the HttpOnly refresh cookie so the BFF session-restore works
+        // regardless of same-origin vs cross-origin deployment (backend CORS
+        // sets Access-Control-Allow-Credentials: true).
+        credentials: 'include',
         body: body ? JSON.stringify(body) : undefined,
       });
 
