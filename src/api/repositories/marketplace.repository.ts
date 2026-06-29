@@ -23,6 +23,7 @@ export interface IMarketplaceRepository {
   connectPartner(partnerCode: string): Promise<ApiResponse<void>>;
   disconnectPartner(partnerCode: string): Promise<ApiResponse<void>>;
   createRide(request: CreateRideRequest): Promise<ApiResponse<RideRequest>>;
+  confirmRide(rideId: string): Promise<ApiResponse<RideRequest>>;
   listRides(): Promise<ApiResponse<RideRequest[]>>;
   getRide(rideId: string): Promise<ApiResponse<RideRequest>>;
   createFoodOrder(request: CreateFoodOrderRequest): Promise<ApiResponse<FoodOrder>>;

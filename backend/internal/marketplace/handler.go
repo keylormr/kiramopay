@@ -30,6 +30,17 @@ func (h *Handler) GetPartners(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) ConfirmRide(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	rideID := chi.URLParam(r, "id")
+	ride, err := h.service.ConfirmRide(r.Context(), userID, rideID)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "CONFIRM_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, ride)
+}
+
 func (h *Handler) ConnectPartner(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var req ConnectPartnerRequest

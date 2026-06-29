@@ -669,6 +669,64 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		is_active BOOLEAN DEFAULT TRUE
 	);
 
+	-- Marketplace (migration 005)
+	CREATE TABLE IF NOT EXISTS marketplace_partners (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		code VARCHAR(50) NOT NULL UNIQUE,
+		name VARCHAR(100) NOT NULL,
+		category VARCHAR(30) NOT NULL,
+		logo VARCHAR(100) DEFAULT '',
+		color VARCHAR(20) DEFAULT '#000000',
+		description TEXT DEFAULT '',
+		active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS user_partner_connections (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		partner_code VARCHAR(50) NOT NULL REFERENCES marketplace_partners(code),
+		connected_at TIMESTAMP DEFAULT NOW(),
+		UNIQUE(user_id, partner_code)
+	);
+	CREATE TABLE IF NOT EXISTS ride_requests (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		partner_code VARCHAR(50) NOT NULL,
+		pickup TEXT NOT NULL,
+		destination TEXT NOT NULL,
+		estimated_price BIGINT NOT NULL,
+		estimated_time VARCHAR(30) NOT NULL,
+		distance VARCHAR(30) NOT NULL,
+		status VARCHAR(20) DEFAULT 'searching',
+		driver_name VARCHAR(100),
+		driver_rating DOUBLE PRECISION,
+		driver_car VARCHAR(100),
+		driver_plate VARCHAR(20),
+		final_price BIGINT,
+		created_at TIMESTAMP DEFAULT NOW(),
+		completed_at TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS food_orders (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		partner_code VARCHAR(50) NOT NULL,
+		restaurant_name VARCHAR(200) NOT NULL,
+		subtotal BIGINT NOT NULL,
+		delivery_fee BIGINT NOT NULL,
+		total BIGINT NOT NULL,
+		status VARCHAR(20) DEFAULT 'preparing',
+		estimated_delivery VARCHAR(30) NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW(),
+		completed_at TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS food_order_items (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		order_id UUID NOT NULL REFERENCES food_orders(id) ON DELETE CASCADE,
+		name VARCHAR(200) NOT NULL,
+		quantity INTEGER NOT NULL DEFAULT 1,
+		price BIGINT NOT NULL
+	);
+
 	CREATE TABLE IF NOT EXISTS savings_goals (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -720,6 +778,8 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"payouts",
 		"qr_payments", "qr_payment_codes", "qr_merchants",
 		"service_providers",
+		"food_order_items", "food_orders", "ride_requests",
+		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
 		"journal_entries", "journal_postings",
 		"transactions",

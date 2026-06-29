@@ -80,6 +80,34 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     });
   }
 
+  async confirmRide(rideId: string): Promise<ApiResponse<RideRequest>> {
+    const res = await this.client.post<{
+      id: string; partner_code: string; pickup: string; destination: string;
+      estimated_price: number; estimated_time: string; distance: string; status: string;
+      driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+    }>(`/api/v1/marketplace/rides/${rideId}/confirm`, {});
+
+    if (!res.success || !res.data) return apiError('CONFIRM_FAILED', res.error?.message || 'Failed');
+
+    return apiSuccess({
+      id: res.data.id,
+      partnerId: res.data.partner_code,
+      pickup: res.data.pickup,
+      destination: res.data.destination,
+      estimatedPrice: res.data.estimated_price / 100,
+      estimatedTime: res.data.estimated_time,
+      distance: res.data.distance,
+      status: res.data.status as RideRequest['status'],
+      driver: res.data.driver_name ? {
+        name: res.data.driver_name,
+        rating: res.data.driver_rating,
+        car: res.data.driver_car,
+        plate: res.data.driver_plate,
+        photo: '',
+      } : undefined,
+    });
+  }
+
   async listRides(): Promise<ApiResponse<RideRequest[]>> {
     const res = await this.client.get<Array<{
       id: string; partner_code: string; pickup: string; destination: string;

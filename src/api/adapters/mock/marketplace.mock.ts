@@ -81,6 +81,16 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
     return apiSuccess(ride);
   }
 
+  async confirmRide(rideId: string): Promise<ApiResponse<RideRequest>> {
+    const state = getState();
+    const rides: RideRequest[] = state?.rides ?? [];
+    const i = rides.findIndex((r) => r.id === rideId);
+    if (i === -1) return apiError('NOT_FOUND', 'Viaje no encontrado');
+    rides[i] = { ...rides[i], status: 'confirmed' };
+    saveField('rides', rides);
+    return apiSuccess(rides[i]);
+  }
+
   async listRides(): Promise<ApiResponse<RideRequest[]>> {
     const state = getState();
     return apiSuccess(state?.rides ?? []);

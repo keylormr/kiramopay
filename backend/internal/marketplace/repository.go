@@ -72,6 +72,19 @@ func (r *Repository) DisconnectPartner(ctx context.Context, userID, partnerCode 
 	return err
 }
 
+// WalletBalance returns the user's spendable balance in the given currency.
+func (r *Repository) WalletBalance(ctx context.Context, userID, currency string) (int64, error) {
+	q := `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`
+	if currency == "USD" {
+		q = `SELECT balance_usd FROM wallets WHERE user_id = $1::uuid`
+	}
+	var bal int64
+	if err := r.db.QueryRow(ctx, q, userID).Scan(&bal); err != nil {
+		return 0, err
+	}
+	return bal, nil
+}
+
 // ── Ride Requests ────────────────────────────────────────────────────────────
 
 func (r *Repository) CreateRideRequest(ctx context.Context, ride *RideRequestRecord) error {
