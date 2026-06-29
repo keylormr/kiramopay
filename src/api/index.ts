@@ -19,6 +19,7 @@ import type { IEscrowRepository } from './repositories/escrow.repository';
 import type { IPayoutRepository } from './repositories/payout.repository';
 import type { IB2BRepository } from './repositories/b2b.repository';
 import type { IAssistantRepository } from './repositories/assistant.repository';
+import type { ISavingsRepository } from './repositories/savings.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -53,6 +54,7 @@ export interface ApiLayer {
   splitPay?: ISplitPayRepository;
   cards?: ICardsRepository;
   country?: ICountryRepository;
+  savings?: ISavingsRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -147,3 +149,8 @@ export type {
   AssistantReply,
   AssistantProposal,
 } from './repositories/assistant.repository';
+export type {
+  ISavingsRepository,
+  SavingsGoal,
+  CreateSavingsGoalRequest,
+} from './repositories/savings.repository';

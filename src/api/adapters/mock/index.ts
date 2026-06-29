@@ -14,6 +14,7 @@ import { MockQRPaymentRepository } from './qrpayment.mock';
 import { MockSplitPayRepository } from './splitpay.mock';
 import { MockBudgetRepository } from './budget.mock';
 import { MockRecurringRepository } from './recurring.mock';
+import { MockSavingsRepository } from './savings.mock';
 
 // Auth, MFA, escrow, payout and B2B are NOT mocked — they always go through the
 // real backend (they move money / hold secrets). See createApiLayer() in
@@ -48,5 +49,6 @@ export function createMockApiLayer(
     marketplace: new MockMarketplaceRepository(),
     qrPayments: new MockQRPaymentRepository(),
     splitPay: new MockSplitPayRepository(),
+    savings: new MockSavingsRepository(),
   };
 }

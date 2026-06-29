@@ -36,8 +36,10 @@ const (
 	TypeP2PSend      = "p2p_send"
 	TypeP2PReceive   = "p2p_receive"
 	TypeRefund       = "refund"
-	TypeCryptoBuy    = "crypto_buy"  // fiat leaves the wallet to buy crypto
-	TypeCryptoSell   = "crypto_sell" // fiat enters the wallet from selling crypto
+	TypeCryptoBuy    = "crypto_buy"       // fiat leaves the wallet to buy crypto
+	TypeCryptoSell   = "crypto_sell"      // fiat enters the wallet from selling crypto
+	TypeSavingsDeposit  = "savings_deposit"  // wallet -> SYSTEM:SAVINGS
+	TypeSavingsWithdraw = "savings_withdraw" // SYSTEM:SAVINGS -> wallet
 )
 
 // Transaction statuses
