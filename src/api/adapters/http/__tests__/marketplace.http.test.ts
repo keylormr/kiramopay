@@ -24,6 +24,8 @@ describe('HttpMarketplaceRepository', () => {
     const res = await new HttpMarketplaceRepository(fakeClient({ post })).createRide({ partnerCode: 'uber', pickup: 'A', destination: 'B' });
     expect(res.success).toBe(true);
     expect(res.data?.estimatedPrice).toBe(5250); // centimos -> colones
+    expect(res.data?.driver?.name).toBe('Carlos'); // driver matched at request time
+    expect(res.data?.driver?.plate).toBe('ABC-123');
     expect(post).toHaveBeenCalledWith('/api/v1/marketplace/rides', expect.objectContaining({ partner_code: 'uber' }));
   });
 

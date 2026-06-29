@@ -116,6 +116,28 @@ func (s *Service) DisconnectPartner(ctx context.Context, userID, partnerCode str
 
 // ── Ride Requests ────────────────────────────────────────────────────────────
 
+// driverProfile is a simulated partner driver. Real driver matching happens on
+// the partner's platform; until that integration exists we assign a believable
+// driver at request time so the ride is complete end-to-end (the rider sees a
+// real driver, vehicle and plate persisted with the ride).
+type driverProfile struct {
+	Name   string
+	Car    string
+	Plate  string
+	Rating float64
+}
+
+var driverPool = []driverProfile{
+	{"Carlos Ramírez", "Toyota Corolla", "SJB-412", 4.92},
+	{"María Fernández", "Hyundai Elantra", "BCR-738", 4.88},
+	{"José Mora", "Nissan Sentra", "CLM-193", 4.95},
+	{"Ana Solís", "Kia Rio", "MOT-264", 4.81},
+	{"Luis Vargas", "Honda Civic", "SJP-590", 4.90},
+	{"Daniela Castro", "Toyota Yaris", "BMV-117", 4.97},
+	{"Roberto Jiménez", "Mazda 3", "CRC-845", 4.86},
+	{"Marcela Rojas", "Suzuki Swift", "GTO-301", 4.93},
+}
+
 func (s *Service) CreateRideRequest(ctx context.Context, userID string, req *CreateRideRequest) (*RideRequestRecord, error) {
 	if req.Pickup == "" || req.Destination == "" {
 		return nil, fmt.Errorf("pickup and destination are required")
@@ -125,6 +147,7 @@ func (s *Service) CreateRideRequest(ctx context.Context, userID string, req *Cre
 	estimatedPrice := int64(2500+rand.Intn(12500)) * 100 // in centimos
 	estimatedMins := 8 + rand.Intn(25)
 	distance := fmt.Sprintf("%.1f km", 1.5+rand.Float64()*15.0)
+	driver := driverPool[rand.Intn(len(driverPool))]
 
 	ride := &RideRequestRecord{
 		ID:             uuid.New().String(),
@@ -136,6 +159,10 @@ func (s *Service) CreateRideRequest(ctx context.Context, userID string, req *Cre
 		EstimatedTime:  fmt.Sprintf("%d min", estimatedMins),
 		Distance:       distance,
 		Status:         "searching",
+		DriverName:     driver.Name,
+		DriverRating:   driver.Rating,
+		DriverCar:      driver.Car,
+		DriverPlate:    driver.Plate,
 		CreatedAt:      time.Now(),
 	}
 

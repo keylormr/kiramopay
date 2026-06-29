@@ -25,6 +25,13 @@ function saveField(field: string, value: unknown) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+const MOCK_DRIVERS = [
+  { name: 'Carlos Ramírez', car: 'Toyota Corolla', plate: 'SJB-412', rating: 4.92 },
+  { name: 'María Fernández', car: 'Hyundai Elantra', plate: 'BCR-738', rating: 4.88 },
+  { name: 'José Mora', car: 'Nissan Sentra', plate: 'CLM-193', rating: 4.95 },
+  { name: 'Ana Solís', car: 'Kia Rio', plate: 'MOT-264', rating: 4.81 },
+];
+
 const initialPartners: MarketplacePartner[] = [
   { id: 'p-uber', code: 'uber', name: 'Uber', category: 'transport', logo: '🚗', color: '#000000', description: 'Solicita viajes y pagalos desde KiramoPay' },
   { id: 'p-didi', code: 'didi', name: 'DiDi', category: 'transport', logo: '🚕', color: '#FF6611', description: 'Viajes con tarifa competitiva' },
@@ -64,6 +71,7 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
   }
 
   async createRide(request: CreateRideRequest): Promise<ApiResponse<RideRequest>> {
+    const driver = MOCK_DRIVERS[Math.floor(Math.random() * MOCK_DRIVERS.length)];
     const ride: RideRequest = {
       id: `ride-${Date.now()}`,
       partnerId: request.partnerCode,
@@ -73,6 +81,7 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: `${Math.floor(Math.random() * 15) + 5} min`,
       distance: `${(Math.random() * 10 + 1).toFixed(1)} km`,
       status: 'searching',
+      driver: { ...driver, photo: '' },
     };
     const state = getState();
     const rides: RideRequest[] = state?.rides ?? [];

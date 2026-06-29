@@ -60,6 +60,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.post<{
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
+      driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
     }>('/api/v1/marketplace/rides', {
       partner_code: request.partnerCode,
       pickup: request.pickup,
@@ -77,6 +78,13 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      driver: res.data.driver_name ? {
+        name: res.data.driver_name,
+        rating: res.data.driver_rating,
+        car: res.data.driver_car,
+        plate: res.data.driver_plate,
+        photo: '',
+      } : undefined,
     });
   }
 

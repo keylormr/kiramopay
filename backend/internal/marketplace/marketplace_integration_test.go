@@ -70,6 +70,10 @@ func TestConfirmRide_DebitsWallet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRideRequest: %v", err)
 	}
+	// A driver is matched and persisted at request time, before any charge.
+	if ride.DriverName == "" || ride.DriverPlate == "" {
+		t.Fatalf("expected a driver assigned at creation, got %+v", ride)
+	}
 	w0 := walletCRC(t, pool, user) // no debit yet at request time
 
 	confirmed, err := svc.ConfirmRide(ctx, user, ride.ID)
@@ -78,6 +82,10 @@ func TestConfirmRide_DebitsWallet(t *testing.T) {
 	}
 	if confirmed.Status != "confirmed" {
 		t.Fatalf("status = %s, want confirmed", confirmed.Status)
+	}
+	// The driver assigned at creation survives the DB round-trip on confirm.
+	if confirmed.DriverName != ride.DriverName {
+		t.Fatalf("driver = %q, want %q", confirmed.DriverName, ride.DriverName)
 	}
 	if got := walletCRC(t, pool, user); got != w0-ride.EstimatedPrice {
 		t.Fatalf("wallet = %d, want %d", got, w0-ride.EstimatedPrice)

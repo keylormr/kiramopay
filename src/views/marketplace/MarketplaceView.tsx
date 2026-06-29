@@ -562,15 +562,15 @@ export const MarketplaceView: React.FC = () => {
                   👨
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold uv-text-primary">Carlos Ramírez</p>
+                  <p className="font-bold uv-text-primary">{activeRide?.driver?.name ?? 'Conductor asignado'}</p>
                   <div className="flex items-center gap-1 text-sm text-gray-500">
                     <Icons.Star size={14} className="text-yellow-500 fill-yellow-500" />
-                    <span>4.92</span>
+                    <span>{(activeRide?.driver?.rating ?? 5).toFixed(2)}</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold uv-text-primary">Toyota Corolla</p>
-                  <p className="text-sm text-gray-500">ABC-123</p>
+                  <p className="font-bold uv-text-primary">{activeRide?.driver?.car ?? 'Vehículo'}</p>
+                  <p className="text-sm text-gray-500">{activeRide?.driver?.plate ?? ''}</p>
                 </div>
               </div>
 
@@ -599,7 +599,9 @@ export const MarketplaceView: React.FC = () => {
                 Tu conductor viene en camino
               </h3>
               <p className="text-3xl font-black text-primary mb-2">3 min</p>
-              <p className="uv-text-muted">Toyota Corolla • ABC-123</p>
+              <p className="uv-text-muted">
+                {activeRide?.driver ? `${activeRide.driver.car} • ${activeRide.driver.plate}` : 'En camino'}
+              </p>
             </div>
           )}
         </div>

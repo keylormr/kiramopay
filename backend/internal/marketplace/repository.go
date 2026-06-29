@@ -90,10 +90,12 @@ func (r *Repository) WalletBalance(ctx context.Context, userID, currency string)
 func (r *Repository) CreateRideRequest(ctx context.Context, ride *RideRequestRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO ride_requests (id, user_id, partner_code, pickup, destination,
-		 estimated_price, estimated_time, distance, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		 estimated_price, estimated_time, distance, status,
+		 driver_name, driver_rating, driver_car, driver_plate)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		ride.ID, ride.UserID, ride.PartnerCode, ride.Pickup, ride.Destination,
-		ride.EstimatedPrice, ride.EstimatedTime, ride.Distance, ride.Status)
+		ride.EstimatedPrice, ride.EstimatedTime, ride.Distance, ride.Status,
+		ride.DriverName, ride.DriverRating, ride.DriverCar, ride.DriverPlate)
 	return err
 }
 
@@ -129,14 +131,6 @@ func (r *Repository) UpdateRideStatus(ctx context.Context, rideID, status string
 		return fmt.Errorf("ride request not found")
 	}
 	return nil
-}
-
-func (r *Repository) AssignDriver(ctx context.Context, rideID, name, car, plate string, rating float64) error {
-	_, err := r.db.Exec(ctx,
-		`UPDATE ride_requests SET driver_name = $2, driver_rating = $3, driver_car = $4,
-		 driver_plate = $5, status = 'confirmed' WHERE id = $1`,
-		rideID, name, rating, car, plate)
-	return err
 }
 
 func (r *Repository) ListUserRides(ctx context.Context, userID string, limit int) ([]RideRequestRecord, error) {
