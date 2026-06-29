@@ -7,14 +7,87 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
-type Service struct {
-	repo *Repository
+// HistoryRecorder makes a marketplace charge visible in the user's transaction
+// list. Best-effort: failing to record never fails the order.
+type HistoryRecorder interface {
+	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+type Service struct {
+	repo    *Repository
+	ledger  *ledger.Engine
+	history HistoryRecorder
+}
+
+func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder) *Service {
+	return &Service{repo: repo, ledger: eng, history: history}
+}
+
+// chargeWallet debits the user's wallet for a marketplace order, crediting
+// SYSTEM:EXTERNAL (the partner counterparty). The actual settlement to the
+// partner requires a partner integration and is out of scope; this records the
+// real spend so the wallet and ledger stay correct.
+func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor int64, label string) error {
+	if amountMinor <= 0 {
+		return nil
+	}
+	bal, err := s.repo.WalletBalance(ctx, userID, "CRC")
+	if err != nil {
+		return fmt.Errorf("balance check: %w", err)
+	}
+	if bal < amountMinor {
+		return fmt.Errorf("insufficient balance")
+	}
+	postID := uuid.NewString()
+	if _, err := s.ledger.Post(ctx, &ledger.Posting{
+		Description:    label,
+		IdempotencyKey: "marketplace:" + postID,
+		TxID:           postID,
+		CreatedBy:      userID,
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{UserID: userID}, Side: ledger.Debit, AmountMinor: amountMinor, Currency: "CRC"},
+			{Account: ledger.Account{SystemCode: ledger.SystemExternalCRC}, Side: ledger.Credit, AmountMinor: amountMinor, Currency: "CRC"},
+		},
+	}); err != nil {
+		return fmt.Errorf("marketplace charge: %w", err)
+	}
+	if s.history != nil {
+		_ = s.history.RecordHistory(ctx, userID, &transaction.CreateTransactionRequest{
+			Type:             "marketplace",
+			Amount:           amountMinor,
+			Currency:         "CRC",
+			CounterpartyType: "marketplace",
+			CounterpartyName: label,
+			Description:      label,
+		})
+	}
+	return nil
+}
+
+// ConfirmRide charges the rider the estimated price and marks the ride confirmed.
+func (s *Service) ConfirmRide(ctx context.Context, userID, rideID string) (*RideRequestRecord, error) {
+	ride, err := s.repo.GetRideRequest(ctx, rideID)
+	if err != nil {
+		return nil, fmt.Errorf("ride not found")
+	}
+	if ride.UserID != userID {
+		return nil, fmt.Errorf("ride does not belong to user")
+	}
+	if ride.Status == "confirmed" || ride.Status == "completed" {
+		return nil, fmt.Errorf("ride already confirmed")
+	}
+	if err := s.chargeWallet(ctx, userID, ride.EstimatedPrice, "Viaje "+ride.PartnerCode); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateRideStatus(ctx, rideID, "confirmed"); err != nil {
+		return nil, err
+	}
+	ride.Status = "confirmed"
+	return ride, nil
 }
 
 // ── Partners ─────────────────────────────────────────────────────────────────
@@ -113,6 +186,11 @@ func (s *Service) CreateFoodOrder(ctx context.Context, userID string, req *Creat
 
 	deliveryFee := int64(150000) // 1500 CRC in centimos
 	total := subtotal + deliveryFee
+
+	// Charge the wallet up front (balance-checked); no order if it fails.
+	if err := s.chargeWallet(ctx, userID, total, "Pedido "+req.RestaurantName); err != nil {
+		return nil, err
+	}
 
 	estimatedMins := 25 + rand.Intn(20)
 

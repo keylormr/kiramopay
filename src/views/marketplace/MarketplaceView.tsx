@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { getApiLayer } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
+import type { RideRequest, Transaction } from '@/types';
+
+const hasBackend = !!import.meta.env.VITE_API_URL;
 
 // Partners del marketplace
 const MARKETPLACE_PARTNERS = {
@@ -140,6 +145,25 @@ export const MarketplaceView: React.FC = () => {
   const [rideStep, setRideStep] = useState<'location' | 'searching' | 'found' | 'arriving'>('location');
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
+  const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
+
+  // In http mode the backend moves the money and we refresh; in mock mode the
+  // view mirrors the wallet debit locally (there is no backend ledger).
+  const localDebit = (amount: number, label: string) => {
+    const acct = state.accounts.find((a) => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
+    if (!acct) return;
+    const tx: Transaction = {
+      id: Date.now().toString(),
+      title: label,
+      amount: -amount,
+      ccy: acct.ccy,
+      date: new Date().toLocaleDateString(),
+      type: 'debit',
+      category: 'Marketplace',
+      status: 'completed',
+    };
+    dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+  };
 
   // Food states
   const [selectedRestaurant, setSelectedRestaurant] = useState<typeof DEMO_RESTAURANTS[0] | null>(null);
@@ -180,27 +204,51 @@ export const MarketplaceView: React.FC = () => {
     }
   };
 
-  const handleRequestRide = () => {
-    if (!pickup || !destination) return;
-
+  const handleRequestRide = async () => {
+    if (!pickup || !destination || !selectedPartner) return;
     setRideStep('searching');
-
-    // Simular búsqueda de conductor
-    setTimeout(() => {
-      setRideStep('found');
-    }, 3000);
+    const api = getApiLayer();
+    if (api.marketplace) {
+      const res = await api.marketplace.createRide({ partnerCode: selectedPartner.id, pickup, destination });
+      if (res.success && res.data) setActiveRide(res.data);
+    }
+    setRideStep('found');
   };
 
-  const handleConfirmRide = () => {
+  const handleConfirmRide = async () => {
+    const api = getApiLayer();
+    if (api.marketplace && activeRide) {
+      const res = await api.marketplace.confirmRide(activeRide.id);
+      if (res.success) {
+        if (hasBackend) refreshAccounts().catch(() => {});
+        else localDebit(activeRide.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
+      }
+    }
     setRideStep('arriving');
-
-    // Simular llegada
     setTimeout(() => {
       setShowRideSheet(false);
       setRideStep('location');
       setPickup('');
       setDestination('');
+      setActiveRide(null);
     }, 5000);
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!selectedRestaurant || !selectedPartner || cartItems.length === 0) return;
+    const api = getApiLayer();
+    if (api.marketplace) {
+      const res = await api.marketplace.createFoodOrder({
+        partnerCode: selectedPartner.id,
+        restaurantName: selectedRestaurant.name,
+        items: cartItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
+      });
+      if (res.success) {
+        if (hasBackend) refreshAccounts().catch(() => {});
+        else localDebit(cartTotal + deliveryFee, `${selectedRestaurant.name}`);
+      }
+    }
+    setOrderStep('confirm');
   };
 
   const addToCart = (item: { name: string; price: number }) => {
@@ -530,7 +578,7 @@ export const MarketplaceView: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="uv-text-muted">Total a pagar</span>
                   <span className="font-black text-xl uv-text-primary">
-                    {formatCurrency(5250)}
+                    {formatCurrency(activeRide?.estimatedPrice ?? 5250)}
                   </span>
                 </div>
               </div>
@@ -701,7 +749,7 @@ export const MarketplaceView: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setOrderStep('confirm')}
+                onClick={handlePlaceOrder}
                 className={`w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'}`}
               >
                 Pagar con KiramoPay

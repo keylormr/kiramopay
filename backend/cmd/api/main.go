@@ -252,7 +252,7 @@ func main() {
 	paymentService := payment.NewService(paymentRepo, txService)
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
 
-	marketplaceService := marketplace.NewService(marketplaceRepo)
+	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService)
 	loyaltyService := loyalty.NewService(loyaltyRepo)
 	qrService := qrpayment.NewService(qrRepo, txService)
 	splitService := splitpay.NewService(splitRepo, txService)
@@ -557,6 +557,7 @@ func main() {
 			r.Get("/marketplace/rides", marketplaceHandler.ListRides)
 			r.Get("/marketplace/rides/{id}", marketplaceHandler.GetRideRequest)
 			r.Patch("/marketplace/rides/{id}", marketplaceHandler.UpdateRideStatus)
+			r.Post("/marketplace/rides/{id}/confirm", marketplaceHandler.ConfirmRide)
 			r.Post("/marketplace/food-orders", marketplaceHandler.CreateFoodOrder)
 			r.Get("/marketplace/food-orders", marketplaceHandler.ListFoodOrders)
 			r.Get("/marketplace/food-orders/{id}", marketplaceHandler.GetFoodOrder)
