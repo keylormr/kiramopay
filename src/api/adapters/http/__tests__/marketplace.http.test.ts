@@ -37,6 +37,28 @@ describe('HttpMarketplaceRepository', () => {
     expect(post).toHaveBeenCalledWith('/api/v1/marketplace/rides/r1/confirm', {});
   });
 
+  it('maps a tracked food order with live status, ETA and courier', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        order: {
+          id: 'o1', partner_code: 'ubereats', restaurant_name: 'Soda',
+          subtotal: 700000, delivery_fee: 150000, total: 850000,
+          status: 'on_the_way', estimated_delivery: '30 min', minutes_remaining: 8,
+          courier: { name: 'Diego Salas', vehicle: 'Honda CB125', plate: 'MOT-118' },
+        },
+        items: [{ name: 'Casado', quantity: 2, price: 350000 }],
+      },
+    });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getFoodOrder('o1');
+    expect(res.success).toBe(true);
+    expect(res.data?.status).toBe('on_the_way');
+    expect(res.data?.minutesRemaining).toBe(8);
+    expect(res.data?.courier?.name).toBe('Diego Salas');
+    expect(res.data?.total).toBe(8500); // centimos -> colones
+    expect(res.data?.items[0].price).toBe(3500); // centimos -> colones
+  });
+
   it('creates a food order sending item prices in centimos', async () => {
     const post = vi.fn().mockResolvedValue({
       success: true,

@@ -194,16 +194,22 @@ func (r *Repository) CreateFoodOrder(ctx context.Context, order *FoodOrderRecord
 	return tx.Commit(ctx)
 }
 
-func (r *Repository) GetFoodOrder(ctx context.Context, orderID string) (*FoodOrderRecord, []FoodOrderItemRecord, error) {
+func (r *Repository) GetFoodOrder(ctx context.Context, orderID, userID string) (*FoodOrderRecord, []FoodOrderItemRecord, error) {
 	var order FoodOrderRecord
+	// Scoped by user_id so a non-owner gets no rows (the caller 404s) and the
+	// derive/backfill side effect never runs on someone else's order.
+	// elapsed_seconds is computed by the DB (NOW() - created_at), which is
+	// timezone-safe regardless of the session TZ or the column type.
 	err := r.db.QueryRow(ctx,
 		`SELECT id, user_id, partner_code, restaurant_name,
 		 subtotal, delivery_fee, total, status, estimated_delivery,
-		 created_at, completed_at
-		 FROM food_orders WHERE id = $1`, orderID).Scan(
+		 created_at, completed_at,
+		 GREATEST(0, EXTRACT(EPOCH FROM (NOW() - created_at)))::bigint
+		 FROM food_orders WHERE id = $1 AND user_id = $2`, orderID, userID).Scan(
 		&order.ID, &order.UserID, &order.PartnerCode, &order.RestaurantName,
 		&order.Subtotal, &order.DeliveryFee, &order.Total, &order.Status,
-		&order.EstimatedDelivery, &order.CreatedAt, &order.CompletedAt)
+		&order.EstimatedDelivery, &order.CreatedAt, &order.CompletedAt,
+		&order.ElapsedSeconds)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -243,11 +249,26 @@ func (r *Repository) UpdateFoodOrderStatus(ctx context.Context, orderID, status 
 	return nil
 }
 
+// MarkFoodOrderDeliveredIfDue persists the delivered terminal state for an order
+// whose ETA has elapsed. completed_at is the true delivery instant
+// (created_at + ETA), never NOW(), so the write is idempotent and correct even
+// if the order is opened late. The status guard makes concurrent reads race-safe
+// (first writer wins; the rest are no-ops). 0 rows affected is not an error.
+func (r *Repository) MarkFoodOrderDeliveredIfDue(ctx context.Context, orderID string, etaMinutes int) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE food_orders
+		 SET status = 'delivered', completed_at = created_at + make_interval(mins => $2)
+		 WHERE id = $1 AND status NOT IN ('delivered', 'cancelled')`,
+		orderID, etaMinutes)
+	return err
+}
+
 func (r *Repository) ListUserFoodOrders(ctx context.Context, userID string, limit int) ([]FoodOrderRecord, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, partner_code, restaurant_name,
 		 subtotal, delivery_fee, total, status, estimated_delivery,
-		 created_at, completed_at
+		 created_at, completed_at,
+		 GREATEST(0, EXTRACT(EPOCH FROM (NOW() - created_at)))::bigint
 		 FROM food_orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
 		userID, limit)
 	if err != nil {
@@ -261,7 +282,8 @@ func (r *Repository) ListUserFoodOrders(ctx context.Context, userID string, limi
 		if err := rows.Scan(
 			&order.ID, &order.UserID, &order.PartnerCode, &order.RestaurantName,
 			&order.Subtotal, &order.DeliveryFee, &order.Total, &order.Status,
-			&order.EstimatedDelivery, &order.CreatedAt, &order.CompletedAt); err != nil {
+			&order.EstimatedDelivery, &order.CreatedAt, &order.CompletedAt,
+			&order.ElapsedSeconds); err != nil {
 			return nil, err
 		}
 		orders = append(orders, order)

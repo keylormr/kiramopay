@@ -32,6 +32,61 @@ const MOCK_DRIVERS = [
   { name: 'Ana Solís', car: 'Kia Rio', plate: 'MOT-264', rating: 4.81 },
 ];
 
+// Live food-order progress mirrors backend/internal/marketplace/service.go:
+// status is a deterministic function of the elapsed fraction of the ETA. Keep
+// these fractions identical to the Go constants or dev and prod diverge.
+const FOOD_FRAC_READY = 0.4;
+const FOOD_FRAC_ON_THE_WAY = 0.75;
+const FOOD_FRAC_DELIVERED = 1.0;
+
+const MOCK_COURIERS = [
+  { name: 'Diego Salas', vehicle: 'Honda CB125', plate: 'MOT-118' },
+  { name: 'Karla Méndez', vehicle: 'Yamaha YBR', plate: 'MOT-204' },
+  { name: 'Esteban Núñez', vehicle: 'Vespa Primavera', plate: 'MOT-377' },
+  { name: 'Priscilla Vega', vehicle: 'Suzuki GN125', plate: 'MOT-461' },
+];
+
+type StoredFoodOrder = FoodOrder & { createdAt: string };
+
+function etaMinutes(s: string): number {
+  const m = s.match(/\d+/);
+  const n = m ? parseInt(m[0], 10) : 30;
+  return n >= 1 ? n : 30;
+}
+
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// Recompute live status/ETA/courier from elapsed time (mirrors the backend).
+function liveFoodOrder(o: StoredFoodOrder): FoodOrder {
+  const { createdAt, ...rest } = o;
+  if (o.status === 'delivered' || o.status === 'cancelled') {
+    return { ...rest, minutesRemaining: 0 };
+  }
+  const eta = etaMinutes(o.estimatedDelivery);
+  const created = createdAt ? new Date(createdAt).getTime() : Date.now();
+  const elapsed = Math.max(0, (Date.now() - created) / 1000);
+  const f = eta > 0 ? elapsed / (eta * 60) : 1;
+  let status: FoodOrder['status'];
+  if (f < FOOD_FRAC_READY) status = 'preparing';
+  else if (f < FOOD_FRAC_ON_THE_WAY) status = 'ready';
+  else if (f < FOOD_FRAC_DELIVERED) status = 'on_the_way';
+  else status = 'delivered';
+  const courier =
+    status === 'on_the_way' || status === 'delivered'
+      ? MOCK_COURIERS[hashId(o.id) % MOCK_COURIERS.length]
+      : undefined;
+  return {
+    ...rest,
+    status,
+    minutesRemaining: status === 'delivered' ? 0 : Math.max(0, eta - Math.floor(elapsed / 60)),
+    courier,
+  };
+}
+
 const initialPartners: MarketplacePartner[] = [
   { id: 'p-uber', code: 'uber', name: 'Uber', category: 'transport', logo: '🚗', color: '#000000', description: 'Solicita viajes y pagalos desde KiramoPay' },
   { id: 'p-didi', code: 'didi', name: 'DiDi', category: 'transport', logo: '🚕', color: '#FF6611', description: 'Viajes con tarifa competitiva' },
@@ -116,7 +171,8 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
   async createFoodOrder(request: CreateFoodOrderRequest): Promise<ApiResponse<FoodOrder>> {
     const subtotal = request.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const deliveryFee = 1500;
-    const order: FoodOrder = {
+    const estimated = Math.floor(Math.random() * 20) + 25;
+    const stored: StoredFoodOrder = {
       id: `food-${Date.now()}`,
       partnerId: request.partnerCode,
       restaurantName: request.restaurantName,
@@ -125,25 +181,34 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
       deliveryFee,
       total: subtotal + deliveryFee,
       status: 'preparing',
-      estimatedDelivery: `${Math.floor(Math.random() * 20) + 25} min`,
+      estimatedDelivery: `${estimated} min`,
+      minutesRemaining: estimated,
+      createdAt: new Date().toISOString(),
     };
     const state = getState();
-    const orders: FoodOrder[] = state?.foodOrders ?? [];
-    orders.unshift(order);
+    const orders: StoredFoodOrder[] = state?.foodOrders ?? [];
+    orders.unshift(stored);
     saveField('foodOrders', orders);
-    return apiSuccess(order);
+    return apiSuccess(liveFoodOrder(stored));
   }
 
   async listFoodOrders(): Promise<ApiResponse<FoodOrder[]>> {
     const state = getState();
-    return apiSuccess(state?.foodOrders ?? []);
+    const orders: StoredFoodOrder[] = state?.foodOrders ?? [];
+    return apiSuccess(orders.map(liveFoodOrder));
   }
 
   async getFoodOrder(orderId: string): Promise<ApiResponse<FoodOrder>> {
     const state = getState();
-    const orders: FoodOrder[] = state?.foodOrders ?? [];
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return apiError('NOT_FOUND', 'Orden no encontrada');
-    return apiSuccess(order);
+    const orders: StoredFoodOrder[] = state?.foodOrders ?? [];
+    const i = orders.findIndex((o) => o.id === orderId);
+    if (i === -1) return apiError('NOT_FOUND', 'Orden no encontrada');
+    const live = liveFoodOrder(orders[i]);
+    // Persist the terminal state so later reads short-circuit (mirrors backend backfill).
+    if (live.status === 'delivered' && orders[i].status !== 'delivered') {
+      orders[i] = { ...orders[i], status: 'delivered', minutesRemaining: 0 };
+      saveField('foodOrders', orders);
+    }
+    return apiSuccess(live);
   }
 }

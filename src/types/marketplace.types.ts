@@ -35,6 +35,8 @@ export interface FoodOrder {
   subtotal: number;
   deliveryFee: number;
   total: number;
-  status: 'preparing' | 'ready' | 'on_the_way' | 'delivered';
+  status: 'preparing' | 'ready' | 'on_the_way' | 'delivered' | 'cancelled';
   estimatedDelivery: string;
+  minutesRemaining?: number;
+  courier?: { name: string; vehicle: string; plate: string };
 }

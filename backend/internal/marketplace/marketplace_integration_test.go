@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/marketplace"
@@ -92,6 +94,84 @@ func TestConfirmRide_DebitsWallet(t *testing.T) {
 	}
 	if _, err := svc.ConfirmRide(ctx, user, ride.ID); err == nil {
 		t.Fatal("expected error confirming an already-confirmed ride")
+	}
+}
+
+// A food order progresses preparing -> delivered purely from elapsed time, the
+// delivered state is persisted (backfill), the backfill is idempotent, and no
+// read ever moves money.
+func TestGetFoodOrder_LiveStatusAndBackfill(t *testing.T) {
+	svc, pool, user := setupMarketplace(t)
+	ctx := context.Background()
+
+	order, err := svc.CreateFoodOrder(ctx, user, &marketplace.CreateFoodOrderRequest{
+		PartnerCode:    "ubereats",
+		RestaurantName: "Soda Tica",
+		Items:          []marketplace.FoodOrderItemReq{{Name: "Casado", Quantity: 1, Price: 300000}},
+	})
+	if err != nil {
+		t.Fatalf("CreateFoodOrder: %v", err)
+	}
+	wAfterOrder := walletCRC(t, pool, user)
+
+	// A fresh order is still preparing.
+	got, _, err := svc.GetFoodOrder(ctx, order.ID, user)
+	if err != nil {
+		t.Fatalf("GetFoodOrder: %v", err)
+	}
+	if got.Status != "preparing" {
+		t.Fatalf("fresh order status = %s, want preparing", got.Status)
+	}
+
+	// A non-owner read returns not-found and must NOT trigger the backfill write.
+	if _, _, err := svc.GetFoodOrder(ctx, order.ID, uuid.NewString()); err == nil {
+		t.Fatal("expected not-found reading another user's order")
+	}
+
+	// Backdate creation well past any ETA -> derives + persists delivered.
+	if _, err := pool.Exec(ctx,
+		`UPDATE food_orders SET created_at = NOW() - INTERVAL '3 hours' WHERE id = $1::uuid`, order.ID); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+
+	got, _, err = svc.GetFoodOrder(ctx, order.ID, user)
+	if err != nil {
+		t.Fatalf("GetFoodOrder (aged): %v", err)
+	}
+	if got.Status != "delivered" {
+		t.Fatalf("aged order status = %s, want delivered", got.Status)
+	}
+	if got.CompletedAt == nil {
+		t.Fatal("delivered order should expose completed_at")
+	}
+
+	// The terminal state is persisted on the row.
+	var stored string
+	var completed *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT status, completed_at FROM food_orders WHERE id = $1::uuid`, order.ID).Scan(&stored, &completed); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if stored != "delivered" || completed == nil {
+		t.Fatalf("backfill not persisted: status=%s completed=%v", stored, completed)
+	}
+	firstCompleted := *completed
+
+	// Idempotent: a second read does not move completed_at.
+	if _, _, err := svc.GetFoodOrder(ctx, order.ID, user); err != nil {
+		t.Fatalf("GetFoodOrder (idempotent): %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT completed_at FROM food_orders WHERE id = $1::uuid`, order.ID).Scan(&completed); err != nil {
+		t.Fatalf("read row 2: %v", err)
+	}
+	if !completed.Equal(firstCompleted) {
+		t.Fatalf("completed_at changed on second read: %v vs %v", firstCompleted, *completed)
+	}
+
+	// Reads never moved money.
+	if w := walletCRC(t, pool, user); w != wAfterOrder {
+		t.Fatalf("wallet changed across reads: %d vs %d", w, wAfterOrder)
 	}
 }
 

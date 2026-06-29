@@ -176,7 +176,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.post<{
       id: string; partner_code: string; restaurant_name: string;
       subtotal: number; delivery_fee: number; total: number;
-      status: string; estimated_delivery: string;
+      status: string; estimated_delivery: string; minutes_remaining: number;
     }>('/api/v1/marketplace/food-orders', {
       partner_code: request.partnerCode,
       restaurant_name: request.restaurantName,
@@ -195,6 +195,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: res.data.total / 100,
       status: res.data.status as FoodOrder['status'],
       estimatedDelivery: res.data.estimated_delivery,
+      minutesRemaining: res.data.minutes_remaining,
     });
   }
 
@@ -202,7 +203,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.get<Array<{
       id: string; partner_code: string; restaurant_name: string;
       subtotal: number; delivery_fee: number; total: number;
-      status: string; estimated_delivery: string;
+      status: string; estimated_delivery: string; minutes_remaining: number;
     }>>('/api/v1/marketplace/food-orders');
 
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch orders');
@@ -217,6 +218,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: o.total / 100,
       status: o.status as FoodOrder['status'],
       estimatedDelivery: o.estimated_delivery,
+      minutesRemaining: o.minutes_remaining,
     })));
   }
 
@@ -225,7 +227,8 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       order: {
         id: string; partner_code: string; restaurant_name: string;
         subtotal: number; delivery_fee: number; total: number;
-        status: string; estimated_delivery: string;
+        status: string; estimated_delivery: string; minutes_remaining: number;
+        courier?: { name: string; vehicle: string; plate: string };
       };
       items: Array<{ name: string; quantity: number; price: number }>;
     }>(`/api/v1/marketplace/food-orders/${orderId}`);
@@ -242,6 +245,8 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: res.data.order.total / 100,
       status: res.data.order.status as FoodOrder['status'],
       estimatedDelivery: res.data.order.estimated_delivery,
+      minutesRemaining: res.data.order.minutes_remaining,
+      courier: res.data.order.courier,
     });
   }
 }

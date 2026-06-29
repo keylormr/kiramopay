@@ -166,17 +166,18 @@ func (h *Handler) GetFoodOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orderID := chi.URLParam(r, "id")
-	order, items, err := h.service.GetFoodOrder(r.Context(), orderID)
+	// Scoped to the requesting user; a non-owner gets a not-found error and no
+	// derive/backfill side effect runs on their order.
+	order, items, err := h.service.GetFoodOrder(r.Context(), orderID, userID)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
 		return
 	}
-	if order.UserID != userID {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
-		return
-	}
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"order": order,
+		"order": FoodOrderResponse{
+			FoodOrderRecord: order,
+			Courier:         h.service.CourierFor(order.ID, order.Status),
+		},
 		"items": items,
 	})
 }
@@ -188,13 +189,8 @@ func (h *Handler) UpdateFoodOrderStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	orderID := chi.URLParam(r, "id")
-	// Ownership check: only the ordering user may change their own order (IDOR).
-	order, _, err := h.service.GetFoodOrder(r.Context(), orderID)
-	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
-		return
-	}
-	if order.UserID != userID {
+	// Ownership check: the scoped lookup returns no rows for a non-owner (IDOR).
+	if _, _, err := h.service.GetFoodOrder(r.Context(), orderID, userID); err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "food order not found")
 		return
 	}
