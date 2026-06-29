@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"math/rand"
@@ -32,7 +33,12 @@ func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder) *
 // SYSTEM:EXTERNAL (the partner counterparty). The actual settlement to the
 // partner requires a partner integration and is out of scope; this records the
 // real spend so the wallet and ledger stay correct.
-func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor int64, label string) error {
+//
+// idemKey is the ledger idempotency key: a STABLE key (e.g. per-ride) makes the
+// charge safe against retries, concurrent calls and status manipulation — a
+// repeat charge collides on the ledger UNIQUE constraint and is a no-op instead
+// of a second debit.
+func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor int64, label, idemKey string) error {
 	if amountMinor <= 0 {
 		return nil
 	}
@@ -43,17 +49,19 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 	if bal < amountMinor {
 		return fmt.Errorf("insufficient balance")
 	}
-	postID := uuid.NewString()
 	if _, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    label,
-		IdempotencyKey: "marketplace:" + postID,
-		TxID:           postID,
+		IdempotencyKey: idemKey,
+		TxID:           uuid.NewString(),
 		CreatedBy:      userID,
 		Entries: []ledger.Entry{
 			{Account: ledger.Account{UserID: userID}, Side: ledger.Debit, AmountMinor: amountMinor, Currency: "CRC"},
 			{Account: ledger.Account{SystemCode: ledger.SystemExternalCRC}, Side: ledger.Credit, AmountMinor: amountMinor, Currency: "CRC"},
 		},
 	}); err != nil {
+		if errors.Is(err, ledger.ErrIdempotent) {
+			return nil // already charged for this key; no second debit, no dup history
+		}
 		return fmt.Errorf("marketplace charge: %w", err)
 	}
 	if s.history != nil {
@@ -71,23 +79,28 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 
 // ConfirmRide charges the rider the estimated price and marks the ride confirmed.
 func (s *Service) ConfirmRide(ctx context.Context, userID, rideID string) (*RideRequestRecord, error) {
-	ride, err := s.repo.GetRideRequest(ctx, rideID)
+	ride, err := s.repo.GetRideRequest(ctx, rideID, userID) // scoped: non-owner -> not found
 	if err != nil {
 		return nil, fmt.Errorf("ride not found")
 	}
-	if ride.UserID != userID {
-		return nil, fmt.Errorf("ride does not belong to user")
-	}
-	if ride.Status == "confirmed" || ride.Status == "completed" {
+	if ride.Status != "searching" {
 		return nil, fmt.Errorf("ride already confirmed")
 	}
-	if err := s.chargeWallet(ctx, userID, ride.EstimatedPrice, "Viaje "+ride.PartnerCode); err != nil {
+	// Stable idempotency key so a repeated confirm (status reset, retry, or a
+	// concurrent call) collides on the ledger and never produces a second debit.
+	if err := s.chargeWallet(ctx, userID, ride.EstimatedPrice, "Viaje "+ride.PartnerCode, "marketplace:ride:"+rideID); err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpdateRideStatus(ctx, rideID, "confirmed"); err != nil {
+	// Conditional flip (only from searching) that also re-anchors the trip clock
+	// at confirmation, so the searching dwell time never leaks into the trip.
+	if err := s.repo.ConfirmRideRow(ctx, rideID); err != nil {
 		return nil, err
 	}
+	// Return the live status (the trip clock just started, so 'arriving' with the
+	// full ETA), consistent with what the tracker reads on its next poll.
 	ride.Status = "confirmed"
+	ride.ElapsedSeconds = 0
+	applyLiveRideStatus(ride)
 	return ride, nil
 }
 
@@ -174,13 +187,78 @@ func (s *Service) CreateRideRequest(ctx context.Context, userID string, req *Cre
 	return ride, nil
 }
 
-func (s *Service) GetRideRequest(ctx context.Context, rideID string) (*RideRequestRecord, error) {
-	return s.repo.GetRideRequest(ctx, rideID)
+// Live trip progress after confirmation. Like the food order, status is a
+// deterministic function of elapsed time vs the trip ETA, anchored on creation
+// (the rider confirms within seconds of requesting). Only confirmed/arriving/
+// in_progress rides progress; searching (unconfirmed) and terminal states are
+// returned as stored. Keep these fractions in sync with the mock adapter
+// (src/api/adapters/mock/marketplace.mock.ts).
+const (
+	rideFracInProgress = 0.15 // arriving -> in_progress (driver reaches pickup)
+	rideFracCompleted  = 1.00 // in_progress -> completed
+)
+
+// deriveRideStatus returns the live status for a confirmed ride from its
+// DB-computed ElapsedSeconds and ETA. searching (unconfirmed) and terminal
+// states (completed, cancelled) are returned verbatim.
+func deriveRideStatus(ride *RideRequestRecord) string {
+	switch ride.Status {
+	case "searching", "completed", "cancelled":
+		return ride.Status
+	}
+	totalSecs := float64(parseEtaMinutes(ride.EstimatedTime) * 60)
+	if totalSecs <= 0 {
+		return "completed"
+	}
+	switch f := float64(ride.ElapsedSeconds) / totalSecs; {
+	case f < rideFracInProgress:
+		return "arriving"
+	case f < rideFracCompleted:
+		return "in_progress"
+	default:
+		return "completed"
+	}
+}
+
+// applyLiveRideStatus mutates the record: sets the live status and the minutes
+// left until arrival at the destination.
+func applyLiveRideStatus(ride *RideRequestRecord) {
+	ride.Status = deriveRideStatus(ride)
+	if ride.Status != "arriving" && ride.Status != "in_progress" {
+		ride.MinutesRemaining = 0
+		return
+	}
+	remaining := parseEtaMinutes(ride.EstimatedTime) - int(ride.ElapsedSeconds/60)
+	if remaining < 0 {
+		remaining = 0
+	}
+	ride.MinutesRemaining = remaining
+}
+
+func (s *Service) GetRideRequest(ctx context.Context, rideID, userID string) (*RideRequestRecord, error) {
+	ride, err := s.repo.GetRideRequest(ctx, rideID, userID)
+	if err != nil {
+		return nil, err
+	}
+	wasNonTerminal := ride.Status != "completed" && ride.Status != "cancelled"
+	applyLiveRideStatus(ride)
+	// Once the trip is due, persist completed so it survives without the tracker
+	// open. Best-effort and idempotent (guarded UPDATE, no money moves).
+	if wasNonTerminal && ride.Status == "completed" {
+		mins := parseEtaMinutes(ride.EstimatedTime)
+		_ = s.repo.MarkRideCompletedIfDue(ctx, ride.ID, mins)
+		t := ride.CreatedAt.Add(time.Duration(mins) * time.Minute)
+		ride.CompletedAt = &t
+	}
+	return ride, nil
 }
 
 func (s *Service) UpdateRideStatus(ctx context.Context, rideID, status string) error {
+	// 'searching' is the pre-payment initial state and is NOT a valid update
+	// target: resetting a confirmed ride back to searching would let it be
+	// re-confirmed and charged again.
 	validStatuses := map[string]bool{
-		"searching": true, "confirmed": true, "arriving": true,
+		"confirmed": true, "arriving": true,
 		"in_progress": true, "completed": true, "cancelled": true,
 	}
 	if !validStatuses[status] {
@@ -190,7 +268,16 @@ func (s *Service) UpdateRideStatus(ctx context.Context, rideID, status string) e
 }
 
 func (s *Service) ListUserRides(ctx context.Context, userID string) ([]RideRequestRecord, error) {
-	return s.repo.ListUserRides(ctx, userID, 50)
+	rides, err := s.repo.ListUserRides(ctx, userID, 50)
+	if err != nil {
+		return nil, err
+	}
+	// Override status in memory only (no per-row writes inside the list path);
+	// the single-ride GetRideRequest persists the completed backfill.
+	for i := range rides {
+		applyLiveRideStatus(&rides[i])
+	}
+	return rides, nil
 }
 
 // ── Food Orders ──────────────────────────────────────────────────────────────
@@ -215,8 +302,9 @@ func (s *Service) CreateFoodOrder(ctx context.Context, userID string, req *Creat
 	deliveryFee := int64(150000) // 1500 CRC in centimos
 	total := subtotal + deliveryFee
 
-	// Charge the wallet up front (balance-checked); no order if it fails.
-	if err := s.chargeWallet(ctx, userID, total, "Pedido "+req.RestaurantName); err != nil {
+	// Charge the wallet up front (balance-checked); no order if it fails. Each
+	// food order is a distinct charge, so a unique key per call is correct.
+	if err := s.chargeWallet(ctx, userID, total, "Pedido "+req.RestaurantName, "marketplace:"+uuid.NewString()); err != nil {
 		return nil, err
 	}
 

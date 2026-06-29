@@ -99,19 +99,24 @@ func (r *Repository) CreateRideRequest(ctx context.Context, ride *RideRequestRec
 	return err
 }
 
-func (r *Repository) GetRideRequest(ctx context.Context, rideID string) (*RideRequestRecord, error) {
+func (r *Repository) GetRideRequest(ctx context.Context, rideID, userID string) (*RideRequestRecord, error) {
 	var ride RideRequestRecord
+	// Scoped by user_id so a non-owner gets no rows (the caller 404s) and the
+	// derive/backfill side effect never runs on someone else's ride.
+	// elapsed_seconds is computed by the DB (timezone-safe).
 	err := r.db.QueryRow(ctx,
 		`SELECT id, user_id, partner_code, pickup, destination,
 		 estimated_price, estimated_time, distance, status,
 		 COALESCE(driver_name, ''), COALESCE(driver_rating, 0), COALESCE(driver_car, ''),
 		 COALESCE(driver_plate, ''), COALESCE(final_price, 0),
-		 created_at, completed_at
-		 FROM ride_requests WHERE id = $1`, rideID).Scan(
+		 created_at, completed_at,
+		 GREATEST(0, EXTRACT(EPOCH FROM (NOW() - created_at)))::bigint
+		 FROM ride_requests WHERE id = $1 AND user_id = $2`, rideID, userID).Scan(
 		&ride.ID, &ride.UserID, &ride.PartnerCode, &ride.Pickup, &ride.Destination,
 		&ride.EstimatedPrice, &ride.EstimatedTime, &ride.Distance, &ride.Status,
 		&ride.DriverName, &ride.DriverRating, &ride.DriverCar, &ride.DriverPlate,
-		&ride.FinalPrice, &ride.CreatedAt, &ride.CompletedAt)
+		&ride.FinalPrice, &ride.CreatedAt, &ride.CompletedAt,
+		&ride.ElapsedSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +138,45 @@ func (r *Repository) UpdateRideStatus(ctx context.Context, rideID, status string
 	return nil
 }
 
+// ConfirmRideRow flips a ride from searching to confirmed and re-anchors
+// created_at to the confirmation instant, so the trip clock starts at
+// confirmation (not request time). The status='searching' guard makes the
+// transition atomic: under a concurrent double-confirm exactly one call flips
+// the row; the loser gets 0 rows and an error.
+func (r *Repository) ConfirmRideRow(ctx context.Context, rideID string) error {
+	res, err := r.db.Exec(ctx,
+		`UPDATE ride_requests SET status = 'confirmed', created_at = NOW()
+		 WHERE id = $1 AND status = 'searching'`, rideID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("ride is not in a confirmable state")
+	}
+	return nil
+}
+
+// MarkRideCompletedIfDue persists the completed terminal state for a ride whose
+// ETA has elapsed. completed_at is the true arrival instant (created_at + ETA),
+// never NOW(), so the write is idempotent. The status guard makes concurrent
+// reads race-safe. 0 rows affected is not an error.
+func (r *Repository) MarkRideCompletedIfDue(ctx context.Context, rideID string, etaMinutes int) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE ride_requests
+		 SET status = 'completed', completed_at = created_at + make_interval(mins => $2)
+		 WHERE id = $1 AND status NOT IN ('completed', 'cancelled', 'searching')`,
+		rideID, etaMinutes)
+	return err
+}
+
 func (r *Repository) ListUserRides(ctx context.Context, userID string, limit int) ([]RideRequestRecord, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, partner_code, pickup, destination,
 		 estimated_price, estimated_time, distance, status,
 		 COALESCE(driver_name, ''), COALESCE(driver_rating, 0), COALESCE(driver_car, ''),
 		 COALESCE(driver_plate, ''), COALESCE(final_price, 0),
-		 created_at, completed_at
+		 created_at, completed_at,
+		 GREATEST(0, EXTRACT(EPOCH FROM (NOW() - created_at)))::bigint
 		 FROM ride_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
 		userID, limit)
 	if err != nil {
@@ -154,7 +191,8 @@ func (r *Repository) ListUserRides(ctx context.Context, userID string, limit int
 			&ride.ID, &ride.UserID, &ride.PartnerCode, &ride.Pickup, &ride.Destination,
 			&ride.EstimatedPrice, &ride.EstimatedTime, &ride.Distance, &ride.Status,
 			&ride.DriverName, &ride.DriverRating, &ride.DriverCar, &ride.DriverPlate,
-			&ride.FinalPrice, &ride.CreatedAt, &ride.CompletedAt); err != nil {
+			&ride.FinalPrice, &ride.CreatedAt, &ride.CompletedAt,
+			&ride.ElapsedSeconds); err != nil {
 			return nil, err
 		}
 		rides = append(rides, ride)

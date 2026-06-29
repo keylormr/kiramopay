@@ -13,6 +13,15 @@ function backdate(id: string, msAgo: number) {
   localStorage.setItem(KEY, JSON.stringify(state));
 }
 
+function backdateRide(id: string, msAgo: number) {
+  const state = JSON.parse(localStorage.getItem(KEY) || '{}') as {
+    rides: Array<{ id: string; createdAt: string }>;
+  };
+  const r = state.rides.find((x) => x.id === id);
+  if (r) r.createdAt = new Date(Date.now() - msAgo).toISOString();
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+
 describe('MockMarketplaceRepository food order tracking', () => {
   beforeEach(() => localStorage.clear());
 
@@ -48,6 +57,33 @@ describe('MockMarketplaceRepository food order tracking', () => {
     // Terminal state is persisted: even reset to "just created", it stays delivered.
     backdate(id, 0);
     expect((await repo.getFoodOrder(id)).data!.status).toBe('delivered');
+  });
+
+  it('progresses a confirmed ride arriving -> in_progress -> completed', async () => {
+    const repo = new MockMarketplaceRepository();
+    const created = await repo.createRide({ partnerCode: 'uber', pickup: 'A', destination: 'B' });
+    expect(created.data!.status).toBe('searching');
+    const id = created.data!.id;
+    const etaMs = parseInt(created.data!.estimatedTime, 10) * 60 * 1000;
+
+    // An unconfirmed (searching) ride does not progress, even past its ETA.
+    backdateRide(id, etaMs * 0.5);
+    expect((await repo.getRide(id)).data!.status).toBe('searching');
+
+    await repo.confirmRide(id);
+
+    backdateRide(id, etaMs * 0.05);
+    expect((await repo.getRide(id)).data!.status).toBe('arriving');
+
+    backdateRide(id, etaMs * 0.5);
+    expect((await repo.getRide(id)).data!.status).toBe('in_progress');
+
+    backdateRide(id, etaMs * 1.2);
+    expect((await repo.getRide(id)).data!.status).toBe('completed');
+
+    // Terminal state is persisted.
+    backdateRide(id, 0);
+    expect((await repo.getRide(id)).data!.status).toBe('completed');
   });
 
   it('keeps the courier stable across reads for the same order', async () => {

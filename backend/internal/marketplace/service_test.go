@@ -82,6 +82,57 @@ func TestDeriveCourierDeterministic(t *testing.T) {
 	}
 }
 
+func TestDeriveRideStatus(t *testing.T) {
+	// 20 min ETA = 1200s: in_progress at 0.15 (180s), completed at 1.00 (1200s).
+	cases := []struct {
+		status  string
+		elapsed int64
+		want    string
+	}{
+		{"confirmed", 0, "arriving"},
+		{"confirmed", 100, "arriving"},
+		{"confirmed", 180, "in_progress"},
+		{"confirmed", 600, "in_progress"},
+		{"confirmed", 1200, "completed"},
+		{"in_progress", 5000, "completed"},
+	}
+	for _, c := range cases {
+		r := &RideRequestRecord{Status: c.status, EstimatedTime: "20 min", ElapsedSeconds: c.elapsed}
+		if got := deriveRideStatus(r); got != c.want {
+			t.Errorf("status=%s elapsed=%ds: got %s, want %s", c.status, c.elapsed, got, c.want)
+		}
+	}
+
+	// searching (unconfirmed) never progresses; terminal states are verbatim.
+	if got := deriveRideStatus(&RideRequestRecord{Status: "searching", EstimatedTime: "20 min", ElapsedSeconds: 99999}); got != "searching" {
+		t.Errorf("searching progressed to %s", got)
+	}
+	if got := deriveRideStatus(&RideRequestRecord{Status: "cancelled", EstimatedTime: "20 min", ElapsedSeconds: 99999}); got != "cancelled" {
+		t.Errorf("cancelled changed to %s", got)
+	}
+	if got := deriveRideStatus(&RideRequestRecord{Status: "completed", EstimatedTime: "20 min", ElapsedSeconds: 0}); got != "completed" {
+		t.Errorf("completed changed to %s", got)
+	}
+}
+
+func TestApplyLiveRideStatusMinutesRemaining(t *testing.T) {
+	r := &RideRequestRecord{Status: "confirmed", EstimatedTime: "20 min", ElapsedSeconds: 300} // 5 min in
+	applyLiveRideStatus(r)
+	if r.Status != "in_progress" {
+		t.Fatalf("status = %s, want in_progress", r.Status)
+	}
+	if r.MinutesRemaining != 15 {
+		t.Fatalf("minutes remaining = %d, want 15", r.MinutesRemaining)
+	}
+
+	// An unconfirmed ride does not progress and exposes no countdown.
+	s := &RideRequestRecord{Status: "searching", EstimatedTime: "20 min", ElapsedSeconds: 300}
+	applyLiveRideStatus(s)
+	if s.Status != "searching" || s.MinutesRemaining != 0 {
+		t.Fatalf("searching: status=%s remaining=%d", s.Status, s.MinutesRemaining)
+	}
+}
+
 func TestCourierForVisibility(t *testing.T) {
 	s := &Service{}
 	for _, st := range []string{"preparing", "ready"} {

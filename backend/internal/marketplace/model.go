@@ -42,6 +42,11 @@ type RideRequestRecord struct {
 	FinalPrice     int64      `json:"final_price,omitempty"` // centimos
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+
+	// Computed at read time (never persisted): live trip progress after a ride is
+	// confirmed. Status is derived from ElapsedSeconds (DB-computed) and the ETA.
+	ElapsedSeconds   int64 `json:"-"`
+	MinutesRemaining int   `json:"minutes_remaining"`
 }
 
 // ── Food Order ───────────────────────────────────────────────────────────────

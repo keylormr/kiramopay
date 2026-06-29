@@ -17,7 +17,8 @@ export interface RideRequest {
   estimatedPrice: number;
   estimatedTime: string;
   distance: string;
-  status: 'searching' | 'confirmed' | 'arriving' | 'in_progress' | 'completed';
+  status: 'searching' | 'confirmed' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
+  minutesRemaining?: number;
   driver?: {
     name: string;
     rating: number;

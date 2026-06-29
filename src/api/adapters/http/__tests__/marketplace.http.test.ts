@@ -29,6 +29,24 @@ describe('HttpMarketplaceRepository', () => {
     expect(post).toHaveBeenCalledWith('/api/v1/marketplace/rides', expect.objectContaining({ partner_code: 'uber' }));
   });
 
+  it('maps a tracked ride with live status, ETA and driver', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        id: 'r1', partner_code: 'uber', pickup: 'A', destination: 'B',
+        estimated_price: 525000, estimated_time: '20 min', distance: '5.0 km',
+        status: 'in_progress', minutes_remaining: 7,
+        driver_name: 'Carlos', driver_rating: 4.9, driver_car: 'Corolla', driver_plate: 'ABC-123',
+      },
+    });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getRide('r1');
+    expect(res.success).toBe(true);
+    expect(res.data?.status).toBe('in_progress');
+    expect(res.data?.minutesRemaining).toBe(7);
+    expect(res.data?.driver?.name).toBe('Carlos');
+    expect(res.data?.estimatedPrice).toBe(5250); // centimos -> colones
+  });
+
   it('confirms a ride via the confirm endpoint', async () => {
     const post = vi.fn().mockResolvedValue({ success: true, data: rawRide });
     const res = await new HttpMarketplaceRepository(fakeClient({ post })).confirmRide('r1');

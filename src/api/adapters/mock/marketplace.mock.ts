@@ -87,6 +87,35 @@ function liveFoodOrder(o: StoredFoodOrder): FoodOrder {
   };
 }
 
+// Live trip progress mirrors backend/internal/marketplace/service.go. Keep these
+// fractions identical to the Go ride constants.
+const RIDE_FRAC_IN_PROGRESS = 0.15;
+const RIDE_FRAC_COMPLETED = 1.0;
+
+type StoredRide = RideRequest & { createdAt: string };
+
+// Recompute live status/ETA from elapsed time for a confirmed ride (mirrors the
+// backend). searching (unconfirmed) and terminal states are returned as stored.
+function liveRide(r: StoredRide): RideRequest {
+  const { createdAt, ...rest } = r;
+  if (r.status === 'searching' || r.status === 'completed' || r.status === 'cancelled') {
+    return { ...rest, minutesRemaining: 0 };
+  }
+  const eta = etaMinutes(r.estimatedTime);
+  const created = createdAt ? new Date(createdAt).getTime() : Date.now();
+  const elapsed = Math.max(0, (Date.now() - created) / 1000);
+  const f = eta > 0 ? elapsed / (eta * 60) : 1;
+  let status: RideRequest['status'];
+  if (f < RIDE_FRAC_IN_PROGRESS) status = 'arriving';
+  else if (f < RIDE_FRAC_COMPLETED) status = 'in_progress';
+  else status = 'completed';
+  return {
+    ...rest,
+    status,
+    minutesRemaining: status === 'completed' ? 0 : Math.max(0, eta - Math.floor(elapsed / 60)),
+  };
+}
+
 const initialPartners: MarketplacePartner[] = [
   { id: 'p-uber', code: 'uber', name: 'Uber', category: 'transport', logo: '🚗', color: '#000000', description: 'Solicita viajes y pagalos desde KiramoPay' },
   { id: 'p-didi', code: 'didi', name: 'DiDi', category: 'transport', logo: '🚕', color: '#FF6611', description: 'Viajes con tarifa competitiva' },
@@ -127,7 +156,7 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
 
   async createRide(request: CreateRideRequest): Promise<ApiResponse<RideRequest>> {
     const driver = MOCK_DRIVERS[Math.floor(Math.random() * MOCK_DRIVERS.length)];
-    const ride: RideRequest = {
+    const stored: StoredRide = {
       id: `ride-${Date.now()}`,
       partnerId: request.partnerCode,
       pickup: request.pickup,
@@ -137,35 +166,45 @@ export class MockMarketplaceRepository implements IMarketplaceRepository {
       distance: `${(Math.random() * 10 + 1).toFixed(1)} km`,
       status: 'searching',
       driver: { ...driver, photo: '' },
+      createdAt: new Date().toISOString(),
     };
     const state = getState();
-    const rides: RideRequest[] = state?.rides ?? [];
-    rides.unshift(ride);
+    const rides: StoredRide[] = state?.rides ?? [];
+    rides.unshift(stored);
     saveField('rides', rides);
-    return apiSuccess(ride);
+    return apiSuccess(liveRide(stored));
   }
 
   async confirmRide(rideId: string): Promise<ApiResponse<RideRequest>> {
     const state = getState();
-    const rides: RideRequest[] = state?.rides ?? [];
+    const rides: StoredRide[] = state?.rides ?? [];
     const i = rides.findIndex((r) => r.id === rideId);
     if (i === -1) return apiError('NOT_FOUND', 'Viaje no encontrado');
-    rides[i] = { ...rides[i], status: 'confirmed' };
+    // Re-anchor the trip clock at confirmation (mirrors the backend) so searching
+    // dwell time does not leak into the trip.
+    rides[i] = { ...rides[i], status: 'confirmed', createdAt: new Date().toISOString() };
     saveField('rides', rides);
-    return apiSuccess(rides[i]);
+    return apiSuccess(liveRide(rides[i]));
   }
 
   async listRides(): Promise<ApiResponse<RideRequest[]>> {
     const state = getState();
-    return apiSuccess(state?.rides ?? []);
+    const rides: StoredRide[] = state?.rides ?? [];
+    return apiSuccess(rides.map(liveRide));
   }
 
   async getRide(rideId: string): Promise<ApiResponse<RideRequest>> {
     const state = getState();
-    const rides: RideRequest[] = state?.rides ?? [];
-    const ride = rides.find((r) => r.id === rideId);
-    if (!ride) return apiError('NOT_FOUND', 'Viaje no encontrado');
-    return apiSuccess(ride);
+    const rides: StoredRide[] = state?.rides ?? [];
+    const i = rides.findIndex((r) => r.id === rideId);
+    if (i === -1) return apiError('NOT_FOUND', 'Viaje no encontrado');
+    const live = liveRide(rides[i]);
+    // Persist the terminal state so later reads short-circuit (mirrors backend backfill).
+    if (live.status === 'completed' && rides[i].status !== 'completed') {
+      rides[i] = { ...rides[i], status: 'completed', minutesRemaining: 0 };
+      saveField('rides', rides);
+    }
+    return apiSuccess(live);
   }
 
   async createFoodOrder(request: CreateFoodOrderRequest): Promise<ApiResponse<FoodOrder>> {

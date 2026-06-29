@@ -61,6 +61,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>('/api/v1/marketplace/rides', {
       partner_code: request.partnerCode,
       pickup: request.pickup,
@@ -78,6 +79,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
       driver: res.data.driver_name ? {
         name: res.data.driver_name,
         rating: res.data.driver_rating,
@@ -93,6 +95,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}/confirm`, {});
 
     if (!res.success || !res.data) return apiError('CONFIRM_FAILED', res.error?.message || 'Failed');
@@ -106,6 +109,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
       driver: res.data.driver_name ? {
         name: res.data.driver_name,
         rating: res.data.driver_rating,
@@ -121,6 +125,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>>('/api/v1/marketplace/rides');
 
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rides');
@@ -134,6 +139,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: r.estimated_time,
       distance: r.distance,
       status: r.status as RideRequest['status'],
+      minutesRemaining: r.minutes_remaining,
       driver: r.driver_name ? {
         name: r.driver_name,
         rating: r.driver_rating,
@@ -149,6 +155,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}`);
 
     if (!res.success || !res.data) return apiError('NOT_FOUND', 'Ride not found');
@@ -162,6 +169,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
       driver: res.data.driver_name ? {
         name: res.data.driver_name,
         rating: res.data.driver_rating,

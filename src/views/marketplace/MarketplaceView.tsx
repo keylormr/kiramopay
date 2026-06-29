@@ -23,6 +23,22 @@ const FOOD_STATUS_INDEX: Record<string, number> = {
   cancelled: -1,
 };
 
+// Live ride tracker steps (status -> step index).
+const RIDE_STEPS = [
+  { key: 'confirmed', label: 'Confirmado', icon: '✅' },
+  { key: 'arriving', label: 'En camino a ti', icon: '🚗' },
+  { key: 'in_progress', label: 'Viaje en curso', icon: '🛣️' },
+  { key: 'completed', label: 'Llegaste', icon: '🎉' },
+] as const;
+const RIDE_STATUS_INDEX: Record<string, number> = {
+  confirmed: 0,
+  arriving: 1,
+  in_progress: 2,
+  completed: 3,
+  searching: -1,
+  cancelled: -1,
+};
+
 // Partners del marketplace
 const MARKETPLACE_PARTNERS = {
   transport: [
@@ -157,7 +173,7 @@ export const MarketplaceView: React.FC = () => {
   } | null>(null);
 
   // Ride states
-  const [rideStep, setRideStep] = useState<'location' | 'searching' | 'found' | 'arriving'>('location');
+  const [rideStep, setRideStep] = useState<'location' | 'searching' | 'found' | 'tracking'>('location');
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
@@ -212,6 +228,32 @@ export const MarketplaceView: React.FC = () => {
     };
   }, [orderStep, activeOrder?.id]);
 
+  // While tracking a ride, poll the backend for the live trip status (arriving ->
+  // in_progress -> completed). Backend status is authoritative; polling stops on
+  // unmount, sheet close, and once the ride is terminal.
+  useEffect(() => {
+    if (rideStep !== 'tracking' || !activeRide?.id) return;
+    const mp = getApiLayer().marketplace;
+    if (!mp) return;
+    const rideId = activeRide.id;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      mp.getRide(rideId)
+        .then((res) => {
+          if (cancelled || !res.success || !res.data) return;
+          setActiveRide(res.data);
+          if (res.data.status === 'completed' || res.data.status === 'cancelled') {
+            clearInterval(timer);
+          }
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [rideStep, activeRide?.id]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
   };
@@ -261,19 +303,21 @@ export const MarketplaceView: React.FC = () => {
     const api = getApiLayer();
     if (api.marketplace && activeRide) {
       const res = await api.marketplace.confirmRide(activeRide.id);
-      if (res.success) {
+      if (res.success && res.data) {
+        setActiveRide(res.data); // status confirmed; the tracker polls from here
         if (hasBackend) refreshAccounts().catch(() => {});
         else localDebit(activeRide.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
       }
     }
-    setRideStep('arriving');
-    setTimeout(() => {
-      setShowRideSheet(false);
-      setRideStep('location');
-      setPickup('');
-      setDestination('');
-      setActiveRide(null);
-    }, 5000);
+    setRideStep('tracking');
+  };
+
+  const closeRideSheet = () => {
+    setShowRideSheet(false);
+    setRideStep('location');
+    setPickup('');
+    setDestination('');
+    setActiveRide(null);
   };
 
   const handlePlaceOrder = async () => {
@@ -508,7 +552,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Ride Request Sheet (Uber/DiDi) */}
       <BottomSheet
         isOpen={showRideSheet}
-        onClose={() => { setShowRideSheet(false); setRideStep('location'); }}
+        onClose={closeRideSheet}
         title={selectedPartner?.name || 'Pedir viaje'}
       >
         <div className="space-y-6">
@@ -636,16 +680,81 @@ export const MarketplaceView: React.FC = () => {
             </div>
           )}
 
-          {rideStep === 'arriving' && (
-            <div className="text-center py-8">
-              <div className="text-6xl mb-4">🚗</div>
-              <h3 className="text-xl font-bold uv-text-primary mb-2">
-                Tu conductor viene en camino
-              </h3>
-              <p className="text-3xl font-black text-primary mb-2">3 min</p>
-              <p className="uv-text-muted">
-                {activeRide?.driver ? `${activeRide.driver.car} • ${activeRide.driver.plate}` : 'En camino'}
-              </p>
+          {rideStep === 'tracking' && (
+            <div className="py-2 space-y-5">
+              <div className="text-center">
+                <h3 className="text-xl font-bold uv-text-primary mb-1">
+                  {activeRide?.status === 'completed'
+                    ? '¡Llegaste a tu destino!'
+                    : activeRide?.status === 'in_progress'
+                      ? 'Viaje en curso'
+                      : 'Tu conductor viene en camino'}
+                </h3>
+                <p className="uv-text-muted">{activeRide?.destination}</p>
+              </div>
+
+              {activeRide?.status !== 'completed' && (
+                <div className="uv-surface-2 rounded-xl p-4 text-center">
+                  <p className="text-sm text-gray-500 mb-1">
+                    {activeRide?.status === 'in_progress' ? 'Llegas en' : 'Tu conductor llega en'}
+                  </p>
+                  <p className="text-3xl font-black uv-text-primary">
+                    {(activeRide?.minutesRemaining ?? 0) > 0 ? `${activeRide?.minutesRemaining} min` : 'Muy pronto'}
+                  </p>
+                </div>
+              )}
+
+              {/* Live status stepper (driven by the backend status) */}
+              <div className="space-y-3">
+                {RIDE_STEPS.map((step, i) => {
+                  const current = RIDE_STATUS_INDEX[activeRide?.status ?? 'confirmed'];
+                  const done = current >= i;
+                  const active = current === i;
+                  return (
+                    <div key={step.key} className="flex items-center gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-lg ${
+                          done
+                            ? 'bg-green-500 text-white'
+                            : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
+                        } ${active ? 'ring-2 ring-green-400' : ''}`}
+                      >
+                        {done ? <Icons.Check size={18} /> : step.icon}
+                      </div>
+                      <span className={`font-medium ${done ? 'uv-text-primary' : 'uv-text-muted'}`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Driver card */}
+              {activeRide?.driver && (
+                <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
+                  <div className="w-14 h-14 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
+                    👨
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold uv-text-primary">{activeRide.driver.name}</p>
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <Icons.Star size={14} className="text-yellow-500 fill-yellow-500" />
+                      <span>{activeRide.driver.rating.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold uv-text-primary">{activeRide.driver.car}</p>
+                    <p className="text-sm text-gray-500">{activeRide.driver.plate}</p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={closeRideSheet}
+                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
+              >
+                {activeRide?.status === 'completed' ? 'Listo' : 'Seguir en segundo plano'}
+              </button>
             </div>
           )}
         </div>

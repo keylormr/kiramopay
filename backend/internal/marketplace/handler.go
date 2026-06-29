@@ -89,12 +89,10 @@ func (h *Handler) GetRideRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rideID := chi.URLParam(r, "id")
-	ride, err := h.service.GetRideRequest(r.Context(), rideID)
+	// Scoped to the requesting user; a non-owner gets not-found and no
+	// derive/backfill side effect runs on their ride.
+	ride, err := h.service.GetRideRequest(r.Context(), rideID, userID)
 	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
-		return
-	}
-	if ride.UserID != userID {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
 		return
 	}
@@ -108,13 +106,8 @@ func (h *Handler) UpdateRideStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rideID := chi.URLParam(r, "id")
-	// Ownership check: only the requesting user may change their own ride (IDOR).
-	ride, err := h.service.GetRideRequest(r.Context(), rideID)
-	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
-		return
-	}
-	if ride.UserID != userID {
+	// Ownership check: the scoped lookup returns no rows for a non-owner (IDOR).
+	if _, err := h.service.GetRideRequest(r.Context(), rideID, userID); err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "ride not found")
 		return
 	}

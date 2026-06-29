@@ -82,8 +82,17 @@ func TestConfirmRide_DebitsWallet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfirmRide: %v", err)
 	}
-	if confirmed.Status != "confirmed" {
-		t.Fatalf("status = %s, want confirmed", confirmed.Status)
+	// The trip clock starts at confirmation, so the live status is 'arriving'
+	// (the persisted status is 'confirmed').
+	if confirmed.Status != "arriving" {
+		t.Fatalf("status = %s, want arriving", confirmed.Status)
+	}
+	var persisted string
+	if err := pool.QueryRow(ctx, `SELECT status FROM ride_requests WHERE id = $1::uuid`, ride.ID).Scan(&persisted); err != nil {
+		t.Fatalf("read persisted status: %v", err)
+	}
+	if persisted != "confirmed" {
+		t.Fatalf("persisted status = %s, want confirmed", persisted)
 	}
 	// The driver assigned at creation survives the DB round-trip on confirm.
 	if confirmed.DriverName != ride.DriverName {
@@ -94,6 +103,44 @@ func TestConfirmRide_DebitsWallet(t *testing.T) {
 	}
 	if _, err := svc.ConfirmRide(ctx, user, ride.ID); err == nil {
 		t.Fatal("expected error confirming an already-confirmed ride")
+	}
+}
+
+// Even if a confirmed ride is forced back to 'searching' at the DB level, a
+// second confirm must not produce a second wallet debit (stable ledger key).
+func TestConfirmRide_NoDoubleChargeOnReset(t *testing.T) {
+	svc, pool, user := setupMarketplace(t)
+	ctx := context.Background()
+
+	ride, err := svc.CreateRideRequest(ctx, user, &marketplace.CreateRideRequest{
+		PartnerCode: "uber", Pickup: "A", Destination: "B",
+	})
+	if err != nil {
+		t.Fatalf("CreateRideRequest: %v", err)
+	}
+	w0 := walletCRC(t, pool, user)
+
+	if _, err := svc.ConfirmRide(ctx, user, ride.ID); err != nil {
+		t.Fatalf("ConfirmRide: %v", err)
+	}
+	afterFirst := walletCRC(t, pool, user)
+	if afterFirst != w0-ride.EstimatedPrice {
+		t.Fatalf("first charge wrong: %d, want %d", afterFirst, w0-ride.EstimatedPrice)
+	}
+
+	// Force the row back to searching (simulating a malicious/buggy status reset).
+	if _, err := pool.Exec(ctx,
+		`UPDATE ride_requests SET status = 'searching' WHERE id = $1::uuid`, ride.ID); err != nil {
+		t.Fatalf("force searching: %v", err)
+	}
+
+	// A second confirm runs the charge again, but the stable idempotency key
+	// collapses it to a no-op: the wallet is unchanged.
+	if _, err := svc.ConfirmRide(ctx, user, ride.ID); err != nil {
+		t.Fatalf("second ConfirmRide: %v", err)
+	}
+	if got := walletCRC(t, pool, user); got != afterFirst {
+		t.Fatalf("second confirm double-charged: %d, want %d", got, afterFirst)
 	}
 }
 
@@ -172,6 +219,86 @@ func TestGetFoodOrder_LiveStatusAndBackfill(t *testing.T) {
 	// Reads never moved money.
 	if w := walletCRC(t, pool, user); w != wAfterOrder {
 		t.Fatalf("wallet changed across reads: %d vs %d", w, wAfterOrder)
+	}
+}
+
+// A confirmed ride progresses arriving -> completed purely from elapsed time,
+// completed is persisted (backfill), the backfill is idempotent, and no read
+// moves money.
+func TestGetRideRequest_LiveProgressAndBackfill(t *testing.T) {
+	svc, pool, user := setupMarketplace(t)
+	ctx := context.Background()
+
+	ride, err := svc.CreateRideRequest(ctx, user, &marketplace.CreateRideRequest{
+		PartnerCode: "uber", Pickup: "A", Destination: "B",
+	})
+	if err != nil {
+		t.Fatalf("CreateRideRequest: %v", err)
+	}
+
+	// An unconfirmed (searching) ride is not progressed by a read.
+	got, err := svc.GetRideRequest(ctx, ride.ID, user)
+	if err != nil {
+		t.Fatalf("GetRideRequest: %v", err)
+	}
+	if got.Status != "searching" {
+		t.Fatalf("fresh ride status = %s, want searching", got.Status)
+	}
+
+	if _, err := svc.ConfirmRide(ctx, user, ride.ID); err != nil {
+		t.Fatalf("ConfirmRide: %v", err)
+	}
+	wAfterConfirm := walletCRC(t, pool, user)
+
+	// A non-owner read returns not-found and must NOT trigger the backfill write.
+	if _, err := svc.GetRideRequest(ctx, ride.ID, uuid.NewString()); err == nil {
+		t.Fatal("expected not-found reading another user's ride")
+	}
+
+	// Backdate creation well past the ETA -> derives + persists completed.
+	if _, err := pool.Exec(ctx,
+		`UPDATE ride_requests SET created_at = NOW() - INTERVAL '3 hours' WHERE id = $1::uuid`, ride.ID); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+
+	got, err = svc.GetRideRequest(ctx, ride.ID, user)
+	if err != nil {
+		t.Fatalf("GetRideRequest (aged): %v", err)
+	}
+	if got.Status != "completed" {
+		t.Fatalf("aged ride status = %s, want completed", got.Status)
+	}
+	if got.CompletedAt == nil {
+		t.Fatal("completed ride should expose completed_at")
+	}
+
+	// The terminal state is persisted on the row.
+	var stored string
+	var completed *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT status, completed_at FROM ride_requests WHERE id = $1::uuid`, ride.ID).Scan(&stored, &completed); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if stored != "completed" || completed == nil {
+		t.Fatalf("backfill not persisted: status=%s completed=%v", stored, completed)
+	}
+	firstCompleted := *completed
+
+	// Idempotent: a second read does not move completed_at.
+	if _, err := svc.GetRideRequest(ctx, ride.ID, user); err != nil {
+		t.Fatalf("GetRideRequest (idempotent): %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT completed_at FROM ride_requests WHERE id = $1::uuid`, ride.ID).Scan(&completed); err != nil {
+		t.Fatalf("read row 2: %v", err)
+	}
+	if !completed.Equal(firstCompleted) {
+		t.Fatalf("completed_at changed on second read: %v vs %v", firstCompleted, *completed)
+	}
+
+	// The only charge was at confirmation; reads moved no money.
+	if w := walletCRC(t, pool, user); w != wAfterConfirm {
+		t.Fatalf("wallet changed across reads: %d vs %d", w, wAfterConfirm)
 	}
 }
 
