@@ -198,12 +198,13 @@ func main() {
 	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
 	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
-		LockoutStore:     lockoutStore,
-		AuditLogger:      auditLogger,
-		Screener:         kycService,
-		MaxLoginAttempts: 5,
-		IdleTimeout:      cfg.JWT.IdleTimeout,
-		AbsoluteTimeout:  cfg.JWT.RefreshDuration,
+		LockoutStore:             lockoutStore,
+		AuditLogger:              auditLogger,
+		Screener:                 kycService,
+		MaxLoginAttempts:         5,
+		IdleTimeout:              cfg.JWT.IdleTimeout,
+		AbsoluteTimeout:          cfg.JWT.RefreshDuration,
+		RequirePhoneVerification: cfg.Server.RequirePhoneVerification,
 	})
 	userService := user.NewService(userRepo)
 	walletService := wallet.NewService(walletRepo)
@@ -464,6 +465,8 @@ func main() {
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)
+			r.Post("/auth/register/otp/send", authHandler.RegisterSendOTP)
+			r.Post("/auth/register/otp/verify", authHandler.RegisterVerifyOTP)
 			r.Post("/auth/refresh", authHandler.RefreshToken)
 			r.Post("/auth/forgot-password", authHandler.ForgotPassword)
 			r.Post("/auth/reset-password", authHandler.ResetPassword)
