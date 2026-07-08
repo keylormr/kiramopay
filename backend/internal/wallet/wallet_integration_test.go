@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kiramopay/backend/internal/kyc"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
@@ -104,5 +105,39 @@ func TestUpdateBalance_Debit(t *testing.T) {
 	expected := initialBalance - debitAmount
 	if balance.CRC != expected {
 		t.Fatalf("expected balance %d after debit, got %d", expected, balance.CRC)
+	}
+}
+
+// A wallet created for a brand-new user must start at the KYC level-0 (Basic)
+// limits, not the higher column default that used to leak the "Verified" tier
+// to unverified accounts.
+func TestCreateForUser_StartsAtBasicKYCLimits(t *testing.T) {
+	pool := testutil.TestDB(t)
+	repo := wallet.NewRepository(pool)
+	ctx := context.Background()
+
+	userID := "00000000-0000-0000-0000-0000000009a1"
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level)
+		 VALUES ($1, '109990999', '+50688887777', 'New', 'User', 'x', 'active', 0)`,
+		userID,
+	); err != nil {
+		t.Fatalf("seed bare user: %v", err)
+	}
+
+	if err := repo.CreateForUser(ctx, userID); err != nil {
+		t.Fatalf("CreateForUser() error: %v", err)
+	}
+
+	w, err := repo.FindByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("FindByUserID() error: %v", err)
+	}
+	basic := kyc.LevelLimits[kyc.LevelBasic]
+	if w.DailyLimit != basic.DailyMinor {
+		t.Errorf("daily_limit = %d, want Basic tier %d", w.DailyLimit, basic.DailyMinor)
+	}
+	if w.MonthlyLimit != basic.MonthlyMinor {
+		t.Errorf("monthly_limit = %d, want Basic tier %d", w.MonthlyLimit, basic.MonthlyMinor)
 	}
 }

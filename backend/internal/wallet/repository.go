@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kiramopay/backend/internal/kyc"
 )
 
 type Repository struct {
@@ -17,9 +19,14 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 func (r *Repository) CreateForUser(ctx context.Context, userID string) error {
+	// New users start at KYC level 0 (Basic). Pin the wallet limits to that tier
+	// explicitly instead of relying on the column default: migration 001 defaults
+	// daily/monthly_limit to the higher "Verified" tier, which would silently let
+	// an unverified account transact well above its intended cap.
+	basic := kyc.LevelLimits[kyc.LevelBasic]
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO wallets (id, user_id) VALUES ($1, $2)`,
-		uuid.New().String(), userID,
+		`INSERT INTO wallets (id, user_id, daily_limit, monthly_limit) VALUES ($1, $2, $3, $4)`,
+		uuid.New().String(), userID, basic.DailyMinor, basic.MonthlyMinor,
 	)
 	if err != nil {
 		return fmt.Errorf("create wallet: %w", err)
