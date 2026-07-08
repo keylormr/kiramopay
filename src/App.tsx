@@ -11,6 +11,8 @@ import { Icons } from './components/Icons';
 import type { LucideIcon } from 'lucide-react';
 import { biometricService } from './services/biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { User } from './types';
 import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
 import { useAuthStore } from './stores/auth.store';
@@ -216,6 +218,25 @@ const Layout = () => {
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
   const { state } = useApp();
   const { t } = useLanguage();
+
+  // Android hardware back: close an open overlay first, else return to Home,
+  // else exit the app. Without this the WebView has a single history entry, so
+  // Back quits the app from any screen. No-op on web (no hardware back).
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = CapApp.addListener('backButton', () => {
+      if (overlayView !== null) {
+        setOverlayView(null);
+      } else if (activeTab !== 'home') {
+        setActiveTab('home');
+      } else {
+        void CapApp.exitApp();
+      }
+    });
+    return () => {
+      void listener.then((handle) => handle.remove());
+    };
+  }, [overlayView, activeTab]);
 
   const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
