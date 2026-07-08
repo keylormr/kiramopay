@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
-import { storageService } from './services/storage';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/auth/LoginView';
@@ -434,10 +433,10 @@ const AppContainer = () => {
   // call entirely — going straight to login — so boot doesn't spend an /auth/*
   // request (which counts against the auth rate limit). Block the first paint
   // only while that restore is in flight.
-  const [booting, setBooting] = useState(() => hasBackend && !!useAuthStore.getState().user);
+  const [booting, setBooting] = useState(() => hasBackend && useAuthStore.getState().sessionHint);
 
   useEffect(() => {
-    if (!hasBackend || !useAuthStore.getState().user) return;
+    if (!hasBackend || !useAuthStore.getState().sessionHint) return;
     let cancelled = false;
     useAuthStore
       .getState()
@@ -490,7 +489,6 @@ const AppInit = () => {
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
   useEffect(() => {
-    storageService.initializeDefaultUsers();
     // Hide native splash screen after app is ready
     SplashScreen.hide().catch(() => {
       // Not running in Capacitor native context — ignore

@@ -18,7 +18,6 @@ import { useServicesStore } from '@/stores/services.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import type { AppState, AppAction } from '@/types';
-import { storageService } from '@/services/storage';
 import { getApiLayer } from '@/api';
 import {
   refreshAccounts,
@@ -241,9 +240,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       }
       case 'TOGGLE_BIOMETRIC':
         settings.toggleBiometric();
-        if (auth.user?.cedula) {
-          storageService.toggleBiometric(auth.user.cedula, !settings.biometricEnabled);
-        }
         break;
       case 'TOGGLE_NOTIFICATIONS':
         settings.toggleNotifications();
