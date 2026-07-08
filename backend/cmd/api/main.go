@@ -107,6 +107,16 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to PostgreSQL")
 
+	// PII at rest (cedula/phone/email) is encrypted with a key read from the
+	// kiramopay.encryption_key GUC (migration 024). Outside development, fail fast
+	// at boot if it's missing/short instead of erroring on the first PII access.
+	if cfg.Server.Environment != "development" {
+		if err := database.VerifyEncryptionKey(context.Background(), pool); err != nil {
+			log.Fatalf("PII encryption not configured: %v", err)
+		}
+		log.Println("PII encryption key present")
+	}
+
 	if os.Getenv("RUN_MIGRATIONS") == "true" {
 		migDir := os.Getenv("MIGRATIONS_DIR")
 		if migDir == "" {
