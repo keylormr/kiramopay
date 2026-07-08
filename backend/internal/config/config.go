@@ -55,6 +55,9 @@ type ServerConfig struct {
 	Environment  string // "development", "staging", "production"
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	// RequirePhoneVerification gates registration on a verified phone OTP.
+	// Keep false until an SMS provider can deliver the code.
+	RequirePhoneVerification bool
 }
 
 type DatabaseConfig struct {
@@ -123,10 +126,11 @@ type CORSConfig struct {
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Port:         getEnvInt("SERVER_PORT", 8080),
-			Environment:  getEnv("ENVIRONMENT", "development"),
-			ReadTimeout:  time.Duration(getEnvInt("SERVER_READ_TIMEOUT", 10)) * time.Second,
-			WriteTimeout: time.Duration(getEnvInt("SERVER_WRITE_TIMEOUT", 10)) * time.Second,
+			Port:                     getEnvInt("SERVER_PORT", 8080),
+			Environment:              getEnv("ENVIRONMENT", "development"),
+			ReadTimeout:              time.Duration(getEnvInt("SERVER_READ_TIMEOUT", 10)) * time.Second,
+			WriteTimeout:             time.Duration(getEnvInt("SERVER_WRITE_TIMEOUT", 10)) * time.Second,
+			RequirePhoneVerification: getEnv("REQUIRE_PHONE_VERIFICATION", "false") == "true",
 		},
 		Database: DatabaseConfig{
 			Host:        getEnv("DB_HOST", "localhost"),

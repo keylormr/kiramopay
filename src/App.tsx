@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
-import { storageService } from './services/storage';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/auth/LoginView';
@@ -11,6 +10,8 @@ import { Icons } from './components/Icons';
 import type { LucideIcon } from 'lucide-react';
 import { biometricService } from './services/biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { User } from './types';
 import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
 import { useAuthStore } from './stores/auth.store';
@@ -217,6 +218,25 @@ const Layout = () => {
   const { state } = useApp();
   const { t } = useLanguage();
 
+  // Android hardware back: close an open overlay first, else return to Home,
+  // else exit the app. Without this the WebView has a single history entry, so
+  // Back quits the app from any screen. No-op on web (no hardware back).
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = CapApp.addListener('backButton', () => {
+      if (overlayView !== null) {
+        setOverlayView(null);
+      } else if (activeTab !== 'home') {
+        setActiveTab('home');
+      } else {
+        void CapApp.exitApp();
+      }
+    });
+    return () => {
+      void listener.then((handle) => handle.remove());
+    };
+  }, [overlayView, activeTab]);
+
   const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
     { id: 'sinpe', icon: Icons.Smartphone, label: t('nav_sinpe') },
@@ -413,10 +433,10 @@ const AppContainer = () => {
   // call entirely — going straight to login — so boot doesn't spend an /auth/*
   // request (which counts against the auth rate limit). Block the first paint
   // only while that restore is in flight.
-  const [booting, setBooting] = useState(() => hasBackend && !!useAuthStore.getState().user);
+  const [booting, setBooting] = useState(() => hasBackend && useAuthStore.getState().sessionHint);
 
   useEffect(() => {
-    if (!hasBackend || !useAuthStore.getState().user) return;
+    if (!hasBackend || !useAuthStore.getState().sessionHint) return;
     let cancelled = false;
     useAuthStore
       .getState()
@@ -469,7 +489,6 @@ const AppInit = () => {
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
   useEffect(() => {
-    storageService.initializeDefaultUsers();
     // Hide native splash screen after app is ready
     SplashScreen.hide().catch(() => {
       // Not running in Capacitor native context — ignore

@@ -62,3 +62,24 @@ func NewPostgresPool(cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
 
 	return pool, nil
 }
+
+// VerifyEncryptionKey fails fast when the PII-at-rest encryption key is not
+// configured on the connected database. Migration 024 encrypts cedula/phone/
+// email using a secret read from the `kiramopay.encryption_key` GUC, set once
+// via `ALTER DATABASE <db> SET kiramopay.encryption_key = '<32+ chars>'`. If it
+// is missing, every PII read/write raises at runtime; surfacing it at boot turns
+// a scattered runtime failure into one clear startup error. current_setting's
+// missing_ok=true form returns empty instead of raising when the GUC is unset.
+func VerifyEncryptionKey(ctx context.Context, pool *pgxpool.Pool) error {
+	var key string
+	if err := pool.QueryRow(ctx,
+		`SELECT COALESCE(current_setting('kiramopay.encryption_key', true), '')`,
+	).Scan(&key); err != nil {
+		return fmt.Errorf("read kiramopay.encryption_key GUC: %w", err)
+	}
+	if len(key) < 32 {
+		return fmt.Errorf("kiramopay.encryption_key GUC is unset or shorter than 32 chars; " +
+			"set it once with: ALTER DATABASE <db> SET kiramopay.encryption_key = '<32+ char secret>'")
+	}
+	return nil
+}

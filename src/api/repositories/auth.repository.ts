@@ -47,4 +47,10 @@ export interface IAuthRepository {
   /** Exchanges a refresh token for a fresh token pair (rotation). */
   refresh(refreshToken: string): Promise<ApiResponse<TokenPair>>;
   logout(): Promise<ApiResponse<void>>;
+  /**
+   * Fetches the authenticated user's profile (GET /users/me). Used on cold
+   * start to rehydrate the profile from the backend so PII (cedula/phone/email)
+   * never has to be persisted in localStorage.
+   */
+  getProfile(): Promise<ApiResponse<User>>;
 }

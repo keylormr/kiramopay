@@ -57,10 +57,15 @@ func TestDB(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("Failed to create schema: %v", err)
 	}
 
-	truncateAll(ctx, pool)
+	if err := truncateAll(ctx, pool); err != nil {
+		pool.Close()
+		t.Fatalf("Failed to reset test DB: %v", err)
+	}
 
 	t.Cleanup(func() {
-		truncateAll(context.Background(), pool)
+		if err := truncateAll(context.Background(), pool); err != nil {
+			t.Errorf("cleanup: failed to reset test DB: %v", err)
+		}
 		pool.Close()
 	})
 
@@ -420,6 +425,26 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		AFTER INSERT ON journal_entries
 		DEFERRABLE INITIALLY DEFERRED
 		FOR EACH ROW EXECUTE FUNCTION fn_journal_posting_balanced();
+
+	-- Append-only enforcement — mirrors migration 020 so integration tests
+	-- exercise the immutability guarantee, not just the balance trigger.
+	CREATE OR REPLACE FUNCTION fn_journal_immutable()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		RAISE EXCEPTION 'journal entries are append-only (op=%, tbl=%)',
+			TG_OP, TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trg_journal_entries_immutable ON journal_entries;
+	CREATE TRIGGER trg_journal_entries_immutable
+		BEFORE UPDATE OR DELETE ON journal_entries
+		FOR EACH ROW EXECUTE FUNCTION fn_journal_immutable();
+
+	DROP TRIGGER IF EXISTS trg_journal_postings_immutable ON journal_postings;
+	CREATE TRIGGER trg_journal_postings_immutable
+		BEFORE UPDATE OR DELETE ON journal_postings
+		FOR EACH ROW EXECUTE FUNCTION fn_journal_immutable();
 
 	CREATE OR REPLACE VIEW ledger_account_balances AS
 	SELECT la.id AS account_id, la.code, la.type, la.user_id, la.currency, la.normal_balance,
@@ -808,7 +833,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
-func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
+func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	tables := []string{
 		"sinpe_history", "sinpe_contacts",
 		"crypto_price_alerts", "crypto_staking", "crypto_transactions", "crypto_assets",
@@ -831,11 +856,13 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 		"ledger_accounts",
 		"users",
 	}
-	for _, t := range tables {
-		_, _ = pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", t)) //nolint:gosec // test-only, fixed table list
+	for _, tbl := range tables {
+		if _, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tbl)); err != nil { //nolint:gosec // test-only, fixed table list
+			return fmt.Errorf("truncate %s: %w", tbl, err)
+		}
 	}
 	// Re-seed system ledger accounts after truncate.
-	_, _ = pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ledger_accounts (code, type, currency, normal_balance) VALUES
 			('SYSTEM:FEES:CRC',      'system_fee', 'CRC', 'credit'),
 			('SYSTEM:FEES:USD',      'system_fee', 'USD', 'credit'),
@@ -851,7 +878,10 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) {
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
 		ON CONFLICT (code) DO NOTHING
-	`)
+	`); err != nil {
+		return fmt.Errorf("re-seed system ledger accounts: %w", err)
+	}
+	return nil
 }
 
 // SeedTestUser creates a test user with wallet and returns the user ID.

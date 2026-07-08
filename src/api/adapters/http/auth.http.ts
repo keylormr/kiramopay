@@ -160,4 +160,36 @@ export class HttpAuthRepository implements IAuthRepository {
     this.client.clearTokens();
     return apiSuccess(undefined as unknown as void);
   }
+
+  async getProfile(): Promise<ApiResponse<User>> {
+    const res = await this.client.get<{
+      id: string;
+      cedula: string;
+      phone: string;
+      first_name: string;
+      last_name: string;
+      email: string;
+      kyc_level: number;
+      profile_picture_url?: string;
+      created_at?: string;
+    }>('/api/v1/users/me');
+
+    if (!res.success || !res.data) {
+      return apiError('PROFILE_FAILED', res.error?.message || 'Failed to load profile');
+    }
+
+    const u = res.data;
+    const user: User = {
+      id: u.id,
+      cedula: u.cedula,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      phone: u.phone,
+      email: u.email || '',
+      avatar: u.profile_picture_url || '',
+      createdAt: u.created_at || new Date().toISOString(),
+      kycLevel: u.kyc_level as 0 | 1 | 2,
+    };
+    return apiSuccess<User>(user);
+  }
 }

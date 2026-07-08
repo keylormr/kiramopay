@@ -107,6 +107,16 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to PostgreSQL")
 
+	// PII at rest (cedula/phone/email) is encrypted with a key read from the
+	// kiramopay.encryption_key GUC (migration 024). Outside development, fail fast
+	// at boot if it's missing/short instead of erroring on the first PII access.
+	if cfg.Server.Environment != "development" {
+		if err := database.VerifyEncryptionKey(context.Background(), pool); err != nil {
+			log.Fatalf("PII encryption not configured: %v", err)
+		}
+		log.Println("PII encryption key present")
+	}
+
 	if os.Getenv("RUN_MIGRATIONS") == "true" {
 		migDir := os.Getenv("MIGRATIONS_DIR")
 		if migDir == "" {
@@ -188,12 +198,13 @@ func main() {
 	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
 	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
-		LockoutStore:     lockoutStore,
-		AuditLogger:      auditLogger,
-		Screener:         kycService,
-		MaxLoginAttempts: 5,
-		IdleTimeout:      cfg.JWT.IdleTimeout,
-		AbsoluteTimeout:  cfg.JWT.RefreshDuration,
+		LockoutStore:             lockoutStore,
+		AuditLogger:              auditLogger,
+		Screener:                 kycService,
+		MaxLoginAttempts:         5,
+		IdleTimeout:              cfg.JWT.IdleTimeout,
+		AbsoluteTimeout:          cfg.JWT.RefreshDuration,
+		RequirePhoneVerification: cfg.Server.RequirePhoneVerification,
 	})
 	userService := user.NewService(userRepo)
 	walletService := wallet.NewService(walletRepo)
@@ -458,6 +469,8 @@ func main() {
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)
+			r.Post("/auth/register/otp/send", authHandler.RegisterSendOTP)
+			r.Post("/auth/register/otp/verify", authHandler.RegisterVerifyOTP)
 			r.Post("/auth/refresh", authHandler.RefreshToken)
 			r.Post("/auth/forgot-password", authHandler.ForgotPassword)
 			r.Post("/auth/reset-password", authHandler.ResetPassword)

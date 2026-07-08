@@ -13,18 +13,20 @@ test:
 	go test ./pkg/... -v -count=1
 
 # Run integration tests (requires PostgreSQL and Redis)
+# -p 1: integration tests share one Postgres with fixed seed IDs, so packages
+# must run serially (parallel packages race on the same rows) — matches CI.
 test-integration:
 	TEST_DB_DSN="postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable" \
 	TEST_REDIS_ADDR="localhost:6379" \
-	go test ./internal/... -v -count=1 -timeout=60s
+	go test ./internal/... -v -count=1 -p 1 -timeout=60s
 
 # Run all tests
 test-all:
-	go test ./... -v -count=1 -timeout=60s
+	go test ./... -v -count=1 -p 1 -timeout=60s
 
 # Run tests with coverage
 test-coverage:
-	go test ./... -v -count=1 -coverprofile=coverage.out -timeout=60s
+	go test ./... -v -count=1 -p 1 -coverprofile=coverage.out -timeout=60s
 	go tool cover -html=coverage.out -o coverage.html
 
 # Create test database
