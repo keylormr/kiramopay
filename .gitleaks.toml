@@ -1,0 +1,12 @@
+# Configuracion de gitleaks (Secret Scan en CI).
+# Solo se permiten aqui valores FIJOS de test, nunca credenciales reales.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de test conocidos — no son credenciales"
+regexes = [
+  # Clave fija de cifrado de PII usada por internal/testutil en los tests de
+  # integracion (se inyecta como GUC kiramopay.encryption_key de la DB de test).
+  '''test-pii-encryption-key-0123456789ab''',
+]
