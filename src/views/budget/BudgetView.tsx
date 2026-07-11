@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { useAccountStore } from '@/stores/account.store';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { Button } from '@/components/ui/Button';
 import type { Budget } from '@/types';
 import {
   UtensilsCrossed,
@@ -440,12 +441,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
 
           {/* Save / Cancel */}
           <div className="flex gap-3 pt-2">
-            <button
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
               onClick={() => setSheetOpen(false)}
-              className="flex-1 py-3 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-600 dark:text-gray-300 font-medium text-sm"
             >
               {t('cancel')}
-            </button>
+            </Button>
             <button
               onClick={handleSave}
               disabled={!formLabel.trim() || !formLimit || parseInt(formLimit, 10) <= 0}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { Button } from '@/components/ui/Button';
 import { getApiLayer } from '@/api';
 import type { SplitGroup } from '@/api/repositories/splitpay.repository';
 
@@ -125,9 +126,9 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
             <p className="text-lg font-bold mb-2 uv-text-primary">{t('splitpay_no_splits')}</p>
             <p className="text-sm text-center mb-6">{t('splitpay_no_splits_desc')}</p>
-            <button onClick={() => setShowCreate(true)} className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform">
+            <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
               {t('splitpay_create')}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
@@ -223,11 +224,15 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             )}
           </div>
 
-          <button onClick={handleCreate}
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={handleCreate}
             disabled={!title || !totalAmount || participants.filter(p => p.userName).length === 0}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all">
+          >
             {t('splitpay_create')}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
     </div>

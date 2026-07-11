@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { Button } from '../../components/ui/Button';
 
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
@@ -504,22 +505,16 @@ export const ServicesView: React.FC = () => {
             )}
           </div>
 
-          <button
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={handlePayService}
-            disabled={!clientId || !billAmount || parseFloat(billAmount) > balance || isProcessing}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+            loading={isProcessing}
+            disabled={!clientId || !billAmount || parseFloat(billAmount) > balance}
           >
-            {isProcessing ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {t('processing_payment')}
-              </>
-            ) : (
-              <>
-                {t('pay')} {billAmount && formatCurrency(parseFloat(billAmount))}
-              </>
-            )}
-          </button>
+            {isProcessing ? t('processing_payment') : <>{t('pay')} {billAmount && formatCurrency(parseFloat(billAmount))}</>}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -581,22 +576,16 @@ export const ServicesView: React.FC = () => {
             </div>
           </div>
 
-          <button
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={handleRecharge}
-            disabled={!rechargePhone || !rechargeAmount || (rechargeAmount || 0) > balance || isProcessing}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+            loading={isProcessing}
+            disabled={!rechargePhone || !rechargeAmount || (rechargeAmount || 0) > balance}
           >
-            {isProcessing ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {t('processing')}
-              </>
-            ) : (
-              <>
-                {t('recharge_label')} {rechargeAmount && formatCurrency(rechargeAmount)}
-              </>
-            )}
-          </button>
+            {isProcessing ? t('processing') : <>{t('recharge_label')} {rechargeAmount && formatCurrency(rechargeAmount)}</>}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -625,12 +614,14 @@ export const ServicesView: React.FC = () => {
             </div>
           )}
 
-          <button
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={() => setShowSuccessSheet(false)}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
           >
             {t('ready')}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
     </div>
