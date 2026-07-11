@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Icons } from '../../components/Icons';
+import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -138,13 +139,16 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={phone.length < 8 || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={phone.length < 8}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
@@ -176,13 +180,16 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               ))}
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={otp.some(d => !d) || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={otp.some(d => !d)}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('verify')}
-            </button>
+              {t('verify')}
+            </Button>
           </div>
         );
 
@@ -247,13 +254,16 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={!cedula.part1 || cedula.part2.length < 4 || cedula.part3.length < 4 || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={!cedula.part1 || cedula.part2.length < 4 || cedula.part3.length < 4}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
@@ -288,13 +298,16 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={!name.firstName || !name.lastName || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={!name.firstName || !name.lastName}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
@@ -387,20 +400,17 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               )}
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleRegister}
-              disabled={password.length < 8 || password !== confirmPassword || isLoading}
-              className="w-full bg-gradient-to-r from-primary to-accent text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+              loading={isLoading}
+              disabled={password.length < 8 || password !== confirmPassword}
+              rightIcon={<Icons.Check size={20} />}
             >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  {t('create_account')}
-                  <Icons.Check size={20} />
-                </>
-              )}
-            </button>
+              {t('create_account')}
+            </Button>
           </div>
         );
     }
