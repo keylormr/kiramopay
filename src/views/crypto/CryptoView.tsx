@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
@@ -66,6 +67,7 @@ const CRC_RATE = 515;
 
 export const CryptoView: React.FC = () => {
   const { state, dispatch } = useApp();
+  const { t } = useLanguage();
 
   const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail'>('none');
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
@@ -314,8 +316,8 @@ export const CryptoView: React.FC = () => {
 
   const getTxLabel = (type: CryptoTransaction['type']) => {
     const labels: Record<string, string> = {
-      buy: 'Compra', sell: 'Venta', send: 'Enviado', receive: 'Recibido',
-      convert: 'Conversión', stake: 'Staking', unstake: 'Unstake', yield: 'Rendimiento'
+      buy: t('crypto_tx_buy'), sell: t('crypto_tx_sell'), send: t('crypto_tx_send'), receive: t('crypto_tx_receive'),
+      convert: t('crypto_tx_convert'), stake: t('staking'), unstake: t('crypto_tx_unstake'), yield: t('crypto_tx_yield')
     };
     return labels[type] || type;
   };
@@ -323,9 +325,9 @@ export const CryptoView: React.FC = () => {
   // Format time ago
   const formatTimeAgo = (date: Date) => {
     const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'Ahora';
-    if (seconds < 3600) return `Hace ${Math.floor(seconds / 60)}m`;
-    return `Hace ${Math.floor(seconds / 3600)}h`;
+    if (seconds < 60) return t('crypto_just_now');
+    if (seconds < 3600) return t('crypto_minutes_ago').replace('{n}', String(Math.floor(seconds / 60)));
+    return t('crypto_hours_ago').replace('{n}', String(Math.floor(seconds / 3600)));
   };
 
   return (
@@ -340,12 +342,12 @@ export const CryptoView: React.FC = () => {
         <div className="relative flex justify-between items-start mb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Portfolio Total</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t('total_portfolio')}</p>
               <div aria-live="polite">
                 {isLoading ? (
-                  <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title="Actualizando..." role="status" aria-label="Updating prices" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
                 ) : (
-                  <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" title="Precios actualizados" role="status" aria-label="Prices updated" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" title={t('crypto_prices_updated')} role="status" aria-label={t('crypto_prices_updated')} />
                 )}
               </div>
             </div>
@@ -359,7 +361,7 @@ export const CryptoView: React.FC = () => {
             {lastUpdated && (
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
-                aria-label="Refresh prices"
+                aria-label={t('crypto_refresh_prices')}
                 className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors ml-auto"
               >
                 <Icons.RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
@@ -375,19 +377,19 @@ export const CryptoView: React.FC = () => {
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
             className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
           >
-            <Icons.Plus size={16} /> Comprar
+            <Icons.Plus size={16} /> {t('buy')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
             className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
           >
-            <Icons.Minus size={16} /> Vender
+            <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('convert'); }}
             className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
           >
-            <Icons.RefreshCw size={16} /> Convertir
+            <Icons.RefreshCw size={16} /> {t('convert')}
           </button>
         </div>
       </div>
@@ -400,7 +402,7 @@ export const CryptoView: React.FC = () => {
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'uv-surface-1 uv-shadow-soft uv-text-primary' : 'uv-text-muted hover:uv-text-secondary'}`}
           >
-            {tab === 'portfolio' ? 'Mi Portfolio' : tab === 'market' ? 'Mercado' : 'Staking'}
+            {tab === 'portfolio' ? t('crypto_my_portfolio') : tab === 'market' ? t('market') : t('staking')}
           </button>
         ))}
       </div>
@@ -408,19 +410,19 @@ export const CryptoView: React.FC = () => {
       {/* Portfolio Tab */}
       {activeTab === 'portfolio' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Mis Activos</h3>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('my_assets')}</h3>
 
           {assetsWithBalance.length === 0 ? (
             <div className="uv-surface-1 rounded-2xl p-8 text-center border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
               <div className="w-16 h-16 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mx-auto mb-4">
                 <Icons.Wallet size={28} className="uv-text-muted" />
               </div>
-              <p className="text-gray-500 mb-4">No tienes activos crypto aún</p>
+              <p className="text-gray-500 mb-4">{t('no_crypto_yet')}</p>
               <button
                 onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
                 className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-2 rounded-xl font-bold"
               >
-                Comprar Crypto
+                {t('buy_crypto')}
               </button>
             </div>
           ) : (
@@ -464,7 +466,7 @@ export const CryptoView: React.FC = () => {
           {/* Recent Transactions */}
           {state.crypto.transactions.length > 0 && (
             <>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white mt-6">Transacciones Recientes</h3>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mt-6">{t('recent_crypto_tx')}</h3>
               <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.crypto.transactions.slice(0, 5).map(tx => (
                   <button
@@ -499,14 +501,14 @@ export const CryptoView: React.FC = () => {
       {activeTab === 'market' && (
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Mercado en Vivo</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('crypto_market_live')}</h3>
             <button
               onClick={() => { setIsLoading(true); fetchPrices(); }}
-              aria-label="Refresh prices"
+              aria-label={t('crypto_refresh_prices')}
               className="flex items-center gap-1 text-sm text-[var(--color-primary)]"
             >
               <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-              Actualizar
+              {t('crypto_refresh')}
             </button>
           </div>
 
@@ -539,8 +541,8 @@ export const CryptoView: React.FC = () => {
                       </div>
                       {mktData && mktData.marketCap > 0 && (
                         <div className="flex gap-4 mt-2 text-xs text-gray-400">
-                          <span>Cap: {formatLargeNumber(mktData.marketCap)}</span>
-                          <span>Vol: {formatLargeNumber(mktData.volume24h)}</span>
+                          <span>{t('crypto_market_cap_short')}: {formatLargeNumber(mktData.marketCap)}</span>
+                          <span>{t('crypto_volume_short')}: {formatLargeNumber(mktData.volume24h)}</span>
                         </div>
                       )}
                     </div>
@@ -556,21 +558,21 @@ export const CryptoView: React.FC = () => {
       {/* Staking Tab */}
       {activeTab === 'staking' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Posiciones de Staking</h3>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('crypto_staking_positions')}</h3>
 
           {state.crypto.stakingPositions.length === 0 ? (
             <div className="uv-surface-1 rounded-2xl p-8 text-center border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
               <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Icons.Percent size={28} className="text-purple-500" />
               </div>
-              <p className="text-gray-500 mb-2">Gana rendimientos con tus crypto</p>
-              <p className="text-sm text-gray-400 mb-4">Hasta 8% APY en stablecoins</p>
+              <p className="text-gray-500 mb-2">{t('earn_passive')}</p>
+              <p className="text-sm text-gray-400 mb-4">{t('crypto_up_to_apy')}</p>
               <button
                 onClick={() => { setSelectedAsset(assetsWithBalance.find(a => a.symbol === 'ETH' || a.symbol === 'USDT') || null); setActiveSheet('stake'); }}
                 className="bg-purple-600 text-white px-6 py-2 rounded-xl font-bold"
                 disabled={assetsWithBalance.length === 0}
               >
-                Comenzar Staking
+                {t('start_staking')}
               </button>
             </div>
           ) : (
@@ -591,21 +593,21 @@ export const CryptoView: React.FC = () => {
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between">
-                          <span className="font-bold uv-text-primary">{position.asset} Staking</span>
+                          <span className="font-bold uv-text-primary">{position.asset} {t('staking')}</span>
                           <span className="text-green-500 font-bold">{position.apy}% APY</span>
                         </div>
-                        <div className="text-sm text-gray-500">Desde {position.startDate}</div>
+                        <div className="text-sm text-gray-500">{t('crypto_since')} {position.startDate}</div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 uv-surface-2 rounded-xl p-3">
                       <div>
-                        <p className="text-xs text-gray-500">Stakeado</p>
+                        <p className="text-xs text-gray-500">{t('crypto_staked')}</p>
                         <p className="font-bold uv-text-primary">{formatCrypto(position.amount)} {position.asset}</p>
                         <p className="text-xs text-gray-500">{formatUsd(valueUsd)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Ganado</p>
+                        <p className="text-xs text-gray-500">{t('earned')}</p>
                         <p className="font-bold text-green-500">{formatCrypto(position.earned)} {position.asset}</p>
                         <p className="text-xs text-gray-500">{formatUsd(earnedUsd)}</p>
                       </div>
@@ -617,7 +619,7 @@ export const CryptoView: React.FC = () => {
                           onClick={() => dispatch({ type: 'CLAIM_STAKING_YIELD', payload: { positionId: position.id, amount: position.earned } })}
                           className="flex-1 bg-green-500 text-white py-2 rounded-xl text-sm font-bold"
                         >
-                          Reclamar
+                          {t('claim')}
                         </button>
                       )}
                       {!position.locked && (
@@ -625,13 +627,13 @@ export const CryptoView: React.FC = () => {
                           onClick={() => dispatch({ type: 'UNSTAKE_CRYPTO', payload: { positionId: position.id } })}
                           className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-2 rounded-xl text-sm font-bold"
                         >
-                          Retirar
+                          {t('crypto_withdraw')}
                         </button>
                       )}
                       {position.locked && (
                         <div className="flex-1 flex items-center justify-center gap-2 text-sm text-gray-500">
                           <Icons.Lock size={14} />
-                          Bloqueado {position.lockPeriodDays} días
+                          {t('locked')} {position.lockPeriodDays} {t('crypto_days')}
                         </div>
                       )}
                     </div>
@@ -643,7 +645,7 @@ export const CryptoView: React.FC = () => {
 
           {/* APY Rates */}
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-2xl p-4">
-            <h4 className="font-bold uv-text-primary mb-3">Tasas de Rendimiento</h4>
+            <h4 className="font-bold uv-text-primary mb-3">{t('yield_rates')}</h4>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { asset: 'ETH', apy: 4.5 },
@@ -687,23 +689,23 @@ export const CryptoView: React.FC = () => {
               {marketData[selectedAsset.symbol] && marketData[selectedAsset.symbol].marketCap > 0 && (
                 <div className="grid grid-cols-2 gap-3 mt-4 text-left">
                   <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Cap. de Mercado</p>
+                    <p className="text-xs text-gray-500">{t('crypto_market_cap')}</p>
                     <p className="font-bold uv-text-primary">
                       {formatLargeNumber(marketData[selectedAsset.symbol].marketCap)}
                     </p>
                   </div>
                   <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Volumen 24h</p>
+                    <p className="text-xs text-gray-500">{t('crypto_volume_24h')}</p>
                     <p className="font-bold uv-text-primary">
                       {formatLargeNumber(marketData[selectedAsset.symbol].volume24h)}
                     </p>
                   </div>
                   <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Máximo 24h</p>
+                    <p className="text-xs text-gray-500">{t('crypto_high_24h')}</p>
                     <p className="font-bold text-green-500">{formatUsd(marketData[selectedAsset.symbol].high24h || 0)}</p>
                   </div>
                   <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Mínimo 24h</p>
+                    <p className="text-xs text-gray-500">{t('crypto_low_24h')}</p>
                     <p className="font-bold text-red-500">{formatUsd(marketData[selectedAsset.symbol].low24h || 0)}</p>
                   </div>
                 </div>
@@ -714,12 +716,12 @@ export const CryptoView: React.FC = () => {
               <div className="uv-surface-2 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-500">Tu Balance</p>
+                    <p className="text-xs text-gray-500">{t('crypto_your_balance')}</p>
                     <p className="font-bold uv-text-primary">{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</p>
                     <p className="text-sm text-gray-500">{formatUsd(selectedAsset.balance * selectedAsset.currentPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Precio Promedio</p>
+                    <p className="text-xs text-gray-500">{t('crypto_avg_price')}</p>
                     <p className="font-bold uv-text-primary">{formatUsd(selectedAsset.avgBuyPrice)}</p>
                     <p className={`text-sm ${selectedAsset.currentPrice >= selectedAsset.avgBuyPrice ? 'text-green-500' : 'text-red-500'}`}>
                       {((selectedAsset.currentPrice - selectedAsset.avgBuyPrice) / selectedAsset.avgBuyPrice * 100).toFixed(2)}%
@@ -734,27 +736,27 @@ export const CryptoView: React.FC = () => {
                 onClick={() => setActiveSheet('buy')}
                 className="bg-green-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
               >
-                <Icons.Plus size={18} /> Comprar
+                <Icons.Plus size={18} /> {t('buy')}
               </button>
               <button
                 onClick={() => setActiveSheet('sell')}
                 disabled={selectedAsset.balance === 0}
                 className="bg-red-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Icons.Minus size={18} /> Vender
+                <Icons.Minus size={18} /> {t('sell')}
               </button>
               <button
                 onClick={() => setActiveSheet('send')}
                 disabled={selectedAsset.balance === 0}
                 className="border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Icons.Send size={18} /> Enviar
+                <Icons.Send size={18} /> {t('send')}
               </button>
               <button
                 onClick={() => setActiveSheet('receive')}
                 className="border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
               >
-                <Icons.Receive size={18} /> Recibir
+                <Icons.Receive size={18} /> {t('receive')}
               </button>
             </div>
 
@@ -763,7 +765,7 @@ export const CryptoView: React.FC = () => {
                 onClick={() => setActiveSheet('stake')}
                 className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
               >
-                <Icons.Percent size={18} /> Hacer Staking
+                <Icons.Percent size={18} /> {t('crypto_do_staking')}
               </button>
             )}
           </div>
@@ -771,10 +773,10 @@ export const CryptoView: React.FC = () => {
       )}
 
       {/* Buy Sheet */}
-      <BottomSheet isOpen={activeSheet === 'buy'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Comprar ${selectedAsset?.symbol || 'Crypto'}`}>
+      <BottomSheet isOpen={activeSheet === 'buy'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('buy')} ${selectedAsset?.symbol || t('crypto_generic')}`}>
         <div className="space-y-6">
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">Seleccionar Crypto</label>
+            <label className="text-xs text-gray-500 font-bold">{t('select_crypto')}</label>
             <select
               className="w-full bg-transparent text-lg font-bold uv-text-primary mt-2 outline-none"
               value={selectedAsset?.symbol || ''}
@@ -787,7 +789,7 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <div className="text-center">
-            <label className="text-sm text-gray-500">Monto a invertir (USD)</label>
+            <label className="text-sm text-gray-500">{t('invest_amount')} (USD)</label>
             <div className="flex items-center justify-center gap-2 mt-2">
               <span className="text-4xl font-bold uv-text-primary">$</span>
               <input
@@ -822,25 +824,25 @@ export const CryptoView: React.FC = () => {
             disabled={!amount || parseFloat(amount) <= 0}
             className="w-full bg-green-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            Comprar {selectedAsset?.symbol}
+            {t('buy')} {selectedAsset?.symbol}
           </button>
         </div>
       </BottomSheet>
 
       {/* Sell Sheet */}
-      <BottomSheet isOpen={activeSheet === 'sell'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Vender ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'sell'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('sell')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           {selectedAsset && (
             <div className="uv-surface-2 rounded-xl p-4">
               <div className="flex justify-between items-center">
-                <span className="uv-text-muted">Disponible</span>
+                <span className="uv-text-muted">{t('available')}</span>
                 <span className="font-bold uv-text-primary">{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</span>
               </div>
             </div>
           )}
 
           <div className="text-center">
-            <label className="text-sm text-gray-500">Cantidad a vender</label>
+            <label className="text-sm text-gray-500">{t('crypto_amount_to_sell')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
               <input
                 type="number"
@@ -859,7 +861,7 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">Recibir en</label>
+            <label className="text-xs text-gray-500 font-bold">{t('receive_in')}</label>
             <div className="flex gap-2 mt-2">
               {['CRC', 'USD'].map(ccy => (
                 <button
@@ -878,23 +880,23 @@ export const CryptoView: React.FC = () => {
             disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-red-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            Vender y recibir {convertTo}
+            {t('crypto_sell_and_receive')} {convertTo}
           </button>
         </div>
       </BottomSheet>
 
       {/* Convert Sheet */}
-      <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title="Convertir Crypto">
+      <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('convert')} ${t('crypto_generic')}`}>
         <div className="space-y-6">
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">De</label>
+            <label className="text-xs text-gray-500 font-bold">{t('from')}</label>
             <select
               className="w-full bg-transparent text-lg font-bold uv-text-primary mt-2 outline-none"
               value={selectedAsset?.symbol || ''}
               onChange={(e) => setSelectedAsset(state.crypto.assets.find(a => a.symbol === e.target.value) || null)}
             >
               {assetsWithBalance.map(a => (
-                <option key={a.symbol} value={a.symbol}>{a.name} - {formatCrypto(a.balance)} disponible</option>
+                <option key={a.symbol} value={a.symbol}>{a.name} - {formatCrypto(a.balance)} {t('crypto_available_suffix')}</option>
               ))}
             </select>
           </div>
@@ -916,7 +918,7 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">A</label>
+            <label className="text-xs text-gray-500 font-bold">{t('crypto_to_label')}</label>
             <select
               className="w-full bg-transparent text-lg font-bold uv-text-primary mt-2 outline-none"
               value={convertTo}
@@ -930,7 +932,7 @@ export const CryptoView: React.FC = () => {
 
           {amount && selectedAsset && convertTo && (
             <div className="text-center text-gray-500">
-              Recibirás aproximadamente: <span className="font-bold uv-text-primary">
+              {t('crypto_receive_approx')}: <span className="font-bold uv-text-primary">
                 {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / (state.crypto.assets.find(a => a.symbol === convertTo)?.currentPrice || 1))} {convertTo}
               </span>
             </div>
@@ -941,27 +943,27 @@ export const CryptoView: React.FC = () => {
             disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-blue-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            Convertir
+            {t('convert')}
           </button>
         </div>
       </BottomSheet>
 
       {/* Send Sheet */}
-      <BottomSheet isOpen={activeSheet === 'send'} onClose={() => { setActiveSheet('none'); setAmount(''); setSendAddress(''); }} title={`Enviar ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'send'} onClose={() => { setActiveSheet('none'); setAmount(''); setSendAddress(''); }} title={`${t('send')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">Dirección destino</label>
+            <label className="text-xs text-gray-500 font-bold">{t('destination_address')}</label>
             <input
               type="text"
               value={sendAddress}
               onChange={(e) => setSendAddress(e.target.value)}
-              placeholder="0x... o bc1..."
+              placeholder={t('crypto_address_placeholder')}
               className="w-full bg-transparent text-lg font-mono uv-text-primary mt-2 outline-none"
             />
           </div>
 
           <div className="text-center">
-            <label className="text-sm text-gray-500">Cantidad</label>
+            <label className="text-sm text-gray-500">{t('amount')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
               <input
                 type="number"
@@ -972,15 +974,15 @@ export const CryptoView: React.FC = () => {
               />
               <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
             </div>
-            <p className="text-sm text-gray-500 mt-2">Disponible: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
+            <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
 
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Icons.AlertTriangle size={20} className="text-yellow-600 mt-0.5" />
               <div>
-                <p className="font-bold text-yellow-800 dark:text-yellow-200">Verificar dirección</p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">Las transacciones crypto son irreversibles</p>
+                <p className="font-bold text-yellow-800 dark:text-yellow-200">{t('verify_address')}</p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">{t('irreversible_warning')}</p>
               </div>
             </div>
           </div>
@@ -990,7 +992,7 @@ export const CryptoView: React.FC = () => {
             disabled={!amount || !sendAddress || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            Enviar {selectedAsset?.symbol}
+            {t('send')} {selectedAsset?.symbol}
           </button>
         </div>
       </BottomSheet>
@@ -1001,22 +1003,22 @@ export const CryptoView: React.FC = () => {
         onClose={() => setShowSendConfirm(false)}
         onConfirm={handleSend}
         amountDisplay={`${amount || '0'} ${selectedAsset?.symbol || ''}`}
-        confirmLabel={`Enviar ${selectedAsset?.symbol || ''}`}
-        warning="Las transacciones crypto son irreversibles. Verifica la dirección de destino."
+        confirmLabel={`${t('send')} ${selectedAsset?.symbol || ''}`}
+        warning={t('crypto_irreversible_warning')}
         rows={[
           {
-            label: 'Dirección',
+            label: t('address'),
             value: sendAddress ? `${sendAddress.slice(0, 10)}…${sendAddress.slice(-6)}` : '',
           },
           {
-            label: 'Comisión de red',
+            label: t('network_fee'),
             value: `${formatCrypto(parseFloat(amount || '0') * 0.0001)} ${selectedAsset?.symbol || ''}`,
           },
         ]}
       />
 
       {/* Receive Sheet */}
-      <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`Recibir ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`${t('receive')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="flex flex-col items-center py-4">
             <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-4">
@@ -1024,17 +1026,17 @@ export const CryptoView: React.FC = () => {
             </div>
 
             <p className="text-xs text-center text-gray-400 mt-2 max-w-[280px]">
-              Escanea este código QR o copia la dirección para recibir {selectedAsset?.symbol}
+              {t('crypto_scan_or_copy')} {selectedAsset?.symbol}
             </p>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">Tu dirección {selectedAsset?.symbol}</label>
+            <label className="text-xs text-gray-500 font-bold">{t('crypto_your_address')} {selectedAsset?.symbol}</label>
             <div className="flex items-center gap-2 mt-2">
               <p className="font-mono text-sm uv-text-primary break-all flex-1">
                 0xKiramoPay{selectedAsset?.symbol}Wallet12345abcdef
               </p>
-              <button aria-label="Copy" className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
+              <button aria-label={t('copy')} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
                 <Icons.Copy size={16} />
               </button>
             </div>
@@ -1042,18 +1044,18 @@ export const CryptoView: React.FC = () => {
 
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Solo envía {selectedAsset?.symbol} a esta dirección. Otros activos podrían perderse permanentemente.
+              {t('only_send_asset').replace('{asset}', selectedAsset?.symbol || '')}. {t('crypto_other_assets_lost')}
             </p>
           </div>
         </div>
       </BottomSheet>
 
       {/* Stake Sheet */}
-      <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`Staking ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('staking')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-4">
             <div className="flex justify-between items-center">
-              <span className="text-gray-600 dark:text-gray-300">APY Estimado</span>
+              <span className="text-gray-600 dark:text-gray-300">{t('crypto_estimated_apy')}</span>
               <span className="text-2xl font-black text-green-600">
                 {selectedAsset?.symbol === 'ETH' ? '4.5' : selectedAsset?.symbol === 'USDT' ? '8.0' : '6.5'}%
               </span>
@@ -1061,7 +1063,7 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <div className="text-center">
-            <label className="text-sm text-gray-500">Cantidad a stakear</label>
+            <label className="text-sm text-gray-500">{t('crypto_amount_to_stake')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
               <input
                 type="number"
@@ -1072,12 +1074,12 @@ export const CryptoView: React.FC = () => {
               />
               <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
             </div>
-            <p className="text-sm text-gray-500 mt-2">Disponible: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
+            <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
 
           {amount && (
             <div className="uv-surface-2 rounded-xl p-4">
-              <p className="text-sm text-gray-500">Ganancia estimada mensual</p>
+              <p className="text-sm text-gray-500">{t('estimated_earnings')}</p>
               <p className="font-bold text-green-500">
                 +{formatCrypto(parseFloat(amount) * (selectedAsset?.symbol === 'USDT' ? 0.08 : 0.045) / 12)} {selectedAsset?.symbol}
               </p>
@@ -1089,14 +1091,14 @@ export const CryptoView: React.FC = () => {
             disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-purple-600 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            Comenzar Staking
+            {t('start_staking')}
           </button>
         </div>
       </BottomSheet>
 
       {/* Transaction Detail Sheet */}
       {selectedTx && (
-        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title="Detalle de Transacción">
+        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
           <div className="space-y-4">
             <div className="flex flex-col items-center py-4">
               <div className="w-16 h-16 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-3">
@@ -1108,33 +1110,33 @@ export const CryptoView: React.FC = () => {
 
             <div className="space-y-3">
               <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">Activo</span>
+                <span className="uv-text-muted">{t('crypto_asset_label')}</span>
                 <span className="font-bold uv-text-primary">{selectedTx.fromAsset}{selectedTx.toAsset ? ` → ${selectedTx.toAsset}` : ''}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">Cantidad</span>
+                <span className="uv-text-muted">{t('amount')}</span>
                 <span className="font-bold uv-text-primary">{formatCrypto(selectedTx.fromAmount)} {selectedTx.fromAsset}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">Precio</span>
+                <span className="uv-text-muted">{t('crypto_price')}</span>
                 <span className="font-bold uv-text-primary">{formatUsd(selectedTx.price)}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">Comisión</span>
+                <span className="uv-text-muted">{t('crypto_fee')}</span>
                 <span className="font-bold uv-text-primary">{formatUsd(selectedTx.fee)}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">Total USD</span>
+                <span className="uv-text-muted">{t('crypto_total_usd')}</span>
                 <span className="font-bold uv-text-primary">{formatUsd(selectedTx.fromAmount * selectedTx.price)}</span>
               </div>
               {selectedTx.txHash && (
                 <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                  <span className="uv-text-muted">TX Hash</span>
+                  <span className="uv-text-muted">{t('tx_hash')}</span>
                   <span className="font-mono text-xs text-[var(--color-primary)]">{selectedTx.txHash}</span>
                 </div>
               )}
               <div className="flex justify-between py-3">
-                <span className="uv-text-muted">Estado</span>
+                <span className="uv-text-muted">{t('status')}</span>
                 <span className="font-bold text-green-500 flex items-center gap-1">
                   <Icons.Check size={14} /> {selectedTx.status}
                 </span>
