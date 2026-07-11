@@ -253,3 +253,41 @@ body {
 .card-interactive:active {
   transform: scale(0.97);
 }
+
+/* Chat typing indicator (no bounce easing — see AssistantView) */
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+.animate-typing { animation: typing-dot 1.2s ease-in-out infinite; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Safe-area insets (Capacitor Android notch / gesture bar; PWA standalone).
+   index.html sets viewport-fit=cover, so env(safe-area-inset-*) is live.
+   Existing markup already references pb-safe — define it (and the siblings).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Reduced motion — honor the OS/user preference. Neutralize every keyframe
+   (the token system ships 12+), and fully stop the infinite ambient loops
+   (scan, pulse-glow) that are hardest on vestibular-sensitive users.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-scan,
+  .animate-pulse-glow,
+  .animate-typing {
+    animation: none !important;
+  }
+}

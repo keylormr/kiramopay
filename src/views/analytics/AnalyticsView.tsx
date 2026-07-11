@@ -62,16 +62,26 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     return { income, expenses, net: income - expenses };
   }, [transactions]);
 
-  // Spending by day of week (for mini heatmap)
-  const weekdaySpending = useMemo(() => {
+  // Spending by day of week (mini heatmap). Buckets real expenses by weekday.
+  // Transaction dates that are relative labels ("Just now") don't parse and are
+  // skipped rather than faked; hasWeekdayData gates an honest empty state.
+  const { weekdaySpending, hasWeekdayData } = useMemo(() => {
     const days = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
+    let counted = 0;
+    for (const tx of transactions) {
+      if (tx.amount >= 0) continue; // expenses only
+      const parsed = new Date(tx.date);
+      if (Number.isNaN(parsed.getTime())) continue; // skip unparseable/relative dates
+      days[parsed.getDay()] += Math.abs(tx.amount);
+      counted++;
+    }
     const dayNames = [t('analytics_sun'), t('analytics_mon'), t('analytics_tue'), t('analytics_wed'), t('analytics_thu'), t('analytics_fri'), t('analytics_sat')];
-
-    // Since dates are strings like "Just now", "2024-01-15", etc., we approximate
-    // In a real app we'd parse ISO dates
     const max = Math.max(...days, 1);
-    return dayNames.map((name, i) => ({ name, value: days[i], intensity: days[i] / max }));
-  }, [t]);
+    return {
+      weekdaySpending: dayNames.map((name, i) => ({ name, value: days[i], intensity: days[i] / max })),
+      hasWeekdayData: counted > 0,
+    };
+  }, [transactions, t]);
 
   // Top spending category
   const topCategory = categoryData.items[0];
@@ -79,7 +89,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const formatCurrency = (amount: number) => {
     const ccy = state.baseCurrency || 'CRC';
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(amount);
+      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
     } catch {
       return `${amount.toFixed(2)} ${ccy}`;
     }
@@ -247,21 +257,25 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         <div className="px-4 py-2">
           <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
             <h3 className="text-sm font-bold uv-text-muted mb-4">{t('analytics_weekly_pattern')}</h3>
-            <div className="flex gap-2 justify-between">
-              {weekdaySpending.map((day) => (
-                <div key={day.name} className="flex flex-col items-center gap-2 flex-1">
-                  <div
-                    className="w-full aspect-square rounded-xl transition-all duration-500"
-                    style={{
-                      backgroundColor: day.intensity > 0
-                        ? `rgba(10, 132, 255, ${0.15 + day.intensity * 0.7})`
-                        : 'var(--tw-gradient-from, rgba(0,0,0,0.05))',
-                    }}
-                  />
-                  <span className="text-[10px] font-bold text-gray-400">{day.name}</span>
-                </div>
-              ))}
-            </div>
+            {hasWeekdayData ? (
+              <div className="flex gap-2 justify-between">
+                {weekdaySpending.map((day) => (
+                  <div key={day.name} className="flex flex-col items-center gap-2 flex-1">
+                    <div
+                      className="w-full aspect-square rounded-xl transition-all duration-500"
+                      style={{
+                        backgroundColor: day.intensity > 0
+                          ? `rgba(10, 132, 255, ${0.15 + day.intensity * 0.7})`
+                          : 'rgba(94, 115, 160, 0.10)',
+                      }}
+                    />
+                    <span className="text-[10px] font-bold uv-text-muted">{day.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm uv-text-muted py-4 text-center">{t('analytics_no_expenses')}</p>
+            )}
           </div>
         </div>
 

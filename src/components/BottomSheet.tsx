@@ -28,6 +28,16 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
     }
   }, [isOpen]);
 
+  // Escape closes the sheet (User Control & Freedom).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!visible && !isOpen) return null;
 
   return ReactDOM.createPortal(
@@ -71,7 +81,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
           rounded-t-[2.25rem] sm:rounded-3xl p-6 transform transition-transform duration-300
           ${isOpen ? 'translate-y-0 scale-100' : 'translate-y-full sm:translate-y-10 sm:scale-95'}
         `}
-        style={{ maxHeight: '85vh' }}
+        style={{ maxHeight: '85vh', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
       >
         {/* Drag handle (mobile only) */}
         <div className="w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
@@ -87,7 +97,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
             <button
               onClick={onClose}
               aria-label={t('close')}
-              className="w-9 h-9 flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full uv-text-secondary hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors text-base"
+              className="w-11 h-11 flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full uv-text-secondary hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors text-base"
             >
               ✕
             </button>

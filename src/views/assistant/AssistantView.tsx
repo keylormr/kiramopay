@@ -208,9 +208,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <div className="flex justify-start">
             <div className="uv-surface-2 px-4 py-3 rounded-2xl rounded-bl-sm">
               <div className="flex gap-1">
-                <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '120ms' }} />
-                <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '240ms' }} />
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-typing" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-typing" style={{ animationDelay: '120ms' }} />
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-typing" style={{ animationDelay: '240ms' }} />
               </div>
             </div>
           </div>

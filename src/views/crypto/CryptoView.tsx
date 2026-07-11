@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
@@ -75,6 +76,7 @@ export const CryptoView: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [convertTo, setConvertTo] = useState('CRC');
   const [sendAddress, setSendAddress] = useState('');
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
 
   // Real-time price states
   const [isLoading, setIsLoading] = useState(true);
@@ -271,6 +273,7 @@ export const CryptoView: React.FC = () => {
         fee
       }
     });
+    setShowSendConfirm(false);
     setActiveSheet('none');
     setAmount('');
     setSendAddress('');
@@ -983,7 +986,7 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <button
-            onClick={handleSend}
+            onClick={() => setShowSendConfirm(true)}
             disabled={!amount || !sendAddress || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
@@ -991,6 +994,26 @@ export const CryptoView: React.FC = () => {
           </button>
         </div>
       </BottomSheet>
+
+      {/* Review-before-send confirmation (crypto is irreversible) */}
+      <ConfirmSendSheet
+        isOpen={showSendConfirm}
+        onClose={() => setShowSendConfirm(false)}
+        onConfirm={handleSend}
+        amountDisplay={`${amount || '0'} ${selectedAsset?.symbol || ''}`}
+        confirmLabel={`Enviar ${selectedAsset?.symbol || ''}`}
+        warning="Las transacciones crypto son irreversibles. Verifica la dirección de destino."
+        rows={[
+          {
+            label: 'Dirección',
+            value: sendAddress ? `${sendAddress.slice(0, 10)}…${sendAddress.slice(-6)}` : '',
+          },
+          {
+            label: 'Comisión de red',
+            value: `${formatCrypto(parseFloat(amount || '0') * 0.0001)} ${selectedAsset?.symbol || ''}`,
+          },
+        ]}
+      />
 
       {/* Receive Sheet */}
       <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`Recibir ${selectedAsset?.symbol || ''}`}>

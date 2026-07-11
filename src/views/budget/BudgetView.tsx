@@ -87,7 +87,7 @@ const getProgressTextColor = (percentage: number): string => {
 
 const formatCurrency = (amount: number, ccy: string) => {
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(amount);
+    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
   } catch {
     return `${amount} ${ccy}`;
   }

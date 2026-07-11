@@ -113,7 +113,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'phone':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Phone size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
@@ -151,7 +151,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'otp':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Shield size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
@@ -189,7 +189,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'cedula':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.User size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
@@ -260,7 +260,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'name':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-yellow-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Edit size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
@@ -301,7 +301,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'password':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Lock size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
