@@ -256,7 +256,7 @@ const Layout = () => {
         </div>
         <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
-            <span aria-live="polite" className="px-2 py-0.5 bg-[var(--color-danger-soft)] text-[var(--color-danger)] text-[10px] font-bold uppercase tracking-wider rounded-md">
+            <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-bold uppercase tracking-wider rounded-md">
               Offline
             </span>
           )}
