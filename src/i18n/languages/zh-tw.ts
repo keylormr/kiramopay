@@ -644,6 +644,26 @@ const zhTw: TranslationKeys = {
   webhooks_no_deliveries: '尚無傳送紀錄',
   webhooks_active: '使用中',
   webhooks_disabled: '已停用',
+  // Password recovery
+  recover_link: '忘記密碼？',
+  recover_title: '找回密碼',
+  recover_subtitle: '輸入您的身分證號碼，我們會傳送重設密碼的說明給您。',
+  recover_send: '傳送說明',
+  recover_sending: '傳送中...',
+  recover_have_code: '我已經有驗證碼',
+  recover_sent_desc: '如果該身分證號碼有對應的帳戶，我們已傳送重設密碼的驗證碼。請查看您的訊息。',
+  recover_reset_title: '設定新密碼',
+  recover_reset_subtitle: '輸入您收到的驗證碼和新密碼。',
+  recover_token_label: '重設驗證碼',
+  recover_token_placeholder: '在此貼上驗證碼',
+  recover_submit: '重設密碼',
+  recover_submitting: '重設中...',
+  recover_invalid_token: '驗證碼無效或已過期。請重新申請。',
+  recover_error_generic: '發生錯誤，請再試一次。',
+  recover_success_title: '完成！',
+  recover_success_desc: '您的密碼已更新，現在可以登入了。',
+  recover_back_to_login: '返回登入',
+  recover_dev_hint: '開發驗證碼',
 };
 
 export default zhTw;

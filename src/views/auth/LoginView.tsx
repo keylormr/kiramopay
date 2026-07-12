@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
+import { RecoverPasswordView } from './RecoverPasswordView';
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -20,6 +21,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [showRecover, setShowRecover] = useState(false);
   const [lastUser] = useState<{ cedula: string; name: string } | null>(() => {
     const savedCedula = localStorage.getItem('kiramopay_last_cedula');
     const savedName = localStorage.getItem('kiramopay_last_name');
@@ -306,6 +308,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               </Button>
             </form>
 
+            <button
+              type="button"
+              onClick={() => setShowRecover(true)}
+              className="mt-4 w-full text-center text-[var(--color-primary-300)] hover:text-[var(--color-primary-200)] text-sm font-semibold transition-colors"
+            >
+              {t('recover_link')}
+            </button>
+
             {biometricAvailable && (
               <Button
                 variant="secondary"
@@ -338,6 +348,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
           {t('login_terms')}
         </p>
       </footer>
+
+      {showRecover && (
+        <RecoverPasswordView initialCedula={cedula} onClose={() => setShowRecover(false)} />
+      )}
     </div>
   );
 };

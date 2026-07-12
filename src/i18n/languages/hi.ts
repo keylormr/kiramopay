@@ -644,6 +644,26 @@ const hi: TranslationKeys = {
   webhooks_no_deliveries: 'अभी कोई डिलीवरी नहीं',
   webhooks_active: 'सक्रिय',
   webhooks_disabled: 'अक्षम',
+  // Password recovery
+  recover_link: 'पासवर्ड भूल गए?',
+  recover_title: 'पासवर्ड पुनर्प्राप्त करें',
+  recover_subtitle: 'अपना पहचान नंबर दर्ज करें और हम आपको उसे रीसेट करने के निर्देश भेजेंगे।',
+  recover_send: 'निर्देश भेजें',
+  recover_sending: 'भेजा जा रहा है...',
+  recover_have_code: 'मेरे पास पहले से कोड है',
+  recover_sent_desc: 'यदि उस पहचान नंबर से कोई खाता मौजूद है, तो हमने पासवर्ड रीसेट करने के लिए एक कोड भेजा है। अपने संदेश देखें।',
+  recover_reset_title: 'नया पासवर्ड सेट करें',
+  recover_reset_subtitle: 'आपको मिला कोड और अपना नया पासवर्ड दर्ज करें।',
+  recover_token_label: 'रिकवरी कोड',
+  recover_token_placeholder: 'कोड यहाँ पेस्ट करें',
+  recover_submit: 'पासवर्ड रीसेट करें',
+  recover_submitting: 'रीसेट हो रहा है...',
+  recover_invalid_token: 'कोड अमान्य है या समाप्त हो गया है। नया कोड अनुरोध करें।',
+  recover_error_generic: 'कुछ गलत हो गया। कृपया फिर से प्रयास करें।',
+  recover_success_title: 'हो गया!',
+  recover_success_desc: 'आपका पासवर्ड अपडेट हो गया है। अब आप साइन इन कर सकते हैं।',
+  recover_back_to_login: 'साइन इन पर वापस जाएँ',
+  recover_dev_hint: 'डेवलपमेंट कोड',
 };
 
 export default hi;

@@ -652,6 +652,26 @@ const en: TranslationKeys = {
   webhooks_no_deliveries: 'No deliveries yet',
   webhooks_active: 'Active',
   webhooks_disabled: 'Disabled',
+  // Password recovery
+  recover_link: 'Forgot your password?',
+  recover_title: 'Recover password',
+  recover_subtitle: 'Enter your ID number and we will send you instructions to reset it.',
+  recover_send: 'Send instructions',
+  recover_sending: 'Sending...',
+  recover_have_code: 'I already have a code',
+  recover_sent_desc: 'If an account exists for that ID, we sent a code to reset the password. Check your messages.',
+  recover_reset_title: 'Set a new password',
+  recover_reset_subtitle: 'Enter the code you received and your new password.',
+  recover_token_label: 'Recovery code',
+  recover_token_placeholder: 'Paste the code here',
+  recover_submit: 'Reset password',
+  recover_submitting: 'Resetting...',
+  recover_invalid_token: 'The code is invalid or expired. Request a new one.',
+  recover_error_generic: 'Something went wrong. Please try again.',
+  recover_success_title: 'All set!',
+  recover_success_desc: 'Your password has been updated. You can sign in now.',
+  recover_back_to_login: 'Back to sign in',
+  recover_dev_hint: 'Development code',
 };
 
 export default en;

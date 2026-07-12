@@ -363,6 +363,27 @@ export type TranslationKeys = {
   cedula_label: string;
   cedula_placeholder: string;
 
+  // Password recovery
+  recover_link: string;
+  recover_title: string;
+  recover_subtitle: string;
+  recover_send: string;
+  recover_sending: string;
+  recover_have_code: string;
+  recover_sent_desc: string;
+  recover_reset_title: string;
+  recover_reset_subtitle: string;
+  recover_token_label: string;
+  recover_token_placeholder: string;
+  recover_submit: string;
+  recover_submitting: string;
+  recover_invalid_token: string;
+  recover_error_generic: string;
+  recover_success_title: string;
+  recover_success_desc: string;
+  recover_back_to_login: string;
+  recover_dev_hint: string;
+
   // Error Boundary
   error_title: string;
   error_desc: string;
