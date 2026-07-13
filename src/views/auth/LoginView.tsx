@@ -206,16 +206,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('continue')}
             </Button>
 
-            {/* Demo credentials hint — visually demoted, never the focal point */}
-            <div className="mt-8 p-3.5 rounded-xl bg-white/[0.04] border border-white/10">
-              <p className="text-[var(--color-primary-300)] text-xs font-semibold uppercase tracking-wider mb-2">
-                Usuarios de prueba
-              </p>
-              <div className="space-y-1 text-[11px] text-[var(--color-text-muted-dark)] font-mono">
-                <p>702650930 · Kiramopay2024!</p>
-                <p>700000000 · Admin2024!</p>
+            {/* Demo credentials hint — DEV builds only; never shipped to production. */}
+            {import.meta.env.DEV && (
+              <div className="mt-8 p-3.5 rounded-xl bg-white/[0.04] border border-white/10">
+                <p className="text-[var(--color-primary-300)] text-xs font-semibold uppercase tracking-wider mb-2">
+                  Usuarios de prueba
+                </p>
+                <div className="space-y-1 text-[11px] text-[var(--color-text-muted-dark)] font-mono">
+                  <p>702650930 · Kiramopay2024!</p>
+                  <p>700000000 · Admin2024!</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           <div className="animate-slide-up">

@@ -247,7 +247,7 @@ const Layout = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 uv-surface-1/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between">
+      <div className="sticky top-0 z-30 bg-white/75 dark:bg-[#121E3A]/75 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center text-white font-black text-sm uv-shadow-soft">
             K
@@ -256,14 +256,14 @@ const Layout = () => {
         </div>
         <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
-            <span aria-live="polite" className="px-2 py-0.5 bg-[var(--color-danger-soft)] text-[var(--color-danger)] text-[10px] font-bold uppercase tracking-wider rounded-md">
+            <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-bold uppercase tracking-wider rounded-md">
               Offline
             </span>
           )}
           <button
             onClick={() => setOverlayView('notifications')}
             aria-label={t('notifications_setting')}
-            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors relative uv-text-secondary"
+            className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors relative uv-text-secondary"
           >
             <Icons.Bell size={20} />
             {unreadCount > 0 && (

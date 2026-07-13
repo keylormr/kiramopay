@@ -53,6 +53,19 @@
   --color-danger-soft: rgba(239, 68, 68, 0.12);
   --color-info: #2D7BFF;
 
+  /* ── Status "on-soft" text — darker shades that pass contrast (>=4.5:1) as
+     TEXT/icons over the *-soft tints. The base status colors fail as text on
+     their own soft background; use these for chips. Dark-mode uses lighter
+     shades (text sits over a soft tint on a dark navy surface). ──────────── */
+  --color-success-strong: #0B7A4B;
+  --color-warning-strong: #9A5B00;
+  --color-danger-strong:  #B42318;
+  --color-info-strong:    #1858CC;
+  --color-success-strong-dark: #4ADE80;
+  --color-warning-strong-dark: #FBBF24;
+  --color-danger-strong-dark:  #F87171;
+  --color-info-strong-dark:    #82B0FF;
+
   /* ── Surface elevation (the heart of Unified Vision) ─────────────────
      Light mode: white → subtle off-white → cool gray
      Dark mode (via .dark): navy-900 → navy-800 → navy-700                */
@@ -170,6 +183,16 @@ body {
 .uv-shadow-floating { box-shadow: var(--shadow-floating); }
 .uv-shadow-primary  { box-shadow: var(--shadow-primary); }
 
+/* Status chips: contrast-safe text/icon on a soft tint (uses the -strong ramp). */
+.uv-chip-success { background-color: var(--color-success-soft); color: var(--color-success-strong); }
+.uv-chip-warning { background-color: var(--color-warning-soft); color: var(--color-warning-strong); }
+.uv-chip-danger  { background-color: var(--color-danger-soft);  color: var(--color-danger-strong); }
+.uv-chip-info    { background-color: var(--color-primary-soft); color: var(--color-info-strong); }
+.dark .uv-chip-success { color: var(--color-success-strong-dark); }
+.dark .uv-chip-warning { color: var(--color-warning-strong-dark); }
+.dark .uv-chip-danger  { color: var(--color-danger-strong-dark); }
+.dark .uv-chip-info    { color: var(--color-info-strong-dark); }
+
 /* Brand gradient (deep navy → electric blue) — used in hero/balance card */
 .uv-gradient-brand {
   background-image: linear-gradient(135deg, #1B294A 0%, #2D7BFF 100%);
@@ -252,4 +275,42 @@ body {
 }
 .card-interactive:active {
   transform: scale(0.97);
+}
+
+/* Chat typing indicator (no bounce easing — see AssistantView) */
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+.animate-typing { animation: typing-dot 1.2s ease-in-out infinite; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Safe-area insets (Capacitor Android notch / gesture bar; PWA standalone).
+   index.html sets viewport-fit=cover, so env(safe-area-inset-*) is live.
+   Existing markup already references pb-safe — define it (and the siblings).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Reduced motion — honor the OS/user preference. Neutralize every keyframe
+   (the token system ships 12+), and fully stop the infinite ambient loops
+   (scan, pulse-glow) that are hardest on vestibular-sensitive users.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-scan,
+  .animate-pulse-glow,
+  .animate-typing {
+    animation: none !important;
+  }
 }

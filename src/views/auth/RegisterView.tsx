@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Icons } from '../../components/Icons';
+import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -113,18 +114,18 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       case 'phone':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Phone size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
               {t('reg_phone_title')}
             </h1>
-            <p className="text-gray-400 mb-6">
+            <p className="text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_phone_desc')}
             </p>
 
             <div className="flex gap-3 mb-6">
-              <div className="flex items-center gap-2 bg-slate-800 px-4 py-4 rounded-xl border border-slate-700">
+              <div className="flex items-center gap-2 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)]">
                 <span className="text-xl">🇨🇷</span>
                 <span className="text-white font-medium">+506</span>
               </div>
@@ -133,31 +134,34 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="8888-0000"
-                className="flex-1 bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium placeholder-gray-500 outline-none focus:border-primary transition-colors"
+                className="flex-1 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)] transition-colors"
                 autoFocus
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={phone.length < 8 || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={phone.length < 8}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
       case 'otp':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Shield size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
               {t('reg_verify_title')}
             </h1>
-            <p className="text-gray-400 mb-6">
+            <p className="text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_code_sent_to')} +506 {phone}
             </p>
 
@@ -171,31 +175,34 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handleOtpChange(index, e.target.value)}
-                  className="w-11 h-14 bg-slate-800 border-2 border-slate-700 rounded-xl text-center text-xl font-bold text-white outline-none focus:border-primary"
+                  className="w-11 h-14 bg-[var(--color-surface-2-dark)] border-2 border-[var(--color-border-dark)] rounded-xl text-center text-xl font-bold text-white outline-none focus:border-[var(--color-primary)]"
                 />
               ))}
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={otp.some(d => !d) || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={otp.some(d => !d)}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('verify')}
-            </button>
+              {t('verify')}
+            </Button>
           </div>
         );
 
       case 'cedula':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.User size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
               {t('reg_cedula_title')}
             </h1>
-            <p className="text-gray-400 mb-6">
+            <p className="text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_cedula_desc')}
             </p>
 
@@ -212,7 +219,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                     cedula.type === type.id
                       ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
-                      : 'bg-slate-800 text-gray-400'
+                      : 'bg-[var(--color-surface-2-dark)] text-[var(--color-text-muted-dark)]'
                   }`}
                 >
                   {type.label}
@@ -227,46 +234,49 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 value={cedula.part1}
                 onChange={(e) => setCedula({ ...cedula, part1: e.target.value.replace(/\D/g, '').slice(0, 1) })}
                 placeholder="1"
-                className="w-14 bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium text-center outline-none focus:border-primary"
+                className="w-14 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
-              <span className="text-gray-500 self-center text-2xl">-</span>
+              <span className="text-[var(--color-text-muted-dark)] self-center text-2xl">-</span>
               <input
                 type="text"
                 value={cedula.part2}
                 onChange={(e) => setCedula({ ...cedula, part2: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                 placeholder="1234"
-                className="flex-1 bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium text-center outline-none focus:border-primary"
+                className="flex-1 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
-              <span className="text-gray-500 self-center text-2xl">-</span>
+              <span className="text-[var(--color-text-muted-dark)] self-center text-2xl">-</span>
               <input
                 type="text"
                 value={cedula.part3}
                 onChange={(e) => setCedula({ ...cedula, part3: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                 placeholder="5678"
-                className="flex-1 bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium text-center outline-none focus:border-primary"
+                className="flex-1 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={!cedula.part1 || cedula.part2.length < 4 || cedula.part3.length < 4 || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={!cedula.part1 || cedula.part2.length < 4 || cedula.part3.length < 4}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
       case 'name':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-yellow-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Edit size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
               {t('reg_name_title')}
             </h1>
-            <p className="text-gray-400 mb-6">
+            <p className="text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_name_desc')}
             </p>
 
@@ -276,7 +286,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 value={name.firstName}
                 onChange={(e) => setName({ ...name, firstName: e.target.value })}
                 placeholder={t('first_name')}
-                className="w-full bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium placeholder-gray-500 outline-none focus:border-primary"
+                className="w-full bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)]"
                 autoFocus
               />
               <input
@@ -284,36 +294,39 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 value={name.lastName}
                 onChange={(e) => setName({ ...name, lastName: e.target.value })}
                 placeholder={t('last_name')}
-                className="w-full bg-slate-800 px-4 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium placeholder-gray-500 outline-none focus:border-primary"
+                className="w-full bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)]"
               />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleNext}
-              disabled={!name.firstName || !name.lastName || isLoading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              loading={isLoading}
+              disabled={!name.firstName || !name.lastName}
             >
-              {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('continue')}
-            </button>
+              {t('continue')}
+            </Button>
           </div>
         );
 
       case 'password':
         return (
           <div className="animate-in fade-in slide-in-from-right duration-300">
-            <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-400 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
               <Icons.Lock size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white mb-2">
               {t('reg_password_title')}
             </h1>
-            <p className="text-gray-400 mb-6">
+            <p className="text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_password_desc')}
             </p>
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="text-sm text-gray-400 mb-2 block">{t('password')}</label>
+                <label className="text-sm text-[var(--color-text-muted-dark)] mb-2 block">{t('password')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -323,13 +336,13 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                       setError('');
                     }}
                     placeholder={t('password')}
-                    className="w-full bg-slate-800 px-4 pr-12 py-4 rounded-xl border border-slate-700 text-white text-lg font-medium placeholder-gray-500 outline-none focus:border-primary"
+                    className="w-full bg-[var(--color-surface-2-dark)] px-4 pr-12 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)]"
                     autoFocus
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white"
                   >
                     {showPassword ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
                   </button>
@@ -338,7 +351,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 {/* Password strength indicator */}
                 {password.length > 0 && (
                   <div className="mt-2">
-                    <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-[var(--color-surface-3-dark)] rounded-full overflow-hidden">
                       <div
                         className={`h-full ${strength.color} transition-all duration-300`}
                         style={{ width: strength.width }}
@@ -352,7 +365,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               </div>
 
               <div>
-                <label className="text-sm text-gray-400 mb-2 block">{t('confirm_password')}</label>
+                <label className="text-sm text-[var(--color-text-muted-dark)] mb-2 block">{t('confirm_password')}</label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
@@ -362,14 +375,14 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                       setError('');
                     }}
                     placeholder={t('confirm_password')}
-                    className={`w-full bg-slate-800 px-4 pr-12 py-4 rounded-xl border text-white text-lg font-medium placeholder-gray-500 outline-none transition-colors ${
-                      confirmPassword && password !== confirmPassword ? 'border-red-500' : 'border-slate-700 focus:border-primary'
+                    className={`w-full bg-[var(--color-surface-2-dark)] px-4 pr-12 py-4 rounded-xl border text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none transition-colors ${
+                      confirmPassword && password !== confirmPassword ? 'border-[var(--color-danger)]' : 'border-[var(--color-border-dark)] focus:border-[var(--color-primary)]'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white"
                   >
                     {showConfirmPassword ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
                   </button>
@@ -377,30 +390,27 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               </div>
 
               {confirmPassword && password !== confirmPassword && (
-                <p className="text-red-500 text-sm">{t('passwords_dont_match')}</p>
+                <p className="text-[var(--color-danger)] text-sm">{t('passwords_dont_match')}</p>
               )}
               {error && (
-                <p className="text-red-400 text-sm flex items-center gap-1">
+                <p className="text-[var(--color-danger)] text-sm flex items-center gap-1">
                   <Icons.AlertCircle size={14} />
                   {error}
                 </p>
               )}
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={handleRegister}
-              disabled={password.length < 8 || password !== confirmPassword || isLoading}
-              className="w-full bg-gradient-to-r from-primary to-accent text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+              loading={isLoading}
+              disabled={password.length < 8 || password !== confirmPassword}
+              rightIcon={<Icons.Check size={20} />}
             >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  {t('create_account')}
-                  <Icons.Check size={20} />
-                </>
-              )}
-            </button>
+              {t('create_account')}
+            </Button>
           </div>
         );
     }
@@ -412,7 +422,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-[var(--color-background-dark)] to-[var(--color-surface-1-dark)] flex flex-col">
       {/* Header */}
       <div className="p-4 pt-6">
         <div className="flex items-center justify-between mb-4">
@@ -422,16 +432,16 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               const currentIndex = steps.indexOf(step);
               if (currentIndex > 0) setStep(steps[currentIndex - 1]);
             }}
-            className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors"
+            className="p-2 -ml-2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
           >
             <Icons.ChevronLeft size={24} />
           </button>
-          <span className="text-gray-400 text-sm">{t('create_account')}</span>
+          <span className="text-[var(--color-text-muted-dark)] text-sm">{t('create_account')}</span>
           <div className="w-8" />
         </div>
 
         {/* Progress bar */}
-        <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
+        <div className="h-1 bg-[var(--color-surface-3-dark)] rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500"
             style={{ width: `${getProgress()}%` }}
@@ -446,9 +456,9 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
 
       {/* Security note */}
       <div className="p-6 pb-8">
-        <div className="flex items-center gap-3 bg-slate-800/50 p-4 rounded-xl">
+        <div className="flex items-center gap-3 bg-[var(--color-surface-2-dark)]/50 p-4 rounded-xl">
           <Icons.Shield size={20} className="text-green-500" />
-          <p className="text-gray-400 text-xs">
+          <p className="text-[var(--color-text-muted-dark)] text-xs">
             {t('reg_security_note')}
           </p>
         </div>

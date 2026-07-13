@@ -55,7 +55,7 @@ const formatCurrency = (amount: number, ccy: string) => {
   if (ccy === 'CRC') {
     return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
   }
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(amount);
+  return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
 };
 
 const formatDate = (dateStr: string) => {
@@ -216,7 +216,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                         <button
                           onClick={() => setConfirmDeleteId(payment.id)}
                           aria-label={t('delete')}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="p-1.5 rounded-lg uv-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         >
                           <Icons.X size={16} />
                         </button>
@@ -279,7 +279,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                         <button
                           onClick={() => setConfirmDeleteId(payment.id)}
                           aria-label={t('delete')}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="p-1.5 rounded-lg uv-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         >
                           <Icons.X size={16} />
                         </button>

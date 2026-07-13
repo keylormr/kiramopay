@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { Button } from '@/components/ui/Button';
 import { useSavingsStore, SavingsGoal } from '@/stores/savings.store';
 import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
@@ -88,7 +89,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const formatCurrency = (amount: number) => {
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CRC' }).format(amount);
+      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
     } catch {
       return `${amount.toFixed(2)} CRC`;
     }
@@ -218,12 +219,13 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </div>
             <p className="text-lg font-bold mb-2 uv-text-primary">{t('savings_no_goals')}</p>
             <p className="text-sm text-gray-400 text-center mb-6">{t('savings_no_goals_desc')}</p>
-            <button
+            <Button
+              variant="primary"
+              size="md"
               onClick={() => setShowAddSheet(true)}
-              className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
             >
               {t('savings_create_first')}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="px-4 py-2 space-y-3">
@@ -373,13 +375,15 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
 
           {/* Create button */}
-          <button
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={handleAddGoal}
             disabled={!goalName || !goalTarget}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
           >
             {t('savings_create_goal')}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -434,13 +438,15 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   ))}
                 </div>
 
-                <button
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
                   onClick={handleDeposit}
                   disabled={!depositAmount || numAmount <= 0 || isInsufficient}
-                  className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {t('savings_deposit')}
-                </button>
+                </Button>
               </div>
             );
           })()}

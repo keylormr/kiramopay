@@ -4,6 +4,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { SinpeContact, SinpeTransaction } from '../../types';
 
@@ -40,6 +41,7 @@ export const SinpeView: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sendError, setSendError] = useState('');
   const [showMfa, setShowMfa] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<SinpeTransaction | null>(null);
 
   // Add contact form states
@@ -77,9 +79,11 @@ export const SinpeView: React.FC = () => {
     if (!res.success || !res.data) {
       // High-value transfer: prompt for a TOTP code, then retry (form persists).
       if (res.error?.code === MFA_REQUIRED) {
+        setShowConfirm(false);
         setShowMfa(true);
         return;
       }
+      setShowConfirm(false);
       setSendError(res.error?.message || t('assistant_action_failed'));
       return;
     }
@@ -97,6 +101,7 @@ export const SinpeView: React.FC = () => {
 
     dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
     setLastTransaction(tx);
+    setShowConfirm(false);
     setShowSendSheet(false);
     setShowSuccessSheet(true);
 
@@ -621,7 +626,7 @@ export const SinpeView: React.FC = () => {
 
           {/* Boton enviar */}
           <button
-            onClick={handleSendMoney}
+            onClick={() => setShowConfirm(true)}
             disabled={!phone || !amount || parseFloat(amount) > balance || isProcessing}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >
@@ -639,6 +644,21 @@ export const SinpeView: React.FC = () => {
           </button>
         </div>
       </BottomSheet>
+
+      {/* Review-before-send confirmation (money moves are irreversible on the ledger) */}
+      <ConfirmSendSheet
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={handleSendMoney}
+        amount={parseFloat(amount || '0')}
+        currency="CRC"
+        processing={isProcessing}
+        confirmLabel={t('send')}
+        rows={[
+          { label: t('recipient'), value: selectedContact?.name || `+506 ${phone}` },
+          ...(reference ? [{ label: t('detail_optional'), value: reference }] : []),
+        ]}
+      />
 
       {/* Receive Money Sheet */}
       <BottomSheet

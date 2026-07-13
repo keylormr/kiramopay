@@ -47,6 +47,20 @@ var DefaultTestUsers = []TestUser{
 		BalanceCRC: 500000000, // ₡5,000,000.00
 		BalanceUSD: 100000,    // $1,000.00
 	},
+	{
+		// Demo account for presentations. In production its password is NOT this
+		// dev-only value — it MUST be supplied via SEED_PASSWORD_701234567 (see
+		// resolveSeedPassword); the real demo password is never stored in the repo.
+		ID:         "a0000000-0000-0000-0000-000000000003",
+		Cedula:     "701234567",
+		Phone:      "+50688880003",
+		FirstName:  "Demo",
+		LastName:   "KiramoPay",
+		Password:   "DemoLocal2026!", // local-development fallback only
+		KYCLevel:   1,
+		BalanceCRC: 75000000, // ₡750,000.00
+		BalanceUSD: 20000,    // $200.00
+	},
 }
 
 // SeedDevelopment provisions the demo users. devMode is true only when the

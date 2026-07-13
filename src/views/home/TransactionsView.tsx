@@ -80,7 +80,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
   const formatCurrency = (amount: number, ccy?: string) => {
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy || 'CRC' }).format(amount);
+      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy || 'CRC' }).format(amount);
     } catch {
       return `${amount.toFixed(2)} ${ccy || ''}`;
     }
@@ -362,8 +362,8 @@ const TransactionCard: React.FC<{
         </div>
         <div className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-block ${
           tx.status === 'completed'
-            ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-            : 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+            ? 'uv-chip-success'
+            : 'uv-chip-warning'
         }`}>
           {tx.status === 'completed' ? '✓' : '⏳'} {tx.status || 'completed'}
         </div>

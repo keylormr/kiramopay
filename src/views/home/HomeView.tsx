@@ -67,7 +67,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(amount);
+      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
     } catch {
       return `${amount} ${ccy}`;
     }
@@ -361,73 +361,73 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={onOpenAssistant}
-              className="col-span-2 bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-900/20 dark:to-fuchsia-900/10 rounded-2xl p-4 border border-violet-100 dark:border-violet-800/30 text-left active:scale-[0.98] transition-all flex items-center gap-3"
+              className="col-span-2 uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive flex items-center gap-3"
             >
               <div className="w-10 h-10 shrink-0 rounded-xl uv-gradient-brand flex items-center justify-center">
                 <Icons.MessageCircle size={20} className="text-white" />
               </div>
               <div className="min-w-0">
                 <div className="text-base font-extrabold uv-text-primary">{t('assistant_title')}</div>
-                <div className="text-[11px] text-gray-500 mt-0.5">{t('assistant_card_desc')}</div>
+                <div className="text-[11px] uv-text-muted mt-0.5">{t('assistant_card_desc')}</div>
               </div>
             </button>
 
             <button
               onClick={onOpenAnalytics}
-              className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/10 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-800/30 text-left active:scale-[0.98] transition-all"
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center">
-                  <Icons.TrendingUp size={16} className="text-indigo-600" />
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
+                  <Icons.TrendingUp size={16} className="text-[var(--color-primary)]" />
                 </div>
-                <span className="text-[10px] font-bold text-indigo-600/80 uppercase tracking-wider">{t('home_spending')}</span>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spending')}</span>
               </div>
               <div className="text-lg font-extrabold uv-text-primary truncate">
                 {formatCurrency(monthlyExpenses, baseAccount.ccy)}
               </div>
-              {topCat && <div className="text-[10px] text-gray-500 mt-0.5">{t('home_top_cat')}: {topCat}</div>}
+              {topCat && <div className="text-[10px] uv-text-muted mt-0.5">{t('home_top_cat')}: {topCat}</div>}
             </button>
 
             <button
               onClick={onOpenSavings}
-              className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-800/30 text-left active:scale-[0.98] transition-all"
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-800/40 flex items-center justify-center">
-                  <Icons.PiggyBank size={16} className="text-emerald-600" />
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-success-soft)] flex items-center justify-center">
+                  <Icons.PiggyBank size={16} className="text-[var(--color-success)]" />
                 </div>
-                <span className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{t('home_savings')}</span>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_savings')}</span>
               </div>
               <div className="text-lg font-extrabold uv-text-primary">{t('home_savings_view')}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{t('home_savings_desc')}</div>
+              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_savings_desc')}</div>
             </button>
 
             <button
               onClick={onOpenSplitPay}
-              className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/10 rounded-2xl p-4 border border-purple-100 dark:border-purple-800/30 text-left active:scale-[0.98] transition-all"
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-800/40 flex items-center justify-center">
-                  <Icons.Users size={16} className="text-purple-600" />
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
+                  <Icons.Users size={16} className="text-[var(--color-primary)]" />
                 </div>
-                <span className="text-[10px] font-bold text-purple-600/80 uppercase tracking-wider">{t('home_split')}</span>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_split')}</span>
               </div>
               <div className="text-lg font-extrabold uv-text-primary">{t('home_split_view')}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{t('home_split_desc')}</div>
+              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_split_desc')}</div>
             </button>
 
             <button
               onClick={onOpenLoyalty}
-              className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/10 rounded-2xl p-4 border border-amber-100 dark:border-amber-800/30 text-left active:scale-[0.98] transition-all"
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-800/40 flex items-center justify-center">
-                  <Icons.Award size={16} className="text-amber-600" />
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
+                  <Icons.Award size={16} className="text-[var(--color-accent)]" />
                 </div>
-                <span className="text-[10px] font-bold text-amber-600/80 uppercase tracking-wider">{t('home_loyalty')}</span>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_loyalty')}</span>
               </div>
               <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{t('home_loyalty_desc')}</div>
+              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_loyalty_desc')}</div>
             </button>
           </div>
         );

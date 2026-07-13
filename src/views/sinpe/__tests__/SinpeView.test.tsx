@@ -50,7 +50,10 @@ async function openSendSheetAndSubmit(user: ReturnType<typeof userEvent.setup>) 
   const d = within(dialog);
   await user.type(d.getByPlaceholderText('8888-0000'), '88887777');
   await user.type(d.getByPlaceholderText('0'), '5000');
-  await user.click(d.getByRole('button', { name: /Enviar/ }));
+  await user.click(d.getByRole('button', { name: /Enviar/ })); // opens the review sheet
+  // Review-before-send: confirm the transfer in the confirmation sheet.
+  const sheets = await screen.findAllByRole('dialog');
+  await user.click(within(sheets[sheets.length - 1]).getByRole('button', { name: /Enviar/ }));
 }
 
 beforeEach(() => {
