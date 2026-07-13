@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
+import { Button } from '../../components/ui';
 import { BottomSheet } from '../../components/BottomSheet';
 
 export const CardsView: React.FC = () => {
@@ -176,12 +177,9 @@ export const CardsView: React.FC = () => {
             <p className="text-xs uv-text-muted mt-2">Limite diario para retiros en efectivo.</p>
           </div>
 
-          <button
-            onClick={saveLimits}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold active:scale-[0.98] transition-all uv-shadow-primary"
-          >
+          <Button onClick={saveLimits} size="lg" fullWidth>
             Guardar cambios
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
