@@ -700,6 +700,26 @@ const es: TranslationKeys = {
   webhooks_no_deliveries: 'Sin entregas todavía',
   webhooks_active: 'Activo',
   webhooks_disabled: 'Deshabilitado',
+  // Password recovery
+  recover_link: '¿Olvidaste tu contraseña?',
+  recover_title: 'Recuperar contraseña',
+  recover_subtitle: 'Ingresa tu cédula y te enviaremos instrucciones para restablecerla.',
+  recover_send: 'Enviar instrucciones',
+  recover_sending: 'Enviando...',
+  recover_have_code: 'Ya tengo un código',
+  recover_sent_desc: 'Si existe una cuenta con esa cédula, enviamos un código para restablecer la contraseña. Revisa tus mensajes.',
+  recover_reset_title: 'Crea tu nueva contraseña',
+  recover_reset_subtitle: 'Ingresa el código que recibiste y tu nueva contraseña.',
+  recover_token_label: 'Código de recuperación',
+  recover_token_placeholder: 'Pega el código aquí',
+  recover_submit: 'Restablecer contraseña',
+  recover_submitting: 'Restableciendo...',
+  recover_invalid_token: 'El código es inválido o expiró. Solicita uno nuevo.',
+  recover_error_generic: 'Algo salió mal. Intenta de nuevo.',
+  recover_success_title: '¡Listo!',
+  recover_success_desc: 'Tu contraseña se actualizó. Ya puedes iniciar sesión.',
+  recover_back_to_login: 'Volver a iniciar sesión',
+  recover_dev_hint: 'Código de desarrollo',
 };
 
 export default es;

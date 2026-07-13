@@ -154,6 +154,79 @@ describe('HttpAuthRepository', () => {
     });
   });
 
+  describe('forgotPassword', () => {
+    it('returns the dev token when the backend (dev env) provides one', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: { message: 'ok', dev_token: 'reset-token-abc' } }),
+      });
+      const result = await repo.forgotPassword('702650930');
+      expect(result.success).toBe(true);
+      expect(result.data?.devToken).toBe('reset-token-abc');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/api/v1/auth/forgot-password',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ cedula: '702650930' }),
+        }),
+      );
+    });
+
+    it('succeeds without a token (anti-enumeration / production)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: { message: 'if the account exists, a reset link has been sent' } }),
+      });
+      const result = await repo.forgotPassword('999999999');
+      expect(result.success).toBe(true);
+      expect(result.data?.devToken).toBeUndefined();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('resets the password with a valid token', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { message: 'Password reset successful' } }),
+      });
+      const result = await repo.resetPassword('valid-token', 'NewPass2024!');
+      expect(result.success).toBe(true);
+      expect(result.data?.reset).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/api/v1/auth/reset-password',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'valid-token', new_password: 'NewPass2024!' }),
+        }),
+      );
+    });
+
+    it('preserves RESET_FAILED for an invalid or expired token', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { code: 'RESET_FAILED', message: 'invalid or expired reset token' } }),
+      });
+      const result = await repo.resetPassword('bad-token', 'NewPass2024!');
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('RESET_FAILED');
+    });
+
+    it('preserves VALIDATION_ERROR for a weak password', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { code: 'VALIDATION_ERROR', message: 'password too weak' } }),
+      });
+      const result = await repo.resetPassword('valid-token', 'weak');
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
   describe('register', () => {
     it('should register a new user', async () => {
       mockFetch.mockResolvedValueOnce({

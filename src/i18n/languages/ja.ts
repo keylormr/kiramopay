@@ -692,6 +692,26 @@ const ja: TranslationKeys = {
   webhooks_no_deliveries: '配信はまだありません',
   webhooks_active: '有効',
   webhooks_disabled: '無効',
+  // Password recovery
+  recover_link: 'パスワードをお忘れですか？',
+  recover_title: 'パスワードの再設定',
+  recover_subtitle: 'ID番号を入力してください。再設定の手順をお送りします。',
+  recover_send: '手順を送信',
+  recover_sending: '送信中...',
+  recover_have_code: 'コードを持っています',
+  recover_sent_desc: 'そのIDのアカウントが存在する場合、パスワード再設定用のコードを送信しました。メッセージをご確認ください。',
+  recover_reset_title: '新しいパスワードを設定',
+  recover_reset_subtitle: '受け取ったコードと新しいパスワードを入力してください。',
+  recover_token_label: '再設定コード',
+  recover_token_placeholder: 'ここにコードを貼り付け',
+  recover_submit: 'パスワードを再設定',
+  recover_submitting: '再設定中...',
+  recover_invalid_token: 'コードが無効か期限切れです。新しいコードを申請してください。',
+  recover_error_generic: '問題が発生しました。もう一度お試しください。',
+  recover_success_title: '完了しました！',
+  recover_success_desc: 'パスワードを更新しました。ログインできます。',
+  recover_back_to_login: 'ログインに戻る',
+  recover_dev_hint: '開発用コード',
 };
 
 export default ja;

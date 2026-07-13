@@ -4,6 +4,7 @@ import type {
   LoginResponse,
   RegisterRequest,
   ChangePasswordRequest,
+  ForgotPasswordResult,
   TokenPair,
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
@@ -134,6 +135,44 @@ export class HttpAuthRepository implements IAuthRepository {
     }
 
     return apiSuccess({ changed: true });
+  }
+
+  async forgotPassword(cedula: string): Promise<ApiResponse<ForgotPasswordResult>> {
+    // auth=false: this is an unauthenticated endpoint. The backend replies 202
+    // with a constant message whether or not the cédula exists (anti-enumeration),
+    // so a `success` result here does NOT imply the account exists.
+    const res = await this.client.post<{ message?: string; dev_token?: string }>(
+      '/api/v1/auth/forgot-password',
+      { cedula },
+      false,
+    );
+
+    if (!res.success) {
+      return apiError('FORGOT_PASSWORD_FAILED', res.error?.message || 'Could not process the request');
+    }
+
+    // `dev_token` is only present when the backend runs in a dev environment.
+    return apiSuccess<ForgotPasswordResult>({ devToken: res.data?.dev_token });
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<ApiResponse<{ reset: boolean }>> {
+    const res = await this.client.post(
+      '/api/v1/auth/reset-password',
+      { token, new_password: newPassword },
+      false,
+    );
+
+    if (!res.success) {
+      // Preserve the backend code so the UI can distinguish an invalid/expired
+      // token (RESET_FAILED) from a weak password (VALIDATION_ERROR) and show
+      // the right localized guidance.
+      return apiError(res.error?.code || 'RESET_PASSWORD_FAILED', res.error?.message || 'Could not reset the password');
+    }
+
+    return apiSuccess({ reset: true });
   }
 
   async refresh(refreshToken: string): Promise<ApiResponse<TokenPair>> {

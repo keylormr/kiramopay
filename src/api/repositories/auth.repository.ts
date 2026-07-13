@@ -39,11 +39,29 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface ForgotPasswordResult {
+  /**
+   * Only ever populated when the backend runs in a development environment,
+   * as a testing convenience. In production it is always undefined — the real
+   * reset token is delivered out-of-band (SMS/email). The UI must gate any
+   * display of it behind `import.meta.env.DEV`.
+   */
+  devToken?: string;
+}
+
 export interface IAuthRepository {
   login(request: LoginRequest): Promise<ApiResponse<LoginResponse>>;
   register(request: RegisterRequest): Promise<ApiResponse<RegisterResponse>>;
   validatePassword(cedula: string, password: string): Promise<ApiResponse<{ valid: boolean }>>;
   changePassword(request: ChangePasswordRequest): Promise<ApiResponse<{ changed: boolean }>>;
+  /**
+   * Requests a password-reset token for the given cédula. Resolves successfully
+   * regardless of whether the account exists (anti-enumeration) — a failure
+   * here signals a transport/rate-limit problem, never "account not found".
+   */
+  forgotPassword(cedula: string): Promise<ApiResponse<ForgotPasswordResult>>;
+  /** Consumes a reset token and sets a new password for the owning account. */
+  resetPassword(token: string, newPassword: string): Promise<ApiResponse<{ reset: boolean }>>;
   /** Exchanges a refresh token for a fresh token pair (rotation). */
   refresh(refreshToken: string): Promise<ApiResponse<TokenPair>>;
   logout(): Promise<ApiResponse<void>>;
