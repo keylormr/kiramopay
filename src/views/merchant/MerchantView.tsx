@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
+import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiLayer } from '@/api';
@@ -186,9 +187,9 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
             <p className="font-semibold uv-text-primary">{t('merchant_empty')}</p>
             <p className="text-sm uv-text-muted mt-1 max-w-[280px]">{t('merchant_empty_desc')}</p>
-            <button onClick={() => { setError(''); setShowRegister(true); }} className="mt-5 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-5 py-2.5 rounded-xl font-bold">
+            <Button onClick={() => { setError(''); setShowRegister(true); }} className="mt-5">
               {t('merchant_register')}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
@@ -247,9 +248,9 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             <span className="text-sm uv-text-secondary">{t('merchant_terms')}</span>
           </label>
           {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
-          <button onClick={register} disabled={submitting || !name.trim() || !cedula.trim() || !legalName.trim() || !accepted} className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+          <Button onClick={register} loading={submitting} disabled={!name.trim() || !cedula.trim() || !legalName.trim() || !accepted} size="lg" fullWidth>
             {submitting ? t('loading') : t('merchant_register_btn')}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -279,9 +280,9 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 </div>
                 <p className="text-xs uv-text-muted">{t('merchant_qr_amount_hint')}</p>
                 {detailError && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{detailError}</p>}
-                <button onClick={generateQR} disabled={generating} className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
+                <Button onClick={generateQR} loading={generating} size="lg" fullWidth>
                   {generating ? t('loading') : t('merchant_generate_qr')}
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="flex flex-col items-center space-y-3">
@@ -294,12 +295,12 @@ export const MerchantView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 {generated.amount > 0 && <p className="text-2xl font-black uv-text-primary tabular-nums">{money(generated.amount)}</p>}
                 <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('merchant_qr_help')}</p>
                 <div className="flex gap-3 w-full">
-                  <button onClick={() => { navigator.clipboard?.writeText(generated.qrData); }} className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2">
-                    <Icons.Copy size={18} /> {t('copy')}
-                  </button>
-                  <button onClick={() => { setGenerated(null); setQrAmount(''); }} className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold">
+                  <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(generated.qrData); }} leftIcon={<Icons.Copy size={18} />} className="flex-1">
+                    {t('copy')}
+                  </Button>
+                  <Button onClick={() => { setGenerated(null); setQrAmount(''); }} className="flex-1">
                     {t('merchant_generate_qr')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
