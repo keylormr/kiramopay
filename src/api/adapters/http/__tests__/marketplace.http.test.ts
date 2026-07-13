@@ -24,7 +24,27 @@ describe('HttpMarketplaceRepository', () => {
     const res = await new HttpMarketplaceRepository(fakeClient({ post })).createRide({ partnerCode: 'uber', pickup: 'A', destination: 'B' });
     expect(res.success).toBe(true);
     expect(res.data?.estimatedPrice).toBe(5250); // centimos -> colones
+    expect(res.data?.driver?.name).toBe('Carlos'); // driver matched at request time
+    expect(res.data?.driver?.plate).toBe('ABC-123');
     expect(post).toHaveBeenCalledWith('/api/v1/marketplace/rides', expect.objectContaining({ partner_code: 'uber' }));
+  });
+
+  it('maps a tracked ride with live status, ETA and driver', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        id: 'r1', partner_code: 'uber', pickup: 'A', destination: 'B',
+        estimated_price: 525000, estimated_time: '20 min', distance: '5.0 km',
+        status: 'in_progress', minutes_remaining: 7,
+        driver_name: 'Carlos', driver_rating: 4.9, driver_car: 'Corolla', driver_plate: 'ABC-123',
+      },
+    });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getRide('r1');
+    expect(res.success).toBe(true);
+    expect(res.data?.status).toBe('in_progress');
+    expect(res.data?.minutesRemaining).toBe(7);
+    expect(res.data?.driver?.name).toBe('Carlos');
+    expect(res.data?.estimatedPrice).toBe(5250); // centimos -> colones
   });
 
   it('confirms a ride via the confirm endpoint', async () => {
@@ -33,6 +53,28 @@ describe('HttpMarketplaceRepository', () => {
     expect(res.success).toBe(true);
     expect(res.data?.status).toBe('confirmed');
     expect(post).toHaveBeenCalledWith('/api/v1/marketplace/rides/r1/confirm', {});
+  });
+
+  it('maps a tracked food order with live status, ETA and courier', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        order: {
+          id: 'o1', partner_code: 'ubereats', restaurant_name: 'Soda',
+          subtotal: 700000, delivery_fee: 150000, total: 850000,
+          status: 'on_the_way', estimated_delivery: '30 min', minutes_remaining: 8,
+          courier: { name: 'Diego Salas', vehicle: 'Honda CB125', plate: 'MOT-118' },
+        },
+        items: [{ name: 'Casado', quantity: 2, price: 350000 }],
+      },
+    });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getFoodOrder('o1');
+    expect(res.success).toBe(true);
+    expect(res.data?.status).toBe('on_the_way');
+    expect(res.data?.minutesRemaining).toBe(8);
+    expect(res.data?.courier?.name).toBe('Diego Salas');
+    expect(res.data?.total).toBe(8500); // centimos -> colones
+    expect(res.data?.items[0].price).toBe(3500); // centimos -> colones
   });
 
   it('creates a food order sending item prices in centimos', async () => {

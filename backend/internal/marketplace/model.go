@@ -42,6 +42,11 @@ type RideRequestRecord struct {
 	FinalPrice     int64      `json:"final_price,omitempty"` // centimos
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+
+	// Computed at read time (never persisted): live trip progress after a ride is
+	// confirmed. Status is derived from ElapsedSeconds (DB-computed) and the ETA.
+	ElapsedSeconds   int64 `json:"-"`
+	MinutesRemaining int   `json:"minutes_remaining"`
 }
 
 // ── Food Order ───────────────────────────────────────────────────────────────
@@ -58,6 +63,11 @@ type FoodOrderRecord struct {
 	EstimatedDelivery string     `json:"estimated_delivery"`
 	CreatedAt         time.Time  `json:"created_at"`
 	CompletedAt       *time.Time `json:"completed_at,omitempty"`
+
+	// Computed at read time (never persisted): live delivery progress. Status is
+	// derived from ElapsedSeconds (computed by the DB, timezone-safe) and the ETA.
+	ElapsedSeconds   int64 `json:"-"`
+	MinutesRemaining int   `json:"minutes_remaining"`
 }
 
 type FoodOrderItemRecord struct {
@@ -66,6 +76,22 @@ type FoodOrderItemRecord struct {
 	Name     string `json:"name"`
 	Quantity int    `json:"quantity"`
 	Price    int64  `json:"price"` // centimos
+}
+
+// CourierInfo is the (simulated) delivery courier shown to the rider. Real
+// courier assignment happens on the partner platform; until that integration
+// exists we derive a stable courier from the order id so every read agrees.
+type CourierInfo struct {
+	Name    string `json:"name"`
+	Vehicle string `json:"vehicle"`
+	Plate   string `json:"plate"`
+}
+
+// FoodOrderResponse is the single-order GET payload: the order plus a computed
+// courier (only present once the order is on the way / delivered).
+type FoodOrderResponse struct {
+	*FoodOrderRecord
+	Courier *CourierInfo `json:"courier,omitempty"`
 }
 
 // ── Request / Response DTOs ──────────────────────────────────────────────────

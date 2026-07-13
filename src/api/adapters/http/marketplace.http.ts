@@ -60,6 +60,8 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.post<{
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
+      driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>('/api/v1/marketplace/rides', {
       partner_code: request.partnerCode,
       pickup: request.pickup,
@@ -77,6 +79,14 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
+      driver: res.data.driver_name ? {
+        name: res.data.driver_name,
+        rating: res.data.driver_rating,
+        car: res.data.driver_car,
+        plate: res.data.driver_plate,
+        photo: '',
+      } : undefined,
     });
   }
 
@@ -85,6 +95,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}/confirm`, {});
 
     if (!res.success || !res.data) return apiError('CONFIRM_FAILED', res.error?.message || 'Failed');
@@ -98,6 +109,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
       driver: res.data.driver_name ? {
         name: res.data.driver_name,
         rating: res.data.driver_rating,
@@ -113,6 +125,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>>('/api/v1/marketplace/rides');
 
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rides');
@@ -126,6 +139,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: r.estimated_time,
       distance: r.distance,
       status: r.status as RideRequest['status'],
+      minutesRemaining: r.minutes_remaining,
       driver: r.driver_name ? {
         name: r.driver_name,
         rating: r.driver_rating,
@@ -141,6 +155,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       id: string; partner_code: string; pickup: string; destination: string;
       estimated_price: number; estimated_time: string; distance: string; status: string;
       driver_name: string; driver_rating: number; driver_car: string; driver_plate: string;
+      minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}`);
 
     if (!res.success || !res.data) return apiError('NOT_FOUND', 'Ride not found');
@@ -154,6 +169,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       estimatedTime: res.data.estimated_time,
       distance: res.data.distance,
       status: res.data.status as RideRequest['status'],
+      minutesRemaining: res.data.minutes_remaining,
       driver: res.data.driver_name ? {
         name: res.data.driver_name,
         rating: res.data.driver_rating,
@@ -168,7 +184,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.post<{
       id: string; partner_code: string; restaurant_name: string;
       subtotal: number; delivery_fee: number; total: number;
-      status: string; estimated_delivery: string;
+      status: string; estimated_delivery: string; minutes_remaining: number;
     }>('/api/v1/marketplace/food-orders', {
       partner_code: request.partnerCode,
       restaurant_name: request.restaurantName,
@@ -187,6 +203,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: res.data.total / 100,
       status: res.data.status as FoodOrder['status'],
       estimatedDelivery: res.data.estimated_delivery,
+      minutesRemaining: res.data.minutes_remaining,
     });
   }
 
@@ -194,7 +211,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     const res = await this.client.get<Array<{
       id: string; partner_code: string; restaurant_name: string;
       subtotal: number; delivery_fee: number; total: number;
-      status: string; estimated_delivery: string;
+      status: string; estimated_delivery: string; minutes_remaining: number;
     }>>('/api/v1/marketplace/food-orders');
 
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch orders');
@@ -209,6 +226,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: o.total / 100,
       status: o.status as FoodOrder['status'],
       estimatedDelivery: o.estimated_delivery,
+      minutesRemaining: o.minutes_remaining,
     })));
   }
 
@@ -217,7 +235,8 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       order: {
         id: string; partner_code: string; restaurant_name: string;
         subtotal: number; delivery_fee: number; total: number;
-        status: string; estimated_delivery: string;
+        status: string; estimated_delivery: string; minutes_remaining: number;
+        courier?: { name: string; vehicle: string; plate: string };
       };
       items: Array<{ name: string; quantity: number; price: number }>;
     }>(`/api/v1/marketplace/food-orders/${orderId}`);
@@ -234,6 +253,8 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       total: res.data.order.total / 100,
       status: res.data.order.status as FoodOrder['status'],
       estimatedDelivery: res.data.order.estimated_delivery,
+      minutesRemaining: res.data.order.minutes_remaining,
+      courier: res.data.order.courier,
     });
   }
 }
