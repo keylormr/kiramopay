@@ -41,13 +41,23 @@ describe('HttpSavingsRepository', () => {
     const post = vi.fn().mockResolvedValue({ success: true, data: { ...rawGoal, saved_minor: 500000 } });
     const res = await new HttpSavingsRepository(fakeClient({ post })).deposit('g1', 2500);
     expect(res.data?.saved).toBe(5000);
-    expect(post).toHaveBeenCalledWith('/api/v1/savings/goals/g1/deposit', { amount_minor: 250000 });
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/savings/goals/g1/deposit',
+      { amount_minor: 250000 },
+      true,
+      expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+    );
   });
 
   it('withdraws via the withdraw endpoint', async () => {
     const post = vi.fn().mockResolvedValue({ success: true, data: rawGoal });
     await new HttpSavingsRepository(fakeClient({ post })).withdraw('g1', 1000);
-    expect(post).toHaveBeenCalledWith('/api/v1/savings/goals/g1/withdraw', { amount_minor: 100000 });
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/savings/goals/g1/withdraw',
+      { amount_minor: 100000 },
+      true,
+      expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+    );
   });
 
   it('deletes a goal', async () => {

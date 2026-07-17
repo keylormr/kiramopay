@@ -208,7 +208,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('continue')}
             </Button>
 
-            {/* Demo credentials hint — DEV builds only; never shipped to production. */}
+            {/* Demo credentials hint — dev builds only; never shipped to production. */}
             {import.meta.env.DEV && (
               <div className="mt-8 p-3.5 rounded-xl bg-white/[0.04] border border-white/10">
                 <p className="text-[var(--color-primary-300)] text-xs font-semibold uppercase tracking-wider mb-2">

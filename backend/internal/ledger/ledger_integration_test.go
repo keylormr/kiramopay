@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -236,19 +237,32 @@ func TestImmutableEntries(t *testing.T) {
 	eng := ledger.NewEngine(pool, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	ctx := context.Background()
 
-	_, err := eng.Post(ctx, &ledger.Posting{
+	if _, err := eng.Post(ctx, &ledger.Posting{
 		Description: "to-be-immutable",
 		Entries: []ledger.Entry{
 			{Account: ledger.Account{UserID: from}, Side: ledger.Debit, AmountMinor: 1, Currency: "CRC"},
 			{Account: ledger.Account{UserID: to}, Side: ledger.Credit, AmountMinor: 1, Currency: "CRC"},
 		},
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("post: %v", err)
 	}
-	// In the test schema we didn't install the immutability trigger because
-	// testutil.go only covers the balance trigger. The production migration
-	// 020 installs both; this test is here as documentation — the assertion
-	// itself runs against production schema:
-	t.Skip("Run against migration 020 schema to verify immutable trigger.")
+
+	// The append-only triggers (installed by testutil, mirroring migration 020)
+	// must reject every mutation of already-posted journal rows.
+	mutations := []struct {
+		name string
+		sql  string
+	}{
+		{"update-entries", "UPDATE journal_entries SET amount_minor = amount_minor + 1"},
+		{"delete-entries", "DELETE FROM journal_entries"},
+		{"update-postings", "UPDATE journal_postings SET description = 'tampered'"},
+		{"delete-postings", "DELETE FROM journal_postings"},
+	}
+	for _, m := range mutations {
+		if _, err := pool.Exec(ctx, m.sql); err == nil {
+			t.Errorf("%s: expected append-only trigger to reject the mutation, got nil error", m.name)
+		} else if !strings.Contains(err.Error(), "append-only") {
+			t.Errorf("%s: expected an append-only rejection, got: %v", m.name, err)
+		}
+	}
 }

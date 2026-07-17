@@ -16,10 +16,11 @@ import (
 type Handler struct {
 	service *Service
 	cookies CookieConfig
+	devMode bool // server runs in development; gates the dev-token echo
 }
 
-func NewHandler(service *Service, cookies CookieConfig) *Handler {
-	return &Handler{service: service, cookies: cookies}
+func NewHandler(service *Service, cookies CookieConfig, devMode bool) *Handler {
+	return &Handler{service: service, cookies: cookies, devMode: devMode}
 }
 
 // noStore marks an auth response uncacheable so tokens are never written to a
@@ -114,6 +115,49 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	h.cookies.setRefreshCookie(w, result.Tokens.RefreshToken, result.Tokens.RefreshExpiry)
 	noStore(w)
 	response.JSON(w, http.StatusCreated, result)
+}
+
+// RegisterSendOTP issues a phone-verification code for a pending registration.
+// Response is generic; in dev the code is echoed (dev_code) like ForgotPassword,
+// since no SMS provider is wired yet (delivery is the licensing/partner gap).
+func (h *Handler) RegisterSendOTP(w http.ResponseWriter, r *http.Request) {
+	var req SendRegistrationOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidatePhone(req.Phone); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+	code, err := h.service.SendRegistrationOTP(r.Context(), req.Phone)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "OTP_SEND_FAILED", "could not send verification code")
+		return
+	}
+	resp := map[string]string{"message": "verification code sent"}
+	if h.isDevMode(r) {
+		resp["dev_code"] = code
+	}
+	noStore(w)
+	response.JSON(w, http.StatusOK, resp)
+}
+
+// RegisterVerifyOTP checks the code and returns a single-use verification token
+// the client passes to /auth/register as `verification_token`.
+func (h *Handler) RegisterVerifyOTP(w http.ResponseWriter, r *http.Request) {
+	var req VerifyRegistrationOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	token, err := h.service.VerifyRegistrationOTP(r.Context(), req.Phone, req.Code)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "OTP_INVALID", "invalid or expired verification code")
+		return
+	}
+	noStore(w)
+	response.JSON(w, http.StatusOK, map[string]string{"verification_token": token})
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +258,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]string{"message": "if the account exists, a reset link has been sent"}
-	if token != "" && isDevMode(r) {
+	if token != "" && h.isDevMode(r) {
 		resp["dev_token"] = token
 	}
 	response.JSON(w, http.StatusAccepted, resp)
@@ -237,7 +281,10 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"message": "Password reset successful"})
 }
 
-func isDevMode(r *http.Request) bool {
-	// Dev hint header injected by infra; never trusted in production env.
-	return r.Header.Get("X-Kiramopay-Dev") == "true"
+// isDevMode reports whether the dev-only token echo is allowed. It is gated on
+// the SERVER's environment (set at construction from config) — the request
+// header alone is never trusted, so a client cannot turn on dev mode in
+// production and exfiltrate the reset token.
+func (h *Handler) isDevMode(r *http.Request) bool {
+	return h.devMode && r.Header.Get("X-Kiramopay-Dev") == "true"
 }

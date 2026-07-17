@@ -131,6 +131,23 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 	return "", fmt.Errorf("ledger.post exhausted retries: %w", lastErr)
 }
 
+// PostingExists reports whether a posting with the given idempotency key has
+// already been recorded. It lets a caller make a non-idempotent side effect
+// (e.g. a state update paired with a posting) safe against retries by checking
+// before acting. An empty key is never considered to exist.
+func (e *Engine) PostingExists(ctx context.Context, idempotencyKey string) (bool, error) {
+	if idempotencyKey == "" {
+		return false, nil
+	}
+	var exists bool
+	if err := e.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM journal_postings WHERE idempotency_key = $1)`,
+		idempotencyKey).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // ErrIdempotent indicates the IdempotencyKey collided with an existing posting.
 var ErrIdempotent = errors.New("idempotent: posting already recorded")
 

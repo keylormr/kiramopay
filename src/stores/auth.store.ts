@@ -28,6 +28,10 @@ interface RegisterParams {
 interface AuthState {
   isAuthenticated: boolean;
   isOnboarded: boolean;
+  // Non-PII flag: a session existed on this device, so attempt a cookie-based
+  // restore on cold start. Lets us use this — instead of the persisted PII
+  // profile — as the "there is a session to restore" signal.
+  sessionHint: boolean;
   user: User | null;
   // Tokens are kept in memory only — never persisted. localStorage is too
   // easily exfiltrated via XSS for tokens of an actively-authenticated
@@ -59,6 +63,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       isAuthenticated: false,
       isOnboarded: false,
+      sessionHint: false,
       user: null,
       accessToken: null,
       refreshToken: null,
@@ -70,6 +75,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             isAuthenticated: true,
             isOnboarded: true,
+            sessionHint: true,
             user: result.data.user,
             accessToken: result.data.tokens?.access_token ?? null,
             refreshToken: result.data.tokens?.refresh_token ?? null,
@@ -92,6 +98,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             isAuthenticated: true,
             isOnboarded: true,
+            sessionHint: true,
             user: result.data.user,
             accessToken: result.data.tokens?.access_token ?? null,
             refreshToken: result.data.tokens?.refresh_token ?? null,
@@ -119,6 +126,7 @@ export const useAuthStore = create<AuthState>()(
         secureTokenStore.clear();
         set({
           isAuthenticated: false,
+          sessionHint: false,
           user: null,
           accessToken: null,
           refreshToken: null,
@@ -145,6 +153,7 @@ export const useAuthStore = create<AuthState>()(
         secureTokenStore.clear();
         set({
           isAuthenticated: false,
+          sessionHint: false,
           user: null,
           accessToken: null,
           refreshToken: null,
@@ -160,17 +169,28 @@ export const useAuthStore = create<AuthState>()(
         const stored = await secureTokenStore.getRefreshToken();
         const result = await api.auth.refresh(stored ?? '');
         if (result.success && result.data?.access_token) {
+          // Set tokens first so the profile fetch below is authenticated.
           set({
-            isAuthenticated: true,
-            isOnboarded: true,
             accessToken: result.data.access_token,
             refreshToken: result.data.refresh_token ?? null,
           });
           // Persist the rotated refresh token on native (no-op on web).
           secureTokenStore.setRefreshToken(result.data.refresh_token ?? null);
+          // The profile (PII) is not persisted with a backend — re-fetch it now
+          // that we have a valid session, then flip authenticated with the user
+          // already in place (no null-user window for the UI).
+          const profile = await api.auth.getProfile();
+          set({
+            isAuthenticated: true,
+            isOnboarded: true,
+            sessionHint: true,
+            ...(profile.success && profile.data ? { user: profile.data } : {}),
+          });
           syncAllData().catch(() => {});
         } else {
-          set({ isAuthenticated: false, accessToken: null, refreshToken: null });
+          // Stale/absent cookie: clear the restore hint so the next cold start
+          // goes straight to login instead of retrying a dead session.
+          set({ isAuthenticated: false, sessionHint: false, accessToken: null, refreshToken: null });
         }
       },
 
@@ -196,12 +216,16 @@ export const useAuthStore = create<AuthState>()(
         // Note: tokens are intentionally NOT persisted. PIN/biometric path
         // is the local re-auth; password is the cold-start re-auth.
         isOnboarded: state.isOnboarded,
-        user: state.user,
-        // With a backend, isAuthenticated is derived from the boot-time cookie
-        // refresh (bootstrap), never persisted — persisting it was the phantom
-        // session that flashed "logged in" then bounced to login. In mock mode
-        // (no cookie) keep persisting it so a refresh stays logged in.
-        ...(hasBackend ? {} : { isAuthenticated: state.isAuthenticated }),
+        // Non-PII signal that gates the boot-time cookie restore (replaces the
+        // persisted profile that used to double as this flag).
+        sessionHint: state.sessionHint,
+        // The profile (cedula/phone/email = PII) is NOT persisted with a backend:
+        // bootstrap() re-fetches it from GET /users/me after the cookie refresh.
+        // isAuthenticated is likewise derived from that refresh, never persisted
+        // (persisting it was the phantom session that flashed "logged in"). In
+        // mock mode (no cookie/backend to re-fetch from) keep both so a reload
+        // stays logged in.
+        ...(hasBackend ? {} : { user: state.user, isAuthenticated: state.isAuthenticated }),
       }),
       // Sanitize what rehydrates: a localStorage written by an OLDER build still
       // has isAuthenticated:true. With a backend that stale flag must be ignored

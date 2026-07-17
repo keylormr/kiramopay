@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"time"
@@ -365,6 +366,89 @@ func (r *Repository) VerifyMFAChallenge(ctx context.Context, userID, purpose, co
 			`UPDATE mfa_challenges SET attempts = $2 WHERE id = $1::uuid`, id, newAttempts)
 	}
 	return false, tx.Commit(ctx)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Registration phone OTP (Redis; short-lived, attempt-capped, single-use)
+// ─────────────────────────────────────────────────────────────────────────
+
+const (
+	regOTPTTL         = 5 * time.Minute
+	regOTPMaxAttempts = 5
+	regVerifyTokenTTL = 15 * time.Minute
+)
+
+func regOTPKey(phone string) string         { return "auth:regotp:code:" + phone }
+func regOTPAttemptsKey(phone string) string { return "auth:regotp:tries:" + phone }
+func regVerifyKey(token string) string      { return "auth:regverify:" + token }
+
+// PutRegistrationOTP stores the hashed code for a phone with a short TTL and
+// resets the attempt counter. The latest send wins.
+func (r *Repository) PutRegistrationOTP(ctx context.Context, phone, codeHash string) error {
+	if r.redis == nil {
+		return fmt.Errorf("otp store unavailable")
+	}
+	pipe := r.redis.TxPipeline()
+	pipe.Set(ctx, regOTPKey(phone), codeHash, regOTPTTL)
+	pipe.Set(ctx, regOTPAttemptsKey(phone), 0, regOTPTTL)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// VerifyRegistrationOTP compares the supplied code hash against the stored one,
+// enforcing an attempt cap. On success it consumes the code (single use).
+func (r *Repository) VerifyRegistrationOTP(ctx context.Context, phone, codeHash string) (bool, error) {
+	if r.redis == nil {
+		return false, fmt.Errorf("otp store unavailable")
+	}
+	stored, err := r.redis.Get(ctx, regOTPKey(phone)).Result()
+	if errors.Is(err, redis.Nil) {
+		return false, nil // expired or never sent
+	}
+	if err != nil {
+		return false, fmt.Errorf("otp lookup: %w", err)
+	}
+	attempts, err := r.redis.Incr(ctx, regOTPAttemptsKey(phone)).Result()
+	if err != nil {
+		return false, fmt.Errorf("otp attempts: %w", err)
+	}
+	if attempts > regOTPMaxAttempts {
+		_ = r.redis.Del(ctx, regOTPKey(phone)).Err() // burn after too many tries
+		return false, nil
+	}
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(codeHash)) != 1 {
+		return false, nil
+	}
+	_ = r.redis.Del(ctx, regOTPKey(phone), regOTPAttemptsKey(phone)).Err()
+	return true, nil
+}
+
+// PutPhoneVerificationToken records that `phone` proved ownership; the token
+// must be presented at register time (short TTL, single use).
+func (r *Repository) PutPhoneVerificationToken(ctx context.Context, token, phone string) error {
+	if r.redis == nil {
+		return fmt.Errorf("otp store unavailable")
+	}
+	return r.redis.Set(ctx, regVerifyKey(token), phone, regVerifyTokenTTL).Err()
+}
+
+// ConsumePhoneVerificationToken returns the phone a token was issued for and
+// deletes it (single use). Empty string if invalid/expired.
+func (r *Repository) ConsumePhoneVerificationToken(ctx context.Context, token string) (string, error) {
+	if r.redis == nil {
+		return "", fmt.Errorf("otp store unavailable")
+	}
+	if token == "" {
+		return "", nil
+	}
+	phone, err := r.redis.GetDel(ctx, regVerifyKey(token)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("verify token consume: %w", err)
+	}
+	return phone, nil
 }
 
 func nullable(s string) interface{} {

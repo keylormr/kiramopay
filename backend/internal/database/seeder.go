@@ -102,7 +102,7 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) erro
 	for _, u := range DefaultTestUsers {
 		// Check if user already exists
 		var exists bool
-		err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE cedula = $1)", u.Cedula).Scan(&exists)
+		err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE cedula_hash = fn_pii_hmac($1))", u.Cedula).Scan(&exists)
 		if err != nil {
 			return fmt.Errorf("check user exists: %w", err)
 		}
@@ -126,8 +126,8 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) erro
 
 		// Insert user
 		_, err = pool.Exec(ctx,
-			`INSERT INTO users (id, cedula, phone, first_name, last_name, password_hash, status, kyc_level, kyc_status)
-			 VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, 'verified')`,
+			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status)
+			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified')`,
 			u.ID, u.Cedula, u.Phone, u.FirstName, u.LastName, pinHash, u.KYCLevel,
 		)
 		if err != nil {

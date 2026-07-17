@@ -39,7 +39,7 @@ func registerTestUser(t *testing.T, svc *auth.Service) *auth.LoginResponse {
 func TestLoginSetsRefreshCookie(t *testing.T) {
 	svc, _ := setupAuthService(t)
 	registerTestUser(t, svc)
-	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true})
+	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true}, false)
 
 	body := `{"cedula":"702650930","password":"Kiramopay2024!"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
@@ -69,7 +69,7 @@ func TestLoginSetsRefreshCookie(t *testing.T) {
 func TestRefreshReadsCookie(t *testing.T) {
 	svc, _ := setupAuthService(t)
 	resp := registerTestUser(t, svc)
-	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true})
+	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true}, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: "__Host-kp_refresh", Value: resp.Tokens.RefreshToken})
@@ -93,7 +93,7 @@ func TestRefreshReadsCookie(t *testing.T) {
 func TestRefreshFallsBackToBody(t *testing.T) {
 	svc, _ := setupAuthService(t)
 	resp := registerTestUser(t, svc)
-	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true})
+	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true}, false)
 
 	body := `{"refresh_token":"` + resp.Tokens.RefreshToken + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(body))

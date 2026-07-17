@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -26,6 +27,14 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 func Error(w http.ResponseWriter, status int, code, message string) {
+	// Never leak internal failure detail (raw DB/driver text, invariants) to
+	// clients on server errors. The real message is logged for diagnosis; the
+	// client gets a generic message. 4xx messages are author-controlled and
+	// user-safe, so they pass through unchanged.
+	if status >= http.StatusInternalServerError {
+		slog.Error("server error response", "status", status, "code", code, "detail", message)
+		message = "internal server error"
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(APIResponse{

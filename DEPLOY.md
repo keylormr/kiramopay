@@ -40,6 +40,13 @@ Guardá la cadena resultante — la usás en el paso 4 como `JWT_SECRET`.
    - Region: cualquiera (mismo continente que Koyeb idealmente)
 3. Tras crear, copiá la **Connection string** que muestra (formato `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require`).
 4. Reemplazá `neondb` por `kiramopay` en la URL. Si querés, podés crear primero una DB nueva desde el dashboard (Settings → Databases) o dejar `neondb` como nombre — da igual.
+5. **Clave de cifrado de PII (obligatorio, ANTES de migrar).** En el **SQL Editor** de Neon corré una vez (reemplazá `<32+ chars>` por un secreto aleatorio de al menos 32 caracteres y guardalo aparte, igual que el JWT secret):
+
+   ```sql
+   ALTER DATABASE <tu-db> SET kiramopay.encryption_key = '<32+ chars>';
+   ```
+
+   La migración 024 cifra cédula/teléfono/email con esta clave. Debe estar seteada **antes** de activar `RUN_MIGRATIONS=true`; si no, la PII de usuarios existentes queda sin cifrar. Fuera de `development` el backend además **no arranca** si la clave falta o mide menos de 32 chars (falla claro al boot en vez de romper en el primer acceso a PII).
 
 > **Anotá**: la `DATABASE_URL` completa.
 
@@ -96,6 +103,8 @@ Guardá la cadena resultante — la usás en el paso 4 como `JWT_SECRET`.
    | `CORS_ORIGINS`       | `https://<tu-app>.vercel.app,https://*.vercel.app`     |
    | `RUN_MIGRATIONS`     | `true`  *(solo el primer deploy, después borrar)*       |
    | `SEED_DEMO`          | `true`  *(solo el primer deploy)*                      |
+
+   > **Antes de este primer deploy** asegurate de haber corrido el `ALTER DATABASE ... SET kiramopay.encryption_key` del paso 2.5; si no, el backend abortará el arranque con `PII encryption not configured`.
 
 6. **Create Web Service**. La primera build tarda ~5–8 min (Docker build + push + arranque). Mirá los logs:
    - `Running migrations from ./migrations ...` seguido de `migration applied` ×24

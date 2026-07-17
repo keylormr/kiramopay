@@ -24,6 +24,13 @@ import (
 // login (wrong cedula, wrong password, locked, etc.) to prevent enumeration.
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
+// ErrInvalidOTP is returned when a registration OTP code is wrong or expired.
+var ErrInvalidOTP = errors.New("invalid or expired verification code")
+
+// ErrPhoneNotVerified is returned by Register when phone verification is
+// required but no valid verification token was presented for the phone.
+var ErrPhoneNotVerified = errors.New("phone number not verified")
+
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
 type SanctionScreener interface {
@@ -41,6 +48,9 @@ type Service struct {
 	maxLoginAttempts int
 	idleTimeout      time.Duration
 	absoluteTimeout  time.Duration
+	// requirePhoneVerification gates whether Register demands a valid phone
+	// verification token. Off until an SMS provider can deliver the code.
+	requirePhoneVerification bool
 }
 
 // Options for service wiring.
@@ -54,6 +64,10 @@ type Options struct {
 	// Zero falls back to 30 minutes / 7 days respectively.
 	IdleTimeout     time.Duration
 	AbsoluteTimeout time.Duration
+	// RequirePhoneVerification makes Register reject signups without a valid
+	// phone-verification token. Keep false until an SMS provider is wired
+	// (otherwise nobody could obtain a code in production).
+	RequirePhoneVerification bool
 }
 
 func NewService(
@@ -76,16 +90,17 @@ func NewService(
 		opts.AbsoluteTimeout = 7 * 24 * time.Hour
 	}
 	return &Service{
-		authRepo:         authRepo,
-		userRepo:         userRepo,
-		walletRepo:       walletRepo,
-		jwt:              jwt,
-		lockoutStore:     opts.LockoutStore,
-		auditLogger:      opts.AuditLogger,
-		screener:         opts.Screener,
-		maxLoginAttempts: opts.MaxLoginAttempts,
-		idleTimeout:      opts.IdleTimeout,
-		absoluteTimeout:  opts.AbsoluteTimeout,
+		authRepo:                 authRepo,
+		userRepo:                 userRepo,
+		walletRepo:               walletRepo,
+		jwt:                      jwt,
+		lockoutStore:             opts.LockoutStore,
+		auditLogger:              opts.AuditLogger,
+		screener:                 opts.Screener,
+		maxLoginAttempts:         opts.MaxLoginAttempts,
+		idleTimeout:              opts.IdleTimeout,
+		absoluteTimeout:          opts.AbsoluteTimeout,
+		requirePhoneVerification: opts.RequirePhoneVerification,
 	}
 }
 
@@ -125,6 +140,17 @@ type RegisterRequest struct {
 	LastName  string `json:"last_name"`
 	Password  string `json:"password"`
 	Email     string `json:"email,omitempty"`
+	// VerificationToken proves phone ownership (issued by VerifyRegistrationOTP).
+	VerificationToken string `json:"verification_token,omitempty"`
+}
+
+type SendRegistrationOTPRequest struct {
+	Phone string `json:"phone"`
+}
+
+type VerifyRegistrationOTPRequest struct {
+	Phone string `json:"phone"`
+	Code  string `json:"code"`
 }
 
 type ChangePasswordRequest struct {
@@ -214,21 +240,38 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		}
 	}
 
+	// Proof of phone ownership. A verification token is issued by
+	// VerifyRegistrationOTP once the user enters the code sent to their phone.
+	// When RequirePhoneVerification is on, a valid token for THIS phone is
+	// mandatory; otherwise it is best-effort (records phone_verified when given).
+	phoneVerified := false
+	if req.VerificationToken != "" {
+		verifiedPhone, verr := s.authRepo.ConsumePhoneVerificationToken(ctx, req.VerificationToken)
+		if verr != nil {
+			return nil, fmt.Errorf("verify phone: %w", verr)
+		}
+		phoneVerified = verifiedPhone != "" && verifiedPhone == req.Phone
+	}
+	if s.requirePhoneVerification && !phoneVerified {
+		return nil, ErrPhoneNotVerified
+	}
+
 	pwHash, err := hash.HashPin(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	newUser := &user.UserRecord{
-		ID:           uuid.New().String(),
-		Cedula:       req.Cedula,
-		Phone:        req.Phone,
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		Email:        req.Email,
-		PasswordHash: pwHash,
-		Status:       "active",
-		KYCLevel:     0,
+		ID:            uuid.New().String(),
+		Cedula:        req.Cedula,
+		Phone:         req.Phone,
+		PhoneVerified: phoneVerified,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		Email:         req.Email,
+		PasswordHash:  pwHash,
+		Status:        "active",
+		KYCLevel:      0,
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
@@ -494,6 +537,71 @@ func (s *Service) resetLockout(cedula string) {
 		return
 	}
 	middleware.ResetLockoutCounter(s.lockoutStore, cedula)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Registration phone verification (OTP)
+// ─────────────────────────────────────────────────────────────────────────
+
+// SendRegistrationOTP generates a 6-digit code for a phone, stores its hash
+// (short TTL, attempt-capped) and returns the plaintext code. Delivery is out
+// of band: a production SMS provider would send it; with none wired the handler
+// echoes it only in dev (mirroring ForgotPassword's dev_token).
+func (s *Service) SendRegistrationOTP(ctx context.Context, phone string) (string, error) {
+	if phone == "" {
+		return "", fmt.Errorf("phone required")
+	}
+	code, err := generateNumericOTP(6)
+	if err != nil {
+		return "", fmt.Errorf("generate code: %w", err)
+	}
+	if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code)); err != nil {
+		return "", fmt.Errorf("store otp: %w", err)
+	}
+	// TODO(sms-provider): deliver `code` to `phone` via SMS once a provider is
+	// contracted (blocked by partner/licensing, not code).
+	return code, nil
+}
+
+// VerifyRegistrationOTP checks a code and, on success, issues a short-lived,
+// single-use phone-verification token that Register consumes.
+func (s *Service) VerifyRegistrationOTP(ctx context.Context, phone, code string) (string, error) {
+	if phone == "" || code == "" {
+		return "", ErrInvalidOTP
+	}
+	ok, err := s.authRepo.VerifyRegistrationOTP(ctx, phone, hashOTP(code))
+	if err != nil {
+		return "", fmt.Errorf("verify otp: %w", err)
+	}
+	if !ok {
+		return "", ErrInvalidOTP
+	}
+	token, err := randomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("token gen: %w", err)
+	}
+	if err := s.authRepo.PutPhoneVerificationToken(ctx, token, phone); err != nil {
+		return "", fmt.Errorf("store verify token: %w", err)
+	}
+	return token, nil
+}
+
+func hashOTP(code string) string {
+	h := sha256.Sum256([]byte("regotp:" + code))
+	return hex.EncodeToString(h[:])
+}
+
+// generateNumericOTP returns an n-digit numeric string using crypto/rand.
+func generateNumericOTP(n int) (string, error) {
+	const digits = "0123456789"
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = digits[int(b[i])%len(digits)]
+	}
+	return string(b), nil
 }
 
 func randomToken(n int) (string, error) {

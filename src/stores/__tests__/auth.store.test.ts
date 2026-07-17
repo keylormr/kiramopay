@@ -7,6 +7,20 @@ vi.mock('@/api', () => ({
   getApiLayer: () => ({
     auth: {
       refresh: mockRefresh,
+      getProfile: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          id: 'user-001',
+          cedula: '702650930',
+          firstName: 'Keilor',
+          lastName: 'Martinez',
+          phone: '+506 8888-0000',
+          email: 'keilor@kiramopay.com',
+          kycLevel: 2,
+          avatar: '',
+          createdAt: '2024-01-15',
+        },
+      }),
       login: vi.fn().mockImplementation(async ({ cedula, password }: { cedula: string; password: string }) => {
         if (cedula === '702650930' && password === 'Kiramopay2024!') {
           return {
@@ -56,6 +70,7 @@ describe('useAuthStore', () => {
     useAuthStore.setState({
       isAuthenticated: false,
       isOnboarded: false,
+      sessionHint: false,
       user: null,
       accessToken: null,
       refreshToken: null,
@@ -126,6 +141,9 @@ describe('useAuthStore', () => {
     expect(s.isAuthenticated).toBe(true);
     expect(s.accessToken).toBe('fresh-access');
     expect(s.refreshToken).toBe('fresh-refresh');
+    // Profile is re-fetched from the backend (not persisted PII).
+    expect(s.user?.firstName).toBe('Keilor');
+    expect(s.sessionHint).toBe(true);
   });
 
   it('bootstrap stays logged out when there is no valid cookie', async () => {

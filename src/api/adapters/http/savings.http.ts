@@ -18,6 +18,15 @@ interface GoalDTO {
   created_at: string;
 }
 
+// A per-request key so an exact retry of the same deposit/withdraw (offline
+// queue replay, proxy resend) is deduplicated by the backend and moves money
+// only once. A fresh user action gets a fresh key.
+function idempotencyKey(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function mapGoal(d: GoalDTO): SavingsGoal {
   return {
     id: d.id,
@@ -58,17 +67,23 @@ export class HttpSavingsRepository implements ISavingsRepository {
   }
 
   async deposit(id: string, amount: number): Promise<ApiResponse<SavingsGoal>> {
-    const res = await this.client.post<GoalDTO>(`/api/v1/savings/goals/${id}/deposit`, {
-      amount_minor: Math.round(amount * 100),
-    });
+    const res = await this.client.post<GoalDTO>(
+      `/api/v1/savings/goals/${id}/deposit`,
+      { amount_minor: Math.round(amount * 100) },
+      true,
+      { 'Idempotency-Key': idempotencyKey() }, // exact retries (queue/replay) move money once
+    );
     if (!res.success || !res.data) return apiError('SAVINGS_FAILED', res.error?.message || 'Failed');
     return apiSuccess(mapGoal(res.data));
   }
 
   async withdraw(id: string, amount: number): Promise<ApiResponse<SavingsGoal>> {
-    const res = await this.client.post<GoalDTO>(`/api/v1/savings/goals/${id}/withdraw`, {
-      amount_minor: Math.round(amount * 100),
-    });
+    const res = await this.client.post<GoalDTO>(
+      `/api/v1/savings/goals/${id}/withdraw`,
+      { amount_minor: Math.round(amount * 100) },
+      true,
+      { 'Idempotency-Key': idempotencyKey() },
+    );
     if (!res.success || !res.data) return apiError('SAVINGS_FAILED', res.error?.message || 'Failed');
     return apiSuccess(mapGoal(res.data));
   }

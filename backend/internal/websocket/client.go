@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -23,12 +24,50 @@ const (
 	authMessageSize = 4096
 )
 
+// allowedOrigins is the WebSocket Origin allowlist (CSWSH defense), configured
+// once at startup from the CORS origins. Empty until SetAllowedOrigins runs.
+var allowedOrigins []string
+
+// SetAllowedOrigins configures the WebSocket Origin allowlist. Call once at
+// startup with cfg.CORS.Origins.
+func SetAllowedOrigins(origins []string) { allowedOrigins = origins }
+
+// originAllowed enforces the Origin allowlist for the upgrade handshake. A
+// missing Origin (native apps / non-browser clients, which carry no ambient
+// cookie credential) is allowed; a browser Origin must be allowlisted or a
+// native/local-dev origin, otherwise the cross-origin handshake is rejected.
+func originAllowed(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	// Exact allowlist match (configured web origins) first.
+	for _, o := range allowedOrigins {
+		if o == origin {
+			return true
+		}
+	}
+	// Parse so the host is compared exactly — a raw prefix would also match an
+	// attacker domain like https://localhost.evil.com.
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "capacitor", "ionic", "file":
+		return true // native app webviews; not web-attacker registerable
+	case "http", "https":
+		host := u.Hostname()
+		return host == "localhost" || host == "127.0.0.1"
+	default:
+		return false
+	}
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins in development
-	},
+	CheckOrigin:     originAllowed,
 }
 
 // JTIChecker reports whether an access token's jti has been revoked. It mirrors
