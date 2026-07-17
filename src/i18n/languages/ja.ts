@@ -368,6 +368,8 @@ const ja: TranslationKeys = {
   crypto_scan_or_copy: 'このQRコードをスキャンするか、アドレスをコピーして受け取ってください',
   crypto_your_address: 'あなたのアドレス',
   crypto_other_assets_lost: '他の資産は永久に失われる可能性があります。',
+  crypto_deposit_unavailable_title: '暗号資産の入金は近日対応',
+  crypto_deposit_unavailable_desc: '暗号資産の直接入金はまだご利用いただけません。ウォレットのカストディが有効になり次第、対応します。',
   crypto_estimated_apy: '予想APY',
   crypto_amount_to_stake: 'ステーク数量',
   crypto_asset_label: '資産',

@@ -368,6 +368,8 @@ const en: TranslationKeys = {
   crypto_scan_or_copy: 'Scan this QR code or copy the address to receive',
   crypto_your_address: 'Your address',
   crypto_other_assets_lost: 'Other assets could be permanently lost.',
+  crypto_deposit_unavailable_title: 'Crypto deposits coming soon',
+  crypto_deposit_unavailable_desc: 'Direct crypto deposits are not available yet. This will be enabled once wallet custody is live.',
   crypto_estimated_apy: 'Estimated APY',
   crypto_amount_to_stake: 'Amount to stake',
   crypto_asset_label: 'Asset',

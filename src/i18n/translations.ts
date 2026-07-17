@@ -389,6 +389,8 @@ export type TranslationKeys = {
   crypto_scan_or_copy: string;
   crypto_your_address: string;
   crypto_other_assets_lost: string;
+  crypto_deposit_unavailable_title: string;
+  crypto_deposit_unavailable_desc: string;
   crypto_estimated_apy: string;
   crypto_amount_to_stake: string;
   crypto_asset_label: string;
