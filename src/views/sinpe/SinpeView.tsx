@@ -465,7 +465,7 @@ export const SinpeView: React.FC = () => {
               type="text"
               value={newContactName}
               onChange={(e) => setNewContactName(e.target.value)}
-              placeholder="Ej: Juan Perez"
+              placeholder={t('sinpe_contact_name_ph')}
               className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
             />
           </div>
@@ -498,7 +498,7 @@ export const SinpeView: React.FC = () => {
               className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
             >
               {BANKS.map((bank) => (
-                <option key={bank} value={bank}>{bank}</option>
+                <option key={bank} value={bank}>{bank === 'Desconocido' ? t('unknown_bank') : bank}</option>
               ))}
             </select>
           </div>
@@ -616,7 +616,7 @@ export const SinpeView: React.FC = () => {
               type="text"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder="Ej: Almuerzo, pago deuda..."
+              placeholder={t('sinpe_send_desc_ph')}
               className="w-full bg-transparent outline-none uv-text-primary"
               maxLength={50}
             />
@@ -705,7 +705,7 @@ export const SinpeView: React.FC = () => {
               type="text"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder="Ej: Pago de almuerzo..."
+              placeholder={t('sinpe_request_reason_ph')}
               className="w-full bg-transparent outline-none uv-text-primary"
             />
           </div>

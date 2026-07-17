@@ -41,13 +41,13 @@ const PHONE_OPERATORS = [
 ];
 
 const CATEGORIES = [
-  { id: 'all', label: 'Todos', icon: '📋' },
-  { id: 'electricity', label: 'Electricidad', icon: '⚡' },
-  { id: 'water', label: 'Agua', icon: '💧' },
-  { id: 'telecom', label: 'Teléfono', icon: '📱' },
-  { id: 'internet', label: 'Internet', icon: '📡' },
-  { id: 'cable', label: 'Cable', icon: '📺' },
-  { id: 'other', label: 'Otros', icon: '📄' },
+  { id: 'all', label: 'cat_all', icon: '📋' },
+  { id: 'electricity', label: 'cat_electricity', icon: '⚡' },
+  { id: 'water', label: 'cat_water', icon: '💧' },
+  { id: 'telecom', label: 'cat_telecom', icon: '📱' },
+  { id: 'internet', label: 'cat_internet', icon: '📡' },
+  { id: 'cable', label: 'cat_cable', icon: '📺' },
+  { id: 'other', label: 'cat_other', icon: '📄' },
 ];
 
 export const ServicesView: React.FC = () => {
@@ -291,7 +291,7 @@ export const ServicesView: React.FC = () => {
                 }`}
               >
                 <span>{cat.icon}</span>
-                {cat.label}
+                {t(cat.label)}
               </button>
             ))}
           </div>

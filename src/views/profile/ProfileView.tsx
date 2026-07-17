@@ -132,9 +132,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   }, 0);
 
   const kycLevelText: Record<number, string> = {
-    0: 'Básico',
-    1: 'Verificado',
-    2: 'Completo',
+    0: t('kyc_basic'),
+    1: t('kyc_verified'),
+    2: t('kyc_complete'),
   };
 
   return (
@@ -161,7 +161,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               {state.settings.biometricEnabled && (
                 <span className="px-2 py-0.5 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                   <Icons.Fingerprint size={11} />
-                  Biometría
+                  {t('biometrics')}
                 </span>
               )}
             </div>
@@ -171,15 +171,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         {/* Quick Stats */}
         <div className="relative grid grid-cols-2 gap-3 mt-6">
           <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">Balance Total</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('total_balance')}</p>
             <p className="text-lg font-black tabular-nums">
               ~${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
           <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">Este mes</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('this_month')}</p>
             <p className="text-lg font-black">
-              {state.transactions.filter(t => t.type === 'debit').length} gastos
+              {state.transactions.filter(tx => tx.type === 'debit').length} {t('expenses')}
             </p>
           </div>
         </div>
@@ -197,7 +197,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('personal_data')}</p>
-              <p className="text-sm text-gray-500">Cédula: {state.user?.cedula}</p>
+              <p className="text-sm text-gray-500">{t('cedula')}: {state.user?.cedula}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -208,7 +208,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('kyc_verification')}</p>
-              <p className="text-sm text-gray-500">Nivel {state.user?.kycLevel || 0} - {kycLevelText[state.user?.kycLevel || 0]}</p>
+              <p className="text-sm text-gray-500">{t('profile_level')} {state.user?.kycLevel || 0} - {kycLevelText[state.user?.kycLevel || 0]}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -222,7 +222,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('transaction_limits')}</p>
-              <p className="text-sm text-gray-500">Diario: {formatCurrency(500000)}</p>
+              <p className="text-sm text-gray-500">{t('daily_limit')}: {formatCurrency(500000)}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -647,29 +647,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         <div className="space-y-4">
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="uv-text-muted">Límite diario</span>
+              <span className="uv-text-muted">{t('daily_limit')}</span>
               <span className="font-bold uv-text-primary">{formatCurrency(500000)}</span>
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div className="h-full bg-primary rounded-full" style={{ width: '35%' }} />
             </div>
-            <p className="text-xs text-gray-500 mt-1">Usado: {formatCurrency(175000)}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('used')}: {formatCurrency(175000)}</p>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="uv-text-muted">Límite mensual</span>
+              <span className="uv-text-muted">{t('monthly_limit')}</span>
               <span className="font-bold uv-text-primary">{formatCurrency(5000000)}</span>
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div className="h-full bg-accent rounded-full" style={{ width: '20%' }} />
             </div>
-            <p className="text-xs text-gray-500 mt-1">Usado: {formatCurrency(1000000)}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('used')}: {formatCurrency(1000000)}</p>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="uv-text-muted">Por transacción</span>
+              <span className="uv-text-muted">{t('per_transaction')}</span>
               <span className="font-bold uv-text-primary">{formatCurrency(200000)}</span>
             </div>
           </div>
@@ -679,14 +679,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <Icons.Info size={18} className="text-blue-500 mt-0.5" />
               <div>
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  Para aumentar tus límites, completa la verificación KYC nivel 2.
+                  {t('limits_kyc_hint')}
                 </p>
               </div>
             </div>
           </div>
 
           <button className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all">
-            Solicitar aumento
+            {t('request_increase')}
           </button>
         </div>
       </BottomSheet>

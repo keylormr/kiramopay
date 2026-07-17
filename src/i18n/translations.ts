@@ -29,6 +29,21 @@ export type TranslationKeys = {
   notif_read_label: string;
   notif_unread_label: string;
   notif_delete: string;
+  kyc_basic: string;
+  kyc_verified: string;
+  kyc_complete: string;
+  profile_level: string;
+  limits_kyc_hint: string;
+  cat_all: string;
+  cat_electricity: string;
+  cat_water: string;
+  cat_telecom: string;
+  cat_internet: string;
+  cat_cable: string;
+  cat_other: string;
+  sinpe_contact_name_ph: string;
+  sinpe_send_desc_ph: string;
+  sinpe_request_reason_ph: string;
   // Common
   app_name: string;
   welcome: string;
