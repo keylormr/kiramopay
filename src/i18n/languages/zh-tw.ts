@@ -3,6 +3,15 @@
 import type { TranslationKeys } from '../translations';
 
 const zhTw: TranslationKeys = {
+  notif_title: '通知',
+  notif_unread: '未讀',
+  notif_all_read: '全部已讀',
+  notif_mark_all_read: '全部標為已讀',
+  notif_empty_title: '沒有通知',
+  notif_empty_desc: '有新消息時我們會通知您。',
+  notif_read_label: '已讀',
+  notif_unread_label: '未讀',
+  notif_delete: '刪除通知',
   // Common
   app_name: 'KiramoPay',
   welcome: '歡迎',

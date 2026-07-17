@@ -3,6 +3,15 @@
 import type { TranslationKeys } from '../translations';
 
 const ja: TranslationKeys = {
+  notif_title: '通知',
+  notif_unread: '未読',
+  notif_all_read: 'すべて既読',
+  notif_mark_all_read: 'すべて既読にする',
+  notif_empty_title: '通知はありません',
+  notif_empty_desc: '新しい情報があればお知らせします。',
+  notif_read_label: '既読',
+  notif_unread_label: '未読',
+  notif_delete: '通知を削除',
   // Common
   app_name: 'KiramoPay',
   welcome: 'ようこそ',

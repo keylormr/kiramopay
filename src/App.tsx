@@ -267,7 +267,7 @@ const Layout = () => {
           >
             <Icons.Bell size={20} />
             {unreadCount > 0 && (
-              <span aria-label={`${unreadCount} unread`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[var(--color-danger)] rounded-full border-2 border-[var(--color-surface-1)] dark:border-[var(--color-surface-1-dark)] flex items-center justify-center text-[10px] font-bold text-white">
+              <span aria-label={`${unreadCount} ${t('notif_unread')}`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[var(--color-danger)] rounded-full border-2 border-[var(--color-surface-1)] dark:border-[var(--color-surface-1-dark)] flex items-center justify-center text-[10px] font-bold text-white">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}

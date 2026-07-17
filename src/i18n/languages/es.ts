@@ -3,6 +3,15 @@
 import type { TranslationKeys } from '../translations';
 
 const es: TranslationKeys = {
+  notif_title: 'Notificaciones',
+  notif_unread: 'sin leer',
+  notif_all_read: 'Todas leídas',
+  notif_mark_all_read: 'Marcar todas como leídas',
+  notif_empty_title: 'Sin notificaciones',
+  notif_empty_desc: 'Te avisaremos cuando haya novedades.',
+  notif_read_label: 'Leída',
+  notif_unread_label: 'No leída',
+  notif_delete: 'Eliminar notificación',
   // Common
   app_name: 'KiramoPay',
   welcome: 'Bienvenido',

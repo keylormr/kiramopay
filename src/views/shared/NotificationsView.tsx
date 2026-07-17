@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '../../components/Icons';
 import { Notification } from '../../types';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 interface NotificationsViewProps {
   onClose: () => void;
@@ -41,6 +42,7 @@ const getNotificationBg = (type: Notification['type'], read: boolean) => {
 
 export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose }) => {
   const { state, dispatch } = useApp();
+  const { t } = useLanguage();
   const notifications = state.notifications || [];
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [open, setOpen] = useState(true);
@@ -59,12 +61,12 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
     dispatch({ type: 'DELETE_NOTIFICATION', payload: id });
 
   return (
-    <BottomSheet isOpen={open} onClose={handleClose} title="Notificaciones">
+    <BottomSheet isOpen={open} onClose={handleClose} title={t('notif_title')}>
       {/* Actions bar */}
       {notifications.length > 0 && (
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm uv-text-secondary" aria-live="polite">
-            {unreadCount > 0 ? `${unreadCount} sin leer` : 'Todas leídas'}
+            {unreadCount > 0 ? `${unreadCount} ${t('notif_unread')}` : t('notif_all_read')}
           </span>
           {unreadCount > 0 && (
             <button
@@ -72,7 +74,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
               onClick={handleMarkAllAsRead}
               className="text-sm text-[var(--color-primary)] font-medium rounded-lg px-2 py-1 hover:bg-[var(--color-primary-soft)] transition-colors"
             >
-              Marcar todas como leídas
+              {t('notif_mark_all_read')}
             </button>
           )}
         </div>
@@ -83,9 +85,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
           <div className="w-16 h-16 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
             <Icons.Bell size={32} className="uv-text-muted" />
           </div>
-          <h3 className="text-base font-semibold mb-1">Sin notificaciones</h3>
+          <h3 className="text-base font-semibold mb-1">{t('notif_empty_title')}</h3>
           <p className="uv-text-muted text-sm text-center">
-            Te avisaremos cuando haya novedades.
+            {t('notif_empty_desc')}
           </p>
         </div>
       ) : (
@@ -95,7 +97,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
               <button
                 type="button"
                 onClick={() => handleMarkAsRead(notification.id)}
-                aria-label={`${notification.read ? 'Leída' : 'No leída'}: ${notification.title}`}
+                aria-label={`${notification.read ? t('notif_read_label') : t('notif_unread_label')}: ${notification.title}`}
                 className={`w-full text-left rounded-xl p-4 pr-10 transition-all ${getNotificationBg(
                   notification.type,
                   notification.read,
@@ -135,7 +137,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
               <button
                 type="button"
                 onClick={() => handleDelete(notification.id)}
-                aria-label={`Eliminar notificación: ${notification.title}`}
+                aria-label={`${t('notif_delete')}: ${notification.title}`}
                 className="absolute top-2 right-2 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400"
               >
                 <Icons.X size={16} />

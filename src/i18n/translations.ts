@@ -19,6 +19,16 @@ export const LANGUAGES: LanguageOption[] = [
 ];
 
 export type TranslationKeys = {
+  // Notifications
+  notif_title: string;
+  notif_unread: string;
+  notif_all_read: string;
+  notif_mark_all_read: string;
+  notif_empty_title: string;
+  notif_empty_desc: string;
+  notif_read_label: string;
+  notif_unread_label: string;
+  notif_delete: string;
   // Common
   app_name: string;
   welcome: string;
