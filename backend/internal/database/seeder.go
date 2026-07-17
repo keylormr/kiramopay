@@ -61,6 +61,33 @@ var DefaultTestUsers = []TestUser{
 		BalanceCRC: 75000000, // ₡750,000.00
 		BalanceUSD: 20000,    // $200.00
 	},
+	{
+		// Team/demo account. Same rule as above: in any non-development
+		// environment the password MUST come from SEED_PASSWORD_101010101 (no
+		// hardcoded fallback); the value below is only used for local dev.
+		ID:         "a0000000-0000-0000-0000-000000000004",
+		Cedula:     "101010101",
+		Phone:      "+50688880004",
+		FirstName:  "Victor",
+		LastName:   "Lobo",
+		Password:   "VictorLocal2026!", // local-development fallback only
+		KYCLevel:   1,
+		BalanceCRC: 250000000, // ₡2,500,000.00
+		BalanceUSD: 50000,     // $500.00
+	},
+	{
+		// Team/demo account. Password in non-development comes from
+		// SEED_PASSWORD_202020202 (no hardcoded fallback).
+		ID:         "a0000000-0000-0000-0000-000000000005",
+		Cedula:     "202020202",
+		Phone:      "+50688880005",
+		FirstName:  "Emmanuel",
+		LastName:   "Coto",
+		Password:   "EmmanuelLocal2026!", // local-development fallback only
+		KYCLevel:   1,
+		BalanceCRC: 250000000, // ₡2,500,000.00
+		BalanceUSD: 50000,     // $500.00
+	},
 }
 
 // SeedDevelopment provisions the demo users. devMode is true only when the
