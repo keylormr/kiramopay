@@ -5,7 +5,6 @@ import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CryptoAsset, CryptoTransaction } from '../../types';
-import { QRCodeSVG } from 'qrcode.react';
 import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
 
 // Static list of crypto symbols to track
@@ -1019,34 +1018,12 @@ export const CryptoView: React.FC = () => {
 
       {/* Receive Sheet */}
       <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`${t('receive')} ${selectedAsset?.symbol || ''}`}>
-        <div className="space-y-6">
-          <div className="flex flex-col items-center py-4">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-4">
-              <QRCodeSVG value={`${selectedAsset?.symbol?.toLowerCase() || 'crypto'}:0xKiramoPay${selectedAsset?.symbol}Wallet12345`} size={180} />
-            </div>
-
-            <p className="text-xs text-center text-gray-400 mt-2 max-w-[280px]">
-              {t('crypto_scan_or_copy')} {selectedAsset?.symbol}
-            </p>
+        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
+          <div className="w-16 h-16 rounded-2xl uv-surface-2 flex items-center justify-center">
+            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
           </div>
-
-          <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">{t('crypto_your_address')} {selectedAsset?.symbol}</label>
-            <div className="flex items-center gap-2 mt-2">
-              <p className="font-mono text-sm uv-text-primary break-all flex-1">
-                0xKiramoPay{selectedAsset?.symbol}Wallet12345abcdef
-              </p>
-              <button aria-label={t('copy')} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                <Icons.Copy size={16} />
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              {t('only_send_asset').replace('{asset}', selectedAsset?.symbol || '')}. {t('crypto_other_assets_lost')}
-            </p>
-          </div>
+          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
+          <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
         </div>
       </BottomSheet>
 

@@ -48,7 +48,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Form States
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
-  const [selectedCrypto, setSelectedCrypto] = useState<'BTC' | 'ETH' | 'USDT'>('BTC');
 
   // Scanner / pay-by-QR states. The scanner reads a real QR via the camera
   // (or manual entry) and pays it through the backend QR rail (scanAndPay),
@@ -671,30 +670,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
       {/* Add Money (Crypto) Sheet */}
       <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('deposit_crypto')}>
-        <div className="space-y-6">
-          <div className="flex p-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl">
-            {(['BTC', 'ETH', 'USDT'] as const).map((crypto) => (
-              <button
-                key={crypto}
-                onClick={() => setSelectedCrypto(crypto)}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${selectedCrypto === crypto ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary' : 'text-gray-500'}`}
-              >
-                {crypto}
-              </button>
-            ))}
+        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
+            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
           </div>
-          
-          <div className="flex flex-col items-center justify-center py-4">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-4">
-               <QRCodeSVG value={`mock-${selectedCrypto}-address`} size={200} />
-            </div>
-            <p className="text-xs text-center text-gray-500 max-w-[250px] break-all font-mono bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-3 rounded-lg">
-              0x71C7656EC7ab88b098defB751B7401B5f6d8976F
-            </p>
-            <p className="text-xs text-center text-gray-400 mt-4">
-              Send only {selectedCrypto} to this address. <br/>Adding other assets may result in permanent loss.
-            </p>
-          </div>
+          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
+          <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
         </div>
       </BottomSheet>
 

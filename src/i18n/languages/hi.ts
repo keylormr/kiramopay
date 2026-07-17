@@ -368,6 +368,8 @@ const hi: TranslationKeys = {
   crypto_scan_or_copy: 'प्राप्त करने के लिए इस QR कोड को स्कैन करें या पता कॉपी करें',
   crypto_your_address: 'आपका पता',
   crypto_other_assets_lost: 'अन्य संपत्तियां स्थायी रूप से खो सकती हैं।',
+  crypto_deposit_unavailable_title: 'क्रिप्टो जमा जल्द आ रहा है',
+  crypto_deposit_unavailable_desc: 'सीधे क्रिप्टो जमा अभी उपलब्ध नहीं हैं। वॉलेट कस्टडी सक्रिय होने पर यह सक्षम किया जाएगा।',
   crypto_estimated_apy: 'अनुमानित APY',
   crypto_amount_to_stake: 'स्टेक करने की मात्रा',
   crypto_asset_label: 'संपत्ति',

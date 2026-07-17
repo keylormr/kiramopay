@@ -368,6 +368,8 @@ const es: TranslationKeys = {
   crypto_scan_or_copy: 'Escanea este código QR o copia la dirección para recibir',
   crypto_your_address: 'Tu dirección',
   crypto_other_assets_lost: 'Otros activos podrían perderse permanentemente.',
+  crypto_deposit_unavailable_title: 'Depósitos cripto próximamente',
+  crypto_deposit_unavailable_desc: 'Los depósitos directos de cripto aún no están disponibles. Se habilitarán cuando la custodia de la billetera esté activa.',
   crypto_estimated_apy: 'APY Estimado',
   crypto_amount_to_stake: 'Cantidad a stakear',
   crypto_asset_label: 'Activo',

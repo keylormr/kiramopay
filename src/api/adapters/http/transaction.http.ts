@@ -35,7 +35,9 @@ export class HttpTransactionRepository implements ITransactionRepository {
       id: tx.id,
       title: tx.counterparty_name || parseDescription(tx.metadata),
       type: mapTxType(tx.type) as 'credit' | 'debit',
-      amount: tx.amount / 100, // centimos → colones
+      // Backend returns the amount as a positive magnitude with direction encoded
+      // in `type`; sign it here so income shows as +/green and spends as -/red.
+      amount: (isIncoming(tx.type) ? 1 : -1) * (Math.abs(tx.amount) / 100), // centimos → colones
       ccy: tx.currency,
       description: tx.counterparty_name || parseDescription(tx.metadata),
       date: new Date(tx.created_at).toLocaleDateString('es-CR'),
@@ -65,9 +67,27 @@ export class HttpTransactionRepository implements ITransactionRepository {
   }
 }
 
+// Transaction types where money ENTERS the user's wallet (credit / positive amount).
+// Mirrors the backend's incoming set (the complement of transaction.isOutgoing plus the
+// savings/escrow money-in types); every other type is treated as outgoing (debit, negative).
+const INCOMING_TYPES = new Set([
+  'sinpe_receive',
+  'qr_receive',
+  'deposit',
+  'p2p_receive',
+  'refund',
+  'crypto_sell', // fiat enters the wallet from selling crypto
+  'savings_withdraw', // SYSTEM:SAVINGS -> wallet
+  'escrow_receive',
+  'escrow_refund',
+]);
+
+function isIncoming(backendType: string): boolean {
+  return INCOMING_TYPES.has(backendType);
+}
+
 function mapTxType(backendType: string): 'credit' | 'debit' {
-  const creditTypes = ['sinpe_receive', 'qr_receive', 'deposit', 'p2p_receive', 'refund'];
-  return creditTypes.includes(backendType) ? 'credit' : 'debit';
+  return isIncoming(backendType) ? 'credit' : 'debit';
 }
 
 function mapCategory(backendType: string): string {

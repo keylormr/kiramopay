@@ -302,6 +302,8 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         crypto.addTransaction(buyTx);
         accounts.updateAccountBalance(fromCurrency, -fromAmount);
         if (hasBackend) {
+          const api = getApiLayer();
+          api.crypto.buy({ asset, amount, price, fromCurrency, fromAmount }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;
@@ -324,6 +326,8 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         crypto.addTransaction(sellTx);
         accounts.updateAccountBalance(toCurrency, toAmount);
         if (hasBackend) {
+          const api = getApiLayer();
+          api.crypto.sell({ asset, amount, price, toCurrency, toAmount }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;

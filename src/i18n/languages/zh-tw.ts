@@ -368,6 +368,8 @@ const zhTw: TranslationKeys = {
   crypto_scan_or_copy: '掃描此QR碼或複製地址以接收',
   crypto_your_address: '您的地址',
   crypto_other_assets_lost: '其他資產可能會永久遺失。',
+  crypto_deposit_unavailable_title: '加密貨幣存款即將推出',
+  crypto_deposit_unavailable_desc: '尚未開放加密貨幣直接存款。待錢包託管上線後將開放此功能。',
   crypto_estimated_apy: '預估年利率',
   crypto_amount_to_stake: '質押數量',
   crypto_asset_label: '資產',
