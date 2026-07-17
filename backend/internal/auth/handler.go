@@ -56,10 +56,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
 		return
 	}
-	if err := validator.ValidatePassword(req.Password); err != nil {
-		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
-		return
-	}
+	// Login must NOT enforce the password-complexity policy — that belongs to
+	// registration. Re-validating here locks out any account whose password
+	// predates a policy change or was provisioned by the seeder. The service
+	// verifies the hash and returns a constant "invalid credentials" on mismatch.
 
 	result, err := h.service.Login(r.Context(), &req, loginContext(r))
 	if err != nil {
