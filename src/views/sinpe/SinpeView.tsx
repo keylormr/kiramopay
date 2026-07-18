@@ -7,6 +7,8 @@ import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { SinpeContact, SinpeTransaction } from '../../types';
+import { QRCodeSVG } from 'qrcode.react';
+import { encodeContactQr } from '@/utils/contactQr';
 
 // Bancos de Costa Rica para selección
 const BANKS = [
@@ -31,6 +33,7 @@ export const SinpeView: React.FC = () => {
   const [showReceiveSheet, setShowReceiveSheet] = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
   const [showAddContactSheet, setShowAddContactSheet] = useState(false);
+  const [showMyQrSheet, setShowMyQrSheet] = useState(false);
   const [selectedContact, setSelectedContact] = useState<SinpeContact | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -181,6 +184,8 @@ export const SinpeView: React.FC = () => {
   const favorites = state.sinpeContacts.filter(c => c.isFavorite);
   const allContacts = state.sinpeContacts;
   const userPhone = state.user?.phone || '+506 8888-0000';
+  const userName = [state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ') || t('app_name');
+  const myContactQr = encodeContactQr({ name: userName, phone: userPhone });
 
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
@@ -385,6 +390,14 @@ export const SinpeView: React.FC = () => {
                 {t('share')}
               </button>
             </div>
+            {/* Share your KiramoPay contact as a QR others can scan to add you */}
+            <button
+              onClick={() => setShowMyQrSheet(true)}
+              className="mt-2.5 w-full bg-[var(--color-primary)] text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Icons.QrCode size={16} />
+              {t('qr_code')}
+            </button>
           </div>
 
           {/* Solicitar a contacto */}
@@ -529,6 +542,31 @@ export const SinpeView: React.FC = () => {
           >
             <Icons.Plus size={20} />
             {t('save_contact')}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* My contact QR — others scan this to add me as a contact */}
+      <BottomSheet
+        isOpen={showMyQrSheet}
+        onClose={() => setShowMyQrSheet(false)}
+        title={t('qr_code')}
+      >
+        <div className="flex flex-col items-center space-y-4 py-2">
+          <div className="bg-white p-4 rounded-2xl">
+            <QRCodeSVG value={myContactQr} size={220} level="M" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-bold uv-text-primary">{userName}</p>
+            <p className="text-sm uv-text-muted tabular-nums">{userPhone}</p>
+          </div>
+          <p className="text-xs uv-text-muted text-center px-4">{t('share_number_message')}</p>
+          <button
+            onClick={() => handleShare(t('app_name'), `${userName} · ${userPhone}`)}
+            className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] py-3 rounded-xl font-semibold uv-text-primary flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <Icons.Share size={16} />
+            {t('share')}
           </button>
         </div>
       </BottomSheet>
