@@ -68,7 +68,7 @@ export const CryptoView: React.FC = () => {
   // Single shared USD->CRC rate (same source as the wallet + balance summary).
   const crcRate = useUsdToCrcRate();
 
-  const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail' | 'onramp'>('none');
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
   const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
   const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking'>('portfolio');
@@ -825,7 +825,37 @@ export const CryptoView: React.FC = () => {
           >
             {t('buy')} {selectedAsset?.symbol}
           </button>
+
+          {/* Alternative: fund with card/bank via an external on-ramp (scaffold).
+              "Buy" above spends the in-app fiat balance; this routes to a provider. */}
+          <button
+            onClick={() => setActiveSheet('onramp')}
+            className="w-full border-2 border-[var(--color-primary)] text-[var(--color-primary)] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
+          >
+            <Icons.Card size={18} /> {t('crypto_onramp_cta')}
+          </button>
         </div>
+      </BottomSheet>
+
+      {/* On-ramp (buy crypto with card/bank) — honest scaffold; moves no funds */}
+      <BottomSheet isOpen={activeSheet === 'onramp'} onClose={() => setActiveSheet('none')} title={t('crypto_onramp_cta')}>
+        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
+          <div className="w-16 h-16 rounded-2xl uv-surface-2 flex items-center justify-center">
+            <Icons.Card size={30} className="text-[var(--color-primary)]" />
+          </div>
+          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_onramp_soon_title')}</h3>
+          <p className="text-sm text-gray-500 max-w-[320px]">{t('crypto_onramp_soon_desc')}</p>
+        </div>
+        {/* ON-RAMP INTEGRATION POINT (when a provider account + destination wallet exist):
+            replace the body above with a hosted widget iframe, e.g. Onramper:
+              const url = `https://buy.onramper.com/?apiKey=${import.meta.env.VITE_ONRAMPER_API_KEY}`
+                + `&defaultCrypto=${selectedAsset?.symbol}&defaultFiat=USD`
+                + `&wallets=${selectedAsset?.symbol}:${destinationWalletAddress}`;
+              <iframe src={url} allow="accelerometer; camera; microphone; payment"
+                className="w-full h-[620px] rounded-xl border-0" title="On-ramp" />
+            Transak/MoonPay are alternates (MoonPay's URL must be signed server-side).
+            Doubly gated: needs a provider account AND live crypto custody/deposit
+            address (on-chain deposits are not live yet — see crypto_deposit_unavailable_desc). */}
       </BottomSheet>
 
       {/* Sell Sheet */}
