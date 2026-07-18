@@ -128,8 +128,8 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   <span className="text-xs font-bold text-gray-500">{t('loyalty_next_tier')}</span>
                   <span className="text-xs font-bold" style={{ color: tierConfig?.color }}>
                     {account?.tier === 'bronze' ? 'Silver: 5,000 pts' :
-                     account?.tier === 'silver' ? 'Gold: 15,000 pts' :
-                     account?.tier === 'gold' ? 'Platinum: 50,000 pts' : 'Max'}
+                     account?.tier === 'silver' ? 'Gold: 25,000 pts' :
+                     account?.tier === 'gold' ? 'Platinum: 100,000 pts' : 'Max'}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">
@@ -138,12 +138,53 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     style={{
                       width: `${Math.min(((account?.lifetimePoints || 0) / (
                         account?.tier === 'bronze' ? 5000 :
-                        account?.tier === 'silver' ? 15000 :
-                        account?.tier === 'gold' ? 50000 : 50000
+                        account?.tier === 'silver' ? 25000 :
+                        account?.tier === 'gold' ? 100000 : 100000
                       )) * 100, 100)}%`,
                       backgroundColor: tierConfig?.color,
                     }}
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Subscription plans (scaffold — billing/enforcement not live yet).
+                Prices confirmed by product; internal transfers stay free at every
+                tier, so points are only ever funded by real margin. */}
+            <div className="px-4 py-2">
+              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm font-bold uv-text-primary">{t('plan_title')}</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('plan_soon')}</span>
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { name: 'Free', price: t('plan_price_free'), desc: t('plan_free_desc'), current: true },
+                    { name: 'Plus', price: `$4${t('plan_per_month')}`, desc: t('plan_plus_desc'), current: false },
+                    { name: 'Pro', price: `$11${t('plan_per_month')}`, desc: t('plan_pro_desc'), current: false },
+                  ].map((plan) => (
+                    <div
+                      key={plan.name}
+                      className={`rounded-xl p-3 border ${
+                        plan.current
+                          ? 'border-[var(--color-primary)] bg-primary/5'
+                          : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-2'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold uv-text-primary">{plan.name}</span>
+                          {plan.current && (
+                            <span className="text-[10px] font-bold text-[var(--color-primary)] bg-primary/10 px-2 py-0.5 rounded-full">
+                              {t('plan_current')}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm font-extrabold uv-text-primary tabular-nums">{plan.price}</span>
+                      </div>
+                      <p className="text-xs uv-text-muted">{plan.desc}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

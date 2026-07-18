@@ -624,6 +624,14 @@ export type TranslationKeys = {
   loyalty_redeem: string;
   loyalty_next_tier: string;
   loyalty_max_per_tx: string;
+  plan_title: string;
+  plan_current: string;
+  plan_soon: string;
+  plan_price_free: string;
+  plan_per_month: string;
+  plan_free_desc: string;
+  plan_plus_desc: string;
+  plan_pro_desc: string;
 
   // Home extra cards
   home_split: string;
