@@ -20,7 +20,14 @@ export const useTransactionStore = create<TransactionState>()(
       setTransactions: (transactions) => set({ transactions }),
 
       addTransaction: (transaction) =>
-        set((s) => ({ transactions: [transaction, ...s.transactions] })),
+        set((s) => ({
+          transactions: [
+            // Stamp a machine timestamp for date filtering if the caller didn't
+            // provide one (locally-created optimistic transactions).
+            { ...transaction, dateISO: transaction.dateISO ?? new Date().toISOString() },
+            ...s.transactions,
+          ],
+        })),
     }),
     {
       name: 'kiramopay-transactions',

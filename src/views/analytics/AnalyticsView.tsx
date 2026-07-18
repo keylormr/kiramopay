@@ -20,14 +20,163 @@ function getCategoryConfig(cat: string) {
   return CATEGORY_CONFIG[cat] || CATEGORY_CONFIG.General;
 }
 
+// Income (green) and expense (red) — the app-wide cash-flow semantics. In the
+// trend chart these are also separated by POSITION (income up, expense down from
+// a zero baseline), so identity never rests on color alone (colorblind-safe).
+const INCOME_COLOR = '#10b981';
+const EXPENSE_COLOR = '#ef4444';
+
+const LOCALE_BY_LANG: Record<string, string> = {
+  es: 'es-CR',
+  en: 'en-US',
+  fr: 'fr-FR',
+  pt: 'pt-BR',
+  'zh-cn': 'zh-CN',
+  'zh-tw': 'zh-TW',
+  ja: 'ja-JP',
+  hi: 'hi-IN',
+};
+
 type Period = 'week' | 'month' | 'all';
+
+// Machine timestamp for a transaction, or null when it has no parseable date.
+// dateISO is the reliable field; the localized `date` string only parses when it
+// happens to be ISO-ish, otherwise it is skipped rather than faked.
+function getTxTime(tx: Transaction): number | null {
+  if (tx.dateISO) {
+    const t = Date.parse(tx.dateISO);
+    if (!Number.isNaN(t)) return t;
+  }
+  const t2 = Date.parse(tx.date);
+  return Number.isNaN(t2) ? null : t2;
+}
+
+interface Bucket {
+  label: string;
+  income: number;
+  expense: number;
+}
+
+// Diverging bar chart: income grows up, expense grows down from a shared
+// baseline. One tap on a column reveals its exact figures.
+const CashflowChart: React.FC<{
+  buckets: Bucket[];
+  format: (n: number) => string;
+  incomeLabel: string;
+  expenseLabel: string;
+}> = ({ buckets, format, incomeLabel, expenseLabel }) => {
+  const [selected, setSelected] = useState<number | null>(null);
+  const half = 46; // px per side of the baseline
+  const maxVal = Math.max(1, ...buckets.map((b) => Math.max(b.income, b.expense)));
+  // Label density: always for few buckets, sparse for a full month.
+  const step = buckets.length <= 10 ? 1 : Math.ceil(buckets.length / 6);
+  const sel = selected != null ? buckets[selected] : null;
+
+  return (
+    <div>
+      {/* Readout / legend line */}
+      <div className="h-6 mb-1 flex items-center justify-between text-[11px]">
+        {sel ? (
+          <span className="font-semibold uv-text-primary truncate">
+            {sel.label}
+            <span className="ml-2 text-green-600 dark:text-green-400">+{format(sel.income)}</span>
+            <span className="ml-2 text-red-500 dark:text-red-400">-{format(sel.expense)}</span>
+          </span>
+        ) : (
+          <div className="flex items-center gap-4 uv-text-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: INCOME_COLOR }} />
+              {incomeLabel}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: EXPENSE_COLOR }} />
+              {expenseLabel}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Columns */}
+      <div className="flex items-stretch gap-[2px]">
+        {buckets.map((b, i) => {
+          const active = selected === i;
+          const dim = selected != null && !active;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setSelected(active ? null : i)}
+              aria-label={`${b.label}: +${format(b.income)} / -${format(b.expense)}`}
+              className={`group flex-1 min-w-0 flex flex-col items-center transition-opacity ${dim ? 'opacity-40' : 'opacity-100'}`}
+            >
+              {/* income (up) */}
+              <div className="w-full flex flex-col justify-end" style={{ height: half }}>
+                <div
+                  className="w-full rounded-t-[3px] transition-all duration-500"
+                  style={{ height: Math.max(b.income > 0 ? 2 : 0, (b.income / maxVal) * half), backgroundColor: INCOME_COLOR }}
+                />
+              </div>
+              {/* baseline */}
+              <div className="w-full h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
+              {/* expense (down) */}
+              <div className="w-full flex flex-col justify-start" style={{ height: half }}>
+                <div
+                  className="w-full rounded-b-[3px] transition-all duration-500"
+                  style={{ height: Math.max(b.expense > 0 ? 2 : 0, (b.expense / maxVal) * half), backgroundColor: EXPENSE_COLOR }}
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Labels */}
+      <div className="flex gap-[2px] mt-1.5">
+        {buckets.map((b, i) => (
+          <span key={i} className="flex-1 min-w-0 text-center text-[9px] font-medium uv-text-muted truncate">
+            {i % step === 0 ? b.label : ''}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [period, setPeriod] = useState<Period>('month');
+  // 0 = current month, -1 = previous, ... (only used when period === 'month')
+  const [monthOffset, setMonthOffset] = useState(0);
 
-  const transactions = state.transactions;
+  const locale = LOCALE_BY_LANG[language] || 'es-CR';
+  const allTransactions = state.transactions;
+
+  // The active date window for the selected period.
+  const range = useMemo(() => {
+    const now = new Date();
+    if (period === 'week') {
+      const end = now.getTime();
+      return { start: end - 7 * 86400000, end, label: '' };
+    }
+    if (period === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 1);
+      const label = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(start);
+      return { start: start.getTime(), end: end.getTime(), label, monthStart: start };
+    }
+    return { start: -Infinity, end: Infinity, label: '' };
+  }, [period, monthOffset, locale]);
+
+  // Transactions inside the active window (undated ones are excluded from
+  // week/month and kept only in "all").
+  const transactions = useMemo(() => {
+    if (period === 'all') return allTransactions;
+    return allTransactions.filter((tx) => {
+      const time = getTxTime(tx);
+      return time !== null && time >= range.start && time < range.end;
+    });
+  }, [allTransactions, period, range.start, range.end]);
 
   // Category breakdown for expenses
   const categoryData = useMemo(() => {
@@ -62,17 +211,83 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     return { income, expenses, net: income - expenses };
   }, [transactions]);
 
-  // Spending by day of week (mini heatmap). Buckets real expenses by weekday.
-  // Transaction dates that are relative labels ("Just now") don't parse and are
-  // skipped rather than faked; hasWeekdayData gates an honest empty state.
+  // Cash-flow buckets over the active period (income up / expense down).
+  const cashflowBuckets = useMemo<Bucket[]>(() => {
+    const addTo = (b: Bucket, amount: number) => {
+      if (amount >= 0) b.income += amount;
+      else b.expense += Math.abs(amount);
+    };
+
+    if (period === 'week') {
+      const now = new Date();
+      const days: { key: string; b: Bucket }[] = [];
+      const wd = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        days.push({ key: d.toDateString(), b: { label: wd.format(d), income: 0, expense: 0 } });
+      }
+      const byKey = new Map(days.map((d) => [d.key, d.b]));
+      for (const tx of transactions) {
+        const time = getTxTime(tx);
+        if (time === null) continue;
+        const b = byKey.get(new Date(time).toDateString());
+        if (b) addTo(b, tx.amount);
+      }
+      return days.map((d) => d.b);
+    }
+
+    if (period === 'month') {
+      const start = (range as { monthStart?: Date }).monthStart || new Date();
+      const year = start.getFullYear();
+      const month = start.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const buckets: Bucket[] = Array.from({ length: daysInMonth }, (_, i) => ({
+        label: String(i + 1),
+        income: 0,
+        expense: 0,
+      }));
+      for (const tx of transactions) {
+        const time = getTxTime(tx);
+        if (time === null) continue;
+        const day = new Date(time).getDate();
+        if (day >= 1 && day <= daysInMonth) addTo(buckets[day - 1], tx.amount);
+      }
+      return buckets;
+    }
+
+    // all — group by calendar month
+    const mo = new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' });
+    const map = new Map<string, Bucket>();
+    const order: string[] = [];
+    const dated = transactions
+      .map((tx) => ({ tx, time: getTxTime(tx) }))
+      .filter((x): x is { tx: Transaction; time: number } => x.time !== null)
+      .sort((a, b) => a.time - b.time);
+    for (const { tx, time } of dated) {
+      const d = new Date(time);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      let b = map.get(key);
+      if (!b) {
+        b = { label: mo.format(d), income: 0, expense: 0 };
+        map.set(key, b);
+        order.push(key);
+      }
+      addTo(b, tx.amount);
+    }
+    return order.map((k) => map.get(k)!);
+  }, [transactions, period, range, locale]);
+
+  const hasCashflow = cashflowBuckets.some((b) => b.income > 0 || b.expense > 0);
+
+  // Spending by day of week (mini heatmap) over the active period.
   const { weekdaySpending, hasWeekdayData } = useMemo(() => {
     const days = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
     let counted = 0;
     for (const tx of transactions) {
       if (tx.amount >= 0) continue; // expenses only
-      const parsed = new Date(tx.date);
-      if (Number.isNaN(parsed.getTime())) continue; // skip unparseable/relative dates
-      days[parsed.getDay()] += Math.abs(tx.amount);
+      const time = getTxTime(tx);
+      if (time === null) continue; // skip unparseable/relative dates
+      days[new Date(time).getDay()] += Math.abs(tx.amount);
       counted++;
     }
     const dayNames = [t('analytics_sun'), t('analytics_mon'), t('analytics_tue'), t('analytics_wed'), t('analytics_thu'), t('analytics_fri'), t('analytics_sat')];
@@ -92,6 +307,16 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
     } catch {
       return `${amount.toFixed(2)} ${ccy}`;
+    }
+  };
+
+  // Compact currency for chart readouts (keeps the line short).
+  const formatCompact = (amount: number) => {
+    const ccy = state.baseCurrency || 'CRC';
+    try {
+      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
+    } catch {
+      return `${Math.round(amount)}`;
     }
   };
 
@@ -122,7 +347,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             {(['week', 'month', 'all'] as Period[]).map((p) => (
               <button
                 key={p}
-                onClick={() => setPeriod(p)}
+                onClick={() => { setPeriod(p); if (p === 'month') setMonthOffset(0); }}
                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                   period === p
                     ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary'
@@ -133,6 +358,28 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               </button>
             ))}
           </div>
+
+          {/* Month navigator (only for the monthly view) */}
+          {period === 'month' && (
+            <div className="flex items-center justify-between mt-3 px-1">
+              <button
+                onClick={() => setMonthOffset((o) => o - 1)}
+                aria-label={new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset - 1, 1))}
+                className="p-1.5 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-text-secondary"
+              >
+                <Icons.ChevronLeft size={18} />
+              </button>
+              <span className="text-sm font-bold uv-text-primary capitalize">{range.label}</span>
+              <button
+                onClick={() => setMonthOffset((o) => Math.min(0, o + 1))}
+                disabled={monthOffset >= 0}
+                aria-label={new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset + 1, 1))}
+                className="p-1.5 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-text-secondary disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Icons.ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Income vs Expenses Card */}
@@ -180,6 +427,18 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                 {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
               </span>
             </div>
+
+            {/* Cash-flow trend over the period */}
+            {hasCashflow && (
+              <div className="mt-5 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                <CashflowChart
+                  buckets={cashflowBuckets}
+                  format={formatCompact}
+                  incomeLabel={t('income')}
+                  expenseLabel={t('expenses')}
+                />
+              </div>
+            )}
           </div>
         </div>
 
