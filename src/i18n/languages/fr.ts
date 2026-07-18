@@ -53,6 +53,7 @@ const fr: TranslationKeys = {
   enter_pin: 'Saisissez votre PIN',
   incorrect_pin: 'PIN incorrect',
   biometric_login: 'Connexion biométrique',
+  download_android_app: "Télécharger l'app Android",
   create_account: 'Créer un compte',
   cedula_not_registered: 'Identité non enregistrée. Veuillez créer un compte.',
   enter_password: 'Saisissez votre mot de passe',

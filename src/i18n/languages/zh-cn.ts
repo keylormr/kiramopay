@@ -54,6 +54,7 @@ const zhCn: TranslationKeys = {
   enter_pin: '请输入您的PIN码',
   incorrect_pin: 'PIN码错误',
   biometric_login: '使用生物识别登录',
+  download_android_app: '下载安卓应用',
   create_account: '建立账户',
   cedula_not_registered: '身份证未注册，请建立账户。',
   enter_password: '请输入您的密码',

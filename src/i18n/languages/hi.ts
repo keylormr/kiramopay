@@ -53,6 +53,7 @@ const hi: TranslationKeys = {
   enter_pin: 'अपना पिन दर्ज करें',
   incorrect_pin: 'गलत पिन',
   biometric_login: 'बायोमेट्रिक से लॉगिन',
+  download_android_app: 'Android ऐप डाउनलोड करें',
   create_account: 'खाता बनाएं',
   cedula_not_registered: 'पहचान पंजीकृत नहीं है। कृपया खाता बनाएं।',
   enter_password: 'अपना पासवर्ड दर्ज करें',
