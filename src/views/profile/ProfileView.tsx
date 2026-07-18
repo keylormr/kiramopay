@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { getApiLayer } from '@/api';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { LanguageSheet } from '../../components/LanguageSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
 import { ApiKeysSheet } from './ApiKeysSheet';
 import { WebhooksSheet } from './WebhooksSheet';
@@ -34,7 +35,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const { t, language, setLanguage, languages, currentLanguage } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [showLimitsSheet, setShowLimitsSheet] = useState(false);
   const [showAboutSheet, setShowAboutSheet] = useState(false);
@@ -830,44 +831,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
       </BottomSheet>
 
-      {/* Language Sheet */}
-      <BottomSheet
+      {/* Language Sheet (shared component, also mounted globally in App.tsx) */}
+      <LanguageSheet
         isOpen={showLanguageSheet}
         onClose={() => setShowLanguageSheet(false)}
-        title={t('language')}
-      >
-        <div className="space-y-2">
-          {languages.map((lang) => (
-            <button
-              key={lang.code}
-              onClick={() => {
-                setLanguage(lang.code);
-                setShowLanguageSheet(false);
-              }}
-              className={`w-full flex items-center p-4 rounded-xl transition-colors ${
-                language === lang.code
-                  ? 'bg-primary/10 border-2 border-primary'
-                  : 'uv-surface-2 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]'
-              }`}
-            >
-              <span className="text-2xl mr-4">{lang.flag}</span>
-              <div className="flex-1 text-left">
-                <p className={`font-bold ${
-                  language === lang.code ? 'text-primary' : 'uv-text-primary'
-                }`}>
-                  {lang.nativeName}
-                </p>
-                <p className="text-xs uv-text-muted mt-0.5">{lang.name}</p>
-              </div>
-              {language === lang.code && (
-                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                  <Icons.Check size={14} className="text-white" />
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      </BottomSheet>
+      />
     </div>
   );
 };

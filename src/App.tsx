@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
+import { LanguageSheet } from './components/LanguageSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
@@ -215,8 +216,9 @@ type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transacti
 const Layout = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
+  const [showLanguage, setShowLanguage] = useState(false);
   const { state } = useApp();
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
 
   // Android hardware back: close an open overlay first, else return to Home,
   // else exit the app. Without this the WebView has a single history entry, so
@@ -280,6 +282,14 @@ const Layout = () => {
               Offline
             </span>
           )}
+          <button
+            onClick={() => setShowLanguage(true)}
+            aria-label={t('language')}
+            title={currentLanguage.nativeName}
+            className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-text-secondary"
+          >
+            <Icons.Globe size={20} />
+          </button>
           <button
             onClick={() => setOverlayView('notifications')}
             aria-label={t('notifications_setting')}
@@ -385,6 +395,9 @@ const Layout = () => {
           <AssistantView onClose={() => setOverlayView(null)} />
         )}
       </Suspense>
+
+      {/* Global language picker, reachable from every tab via the top bar */}
+      <LanguageSheet isOpen={showLanguage} onClose={() => setShowLanguage(false)} />
     </div>
   );
 };
