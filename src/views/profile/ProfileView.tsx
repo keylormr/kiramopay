@@ -255,6 +255,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               {idVerifyMsg.text}
             </p>
           )}
+          {/* N2 (full identity verification with document + liveness via a licensed
+              provider — Didit/Truora) is a separate, sign-off-gated step. Honest
+              "coming soon" until the provider is contracted; the backend hook is
+              documented in internal/kyc/service.go (VerifyIdentity comment). */}
+          {(state.user?.kycLevel || 0) < 2 && (
+            <p className="px-4 pb-3 text-[11px] uv-text-muted">{t('kyc_n2_soon')}</p>
+          )}
 
           <button
             onClick={() => setShowLimitsSheet(true)}

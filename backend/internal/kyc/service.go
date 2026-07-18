@@ -82,6 +82,24 @@ func (s *Service) VerifyIdentity(ctx context.Context, userID, ipAddr string) (*I
 	return &IdentityResult{Status: "verified", VerifiedName: res.Name, IDType: res.IDType, KYCLevel: level}, nil
 }
 
+// ── N2 (full identity verification) integration point ────────────────────────
+//
+// VerifyIdentity above is N1: an existence + name check against the public
+// registry. It does NOT prove the person IS the cedula holder. Full identity
+// verification (N2) requires a licensed provider that checks the id against the
+// TSE with document capture + liveness (e.g. Didit ~$0.20/lookup, or Truora),
+// complying with SUGEF Acuerdo 10-07 and Ley 8968 (PRODHAB).
+//
+// When a provider is contracted, add its verified-callback handler here: on a
+// confirmed match, promote to level 2 through the SAME path the manual admin
+// approval uses, so wallet limits stay consistent:
+//
+//	s.repo.ApplyApproval(ctx, userID, LevelComplete, "verified", LevelLimits[LevelComplete])
+//	s.repo.RecordIdentityVerification(ctx, userID, cedulaHash, name, idType, "didit", true)
+//
+// Do NOT use the TSE electoral padron directly as a KYC source (finalidad
+// electoral / PRODHAB risk) — go through the licensed provider.
+
 // namesMatch reports whether the account name is contained in the official
 // registry name (token subset, accent-folded). The registry name usually has
 // two surnames plus given names, so we require every account token to appear

@@ -746,11 +746,12 @@ const pt: TranslationKeys = {
   recover_success_desc: 'Sua senha foi atualizada. Você já pode entrar.',
   recover_back_to_login: 'Voltar para o login',
   recover_dev_hint: 'Código de desenvolvimento',
-  kyc_verify_cta: 'Verificar identidade',
-  kyc_verify_success: 'Identidade verificada',
+  kyc_verify_cta: 'Validar documento',
+  kyc_verify_success: 'Documento validado no registro público',
   kyc_verify_mismatch: 'O nome não corresponde ao registro oficial',
   kyc_verify_not_found: 'Não encontramos seu documento no registro',
   kyc_verify_unavailable: 'Serviço indisponível, tente novamente mais tarde',
+  kyc_n2_soon: 'Verificação completa (documento + selfie) em breve',
 };
 
 export default pt;

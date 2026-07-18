@@ -738,11 +738,12 @@ const hi: TranslationKeys = {
   recover_success_desc: 'आपका पासवर्ड अपडेट हो गया है। अब आप साइन इन कर सकते हैं।',
   recover_back_to_login: 'साइन इन पर वापस जाएँ',
   recover_dev_hint: 'डेवलपमेंट कोड',
-  kyc_verify_cta: 'पहचान सत्यापित करें',
-  kyc_verify_success: 'पहचान सत्यापित हो गई',
+  kyc_verify_cta: 'दस्तावेज़ मान्य करें',
+  kyc_verify_success: 'दस्तावेज़ सार्वजनिक रिकॉर्ड से मान्य किया गया',
   kyc_verify_mismatch: 'नाम आधिकारिक रिकॉर्ड से मेल नहीं खाता',
   kyc_verify_not_found: 'हमें रिकॉर्ड में आपकी आईडी नहीं मिली',
   kyc_verify_unavailable: 'सेवा उपलब्ध नहीं है, बाद में पुनः प्रयास करें',
+  kyc_n2_soon: 'पूर्ण सत्यापन (दस्तावेज़ + सेल्फी) जल्द आ रहा है',
 };
 
 export default hi;

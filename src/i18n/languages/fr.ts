@@ -746,11 +746,12 @@ const fr: TranslationKeys = {
   recover_success_desc: 'Votre mot de passe a été mis à jour. Vous pouvez maintenant vous connecter.',
   recover_back_to_login: 'Retour à la connexion',
   recover_dev_hint: 'Code de développement',
-  kyc_verify_cta: "Vérifier l'identité",
-  kyc_verify_success: 'Identité vérifiée',
+  kyc_verify_cta: 'Valider le document',
+  kyc_verify_success: 'Document validé auprès du registre public',
   kyc_verify_mismatch: 'Le nom ne correspond pas au registre officiel',
   kyc_verify_not_found: "Nous n'avons pas trouvé votre pièce d'identité dans le registre",
   kyc_verify_unavailable: 'Service indisponible, réessayez plus tard',
+  kyc_n2_soon: 'Vérification complète (document + selfie) bientôt disponible',
 };
 
 export default fr;
