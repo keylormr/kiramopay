@@ -746,6 +746,11 @@ const en: TranslationKeys = {
   recover_success_desc: 'Your password has been updated. You can sign in now.',
   recover_back_to_login: 'Back to sign in',
   recover_dev_hint: 'Development code',
+  kyc_verify_cta: 'Verify identity',
+  kyc_verify_success: 'Identity verified',
+  kyc_verify_mismatch: 'The name does not match the official registry',
+  kyc_verify_not_found: 'We could not find your ID in the registry',
+  kyc_verify_unavailable: 'Service unavailable, please try again later',
 };
 
 export default en;

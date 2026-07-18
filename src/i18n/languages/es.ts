@@ -746,6 +746,11 @@ const es: TranslationKeys = {
   recover_success_desc: 'Tu contraseña se actualizó. Ya puedes iniciar sesión.',
   recover_back_to_login: 'Volver a iniciar sesión',
   recover_dev_hint: 'Código de desarrollo',
+  kyc_verify_cta: 'Verificar identidad',
+  kyc_verify_success: 'Identidad verificada',
+  kyc_verify_mismatch: 'El nombre no coincide con el registro oficial',
+  kyc_verify_not_found: 'No encontramos tu cedula en el registro',
+  kyc_verify_unavailable: 'Servicio no disponible, intenta de nuevo mas tarde',
 };
 
 export default es;

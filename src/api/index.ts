@@ -20,6 +20,7 @@ import type { IPayoutRepository } from './repositories/payout.repository';
 import type { IB2BRepository } from './repositories/b2b.repository';
 import type { IAssistantRepository } from './repositories/assistant.repository';
 import type { ISavingsRepository } from './repositories/savings.repository';
+import type { IKycRepository } from './repositories/kyc.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -29,6 +30,7 @@ import { HttpEscrowRepository } from './adapters/http/escrow.http';
 import { HttpPayoutRepository } from './adapters/http/payout.http';
 import { HttpB2BRepository } from './adapters/http/b2b.http';
 import { HttpAssistantRepository } from './adapters/http/assistant.http';
+import { HttpKycRepository } from './adapters/http/kyc.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -55,6 +57,7 @@ export interface ApiLayer {
   cards?: ICardsRepository;
   country?: ICountryRepository;
   savings?: ISavingsRepository;
+  kyc?: IKycRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -81,7 +84,11 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   const httpPayout = new HttpPayoutRepository(client);
   const httpB2B = new HttpB2BRepository(client);
   const httpAssistant = new HttpAssistantRepository(client);
-  return createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpPayout, httpB2B, httpAssistant);
+  const layer = createMockApiLayer(httpAuth, httpMfa, httpEscrow, httpPayout, httpB2B, httpAssistant);
+  // KYC identity verification is security-sensitive: always hit the real backend
+  // (like auth/mfa), even in mock mode.
+  layer.kyc = new HttpKycRepository(client);
+  return layer;
 }
 
 export function getApiLayer(): ApiLayer {
@@ -154,3 +161,4 @@ export type {
   SavingsGoal,
   CreateSavingsGoalRequest,
 } from './repositories/savings.repository';
+export type { IKycRepository, IdentityVerifyResult } from './repositories/kyc.repository';

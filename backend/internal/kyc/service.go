@@ -2,7 +2,9 @@ package kyc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kiramopay/backend/internal/audit"
 )
@@ -10,17 +12,105 @@ import (
 type Service struct {
 	repo        *Repository
 	auditLogger *audit.Logger
+	hacienda    *HaciendaClient
 }
 
 type Options struct {
 	AuditLogger *audit.Logger
+	// Hacienda enables the automated N1 identity check. Nil-safe: when unset,
+	// VerifyIdentity reports the service as unavailable rather than panicking.
+	Hacienda *HaciendaClient
 }
 
 func NewService(repo *Repository, opts *Options) *Service {
 	if opts == nil {
 		opts = &Options{}
 	}
-	return &Service{repo: repo, auditLogger: opts.AuditLogger}
+	return &Service{repo: repo, auditLogger: opts.AuditLogger, hacienda: opts.Hacienda}
+}
+
+// IdentityResult is the outcome of an automated N1 identity check.
+type IdentityResult struct {
+	Status       string `json:"status"` // verified | mismatch | not_found
+	VerifiedName string `json:"verified_name,omitempty"`
+	IDType       string `json:"id_type,omitempty"`
+	KYCLevel     int    `json:"kyc_level"`
+}
+
+// VerifyIdentity runs an automated N1 check: it looks up the user's OWN
+// registered cedula against the Hacienda registry and, if the official name
+// matches the account name, promotes the user to KYC level 1 (reusing the same
+// ApplyApproval path admin approval uses, so wallet limits stay consistent).
+// Fail-open on service unavailability (never a false negative from an outage).
+func (s *Service) VerifyIdentity(ctx context.Context, userID, ipAddr string) (*IdentityResult, error) {
+	if s.hacienda == nil {
+		return nil, ErrIdentityUnavailable
+	}
+	cedula, first, last, cedulaHash, err := s.repo.GetUserIdentity(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load user: %w", err)
+	}
+	level, _, _ := s.repo.GetUserKYC(ctx, userID)
+
+	res, lerr := s.hacienda.Lookup(ctx, cedula)
+	if errors.Is(lerr, ErrIdentityUnavailable) {
+		return nil, ErrIdentityUnavailable
+	}
+	if errors.Is(lerr, ErrIdentityNotFound) {
+		_ = s.repo.RecordIdentityVerification(ctx, userID, cedulaHash, "", "", "none", false)
+		s.audit(userID, "kyc_identity_not_found", "", "medium", ipAddr)
+		return &IdentityResult{Status: "not_found", KYCLevel: level}, nil
+	}
+	if lerr != nil {
+		return nil, ErrIdentityUnavailable
+	}
+
+	matched := namesMatch(res.Name, first+" "+last)
+	_ = s.repo.RecordIdentityVerification(ctx, userID, cedulaHash, res.Name, res.IDType, res.Source, matched)
+	if !matched {
+		s.audit(userID, "kyc_identity_mismatch", "", "medium", ipAddr)
+		return &IdentityResult{Status: "mismatch", VerifiedName: res.Name, KYCLevel: level}, nil
+	}
+
+	if level < LevelVerified {
+		if err := s.repo.ApplyApproval(ctx, userID, LevelVerified, "verified", LevelLimits[LevelVerified]); err != nil {
+			return nil, fmt.Errorf("apply approval: %w", err)
+		}
+		level = LevelVerified
+	}
+	s.audit(userID, "kyc_identity_verified", "", "low", ipAddr)
+	return &IdentityResult{Status: "verified", VerifiedName: res.Name, IDType: res.IDType, KYCLevel: level}, nil
+}
+
+// namesMatch reports whether the account name is contained in the official
+// registry name (token subset, accent-folded). The registry name usually has
+// two surnames plus given names, so we require every account token to appear
+// (tolerating extra official tokens) rather than exact equality.
+func namesMatch(official, account string) bool {
+	o := identityTokens(official)
+	a := identityTokens(account)
+	if len(o) == 0 || len(a) == 0 {
+		return false
+	}
+	oset := make(map[string]bool, len(o))
+	for _, t := range o {
+		oset[t] = true
+	}
+	matched := 0
+	for _, t := range a {
+		if oset[t] {
+			matched++
+		}
+	}
+	return matched == len(a)
+}
+
+func identityTokens(s string) []string {
+	folded := strings.NewReplacer(
+		"á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u", "ñ", "n",
+		"Á", "a", "É", "e", "Í", "i", "Ó", "o", "Ú", "u", "Ü", "u", "Ñ", "n",
+	).Replace(strings.ToLower(strings.TrimSpace(s)))
+	return strings.Fields(folded)
 }
 
 var validDocTypes = map[string]bool{"national_id": true, "passport": true, "dimex": true}

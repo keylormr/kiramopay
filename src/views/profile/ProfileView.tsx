@@ -38,6 +38,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const { t, currentLanguage } = useLanguage();
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [showLimitsSheet, setShowLimitsSheet] = useState(false);
+  const [verifyingId, setVerifyingId] = useState(false);
+  const [idVerifyMsg, setIdVerifyMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showAboutSheet, setShowAboutSheet] = useState(false);
   const [showLanguageSheet, setShowLanguageSheet] = useState(false);
   const [showBiometricConfirmSheet, setShowBiometricConfirmSheet] = useState(false);
@@ -103,6 +105,31 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       setConfirmPassword('');
       setPasswordError('');
     })();
+  };
+
+  // Automated N1 identity check against the Hacienda registry for the user's own
+  // registered cedula. On a name match the backend promotes the account to KYC
+  // level 1; we reflect that locally so the badge updates without a reload.
+  const handleVerifyIdentity = async () => {
+    if (verifyingId || (state.user?.kycLevel || 0) >= 1) return;
+    setVerifyingId(true);
+    setIdVerifyMsg(null);
+    const res = await getApiLayer().kyc?.verifyIdentity();
+    setVerifyingId(false);
+    if (!res || !res.success || !res.data) {
+      setIdVerifyMsg({ ok: false, text: t('kyc_verify_unavailable') });
+      return;
+    }
+    const { status } = res.data;
+    if (status === 'verified') {
+      // The verify CTA only runs at level 0, and a match promotes to N1.
+      useAuthStore.setState((s) => ({ user: s.user ? { ...s.user, kycLevel: 1 } : s.user }));
+      setIdVerifyMsg({ ok: true, text: t('kyc_verify_success') });
+    } else if (status === 'mismatch') {
+      setIdVerifyMsg({ ok: false, text: t('kyc_verify_mismatch') });
+    } else {
+      setIdVerifyMsg({ ok: false, text: t('kyc_verify_not_found') });
+    }
   };
 
   const handleBiometricToggle = () => {
@@ -203,7 +230,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
-          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
+          <button
+            onClick={handleVerifyIdentity}
+            disabled={verifyingId || (state.user?.kycLevel || 0) >= 1}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors disabled:cursor-default"
+          >
             <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.Shield size={18} className="text-green-600" />
             </div>
@@ -211,8 +242,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <p className="font-semibold uv-text-primary text-sm">{t('kyc_verification')}</p>
               <p className="text-sm text-gray-500">{t('profile_level')} {state.user?.kycLevel || 0} - {kycLevelText[state.user?.kycLevel || 0]}</p>
             </div>
-            <Icons.ChevronRight size={18} className="uv-text-muted" />
+            {(state.user?.kycLevel || 0) >= 1 ? (
+              <Icons.CheckCircle size={18} className="text-green-600" />
+            ) : (
+              <span className="text-xs font-bold text-[var(--color-primary)]">
+                {verifyingId ? t('processing') : t('kyc_verify_cta')}
+              </span>
+            )}
           </button>
+          {idVerifyMsg && (
+            <p className={`px-4 pb-2 text-xs ${idVerifyMsg.ok ? 'text-green-600' : 'text-[var(--color-danger)]'}`} aria-live="polite">
+              {idVerifyMsg.text}
+            </p>
+          )}
 
           <button
             onClick={() => setShowLimitsSheet(true)}

@@ -739,6 +739,11 @@ const zhCn: TranslationKeys = {
   recover_success_desc: '您的密码已更新，现在可以登录了。',
   recover_back_to_login: '返回登录',
   recover_dev_hint: '开发验证码',
+  kyc_verify_cta: '验证身份',
+  kyc_verify_success: '身份已验证',
+  kyc_verify_mismatch: '姓名与官方登记不一致',
+  kyc_verify_not_found: '在登记中未找到你的证件',
+  kyc_verify_unavailable: '服务不可用，请稍后再试',
 };
 
 export default zhCn;

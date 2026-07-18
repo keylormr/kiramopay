@@ -156,6 +156,29 @@ func (r *Repository) GetUserKYC(ctx context.Context, userID string) (level int, 
 	return level, status, err
 }
 
+// GetUserIdentity returns the plaintext cedula (decrypted at rest), the account
+// first/last name (stored in plaintext), and the searchable cedula HMAC token.
+// Used by the automated N1 identity check so it verifies the user's OWN
+// registered cedula (no client-supplied id to spoof).
+func (r *Repository) GetUserIdentity(ctx context.Context, userID string) (cedula, firstName, lastName, cedulaHash string, err error) {
+	err = r.db.QueryRow(ctx,
+		`SELECT fn_pii_decrypt(cedula_enc), first_name, last_name, cedula_hash
+		 FROM users WHERE id = $1::uuid AND deleted_at IS NULL`, userID,
+	).Scan(&cedula, &firstName, &lastName, &cedulaHash)
+	return cedula, firstName, lastName, cedulaHash, err
+}
+
+// RecordIdentityVerification stores the outcome of an automated identity check
+// (existence + matched name + id type only).
+func (r *Repository) RecordIdentityVerification(ctx context.Context, userID, cedulaHash, verifiedName, idType, source string, matched bool) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO identity_verifications (user_id, cedula_hash, verified_name, id_type, source, matched)
+		 VALUES ($1::uuid, $2, NULLIF($3,''), NULLIF($4,''), $5, $6)`,
+		userID, cedulaHash, verifiedName, idType, source, matched,
+	)
+	return err
+}
+
 // ApplyApproval bumps the user's KYC level/status and scales their wallet
 // limits to the new level — all in one transaction.
 func (r *Repository) ApplyApproval(ctx context.Context, userID string, level int, status string, lim Limits) error {
