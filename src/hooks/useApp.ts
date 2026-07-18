@@ -17,6 +17,7 @@ import { useCryptoStore } from '@/stores/crypto.store';
 import { useServicesStore } from '@/stores/services.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { biometricService } from '@/services/biometric';
 import type { AppState, AppAction } from '@/types';
 import { getApiLayer } from '@/api';
 import {
@@ -240,6 +241,11 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       }
       case 'TOGGLE_BIOMETRIC':
         settings.toggleBiometric();
+        // If biometrics was just turned OFF, forget the stored credentials so a
+        // fingerprint/Face ID login can no longer retrieve them (native Keychain).
+        if (!useSettingsStore.getState().biometricEnabled) {
+          void biometricService.deleteCredentials('kiramopay');
+        }
         break;
       case 'TOGGLE_NOTIFICATIONS':
         settings.toggleNotifications();

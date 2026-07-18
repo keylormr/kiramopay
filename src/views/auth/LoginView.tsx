@@ -51,6 +51,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       if (user) {
         localStorage.setItem('kiramopay_last_cedula', userCedula);
         localStorage.setItem('kiramopay_last_name', `${user.firstName} ${user.lastName}`);
+        // Persist credentials to the OS Keychain/Keystore (native only; a no-op
+        // on web, never localStorage) so the user can log in with fingerprint /
+        // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
+        // cleared when biometrics is disabled (see useApp TOGGLE_BIOMETRIC).
+        if (biometricAvailable) {
+          void biometricService.setCredentials('kiramopay', userCedula, userPassword);
+        }
         onLogin(user);
       }
     } else {
