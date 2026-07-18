@@ -17,12 +17,16 @@ export const initialAccounts: Account[] = [
   { ccy: 'USD', balance: 356.40, symbol: '$', flag: '🇺🇸', iban: 'GB66 SWLT 0012 3456 00US', name: 'US Dollar Account', type: 'fiat', rateToUsd: 1 },
 ];
 
+// Mock timestamps are relative to load time so date filters/charts have recent
+// data in dev/no-backend mode. (Production data carries a real created_at.)
+const _txDaysAgo = (d: number): string => new Date(Date.now() - d * 86400000).toISOString();
+
 export const initialTransactions: Transaction[] = [
-  { id: '1', title: 'Café Alma', amount: -7500, ccy: 'CRC', date: 'Hoy, 9:41 AM', type: 'debit', category: 'Comida', status: 'completed' },
-  { id: '2', title: 'SINPE de Diego', amount: 25000, ccy: 'CRC', date: 'Ayer, 4:20 PM', type: 'credit', category: 'SINPE', status: 'completed' },
-  { id: '3', title: 'Uber', amount: -4350, ccy: 'CRC', date: 'Ayer, 8:15 AM', type: 'debit', category: 'Transporte', status: 'completed' },
-  { id: '4', title: 'Pago ICE', amount: -32450, ccy: 'CRC', date: '24 Dic, 2024', type: 'debit', category: 'Servicios', status: 'completed' },
-  { id: '5', title: 'Uber Eats', amount: -12800, ccy: 'CRC', date: '23 Dic, 2024', type: 'debit', category: 'Comida', status: 'completed' },
+  { id: '1', title: 'Café Alma', amount: -7500, ccy: 'CRC', date: 'Hoy, 9:41 AM', dateISO: _txDaysAgo(0), type: 'debit', category: 'Comida', status: 'completed' },
+  { id: '2', title: 'SINPE de Diego', amount: 25000, ccy: 'CRC', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), type: 'credit', category: 'SINPE', status: 'completed' },
+  { id: '3', title: 'Uber', amount: -4350, ccy: 'CRC', date: 'Ayer, 8:15 AM', dateISO: _txDaysAgo(1), type: 'debit', category: 'Transporte', status: 'completed' },
+  { id: '4', title: 'Pago ICE', amount: -32450, ccy: 'CRC', date: 'Hace 6 días', dateISO: _txDaysAgo(6), type: 'debit', category: 'Servicios', status: 'completed' },
+  { id: '5', title: 'Uber Eats', amount: -12800, ccy: 'CRC', date: 'Hace 20 días', dateISO: _txDaysAgo(20), type: 'debit', category: 'Comida', status: 'completed' },
 ];
 
 export const initialBudgets: Budget[] = [

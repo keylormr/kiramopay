@@ -41,6 +41,7 @@ export class HttpTransactionRepository implements ITransactionRepository {
       ccy: tx.currency,
       description: tx.counterparty_name || parseDescription(tx.metadata),
       date: new Date(tx.created_at).toLocaleDateString('es-CR'),
+      dateISO: tx.created_at, // raw ISO timestamp for filtering / charts
       status: tx.status as 'completed' | 'pending',
       category: mapCategory(tx.type),
     }));
