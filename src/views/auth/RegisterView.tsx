@@ -27,6 +27,18 @@ const getPasswordStrength = (pwd: string): { labelKey: string; color: string; te
   return { labelKey: 'password_strong', color: 'bg-green-500', textColor: 'text-green-400', width: '100%' };
 };
 
+// Mirrors the backend policy (validator.ValidatePassword): >=8 chars with an
+// uppercase, a lowercase, a digit and a special character. The frontend used to
+// only require length >= 8, so ordinary passwords passed the UI and were then
+// rejected by the server with a raw English 400 ("password must include ...") —
+// which surfaced to users as a generic "error al crear la cuenta".
+const isPasswordComplex = (pwd: string): boolean =>
+  pwd.length >= 8 &&
+  /[A-Z]/.test(pwd) &&
+  /[a-z]/.test(pwd) &&
+  /[0-9]/.test(pwd) &&
+  /[^A-Za-z0-9]/.test(pwd);
+
 export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }) => {
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>('phone');
@@ -70,8 +82,8 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       setError(t('passwords_dont_match'));
       return;
     }
-    if (password.length < 8) {
-      setError(t('reg_password_min_length'));
+    if (!isPasswordComplex(password)) {
+      setError(t('password_requirements'));
       return;
     }
 
@@ -362,6 +374,12 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                     </p>
                   </div>
                 )}
+                {/* Show the exact policy so users don't hit the backend 400 */}
+                {password.length > 0 && !isPasswordComplex(password) && (
+                  <p className="text-xs mt-1.5 text-[var(--color-text-muted-dark)]">
+                    {t('password_requirements')}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -406,7 +424,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               fullWidth
               onClick={handleRegister}
               loading={isLoading}
-              disabled={password.length < 8 || password !== confirmPassword}
+              disabled={!isPasswordComplex(password) || password !== confirmPassword}
               rightIcon={<Icons.Check size={20} />}
             >
               {t('create_account')}
