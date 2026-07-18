@@ -3,12 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
-import { Account, Transaction } from '../../types';
+import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
+import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -33,8 +34,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const { t } = useLanguage();
 
   // Sheet States
-  const [activeSheet, setActiveSheet] = useState<'none' | 'send' | 'request' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'send' | 'request' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'addContact'>('none');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  // A scanned QR may be a contact (added to the list) instead of a payment.
+  const [scannedContact, setScannedContact] = useState<ContactQrPayload | null>(null);
 
   // "Cobrar con QR" — genera un QR de cobro REAL via la API (riel QR del backend,
   // contabilizado en el ledger). Generar el codigo no mueve dinero; el pago
@@ -169,6 +172,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
               const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
               if (code && code.data) {
+                // A contact QR is added to contacts; it never hits the pay rail.
+                const contact = tryParseContactQr(code.data);
+                if (contact) {
+                  setScannedContact(contact);
+                  setActiveSheet('addContact'); // el cleanup detiene la cámara
+                  return;
+                }
                 setScannedQrData(code.data);
                 setPaymentAmount('');
                 setPayError('');
@@ -201,12 +211,34 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Fallback manual: el pagador pega/ingresa el código del QR.
   const submitManualCode = () => {
     if (!manualCode.trim()) return;
-    setScannedQrData(manualCode.trim());
+    const raw = manualCode.trim();
+    const contact = tryParseContactQr(raw);
+    if (contact) {
+      setScannedContact(contact);
+      setManualCode('');
+      setActiveSheet('addContact');
+      return;
+    }
+    setScannedQrData(raw);
     setManualCode('');
     setPaymentAmount('');
     setPayError('');
     setPayResult(null);
     setActiveSheet('scanResult');
+  };
+
+  const handleAddScannedContact = () => {
+    if (!scannedContact) return;
+    const contact: SinpeContact = {
+      id: Date.now().toString(),
+      name: scannedContact.name,
+      phone: scannedContact.phone,
+      bank: scannedContact.bank || 'Desconocido',
+      isFavorite: false,
+    };
+    dispatch({ type: 'ADD_SINPE_CONTACT', payload: contact });
+    setScannedContact(null);
+    setActiveSheet('none');
   };
 
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
@@ -894,6 +926,40 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           )}
         </BottomSheet>
       )}
+
+      {/* Add Contact from a scanned contact QR (never touches the pay rail) */}
+      <BottomSheet
+        isOpen={activeSheet === 'addContact'}
+        onClose={() => { setActiveSheet('none'); setScannedContact(null); }}
+        title={t('add_contact')}
+      >
+        {scannedContact && (
+          <div className="space-y-6">
+            <div className="flex flex-col items-center py-2">
+              <div className="w-16 h-16 uv-gradient-brand rounded-full flex items-center justify-center text-white text-2xl font-bold mb-3">
+                {scannedContact.name.charAt(0)}
+              </div>
+              <p className="text-lg font-bold uv-text-primary">{scannedContact.name}</p>
+              <p className="text-sm uv-text-muted tabular-nums">{scannedContact.phone}</p>
+              {scannedContact.bank && <p className="text-xs uv-text-muted mt-1">{scannedContact.bank}</p>}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setActiveSheet('none'); setScannedContact(null); }}
+                className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleAddScannedContact}
+                className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
+              >
+                {t('add_contact')}
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
 
     </div>
   );
