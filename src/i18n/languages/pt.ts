@@ -53,6 +53,7 @@ const pt: TranslationKeys = {
   enter_pin: 'Digite seu PIN',
   incorrect_pin: 'PIN incorreto',
   biometric_login: 'Entrar com biometria',
+  download_android_app: 'Baixar app Android',
   create_account: 'Criar conta',
   cedula_not_registered: 'Documento não cadastrado. Por favor, crie uma conta.',
   enter_password: 'Digite sua senha',

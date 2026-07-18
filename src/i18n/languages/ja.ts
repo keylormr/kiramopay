@@ -53,6 +53,7 @@ const ja: TranslationKeys = {
   enter_pin: 'PINを入力してください',
   incorrect_pin: 'PINが正しくありません',
   biometric_login: '生体認証でログイン',
+  download_android_app: 'Androidアプリをダウンロード',
   create_account: 'アカウント作成',
   cedula_not_registered: '身分証が未登録です。アカウントを作成してください。',
   enter_password: 'パスワードを入力してください',

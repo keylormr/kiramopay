@@ -6,6 +6,15 @@ import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
 import { RecoverPasswordView } from './RecoverPasswordView';
+import { Capacitor } from '@capacitor/core';
+
+// Where the signed Android APK lives. Overridable via env; defaults to the
+// GitHub Releases "latest" asset published by the android-apk CI workflow.
+const ANDROID_APK_URL =
+  import.meta.env.VITE_ANDROID_APK_URL ||
+  'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk';
+// Only offer the download on the web — pointless inside the installed app.
+const SHOW_APK_DOWNLOAD = !Capacitor.isNativePlatform();
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -352,6 +361,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             {t('create_account')}
           </button>
         </div>
+
+        {SHOW_APK_DOWNLOAD && (
+          <a
+            href={ANDROID_APK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 mx-auto flex w-fit items-center gap-2 rounded-xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] px-4 py-2.5 text-sm font-semibold text-[var(--color-text-secondary-dark)] hover:text-white hover:border-[var(--color-primary)] transition-colors"
+          >
+            <Icons.Download size={16} />
+            {t('download_android_app')}
+          </a>
+        )}
 
         <p className="text-[var(--color-text-muted-dark)]/70 text-[11px] text-center mt-6 leading-relaxed">
           {t('login_terms')}
