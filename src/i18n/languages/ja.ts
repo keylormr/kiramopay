@@ -376,6 +376,9 @@ const ja: TranslationKeys = {
   crypto_price: '価格',
   crypto_fee: '手数料',
   crypto_total_usd: '合計（USD）',
+  crypto_onramp_cta: 'カードで購入',
+  crypto_onramp_soon_title: 'カード購入は近日対応',
+  crypto_onramp_soon_desc: '近日中に、外部プロバイダー（Onramper / Transak / MoonPay）を通じてカードや銀行で暗号資産を購入できるようになります。本人確認・流動性・保管はプロバイダーが担い、KiramoPay がこれらの資金を預かることはありません。',
 
   reg_phone_title: '電話番号',
   reg_phone_desc: 'SINPE Movilでの送受金に使用します',

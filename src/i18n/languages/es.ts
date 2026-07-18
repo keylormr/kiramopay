@@ -376,6 +376,9 @@ const es: TranslationKeys = {
   crypto_price: 'Precio',
   crypto_fee: 'Comisión',
   crypto_total_usd: 'Total USD',
+  crypto_onramp_cta: 'Comprar con tarjeta',
+  crypto_onramp_soon_title: 'Compra con tarjeta proximamente',
+  crypto_onramp_soon_desc: 'Pronto podras comprar cripto con tarjeta o banco a traves de un proveedor externo (Onramper / Transak / MoonPay) que gestiona la verificacion, la liquidez y la custodia. KiramoPay nunca retiene esos fondos.',
 
   // Registration
   reg_phone_title: 'Tu numero de telefono',

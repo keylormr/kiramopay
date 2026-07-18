@@ -376,6 +376,9 @@ const hi: TranslationKeys = {
   crypto_price: 'मूल्य',
   crypto_fee: 'शुल्क',
   crypto_total_usd: 'कुल USD',
+  crypto_onramp_cta: 'कार्ड से खरीदें',
+  crypto_onramp_soon_title: 'कार्ड से खरीद जल्द आ रही है',
+  crypto_onramp_soon_desc: 'जल्द ही आप किसी बाहरी प्रदाता (Onramper / Transak / MoonPay) के माध्यम से कार्ड या बैंक से क्रिप्टो खरीद सकेंगे, जो सत्यापन, तरलता और कस्टडी संभालता है। KiramoPay कभी उन फंड्स को नहीं रखता।',
 
   reg_phone_title: 'आपका फ़ोन नंबर',
   reg_phone_desc: 'SINPE Movil से पैसे भेजने और प्राप्त करने के लिए इसका उपयोग करें',

@@ -406,6 +406,9 @@ export type TranslationKeys = {
   crypto_price: string;
   crypto_fee: string;
   crypto_total_usd: string;
+  crypto_onramp_cta: string;
+  crypto_onramp_soon_title: string;
+  crypto_onramp_soon_desc: string;
 
   // Registration
   reg_phone_title: string;
