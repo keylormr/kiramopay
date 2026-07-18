@@ -1,7 +1,9 @@
 import { LANGUAGES, type Language } from '../translations';
 import es from '../languages/es';
 import en from '../languages/en';
-import zhTw from '../languages/zh-tw';
+import fr from '../languages/fr';
+import pt from '../languages/pt';
+import zhCn from '../languages/zh-cn';
 import ja from '../languages/ja';
 import hi from '../languages/hi';
 
@@ -10,7 +12,9 @@ import hi from '../languages/hi';
 const translations: Record<Language, Record<string, string>> = {
   es,
   en,
-  'zh-tw': zhTw,
+  fr,
+  pt,
+  'zh-cn': zhCn,
   ja,
   hi,
 };
@@ -18,11 +22,11 @@ const translations: Record<Language, Record<string, string>> = {
 describe('Translations', () => {
   const languages = LANGUAGES.map((l) => l.code);
 
-  it('should have all 5 language codes defined', () => {
-    expect(languages).toEqual(['es', 'en', 'zh-tw', 'ja', 'hi']);
+  it('should have all 7 language codes defined', () => {
+    expect(languages).toEqual(['es', 'en', 'fr', 'pt', 'zh-cn', 'ja', 'hi']);
   });
 
-  it('should have translations for all 5 languages', () => {
+  it('should have translations for all 7 languages', () => {
     for (const lang of languages) {
       expect(translations[lang]).toBeDefined();
     }

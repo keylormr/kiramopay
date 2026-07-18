@@ -22,13 +22,17 @@ const STORAGE_KEY = 'kiramopay_language';
 
 function detectInitialLanguage(): Language {
   const saved = localStorage.getItem(STORAGE_KEY);
+  // Migrate users who picked the now-removed Traditional Chinese to Simplified.
+  if (saved === 'zh-tw') return 'zh-cn';
   if (saved && LANGUAGES.some((l) => l.code === saved)) {
     return saved as Language;
   }
   const browserLang = navigator.language.toLowerCase();
   if (browserLang.startsWith('es')) return 'es';
   if (browserLang.startsWith('en')) return 'en';
-  if (browserLang.startsWith('zh')) return 'zh-tw';
+  if (browserLang.startsWith('fr')) return 'fr';
+  if (browserLang.startsWith('pt')) return 'pt';
+  if (browserLang.startsWith('zh')) return 'zh-cn';
   if (browserLang.startsWith('ja')) return 'ja';
   if (browserLang.startsWith('hi')) return 'hi';
   return 'es'; // Default to Spanish

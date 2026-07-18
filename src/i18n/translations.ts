@@ -1,7 +1,8 @@
 // Sistema de internacionalizacion para KiramoPay
-// Idiomas soportados: Espanol (ES), Ingles (EN), Chino Tradicional (ZH-TW), Japones (JA), Hindi (HI)
+// Idiomas soportados: Espanol (ES), Ingles (EN), Frances (FR), Portugues (PT),
+// Chino Simplificado (ZH-CN), Japones (JA), Hindi (HI)
 
-export type Language = 'es' | 'en' | 'zh-tw' | 'ja' | 'hi';
+export type Language = 'es' | 'en' | 'fr' | 'pt' | 'zh-cn' | 'ja' | 'hi';
 
 export interface LanguageOption {
   code: Language;
@@ -13,7 +14,9 @@ export interface LanguageOption {
 export const LANGUAGES: LanguageOption[] = [
   { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇨🇷' },
   { code: 'en', name: 'English', nativeName: 'English', flag: '🇺🇸' },
-  { code: 'zh-tw', name: 'Chinese (Traditional)', nativeName: '繁體中文', flag: '🇹🇼' },
+  { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
+  { code: 'pt', name: 'Portuguese', nativeName: 'Português', flag: '🇧🇷' },
+  { code: 'zh-cn', name: 'Chinese (Simplified)', nativeName: '简体中文', flag: '🇨🇳' },
   { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵' },
   { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
 ];
@@ -804,7 +807,9 @@ export const defaultTranslations: TranslationKeys = es;
 
 const loaders: Record<Exclude<Language, 'es'>, () => Promise<{ default: TranslationKeys }>> = {
   en: () => import('./languages/en'),
-  'zh-tw': () => import('./languages/zh-tw'),
+  fr: () => import('./languages/fr'),
+  pt: () => import('./languages/pt'),
+  'zh-cn': () => import('./languages/zh-cn'),
   ja: () => import('./languages/ja'),
   hi: () => import('./languages/hi'),
 };
