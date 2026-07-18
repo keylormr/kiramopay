@@ -37,6 +37,12 @@ export type TranslationKeys = {
   kyc_complete: string;
   profile_level: string;
   limits_kyc_hint: string;
+  kyc_verify_cta: string;
+  kyc_verify_success: string;
+  kyc_verify_mismatch: string;
+  kyc_verify_not_found: string;
+  kyc_verify_unavailable: string;
+  kyc_n2_soon: string;
   cat_all: string;
   cat_electricity: string;
   cat_water: string;

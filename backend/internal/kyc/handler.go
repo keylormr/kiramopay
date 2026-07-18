@@ -2,6 +2,7 @@ package kyc
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -42,6 +43,23 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, st)
+}
+
+// VerifyIdentity — POST /api/v1/kyc/verify-identity
+// Automated N1 check against the Hacienda registry for the authed user's own
+// registered cedula. No request body (the id/name come from the account).
+func (h *Handler) VerifyIdentity(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	res, err := h.service.VerifyIdentity(r.Context(), userID, clientIP(r))
+	if err != nil {
+		if errors.Is(err, ErrIdentityUnavailable) {
+			response.Error(w, http.StatusServiceUnavailable, "IDENTITY_UNAVAILABLE", "identity service unavailable, try again later")
+			return
+		}
+		response.Error(w, http.StatusBadRequest, "IDENTITY_VERIFY_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, res)
 }
 
 // Decide — POST /api/v1/admin/kyc/{id}/decision (admin)

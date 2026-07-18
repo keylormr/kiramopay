@@ -738,6 +738,12 @@ const ja: TranslationKeys = {
   recover_success_desc: 'パスワードを更新しました。ログインできます。',
   recover_back_to_login: 'ログインに戻る',
   recover_dev_hint: '開発用コード',
+  kyc_verify_cta: '証明書を照合',
+  kyc_verify_success: '公的登録と証明書を照合しました',
+  kyc_verify_mismatch: '氏名が公式登録と一致しません',
+  kyc_verify_not_found: '登録に本人確認書類が見つかりませんでした',
+  kyc_verify_unavailable: 'サービスを利用できません。後でもう一度お試しください',
+  kyc_n2_soon: '完全な本人確認（書類 + セルフィー）は近日対応',
 };
 
 export default ja;

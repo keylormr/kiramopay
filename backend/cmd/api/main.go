@@ -195,7 +195,12 @@ func main() {
 	savingsRepo := savings.NewRepository(pool)
 
 	// ── Services ─────────────────────────────────────────────────────────
-	kycService := kyc.NewService(kycRepo, &kyc.Options{AuditLogger: auditLogger})
+	kycService := kyc.NewService(kycRepo, &kyc.Options{
+		AuditLogger: auditLogger,
+		// Automated N1 identity check against the free Hacienda registry
+		// (public endpoints by default; fail-open when unreachable).
+		Hacienda: kyc.NewHaciendaClient("", ""),
+	})
 	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
 		LockoutStore:             lockoutStore,
@@ -504,6 +509,7 @@ func main() {
 			// KYC
 			r.Get("/kyc/status", kycHandler.GetStatus)
 			r.Post("/kyc/submit", kycHandler.Submit)
+			r.Post("/kyc/verify-identity", kycHandler.VerifyIdentity)
 
 			// Wallet
 			r.Get("/wallets/me", walletHandler.GetWallet)
