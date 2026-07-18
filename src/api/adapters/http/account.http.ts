@@ -3,6 +3,7 @@ import type { ApiResponse } from '../../types';
 import type { Account, Budget } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
+import { getUsdToCrcRate } from '@/services/fxRate';
 // Generated from backend/docs/openapi.yaml — re-run `npm run gen:api`
 // after any backend handler/schema change. The compiler will then surface
 // every adapter that needs updating.
@@ -30,6 +31,12 @@ export class HttpAccountRepository implements IAccountRepository {
     const crcMinor = res.data.crc ?? res.data.balance_crc ?? 0;
     const usdMinor = res.data.usd ?? res.data.balance_usd ?? 0;
 
+    // Attach the USD conversion factor so callers (HomeView "USD Total",
+    // ProfileView, getBalanceSummary) convert consistently instead of counting
+    // CRC 1:1 against USD. Sourced from the single shared FX rate.
+    const usdPerCrc = await getUsdToCrcRate();
+    const crcToUsd = usdPerCrc > 0 ? 1 / usdPerCrc : 0;
+
     const accounts: Account[] = [
       {
         name: 'Cuenta Colones',
@@ -39,6 +46,7 @@ export class HttpAccountRepository implements IAccountRepository {
         symbol: '₡',
         flag: '🇨🇷',
         iban: '',
+        rateToUsd: crcToUsd,
       },
       {
         name: 'Cuenta Dólares',
@@ -48,6 +56,7 @@ export class HttpAccountRepository implements IAccountRepository {
         symbol: '$',
         flag: '🇺🇸',
         iban: '',
+        rateToUsd: 1,
       },
     ];
 
@@ -77,11 +86,9 @@ export class HttpAccountRepository implements IAccountRepository {
       return apiError('FETCH_FAILED', 'Failed to fetch balance');
     }
 
-    const exchangeRate = 520; // CRC per USD approximate
-    const totalUsd = res.data.reduce((sum, a) => {
-      if (a.ccy === 'USD') return sum + a.balance;
-      return sum + a.balance / exchangeRate;
-    }, 0);
+    // getAccounts already attached rateToUsd from the shared FX rate, so the
+    // summary reuses it instead of a second (divergent) hardcoded constant.
+    const totalUsd = res.data.reduce((sum, a) => sum + a.balance * (a.rateToUsd ?? 0), 0);
 
     return apiSuccess({ totalUsd, accounts: res.data });
   }
