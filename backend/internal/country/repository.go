@@ -58,9 +58,15 @@ func (r *Repository) GetCountryByCode(ctx context.Context, code string) (*Countr
 
 func (r *Repository) GetExchangeRate(ctx context.Context, from, to string) (*ExchangeRate, error) {
 	var rate ExchangeRate
+	// After migration 021 the table is historized; the *active* rate for a pair
+	// is the open-ended row (effective_to IS NULL). Without this filter a closed
+	// historical row could be returned once rates start being updated.
 	err := r.db.QueryRow(ctx,
 		`SELECT id, from_currency, to_currency, rate, source, updated_at
-		 FROM exchange_rates WHERE from_currency = $1 AND to_currency = $2`,
+		 FROM exchange_rates
+		 WHERE from_currency = $1 AND to_currency = $2 AND effective_to IS NULL
+		 ORDER BY effective_from DESC
+		 LIMIT 1`,
 		from, to).Scan(&rate.ID, &rate.FromCurrency, &rate.ToCurrency,
 		&rate.Rate, &rate.Source, &rate.UpdatedAt)
 	if err != nil {
@@ -70,9 +76,13 @@ func (r *Repository) GetExchangeRate(ctx context.Context, from, to string) (*Exc
 }
 
 func (r *Repository) GetAllRates(ctx context.Context) ([]ExchangeRate, error) {
+	// Only the active row per pair (effective_to IS NULL); historized rows are
+	// forensic history, not something the public endpoint should surface.
 	rows, err := r.db.Query(ctx,
 		`SELECT id, from_currency, to_currency, rate, source, updated_at
-		 FROM exchange_rates ORDER BY from_currency, to_currency`)
+		 FROM exchange_rates
+		 WHERE effective_to IS NULL
+		 ORDER BY from_currency, to_currency`)
 	if err != nil {
 		return nil, err
 	}
@@ -251,15 +261,15 @@ func (r *Repository) SeedCountries(ctx context.Context) error {
 		From, To string
 		Rate     float64
 	}{
-		{"CRC", "USD", 0.00194},  // 1 CRC ≈ 0.00194 USD
-		{"USD", "CRC", 515.0},    // 1 USD ≈ 515 CRC
-		{"CRC", "PAB", 0.00194},  // PAB is pegged to USD
+		{"CRC", "USD", 0.00194}, // 1 CRC ≈ 0.00194 USD
+		{"USD", "CRC", 515.0},   // 1 USD ≈ 515 CRC
+		{"CRC", "PAB", 0.00194}, // PAB is pegged to USD
 		{"PAB", "CRC", 515.0},
-		{"CRC", "GTQ", 0.0150},   // 1 CRC ≈ 0.015 GTQ
+		{"CRC", "GTQ", 0.0150}, // 1 CRC ≈ 0.015 GTQ
 		{"GTQ", "CRC", 66.67},
-		{"USD", "PAB", 1.0},      // PAB pegged 1:1 to USD
+		{"USD", "PAB", 1.0}, // PAB pegged 1:1 to USD
 		{"PAB", "USD", 1.0},
-		{"USD", "GTQ", 7.75},     // approximate
+		{"USD", "GTQ", 7.75}, // approximate
 		{"GTQ", "USD", 0.129},
 		{"PAB", "GTQ", 7.75},
 		{"GTQ", "PAB", 0.129},

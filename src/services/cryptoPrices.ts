@@ -1,6 +1,8 @@
 // Crypto Price Service - Realistic Simulated Prices
 // Uses current market values as base with realistic volatility simulation
 
+import { getUsdToCrcRate } from './fxRate';
+
 // Base prices (approximate real market prices as of January 2025)
 const BASE_PRICES: Record<string, { price: number; marketCap: number; volume24h: number }> = {
   BTC: { price: 42850, marketCap: 840000000000, volume24h: 18500000000 },
@@ -231,8 +233,8 @@ class CryptoPriceService {
     const usdValue = amount * priceData.price;
 
     if (fiatCurrency === 'CRC') {
-      const CRC_RATE = 515;
-      return usdValue * CRC_RATE;
+      const rate = await getUsdToCrcRate();
+      return usdValue * rate;
     }
 
     return usdValue;
@@ -249,8 +251,8 @@ class CryptoPriceService {
 
     let usdAmount = fiatAmount;
     if (fiatCurrency === 'CRC') {
-      const CRC_RATE = 515;
-      usdAmount = fiatAmount / CRC_RATE;
+      const rate = await getUsdToCrcRate();
+      usdAmount = rate > 0 ? fiatAmount / rate : fiatAmount;
     }
 
     return usdAmount / priceData.price;

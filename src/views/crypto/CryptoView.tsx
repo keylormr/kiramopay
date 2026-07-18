@@ -6,6 +6,7 @@ import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
+import { useUsdToCrcRate } from '@/hooks/useFxRate';
 
 // Static list of crypto symbols to track
 const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'MATIC'];
@@ -61,12 +62,11 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
   );
 };
 
-// CRC Exchange rate (real rate updated periodically)
-const CRC_RATE = 515;
-
 export const CryptoView: React.FC = () => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
+  // Single shared USD->CRC rate (same source as the wallet + balance summary).
+  const crcRate = useUsdToCrcRate();
 
   const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail'>('none');
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
@@ -90,7 +90,7 @@ export const CryptoView: React.FC = () => {
     acc + (asset.balance * asset.currentPrice), 0
   );
 
-  const totalCrcValue = totalUsdValue * CRC_RATE;
+  const totalCrcValue = totalUsdValue * crcRate;
 
   const totalProfitLoss = state.crypto.assets.reduce((acc, asset) => {
     if (asset.balance > 0) {
@@ -230,7 +230,7 @@ export const CryptoView: React.FC = () => {
         amount: cryptoAmount,
         price: selectedAsset.currentPrice,
         toCurrency: convertTo,
-        toAmount: convertTo === 'CRC' ? fiatAmount * CRC_RATE : fiatAmount
+        toAmount: convertTo === 'CRC' ? fiatAmount * crcRate : fiatAmount
       }
     });
     setActiveSheet('none');
