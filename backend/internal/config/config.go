@@ -127,7 +127,11 @@ func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Port:                     getEnvInt("SERVER_PORT", 8080),
-			Environment:              getEnv("ENVIRONMENT", "development"),
+			// Fail-safe default: an UNSET ENVIRONMENT is treated as production, so a
+			// deploy that forgets to set it runs the full ValidateForProduction gate
+			// instead of silently booting with development bypasses. Local work opts
+			// out explicitly via ENVIRONMENT=development (see .env.example).
+			Environment:              getEnv("ENVIRONMENT", "production"),
 			ReadTimeout:              time.Duration(getEnvInt("SERVER_READ_TIMEOUT", 10)) * time.Second,
 			WriteTimeout:             time.Duration(getEnvInt("SERVER_WRITE_TIMEOUT", 10)) * time.Second,
 			RequirePhoneVerification: getEnv("REQUIRE_PHONE_VERIFICATION", "false") == "true",

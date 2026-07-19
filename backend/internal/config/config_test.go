@@ -97,6 +97,16 @@ func TestValidateForProduction_AllSecure_NoError(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultEnvironmentIsProduction(t *testing.T) {
+	// An unset ENVIRONMENT (getEnv treats empty as unset) must fail safe to
+	// production so a deploy that forgets the var still runs the prod checks.
+	t.Setenv("ENVIRONMENT", "")
+	cfg := Load()
+	if cfg.Server.Environment != "production" {
+		t.Errorf("unset ENVIRONMENT must default to production, got %q", cfg.Server.Environment)
+	}
+}
+
 func TestDSN_IncludesSSLRootCert(t *testing.T) {
 	cfg := DatabaseConfig{
 		Host:        "db.example.com",
