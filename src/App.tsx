@@ -218,6 +218,8 @@ type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transacti
 // Main Layout Component
 const Layout = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
+  // Which SINPE sub-tab to open when navigating there from Home's quick actions.
+  const [sinpeTab, setSinpeTab] = useState<'send' | 'receive' | 'history'>('send');
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
   const [showLanguage, setShowLanguage] = useState(false);
   const { state } = useApp();
@@ -260,8 +262,8 @@ const Layout = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} />;
-      case 'sinpe': return <SinpeView />;
+      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} onNavigateToSinpe={(tab) => { setSinpeTab(tab ?? 'send'); setActiveTab('sinpe'); }} />;
+      case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
       case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenMerchant={() => setOverlayView('merchant')} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} />;

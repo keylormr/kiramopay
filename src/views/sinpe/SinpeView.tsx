@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -25,10 +25,17 @@ const BANKS = [
   'Coopeservidores',
 ];
 
-export const SinpeView: React.FC = () => {
+interface SinpeViewProps {
+  // Sub-tab to open on mount / when navigated here from Home's quick actions.
+  initialTab?: 'send' | 'receive' | 'history';
+}
+
+export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'history'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'history'>(initialTab);
+  // Follow external navigation (e.g. Home "Enviar"/"Recibir") to the right tab.
+  useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showReceiveSheet, setShowReceiveSheet] = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);

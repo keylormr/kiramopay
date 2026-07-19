@@ -29,14 +29,15 @@ interface HomeViewProps {
   onOpenAssistant?: () => void;
   onOpenMarketplace?: () => void;
   onOpenCards?: () => void;
+  onNavigateToSinpe?: (tab?: 'send' | 'receive') => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
 
   // Sheet States
-  const [activeSheet, setActiveSheet] = useState<'none' | 'send' | 'request' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'addContact'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'addContact'>('none');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   // A scanned QR may be a contact (added to the list) instead of a payment.
   const [scannedContact, setScannedContact] = useState<ContactQrPayload | null>(null);
@@ -50,9 +51,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [cobrarLoading, setCobrarLoading] = useState(false);
   const [cobrarError, setCobrarError] = useState('');
 
-  // Form States
-  const [amount, setAmount] = useState('');
-  const [recipient, setRecipient] = useState('');
 
   // Scanner / pay-by-QR states. The scanner reads a real QR via the camera
   // (or manual entry) and pays it through the backend QR rail (scanAndPay),
@@ -97,40 +95,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     return acc + (curr.balance * rate);
   }, 0);
 
-  // Logic to check sufficient funds
-  const numericAmount = parseFloat(amount || '0');
-  const isInsufficientFunds = activeSheet === 'send' && numericAmount > baseAccount.balance;
-
-  const handleTransaction = (type: 'credit' | 'debit') => {
-    if (!amount) return;
-    const val = parseFloat(amount);
-
-    // Reject non-positive amounts: a negative "send" would flip to a positive
-    // credit and inflate the displayed balance.
-    if (!(val > 0)) {
-      return;
-    }
-
-    // Validation: Prevent Debit if insufficient funds
-    if (type === 'debit' && val > baseAccount.balance) {
-      return;
-    }
-
-    const tx: Transaction = {
-      id: Date.now().toString(),
-      title: type === 'debit' ? (recipient || 'Unknown') : `Request from ${recipient || 'User'}`,
-      amount: type === 'debit' ? -val : val,
-      ccy: state.baseCurrency,
-      date: 'Just now',
-      type,
-      category: 'Transfer',
-      status: 'completed'
-    };
-    dispatch({ type: 'ADD_TRANSACTION', payload: tx });
-    setActiveSheet('none');
-    setAmount('');
-    setRecipient('');
-  };
 
   const handleAddAccount = (curr: Partial<Account>) => {
     const newAccount: Account = {
@@ -380,8 +344,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
         <div className="grid grid-cols-4 gap-3">
           {[
-            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => setActiveSheet('send') },
-            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => setActiveSheet('request') },
+            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => onNavigateToSinpe?.('send') },
+            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => onNavigateToSinpe?.('receive') },
             { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
             { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
           ].map((action, i) => (
@@ -593,94 +557,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       </div>
 
       {/* --- Bottom Sheets --- */}
-
-      {/* Send Money Sheet */}
-      <BottomSheet isOpen={activeSheet === 'send'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={t('send_money')}>
-        <div className="p-2 space-y-6">
-          <div className="text-center">
-            <label className="text-sm text-gray-500">{t('amount_to_send')}</label>
-            <div className="flex items-center justify-center gap-2 mt-2">
-              <span className={`text-4xl font-bold ${isInsufficientFunds ? 'text-red-500' : 'uv-text-primary'}`}>{baseAccount.symbol}</span>
-              <input 
-                type="number" 
-                value={amount} 
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className={`text-5xl font-bold bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficientFunds ? 'text-red-500' : 'uv-text-primary'}`}
-                autoFocus
-              />
-            </div>
-            <p aria-live="polite" className={`text-sm mt-2 font-medium ${isInsufficientFunds ? 'text-red-500' : 'text-gray-400'}`}>
-              {isInsufficientFunds
-                ? t('insufficient_funds')
-                : `${t('available')}: ${formatCurrency(baseAccount.balance, baseAccount.ccy)}`
-              }
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="uv-surface-2 p-4 rounded-xl">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">{t('recipient')}</label>
-              <input
-                type="text"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                placeholder="Name, @tag, or Email"
-                className="w-full bg-transparent outline-none text-lg font-semibold uv-text-primary"
-              />
-            </div>
-
-            <button
-              onClick={() => handleTransaction('debit')}
-              disabled={!amount || !recipient || isInsufficientFunds || numericAmount <= 0}
-              className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {t('send_money')}
-            </button>
-          </div>
-        </div>
-      </BottomSheet>
-
-      {/* Request Money Sheet */}
-      <BottomSheet isOpen={activeSheet === 'request'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={t('request_money')}>
-        <div className="p-2 space-y-6">
-          <div className="text-center">
-            <label className="text-sm text-gray-500">{t('amount_to_request')}</label>
-            <div className="flex items-center justify-center gap-2 mt-2">
-              <span className="text-4xl font-bold uv-text-primary">{baseAccount.symbol}</span>
-              <input 
-                type="number" 
-                value={amount} 
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="uv-surface-2 p-4 rounded-xl">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">{t('from')}</label>
-              <input
-                type="text"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                placeholder="Name, @tag, or Email"
-                className="w-full bg-transparent outline-none text-lg font-semibold uv-text-primary"
-              />
-            </div>
-
-            <button
-              onClick={() => handleTransaction('credit')}
-              disabled={!amount || !recipient || numericAmount <= 0}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('request_money')}
-            </button>
-          </div>
-        </div>
-      </BottomSheet>
 
       {/* Cobrar con QR — genera un QR de cobro real (modelo China/Pix: sin datafono) */}
       <BottomSheet
