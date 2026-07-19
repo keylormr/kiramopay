@@ -5,25 +5,16 @@ import { initialAccounts, initialBudgets } from '@/api/adapters/mock/mock-data';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
-interface CardState {
-  frozen: boolean;
-  last4: string;
-  limits: { online: number; atm: number };
-}
-
 interface AccountState {
   baseCurrency: string;
   accounts: Account[];
   budgets: Budget[];
-  cards: CardState;
 
   setBaseCurrency: (ccy: string) => void;
   setAccounts: (accounts: Account[]) => void;
   setBudgets: (budgets: Budget[]) => void;
   addAccount: (account: Account) => void;
   updateAccountBalance: (ccy: string, delta: number) => void;
-  toggleFreeze: () => void;
-  updateLimits: (limits: { online: number; atm: number }) => void;
   updateBudgetSpent: (id: string, spent: number) => void;
   addBudget: (budget: Budget) => void;
   removeBudget: (id: string) => void;
@@ -37,11 +28,6 @@ export const useAccountStore = create<AccountState>()(
       baseCurrency: 'CRC',
       accounts: hasBackend ? [] : initialAccounts,
       budgets: hasBackend ? [] : initialBudgets,
-      cards: {
-        frozen: false,
-        last4: '8842',
-        limits: { online: 500000, atm: 200000 },
-      },
 
       setBaseCurrency: (ccy) => set({ baseCurrency: ccy }),
 
@@ -61,12 +47,6 @@ export const useAccountStore = create<AccountState>()(
             a.ccy === ccy ? { ...a, balance: a.balance + delta } : a,
           ),
         })),
-
-      toggleFreeze: () =>
-        set((s) => ({ cards: { ...s.cards, frozen: !s.cards.frozen } })),
-
-      updateLimits: (limits) =>
-        set((s) => ({ cards: { ...s.cards, limits } })),
 
       updateBudgetSpent: (id, spent) =>
         set((s) => ({

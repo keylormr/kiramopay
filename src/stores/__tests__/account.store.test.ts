@@ -8,7 +8,6 @@ describe('useAccountStore', () => {
       baseCurrency: 'CRC',
       accounts: [...initialAccounts],
       budgets: [...initialBudgets],
-      cards: { frozen: false, last4: '8842', limits: { online: 500000, atm: 200000 } },
     });
   });
 
@@ -48,17 +47,6 @@ describe('useAccountStore', () => {
     useAccountStore.getState().updateAccountBalance('CRC', -5000);
     const crc = useAccountStore.getState().accounts.find((a) => a.ccy === 'CRC')!;
     expect(crc.balance).toBe(384500 - 5000);
-  });
-
-  it('should toggle freeze', () => {
-    expect(useAccountStore.getState().cards.frozen).toBe(false);
-    useAccountStore.getState().toggleFreeze();
-    expect(useAccountStore.getState().cards.frozen).toBe(true);
-  });
-
-  it('should update limits', () => {
-    useAccountStore.getState().updateLimits({ online: 100000, atm: 50000 });
-    expect(useAccountStore.getState().cards.limits.online).toBe(100000);
   });
 
   it('should set base currency', () => {

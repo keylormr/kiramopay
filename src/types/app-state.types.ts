@@ -19,15 +19,6 @@ export interface AppState {
   budgets: Budget[];
   passwordHash: string;
 
-  // Cards
-  cards: {
-    frozen: boolean;
-    last4: string;
-    limits: {
-      online: number;
-      atm: number;
-    };
-  };
 
   // SINPE
   sinpeContacts: SinpeContact[];
@@ -64,11 +55,9 @@ export type AppAction =
   | { type: 'TOGGLE_THEME' }
   | { type: 'TOGGLE_OFFLINE' }
   | { type: 'TOGGLE_LOCK'; payload: boolean }
-  | { type: 'TOGGLE_FREEZE' }
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
   | { type: 'SET_BASE_CURRENCY'; payload: string }
   | { type: 'ADD_ACCOUNT'; payload: Account }
-  | { type: 'UPDATE_LIMITS'; payload: { online: number; atm: number } }
   | { type: 'CHANGE_PASSWORD'; payload: string }
   | { type: 'LOGIN'; payload: User }
   | { type: 'LOGOUT' }

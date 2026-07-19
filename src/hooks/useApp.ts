@@ -50,7 +50,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
     accounts: accounts.accounts,
     transactions: txStore.transactions,
     budgets: accounts.budgets,
-    cards: accounts.cards,
     sinpeContacts: sinpe.sinpeContacts,
     sinpeHistory: sinpe.sinpeHistory,
     savedServices: services.savedServices,
@@ -92,15 +91,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       case 'TOGGLE_LOCK':
         settings.setLocked(action.payload);
         break;
-      case 'TOGGLE_FREEZE':
-        accounts.toggleFreeze();
-        if (hasBackend) {
-          const api = getApiLayer();
-          // If frozen after toggle, freeze; otherwise unfreeze
-          const willBeFrozen = !accounts.cards.frozen;
-          api.cards?.freezeCard('default', willBeFrozen).catch(() => {});
-        }
-        break;
       case 'SET_BASE_CURRENCY':
         accounts.setBaseCurrency(action.payload);
         break;
@@ -110,19 +100,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       case 'ADD_ACCOUNT':
         accounts.addAccount(action.payload);
-        break;
-      case 'UPDATE_LIMITS':
-        accounts.updateLimits(action.payload);
-        if (hasBackend) {
-          const api = getApiLayer();
-          // Map the local {online, atm} limits to the repository's request shape.
-          api.cards
-            ?.updateLimits('default', {
-              dailyLimit: action.payload.online,
-              atmLimit: action.payload.atm,
-            })
-            .catch(() => {});
-        }
         break;
       case 'CHANGE_PASSWORD':
         // No-op locally: actual password change goes through auth.changePassword
