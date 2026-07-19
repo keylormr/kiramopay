@@ -150,6 +150,7 @@ const es: TranslationKeys = {
   help_center: 'Centro de ayuda',
   faq: 'Preguntas frecuentes',
   chat_support: 'Chat con soporte',
+  support_soon_desc: 'El chat en vivo llegara pronto. Mientras tanto, encuentra respuestas en el Centro de ayuda.',
   about: 'Acerca de',
   version: 'Version',
 
@@ -259,6 +260,9 @@ const es: TranslationKeys = {
   sending_request: 'Enviando solicitud...',
   sent_success: 'Enviado!',
   sinpe_transfer_success: 'Tu transferencia SINPE fue exitosa',
+  sinpe_self_send_error: 'No puedes enviarte dinero a tu propio numero',
+  sinpe_external_pending_title: 'Envio en proceso',
+  sinpe_external_pending_desc: 'El numero no pertenece a KiramoPay. La entrega a otros bancos aun no esta habilitada; el monto quedo registrado como pendiente.',
   sent_to_label: 'Enviado a',
   phone: 'Telefono',
   detail: 'Detalle',
@@ -574,6 +578,9 @@ const es: TranslationKeys = {
   home_loyalty: 'Puntos',
   home_loyalty_view: 'Recompensas',
   home_loyalty_desc: 'Gana y canjea puntos',
+  home_marketplace: 'Mercado',
+  home_marketplace_view: 'Abrir mercado',
+  home_marketplace_desc: 'Viajes, comida y mas',
   // Assistant Phase 3b (confirmation)
   assistant_confirm: 'Confirmar',
   assistant_confirmed: 'Confirmado',

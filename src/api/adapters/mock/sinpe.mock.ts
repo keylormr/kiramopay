@@ -54,6 +54,7 @@ export class MockSinpeRepository implements ISinpeRepository {
       date: 'Ahora',
       status: 'completed',
       reference: request.description,
+      internal: true,
     };
 
     const history: SinpeTransaction[] = state?.sinpeHistory ?? [...initialSinpeHistory];

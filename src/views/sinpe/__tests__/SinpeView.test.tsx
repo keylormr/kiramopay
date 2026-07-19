@@ -73,7 +73,12 @@ describe('SinpeView — send', () => {
     await openSendSheetAndSubmit(user);
 
     await waitFor(() =>
-      expect(mocks.api.sinpe.send).toHaveBeenCalledWith({ phone: '88887777', amount: 5000, description: '' }),
+      expect(mocks.api.sinpe.send).toHaveBeenCalledWith({
+        phone: '88887777',
+        amount: 5000,
+        description: '',
+        idempotencyKey: expect.any(String),
+      }),
     );
     expect(await screen.findByText('Enviado!')).toBeInTheDocument();
     expect(mocks.dispatch).toHaveBeenCalled();

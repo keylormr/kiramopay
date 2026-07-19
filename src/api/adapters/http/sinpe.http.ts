@@ -97,10 +97,15 @@ export class HttpSinpeRepository implements ISinpeRepository {
       amount: number;
       fee: number;
       recipient: string;
+      internal: boolean;
     }>('/api/v1/sinpe/send', {
       phone: request.phone,
       amount: Math.round(request.amount * 100), // colones → centimos
       description: request.description || '',
+      // Forward the stable key so the backend's idempotency guard actually
+      // engages; without it the server mints a fresh key per call and a
+      // double-submit would create two transfers.
+      idempotency_key: request.idempotencyKey || '',
     });
 
     if (!res.success || !res.data) {
@@ -120,6 +125,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
       type: 'sent',
       status: res.data.status as 'completed' | 'pending' | 'failed',
       reference: request.description || '',
+      internal: res.data.internal,
     };
 
     return apiSuccess(tx);

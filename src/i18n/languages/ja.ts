@@ -150,6 +150,7 @@ const ja: TranslationKeys = {
   help_center: 'ヘルプセンター',
   faq: 'よくある質問',
   chat_support: 'チャットサポート',
+  support_soon_desc: 'ライブチャットは近日公開予定です。それまではヘルプセンターで回答をご確認ください。',
   about: '概要',
   version: 'バージョン',
 
@@ -259,6 +260,9 @@ const ja: TranslationKeys = {
   sending_request: 'リクエスト送信中...',
   sent_success: '送金完了！',
   sinpe_transfer_success: 'SINPE送金が完了しました',
+  sinpe_self_send_error: '自分の番号には送金できません',
+  sinpe_external_pending_title: '送金処理中',
+  sinpe_external_pending_desc: 'この番号は KiramoPay のユーザーではありません。他行への送金はまだ利用できず、金額は保留として記録されました。',
   sent_to_label: '送金先',
   phone: '電話',
   detail: '詳細',
@@ -566,6 +570,9 @@ const ja: TranslationKeys = {
   home_loyalty: 'ポイント',
   home_loyalty_view: '特典',
   home_loyalty_desc: 'ポイントを貯めて交換',
+  home_marketplace: 'マーケット',
+  home_marketplace_view: 'マーケットを開く',
+  home_marketplace_desc: '配車、フードなど',
   // Assistant Phase 3b (confirmation)
   assistant_confirm: '確認',
   assistant_confirmed: '確認済み',

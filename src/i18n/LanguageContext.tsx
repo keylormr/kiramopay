@@ -59,6 +59,12 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [language]);
 
+  // Keep the document's lang attribute in sync so screen readers, hyphenation
+  // and browser translation match the UI language (it otherwise stays "en").
+  useEffect(() => {
+    document.documentElement.lang = language === 'zh-cn' ? 'zh-CN' : language;
+  }, [language]);
+
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem(STORAGE_KEY, lang);

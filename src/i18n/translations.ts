@@ -179,6 +179,7 @@ export type TranslationKeys = {
   help_center: string;
   faq: string;
   chat_support: string;
+  support_soon_desc: string;
   about: string;
   version: string;
 
@@ -288,6 +289,9 @@ export type TranslationKeys = {
   sending_request: string;
   sent_success: string;
   sinpe_transfer_success: string;
+  sinpe_self_send_error: string;
+  sinpe_external_pending_title: string;
+  sinpe_external_pending_desc: string;
   sent_to_label: string;
   phone: string;
   detail: string;
@@ -650,6 +654,9 @@ export type TranslationKeys = {
   home_loyalty: string;
   home_loyalty_view: string;
   home_loyalty_desc: string;
+  home_marketplace: string;
+  home_marketplace_view: string;
+  home_marketplace_desc: string;
   // Assistant Phase 3b (confirmation)
   assistant_confirm: string;
   assistant_confirmed: string;

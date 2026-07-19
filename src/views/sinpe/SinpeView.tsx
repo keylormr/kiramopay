@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -60,6 +60,24 @@ export const SinpeView: React.FC = () => {
   const crcAccount = state.accounts.find(a => a.ccy === 'CRC');
   const balance = crcAccount?.balance || 0;
 
+  // Last 8 digits of the signed-in user's own number, to block self-sends.
+  const ownDigits = (state.user?.phone || '').replace(/\D/g, '').slice(-8);
+
+  // Stable idempotency key for the CURRENT send attempt. Kept in a ref so the
+  // MFA retry (onVerified → handleSendMoney) reuses the same key and the backend
+  // de-duplicates it into a single transfer; cleared whenever a new/edited send
+  // begins so a corrected retry gets a fresh key.
+  const idemRef = useRef('');
+  const genIdemKey = () => {
+    if (!idemRef.current) {
+      idemRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return idemRef.current;
+  };
+
   const handleSelectContact = (contact: SinpeContact) => {
     setSelectedContact(contact);
     setPhone(contact.phone.replace(/-/g, ''));
@@ -70,26 +88,45 @@ export const SinpeView: React.FC = () => {
     if (!amount || !phone) return;
 
     const numAmount = parseFloat(amount);
-    if (numAmount > balance) return;
+    if (!(numAmount > 0) || numAmount > balance) return;
+
+    // Block sending to your own number: it would fall onto the external rail
+    // (debit + fee, no credit back) — a silent loss. The backend also rejects it.
+    if (ownDigits && phone.replace(/\D/g, '').slice(-8) === ownDigits) {
+      setShowConfirm(false);
+      setSendError(t('sinpe_self_send_error'));
+      return;
+    }
 
     setIsProcessing(true);
     setSendError('');
     // Real transfer through the API layer: the mock adapter records it locally,
-    // the HTTP adapter moves money on the backend (and may require MFA).
-    const res = await getApiLayer().sinpe.send({ phone, amount: numAmount, description: reference });
+    // the HTTP adapter moves money on the backend (and may require MFA). The
+    // idempotency key makes a double-submit collapse into one transfer.
+    const res = await getApiLayer().sinpe.send({
+      phone,
+      amount: numAmount,
+      description: reference,
+      idempotencyKey: genIdemKey(),
+    });
     setIsProcessing(false);
 
     if (!res.success || !res.data) {
       // High-value transfer: prompt for a TOTP code, then retry (form persists).
+      // Keep the idempotency key so the post-MFA retry is the same transfer.
       if (res.error?.code === MFA_REQUIRED) {
         setShowConfirm(false);
         setShowMfa(true);
         return;
       }
+      // A corrected retry (different amount/recipient) must be a new transfer.
+      idemRef.current = '';
       setShowConfirm(false);
       setSendError(res.error?.message || t('assistant_action_failed'));
       return;
     }
+    // Success: release the key so the next send gets a fresh one.
+    idemRef.current = '';
 
     const tx: SinpeTransaction = {
       id: res.data.id,
@@ -115,18 +152,32 @@ export const SinpeView: React.FC = () => {
     setSelectedContact(null);
   };
 
-  const handleRequestMoney = () => {
+  const handleRequestMoney = async () => {
     if (!amount || !phone) return;
 
+    // There is no server-side "request" rail yet, so instead of faking a sent
+    // request we hand the user a real, shareable payment request they can send
+    // to the payer through any channel (it carries their own SINPE number).
     setIsProcessing(true);
-
-    setTimeout(() => {
-      setIsProcessing(false);
-      setShowReceiveSheet(false);
-      setAmount('');
-      setPhone('');
-      setReference('');
-    }, 1500);
+    const myNumber = (state.user?.phone || '').replace(/\s/g, '');
+    const amountLabel = formatCurrency(parseFloat(amount || '0'));
+    const msg = `${t('request_money')}: ${amountLabel}${reference ? ` (${reference})` : ''} - ${t('sinpe_mobile')} ${myNumber}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: t('request_money'), text: msg });
+      } else {
+        await navigator.clipboard.writeText(msg);
+        setCopiedText('request');
+        setTimeout(() => setCopiedText(null), 2000);
+      }
+    } catch {
+      // User dismissed the share sheet — leave the form intact.
+    }
+    setIsProcessing(false);
+    setShowReceiveSheet(false);
+    setAmount('');
+    setPhone('');
+    setReference('');
   };
 
   const handleAddContact = () => {
@@ -574,7 +625,7 @@ export const SinpeView: React.FC = () => {
       {/* Send Money Sheet */}
       <BottomSheet
         isOpen={showSendSheet}
-        onClose={() => { setShowSendSheet(false); setSelectedContact(null); setPhone(''); }}
+        onClose={() => { setShowSendSheet(false); setSelectedContact(null); setPhone(''); setSendError(''); idemRef.current = ''; }}
         title={t('send_money')}
       >
         <div className="space-y-6">
@@ -775,14 +826,18 @@ export const SinpeView: React.FC = () => {
         title=""
       >
         <div className="text-center py-6">
-          <div className="w-20 h-20 bg-[var(--color-success-soft)] rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-glow">
-            <Icons.Check size={40} className="text-[var(--color-success)]" />
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-glow ${lastTransaction?.internal === false ? 'bg-[var(--color-warning-soft)]' : 'bg-[var(--color-success-soft)]'}`}>
+            {lastTransaction?.internal === false ? (
+              <Icons.History size={40} className="text-[var(--color-warning)]" />
+            ) : (
+              <Icons.Check size={40} className="text-[var(--color-success)]" />
+            )}
           </div>
           <h2 className="text-2xl font-black uv-text-primary mb-2 tracking-tight">
-            {t('sent_success')}
+            {lastTransaction?.internal === false ? t('sinpe_external_pending_title') : t('sent_success')}
           </h2>
           <p className="uv-text-muted mb-6">
-            {t('sinpe_transfer_success')}
+            {lastTransaction?.internal === false ? t('sinpe_external_pending_desc') : t('sinpe_transfer_success')}
           </p>
 
           {lastTransaction && (
@@ -844,7 +899,7 @@ export const SinpeView: React.FC = () => {
       {/* High-value MFA challenge → on verify, retry the transfer */}
       <MfaChallengeSheet
         isOpen={showMfa}
-        onClose={() => setShowMfa(false)}
+        onClose={() => { setShowMfa(false); idemRef.current = ''; }}
         onVerified={() => {
           setShowMfa(false);
           handleSendMoney();

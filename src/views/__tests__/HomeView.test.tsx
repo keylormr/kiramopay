@@ -179,7 +179,8 @@ describe('HomeView', () => {
 
   it('should render the Add Money button', () => {
     renderHomeView();
-    expect(screen.getByText('Add Money')).toBeInTheDocument();
+    // The button is localized (default test language is Spanish).
+    expect(screen.getByText('Agregar dinero')).toBeInTheDocument();
   });
 
   it('should render in English when language is set to en', async () => {

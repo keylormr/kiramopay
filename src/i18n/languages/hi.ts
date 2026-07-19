@@ -150,6 +150,7 @@ const hi: TranslationKeys = {
   help_center: 'सहायता केंद्र',
   faq: 'अक्सर पूछे जाने वाले प्रश्न',
   chat_support: 'चैट सहायता',
+  support_soon_desc: 'लाइव चैट जल्द आ रही है। तब तक, सहायता केंद्र में उत्तर पाएं।',
   about: 'के बारे में',
   version: 'संस्करण',
 
@@ -259,6 +260,9 @@ const hi: TranslationKeys = {
   sending_request: 'अनुरोध भेज रहे हैं...',
   sent_success: 'भेजा गया!',
   sinpe_transfer_success: 'आपका SINPE ट्रांसफर सफल रहा',
+  sinpe_self_send_error: 'आप अपने ही नंबर पर पैसे नहीं भेज सकते',
+  sinpe_external_pending_title: 'स्थानांतरण जारी है',
+  sinpe_external_pending_desc: 'यह नंबर KiramoPay पर नहीं है। अन्य बैंकों में डिलीवरी अभी सक्षम नहीं है; राशि लंबित के रूप में दर्ज की गई है।',
   sent_to_label: 'को भेजा गया',
   phone: 'फ़ोन',
   detail: 'विवरण',
@@ -566,6 +570,9 @@ const hi: TranslationKeys = {
   home_loyalty: 'पॉइंट्स',
   home_loyalty_view: 'रिवॉर्ड्स',
   home_loyalty_desc: 'पॉइंट्स कमाएं और रिडीम करें',
+  home_marketplace: 'मार्केटप्लेस',
+  home_marketplace_view: 'मार्केटप्लेस खोलें',
+  home_marketplace_desc: 'सवारी, भोजन और अधिक',
   // Assistant Phase 3b (confirmation)
   assistant_confirm: 'पुष्टि करें',
   assistant_confirmed: 'पुष्टि हो गई',

@@ -151,6 +151,7 @@ const zhCn: TranslationKeys = {
   help_center: '帮助中心',
   faq: '常见问题',
   chat_support: '线上客服',
+  support_soon_desc: '在线客服即将上线。在此期间，请在帮助中心查找答案。',
   about: '关于',
   version: '版本',
 
@@ -260,6 +261,9 @@ const zhCn: TranslationKeys = {
   sending_request: '发送请求中...',
   sent_success: '已发送！',
   sinpe_transfer_success: '您的SINPE转账已成功',
+  sinpe_self_send_error: '不能向自己的号码转账',
+  sinpe_external_pending_title: '转账处理中',
+  sinpe_external_pending_desc: '该号码不是 KiramoPay 用户。尚未开通向其他银行的转账，该金额已记为待处理。',
   sent_to_label: '发送至',
   phone: '电话',
   detail: '详情',
@@ -567,6 +571,9 @@ const zhCn: TranslationKeys = {
   home_loyalty: '积分',
   home_loyalty_view: '奖励',
   home_loyalty_desc: '赚取和兑换积分',
+  home_marketplace: '商城',
+  home_marketplace_view: '打开商城',
+  home_marketplace_desc: '出行、美食等',
   // Assistant Phase 3b (confirmation)
   assistant_confirm: '确认',
   assistant_confirmed: '已确认',

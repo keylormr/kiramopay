@@ -41,6 +41,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const [verifyingId, setVerifyingId] = useState(false);
   const [idVerifyMsg, setIdVerifyMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showAboutSheet, setShowAboutSheet] = useState(false);
+  const [showPersonalData, setShowPersonalData] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [showLanguageSheet, setShowLanguageSheet] = useState(false);
   const [showBiometricConfirmSheet, setShowBiometricConfirmSheet] = useState(false);
   const [showTwoFactorSheet, setShowTwoFactorSheet] = useState(false);
@@ -73,6 +75,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       cancelled = true;
     };
   }, []);
+
+  // Real transaction limits from the backend (they scale with KYC level). In
+  // mock mode api.kyc is undefined, so the sheet falls back to the defaults.
+  const [limits, setLimits] = useState<{ daily: number; monthly: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getApiLayer().kyc?.getStatus();
+      if (!cancelled && res?.success && res.data) {
+        setLimits({ daily: res.data.dailyLimit, monthly: res.data.monthlyLimit });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dailyLimit = limits?.daily ?? 500000;
+  const monthlyLimit = limits?.monthly ?? 5000000;
 
   const getPasswordStrength = (pwd: string): 'weak' | 'medium' | 'strong' => {
     let score = 0;
@@ -219,7 +239,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {t('my_account')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
+          <button
+            onClick={() => setShowPersonalData(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.User size={18} className="text-blue-600" />
             </div>
@@ -272,7 +295,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('transaction_limits')}</p>
-              <p className="text-sm text-gray-500">{t('daily_limit')}: {formatCurrency(500000)}</p>
+              <p className="text-sm text-gray-500">{t('daily_limit')}: {formatCurrency(dailyLimit)}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -549,13 +572,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
-          <button className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors">
+          <button
+            onClick={() => setShowSupport(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
               <Icons.MessageCircle size={18} className="text-blue-600" />
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('chat_support')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('available_247')}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -696,31 +721,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       >
         <div className="space-y-4">
           <div className="uv-surface-2 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center">
               <span className="uv-text-muted">{t('daily_limit')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(500000)}</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(dailyLimit)}</span>
             </div>
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
-              <div className="h-full bg-primary rounded-full" style={{ width: '35%' }} />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{t('used')}: {formatCurrency(175000)}</p>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center">
               <span className="uv-text-muted">{t('monthly_limit')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(5000000)}</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(monthlyLimit)}</span>
             </div>
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
-              <div className="h-full bg-accent rounded-full" style={{ width: '20%' }} />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{t('used')}: {formatCurrency(1000000)}</p>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center">
               <span className="uv-text-muted">{t('per_transaction')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(200000)}</span>
+              <span className="font-bold uv-text-primary">{formatCurrency(500000)}</span>
             </div>
           </div>
 
@@ -877,6 +894,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <p className="text-sm text-gray-500">{t('made_in_cr')}</p>
             <p className="text-xs text-gray-400 mt-1">© 2024 KiramoPay. {t('all_rights')}.</p>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* Personal data — read-only view of the account holder's own details. */}
+      <BottomSheet
+        isOpen={showPersonalData}
+        onClose={() => setShowPersonalData(false)}
+        title={t('personal_data')}
+      >
+        <div className="space-y-3">
+          {[
+            { label: t('first_name'), value: state.user?.firstName },
+            { label: t('last_name'), value: state.user?.lastName },
+            { label: t('cedula'), value: state.user?.cedula },
+            { label: t('phone'), value: state.user?.phone },
+          ].map((row) => (
+            <div key={row.label} className="flex justify-between items-center uv-surface-2 rounded-xl px-4 py-3">
+              <span className="uv-text-muted text-sm">{row.label}</span>
+              <span className="font-semibold uv-text-primary text-sm tabular-nums">{row.value || '—'}</span>
+            </div>
+          ))}
+        </div>
+      </BottomSheet>
+
+      {/* Support — honest placeholder until a live-chat backend exists; routes to
+          the real Help Center meanwhile. */}
+      <BottomSheet
+        isOpen={showSupport}
+        onClose={() => setShowSupport(false)}
+        title={t('chat_support')}
+      >
+        <div className="space-y-4">
+          <p className="uv-text-secondary text-sm">{t('support_soon_desc')}</p>
+          <button
+            onClick={() => { setShowSupport(false); onOpenFAQ?.(); }}
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
+          >
+            <Icons.HelpCircle size={18} />
+            {t('help_center')}
+          </button>
         </div>
       </BottomSheet>
 

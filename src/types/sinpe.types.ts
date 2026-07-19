@@ -16,4 +16,8 @@ export interface SinpeTransaction {
   date: string;
   status: 'completed' | 'pending' | 'failed';
   reference?: string;
+  // False when the recipient is not a KiramoPay user: the funds were booked to
+  // the external rail (delivery to other banks is not yet enabled), so the UI
+  // must not present the transfer as delivered.
+  internal?: boolean;
 }

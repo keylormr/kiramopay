@@ -27,9 +27,10 @@ interface HomeViewProps {
   onOpenSplitPay?: () => void;
   onOpenLoyalty?: () => void;
   onOpenAssistant?: () => void;
+  onOpenMarketplace?: () => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
 
@@ -75,7 +76,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     }
   };
 
-  const baseAccount = state.accounts.find(a => a.ccy === state.baseCurrency) || state.accounts[0];
+  // Never let an empty accounts store crash the view (e.g. cleared browser data
+  // or a store migration): fall back to a zero-balance placeholder account.
+  const baseAccount = state.accounts.find(a => a.ccy === state.baseCurrency)
+    || state.accounts[0]
+    || {
+      ccy: state.baseCurrency || 'CRC',
+      balance: 0,
+      symbol: state.baseCurrency === 'USD' ? '$' : '₡',
+      flag: '🏦',
+      iban: '',
+      name: state.baseCurrency || 'CRC',
+      type: 'fiat' as const,
+      rateToUsd: state.baseCurrency === 'USD' ? 1 : undefined,
+    };
   
   const totalUsdEstimate = state.accounts.reduce((acc, curr) => {
     const rate = curr.rateToUsd || 1;
@@ -89,6 +103,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const handleTransaction = (type: 'credit' | 'debit') => {
     if (!amount) return;
     const val = parseFloat(amount);
+
+    // Reject non-positive amounts: a negative "send" would flip to a positive
+    // credit and inflate the displayed balance.
+    if (!(val > 0)) {
+      return;
+    }
 
     // Validation: Prevent Debit if insufficient funds
     if (type === 'debit' && val > baseAccount.balance) {
@@ -334,7 +354,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           {formatCurrency(baseAccount.balance, baseAccount.ccy)}
         </div>
         <div className="relative text-sm text-white/70 mb-6 tabular-nums">
-          ≈ ${totalUsdEstimate.toLocaleString('en-US', {minimumFractionDigits: 2})} USD Total
+          ≈ ${totalUsdEstimate.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} USD Total
         </div>
 
         <div className="relative flex gap-2.5">
@@ -342,7 +362,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             onClick={() => setActiveSheet('addMoney')}
             className="flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl text-sm font-bold active:scale-[0.98] transition-transform"
           >
-            Add Money
+            {t('add_money')}
           </button>
           <button
             onClick={() => setActiveSheet('addAccount')}
@@ -459,6 +479,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               </div>
               <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
               <div className="text-[10px] uv-text-muted mt-0.5">{t('home_loyalty_desc')}</div>
+            </button>
+
+            <button
+              onClick={onOpenMarketplace}
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
+                  <Icons.ShoppingCart size={16} className="text-[var(--color-primary)]" />
+                </div>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_marketplace')}</span>
+              </div>
+              <div className="text-lg font-extrabold uv-text-primary">{t('home_marketplace_view')}</div>
+              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_marketplace_desc')}</div>
             </button>
           </div>
         );
@@ -583,7 +617,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
             <button
               onClick={() => handleTransaction('debit')}
-              disabled={!amount || !recipient || isInsufficientFunds}
+              disabled={!amount || !recipient || isInsufficientFunds || numericAmount <= 0}
               className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {t('send_money')}
@@ -624,7 +658,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
             <button
               onClick={() => handleTransaction('credit')}
-              disabled={!amount || !recipient}
+              disabled={!amount || !recipient || numericAmount <= 0}
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('request_money')}
