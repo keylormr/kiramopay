@@ -111,6 +111,13 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 
 	// Resolve recipient — internal vs external.
 	peer, _ := s.userRepo.FindByPhone(ctx, req.Phone)
+	// A user sending to their OWN number would fall into the external branch
+	// (peer.ID == userID makes internal=false), debiting them plus a cross-bank
+	// fee against SYSTEM:EXTERNAL with no credit back — a silent money loss.
+	// Reject it outright.
+	if peer != nil && peer.ID == userID {
+		return nil, fmt.Errorf("cannot send to your own number")
+	}
 	internal := peer != nil && peer.ID != userID
 
 	contactName := req.Phone
@@ -228,12 +235,20 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	if s.auditLogger != nil {
 		s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)
 	}
+	// External transfers are debited but not yet settled to other banks, so they
+	// are reported as "pending" (not "completed") and flagged non-internal; the
+	// client surfaces this honestly instead of claiming delivery.
+	status := "completed"
+	if !internal {
+		status = "pending"
+	}
 	return &SendResponse{
 		TransactionID: senderTx.ID,
-		Status:        "completed",
+		Status:        status,
 		Amount:        req.Amount,
 		Fee:           fee,
 		Recipient:     contactName,
+		Internal:      internal,
 	}, nil
 }
 

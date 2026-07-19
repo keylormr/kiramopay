@@ -25,6 +25,11 @@ type SendResponse struct {
 	Amount        int64  `json:"amount"`
 	Fee           int64  `json:"fee"`
 	Recipient     string `json:"recipient"`
+	// Internal is true when the recipient is a KiramoPay user and the funds were
+	// credited to their wallet atomically. When false the transfer was booked
+	// against the external rail, whose settlement to other banks is not yet
+	// enabled — so the client must not present it as delivered.
+	Internal bool `json:"internal"`
 }
 
 // SINPE Móvil limits (per BCCR public reference; kept independently here).

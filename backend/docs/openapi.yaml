@@ -2146,12 +2146,15 @@ components:
 
     SinpeSendResponse:
       type: object
-      required: [transaction_id, status, amount, fee, recipient]
+      required: [transaction_id, status, amount, fee, recipient, internal]
       properties:
         transaction_id:
           type: string
         status:
           type: string
+          description: >-
+            "completed" for internal transfers (credited to a KiramoPay wallet),
+            "pending" for external transfers awaiting inter-bank settlement.
           example: completed
         amount:
           type: integer
@@ -2161,6 +2164,12 @@ components:
           description: Fee charged, in centimos
         recipient:
           type: string
+        internal:
+          type: boolean
+          description: >-
+            True when the recipient is a KiramoPay user and the funds were
+            credited to their wallet. False for external transfers, whose
+            delivery to other banks is not yet enabled.
 
     PayBillRequest:
       type: object

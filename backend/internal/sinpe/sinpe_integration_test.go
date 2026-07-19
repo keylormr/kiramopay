@@ -105,6 +105,40 @@ func TestSend_InsufficientBalance(t *testing.T) {
 	}
 }
 
+func TestSend_ToOwnNumber_Rejected(t *testing.T) {
+	svc, userID := setupSinpeService(t)
+	ctx := context.Background()
+	// +50688881234 is the phone SeedTestUser assigns to userID. Sending to your
+	// own number must be rejected, not silently booked against the external rail.
+	_, err := svc.Send(ctx, userID, &sinpe.SendRequest{
+		Phone:  "+50688881234",
+		Amount: 1000000,
+	}, "")
+	if err == nil {
+		t.Fatal("expected self-send to be rejected")
+	}
+}
+
+func TestSend_External_IsPending(t *testing.T) {
+	svc, userID := setupSinpeService(t)
+	ctx := context.Background()
+	// +50688885678 is not a seeded KiramoPay user → external rail: the transfer
+	// is debited but reported as pending/non-internal, never "completed".
+	resp, err := svc.Send(ctx, userID, &sinpe.SendRequest{
+		Phone:  "+50688885678",
+		Amount: 1000000,
+	}, "")
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if resp.Internal {
+		t.Fatal("expected external transfer to be non-internal")
+	}
+	if resp.Status != "pending" {
+		t.Fatalf("expected external status 'pending', got %q", resp.Status)
+	}
+}
+
 func TestGetHistory_Success(t *testing.T) {
 	svc, userID := setupSinpeService(t)
 	ctx := context.Background()
