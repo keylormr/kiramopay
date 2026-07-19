@@ -17,6 +17,10 @@ import { Capacitor } from '@capacitor/core';
 import { User } from './types';
 import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
 import { useAuthStore } from './stores/auth.store';
+import { useBusinessStore } from './stores/business.store';
+import { useBusinessData } from './hooks/useBusinessData';
+import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
+import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingSheet';
 
 // Lazy-loaded views (code splitting)
 const HomeView = React.lazy(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
@@ -42,6 +46,9 @@ const AdminMerchantsView = React.lazy(() => import('./views/merchant/AdminMercha
 const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 const MarketplaceView = React.lazy(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
 const CardsView = React.lazy(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
+const BusinessHomeView = React.lazy(() => import('./views/business/BusinessHomeView').then(m => ({ default: m.BusinessHomeView })));
+const BusinessMovementsView = React.lazy(() => import('./views/business/BusinessMovementsView').then(m => ({ default: m.BusinessMovementsView })));
+const BusinessSettingsView = React.lazy(() => import('./views/business/BusinessSettingsView').then(m => ({ default: m.BusinessSettingsView })));
 
 // Lock Screen Component — PIN entry for returning users.
 //
@@ -225,6 +232,21 @@ const Layout = () => {
   const { state } = useApp();
   const { t, currentLanguage } = useLanguage();
 
+  // ── Business mode ────────────────────────────────────────────────────────
+  // Same login, several profiles: personal wallet or any of the owner's shops.
+  const activeMerchantId = useBusinessStore((s) => s.activeMerchantId);
+  const setActiveMerchant = useBusinessStore((s) => s.setActiveMerchant);
+  const { merchants, active: activeMerchant, payments: bizPayments, loading: bizLoading, reload: reloadBiz } = useBusinessData();
+  const [bizTab, setBizTab] = useState<'home' | 'movements' | 'settings'>('home');
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const businessMode = activeMerchantId !== null;
+
+  // Self-heal: the stored id may point at a shop that no longer exists.
+  useEffect(() => {
+    if (businessMode && !bizLoading && !activeMerchant) setActiveMerchant(null);
+  }, [businessMode, bizLoading, activeMerchant, setActiveMerchant]);
+
   // Android hardware back: close an open overlay first, else return to Home,
   // else exit the app. Without this the WebView has a single history entry, so
   // Back quits the app from any screen. No-op on web (no hardware back).
@@ -252,6 +274,19 @@ const Layout = () => {
     { id: 'profile', icon: Icons.Profile, label: t('nav_profile') },
   ];
 
+  // In business mode the bottom bar swaps to the shop's own tabs.
+  const BUSINESS_NAV: { id: string; icon: LucideIcon; label: string }[] = [
+    { id: 'home', icon: Icons.Home, label: t('nav_home') },
+    { id: 'movements', icon: Icons.Receipt, label: t('business_movements') },
+    { id: 'settings', icon: Icons.Settings, label: t('business_settings') },
+  ];
+  const NAV_ITEMS: { id: string; icon: LucideIcon; label: string }[] = businessMode ? BUSINESS_NAV : TABS;
+  const currentNavId: string = businessMode ? bizTab : activeTab;
+  const onNavSelect = (id: string) => {
+    if (businessMode) setBizTab(id as 'home' | 'movements' | 'settings');
+    else setActiveTab(id as TabId);
+  };
+
   const notifications = state.notifications || [];
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -261,6 +296,25 @@ const Layout = () => {
   }
 
   const renderContent = () => {
+    // Business mode replaces the personal tabs entirely: the owner is acting as
+    // the shop, so the wallet/crypto/services surfaces do not apply.
+    if (businessMode) {
+      if (!activeMerchant) return <LoadingSkeleton />;
+      switch (bizTab) {
+        case 'movements':
+          return <BusinessMovementsView payments={bizPayments} />;
+        case 'settings':
+          return (
+            <BusinessSettingsView
+              merchant={activeMerchant}
+              onSwitchProfile={() => setShowSwitcher(true)}
+              onBackToPersonal={() => setActiveMerchant(null)}
+            />
+          );
+        default:
+          return <BusinessHomeView merchant={activeMerchant} payments={bizPayments} onReload={reloadBiz} />;
+      }
+    }
     switch (activeTab) {
       case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} onNavigateToSinpe={(tab) => { setSinpeTab(tab ?? 'send'); setActiveTab('sinpe'); }} />;
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
@@ -275,12 +329,30 @@ const Layout = () => {
     <div className="min-h-screen flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
       {/* Top Bar */}
       <div className="sticky top-0 z-30 bg-white/75 dark:bg-[#121E3A]/75 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center text-white font-black text-sm uv-shadow-soft">
-            K
-          </div>
-          <span className="font-bold text-lg tracking-tight uv-text-primary">KiramoPay</span>
-        </div>
+        <button
+          onClick={() => setShowSwitcher(true)}
+          aria-label={t('business_switch')}
+          className="flex items-center gap-2 rounded-lg px-1 -mx-1 py-1 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+        >
+          {businessMode && activeMerchant ? (
+            <>
+              <div className="w-8 h-8 bg-[var(--color-accent-soft)] text-[var(--color-accent)] rounded-lg flex items-center justify-center uv-shadow-soft">
+                <Icons.ShoppingCart size={16} />
+              </div>
+              <span className="font-bold text-lg tracking-tight uv-text-primary max-w-[45vw] truncate">
+                {activeMerchant.name}
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center text-white font-black text-sm uv-shadow-soft">
+                K
+              </div>
+              <span className="font-bold text-lg tracking-tight uv-text-primary">KiramoPay</span>
+            </>
+          )}
+          <Icons.ChevronRight size={16} className="uv-text-muted shrink-0" />
+        </button>
         <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
             <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-bold uppercase tracking-wider rounded-md">
@@ -320,12 +392,12 @@ const Layout = () => {
       {/* Bottom Navigation */}
       <nav role="navigation" aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
         <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
-          {TABS.map((item) => {
-            const active = activeTab === item.id;
+          {NAV_ITEMS.map((item) => {
+            const active = currentNavId === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => onNavSelect(item.id)}
                 aria-current={active ? 'page' : undefined}
                 className="flex flex-col items-center justify-center w-16 h-full gap-1 relative group"
               >
@@ -413,6 +485,26 @@ const Layout = () => {
 
       {/* Global language picker, reachable from every tab via the top bar */}
       <LanguageSheet isOpen={showLanguage} onClose={() => setShowLanguage(false)} />
+
+      <ProfileSwitcherSheet
+        isOpen={showSwitcher}
+        onClose={() => setShowSwitcher(false)}
+        merchants={merchants}
+        activeMerchantId={activeMerchantId}
+        onSelect={(id) => { setActiveMerchant(id); setBizTab('home'); }}
+        onCreate={() => setShowOnboarding(true)}
+      />
+
+      <BusinessOnboardingSheet
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onCreated={(m) => {
+          setShowOnboarding(false);
+          reloadBiz();
+          setActiveMerchant(m.id);
+          setBizTab('home');
+        }}
+      />
     </div>
   );
 };
