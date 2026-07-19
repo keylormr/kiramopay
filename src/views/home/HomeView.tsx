@@ -28,9 +28,10 @@ interface HomeViewProps {
   onOpenLoyalty?: () => void;
   onOpenAssistant?: () => void;
   onOpenMarketplace?: () => void;
+  onOpenCards?: () => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
 
@@ -493,6 +494,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               </div>
               <div className="text-lg font-extrabold uv-text-primary">{t('home_marketplace_view')}</div>
               <div className="text-[10px] uv-text-muted mt-0.5">{t('home_marketplace_desc')}</div>
+            </button>
+
+            <button
+              onClick={onOpenCards}
+              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
+                  <Icons.Card size={16} className="text-[var(--color-accent)]" />
+                </div>
+                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_cards')}</span>
+              </div>
+              <div className="text-lg font-extrabold uv-text-primary">{t('home_cards_view')}</div>
+              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_cards_desc')}</div>
             </button>
           </div>
         );

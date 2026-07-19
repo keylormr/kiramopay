@@ -41,6 +41,7 @@ const MerchantView = React.lazy(() => import('./views/merchant/MerchantView').th
 const AdminMerchantsView = React.lazy(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
 const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 const MarketplaceView = React.lazy(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
+const CardsView = React.lazy(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
 
 // Lock Screen Component — PIN entry for returning users.
 //
@@ -212,7 +213,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'merchant' | 'adminMerchants' | 'assistant' | 'marketplace' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'merchant' | 'adminMerchants' | 'assistant' | 'marketplace' | 'cards' | null;
 
 // Main Layout Component
 const Layout = () => {
@@ -259,7 +260,7 @@ const Layout = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} />;
+      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} />;
       case 'sinpe': return <SinpeView />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
@@ -399,6 +400,11 @@ const Layout = () => {
         {overlayView === 'marketplace' && (
           <OverlayShell title={t('home_marketplace')} onClose={() => setOverlayView(null)}>
             <MarketplaceView />
+          </OverlayShell>
+        )}
+        {overlayView === 'cards' && (
+          <OverlayShell title={t('home_cards')} onClose={() => setOverlayView(null)}>
+            <CardsView />
           </OverlayShell>
         )}
       </Suspense>
