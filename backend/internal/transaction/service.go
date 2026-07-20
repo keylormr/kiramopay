@@ -398,17 +398,24 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Metadata: map[string]any{
 			"from_user":   req.FromUserID,
 			"to_user":     req.ToUserID,
+			"to_merchant": req.ToMerchantID,
 			"description": req.Description,
 		},
 	}
+	// A merchant collection has no receiver row (`receiver` is nil): the shop's
+	// record is qr_payments + the journal entry.
 	if _, err := s.ledger.Post(ctx, p); err != nil && !errors.Is(err, ledger.ErrIdempotent) {
 		_ = s.repo.UpdateStatus(ctx, sender.ID, StatusFailed)
-		_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusFailed)
+		if receiver != nil {
+			_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusFailed)
+		}
 		return nil, nil, fmt.Errorf("post ledger: %w", err)
 	}
 
 	_ = s.repo.UpdateStatus(ctx, sender.ID, StatusCompleted)
-	_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusCompleted)
+	if receiver != nil {
+		_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusCompleted)
+	}
 
 	if s.auditLogger != nil {
 		s.auditLogger.LogTransfer(req.FromUserID, sender.ID, req.Amount, req.Currency, "")

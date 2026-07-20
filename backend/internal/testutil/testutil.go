@@ -276,6 +276,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		code VARCHAR(64) NOT NULL UNIQUE,
 		type VARCHAR(32) NOT NULL,
 		user_id UUID,
+		-- Mirrors migration 045: accounts owned by a shop, so business income is
+		-- kept apart from the owner's personal wallet.
+		merchant_id UUID,
 		currency VARCHAR(3) NOT NULL,
 		normal_balance VARCHAR(8) NOT NULL,
 		metadata JSONB DEFAULT '{}',
@@ -283,6 +286,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_user_currency
 		ON ledger_accounts (user_id, currency) WHERE type = 'user_wallet';
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_accounts_merchant_ccy
+		ON ledger_accounts (merchant_id, currency) WHERE merchant_id IS NOT NULL;
 
 	INSERT INTO ledger_accounts (code, type, currency, normal_balance) VALUES
 		('SYSTEM:FEES:CRC',      'system_fee', 'CRC', 'credit'),
