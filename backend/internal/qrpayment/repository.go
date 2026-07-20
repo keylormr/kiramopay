@@ -565,17 +565,18 @@ func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID s
 // ── Reports (phase 4) ────────────────────────────────────────────────────────
 
 // reportFilter is the shared WHERE of every report query: the shop's completed
-// sales since a UTC instant.
-const reportFilter = `merchant_id = $1::uuid AND status = 'completed' AND created_at >= $2`
+// sales since a UTC instant. Every column is qualified with the `p` alias —
+// the breakdown queries join tables that also have created_at/status columns.
+const reportFilter = `p.merchant_id = $1::uuid AND p.status = 'completed' AND p.created_at >= $2`
 
 // ReportDaily buckets the shop's sales per day. tzOffsetMin is the CLIENT's
 // offset in minutes WEST of UTC (JS getTimezoneOffset(): Costa Rica = 360), so
 // subtracting it re-expresses each instant in the client's local day.
 func (r *Repository) ReportDaily(ctx context.Context, merchantID string, since time.Time, tzOffsetMin int) ([]ReportDay, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT ((created_at - make_interval(mins => $3))::date)::text,
-		        COALESCE(SUM(amount), 0), COALESCE(SUM(fee), 0), COUNT(*)
-		   FROM qr_payments
+		`SELECT ((p.created_at - make_interval(mins => $3))::date)::text,
+		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
+		   FROM qr_payments p
 		  WHERE `+reportFilter+`
 		  GROUP BY 1 ORDER BY 1 ASC`,
 		merchantID, since, tzOffsetMin)
@@ -603,7 +604,7 @@ func (r *Repository) ReportByLocation(ctx context.Context, merchantID string, si
 		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
 		   FROM qr_payments p
 		   LEFT JOIN merchant_locations l ON l.id = p.location_id
-		  WHERE p.`+reportFilter+`
+		  WHERE `+reportFilter+`
 		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
 		merchantID, since)
 	if err != nil {
@@ -623,7 +624,7 @@ func (r *Repository) ReportByCollector(ctx context.Context, merchantID string, s
 		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
 		   FROM qr_payments p
 		   LEFT JOIN users u ON u.id = p.collected_by
-		  WHERE p.`+reportFilter+`
+		  WHERE `+reportFilter+`
 		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
 		merchantID, since)
 	if err != nil {
