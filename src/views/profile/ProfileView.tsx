@@ -15,11 +15,12 @@ interface ProfileViewProps {
   onOpenFAQ?: () => void;
   onOpenEscrow?: () => void;
   onOpenPayout?: () => void;
-  onOpenMerchant?: () => void;
+  /** Opens the business profile switcher (switch to a shop or create one). */
+  onOpenBusiness?: () => void;
   onOpenAdminMerchants?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenMerchant, onOpenAdminMerchants }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -391,7 +392,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
-            onClick={() => onOpenMerchant?.()}
+            onClick={() => onOpenBusiness?.()}
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mr-3">
