@@ -3,6 +3,7 @@ package qrpayment
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
@@ -119,6 +120,22 @@ func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 		payments = []QRPaymentRecord{}
 	}
 	response.JSON(w, http.StatusOK, payments)
+}
+
+// GetMerchantReport — GET /api/v1/qr/merchants/{id}/report?days=30&tz=360.
+// Owner/manager. `tz` is the client's offset in minutes west of UTC (what JS
+// getTimezoneOffset() returns) so daily buckets match the user's calendar.
+func (h *Handler) GetMerchantReport(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
+	report, err := h.service.MerchantReport(r.Context(), merchantID, userID, days, tz)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, report)
 }
 
 func (h *Handler) ListStaff(w http.ResponseWriter, r *http.Request) {

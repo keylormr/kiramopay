@@ -135,6 +135,39 @@ type CatalogItem struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// ── Reports (phase 4) ────────────────────────────────────────────────────────
+
+// ReportDay is one bucket of the daily sales series. The date is a plain
+// YYYY-MM-DD in the CLIENT's timezone (the tz offset travels in the request),
+// so "today" on the phone and "today" in the report agree.
+type ReportDay struct {
+	Date  string `json:"date"`
+	Gross int64  `json:"gross"` // centimos charged to payers
+	Fee   int64  `json:"fee"`   // centimos of merchant commission
+	Net   int64  `json:"net"`   // gross - fee, what the shop keeps
+	Count int    `json:"count"`
+}
+
+// ReportBucket aggregates sales for one location or one collector. An empty
+// Key/Label is the "unattributed" bucket: sales before locations existed, or
+// charges that did not pin one.
+type ReportBucket struct {
+	Key   string `json:"key,omitempty"`
+	Label string `json:"label,omitempty"`
+	Gross int64  `json:"gross"`
+	Fee   int64  `json:"fee"`
+	Net   int64  `json:"net"`
+	Count int    `json:"count"`
+}
+
+type MerchantReport struct {
+	Days        int            `json:"days"`
+	Totals      ReportBucket   `json:"totals"`
+	Daily       []ReportDay    `json:"daily"`
+	ByLocation  []ReportBucket `json:"by_location"`
+	ByCollector []ReportBucket `json:"by_collector"`
+}
+
 // AddStaffRequest identifies the employee by cedula: the owner types the same
 // id the person registered with, so there is no free-form user search.
 type AddStaffRequest struct {

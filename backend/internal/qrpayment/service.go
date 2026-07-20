@@ -608,6 +608,63 @@ func (s *Service) DeleteCatalogItem(ctx context.Context, merchantID, userID, ite
 	return s.repo.DeleteCatalogItem(ctx, merchantID, itemID)
 }
 
+// ── Reports (phase 4) ────────────────────────────────────────────────────────
+
+// MerchantReport aggregates the shop's sales for the owner or a manager: a
+// daily series plus per-location and per-collector breakdowns — the payoff of
+// the attribution phase 3 started recording. A cashier collects but does not
+// read the business's numbers.
+//
+// days is a calendar window in the CLIENT's timezone (tzOffsetMin, minutes
+// west of UTC as JS reports it): "last 7 days" starts at the client's local
+// midnight six days ago, not at an arbitrary rolling instant.
+func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string, days, tzOffsetMin int) (*MerchantReport, error) {
+	if _, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager); err != nil {
+		return nil, err
+	}
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	if tzOffsetMin < -840 || tzOffsetMin > 840 {
+		tzOffsetMin = 0
+	}
+
+	clientZone := time.FixedZone("client", -tzOffsetMin*60)
+	nowClient := time.Now().In(clientZone)
+	startClient := time.Date(nowClient.Year(), nowClient.Month(), nowClient.Day(), 0, 0, 0, 0, clientZone).
+		AddDate(0, 0, -(days - 1))
+	since := startClient.UTC()
+
+	daily, err := s.repo.ReportDaily(ctx, merchantID, since, tzOffsetMin)
+	if err != nil {
+		return nil, fmt.Errorf("report daily: %w", err)
+	}
+	byLocation, err := s.repo.ReportByLocation(ctx, merchantID, since)
+	if err != nil {
+		return nil, fmt.Errorf("report by location: %w", err)
+	}
+	byCollector, err := s.repo.ReportByCollector(ctx, merchantID, since)
+	if err != nil {
+		return nil, fmt.Errorf("report by collector: %w", err)
+	}
+
+	var totals ReportBucket
+	for _, d := range daily {
+		totals.Gross += d.Gross
+		totals.Fee += d.Fee
+		totals.Count += d.Count
+	}
+	totals.Net = totals.Gross - totals.Fee
+
+	return &MerchantReport{
+		Days:        days,
+		Totals:      totals,
+		Daily:       daily,
+		ByLocation:  byLocation,
+		ByCollector: byCollector,
+	}, nil
+}
+
 // ── Admin verification ───────────────────────────────────────────────────────
 
 func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {

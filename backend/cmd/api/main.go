@@ -615,6 +615,7 @@ func main() {
 			r.Get("/qr/merchants/{id}/balance", qrHandler.GetMerchantBalance)
 			r.Post("/qr/merchants/{id}/withdraw", qrHandler.WithdrawMerchant)
 			r.Get("/qr/merchants/{id}/payments", qrHandler.GetMerchantPayments)
+			r.Get("/qr/merchants/{id}/report", qrHandler.GetMerchantReport)
 			r.Get("/qr/merchants/{id}/staff", qrHandler.ListStaff)
 			r.Post("/qr/merchants/{id}/staff", qrHandler.AddStaff)
 			r.Put("/qr/merchants/{id}/staff/{staffID}", qrHandler.UpdateStaff)
