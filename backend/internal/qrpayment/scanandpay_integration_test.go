@@ -12,6 +12,7 @@ import (
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
 )
@@ -21,7 +22,7 @@ func setupQR(t *testing.T) (*qrpayment.Service, *pgxpool.Pool, string, string) {
 	pool := testutil.TestDB(t)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
-	svc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc)
+	svc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool))
 	pinHash, _ := hash.HashPin("Kiramopay2024!")
 	payer := testutil.SeedTestUser(t, pool, "702650930", pinHash)
 	owner := testutil.SeedTestUser2(t, pool)
