@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/messaging"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/internal/wallet"
@@ -51,6 +52,12 @@ type Service struct {
 	// requirePhoneVerification gates whether Register demands a valid phone
 	// verification token. Off until an SMS provider can deliver the code.
 	requirePhoneVerification bool
+	// smsSender / emailSender deliver OTPs and the password-reset token. Nil when
+	// no provider is configured, in which case the handler echoes the secret in
+	// dev only. publicAppURL builds the reset link in the email.
+	smsSender    messaging.SMSSender
+	emailSender  messaging.EmailSender
+	publicAppURL string
 }
 
 // Options for service wiring.
@@ -68,6 +75,12 @@ type Options struct {
 	// phone-verification token. Keep false until an SMS provider is wired
 	// (otherwise nobody could obtain a code in production).
 	RequirePhoneVerification bool
+	// SMSSender / EmailSender deliver registration OTPs and the password-reset
+	// token. Nil disables delivery (dev-echo fallback). PublicAppURL is the
+	// frontend origin used to build the reset link in the email.
+	SMSSender    messaging.SMSSender
+	EmailSender  messaging.EmailSender
+	PublicAppURL string
 }
 
 func NewService(
@@ -101,6 +114,9 @@ func NewService(
 		idleTimeout:              opts.IdleTimeout,
 		absoluteTimeout:          opts.AbsoluteTimeout,
 		requirePhoneVerification: opts.RequirePhoneVerification,
+		smsSender:                opts.SMSSender,
+		emailSender:              opts.EmailSender,
+		publicAppURL:             opts.PublicAppURL,
 	}
 }
 
@@ -452,6 +468,16 @@ func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginCon
 	if err := s.authRepo.InsertPasswordResetToken(ctx, rec); err != nil {
 		return "", fmt.Errorf("insert reset token: %w", err)
 	}
+	// Deliver the reset token by email when configured and the user has an email
+	// on file. Failure is logged but NOT surfaced: ForgotPassword must return the
+	// same response whether or not delivery succeeded (anti-enumeration). Without
+	// a provider the handler echoes the token in dev only.
+	if s.emailSender != nil && u.Email != "" {
+		subject, textBody, htmlBody := messaging.PasswordResetEmail(raw, s.publicAppURL)
+		if derr := s.emailSender.SendEmail(ctx, u.Email, subject, textBody, htmlBody); derr != nil {
+			slog.Warn("auth: password reset email delivery failed", "user_id", u.ID, "err", derr.Error())
+		}
+	}
 	if s.auditLogger != nil {
 		s.auditLogger.Log(audit.Event{
 			UserID:    u.ID,
@@ -558,8 +584,14 @@ func (s *Service) SendRegistrationOTP(ctx context.Context, phone string) (string
 	if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code)); err != nil {
 		return "", fmt.Errorf("store otp: %w", err)
 	}
-	// TODO(sms-provider): deliver `code` to `phone` via SMS once a provider is
-	// contracted (blocked by partner/licensing, not code).
+	// Deliver the code by SMS when a provider is configured. Without one the
+	// handler echoes it in dev only. A delivery failure is surfaced so the client
+	// can prompt a retry instead of waiting for a code that never arrives.
+	if s.smsSender != nil {
+		if err := s.smsSender.SendSMS(ctx, phone, messaging.VerificationSMS(code)); err != nil {
+			return "", fmt.Errorf("deliver otp: %w", err)
+		}
+	}
 	return code, nil
 }
 

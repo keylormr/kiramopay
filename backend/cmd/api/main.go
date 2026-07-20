@@ -33,6 +33,7 @@ import (
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/loyalty"
 	"github.com/kiramopay/backend/internal/marketplace"
+	"github.com/kiramopay/backend/internal/messaging"
 	"github.com/kiramopay/backend/internal/mfa"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/notification"
@@ -159,18 +160,6 @@ func main() {
 	// ── Ledger engine ────────────────────────────────────────────────────
 	ledgerEngine := ledger.NewEngine(pool, logger)
 
-	// ── MFA service ──────────────────────────────────────────────────────
-	mfaSvc := mfa.NewService(pool, &mfa.Config{
-		ThresholdCRCMinor: 10_000_000, // 100,000 CRC
-		ThresholdUSDMinor: 20_000,     // 200 USD
-		VerifyWindow:      5 * time.Minute,
-		// Authenticator secrets are encrypted at rest with a key derived from
-		// JWT_SECRET. The domain prefix keeps this AES key distinct from the
-		// webhook-secret key and from the JWT signing secret (key separation),
-		// so analysis of one ciphertext domain never reveals another's key.
-		TOTPEncryptionKey: []byte("kiramopay-totp-secret\x00" + cfg.JWT.Secret),
-	})
-
 	// ── Repositories ─────────────────────────────────────────────────────
 	userRepo := user.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
@@ -194,6 +183,42 @@ func main() {
 	recurringRepo := recurring.NewRepository(pool)
 	savingsRepo := savings.NewRepository(pool)
 
+	// ── Messaging (SMS / email delivery) ─────────────────────────────────
+	// Real OTP and password-reset delivery. Each sender is nil until its provider
+	// is configured (SMS_PROVIDER/TELNYX_* for SMS, EMAIL_PROVIDER/SES_* for
+	// email), in which case the flow falls back to the dev-only secret echo —
+	// same no-op gating as the assistant and web push.
+	msgCfg := messaging.LoadConfig()
+	smsSender := messaging.NewSMSSender(msgCfg.SMS)
+	emailSender := messaging.NewEmailSender(msgCfg.Email)
+	// Fail closed on a lockout misconfiguration: requiring phone verification with
+	// no SMS provider means nobody could ever obtain a registration code.
+	if cfg.Server.RequirePhoneVerification && smsSender == nil {
+		log.Fatal("REQUIRE_PHONE_VERIFICATION is on but no SMS provider is configured (set SMS_PROVIDER=telnyx + TELNYX_API_KEY + TELNYX_FROM)")
+	}
+
+	// ── MFA service ──────────────────────────────────────────────────────
+	mfaSvc := mfa.NewService(pool, &mfa.Config{
+		ThresholdCRCMinor: 10_000_000, // 100,000 CRC
+		ThresholdUSDMinor: 20_000,     // 200 USD
+		VerifyWindow:      5 * time.Minute,
+		// Authenticator secrets are encrypted at rest with a key derived from
+		// JWT_SECRET. The domain prefix keeps this AES key distinct from the
+		// webhook-secret key and from the JWT signing secret (key separation),
+		// so analysis of one ciphertext domain never reveals another's key.
+		TOTPEncryptionKey: []byte("kiramopay-totp-secret\x00" + cfg.JWT.Secret),
+		// Deliver the step-up code by SMS when a provider is configured; the phone
+		// is resolved from the encrypted user record on demand.
+		SMS: smsSender,
+		PhoneLookup: func(ctx context.Context, userID string) (string, error) {
+			u, err := userRepo.FindByID(ctx, userID)
+			if err != nil {
+				return "", err
+			}
+			return u.Phone, nil
+		},
+	})
+
 	// ── Services ─────────────────────────────────────────────────────────
 	kycService := kyc.NewService(kycRepo, &kyc.Options{
 		AuditLogger: auditLogger,
@@ -210,6 +235,9 @@ func main() {
 		IdleTimeout:              cfg.JWT.IdleTimeout,
 		AbsoluteTimeout:          cfg.JWT.RefreshDuration,
 		RequirePhoneVerification: cfg.Server.RequirePhoneVerification,
+		SMSSender:                smsSender,
+		EmailSender:              emailSender,
+		PublicAppURL:             msgCfg.PublicAppURL,
 	})
 	userService := user.NewService(userRepo)
 	walletService := wallet.NewService(walletRepo)

@@ -19,6 +19,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kiramopay/backend/internal/messaging"
 )
 
 // Service is the MFA orchestrator: issue + verify challenges, enforce
@@ -29,7 +31,15 @@ type Service struct {
 	thresholdUSD int64
 	verifyWindow time.Duration
 	totpAEAD     cipher.AEAD // nil if no encryption key configured → TOTP disabled
+	// sms delivers the step-up code; phoneLookup resolves the user's phone. Both
+	// nil unless an SMS provider is wired, in which case IssueChallenge sends the
+	// code and the handler no longer echoes it (except in dev).
+	sms         messaging.SMSSender
+	phoneLookup PhoneLookup
 }
+
+// PhoneLookup resolves a user's E.164 phone for step-up code delivery.
+type PhoneLookup func(ctx context.Context, userID string) (string, error)
 
 // Config knobs.
 type Config struct {
@@ -40,6 +50,10 @@ type Config struct {
 	// value works (it is hashed to a 32-byte AES-256 key); derive it from
 	// JWT_SECRET in production. Empty disables TOTP enrollment.
 	TOTPEncryptionKey []byte
+	// SMS delivers the step-up code; PhoneLookup resolves the user's phone. Both
+	// optional: leave nil to keep the dev-echo behavior (no SMS provider).
+	SMS         messaging.SMSSender
+	PhoneLookup PhoneLookup
 }
 
 func NewService(db *pgxpool.Pool, cfg *Config) *Service {
@@ -60,6 +74,8 @@ func NewService(db *pgxpool.Pool, cfg *Config) *Service {
 		thresholdCRC: cfg.ThresholdCRCMinor,
 		thresholdUSD: cfg.ThresholdUSDMinor,
 		verifyWindow: cfg.VerifyWindow,
+		sms:          cfg.SMS,
+		phoneLookup:  cfg.PhoneLookup,
 	}
 	if len(cfg.TOTPEncryptionKey) > 0 {
 		key := sha256.Sum256(cfg.TOTPEncryptionKey)
@@ -139,6 +155,21 @@ func (s *Service) IssueChallenge(ctx context.Context, userID, purpose string, me
 	)
 	if err != nil {
 		return "", fmt.Errorf("insert challenge: %w", err)
+	}
+	// Deliver the code by SMS when a provider is wired. Without one the handler
+	// echoes it in dev only. A delivery failure is surfaced so the UI can prompt a
+	// retry rather than wait for a code that never arrives.
+	if s.sms != nil && s.phoneLookup != nil {
+		phone, perr := s.phoneLookup(ctx, userID)
+		if perr != nil {
+			return "", fmt.Errorf("resolve phone: %w", perr)
+		}
+		if phone == "" {
+			return "", fmt.Errorf("no phone on file for step-up delivery")
+		}
+		if serr := s.sms.SendSMS(ctx, phone, messaging.StepUpSMS(code)); serr != nil {
+			return "", fmt.Errorf("deliver code: %w", serr)
+		}
 	}
 	return code, nil
 }
