@@ -3,6 +3,7 @@ package qrpayment
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -559,4 +560,89 @@ func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID s
 		return fmt.Errorf("catalog item not found")
 	}
 	return nil
+}
+
+// ── Reports (phase 4) ────────────────────────────────────────────────────────
+
+// reportFilter is the shared WHERE of every report query: the shop's completed
+// sales since a UTC instant. Every column is qualified with the `p` alias —
+// the breakdown queries join tables that also have created_at/status columns.
+const reportFilter = `p.merchant_id = $1::uuid AND p.status = 'completed' AND p.created_at >= $2`
+
+// ReportDaily buckets the shop's sales per day. tzOffsetMin is the CLIENT's
+// offset in minutes WEST of UTC (JS getTimezoneOffset(): Costa Rica = 360), so
+// subtracting it re-expresses each instant in the client's local day.
+func (r *Repository) ReportDaily(ctx context.Context, merchantID string, since time.Time, tzOffsetMin int) ([]ReportDay, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT ((p.created_at - make_interval(mins => $3))::date)::text,
+		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
+		   FROM qr_payments p
+		  WHERE `+reportFilter+`
+		  GROUP BY 1 ORDER BY 1 ASC`,
+		merchantID, since, tzOffsetMin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ReportDay
+	for rows.Next() {
+		var d ReportDay
+		if err := rows.Scan(&d.Date, &d.Gross, &d.Fee, &d.Count); err != nil {
+			return nil, err
+		}
+		d.Net = d.Gross - d.Fee
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ReportByLocation aggregates the shop's sales per location, biggest first.
+// Sales with no location fall into one bucket with an empty key.
+func (r *Repository) ReportByLocation(ctx context.Context, merchantID string, since time.Time) ([]ReportBucket, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT COALESCE(p.location_id::text, ''), COALESCE(l.name, ''),
+		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
+		   FROM qr_payments p
+		   LEFT JOIN merchant_locations l ON l.id = p.location_id
+		  WHERE `+reportFilter+`
+		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
+		merchantID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectBuckets(rows)
+}
+
+// ReportByCollector aggregates the shop's sales per team member who generated
+// the charge, biggest first. Pre-team sales have no collector and fall into
+// one bucket with an empty key.
+func (r *Repository) ReportByCollector(ctx context.Context, merchantID string, since time.Time) ([]ReportBucket, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT COALESCE(p.collected_by::text, ''),
+		        COALESCE(TRIM(u.first_name || ' ' || u.last_name), ''),
+		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
+		   FROM qr_payments p
+		   LEFT JOIN users u ON u.id = p.collected_by
+		  WHERE `+reportFilter+`
+		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
+		merchantID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectBuckets(rows)
+}
+
+func collectBuckets(rows pgx.Rows) ([]ReportBucket, error) {
+	var out []ReportBucket
+	for rows.Next() {
+		var b ReportBucket
+		if err := rows.Scan(&b.Key, &b.Label, &b.Gross, &b.Fee, &b.Count); err != nil {
+			return nil, err
+		}
+		b.Net = b.Gross - b.Fee
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }

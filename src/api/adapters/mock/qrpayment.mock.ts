@@ -6,6 +6,8 @@ import type {
   StaffMember,
   MerchantLocation,
   CatalogItem,
+  BusinessReport,
+  BusinessReportBucket,
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
@@ -195,6 +197,53 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
     const payments = readList<QRPayment>('qrPayments');
     return apiSuccess(payments.filter((p) => p.merchantId === merchantId));
+  }
+
+  async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (days - 1));
+    const sales = readList<QRPayment>('qrPayments').filter(
+      (p) => p.merchantId === merchantId && new Date(p.createdAt) >= since,
+    );
+    const locations = readList<MerchantLocation>('qrLocations');
+
+    const daily = new Map<string, { gross: number; fee: number; count: number }>();
+    const byLoc = new Map<string, { gross: number; fee: number; count: number }>();
+    const byCol = new Map<string, { gross: number; fee: number; count: number }>();
+    const bump = (m: Map<string, { gross: number; fee: number; count: number }>, k: string, p: QRPayment) => {
+      const b = m.get(k) ?? { gross: 0, fee: 0, count: 0 };
+      b.gross += p.amount;
+      b.fee += p.fee;
+      b.count += 1;
+      m.set(k, b);
+    };
+    for (const p of sales) {
+      const d = new Date(p.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      bump(daily, key, p);
+      bump(byLoc, p.locationId ?? '', p);
+      bump(byCol, p.collectedBy ?? '', p);
+    }
+    const toBuckets = (m: Map<string, { gross: number; fee: number; count: number }>, labelOf: (k: string) => string): BusinessReportBucket[] =>
+      [...m.entries()]
+        .map(([key, v]) => ({ key: key || undefined, label: labelOf(key) || undefined, gross: v.gross, fee: v.fee, net: v.gross - v.fee, count: v.count }))
+        .sort((a, b) => b.gross - a.gross);
+    const totals = sales.reduce(
+      (t, p) => ({ ...t, gross: t.gross + p.amount, fee: t.fee + p.fee, count: t.count + 1 }),
+      { gross: 0, fee: 0, net: 0, count: 0 },
+    );
+    totals.net = totals.gross - totals.fee;
+
+    return apiSuccess({
+      days,
+      totals,
+      daily: [...daily.entries()]
+        .map(([date, v]) => ({ date, gross: v.gross, fee: v.fee, net: v.gross - v.fee, count: v.count }))
+        .sort((a, b) => (a.date < b.date ? -1 : 1)),
+      byLocation: toBuckets(byLoc, (k) => locations.find((l) => l.id === k)?.name ?? ''),
+      byCollector: toBuckets(byCol, (k) => (k ? 'Demo' : '')),
+    });
   }
 
   // ── Team (mock: the demo user owns everything, staff are stored locally) ───

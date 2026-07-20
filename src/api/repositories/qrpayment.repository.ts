@@ -53,6 +53,33 @@ export interface CatalogItem {
   sortOrder: number;
 }
 
+/** One day of the sales series, dated in the client's own timezone. */
+export interface BusinessReportDay {
+  date: string; // YYYY-MM-DD
+  gross: number;
+  fee: number;
+  net: number;
+  count: number;
+}
+
+/** Sales aggregated for one location or collector; empty key = unattributed. */
+export interface BusinessReportBucket {
+  key?: string;
+  label?: string;
+  gross: number;
+  fee: number;
+  net: number;
+  count: number;
+}
+
+export interface BusinessReport {
+  days: number;
+  totals: BusinessReportBucket;
+  daily: BusinessReportDay[];
+  byLocation: BusinessReportBucket[];
+  byCollector: BusinessReportBucket[];
+}
+
 export interface QRPaymentCode {
   id: string;
   type: 'merchant_fixed' | 'merchant_dynamic' | 'p2p_request' | 'p2p_receive';
@@ -133,6 +160,8 @@ export interface IQRPaymentRepository {
   getPaymentHistory(): Promise<ApiResponse<QRPayment[]>>;
   /** The shop's sales feed — every charge of the business, visible to the whole team. */
   getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>>;
+  /** Aggregated sales report (daily, by location, by collector). Owner/manager. */
+  getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>>;
   // Team (owner manages; identified by the cedula the employee registered with).
   getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>>;
   addStaff(merchantId: string, cedula: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>>;

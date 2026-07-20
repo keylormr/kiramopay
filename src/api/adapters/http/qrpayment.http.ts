@@ -8,6 +8,9 @@ import type {
   StaffMember,
   MerchantLocation,
   CatalogItem,
+  BusinessReport,
+  BusinessReportBucket,
+  BusinessReportDay,
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
@@ -278,6 +281,34 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments`);
     if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
     return apiSuccess(res.data.map(mapPayment));
+  }
+
+  async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {
+    // The tz offset makes the server bucket days by the USER's calendar.
+    const tz = new Date().getTimezoneOffset();
+    interface BucketDTO { key?: string; label?: string; gross: number; fee: number; net: number; count: number }
+    interface DayDTO { date: string; gross: number; fee: number; net: number; count: number }
+    interface ReportDTO { days: number; totals: BucketDTO; daily: DayDTO[] | null; by_location: BucketDTO[] | null; by_collector: BucketDTO[] | null }
+    const res = await this.client.get<ReportDTO>(`/api/v1/qr/merchants/${merchantId}/report?days=${days}&tz=${tz}`);
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    const bucket = (b: BucketDTO): BusinessReportBucket => ({
+      key: b.key || undefined,
+      label: b.label || undefined,
+      gross: b.gross / 100,
+      fee: b.fee / 100,
+      net: b.net / 100,
+      count: b.count,
+    });
+    const day = (d: DayDTO): BusinessReportDay => ({
+      date: d.date, gross: d.gross / 100, fee: d.fee / 100, net: d.net / 100, count: d.count,
+    });
+    return apiSuccess({
+      days: res.data.days,
+      totals: bucket(res.data.totals),
+      daily: (res.data.daily ?? []).map(day),
+      byLocation: (res.data.by_location ?? []).map(bucket),
+      byCollector: (res.data.by_collector ?? []).map(bucket),
+    });
   }
 
   // ── Team ───────────────────────────────────────────────────────────────────

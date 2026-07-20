@@ -201,6 +201,100 @@ func TestStaff_RevokeAndReactivateAsManager(t *testing.T) {
 	}
 }
 
+// The report is the payoff of the attribution phase 3 records: exact totals,
+// a per-location and a per-collector breakdown (with an "unattributed" bucket
+// each), and it is readable by owner/manager only.
+func TestMerchantReport_AggregationAndPermissions(t *testing.T) {
+	svc, pool, payer, owner := setupQR(t)
+	ctx := context.Background()
+	qr := verifiedMerchantQR(t, svc, owner, 1000)
+	employee := seedEmployee(t, pool, "808880888")
+
+	member, err := svc.AddStaff(ctx, qr.MerchantID, owner, &qrpayment.AddStaffRequest{Cedula: "808880888", Role: "cashier"})
+	if err != nil {
+		t.Fatalf("add cashier: %v", err)
+	}
+	loc, err := svc.CreateLocation(ctx, qr.MerchantID, owner, &qrpayment.LocationRequest{Name: "Sucursal Norte"})
+	if err != nil {
+		t.Fatalf("create location: %v", err)
+	}
+
+	// Sale 1: the cashier charges 20000 at the location (fee 100 @ 0.50%).
+	code1, err := svc.CreateQRCode(ctx, employee, &qrpayment.CreateQRCodeRequest{
+		Type: "merchant_fixed", Amount: 20000, Currency: "CRC", MerchantID: qr.MerchantID, LocationID: loc.ID,
+	})
+	if err != nil {
+		t.Fatalf("cashier qr: %v", err)
+	}
+	if _, err := svc.ScanAndPay(ctx, payer, &qrpayment.ScanQRPaymentRequest{QRData: code1.QRData, Currency: "CRC"}); err != nil {
+		t.Fatalf("pay 1: %v", err)
+	}
+	// Sale 2: the owner charges 10000 with no location (fee 50).
+	code2, err := svc.CreateQRCode(ctx, owner, &qrpayment.CreateQRCodeRequest{
+		Type: "merchant_fixed", Amount: 10000, Currency: "CRC", MerchantID: qr.MerchantID,
+	})
+	if err != nil {
+		t.Fatalf("owner qr: %v", err)
+	}
+	if _, err := svc.ScanAndPay(ctx, payer, &qrpayment.ScanQRPaymentRequest{QRData: code2.QRData, Currency: "CRC"}); err != nil {
+		t.Fatalf("pay 2: %v", err)
+	}
+
+	rep, err := svc.MerchantReport(ctx, qr.MerchantID, owner, 7, 0)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if rep.Totals.Gross != 30000 || rep.Totals.Fee != 150 || rep.Totals.Net != 29850 || rep.Totals.Count != 2 {
+		t.Fatalf("totals = %+v, want gross 30000 / fee 150 / net 29850 / count 2", rep.Totals)
+	}
+	var dGross, dFee int64
+	var dCount int
+	for _, d := range rep.Daily {
+		dGross += d.Gross
+		dFee += d.Fee
+		dCount += d.Count
+	}
+	if len(rep.Daily) == 0 || dGross != 30000 || dFee != 150 || dCount != 2 {
+		t.Fatalf("daily series does not add up to the totals: %+v", rep.Daily)
+	}
+
+	find := func(bs []qrpayment.ReportBucket, key string) *qrpayment.ReportBucket {
+		for i := range bs {
+			if bs[i].Key == key {
+				return &bs[i]
+			}
+		}
+		return nil
+	}
+	if b := find(rep.ByLocation, loc.ID); b == nil || b.Gross != 20000 || b.Count != 1 || b.Label != "Sucursal Norte" {
+		t.Fatalf("location bucket = %+v", b)
+	}
+	if b := find(rep.ByLocation, ""); b == nil || b.Gross != 10000 || b.Count != 1 {
+		t.Fatalf("unattributed location bucket = %+v", b)
+	}
+	if b := find(rep.ByCollector, employee); b == nil || b.Gross != 20000 || b.Label != "Empleado Prueba" {
+		t.Fatalf("cashier bucket = %+v", b)
+	}
+	if b := find(rep.ByCollector, owner); b == nil || b.Gross != 10000 || b.Label != "Admin User" {
+		t.Fatalf("owner bucket = %+v", b)
+	}
+
+	// The numbers of the business are not the cashier's, nor an outsider's.
+	if _, err := svc.MerchantReport(ctx, qr.MerchantID, employee, 7, 0); err == nil {
+		t.Fatal("a cashier must not read the report")
+	}
+	if _, err := svc.MerchantReport(ctx, qr.MerchantID, payer, 7, 0); err == nil {
+		t.Fatal("an outsider must not read the report")
+	}
+	// A manager can.
+	if _, err := svc.UpdateStaff(ctx, qr.MerchantID, owner, member.ID, &qrpayment.UpdateStaffRequest{Role: "manager"}); err != nil {
+		t.Fatalf("promote to manager: %v", err)
+	}
+	if _, err := svc.MerchantReport(ctx, qr.MerchantID, employee, 7, 0); err != nil {
+		t.Fatalf("a manager must read the report: %v", err)
+	}
+}
+
 // Locations and catalog: managers run them, cashiers only read them, and the
 // write path validates its inputs.
 func TestLocationsAndCatalog_Permissions(t *testing.T) {

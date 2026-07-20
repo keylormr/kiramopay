@@ -278,6 +278,18 @@ export type TranslationKeys = {
   business_charge_location: string;
   business_charge_total: string;
   business_cashier_hint: string;
+  business_reports: string;
+  business_report_daily: string;
+  business_report_net: string;
+  business_report_sales: string;
+  business_report_commission: string;
+  business_report_by_location: string;
+  business_report_by_collector: string;
+  business_report_unattributed: string;
+  business_report_empty: string;
+  business_report_range_7: string;
+  business_report_range_30: string;
+  business_report_range_90: string;
   business_sales_today: string;
   business_sales_total: string;
   business_commission_paid: string;
