@@ -59,6 +59,12 @@ export const ProfileSwitcherSheet: React.FC<Props> = ({
               <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md mt-0.5 ${STATUS_COLOR[m.verificationStatus]}`}>
                 {t(`merchant_status_${m.verificationStatus}` as Parameters<typeof t>[0])}
               </span>
+              {/* Businesses the user works FOR (not their own) show their role. */}
+              {m.role !== 'owner' && (
+                <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md mt-0.5 ml-1 bg-[var(--color-primary-soft)] text-[var(--color-primary)]">
+                  {t(m.role === 'manager' ? 'business_role_manager' : 'business_role_cashier')}
+                </span>
+              )}
             </div>
             {activeMerchantId === m.id && <Icons.Check size={18} className="text-[var(--color-primary)] shrink-0" />}
           </button>

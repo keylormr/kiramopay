@@ -4,6 +4,10 @@ import type {
   QRPaymentCode,
   QRPayment,
   MerchantVerificationStatus,
+  MerchantRole,
+  StaffMember,
+  MerchantLocation,
+  CatalogItem,
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
@@ -25,6 +29,7 @@ interface MerchantDTO {
   verification_status?: string;
   rejection_reason?: string;
   commission_bps?: number;
+  role?: string;
 }
 
 function mapMerchant(d: MerchantDTO): QRMerchant {
@@ -41,6 +46,69 @@ function mapMerchant(d: MerchantDTO): QRMerchant {
     verificationStatus: (d.verification_status as MerchantVerificationStatus) ?? 'pending',
     rejectionReason: d.rejection_reason || undefined,
     commissionBps: d.commission_bps ?? 0,
+    // Endpoints that return a single merchant (register/update/admin) are all
+    // owner or admin flows, so owner is the right default when absent.
+    role: (d.role as MerchantRole) || 'owner',
+  };
+}
+
+interface StaffDTO {
+  id: string;
+  merchant_id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  status: string;
+  location_id?: string;
+  created_at: string;
+}
+
+function mapStaff(d: StaffDTO): StaffMember {
+  return {
+    id: d.id,
+    merchantId: d.merchant_id,
+    userId: d.user_id,
+    firstName: d.first_name,
+    lastName: d.last_name,
+    role: d.role === 'manager' ? 'manager' : 'cashier',
+    status: d.status === 'revoked' ? 'revoked' : 'active',
+    locationId: d.location_id || undefined,
+    createdAt: d.created_at,
+  };
+}
+
+interface LocationDTO {
+  id: string;
+  merchant_id: string;
+  name: string;
+  address: string;
+  active: boolean;
+}
+
+function mapLocation(d: LocationDTO): MerchantLocation {
+  return { id: d.id, merchantId: d.merchant_id, name: d.name, address: d.address, active: d.active };
+}
+
+interface CatalogItemDTO {
+  id: string;
+  merchant_id: string;
+  name: string;
+  price_minor: number;
+  currency: string;
+  active: boolean;
+  sort_order: number;
+}
+
+function mapCatalogItem(d: CatalogItemDTO): CatalogItem {
+  return {
+    id: d.id,
+    merchantId: d.merchant_id,
+    name: d.name,
+    price: d.price_minor / 100, // minor -> major
+    currency: d.currency,
+    active: d.active,
+    sortOrder: d.sort_order,
   };
 }
 
@@ -50,6 +118,8 @@ interface PaymentDTO {
   payer_id: string;
   receiver_id: string;
   merchant_id: string;
+  location_id?: string;
+  collected_by?: string;
   amount: number;
   fee?: number;
   currency: string;
@@ -65,6 +135,8 @@ function mapPayment(d: PaymentDTO): QRPayment {
     payerId: d.payer_id,
     receiverId: d.receiver_id,
     merchantId: d.merchant_id || undefined,
+    locationId: d.location_id || undefined,
+    collectedBy: d.collected_by || undefined,
     amount: d.amount / 100,
     fee: (d.fee ?? 0) / 100,
     currency: d.currency,
@@ -85,6 +157,7 @@ interface QRCodeDTO {
   used: boolean;
   expires_at: string;
   merchant_id?: string;
+  location_id?: string;
 }
 
 function mapCode(d: QRCodeDTO): QRPaymentCode {
@@ -99,6 +172,7 @@ function mapCode(d: QRCodeDTO): QRPaymentCode {
     used: d.used,
     expiresAt: d.expires_at || undefined,
     merchantId: d.merchant_id || undefined,
+    locationId: d.location_id || undefined,
   };
 }
 
@@ -170,6 +244,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       note: request.note,
       single_use: request.singleUse,
       merchant_id: request.merchantId,
+      location_id: request.locationId,
     });
 
     if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
@@ -197,6 +272,112 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.get<PaymentDTO[]>('/api/v1/qr/history');
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch history');
     return apiSuccess(res.data.map(mapPayment));
+  }
+
+  async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
+    const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments`);
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.map(mapPayment));
+  }
+
+  // ── Team ───────────────────────────────────────────────────────────────────
+
+  async getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>> {
+    const res = await this.client.get<StaffDTO[]>(`/api/v1/qr/merchants/${merchantId}/staff`);
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.map(mapStaff));
+  }
+
+  async addStaff(merchantId: string, cedula: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>> {
+    const res = await this.client.post<StaffDTO>(`/api/v1/qr/merchants/${merchantId}/staff`, {
+      cedula, role, location_id: locationId,
+    });
+    if (!res.success || !res.data) return apiError('ADD_STAFF_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapStaff(res.data));
+  }
+
+  async updateStaff(merchantId: string, staffId: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>> {
+    const res = await this.client.put<StaffDTO>(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`, {
+      role, location_id: locationId,
+    });
+    if (!res.success || !res.data) return apiError('UPDATE_STAFF_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapStaff(res.data));
+  }
+
+  async revokeStaff(merchantId: string, staffId: string): Promise<ApiResponse<void>> {
+    const res = await this.client.del(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`);
+    if (!res.success) return apiError('REVOKE_STAFF_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(undefined as unknown as void);
+  }
+
+  // ── Locations ──────────────────────────────────────────────────────────────
+
+  async getLocations(merchantId: string): Promise<ApiResponse<MerchantLocation[]>> {
+    const res = await this.client.get<LocationDTO[]>(`/api/v1/qr/merchants/${merchantId}/locations`);
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.map(mapLocation));
+  }
+
+  async createLocation(merchantId: string, name: string, address: string): Promise<ApiResponse<MerchantLocation>> {
+    const res = await this.client.post<LocationDTO>(`/api/v1/qr/merchants/${merchantId}/locations`, { name, address });
+    if (!res.success || !res.data) return apiError('CREATE_LOCATION_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapLocation(res.data));
+  }
+
+  async updateLocation(
+    merchantId: string,
+    locationId: string,
+    patch: { name?: string; address?: string; active?: boolean },
+  ): Promise<ApiResponse<MerchantLocation>> {
+    const res = await this.client.put<LocationDTO>(`/api/v1/qr/merchants/${merchantId}/locations/${locationId}`, {
+      name: patch.name ?? '',
+      address: patch.address ?? '',
+      active: patch.active,
+    });
+    if (!res.success || !res.data) return apiError('UPDATE_LOCATION_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapLocation(res.data));
+  }
+
+  // ── Catalog ────────────────────────────────────────────────────────────────
+
+  async getCatalog(merchantId: string): Promise<ApiResponse<CatalogItem[]>> {
+    const res = await this.client.get<CatalogItemDTO[]>(`/api/v1/qr/merchants/${merchantId}/catalog`);
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.map(mapCatalogItem));
+  }
+
+  async createCatalogItem(
+    merchantId: string,
+    item: { name: string; price: number; currency?: string },
+  ): Promise<ApiResponse<CatalogItem>> {
+    const res = await this.client.post<CatalogItemDTO>(`/api/v1/qr/merchants/${merchantId}/catalog`, {
+      name: item.name,
+      price_minor: Math.round(item.price * 100), // major -> minor
+      currency: item.currency,
+    });
+    if (!res.success || !res.data) return apiError('CREATE_ITEM_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapCatalogItem(res.data));
+  }
+
+  async updateCatalogItem(
+    merchantId: string,
+    itemId: string,
+    patch: { name?: string; price?: number; active?: boolean; sortOrder?: number },
+  ): Promise<ApiResponse<CatalogItem>> {
+    const res = await this.client.put<CatalogItemDTO>(`/api/v1/qr/merchants/${merchantId}/catalog/${itemId}`, {
+      name: patch.name ?? '',
+      price_minor: patch.price !== undefined ? Math.round(patch.price * 100) : 0,
+      active: patch.active,
+      sort_order: patch.sortOrder,
+    });
+    if (!res.success || !res.data) return apiError('UPDATE_ITEM_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapCatalogItem(res.data));
+  }
+
+  async deleteCatalogItem(merchantId: string, itemId: string): Promise<ApiResponse<void>> {
+    const res = await this.client.del(`/api/v1/qr/merchants/${merchantId}/catalog/${itemId}`);
+    if (!res.success) return apiError('DELETE_ITEM_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(undefined as unknown as void);
   }
 
   // ── Admin ──────────────────────────────────────────────────────────────────
