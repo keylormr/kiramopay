@@ -43,14 +43,13 @@ export function useBusinessData(): BusinessData {
       if (!mRes.success) setError(mRes.error?.message || '');
 
       if (activeMerchantId) {
-        const pRes = await api.getPaymentHistory();
+        // The MERCHANT-scoped feed: every sale of the shop, no matter which
+        // team member generated the charge. The user-scoped history would
+        // miss the sales a cashier collected.
+        const pRes = await api.getMerchantPayments(activeMerchantId);
         if (cancelled) return;
         if (pRes.success && pRes.data) {
-          setPayments(
-            pRes.data
-              .filter((p) => p.merchantId === activeMerchantId)
-              .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-          );
+          setPayments([...pRes.data].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
         }
       } else {
         setPayments([]);

@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
+import { BusinessTeamSheet } from './BusinessTeamSheet';
+import { BusinessLocationsSheet } from './BusinessLocationsSheet';
+import { BusinessCatalogSheet } from './BusinessCatalogSheet';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
@@ -30,8 +34,17 @@ interface Props {
 
 export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfile, onBackToPersonal, onUpdated }) => {
   const { t } = useLanguage();
+  const { state } = useApp();
+  const symbol = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.symbol ?? '₡';
   const cat = t(`merchant_cat_${merchant.category}` as Parameters<typeof t>[0]);
+  // What this screen offers depends on the caller's role: the owner manages
+  // everything; a manager runs locations/catalog; a cashier only reads.
+  const isOwner = merchant.role === 'owner';
+  const canManage = isOwner || merchant.role === 'manager';
 
+  const [showTeam, setShowTeam] = useState(false);
+  const [showLocations, setShowLocations] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [name, setName] = useState(merchant.name);
   const [category, setCategory] = useState<string>(merchant.category);
@@ -108,16 +121,37 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       <p className="text-xs uv-text-muted px-1">{t('business_commission_note')}</p>
 
       <div className="space-y-2.5">
-        <Button onClick={openEdit} fullWidth leftIcon={<Icons.Edit size={18} />}>
-          {t('business_edit')}
-        </Button>
-        <Button variant="secondary" onClick={onSwitchProfile} fullWidth leftIcon={<Icons.Users size={18} />}>
+        {isOwner && (
+          <Button onClick={openEdit} fullWidth leftIcon={<Icons.Edit size={18} />}>
+            {t('business_edit')}
+          </Button>
+        )}
+        {isOwner && (
+          <Button variant="secondary" onClick={() => setShowTeam(true)} fullWidth leftIcon={<Icons.Users size={18} />}>
+            {t('business_team')}
+          </Button>
+        )}
+        {canManage && (
+          <Button variant="secondary" onClick={() => setShowLocations(true)} fullWidth leftIcon={<Icons.MapPin size={18} />}>
+            {t('business_locations')}
+          </Button>
+        )}
+        {canManage && (
+          <Button variant="secondary" onClick={() => setShowCatalog(true)} fullWidth leftIcon={<Icons.Tag size={18} />}>
+            {t('business_catalog')}
+          </Button>
+        )}
+        <Button variant="secondary" onClick={onSwitchProfile} fullWidth leftIcon={<Icons.RefreshCw size={18} />}>
           {t('business_switch')}
         </Button>
         <Button variant="secondary" onClick={onBackToPersonal} fullWidth leftIcon={<Icons.User size={18} />}>
           {t('business_back_to_personal')}
         </Button>
       </div>
+
+      <BusinessTeamSheet isOpen={showTeam} onClose={() => setShowTeam(false)} merchantId={merchant.id} />
+      <BusinessLocationsSheet isOpen={showLocations} onClose={() => setShowLocations(false)} merchantId={merchant.id} />
+      <BusinessCatalogSheet isOpen={showCatalog} onClose={() => setShowCatalog(false)} merchantId={merchant.id} currencySymbol={symbol} />
 
       {/* Edit sheet */}
       <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title={t('business_edit')}>

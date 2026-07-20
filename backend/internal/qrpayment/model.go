@@ -27,6 +27,10 @@ type Merchant struct {
 	// (50 = 0.50%). Charged on each merchant QR payment in ScanAndPay.
 	CommissionBps int       `json:"commission_bps"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Role is how the REQUESTING user relates to this merchant (owner, manager
+	// or cashier). Filled per-caller by the service, never persisted.
+	Role string `json:"role,omitempty"`
 }
 
 // ── QR Payment Code ──────────────────────────────────────────────────────────
@@ -34,10 +38,11 @@ type Merchant struct {
 type QRPaymentCode struct {
 	ID         string     `json:"id"`
 	CreatorID  string     `json:"creator_id"`
-	Type       string     `json:"type"` // merchant_fixed, merchant_dynamic, p2p_request, p2p_receive
+	Type       string     `json:"type"`             // merchant_fixed, merchant_dynamic, p2p_request, p2p_receive
 	Amount     int64      `json:"amount,omitempty"` // centimos, 0 = payer enters amount
 	Currency   string     `json:"currency"`
 	MerchantID string     `json:"merchant_id,omitempty"`
+	LocationID string     `json:"location_id,omitempty"` // which shop location charges with it
 	Note       string     `json:"note,omitempty"`
 	QRData     string     `json:"qr_data"` // encoded payload
 	SingleUse  bool       `json:"single_use"`
@@ -54,8 +59,10 @@ type QRPaymentRecord struct {
 	PayerID     string     `json:"payer_id"`
 	ReceiverID  string     `json:"receiver_id"`
 	MerchantID  string     `json:"merchant_id,omitempty"`
-	Amount      int64      `json:"amount"`         // centimos, gross paid by payer
-	Fee         int64      `json:"fee"`            // centimos, merchant commission (0 for P2P)
+	LocationID  string     `json:"location_id,omitempty"`  // shop location the QR charged for
+	CollectedBy string     `json:"collected_by,omitempty"` // owner/staff user who generated the charge
+	Amount      int64      `json:"amount"`                 // centimos, gross paid by payer
+	Fee         int64      `json:"fee"`                    // centimos, merchant commission (0 for P2P)
 	Currency    string     `json:"currency"`
 	Status      string     `json:"status"` // pending, completed, failed, refunded
 	Note        string     `json:"note,omitempty"`
@@ -82,6 +89,79 @@ type CreateQRCodeRequest struct {
 	Note       string `json:"note,omitempty"`
 	SingleUse  bool   `json:"single_use"`
 	MerchantID string `json:"merchant_id,omitempty"` // required for merchant_* types
+	LocationID string `json:"location_id,omitempty"` // optional shop location for merchant_* types
+}
+
+// ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
+
+// Roles a user can hold on a merchant. Owner is implicit (qr_merchants.user_id
+// — never a merchant_staff row); staff rows are cashier or manager.
+const (
+	RoleOwner   = "owner"
+	RoleManager = "manager"
+	RoleCashier = "cashier"
+)
+
+type StaffMember struct {
+	ID         string     `json:"id"`
+	MerchantID string     `json:"merchant_id"`
+	UserID     string     `json:"user_id"`
+	FirstName  string     `json:"first_name"`
+	LastName   string     `json:"last_name"`
+	Role       string     `json:"role"`   // cashier, manager
+	Status     string     `json:"status"` // active, revoked
+	LocationID string     `json:"location_id,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+type Location struct {
+	ID         string    `json:"id"`
+	MerchantID string    `json:"merchant_id"`
+	Name       string    `json:"name"`
+	Address    string    `json:"address"`
+	Active     bool      `json:"active"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type CatalogItem struct {
+	ID         string    `json:"id"`
+	MerchantID string    `json:"merchant_id"`
+	Name       string    `json:"name"`
+	PriceMinor int64     `json:"price_minor"` // centimos
+	Currency   string    `json:"currency"`
+	Active     bool      `json:"active"`
+	SortOrder  int       `json:"sort_order"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// AddStaffRequest identifies the employee by cedula: the owner types the same
+// id the person registered with, so there is no free-form user search.
+type AddStaffRequest struct {
+	Cedula     string `json:"cedula"`
+	Role       string `json:"role"`
+	LocationID string `json:"location_id,omitempty"`
+}
+
+type UpdateStaffRequest struct {
+	Role       string `json:"role"`
+	LocationID string `json:"location_id,omitempty"`
+}
+
+type LocationRequest struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	// Active only applies on update; nil keeps the current value.
+	Active *bool `json:"active,omitempty"`
+}
+
+type CatalogItemRequest struct {
+	Name       string `json:"name"`
+	PriceMinor int64  `json:"price_minor"`
+	Currency   string `json:"currency"`
+	// Active/SortOrder only apply on update; nil keeps the current value.
+	Active    *bool `json:"active,omitempty"`
+	SortOrder *int  `json:"sort_order,omitempty"`
 }
 
 // VerificationDecisionRequest is the admin reject payload (reason is ignored on

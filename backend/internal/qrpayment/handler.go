@@ -103,6 +103,187 @@ func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, merchants)
 }
 
+// ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
+
+// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments. The shop's
+// sales feed, visible to the whole team (owner, manager, cashier).
+func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	payments, err := h.service.MerchantPayments(r.Context(), merchantID, userID, 50)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	if payments == nil {
+		payments = []QRPaymentRecord{}
+	}
+	response.JSON(w, http.StatusOK, payments)
+}
+
+func (h *Handler) ListStaff(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	staff, err := h.service.ListStaff(r.Context(), merchantID, userID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	if staff == nil {
+		staff = []StaffMember{}
+	}
+	response.JSON(w, http.StatusOK, staff)
+}
+
+func (h *Handler) AddStaff(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	var req AddStaffRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	member, err := h.service.AddStaff(r.Context(), merchantID, userID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "ADD_STAFF_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusCreated, member)
+}
+
+func (h *Handler) UpdateStaff(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	staffID := chi.URLParam(r, "staffID")
+	var req UpdateStaffRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	member, err := h.service.UpdateStaff(r.Context(), merchantID, userID, staffID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "UPDATE_STAFF_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, member)
+}
+
+func (h *Handler) RevokeStaff(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	staffID := chi.URLParam(r, "staffID")
+	if err := h.service.RevokeStaff(r.Context(), merchantID, userID, staffID); err != nil {
+		response.Error(w, http.StatusBadRequest, "REVOKE_STAFF_FAILED", err.Error())
+		return
+	}
+	response.NoContent(w)
+}
+
+func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	locations, err := h.service.ListLocations(r.Context(), merchantID, userID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	if locations == nil {
+		locations = []Location{}
+	}
+	response.JSON(w, http.StatusOK, locations)
+}
+
+func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	var req LocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	loc, err := h.service.CreateLocation(r.Context(), merchantID, userID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "CREATE_LOCATION_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusCreated, loc)
+}
+
+func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	locationID := chi.URLParam(r, "locationID")
+	var req LocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	loc, err := h.service.UpdateLocation(r.Context(), merchantID, userID, locationID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "UPDATE_LOCATION_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, loc)
+}
+
+func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	items, err := h.service.ListCatalog(r.Context(), merchantID, userID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	if items == nil {
+		items = []CatalogItem{}
+	}
+	response.JSON(w, http.StatusOK, items)
+}
+
+func (h *Handler) CreateCatalogItem(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	var req CatalogItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	item, err := h.service.CreateCatalogItem(r.Context(), merchantID, userID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "CREATE_ITEM_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) UpdateCatalogItem(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	itemID := chi.URLParam(r, "itemID")
+	var req CatalogItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	item, err := h.service.UpdateCatalogItem(r.Context(), merchantID, userID, itemID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "UPDATE_ITEM_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) DeleteCatalogItem(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	itemID := chi.URLParam(r, "itemID")
+	if err := h.service.DeleteCatalogItem(r.Context(), merchantID, userID, itemID); err != nil {
+		response.Error(w, http.StatusBadRequest, "DELETE_ITEM_FAILED", err.Error())
+		return
+	}
+	response.NoContent(w)
+}
+
 // ── Admin: merchant verification ─────────────────────────────────────────────
 
 func (h *Handler) ListPendingMerchants(w http.ResponseWriter, r *http.Request) {

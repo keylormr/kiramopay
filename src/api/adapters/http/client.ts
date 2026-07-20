@@ -158,6 +158,10 @@ export class HttpClient {
     return this.request<T>('PATCH', path, body, auth);
   }
 
+  async put<T>(path: string, body?: unknown, auth = true): Promise<ApiResponse<T>> {
+    return this.request<T>('PUT', path, body, auth);
+  }
+
   async del<T>(path: string, auth = true): Promise<ApiResponse<T>> {
     return this.request<T>('DELETE', path, undefined, auth);
   }
