@@ -156,7 +156,10 @@ func (s *Service) MerchantBalance(ctx context.Context, merchantID, currency stri
 // engine updates the user's balance cache from the credit leg.
 //
 // The caller supplies idempotencyKey so a retried or double-tapped withdrawal
-// settles once.
+// settles once. The replay lookup runs BEFORE any balance read: a retry of a
+// withdrawal that already drained the balance must return the original result,
+// not "insufficient". The balance pre-check here is a fast-fail courtesy only —
+// the race-free enforcement is the ledger's in-tx negativity check.
 func (s *Service) WithdrawMerchantToUser(
 	ctx context.Context, merchantID, userID, currency string, amount int64, idempotencyKey string,
 ) (*TransactionRecord, error) {
@@ -173,6 +176,13 @@ func (s *Service) WithdrawMerchantToUser(
 	if existing, _ := s.repo.FindByIdempotencyKey(ctx, userID, idempotencyKey); existing != nil {
 		return existing, nil
 	}
+	bal, err := s.ledger.MerchantBalance(ctx, merchantID, currency)
+	if err != nil {
+		return nil, fmt.Errorf("read merchant balance: %w", err)
+	}
+	if bal < amount {
+		return nil, ErrInsufficientMerchantBalance
+	}
 
 	rec, err := s.repo.Create(ctx, userID, w.ID, &CreateTransactionRequest{
 		Type:             TypeMerchantWithdrawal,
@@ -183,7 +193,11 @@ func (s *Service) WithdrawMerchantToUser(
 		Description:      "Retiro del saldo del negocio",
 		IdempotencyKey:   idempotencyKey,
 	})
-	if err != nil && !errors.Is(err, ErrDuplicate) {
+	if err != nil {
+		if errors.Is(err, ErrDuplicate) {
+			// A concurrent retry won the insert; it owns the posting.
+			return rec, nil
+		}
 		return nil, fmt.Errorf("create withdrawal tx: %w", err)
 	}
 
@@ -199,7 +213,14 @@ func (s *Service) WithdrawMerchantToUser(
 		Metadata: map[string]any{"merchant_id": merchantID, "to_user": userID},
 	})
 	if err != nil && !errors.Is(err, ledger.ErrIdempotent) {
+		_ = s.repo.UpdateStatus(ctx, rec.ID, StatusFailed)
+		if errors.Is(err, ledger.ErrInsufficientFunds) {
+			return nil, ErrInsufficientMerchantBalance
+		}
 		return nil, fmt.Errorf("post withdrawal: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, rec.ID, StatusCompleted); err != nil {
+		return nil, fmt.Errorf("mark completed: %w", err)
 	}
 	return rec, nil
 }
@@ -428,6 +449,11 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 
 // ErrMFARequired indicates the user must verify MFA before this tx proceeds.
 var ErrMFARequired = errors.New("mfa challenge required")
+
+// ErrInsufficientMerchantBalance rejects a withdrawal larger than the shop's
+// journal-derived balance. The exact string reaches the client as the 400
+// message, so keep it stable.
+var ErrInsufficientMerchantBalance = errors.New("insufficient business balance")
 
 // RecordHistory inserts a COMPLETED history row for a movement whose money
 // already moved through the ledger elsewhere (e.g. escrow fund/release/refund

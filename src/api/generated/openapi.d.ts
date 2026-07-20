@@ -4597,13 +4597,18 @@ export interface components {
         };
         SinpeSendResponse: {
             transaction_id: string;
-            /** @example completed */
+            /**
+             * @description "completed" for internal transfers (credited to a KiramoPay wallet), "pending" for external transfers awaiting inter-bank settlement.
+             * @example completed
+             */
             status: string;
             /** @description Amount sent, in centimos */
             amount: number;
             /** @description Fee charged, in centimos */
             fee: number;
             recipient: string;
+            /** @description True when the recipient is a KiramoPay user and the funds were credited to their wallet. False for external transfers, whose delivery to other banks is not yet enabled. */
+            internal: boolean;
         };
         PayBillRequest: {
             /** @example ICE */

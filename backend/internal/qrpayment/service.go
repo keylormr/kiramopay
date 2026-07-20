@@ -326,13 +326,9 @@ func (s *Service) WithdrawToOwner(
 	if err != nil || m.UserID != userID {
 		return fmt.Errorf("merchant not found")
 	}
-	bal, err := s.tx.MerchantBalance(ctx, merchantID, currency)
-	if err != nil {
-		return fmt.Errorf("read balance: %w", err)
-	}
-	if bal < amount {
-		return fmt.Errorf("insufficient business balance")
-	}
+	// No balance pre-check here: the transaction service replays idempotent
+	// retries first, and the ledger enforces the funds atomically — a read
+	// here would just reintroduce the check-then-post race.
 	_, err = s.tx.WithdrawMerchantToUser(ctx, merchantID, userID, currency, amount, idempotencyKey)
 	return err
 }

@@ -134,10 +134,6 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 	return "", fmt.Errorf("ledger.post exhausted retries: %w", lastErr)
 }
 
-// PostingExists reports whether a posting with the given idempotency key has
-// already been recorded. It lets a caller make a non-idempotent side effect
-// (e.g. a state update paired with a posting) safe against retries by checking
-// before acting. An empty key is never considered to exist.
 // MerchantBalance returns a shop's balance in minor units for one currency,
 // derived straight from the journal (credits minus debits on its account).
 //
@@ -162,6 +158,10 @@ func (e *Engine) MerchantBalance(ctx context.Context, merchantID, currency strin
 	return bal, nil
 }
 
+// PostingExists reports whether a posting with the given idempotency key has
+// already been recorded. It lets a caller make a non-idempotent side effect
+// (e.g. a state update paired with a posting) safe against retries by checking
+// before acting. An empty key is never considered to exist.
 func (e *Engine) PostingExists(ctx context.Context, idempotencyKey string) (bool, error) {
 	if idempotencyKey == "" {
 		return false, nil
@@ -177,6 +177,11 @@ func (e *Engine) PostingExists(ctx context.Context, idempotencyKey string) (bool
 
 // ErrIdempotent indicates the IdempotencyKey collided with an existing posting.
 var ErrIdempotent = errors.New("idempotent: posting already recorded")
+
+// ErrInsufficientFunds indicates the posting would take a journal-derived
+// account (a merchant wallet) below zero. User wallets get the equivalent
+// guarantee from the CHECK constraints on their cached balance row.
+var ErrInsufficientFunds = errors.New("insufficient funds")
 
 // errIdempotencyRace is an internal, retryable signal: a concurrent posting
 // won the idempotency-key race. Retrying lets the top-level lookup return the
@@ -236,6 +241,44 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 		}
 	}
 
+	// Pre-lock the affected merchant account rows too — AFTER the user wallets,
+	// so every posting acquires locks in one global order (users, then
+	// merchants) and cannot deadlock. A merchant balance is derived from the
+	// journal (no cached row with a CHECK), so the negativity check before
+	// commit is only race-free because contending postings queue here first.
+	// Zero rows locked is fine: the account may not exist yet — a first-ever
+	// credit provisions it inside this tx, and a debit against a still-missing
+	// account fails the negativity check anyway.
+	type merchantAccountKey struct{ merchantID, currency string }
+	lockMerchants := make([]merchantAccountKey, 0, len(p.Entries))
+	seenMerchant := make(map[merchantAccountKey]bool, len(p.Entries))
+	for _, en := range p.Entries {
+		if en.Account.MerchantID == "" {
+			continue
+		}
+		k := merchantAccountKey{en.Account.MerchantID, en.Currency}
+		if seenMerchant[k] {
+			continue
+		}
+		seenMerchant[k] = true
+		lockMerchants = append(lockMerchants, k)
+	}
+	sort.Slice(lockMerchants, func(i, j int) bool {
+		if lockMerchants[i].merchantID != lockMerchants[j].merchantID {
+			return lockMerchants[i].merchantID < lockMerchants[j].merchantID
+		}
+		return lockMerchants[i].currency < lockMerchants[j].currency
+	})
+	for _, k := range lockMerchants {
+		if _, err := tx.Exec(ctx,
+			`SELECT 1 FROM ledger_accounts
+			  WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'
+			  FOR UPDATE`, k.merchantID, k.currency,
+		); err != nil {
+			return "", fmt.Errorf("lock merchant account %s/%s: %w", k.merchantID, k.currency, err)
+		}
+	}
+
 	postingID := uuid.New().String()
 	metadataJSON := metadataToJSON(p.Metadata)
 	_, err = tx.Exec(ctx,
@@ -259,6 +302,9 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	// Per-currency balance cache deltas keyed by userID.
 	type cacheKey struct{ userID, currency string }
 	cacheDelta := map[cacheKey]int64{}
+	// Merchant accounts debited by this posting; each one gets a negativity
+	// check before commit.
+	debitedMerchantAccounts := map[string]bool{}
 
 	for _, en := range p.Entries {
 		accountID, isUserWallet, normalBalance, err := e.resolveAccount(ctx, tx, en)
@@ -283,6 +329,9 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 			}
 			cacheDelta[cacheKey{en.Account.UserID, en.Currency}] += signed
 		}
+		if en.Account.MerchantID != "" && en.Side == Debit {
+			debitedMerchantAccounts[accountID] = true
+		}
 	}
 
 	// 3. Apply balance-cache deltas in a DETERMINISTIC order. Go map iteration
@@ -303,6 +352,25 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	for _, k := range keys {
 		if err := applyWalletDelta(ctx, tx, k.userID, k.currency, cacheDelta[k]); err != nil {
 			return "", err
+		}
+	}
+
+	// Merchant accounts have no cached row for a CHECK constraint to guard, so
+	// enforce non-negativity here, inside the posting tx: with the merchant row
+	// locks above serializing contenders, read-sum-decide cannot race. This is
+	// what stops two concurrent withdrawals from overdrawing a shop's balance.
+	for accountID := range debitedMerchantAccounts {
+		var bal int64
+		if err := tx.QueryRow(ctx,
+			`SELECT COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_minor
+			                          ELSE -amount_minor END), 0)
+			   FROM journal_entries WHERE account_id = $1::uuid`,
+			accountID,
+		).Scan(&bal); err != nil {
+			return "", fmt.Errorf("merchant negativity check: %w", err)
+		}
+		if bal < 0 {
+			return "", fmt.Errorf("%w: merchant account balance would be %d", ErrInsufficientFunds, bal)
 		}
 	}
 
