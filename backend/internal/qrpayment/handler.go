@@ -35,6 +35,24 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, merchant)
 }
 
+// UpdateMerchant — PATCH /api/v1/qr/merchants/{id}. Owner-only; a change of
+// legal identity sends the shop back to review (see service.UpdateMerchant).
+func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	var req RegisterMerchantRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, m)
+}
+
 func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchants, err := h.service.GetMerchants(r.Context(), userID)

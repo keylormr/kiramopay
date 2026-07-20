@@ -251,6 +251,47 @@ func (s *Service) GetPaymentHistory(ctx context.Context, userID string) ([]QRPay
 	return s.repo.GetUserPayments(ctx, userID, 50)
 }
 
+// UpdateMerchant lets the OWNER correct their shop's details — the piece the
+// rejection flow was missing ("fix it and resubmit" was impossible before).
+//
+// Identity is not silently editable: if the cedula or legal name changes, the
+// merchant goes back to `pending` even if it was already verified, so a shop
+// can't swap the legal entity behind a verified badge. A rejected merchant
+// returns to `pending` on any edit — that IS the resubmission.
+func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string, req *RegisterMerchantRequest) (*Merchant, error) {
+	current, err := s.repo.GetMerchant(ctx, merchantID)
+	if err != nil {
+		return nil, fmt.Errorf("merchant not found")
+	}
+	if current.UserID != userID {
+		return nil, fmt.Errorf("merchant not found")
+	}
+	if req.Name == "" {
+		return nil, fmt.Errorf("merchant name is required")
+	}
+	if req.Cedula == "" {
+		return nil, fmt.Errorf("cedula is required")
+	}
+	if req.LegalName == "" {
+		return nil, fmt.Errorf("legal name is required")
+	}
+	cedulaType := req.CedulaType
+	if cedulaType == "" {
+		cedulaType = current.CedulaType
+	}
+
+	status := current.VerificationStatus
+	identityChanged := req.Cedula != current.Cedula || req.LegalName != current.LegalName
+	if identityChanged || status == "rejected" {
+		status = "pending"
+	}
+
+	return s.repo.UpdateMerchantProfile(
+		ctx, merchantID, req.Name, req.Description, req.Category,
+		req.Cedula, cedulaType, req.LegalName, status,
+	)
+}
+
 // ── Admin verification ───────────────────────────────────────────────────────
 
 func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {

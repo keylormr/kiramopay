@@ -211,6 +211,8 @@ const en: TranslationKeys = {
   daily_limit: 'Daily limit',
   monthly_limit: 'Monthly limit',
   per_transaction: 'Per transaction',
+  business_edit: 'Edit business details',
+  business_edit_identity_note: 'Changing the cedula or legal name sends the business back for review.',
   business_lookup_searching: 'Checking the public registry...',
   business_lookup_found: 'Found: we filled in the legal name',
   business_lookup_not_found: 'Not in the registry. Type the legal name yourself.',

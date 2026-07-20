@@ -59,6 +59,31 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(readMerchants());
   }
 
+  async updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
+    const merchants = readMerchants();
+    const idx = merchants.findIndex((m) => m.id === merchantId);
+    if (idx === -1) return apiError('NOT_FOUND', 'Merchant not found');
+    const current = merchants[idx];
+    // Mirror the backend rule: changing legal identity returns the shop to review.
+    const identityChanged =
+      request.cedula !== current.cedula || request.legalName !== current.legalName;
+    merchants[idx] = {
+      ...current,
+      name: request.name,
+      description: request.description,
+      category: request.category,
+      cedula: request.cedula,
+      cedulaType: request.cedulaType,
+      legalName: request.legalName,
+      verificationStatus:
+        identityChanged || current.verificationStatus === 'rejected'
+          ? 'pending'
+          : current.verificationStatus,
+    };
+    saveField('qrMerchants', merchants);
+    return apiSuccess(merchants[idx]);
+  }
+
   async createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>> {
     const id = `qr-${Date.now()}`;
     const code: QRPaymentCode = {

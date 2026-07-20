@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
+import { BottomSheet } from '@/components/BottomSheet';
+import { getApiLayer } from '@/api';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
@@ -9,6 +11,8 @@ const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
+
+const CATEGORIES = ['restaurant', 'retail', 'services', 'food_truck', 'market'] as const;
 
 const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="flex justify-between gap-3 px-4 py-3">
@@ -21,11 +25,57 @@ interface Props {
   merchant: QRMerchant;
   onSwitchProfile: () => void;
   onBackToPersonal: () => void;
+  onUpdated: () => void;
 }
 
-export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfile, onBackToPersonal }) => {
+export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfile, onBackToPersonal, onUpdated }) => {
   const { t } = useLanguage();
   const cat = t(`merchant_cat_${merchant.category}` as Parameters<typeof t>[0]);
+
+  const [showEdit, setShowEdit] = useState(false);
+  const [name, setName] = useState(merchant.name);
+  const [category, setCategory] = useState<string>(merchant.category);
+  const [description, setDescription] = useState(merchant.description);
+  const [cedula, setCedula] = useState(merchant.cedula);
+  const [legalName, setLegalName] = useState(merchant.legalName);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const openEdit = () => {
+    setName(merchant.name);
+    setCategory(merchant.category);
+    setDescription(merchant.description);
+    setCedula(merchant.cedula);
+    setLegalName(merchant.legalName);
+    setError('');
+    setShowEdit(true);
+  };
+
+  const save = async () => {
+    const api = getApiLayer().qrPayments;
+    if (!api || saving) return;
+    setSaving(true);
+    setError('');
+    const res = await api.updateMerchant(merchant.id, {
+      name: name.trim(),
+      description: description.trim(),
+      category,
+      cedula: cedula.trim(),
+      cedulaType: merchant.cedulaType,
+      legalName: legalName.trim(),
+    });
+    setSaving(false);
+    if (res.success) {
+      setShowEdit(false);
+      onUpdated();
+    } else {
+      setError(res.error?.message || t('assistant_action_failed'));
+    }
+  };
+
+  const identityChanged = cedula.trim() !== merchant.cedula || legalName.trim() !== merchant.legalName;
+  const field = 'w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]';
+  const label = 'text-sm font-medium uv-text-secondary mb-1.5 block';
 
   return (
     <div className="pb-24 pt-4 px-4 space-y-5">
@@ -58,6 +108,9 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       <p className="text-xs uv-text-muted px-1">{t('business_commission_note')}</p>
 
       <div className="space-y-2.5">
+        <Button onClick={openEdit} fullWidth leftIcon={<Icons.Edit size={18} />}>
+          {t('business_edit')}
+        </Button>
         <Button variant="secondary" onClick={onSwitchProfile} fullWidth leftIcon={<Icons.Users size={18} />}>
           {t('business_switch')}
         </Button>
@@ -65,6 +118,52 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           {t('business_back_to_personal')}
         </Button>
       </div>
+
+      {/* Edit sheet */}
+      <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title={t('business_edit')}>
+        <div className="space-y-4">
+          <div>
+            <label className={label}>{t('merchant_name')}</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+          </div>
+          <div>
+            <label className={label}>{t('merchant_category')}</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>{t(`merchant_cat_${c}` as Parameters<typeof t>[0])}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={label}>{t('merchant_desc')}</label>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className={field} />
+          </div>
+          <div>
+            <label className={label}>{t('merchant_cedula')}</label>
+            <input value={cedula} onChange={(e) => setCedula(e.target.value)} className={field} inputMode="numeric" />
+          </div>
+          <div>
+            <label className={label}>{t('merchant_legal_name')}</label>
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className={field} />
+          </div>
+
+          {/* Editing the legal identity is not silent: it returns the shop to review. */}
+          {identityChanged && merchant.verificationStatus === 'verified' && (
+            <p className="text-xs text-[var(--color-warning)]">{t('business_edit_identity_note')}</p>
+          )}
+          {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+
+          <Button
+            onClick={save}
+            loading={saving}
+            disabled={!name.trim() || !cedula.trim() || !legalName.trim() || saving}
+            size="lg"
+            fullWidth
+          >
+            {saving ? t('processing') : t('save')}
+          </Button>
+        </div>
+      </BottomSheet>
     </div>
   );
 };

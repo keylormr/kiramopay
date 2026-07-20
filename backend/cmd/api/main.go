@@ -611,6 +611,7 @@ func main() {
 			// QR
 			r.Post("/qr/merchant", qrHandler.RegisterMerchant)
 			r.Get("/qr/merchants", qrHandler.GetMerchants)
+			r.Patch("/qr/merchants/{id}", qrHandler.UpdateMerchant)
 			r.Post("/qr/codes", qrHandler.CreateQRCode)
 			r.Get("/qr/codes", qrHandler.GetUserQRCodes)
 			r.Post("/qr/pay", qrHandler.ScanAndPay)

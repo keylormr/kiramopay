@@ -211,6 +211,8 @@ const fr: TranslationKeys = {
   daily_limit: 'Limite quotidienne',
   monthly_limit: 'Limite mensuelle',
   per_transaction: 'Par transaction',
+  business_edit: 'Modifier les infos du commerce',
+  business_edit_identity_note: 'Modifier la cedula ou la raison sociale renvoie le commerce en revision.',
   business_lookup_searching: 'Recherche dans le registre public...',
   business_lookup_found: 'Trouve : nous avons rempli la raison sociale',
   business_lookup_not_found: 'Absent du registre. Saisissez la raison sociale manuellement.',

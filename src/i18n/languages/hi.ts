@@ -211,6 +211,8 @@ const hi: TranslationKeys = {
   daily_limit: 'दैनिक सीमा',
   monthly_limit: 'मासिक सीमा',
   per_transaction: 'प्रति लेनदेन',
+  business_edit: 'व्यवसाय विवरण संपादित करें',
+  business_edit_identity_note: 'सेदुला या कानूनी नाम बदलने पर व्यवसाय फिर से समीक्षा में जाएगा।',
   business_lookup_searching: 'सार्वजनिक रजिस्ट्री जांची जा रही है...',
   business_lookup_found: 'मिल गया: हमने कानूनी नाम भर दिया',
   business_lookup_not_found: 'रजिस्ट्री में नहीं मिला। कानूनी नाम स्वयं लिखें।',

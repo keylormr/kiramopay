@@ -71,6 +71,11 @@ export interface ScanQRPayRequest {
 export interface IQRPaymentRepository {
   registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>>;
   getMerchants(): Promise<ApiResponse<QRMerchant[]>>;
+  /**
+   * Correct the shop's own details. Changing the cedula or legal name sends the
+   * merchant back to review — identity is not editable behind a verified badge.
+   */
+  updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>>;
   createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>>;
   getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>>;
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;

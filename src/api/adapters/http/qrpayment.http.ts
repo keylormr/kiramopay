@@ -105,6 +105,20 @@ function mapCode(d: QRCodeDTO): QRPaymentCode {
 export class HttpQRPaymentRepository implements IQRPaymentRepository {
   constructor(private client: HttpClient) {}
 
+  async updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
+    const res = await this.client.patch<MerchantDTO>(`/api/v1/qr/merchants/${merchantId}`, {
+      name: request.name,
+      description: request.description,
+      category: request.category,
+      cedula: request.cedula,
+      cedula_type: request.cedulaType,
+      legal_name: request.legalName,
+    });
+
+    if (!res.success || !res.data) return apiError('UPDATE_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapMerchant(res.data));
+  }
+
   async registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>('/api/v1/qr/merchant', {
       name: request.name,

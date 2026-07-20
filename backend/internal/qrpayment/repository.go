@@ -100,6 +100,35 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 
 // UpdateCommission sets a merchant's commission rate (admin action) and returns
 // the updated row.
+// UpdateMerchantProfile rewrites the owner-editable fields of a merchant.
+// `status` carries the (possibly re-set) verification status so a change of
+// legal identity can send the merchant back for review in the same statement.
+func (r *Repository) UpdateMerchantProfile(
+	ctx context.Context,
+	merchantID, name, description, category, cedula, cedulaType, legalName, status string,
+) (*Merchant, error) {
+	m, err := scanMerchant(r.db.QueryRow(ctx,
+		`UPDATE qr_merchants
+		    SET name                = $2,
+		        description         = $3,
+		        category            = $4,
+		        cedula              = $5,
+		        cedula_type         = $6,
+		        legal_name          = $7,
+		        verification_status = $8,
+		        rejection_reason    = CASE WHEN $8 = 'pending' THEN '' ELSE rejection_reason END
+		  WHERE id = $1
+		  RETURNING `+merchantCols,
+		merchantID, name, description, category, cedula, cedulaType, legalName, status))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("merchant not found")
+		}
+		return nil, err
+	}
+	return m, nil
+}
+
 func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
 	m, err := scanMerchant(r.db.QueryRow(ctx,
 		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 RETURNING `+merchantCols,

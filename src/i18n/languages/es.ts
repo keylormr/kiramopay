@@ -211,6 +211,8 @@ const es: TranslationKeys = {
   daily_limit: 'Limite diario',
   monthly_limit: 'Limite mensual',
   per_transaction: 'Por transaccion',
+  business_edit: 'Editar datos del negocio',
+  business_edit_identity_note: 'Cambiar la cedula o la razon social envia el negocio nuevamente a revision.',
   business_lookup_searching: 'Buscando en el registro publico...',
   business_lookup_found: 'Encontrado: completamos la razon social',
   business_lookup_not_found: 'No aparece en el registro. Escribi la razon social a mano.',

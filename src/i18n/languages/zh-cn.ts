@@ -212,6 +212,8 @@ const zhCn: TranslationKeys = {
   daily_limit: '每日限额',
   monthly_limit: '每月限额',
   per_transaction: '每笔交易',
+  business_edit: '编辑商家资料',
+  business_edit_identity_note: '修改税号或法定名称会使商家重新进入审核。',
   business_lookup_searching: '正在查询公共登记...',
   business_lookup_found: '已找到：已自动填写法定名称',
   business_lookup_not_found: '登记中未找到，请手动填写法定名称。',

@@ -240,6 +240,8 @@ export type TranslationKeys = {
   daily_limit: string;
   monthly_limit: string;
   per_transaction: string;
+  business_edit: string;
+  business_edit_identity_note: string;
   business_lookup_searching: string;
   business_lookup_found: string;
   business_lookup_not_found: string;

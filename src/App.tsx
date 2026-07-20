@@ -309,6 +309,7 @@ const Layout = () => {
               merchant={activeMerchant}
               onSwitchProfile={() => setShowSwitcher(true)}
               onBackToPersonal={() => setActiveMerchant(null)}
+              onUpdated={reloadBiz}
             />
           );
         default:

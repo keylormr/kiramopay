@@ -211,6 +211,8 @@ const ja: TranslationKeys = {
   daily_limit: '1日の限度額',
   monthly_limit: '月間限度額',
   per_transaction: '1取引あたり',
+  business_edit: 'ビジネス情報を編集',
+  business_edit_identity_note: '納税者番号または法人名を変更すると、再審査になります。',
   business_lookup_searching: '公的登記を照会中...',
   business_lookup_found: '見つかりました：法人名を入力しました',
   business_lookup_not_found: '登記に見つかりません。法人名を手入力してください。',
