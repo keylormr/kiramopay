@@ -59,6 +59,27 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(readMerchants());
   }
 
+  async getMerchantBalance(merchantId: string): Promise<ApiResponse<number>> {
+    // Mock balance = collected minus fees, derived from the stored payments so
+    // it behaves like the real journal-derived figure.
+    const state = getState();
+    const payments: Array<{ merchantId?: string; amount: number; fee: number }> =
+      state?.qrPayments ?? [];
+    const withdrawn: number = state?.merchantWithdrawn?.[merchantId] ?? 0;
+    const collected = payments
+      .filter((p) => p.merchantId === merchantId)
+      .reduce((s, p) => s + (p.amount - p.fee), 0);
+    return apiSuccess(collected - withdrawn);
+  }
+
+  async withdrawMerchant(merchantId: string, amount: number): Promise<ApiResponse<void>> {
+    const state = getState();
+    const withdrawn: Record<string, number> = state?.merchantWithdrawn ?? {};
+    withdrawn[merchantId] = (withdrawn[merchantId] ?? 0) + amount;
+    saveField('merchantWithdrawn', withdrawn);
+    return apiSuccess(undefined as unknown as void);
+  }
+
   async updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
     const merchants = readMerchants();
     const idx = merchants.findIndex((m) => m.id === merchantId);

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/wallet"
@@ -144,9 +145,74 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 }
 
 // CreateTransferRequest carries both legs of an internal transfer.
+// MerchantBalance is the shop's own balance in minor units, derived from the
+// journal (no cache, so it cannot drift).
+func (s *Service) MerchantBalance(ctx context.Context, merchantID, currency string) (int64, error) {
+	return s.ledger.MerchantBalance(ctx, merchantID, currency)
+}
+
+// WithdrawMerchantToUser moves money from a shop's balance into the owner's
+// personal wallet: debit the merchant account, credit the user wallet. The
+// engine updates the user's balance cache from the credit leg.
+//
+// The caller supplies idempotencyKey so a retried or double-tapped withdrawal
+// settles once.
+func (s *Service) WithdrawMerchantToUser(
+	ctx context.Context, merchantID, userID, currency string, amount int64, idempotencyKey string,
+) (*TransactionRecord, error) {
+	if amount <= 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+	w, err := s.walletRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("wallet not found")
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = "mwithdraw:" + uuid.New().String()
+	}
+	if existing, _ := s.repo.FindByIdempotencyKey(ctx, userID, idempotencyKey); existing != nil {
+		return existing, nil
+	}
+
+	rec, err := s.repo.Create(ctx, userID, w.ID, &CreateTransactionRequest{
+		Type:             TypeMerchantWithdrawal,
+		Amount:           amount,
+		Currency:         currency,
+		CounterpartyType: "merchant",
+		CounterpartyName: merchantID,
+		Description:      "Retiro del saldo del negocio",
+		IdempotencyKey:   idempotencyKey,
+	})
+	if err != nil && !errors.Is(err, ErrDuplicate) {
+		return nil, fmt.Errorf("create withdrawal tx: %w", err)
+	}
+
+	_, err = s.ledger.Post(ctx, &ledger.Posting{
+		Description:    fmt.Sprintf("merchant withdrawal %d %s", amount, currency),
+		IdempotencyKey: idempotencyKey,
+		TxID:           rec.ID,
+		CreatedBy:      userID,
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: amount, Currency: currency},
+			{Account: ledger.Account{UserID: userID}, Side: ledger.Credit, AmountMinor: amount, Currency: currency},
+		},
+		Metadata: map[string]any{"merchant_id": merchantID, "to_user": userID},
+	})
+	if err != nil && !errors.Is(err, ledger.ErrIdempotent) {
+		return nil, fmt.Errorf("post withdrawal: %w", err)
+	}
+	return rec, nil
+}
+
 type CreateTransferRequest struct {
-	FromUserID     string
-	ToUserID       string
+	FromUserID string
+	ToUserID   string
+	// ToMerchantID credits a shop's own ledger balance instead of a user wallet
+	// (business income is kept apart from the owner's personal money; they
+	// withdraw explicitly). Mutually exclusive with ToUserID. When set there is
+	// no receiver `transactions` row: the shop's record is the qr_payments row
+	// plus the journal entry.
+	ToMerchantID   string
 	Amount         int64
 	Currency       string
 	Fee            int64
@@ -170,7 +236,14 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.Amount <= 0 {
 		return nil, nil, fmt.Errorf("amount must be positive")
 	}
-	if req.FromUserID == req.ToUserID {
+	toMerchant := req.ToMerchantID != ""
+	if toMerchant && req.ToUserID != "" {
+		return nil, nil, fmt.Errorf("only one of ToUserID/ToMerchantID allowed")
+	}
+	if !toMerchant && req.ToUserID == "" {
+		return nil, nil, fmt.Errorf("receiver required")
+	}
+	if !toMerchant && req.FromUserID == req.ToUserID {
 		return nil, nil, fmt.Errorf("sender and receiver must differ")
 	}
 	if req.Fee < 0 {
@@ -190,7 +263,11 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	// record a follow-on row keyed off the receiver can then detect the replay.
 	if req.IdempotencyKey != "" {
 		if existing, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey); existing != nil {
-			recv, _ := s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
+			// A merchant collection has no receiver row to replay.
+			var recv *TransactionRecord
+			if !toMerchant {
+				recv, _ = s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
+			}
 			return existing, recv, nil
 		}
 	}
@@ -199,9 +276,12 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if err != nil {
 		return nil, nil, fmt.Errorf("sender wallet not found")
 	}
-	receiverWallet, err := s.walletRepo.FindByUserID(ctx, req.ToUserID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("receiver wallet not found")
+	var receiverWallet *wallet.WalletRecord
+	if !toMerchant {
+		receiverWallet, err = s.walletRepo.FindByUserID(ctx, req.ToUserID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("receiver wallet not found")
+		}
 	}
 
 	// The payer only funds the fee when it is payer-absorbed; in the merchant
@@ -268,9 +348,13 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if err != nil && !errors.Is(err, ErrDuplicate) {
 		return nil, nil, fmt.Errorf("create sender tx: %w", err)
 	}
-	receiver, err = s.repo.Create(ctx, req.ToUserID, receiverWallet.ID, receiveReq)
-	if err != nil && !errors.Is(err, ErrDuplicate) {
-		return nil, nil, fmt.Errorf("create receiver tx: %w", err)
+	// A shop is not a user: its side of the collection is the qr_payments row
+	// plus the journal entry, so there is no receiver `transactions` row.
+	if !toMerchant {
+		receiver, err = s.repo.Create(ctx, req.ToUserID, receiverWallet.ID, receiveReq)
+		if err != nil && !errors.Is(err, ErrDuplicate) {
+			return nil, nil, fmt.Errorf("create receiver tx: %w", err)
+		}
 	}
 
 	// Build the balanced posting. Two fee models, both booking Fee to SYSTEM:FEES:
@@ -280,17 +364,22 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.Currency == "USD" {
 		feeAccount = ledger.SystemFeesUSD
 	}
+	// The credit leg lands either in a user wallet or in the shop's own account.
+	creditAccount := ledger.Account{UserID: req.ToUserID}
+	if toMerchant {
+		creditAccount = ledger.Account{MerchantID: req.ToMerchantID}
+	}
 	var entries []ledger.Entry
 	if req.Fee > 0 && req.FeeFromReceiver {
 		entries = []ledger.Entry{
 			{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
-			{Account: ledger.Account{UserID: req.ToUserID}, Side: ledger.Credit, AmountMinor: req.Amount - req.Fee, Currency: req.Currency},
+			{Account: creditAccount, Side: ledger.Credit, AmountMinor: req.Amount - req.Fee, Currency: req.Currency},
 			{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
 		}
 	} else {
 		entries = []ledger.Entry{
 			{Account: ledger.Account{UserID: req.FromUserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
-			{Account: ledger.Account{UserID: req.ToUserID}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+			{Account: creditAccount, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
 		}
 		if req.Fee > 0 {
 			entries = append(entries,
@@ -309,17 +398,24 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Metadata: map[string]any{
 			"from_user":   req.FromUserID,
 			"to_user":     req.ToUserID,
+			"to_merchant": req.ToMerchantID,
 			"description": req.Description,
 		},
 	}
+	// A merchant collection has no receiver row (`receiver` is nil): the shop's
+	// record is qr_payments + the journal entry.
 	if _, err := s.ledger.Post(ctx, p); err != nil && !errors.Is(err, ledger.ErrIdempotent) {
 		_ = s.repo.UpdateStatus(ctx, sender.ID, StatusFailed)
-		_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusFailed)
+		if receiver != nil {
+			_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusFailed)
+		}
 		return nil, nil, fmt.Errorf("post ledger: %w", err)
 	}
 
 	_ = s.repo.UpdateStatus(ctx, sender.ID, StatusCompleted)
-	_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusCompleted)
+	if receiver != nil {
+		_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusCompleted)
+	}
 
 	if s.auditLogger != nil {
 		s.auditLogger.LogTransfer(req.FromUserID, sender.ID, req.Amount, req.Currency, "")

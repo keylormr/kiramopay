@@ -50,10 +50,13 @@ const (
 	SystemSavingsUSD  SystemAccountCode = "SYSTEM:SAVINGS:USD"
 )
 
-// Account is a polymorphic reference to either a user wallet account or a
-// system account. Exactly one of UserID/SystemCode must be set.
+// Account is a polymorphic reference to a user wallet, a merchant wallet or a
+// system account. Exactly one of UserID/MerchantID/SystemCode must be set.
 type Account struct {
-	UserID     string
+	UserID string
+	// MerchantID addresses a shop's own balance. Business income lands here
+	// instead of the owner's personal wallet; the owner withdraws explicitly.
+	MerchantID string
 	SystemCode SystemAccountCode
 }
 
@@ -135,6 +138,30 @@ func (e *Engine) Post(ctx context.Context, p *Posting) (string, error) {
 // already been recorded. It lets a caller make a non-idempotent side effect
 // (e.g. a state update paired with a posting) safe against retries by checking
 // before acting. An empty key is never considered to exist.
+// MerchantBalance returns a shop's balance in minor units for one currency,
+// derived straight from the journal (credits minus debits on its account).
+//
+// Deliberately not cached: the `wallets` table caches user balances and is
+// reconciled against the journal, so a second cache would be a second thing
+// that can drift. A shop's entry count is small enough to sum on read.
+func (e *Engine) MerchantBalance(ctx context.Context, merchantID, currency string) (int64, error) {
+	var bal int64
+	err := e.pool.QueryRow(ctx,
+		`SELECT COALESCE(SUM(CASE WHEN je.direction = 'credit' THEN je.amount_minor
+		                          ELSE -je.amount_minor END), 0)
+		   FROM journal_entries je
+		   JOIN ledger_accounts la ON la.id = je.account_id
+		  WHERE la.merchant_id = $1::uuid
+		    AND la.currency = $2
+		    AND la.type = 'merchant_wallet'`,
+		merchantID, currency,
+	).Scan(&bal)
+	if err != nil {
+		return 0, fmt.Errorf("merchant balance: %w", err)
+	}
+	return bal, nil
+}
+
 func (e *Engine) PostingExists(ctx context.Context, idempotencyKey string) (bool, error) {
 	if idempotencyKey == "" {
 		return false, nil
@@ -289,8 +316,43 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 // resolveAccount returns (account_id, isUserWallet, normalBalance, err).
 // For user wallets it auto-provisions the account if missing (idempotent).
 func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (string, bool, string, error) {
-	if en.Account.UserID != "" && en.Account.SystemCode != "" {
-		return "", false, "", errors.New("entry account: only one of UserID/SystemCode allowed")
+	set := 0
+	for _, isSet := range []bool{en.Account.UserID != "", en.Account.MerchantID != "", en.Account.SystemCode != ""} {
+		if isSet {
+			set++
+		}
+	}
+	if set > 1 {
+		return "", false, "", errors.New("entry account: only one of UserID/MerchantID/SystemCode allowed")
+	}
+	if en.Account.MerchantID != "" {
+		// Merchant wallet. Returns isUserWallet=false so the engine does not try
+		// to apply a delta to the users' `wallets` cache — a merchant balance is
+		// derived from the journal instead.
+		var id, nb string
+		err := tx.QueryRow(ctx,
+			`SELECT id::text, normal_balance FROM ledger_accounts
+			 WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'`,
+			en.Account.MerchantID, en.Currency,
+		).Scan(&id, &nb)
+		if err == nil {
+			return id, false, nb, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", false, "", err
+		}
+		code := fmt.Sprintf("MERCHANT:%s:%s", en.Account.MerchantID, en.Currency)
+		err = tx.QueryRow(ctx,
+			`INSERT INTO ledger_accounts (code, type, merchant_id, currency, normal_balance)
+			 VALUES ($1, 'merchant_wallet', $2::uuid, $3, 'credit')
+			 ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+			 RETURNING id::text, normal_balance`,
+			code, en.Account.MerchantID, en.Currency,
+		).Scan(&id, &nb)
+		if err != nil {
+			return "", false, "", fmt.Errorf("provision merchant account: %w", err)
+		}
+		return id, false, nb, nil
 	}
 	if en.Account.SystemCode != "" {
 		var id, nb string

@@ -196,10 +196,18 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	// Move the money THROUGH THE LEDGER: debit the payer, credit the QR creator
 	// atomically. Idempotency keyed by (qr, payer) prevents a double charge on
 	// a retried scan.
+	// A merchant QR credits the SHOP's own balance; a personal QR still credits
+	// the creator's wallet. Either way the payer side is identical.
+	toUserID, toMerchantID := qr.CreatorID, ""
+	if qr.MerchantID != "" {
+		toUserID, toMerchantID = "", qr.MerchantID
+	}
+
 	idem := fmt.Sprintf("qr:%s:%s", qr.ID, payerID)
 	sender, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
 		FromUserID:      payerID,
-		ToUserID:        qr.CreatorID,
+		ToUserID:        toUserID,
+		ToMerchantID:    toMerchantID,
 		Amount:          amount,
 		Currency:        currency,
 		Fee:             fee,
@@ -290,6 +298,43 @@ func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string,
 		ctx, merchantID, req.Name, req.Description, req.Category,
 		req.Cedula, cedulaType, req.LegalName, status,
 	)
+}
+
+// MerchantBalance returns the shop's own balance (minor units), derived from
+// the journal. Owner-only.
+func (s *Service) MerchantBalance(ctx context.Context, merchantID, userID, currency string) (int64, error) {
+	m, err := s.repo.GetMerchant(ctx, merchantID)
+	if err != nil || m.UserID != userID {
+		return 0, fmt.Errorf("merchant not found")
+	}
+	return s.tx.MerchantBalance(ctx, merchantID, currency)
+}
+
+// WithdrawToOwner moves money from the shop's balance to the owner's personal
+// wallet. This is the only way business income becomes personal money, which is
+// the whole point of keeping the two apart.
+func (s *Service) WithdrawToOwner(
+	ctx context.Context, merchantID, userID, currency string, amount int64, idempotencyKey string,
+) error {
+	if amount <= 0 {
+		return fmt.Errorf("amount must be positive")
+	}
+	if currency == "" {
+		currency = "CRC"
+	}
+	m, err := s.repo.GetMerchant(ctx, merchantID)
+	if err != nil || m.UserID != userID {
+		return fmt.Errorf("merchant not found")
+	}
+	bal, err := s.tx.MerchantBalance(ctx, merchantID, currency)
+	if err != nil {
+		return fmt.Errorf("read balance: %w", err)
+	}
+	if bal < amount {
+		return fmt.Errorf("insufficient business balance")
+	}
+	_, err = s.tx.WithdrawMerchantToUser(ctx, merchantID, userID, currency, amount, idempotencyKey)
+	return err
 }
 
 // ── Admin verification ───────────────────────────────────────────────────────

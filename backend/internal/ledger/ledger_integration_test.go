@@ -41,6 +41,97 @@ func TestPostBasicTransfer(t *testing.T) {
 	}
 }
 
+// TestMerchantAccountBalance covers the shop-owned account end to end: a
+// collection credits the merchant (not the owner), a withdrawal debits it, and
+// the balance is derived from the journal rather than a cache.
+func TestMerchantAccountBalance(t *testing.T) {
+	pool := testutil.TestDB(t)
+	owner := testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	payer := testutil.SeedTestUser2(t, pool)
+	eng := ledger.NewEngine(pool, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	ctx := context.Background()
+
+	var merchantID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO qr_merchants (user_id, name, category, qr_code, cedula, cedula_type, legal_name, verification_status)
+		 VALUES ($1::uuid, 'Test Shop', 'retail', 'MRC-TEST-LEDGER', '3101999999', 'juridica', 'TEST SHOP S.A.', 'verified')
+		 RETURNING id::text`, owner).Scan(&merchantID); err != nil {
+		t.Fatalf("seed merchant: %v", err)
+	}
+
+	var ownerBefore int64
+	if err := pool.QueryRow(ctx, `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`, owner).Scan(&ownerBefore); err != nil {
+		t.Fatalf("owner wallet before: %v", err)
+	}
+
+	// Collection: payer -1000, shop +950, fees +50 (0.5% merchant-absorbed).
+	if _, err := eng.Post(ctx, &ledger.Posting{
+		Description: "merchant-collection",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{UserID: payer}, Side: ledger.Debit, AmountMinor: 1000, Currency: "CRC"},
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Credit, AmountMinor: 950, Currency: "CRC"},
+			{Account: ledger.Account{SystemCode: ledger.SystemFeesCRC}, Side: ledger.Credit, AmountMinor: 50, Currency: "CRC"},
+		},
+	}); err != nil {
+		t.Fatalf("collection post: %v", err)
+	}
+
+	bal, err := eng.MerchantBalance(ctx, merchantID, "CRC")
+	if err != nil {
+		t.Fatalf("balance: %v", err)
+	}
+	if bal != 950 {
+		t.Fatalf("after collection want 950, got %d", bal)
+	}
+
+	// Withdrawal to the owner's personal wallet.
+	if _, err := eng.Post(ctx, &ledger.Posting{
+		Description: "merchant-withdrawal",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: 400, Currency: "CRC"},
+			{Account: ledger.Account{UserID: owner}, Side: ledger.Credit, AmountMinor: 400, Currency: "CRC"},
+		},
+	}); err != nil {
+		t.Fatalf("withdrawal post: %v", err)
+	}
+
+	bal, err = eng.MerchantBalance(ctx, merchantID, "CRC")
+	if err != nil {
+		t.Fatalf("balance after withdrawal: %v", err)
+	}
+	if bal != 550 {
+		t.Fatalf("after withdrawal want 550, got %d", bal)
+	}
+
+	// The shop's money must reach the owner's wallet ONLY through the explicit
+	// withdrawal. The seeded user starts with a balance, so compare the delta:
+	// exactly the 400 withdrawn, not the 950 collected.
+	var ownerAfter int64
+	if err := pool.QueryRow(ctx, `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`, owner).Scan(&ownerAfter); err != nil {
+		t.Fatalf("owner wallet: %v", err)
+	}
+	if delta := ownerAfter - ownerBefore; delta != 400 {
+		t.Fatalf("owner wallet delta = %d, want exactly the 400 withdrawn", delta)
+	}
+}
+
+// TestMerchantAccountRejectsAmbiguous — an entry may name only one account kind.
+func TestMerchantAccountRejectsAmbiguous(t *testing.T) {
+	eng, from, _ := setup(t)
+	ctx := context.Background()
+
+	_, err := eng.Post(ctx, &ledger.Posting{
+		Description: "ambiguous",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{UserID: from}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+			{Account: ledger.Account{UserID: from, MerchantID: from}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an entry naming both a user and a merchant")
+	}
+}
+
 // TestPostRejectsUnbalanced — the validatePosting check must trip BEFORE any
 // SQL is issued (cheap defence in depth — the DB trigger is the second one).
 func TestPostRejectsUnbalanced(t *testing.T) {

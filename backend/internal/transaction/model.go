@@ -35,6 +35,8 @@ const (
 	TypeWithdrawal   = "withdrawal"
 	TypeP2PSend      = "p2p_send"
 	TypeP2PReceive   = "p2p_receive"
+	// Owner moving money from a shop's balance into their personal wallet.
+	TypeMerchantWithdrawal = "merchant_withdrawal"
 	TypeRefund       = "refund"
 	TypeCryptoBuy    = "crypto_buy"       // fiat leaves the wallet to buy crypto
 	TypeCryptoSell   = "crypto_sell"      // fiat enters the wallet from selling crypto
