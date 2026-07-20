@@ -201,6 +201,50 @@ func TestStaff_RevokeAndReactivateAsManager(t *testing.T) {
 	}
 }
 
+// Editing the shop's data must actually execute against Postgres (the $8
+// double-use bug shipped because no test ran this statement): a non-identity
+// edit keeps the verified badge, an identity change returns the shop to
+// pending, and an admin re-approval brings it back.
+func TestUpdateMerchant_IdentityChangeAndReverify(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+	qr := verifiedMerchantQR(t, svc, owner, 1000)
+	_ = pool
+
+	// Non-identity edit: same cedula and legal name, new display data.
+	m1, err := svc.UpdateMerchant(ctx, qr.MerchantID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Soda Tica Renovada", Description: "nueva descripcion", Category: "restaurant",
+		Cedula: "3-101-123", CedulaType: "juridica", LegalName: "Soda Tica SA",
+	})
+	if err != nil {
+		t.Fatalf("edit sin identidad: %v", err)
+	}
+	if m1.Name != "Soda Tica Renovada" || m1.VerificationStatus != "verified" {
+		t.Fatalf("un edit sin cambio de identidad no debe perder el verified: %+v", m1)
+	}
+
+	// Identity change: new cedula/type/legal name -> back to pending.
+	m2, err := svc.UpdateMerchant(ctx, qr.MerchantID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Soda Tica Renovada", Description: "nueva descripcion", Category: "restaurant",
+		Cedula: "702650930", CedulaType: "fisica", LegalName: "KEILOR YADIR MARTINEZ RODRIGUEZ",
+	})
+	if err != nil {
+		t.Fatalf("edit de identidad: %v", err)
+	}
+	if m2.Cedula != "702650930" || m2.CedulaType != "fisica" || m2.VerificationStatus != "pending" {
+		t.Fatalf("el cambio de identidad debe volver a pending con los datos nuevos: %+v", m2)
+	}
+
+	// Admin re-approval restores the badge with the new identity intact.
+	m3, err := svc.ApproveMerchant(ctx, qr.MerchantID, owner)
+	if err != nil {
+		t.Fatalf("re-aprobar: %v", err)
+	}
+	if m3.VerificationStatus != "verified" || m3.Cedula != "702650930" {
+		t.Fatalf("tras re-aprobar debe quedar verified con la cedula nueva: %+v", m3)
+	}
+}
+
 // The report is the payoff of the attribution phase 3 records: exact totals,
 // a per-location and a per-collector breakdown (with an "unattributed" bucket
 // each), and it is readable by owner/manager only.
