@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -33,12 +33,29 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
   const [code, setCode] = useState<QRPaymentCode | null>(null);
   const [error, setError] = useState('');
 
+  // Business balance: the shop's own money, separate from the owner's wallet.
+  const [balance, setBalance] = useState<number | null>(null);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [wdAmount, setWdAmount] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [wdError, setWdError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const api = getApiLayer().qrPayments;
+      if (!api) return;
+      const res = await api.getMerchantBalance(merchant.id, ccy);
+      if (!cancelled && res.success && typeof res.data === 'number') setBalance(res.data);
+    })();
+    return () => { cancelled = true; };
+  }, [merchant.id, ccy, payments]);
+
   const verified = merchant.verificationStatus === 'verified';
   const money = (v: number) => `${symbol}${v.toFixed(2)}`;
 
   const todays = payments.filter((p) => isToday(p.createdAt));
   const todayGross = todays.reduce((s, p) => s + p.amount, 0);
-  const todayFee = todays.reduce((s, p) => s + p.fee, 0);
   const totalFee = payments.reduce((s, p) => s + p.fee, 0);
 
   const charge = async () => {
@@ -63,6 +80,24 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
 
   const closeCharge = () => { setShowCharge(false); setCode(null); setAmount(''); setError(''); onReload(); };
 
+  const withdraw = async () => {
+    const api = getApiLayer().qrPayments;
+    const val = parseFloat(wdAmount);
+    if (!api || withdrawing || !(val > 0)) return;
+    setWithdrawing(true);
+    setWdError('');
+    // Stable key per attempt so a double tap settles once.
+    const res = await api.withdrawMerchant(merchant.id, val, ccy, `mwd:${merchant.id}:${val}:${Date.now()}`);
+    setWithdrawing(false);
+    if (res.success) {
+      setShowWithdraw(false);
+      setWdAmount('');
+      onReload();
+    } else {
+      setWdError(res.error?.message || t('assistant_action_failed'));
+    }
+  };
+
   return (
     <div className="pb-24 pt-4 px-4 space-y-5">
       {/* Verification banner — the backend blocks collecting until verified. */}
@@ -84,19 +119,29 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
         </div>
       )}
 
-      {/* Today's sales */}
+      {/* Business balance — the shop's own money, kept apart from the owner's wallet */}
       <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 text-white uv-shadow-floating">
         <div
           className="absolute -right-12 -bottom-12 w-40 h-40 rounded-full opacity-30 pointer-events-none"
           style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.5), transparent)' }}
         />
         <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
-          {t('business_sales_today')}
+          {t('business_balance')}
         </span>
-        <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">{money(todayGross)}</div>
-        <div className="relative text-white/70 text-sm">
-          {todays.length} · {t('business_commission_paid')} {money(todayFee)}
+        <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">
+          {balance === null ? '—' : money(balance)}
         </div>
+        <div className="relative text-white/70 text-sm">
+          {t('business_sales_today')}: {money(todayGross)} · {todays.length}
+        </div>
+        <button
+          onClick={() => { setWdError(''); setShowWithdraw(true); }}
+          disabled={!balance}
+          className="relative mt-4 w-full bg-white/15 text-white h-11 rounded-xl font-bold flex items-center justify-center gap-2 border border-white/20 backdrop-blur-sm active:scale-[0.98] transition-transform disabled:opacity-50"
+        >
+          <Icons.ArrowDownLeft size={18} />
+          {t('business_withdraw')}
+        </button>
       </div>
 
       {/* Primary action */}
@@ -145,6 +190,42 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
           </div>
         )}
       </div>
+
+      {/* Withdraw to the owner's personal wallet */}
+      <BottomSheet isOpen={showWithdraw} onClose={() => setShowWithdraw(false)} title={t('business_withdraw')}>
+        <div className="space-y-4">
+          <p className="text-sm uv-text-muted">{t('business_withdraw_hint')}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-bold uv-text-primary">{symbol}</span>
+            <input
+              type="number"
+              value={wdAmount}
+              onChange={(e) => setWdAmount(e.target.value)}
+              placeholder="0.00"
+              className="flex-1 text-3xl font-bold bg-transparent outline-none uv-text-primary placeholder-gray-300"
+            />
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="uv-text-muted">{t('business_balance')}</span>
+            <button
+              onClick={() => setWdAmount(String(balance ?? 0))}
+              className="font-semibold text-[var(--color-primary)] tabular-nums"
+            >
+              {balance === null ? '—' : money(balance)}
+            </button>
+          </div>
+          {wdError && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{wdError}</p>}
+          <Button
+            onClick={withdraw}
+            loading={withdrawing}
+            disabled={withdrawing || !(parseFloat(wdAmount) > 0) || parseFloat(wdAmount) > (balance ?? 0)}
+            size="lg"
+            fullWidth
+          >
+            {withdrawing ? t('processing') : t('business_withdraw')}
+          </Button>
+        </div>
+      </BottomSheet>
 
       {/* Charge sheet */}
       <BottomSheet isOpen={showCharge} onClose={closeCharge} title={t('merchant_generate_qr')}>

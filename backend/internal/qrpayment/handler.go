@@ -53,6 +53,43 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, m)
 }
 
+// GetMerchantBalance — GET /api/v1/qr/merchants/{id}/balance. Owner-only.
+func (h *Handler) GetMerchantBalance(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	currency := r.URL.Query().Get("currency")
+	if currency == "" {
+		currency = "CRC"
+	}
+	bal, err := h.service.MerchantBalance(r.Context(), merchantID, userID, currency)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"balance": bal, "currency": currency})
+}
+
+// WithdrawMerchant — POST /api/v1/qr/merchants/{id}/withdraw. Moves the shop's
+// balance into the owner's personal wallet.
+func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	var req struct {
+		Amount         int64  `json:"amount"`
+		Currency       string `json:"currency"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey); err != nil {
+		response.Error(w, http.StatusBadRequest, "WITHDRAW_FAILED", err.Error())
+		return
+	}
+	response.NoContent(w)
+}
+
 func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchants, err := h.service.GetMerchants(r.Context(), userID)

@@ -119,6 +119,29 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(mapMerchant(res.data));
   }
 
+  async getMerchantBalance(merchantId: string, currency = 'CRC'): Promise<ApiResponse<number>> {
+    const res = await this.client.get<{ balance: number; currency: string }>(
+      `/api/v1/qr/merchants/${merchantId}/balance?currency=${currency}`,
+    );
+    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(res.data.balance / 100); // minor units -> major
+  }
+
+  async withdrawMerchant(
+    merchantId: string,
+    amount: number,
+    currency: string,
+    idempotencyKey: string,
+  ): Promise<ApiResponse<void>> {
+    const res = await this.client.post(`/api/v1/qr/merchants/${merchantId}/withdraw`, {
+      amount: Math.round(amount * 100), // major -> minor units
+      currency,
+      idempotency_key: idempotencyKey,
+    });
+    if (!res.success) return apiError('WITHDRAW_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(undefined as unknown as void);
+  }
+
   async registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>('/api/v1/qr/merchant', {
       name: request.name,

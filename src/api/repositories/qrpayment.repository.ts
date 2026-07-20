@@ -76,6 +76,15 @@ export interface IQRPaymentRepository {
    * merchant back to review — identity is not editable behind a verified badge.
    */
   updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>>;
+  /** The shop's own balance, in major units (business money, not the owner's). */
+  getMerchantBalance(merchantId: string, currency?: string): Promise<ApiResponse<number>>;
+  /** Move part of the shop's balance into the owner's personal wallet. */
+  withdrawMerchant(
+    merchantId: string,
+    amount: number,
+    currency: string,
+    idempotencyKey: string,
+  ): Promise<ApiResponse<void>>;
   createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>>;
   getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>>;
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;
