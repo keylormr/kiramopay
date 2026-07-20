@@ -3,6 +3,7 @@ package ledger_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -112,6 +113,155 @@ func TestMerchantAccountBalance(t *testing.T) {
 	}
 	if delta := ownerAfter - ownerBefore; delta != 400 {
 		t.Fatalf("owner wallet delta = %d, want exactly the 400 withdrawn", delta)
+	}
+}
+
+// seedTestMerchant inserts a verified shop for ledger-level tests and returns
+// its id.
+func seedTestMerchant(t *testing.T, pool *pgxpool.Pool, owner, qrCode string) string {
+	t.Helper()
+	var id string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO qr_merchants (user_id, name, category, qr_code, cedula, cedula_type, legal_name, verification_status)
+		 VALUES ($1::uuid, 'Test Shop', 'retail', $2, '3101999999', 'juridica', 'TEST SHOP S.A.', 'verified')
+		 RETURNING id::text`, owner, qrCode).Scan(&id); err != nil {
+		t.Fatalf("seed merchant: %v", err)
+	}
+	return id
+}
+
+// TestMerchantOverdraftRejected — a debit beyond the shop's journal balance
+// must fail atomically and leave the journal untouched. This is the guard that
+// keeps a withdrawal from minting personal money out of a shop that never
+// held it.
+func TestMerchantOverdraftRejected(t *testing.T) {
+	pool := testutil.TestDB(t)
+	owner := testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	payer := testutil.SeedTestUser2(t, pool)
+	eng := ledger.NewEngine(pool, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	ctx := context.Background()
+	merchantID := seedTestMerchant(t, pool, owner, "MRC-TEST-OVERDRAFT")
+
+	ownerBefore := walletCRC(t, pool, owner)
+
+	if _, err := eng.Post(ctx, &ledger.Posting{
+		Description: "collection",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{UserID: payer}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+		},
+	}); err != nil {
+		t.Fatalf("collection: %v", err)
+	}
+
+	// More than the shop ever held.
+	_, err := eng.Post(ctx, &ledger.Posting{
+		Description: "overdraft",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: 150, Currency: "CRC"},
+			{Account: ledger.Account{UserID: owner}, Side: ledger.Credit, AmountMinor: 150, Currency: "CRC"},
+		},
+	})
+	if !errors.Is(err, ledger.ErrInsufficientFunds) {
+		t.Fatalf("overdraft: want ErrInsufficientFunds, got %v", err)
+	}
+	if bal, _ := eng.MerchantBalance(ctx, merchantID, "CRC"); bal != 100 {
+		t.Fatalf("balance after rejected overdraft = %d, want 100 (full rollback)", bal)
+	}
+	if got := walletCRC(t, pool, owner); got != ownerBefore {
+		t.Fatalf("owner wallet moved on a rejected overdraft: %d != %d", got, ownerBefore)
+	}
+
+	// The check-then-post shape: two full withdrawals, each covered by the
+	// balance on its own read; only the first may land.
+	if _, err := eng.Post(ctx, &ledger.Posting{
+		Description:    "withdraw-1",
+		IdempotencyKey: "wd-toctou-1",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+			{Account: ledger.Account{UserID: owner}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+		},
+	}); err != nil {
+		t.Fatalf("first withdrawal: %v", err)
+	}
+	_, err = eng.Post(ctx, &ledger.Posting{
+		Description:    "withdraw-2",
+		IdempotencyKey: "wd-toctou-2",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+			{Account: ledger.Account{UserID: owner}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+		},
+	})
+	if !errors.Is(err, ledger.ErrInsufficientFunds) {
+		t.Fatalf("second full withdrawal: want ErrInsufficientFunds, got %v", err)
+	}
+	if bal, _ := eng.MerchantBalance(ctx, merchantID, "CRC"); bal != 0 {
+		t.Fatalf("final balance = %d, want 0 — a shop balance must never go negative", bal)
+	}
+	if delta := walletCRC(t, pool, owner) - ownerBefore; delta != 100 {
+		t.Fatalf("owner received %d, want exactly the 100 the shop held", delta)
+	}
+}
+
+// TestMerchantConcurrentWithdrawalsSingleWinner — N racing withdrawals with
+// distinct idempotency keys against a balance that covers exactly one. The
+// merchant row lock serializes them; exactly one may win.
+func TestMerchantConcurrentWithdrawalsSingleWinner(t *testing.T) {
+	pool := testutil.TestDB(t)
+	owner := testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	payer := testutil.SeedTestUser2(t, pool)
+	eng := ledger.NewEngine(pool, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	ctx := context.Background()
+	merchantID := seedTestMerchant(t, pool, owner, "MRC-TEST-RACE")
+
+	ownerBefore := walletCRC(t, pool, owner)
+
+	if _, err := eng.Post(ctx, &ledger.Posting{
+		Description: "collection",
+		Entries: []ledger.Entry{
+			{Account: ledger.Account{UserID: payer}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+		},
+	}); err != nil {
+		t.Fatalf("collection: %v", err)
+	}
+
+	const N = 8
+	var wg sync.WaitGroup
+	var wins, insufficient, other int32
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := eng.Post(ctx, &ledger.Posting{
+				Description:    "racing-withdrawal",
+				IdempotencyKey: fmt.Sprintf("wd-race-%d", i),
+				Entries: []ledger.Entry{
+					{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: 100, Currency: "CRC"},
+					{Account: ledger.Account{UserID: owner}, Side: ledger.Credit, AmountMinor: 100, Currency: "CRC"},
+				},
+			})
+			switch {
+			case err == nil:
+				atomic.AddInt32(&wins, 1)
+			case errors.Is(err, ledger.ErrInsufficientFunds):
+				atomic.AddInt32(&insufficient, 1)
+			default:
+				atomic.AddInt32(&other, 1)
+				t.Errorf("withdrawal #%d unexpected error: %v", i, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if wins != 1 || insufficient != N-1 || other != 0 {
+		t.Fatalf("wins=%d insufficient=%d other=%d, want exactly 1/%d/0", wins, insufficient, other, N-1)
+	}
+	if bal, _ := eng.MerchantBalance(ctx, merchantID, "CRC"); bal != 0 {
+		t.Fatalf("balance = %d, want 0 — a shop balance must never go negative", bal)
+	}
+	if delta := walletCRC(t, pool, owner) - ownerBefore; delta != 100 {
+		t.Fatalf("owner received %d, want exactly 100 — the race must not mint money", delta)
 	}
 }
 
