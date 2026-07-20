@@ -59,6 +59,11 @@ func TestMerchantAccountBalance(t *testing.T) {
 		t.Fatalf("seed merchant: %v", err)
 	}
 
+	var ownerBefore int64
+	if err := pool.QueryRow(ctx, `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`, owner).Scan(&ownerBefore); err != nil {
+		t.Fatalf("owner wallet before: %v", err)
+	}
+
 	// Collection: payer -1000, shop +950, fees +50 (0.5% merchant-absorbed).
 	if _, err := eng.Post(ctx, &ledger.Posting{
 		Description: "merchant-collection",
@@ -98,14 +103,15 @@ func TestMerchantAccountBalance(t *testing.T) {
 		t.Fatalf("after withdrawal want 550, got %d", bal)
 	}
 
-	// The shop's money must NOT have touched the owner's wallet cache beyond the
-	// explicit withdrawal: owner was credited exactly 400.
-	var ownerCRC int64
-	if err := pool.QueryRow(ctx, `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`, owner).Scan(&ownerCRC); err != nil {
+	// The shop's money must reach the owner's wallet ONLY through the explicit
+	// withdrawal. The seeded user starts with a balance, so compare the delta:
+	// exactly the 400 withdrawn, not the 950 collected.
+	var ownerAfter int64
+	if err := pool.QueryRow(ctx, `SELECT balance_crc FROM wallets WHERE user_id = $1::uuid`, owner).Scan(&ownerAfter); err != nil {
 		t.Fatalf("owner wallet: %v", err)
 	}
-	if ownerCRC != 400 {
-		t.Fatalf("owner wallet want 400, got %d", ownerCRC)
+	if delta := ownerAfter - ownerBefore; delta != 400 {
+		t.Fatalf("owner wallet delta = %d, want exactly the 400 withdrawn", delta)
 	}
 }
 

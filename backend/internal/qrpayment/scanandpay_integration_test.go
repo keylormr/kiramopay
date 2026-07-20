@@ -104,8 +104,17 @@ func TestScanAndPay_MerchantCommission_AndIdempotency(t *testing.T) {
 	if got := walletCRC(t, pool, payer); got != payer0-amount {
 		t.Fatalf("payer balance = %d, want %d", got, payer0-amount)
 	}
-	if got := walletCRC(t, pool, owner); got != owner0+amount-fee {
-		t.Fatalf("merchant balance = %d, want %d", got, owner0+amount-fee)
+	// The collection belongs to the SHOP: the owner's personal wallet must not
+	// move. That separation is the whole point of the merchant balance.
+	if got := walletCRC(t, pool, owner); got != owner0 {
+		t.Fatalf("owner wallet = %d, want it unchanged at %d — business income must not land in the personal wallet", got, owner0)
+	}
+	mbal, err := svc.MerchantBalance(ctx, qr.MerchantID, owner, "CRC")
+	if err != nil {
+		t.Fatalf("merchant balance: %v", err)
+	}
+	if mbal != amount-fee {
+		t.Fatalf("merchant balance = %d, want %d", mbal, amount-fee)
 	}
 	if got := feesCRC(t, pool); got != fees0+fee {
 		t.Fatalf("system fees = %d, want %d", got, fees0+fee)
@@ -124,6 +133,9 @@ func TestScanAndPay_MerchantCommission_AndIdempotency(t *testing.T) {
 	}
 	if got := feesCRC(t, pool); got != fees0+fee {
 		t.Fatalf("system fees moved on retry: %d", got)
+	}
+	if got, err := svc.MerchantBalance(ctx, qr.MerchantID, owner, "CRC"); err != nil || got != amount-fee {
+		t.Fatalf("merchant balance moved on retry: %d (err %v)", got, err)
 	}
 	if n := countPaymentsByTx(t, pool, pay.TxID); n != 1 {
 		t.Fatalf("expected exactly 1 payment row for tx, got %d", n)
