@@ -46,6 +46,7 @@ const AssistantView = React.lazy(() => import('./views/assistant/AssistantView')
 const MarketplaceView = React.lazy(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
 const CardsView = React.lazy(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
 const BusinessHomeView = React.lazy(() => import('./views/business/BusinessHomeView').then(m => ({ default: m.BusinessHomeView })));
+const BusinessReportsView = React.lazy(() => import('./views/business/BusinessReportsView').then(m => ({ default: m.BusinessReportsView })));
 const BusinessMovementsView = React.lazy(() => import('./views/business/BusinessMovementsView').then(m => ({ default: m.BusinessMovementsView })));
 const BusinessSettingsView = React.lazy(() => import('./views/business/BusinessSettingsView').then(m => ({ default: m.BusinessSettingsView })));
 
@@ -236,7 +237,7 @@ const Layout = () => {
   const activeMerchantId = useBusinessStore((s) => s.activeMerchantId);
   const setActiveMerchant = useBusinessStore((s) => s.setActiveMerchant);
   const { merchants, active: activeMerchant, payments: bizPayments, loading: bizLoading, reload: reloadBiz } = useBusinessData();
-  const [bizTab, setBizTab] = useState<'home' | 'movements' | 'settings'>('home');
+  const [bizTab, setBizTab] = useState<'home' | 'reports' | 'movements' | 'settings'>('home');
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const businessMode = activeMerchantId !== null;
@@ -273,16 +274,19 @@ const Layout = () => {
     { id: 'profile', icon: Icons.Profile, label: t('nav_profile') },
   ];
 
-  // In business mode the bottom bar swaps to the shop's own tabs.
+  // In business mode the bottom bar swaps to the shop's own tabs. Reports are
+  // the business's numbers, so a cashier does not get that tab.
+  const canSeeReports = activeMerchant != null && activeMerchant.role !== 'cashier';
   const BUSINESS_NAV: { id: string; icon: LucideIcon; label: string }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
+    ...(canSeeReports ? [{ id: 'reports', icon: Icons.TrendingUp, label: t('business_reports') }] : []),
     { id: 'movements', icon: Icons.Receipt, label: t('business_movements') },
     { id: 'settings', icon: Icons.Settings, label: t('business_settings') },
   ];
   const NAV_ITEMS: { id: string; icon: LucideIcon; label: string }[] = businessMode ? BUSINESS_NAV : TABS;
   const currentNavId: string = businessMode ? bizTab : activeTab;
   const onNavSelect = (id: string) => {
-    if (businessMode) setBizTab(id as 'home' | 'movements' | 'settings');
+    if (businessMode) setBizTab(id as 'home' | 'reports' | 'movements' | 'settings');
     else setActiveTab(id as TabId);
   };
 
@@ -300,6 +304,11 @@ const Layout = () => {
     if (businessMode) {
       if (!activeMerchant) return <LoadingSkeleton />;
       switch (bizTab) {
+        case 'reports':
+          // Role may have changed under a persisted tab; fall back to home.
+          return canSeeReports
+            ? <BusinessReportsView merchant={activeMerchant} />
+            : <BusinessHomeView merchant={activeMerchant} payments={bizPayments} onReload={reloadBiz} />;
         case 'movements':
           return <BusinessMovementsView payments={bizPayments} />;
         case 'settings':
