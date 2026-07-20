@@ -2,6 +2,7 @@ package qrpayment_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -139,6 +140,67 @@ func TestScanAndPay_MerchantCommission_AndIdempotency(t *testing.T) {
 	}
 	if n := countPaymentsByTx(t, pool, pay.TxID); n != 1 {
 		t.Fatalf("expected exactly 1 payment row for tx, got %d", n)
+	}
+}
+
+// A retried withdrawal that already drained the shop's balance must replay the
+// original success (not "insufficient"), the transaction row must end in
+// `completed`, and an over-withdrawal must be rejected without leaving a row.
+func TestWithdrawToOwner_ReplayAndStatus(t *testing.T) {
+	svc, pool, payer, owner := setupQR(t)
+	ctx := context.Background()
+
+	const amount int64 = 100000 // ₡1000.00
+	const fee int64 = 500       // 0.50%
+	qr := verifiedMerchantQR(t, svc, owner, amount)
+	if _, err := svc.ScanAndPay(ctx, payer, &qrpayment.ScanQRPaymentRequest{QRData: qr.QRData, Currency: "CRC"}); err != nil {
+		t.Fatalf("ScanAndPay: %v", err)
+	}
+	collected := amount - fee
+
+	owner0 := walletCRC(t, pool, owner)
+
+	const key = "wd-replay-test"
+	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if got := walletCRC(t, pool, owner); got != owner0+collected {
+		t.Fatalf("owner wallet = %d, want %d", got, owner0+collected)
+	}
+	var status string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM transactions WHERE user_id = $1::uuid AND idempotency_key = $2`,
+		owner, key).Scan(&status); err != nil {
+		t.Fatalf("read withdrawal tx: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("withdrawal tx status = %q, want completed", status)
+	}
+
+	// Replay with the SAME key after the balance is drained: success, no movement.
+	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
+		t.Fatalf("replay must succeed, got: %v", err)
+	}
+	if got := walletCRC(t, pool, owner); got != owner0+collected {
+		t.Fatalf("owner wallet moved on replay: %d", got)
+	}
+	if bal, err := svc.MerchantBalance(ctx, qr.MerchantID, owner, "CRC"); err != nil || bal != 0 {
+		t.Fatalf("merchant balance after replay = %d (err %v), want 0", bal, err)
+	}
+
+	// A NEW key over the drained balance: rejected, and no transaction row.
+	err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", 1, "wd-over-test")
+	if !errors.Is(err, transaction.ErrInsufficientMerchantBalance) {
+		t.Fatalf("overdraw: want ErrInsufficientMerchantBalance, got %v", err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE user_id = $1::uuid AND idempotency_key = 'wd-over-test'`,
+		owner).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("a rejected over-withdrawal left %d transaction rows, want 0", n)
 	}
 }
 
