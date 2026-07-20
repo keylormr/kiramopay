@@ -56,6 +56,49 @@ func TestHaciendaLookupPrimary(t *testing.T) {
 	}
 }
 
+func TestLookupBusinessCedula_ReturnsRegisteredName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("identificacion") != "3101100100" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"nombre":"CAFETERIA CENTRAL S.A.","tipoIdentificacion":"02"}`))
+	}))
+	defer srv.Close()
+
+	// repo is unused by this path and the audit logger is nil-safe.
+	s := NewService(nil, &Options{Hacienda: NewHaciendaClient(srv.URL, srv.URL)})
+	res, err := s.LookupBusinessCedula(context.Background(), "user-1", "3-101-100100", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Name != "CAFETERIA CENTRAL S.A." {
+		t.Fatalf("unexpected name: %+v", res)
+	}
+}
+
+func TestLookupBusinessCedula_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	s := NewService(nil, &Options{Hacienda: NewHaciendaClient(srv.URL, srv.URL)})
+	if _, err := s.LookupBusinessCedula(context.Background(), "user-1", "399999999", ""); !errors.Is(err, ErrIdentityNotFound) {
+		t.Fatalf("want ErrIdentityNotFound, got %v", err)
+	}
+}
+
+func TestLookupBusinessCedula_NoProviderIsUnavailable(t *testing.T) {
+	// Without a configured registry client the lookup must report unavailable
+	// rather than panic — same nil-safe discipline as VerifyIdentity.
+	s := NewService(nil, nil)
+	if _, err := s.LookupBusinessCedula(context.Background(), "user-1", "3101100100", ""); !errors.Is(err, ErrIdentityUnavailable) {
+		t.Fatalf("want ErrIdentityUnavailable, got %v", err)
+	}
+}
+
 func TestHaciendaLookupNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

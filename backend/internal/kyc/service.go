@@ -42,6 +42,38 @@ type IdentityResult struct {
 // matches the account name, promotes the user to KYC level 1 (reusing the same
 // ApplyApproval path admin approval uses, so wallet limits stay consistent).
 // Fail-open on service unavailability (never a false negative from an outage).
+// BusinessLookupResult is the slice of public tax-registry data used to
+// prefill merchant sign-up: the registered name and the id type, nothing else.
+type BusinessLookupResult struct {
+	Name   string `json:"name"`
+	IDType string `json:"id_type"`
+}
+
+// LookupBusinessCedula resolves a business cedula against the public tax
+// registry so merchant sign-up can prefill the legal name (fewer typos, fewer
+// rejections at review).
+//
+// Unlike VerifyIdentity — which only ever reads the caller's OWN cedula — this
+// takes a cedula from the request, so it could be used to enumerate cedulas to
+// names. The registry is public, but enumeration is not a use case we want to
+// host: the route is authenticated, tightly rate limited per user, and every
+// call is audited. It returns no PII beyond the registered name.
+func (s *Service) LookupBusinessCedula(ctx context.Context, userID, cedula, ipAddr string) (*BusinessLookupResult, error) {
+	if s.hacienda == nil {
+		return nil, ErrIdentityUnavailable
+	}
+	res, err := s.hacienda.Lookup(ctx, cedula)
+	if errors.Is(err, ErrIdentityNotFound) {
+		s.audit(userID, "business_cedula_lookup_not_found", "", "low", ipAddr)
+		return nil, ErrIdentityNotFound
+	}
+	if err != nil {
+		return nil, ErrIdentityUnavailable
+	}
+	s.audit(userID, "business_cedula_lookup", "", "low", ipAddr)
+	return &BusinessLookupResult{Name: res.Name, IDType: res.IDType}, nil
+}
+
 func (s *Service) VerifyIdentity(ctx context.Context, userID, ipAddr string) (*IdentityResult, error) {
 	if s.hacienda == nil {
 		return nil, ErrIdentityUnavailable

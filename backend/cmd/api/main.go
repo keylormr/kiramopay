@@ -511,6 +511,15 @@ func main() {
 			r.Post("/kyc/submit", kycHandler.Submit)
 			r.Post("/kyc/verify-identity", kycHandler.VerifyIdentity)
 
+			// Business cedula lookup (prefills merchant sign-up). Unlike the
+			// routes above it reads a cedula supplied by the caller, so it gets
+			// a much tighter per-user budget: enough to fill a form, far too
+			// little to enumerate the registry.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.UserRateLimit(redisClient, 10, time.Minute))
+				r.Post("/kyc/business-lookup", kycHandler.LookupBusinessCedula)
+			})
+
 			// Wallet
 			r.Get("/wallets/me", walletHandler.GetWallet)
 			r.Get("/wallets/me/balance", walletHandler.GetBalance)

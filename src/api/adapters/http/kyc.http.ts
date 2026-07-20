@@ -1,4 +1,9 @@
-import type { IKycRepository, IdentityVerifyResult, KycStatus } from '../../repositories/kyc.repository';
+import type {
+  IKycRepository,
+  IdentityVerifyResult,
+  KycStatus,
+  BusinessLookupResult,
+} from '../../repositories/kyc.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
@@ -43,5 +48,19 @@ export class HttpKycRepository implements IKycRepository {
       idType: res.data.id_type,
       kycLevel: res.data.kyc_level,
     });
+  }
+
+  async lookupBusinessCedula(cedula: string): Promise<ApiResponse<BusinessLookupResult>> {
+    // POST so the cedula travels in the body, never in a URL or query string.
+    const res = await this.client.post<{ name: string; id_type?: string }>(
+      '/api/v1/kyc/business-lookup',
+      { cedula },
+    );
+
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'CEDULA_NOT_FOUND', res.error?.message || 'Lookup failed');
+    }
+
+    return apiSuccess({ name: res.data.name, idType: res.data.id_type });
   }
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
@@ -16,6 +17,33 @@ type Handler struct {
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+// LookupBusinessCedula — POST /api/v1/kyc/business-lookup
+//
+// Takes the cedula in the body (never the query string, so it stays out of
+// URLs, logs and referrers) and returns only the registered name + id type.
+// The route is rate limited per user to keep it from becoming a cedula-to-name
+// enumeration service.
+func (h *Handler) LookupBusinessCedula(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var req struct {
+		Cedula string `json:"cedula"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	res, err := h.service.LookupBusinessCedula(r.Context(), userID, strings.TrimSpace(req.Cedula), clientIP(r))
+	if err != nil {
+		if errors.Is(err, ErrIdentityNotFound) {
+			response.Error(w, http.StatusNotFound, "CEDULA_NOT_FOUND", "cedula not found in the public registry")
+			return
+		}
+		response.Error(w, http.StatusServiceUnavailable, "IDENTITY_UNAVAILABLE", "registry unavailable, try again later")
+		return
+	}
+	response.JSON(w, http.StatusOK, res)
 }
 
 // Submit — POST /api/v1/kyc/submit

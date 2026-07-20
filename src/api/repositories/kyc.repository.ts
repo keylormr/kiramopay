@@ -21,6 +21,13 @@ export interface KycStatus {
   monthlyLimit: number;
 }
 
+/** Public tax-registry data used to prefill business sign-up. */
+export interface BusinessLookupResult {
+  /** Registered name of the taxpayer (the business's legal name). */
+  name: string;
+  idType?: string;
+}
+
 export interface IKycRepository {
   /**
    * Verify the authed user's own registered cedula against the Hacienda
@@ -30,4 +37,10 @@ export interface IKycRepository {
 
   /** Current KYC level/status and the limits it grants for this user. */
   getStatus(): Promise<ApiResponse<KycStatus>>;
+
+  /**
+   * Resolve a business cedula against the public registry to prefill the legal
+   * name during merchant sign-up. Rate limited per user server-side.
+   */
+  lookupBusinessCedula(cedula: string): Promise<ApiResponse<BusinessLookupResult>>;
 }

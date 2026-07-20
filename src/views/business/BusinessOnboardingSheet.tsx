@@ -32,12 +32,34 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Registry lookup that prefills the legal name (fewer typos -> fewer rejections).
+  const [looking, setLooking] = useState(false);
+  const [lookupState, setLookupState] = useState<'idle' | 'found' | 'not_found'>('idle');
 
   const cat = (c: string) => t(`merchant_cat_${c}` as Parameters<typeof t>[0]);
 
   const reset = () => {
     setStep(0); setCedulaType('fisica'); setName(''); setCategory(CATEGORIES[0]);
     setDescription(''); setCedula(''); setLegalName(''); setAccepted(false); setError('');
+    setLooking(false); setLookupState('idle');
+  };
+
+  // Looked up on blur rather than on every keystroke: one call per entered
+  // cedula keeps well inside the server's per-user budget.
+  const lookupCedula = async () => {
+    const api = getApiLayer().kyc;
+    const digits = cedula.replace(/\D/g, '');
+    if (!api || looking || digits.length < 9) return;
+    setLooking(true);
+    const res = await api.lookupBusinessCedula(cedula.trim());
+    setLooking(false);
+    if (res.success && res.data?.name) {
+      setLegalName(res.data.name);
+      setLookupState('found');
+    } else {
+      // Never block sign-up on the registry: the user can type the name.
+      setLookupState('not_found');
+    }
   };
 
   const close = () => { reset(); onClose(); };
@@ -130,7 +152,20 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
           <div className="space-y-4">
             <div>
               <label className={label}>{t('merchant_cedula')}</label>
-              <input value={cedula} onChange={(e) => setCedula(e.target.value)} className={field} inputMode="numeric" />
+              <input
+                value={cedula}
+                onChange={(e) => { setCedula(e.target.value); setLookupState('idle'); }}
+                onBlur={lookupCedula}
+                className={field}
+                inputMode="numeric"
+              />
+              {looking && <p className="text-xs uv-text-muted mt-1.5">{t('business_lookup_searching')}</p>}
+              {!looking && lookupState === 'found' && (
+                <p className="text-xs text-[var(--color-success)] mt-1.5">{t('business_lookup_found')}</p>
+              )}
+              {!looking && lookupState === 'not_found' && (
+                <p className="text-xs uv-text-muted mt-1.5">{t('business_lookup_not_found')}</p>
+              )}
             </div>
             <div>
               <label className={label}>{t('merchant_legal_name')}</label>
