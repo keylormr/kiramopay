@@ -751,19 +751,12 @@ export type TranslationKeys = {
   // Phase H — merchant panel (multi-merchant + commission + verification)
   merchant_panel_menu: string;
   merchant_panel_menu_desc: string;
-  merchant_panel_title: string;
-  merchant_panel_subtitle: string;
-  merchant_empty: string;
-  merchant_empty_desc: string;
-  merchant_register: string;
-  merchant_register_title: string;
   merchant_register_btn: string;
   merchant_register_error: string;
   merchant_name: string;
   merchant_category: string;
   merchant_desc: string;
   merchant_cedula: string;
-  merchant_cedula_type: string;
   merchant_cedula_fisica: string;
   merchant_cedula_juridica: string;
   merchant_legal_name: string;
@@ -786,9 +779,7 @@ export type TranslationKeys = {
   merchant_qr_generated: string;
   merchant_qr_help: string;
   merchant_qr_error: string;
-  merchant_history: string;
   merchant_history_empty: string;
-  merchant_codes: string;
   merchant_gross: string;
   merchant_fee_label: string;
   merchant_net_received: string;
