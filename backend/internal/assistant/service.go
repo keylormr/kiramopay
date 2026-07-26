@@ -35,11 +35,24 @@ type Service struct {
 	tools    *Tools
 	audit    *audit.Logger
 	logger   *slog.Logger // nil ⇒ no logging
+	quota    Limiter      // nil ⇒ unlimited (tests / no Redis)
 	maxTurns int
 }
 
-func NewService(llm LLM, tools *Tools, auditLogger *audit.Logger, logger *slog.Logger) *Service {
-	return &Service{llm: llm, tools: tools, audit: auditLogger, logger: logger, maxTurns: defaultMaxTurns}
+// ServiceOption configures optional Service behavior.
+type ServiceOption func(*Service)
+
+// WithLimiter attaches a daily usage quota. Omit it (or pass nil) for unlimited.
+func WithLimiter(l Limiter) ServiceOption {
+	return func(s *Service) { s.quota = l }
+}
+
+func NewService(llm LLM, tools *Tools, auditLogger *audit.Logger, logger *slog.Logger, opts ...ServiceOption) *Service {
+	s := &Service{llm: llm, tools: tools, audit: auditLogger, logger: logger, maxTurns: defaultMaxTurns}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Available reports whether the assistant is configured.
@@ -59,7 +72,35 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 		return nil, ErrInvalidRequest
 	}
 
-	history := buildHistory(req.History, msg)
+	// Enforce the daily quota before spending any model tokens. Fail closed on a
+	// backing-store error so the paid API budget stays protected.
+	if s.quota != nil {
+		ok, err := s.quota.Allow(ctx, userID)
+		if err != nil {
+			s.logLLMError(ctx, fmt.Errorf("quota check: %w", err))
+			return nil, ErrUnavailable
+		}
+		if !ok {
+			return nil, ErrQuota
+		}
+	}
+
+	resp, err := s.runTurn(ctx, userID, msg, req.History)
+	if err != nil {
+		// The turn passed the quota gate but failed on our side (model error);
+		// refund so our failure doesn't burn the user's allowance.
+		if s.quota != nil {
+			s.quota.Refund(ctx, userID)
+		}
+		return nil, err
+	}
+	return resp, nil
+}
+
+// runTurn drives the model tool-call loop until it returns a final answer or the
+// turn budget is exhausted.
+func (s *Service) runTurn(ctx context.Context, userID, msg string, prior []Turn) (*ChatResponse, error) {
+	history := buildHistory(prior, msg)
 	decls := s.tools.Declarations()
 	var (
 		toolsUsed []string

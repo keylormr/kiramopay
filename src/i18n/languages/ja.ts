@@ -668,6 +668,7 @@ const ja: TranslationKeys = {
   assistant_placeholder: '質問を入力…',
   assistant_send: '送信',
   assistant_error: '回答できませんでした。もう一度お試しください。',
+  assistant_quota_reached: 'アシスタントの1日の利用上限に達しました。明日もう一度お試しください。',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: '加盟店ツール',
   escrow_menu: 'エスクロー決済',

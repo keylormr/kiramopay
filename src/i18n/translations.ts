@@ -752,6 +752,7 @@ export type TranslationKeys = {
   assistant_placeholder: string;
   assistant_send: string;
   assistant_error: string;
+  assistant_quota_reached: string;
   // Phase F — escrow + API keys + webhooks
   merchant_tools: string;
   escrow_menu: string;

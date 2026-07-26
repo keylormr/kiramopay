@@ -320,11 +320,20 @@ func main() {
 	case cfg.Gemini.APIKey != "":
 		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
 	}
+	// Daily usage quota (Redis-backed) so the paid model-API budget can't be
+	// drained. Only wired when the assistant is actually configured.
+	var assistantOpts []assistant.ServiceOption
+	if assistantLLM != nil {
+		assistantOpts = append(assistantOpts, assistant.WithLimiter(
+			assistant.NewRedisQuota(redisClient, cfg.Anthropic.UserDailyLimit, cfg.Anthropic.GlobalDailyLimit),
+		))
+	}
 	assistantService := assistant.NewService(
 		assistantLLM,
 		assistant.NewTools(walletService, txService, budgetService, paymentService),
 		auditLogger,
 		logger,
+		assistantOpts...,
 	)
 
 	// ── Handlers ─────────────────────────────────────────────────────────

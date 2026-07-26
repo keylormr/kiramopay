@@ -34,6 +34,10 @@ type GeminiConfig struct {
 type AnthropicConfig struct {
 	APIKey string // ANTHROPIC_API_KEY
 	Model  string // ANTHROPIC_MODEL
+	// Daily assistant quota (protects the paid API budget). Non-positive ⇒
+	// package defaults (2 per user/day, 100 app-wide/day).
+	UserDailyLimit   int // ASSISTANT_USER_DAILY_LIMIT
+	GlobalDailyLimit int // ASSISTANT_GLOBAL_DAILY_LIMIT
 }
 
 // TelemetryConfig controls OpenTelemetry tracing. Tracing is enabled only when
@@ -179,7 +183,11 @@ func Load() *Config {
 		},
 		Anthropic: AnthropicConfig{
 			APIKey: getEnv("ANTHROPIC_API_KEY", ""),
-			Model:  getEnv("ANTHROPIC_MODEL", "claude-opus-4-8"),
+			// Default to Haiku: the assistant is a fast, low-cost Q&A helper, so
+			// the cheapest current model fits and keeps the API budget lasting.
+			Model:            getEnv("ANTHROPIC_MODEL", "claude-haiku-4-5"),
+			UserDailyLimit:   getEnvInt("ASSISTANT_USER_DAILY_LIMIT", 2),
+			GlobalDailyLimit: getEnvInt("ASSISTANT_GLOBAL_DAILY_LIMIT", 100),
 		},
 	}
 }

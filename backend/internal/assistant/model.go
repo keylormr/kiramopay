@@ -71,4 +71,6 @@ var (
 	ErrInvalidRequest = errors.New("assistant: invalid request")
 	// ErrLLM wraps an upstream model failure.
 	ErrLLM = errors.New("assistant: model request failed")
+	// ErrQuota means the user (or the whole app) hit the daily usage limit.
+	ErrQuota = errors.New("assistant: daily limit reached")
 )
