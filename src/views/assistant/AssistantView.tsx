@@ -74,7 +74,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         if (!cancelled && list.success && list.data) setConversations(list.data);
       }
     };
-    run();
+    // Swallow failures: a status/history load error must not become an unhandled
+    // rejection or block the chat — the assistant still works without the list.
+    run().catch(() => {});
     return () => {
       cancelled = true;
     };
