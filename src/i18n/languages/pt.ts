@@ -676,7 +676,8 @@ const pt: TranslationKeys = {
   assistant_placeholder: 'Digite sua pergunta…',
   assistant_send: 'Enviar',
   assistant_error: 'Não consegui responder. Tente novamente.',
-  assistant_quota_reached: 'Você atingiu seu limite diário do assistente. Tente novamente amanhã.',
+  assistant_quota_reached: 'Você atingiu seu limite diário do assistente. Ele é renovado amanhã; planos com mais consultas chegam em breve.',
+  assistant_busy: 'O assistente está recebendo muitas solicitações no momento. Tente novamente em alguns minutos.',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'Ferramentas para lojistas',
   escrow_menu: 'Pagamentos protegidos',

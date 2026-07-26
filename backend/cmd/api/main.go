@@ -321,11 +321,17 @@ func main() {
 		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
 	}
 	// Daily usage quota (Redis-backed) so the paid model-API budget can't be
-	// drained. Only wired when the assistant is actually configured.
+	// drained. Per-plan limits; the user's plan is resolved from the DB. Only
+	// wired when the assistant is actually configured.
 	var assistantOpts []assistant.ServiceOption
 	if assistantLLM != nil {
+		planLimits := map[string]int{
+			"free": cfg.Anthropic.UserDailyLimit,
+			"plus": cfg.Anthropic.PlusDailyLimit,
+			"pro":  cfg.Anthropic.ProDailyLimit,
+		}
 		assistantOpts = append(assistantOpts, assistant.WithLimiter(
-			assistant.NewRedisQuota(redisClient, cfg.Anthropic.UserDailyLimit, cfg.Anthropic.GlobalDailyLimit),
+			assistant.NewRedisQuota(redisClient, planLimits, cfg.Anthropic.GlobalDailyLimit, userRepo.GetPlan),
 		))
 	}
 	assistantService := assistant.NewService(
