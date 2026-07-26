@@ -670,6 +670,12 @@ const ja: TranslationKeys = {
   assistant_error: '回答できませんでした。もう一度お試しください。',
   assistant_quota_reached: 'アシスタントの1日の利用上限に達しました。明日リセットされます。より多く利用できるプランは近日提供予定です。',
   assistant_busy: 'アシスタントは現在多くのリクエストを処理しています。数分後にもう一度お試しください。',
+  assistant_new_conversation: '新しい会話',
+  assistant_history: '会話',
+  assistant_no_conversations: '保存された会話はまだありません。',
+  assistant_untitled_conversation: '無題の会話',
+  assistant_messages_count: '件のメッセージ',
+  assistant_conv_limit: 'プランで保存できる会話の上限に達しました。別の会話を始めるには1つ削除するか、プランをアップグレードしてください（近日提供予定）。',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: '加盟店ツール',
   escrow_menu: 'エスクロー決済',

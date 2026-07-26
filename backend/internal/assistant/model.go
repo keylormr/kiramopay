@@ -31,7 +31,11 @@ type Turn struct {
 // ChatRequest is the payload for POST /assistant/chat.
 type ChatRequest struct {
 	Message string `json:"message"`
-	History []Turn `json:"history,omitempty"` // prior turns for context (bounded)
+	History []Turn `json:"history,omitempty"` // prior turns (used only when no ConversationID)
+	// ConversationID, when set, persists this turn to that saved conversation and
+	// uses its stored messages as context. Empty ⇒ the server creates a new
+	// conversation (subject to the per-plan limit) and returns its id.
+	ConversationID string `json:"conversation_id,omitempty"`
 }
 
 // ChatResponse is the assistant's answer.
@@ -39,6 +43,9 @@ type ChatResponse struct {
 	Reply     string     `json:"reply"`
 	ToolsUsed []string   `json:"tools_used,omitempty"`
 	Proposals []Proposal `json:"proposals,omitempty"`
+	// ConversationID is the thread this turn was saved to (echoed so the client
+	// can track a server-created conversation). Empty when history is disabled.
+	ConversationID string `json:"conversation_id,omitempty"`
 }
 
 // Proposal is a money-moving action the assistant has PREPARED but NOT executed

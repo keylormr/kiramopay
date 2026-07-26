@@ -320,10 +320,19 @@ func main() {
 	case cfg.Gemini.APIKey != "":
 		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
 	}
+	// Server-side conversation history, per-plan limits (max threads + messages
+	// per thread). Persists regardless of whether the LLM is configured.
+	assistantConvService := assistant.NewConversationService(
+		assistant.NewPgConversationStore(pool),
+		userRepo.GetPlan,
+		map[string]int{"free": cfg.Anthropic.ConvLimitFree, "plus": cfg.Anthropic.ConvLimitPlus, "pro": cfg.Anthropic.ConvLimitPro},
+		map[string]int{"free": cfg.Anthropic.MsgLimitFree, "plus": cfg.Anthropic.MsgLimitPlus, "pro": cfg.Anthropic.MsgLimitPro},
+	)
+
 	// Daily usage quota (Redis-backed) so the paid model-API budget can't be
 	// drained. Per-plan limits; the user's plan is resolved from the DB. Only
 	// wired when the assistant is actually configured.
-	var assistantOpts []assistant.ServiceOption
+	assistantOpts := []assistant.ServiceOption{assistant.WithConversations(assistantConvService)}
 	if assistantLLM != nil {
 		planLimits := map[string]int{
 			"free": cfg.Anthropic.UserDailyLimit,
@@ -360,7 +369,7 @@ func main() {
 	mfaHandler := mfa.NewHandler(mfaSvc, devMode)
 	escrowHandler := escrow.NewHandler(escrowService)
 	payoutHandler := payout.NewHandler(payoutService)
-	assistantHandler := assistant.NewHandler(assistantService)
+	assistantHandler := assistant.NewHandler(assistantService, assistantConvService)
 	b2bHandler := b2b.NewHandler(b2bService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
@@ -594,6 +603,10 @@ func main() {
 			// Conversational assistant (read-only).
 			r.Get("/assistant/status", assistantHandler.Status)
 			r.Post("/assistant/chat", assistantHandler.Chat)
+			r.Get("/assistant/conversations", assistantHandler.ListConversations)
+			r.Post("/assistant/conversations", assistantHandler.CreateConversation)
+			r.Get("/assistant/conversations/{id}", assistantHandler.GetConversation)
+			r.Delete("/assistant/conversations/{id}", assistantHandler.DeleteConversation)
 
 			// Payouts — ledger-backed outbound payments over pluggable rails.
 			r.Get("/payouts/rails", payoutHandler.Rails)

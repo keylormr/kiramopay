@@ -40,6 +40,16 @@ type AnthropicConfig struct {
 	PlusDailyLimit   int // ASSISTANT_PLUS_DAILY_LIMIT
 	ProDailyLimit    int // ASSISTANT_PRO_DAILY_LIMIT
 	GlobalDailyLimit int // ASSISTANT_GLOBAL_DAILY_LIMIT
+	// Saved conversations per user, by plan (max threads kept). Non-positive ⇒
+	// defaults free 2 / plus 5 / pro 15.
+	ConvLimitFree int // ASSISTANT_CONV_LIMIT_FREE
+	ConvLimitPlus int // ASSISTANT_CONV_LIMIT_PLUS
+	ConvLimitPro  int // ASSISTANT_CONV_LIMIT_PRO
+	// Messages kept per conversation, by plan (oldest trimmed beyond it).
+	// Non-positive ⇒ defaults free 30 / plus 60 / pro 120.
+	MsgLimitFree int // ASSISTANT_MSG_LIMIT_FREE
+	MsgLimitPlus int // ASSISTANT_MSG_LIMIT_PLUS
+	MsgLimitPro  int // ASSISTANT_MSG_LIMIT_PRO
 }
 
 // TelemetryConfig controls OpenTelemetry tracing. Tracing is enabled only when
@@ -192,6 +202,12 @@ func Load() *Config {
 			PlusDailyLimit:   getEnvInt("ASSISTANT_PLUS_DAILY_LIMIT", 15),
 			ProDailyLimit:    getEnvInt("ASSISTANT_PRO_DAILY_LIMIT", 50),
 			GlobalDailyLimit: getEnvInt("ASSISTANT_GLOBAL_DAILY_LIMIT", 100),
+			ConvLimitFree:    getEnvInt("ASSISTANT_CONV_LIMIT_FREE", 2),
+			ConvLimitPlus:    getEnvInt("ASSISTANT_CONV_LIMIT_PLUS", 5),
+			ConvLimitPro:     getEnvInt("ASSISTANT_CONV_LIMIT_PRO", 15),
+			MsgLimitFree:     getEnvInt("ASSISTANT_MSG_LIMIT_FREE", 30),
+			MsgLimitPlus:     getEnvInt("ASSISTANT_MSG_LIMIT_PLUS", 60),
+			MsgLimitPro:      getEnvInt("ASSISTANT_MSG_LIMIT_PRO", 120),
 		},
 	}
 }

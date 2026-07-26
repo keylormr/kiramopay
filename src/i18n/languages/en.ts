@@ -678,6 +678,12 @@ const en: TranslationKeys = {
   assistant_error: 'I couldn\'t answer. Please try again.',
   assistant_quota_reached: 'You have reached your daily assistant limit. It resets tomorrow; plans with more requests are coming soon.',
   assistant_busy: 'The assistant is handling a lot of requests right now. Please try again in a few minutes.',
+  assistant_new_conversation: 'New conversation',
+  assistant_history: 'Conversations',
+  assistant_no_conversations: "You don't have any saved conversations yet.",
+  assistant_untitled_conversation: 'Untitled conversation',
+  assistant_messages_count: 'messages',
+  assistant_conv_limit: 'You have reached the maximum saved conversations for your plan. Delete one to start another, or upgrade for more (coming soon).',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'Merchant tools',
   escrow_menu: 'Protected payments',

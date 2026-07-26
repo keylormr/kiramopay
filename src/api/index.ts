@@ -155,6 +155,8 @@ export type {
   AssistantTurn,
   AssistantReply,
   AssistantProposal,
+  AssistantConversation,
+  AssistantConversationSummary,
 } from './repositories/assistant.repository';
 export type {
   ISavingsRepository,
