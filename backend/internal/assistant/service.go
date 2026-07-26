@@ -76,12 +76,15 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 	// Enforce the daily quota before spending any model tokens. Fail closed on a
 	// backing-store error so the paid API budget stays protected.
 	if s.quota != nil {
-		ok, err := s.quota.Allow(ctx, userID)
+		res, err := s.quota.Allow(ctx, userID)
 		if err != nil {
 			s.logLLMError(ctx, fmt.Errorf("quota check: %w", err))
 			return nil, ErrUnavailable
 		}
-		if !ok {
+		if !res.Allowed {
+			if res.Scope == "global" {
+				return nil, ErrAssistantBusy
+			}
 			return nil, ErrQuota
 		}
 	}

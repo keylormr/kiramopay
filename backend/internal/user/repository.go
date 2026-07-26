@@ -15,6 +15,19 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
+// GetPlan returns the user's billing plan (free/plus/pro). A lightweight lookup
+// that avoids the full PII-decrypting user select — used by the assistant quota
+// to size the per-plan daily limit. Defaults to 'free' if the column is null.
+func (r *Repository) GetPlan(ctx context.Context, userID string) (string, error) {
+	var plan string
+	if err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(plan, 'free') FROM users WHERE id = $1 AND deleted_at IS NULL`, userID,
+	).Scan(&plan); err != nil {
+		return "", err
+	}
+	return plan, nil
+}
+
 // IsAdmin reports whether the user has the admin role. Satisfies
 // middleware.AdminChecker. Fail-closed: any error surfaces to the caller.
 func (r *Repository) IsAdmin(ctx context.Context, userID string) (bool, error) {

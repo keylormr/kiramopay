@@ -87,9 +87,12 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     if (res.success && res.data) {
       setMessages([...next, { role: 'assistant', text: res.data.reply, proposals: res.data.proposals }]);
     } else {
-      const text = res.error?.code === 'ASSISTANT_QUOTA'
+      const code = res.error?.code;
+      const text = code === 'ASSISTANT_QUOTA'
         ? t('assistant_quota_reached')
-        : res.error?.message || t('assistant_error');
+        : code === 'ASSISTANT_BUSY'
+          ? t('assistant_busy')
+          : res.error?.message || t('assistant_error');
       setMessages([...next, { role: 'assistant', text }]);
     }
   };
