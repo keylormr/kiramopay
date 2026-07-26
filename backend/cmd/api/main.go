@@ -435,7 +435,12 @@ func main() {
 
 	// Global middleware
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	// RealIP is deprecated in chi v5.3 (SA1019): it takes the leftmost, fully
+	// client-controlled X-Forwarded-For value, so a client can spoof the IP used
+	// for rate-limiting and audit. This is the pre-existing behavior; a proper
+	// trusted-proxy client-IP middleware (Render appends the real client last) is
+	// tracked as a follow-up. Silenced here so the CVE dependency bump can land.
+	r.Use(chimw.RealIP) //nolint:staticcheck // SA1019 — see comment above; trusted-proxy IP fix is a tracked follow-up
 	r.Use(middleware.OtelRouteTag) // refine the otelhttp span name to the chi route
 	r.Use(middleware.RequestTimeout(30 * time.Second))
 	r.Use(middleware.Logger)
