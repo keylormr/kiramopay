@@ -47,16 +47,12 @@ export interface CashbackRule {
   active: boolean;
 }
 
-export interface EarnPointsRequest {
-  refType: string;
-  refId: string;
-  amount: number;
-}
-
+// Points are issued server-side from real captured margin; there is no
+// client-facing earn call (a client-reported amount would allow
+// self-crediting redeemable points).
 export interface ILoyaltyRepository {
   getAccount(): Promise<ApiResponse<PointsAccount>>;
   getTransactions(): Promise<ApiResponse<PointsTransaction[]>>;
-  earnPoints(request: EarnPointsRequest): Promise<ApiResponse<PointsTransaction>>;
   getRewards(): Promise<ApiResponse<Reward[]>>;
   redeemReward(rewardId: string): Promise<ApiResponse<Redemption>>;
   getRedemptions(): Promise<ApiResponse<Redemption[]>>;

@@ -92,7 +92,7 @@ type ConvertRequest struct {
 type StakeRequest struct {
 	Asset    string          `json:"asset"`
 	Amount   decimal.Decimal `json:"amount"`
-	APY      float64         `json:"apy"`
+	APY      float64         `json:"apy"` // ignored: the rate is set server-side (see stakingAPY)
 	Locked   bool            `json:"locked"`
 	LockDays int             `json:"lock_days,omitempty"`
 }

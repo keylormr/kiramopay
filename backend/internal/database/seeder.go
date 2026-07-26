@@ -565,7 +565,6 @@ func seedLoyalty(ctx context.Context, pool *pgxpool.Pool, userID string) {
 		{"Recarga doble", "Tu proxima recarga se duplica (hasta ₡5,000)", "voucher", 1500, 50},
 		{"Puntos dobles 24h", "Gana el doble de puntos por 24 horas", "voucher", 2000, 30},
 		{"Comision crypto 0%", "Una operacion crypto sin comision", "voucher", 1000, -1},
-		{"Nivel VIP 7 dias", "Acceso a beneficios Gold por 7 dias", "experience", 5000, 10},
 	}
 	for _, r := range rewards {
 		_, err := pool.Exec(ctx,

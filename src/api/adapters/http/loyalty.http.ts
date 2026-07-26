@@ -5,7 +5,6 @@ import type {
   Reward,
   Redemption,
   CashbackRule,
-  EarnPointsRequest,
 } from '../../repositories/loyalty.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -49,29 +48,6 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       refId: t.ref_id || undefined,
       createdAt: t.created_at,
     })));
-  }
-
-  async earnPoints(request: EarnPointsRequest): Promise<ApiResponse<PointsTransaction>> {
-    const res = await this.client.post<{
-      id: string; type: string; points: number; description: string;
-      ref_type: string; ref_id: string; created_at: string;
-    }>('/api/v1/loyalty/earn', {
-      ref_type: request.refType,
-      ref_id: request.refId,
-      amount: request.amount,
-    });
-
-    if (!res.success || !res.data) return apiError('EARN_FAILED', res.error?.message || 'Failed');
-
-    return apiSuccess({
-      id: res.data.id,
-      type: res.data.type as PointsTransaction['type'],
-      points: res.data.points,
-      description: res.data.description,
-      refType: res.data.ref_type,
-      refId: res.data.ref_id,
-      createdAt: res.data.created_at,
-    });
   }
 
   async getRewards(): Promise<ApiResponse<Reward[]>> {

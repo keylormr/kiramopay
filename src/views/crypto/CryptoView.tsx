@@ -283,15 +283,13 @@ export const CryptoView: React.FC = () => {
   const handleStake = () => {
     if (!selectedAsset || !amount) return;
     const stakeAmount = parseFloat(amount);
-    const apyRates: Record<string, number> = { ETH: 4.5, USDT: 8.0, USDC: 6.5, SOL: 7.2 };
-    const apy = apyRates[selectedAsset.symbol] || 3.0;
 
     dispatch({
       type: 'STAKE_CRYPTO',
       payload: {
         asset: selectedAsset.symbol,
         amount: stakeAmount,
-        apy,
+        apy: 0, // the backend sets the program rate server-side
         locked: false
       }
     });
@@ -642,22 +640,10 @@ export const CryptoView: React.FC = () => {
             </div>
           )}
 
-          {/* APY Rates */}
+          {/* Rewards program notice: no rates are shown until accrual is live */}
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-2xl p-4">
-            <h4 className="font-bold uv-text-primary mb-3">{t('yield_rates')}</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { asset: 'ETH', apy: 4.5 },
-                { asset: 'USDT', apy: 8.0 },
-                { asset: 'USDC', apy: 6.5 },
-                { asset: 'SOL', apy: 7.2 },
-              ].map(rate => (
-                <div key={rate.asset} className="flex justify-between items-center bg-white/50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
-                  <span className="font-medium text-slate-700 dark:text-gray-300">{rate.asset}</span>
-                  <span className="font-bold text-green-600">{rate.apy}%</span>
-                </div>
-              ))}
-            </div>
+            <h4 className="font-bold uv-text-primary mb-1">{t('yield_rates')}</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_up_to_apy')}</p>
           </div>
         </div>
       )}
@@ -1061,12 +1047,7 @@ export const CryptoView: React.FC = () => {
       <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('staking')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-4">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600 dark:text-gray-300">{t('crypto_estimated_apy')}</span>
-              <span className="text-2xl font-black text-green-600">
-                {selectedAsset?.symbol === 'ETH' ? '4.5' : selectedAsset?.symbol === 'USDT' ? '8.0' : '6.5'}%
-              </span>
-            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_up_to_apy')}</p>
           </div>
 
           <div className="text-center">
@@ -1083,15 +1064,6 @@ export const CryptoView: React.FC = () => {
             </div>
             <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
-
-          {amount && (
-            <div className="uv-surface-2 rounded-xl p-4">
-              <p className="text-sm text-gray-500">{t('estimated_earnings')}</p>
-              <p className="font-bold text-green-500">
-                +{formatCrypto(parseFloat(amount) * (selectedAsset?.symbol === 'USDT' ? 0.08 : 0.045) / 12)} {selectedAsset?.symbol}
-              </p>
-            </div>
-          )}
 
           <button
             onClick={handleStake}

@@ -26,6 +26,9 @@ func (s *Service) GetTransactions(ctx context.Context, userID string) ([]PointsT
 }
 
 // EarnPoints calculates and awards points based on a transaction amount and category.
+// INTERNAL ONLY: not exposed over HTTP. The amount must come from a server-side
+// money path (it is trusted here), so points stay funded by real captured margin;
+// a client-reported amount would allow self-crediting redeemable points.
 func (s *Service) EarnPoints(ctx context.Context, userID string, req *EarnPointsRequest) (*PointsTransaction, error) {
 	// Ensure account exists
 	acct, err := s.repo.GetOrCreateAccount(ctx, userID)

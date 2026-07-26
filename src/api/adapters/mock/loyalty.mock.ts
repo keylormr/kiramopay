@@ -5,7 +5,6 @@ import type {
   Reward,
   Redemption,
   CashbackRule,
-  EarnPointsRequest,
 } from '../../repositories/loyalty.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -66,33 +65,6 @@ export class MockLoyaltyRepository implements ILoyaltyRepository {
   async getTransactions(): Promise<ApiResponse<PointsTransaction[]>> {
     const state = getState();
     return apiSuccess(state?.pointsTransactions ?? initialTransactions);
-  }
-
-  async earnPoints(request: EarnPointsRequest): Promise<ApiResponse<PointsTransaction>> {
-    const state = getState();
-    const account: PointsAccount = state?.pointsAccount ?? { ...initialAccount };
-    const points = Math.floor(request.amount * 0.02); // 2% default earn rate
-
-    const tx: PointsTransaction = {
-      id: `pt-${Date.now()}`,
-      type: 'earn',
-      points,
-      description: `Puntos por ${request.refType}`,
-      refType: request.refType,
-      refId: request.refId,
-      createdAt: new Date().toISOString(),
-    };
-
-    account.totalPoints += points;
-    account.availablePoints += points;
-    account.lifetimePoints += points;
-    saveField('pointsAccount', account);
-
-    const txs: PointsTransaction[] = state?.pointsTransactions ?? [...initialTransactions];
-    txs.unshift(tx);
-    saveField('pointsTransactions', txs);
-
-    return apiSuccess(tx);
   }
 
   async getRewards(): Promise<ApiResponse<Reward[]>> {
