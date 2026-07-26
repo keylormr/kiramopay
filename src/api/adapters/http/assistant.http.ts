@@ -56,7 +56,9 @@ export class HttpAssistantRepository implements IAssistantRepository {
       proposals?: RawProposal[];
     }>('/api/v1/assistant/chat', { message, history });
     if (!res.success || !res.data) {
-      return apiError('ASSISTANT_FAILED', res.error?.message || 'The assistant could not answer');
+      // Preserve the backend error code (e.g. ASSISTANT_QUOTA) so the view can
+      // show the right message instead of a generic failure.
+      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'The assistant could not answer');
     }
     return apiSuccess({
       reply: res.data.reply,

@@ -57,6 +57,30 @@ func TestToAnthropicMessagesPositionalToolResults(t *testing.T) {
 	}
 }
 
+func TestToolUseInputAlwaysEmittedAsObject(t *testing.T) {
+	// Regression: a zero-arg tool_use (e.g. get_balance) must serialize its
+	// input as {} — Anthropic rejects a tool_use block whose input is missing
+	// or null ("tool_use.input: Field required"). Text and tool_result blocks
+	// must NOT carry an input field.
+	history := []Message{
+		{Role: RoleUser, Text: "what's my balance?"},
+		{Role: RoleModel, ToolCalls: []ToolCall{{Name: "get_balance"}}}, // no Args
+		{Role: RoleTool, ToolName: "get_balance", ToolResponse: map[string]any{"crc": 100}},
+	}
+	raw, err := json.Marshal(toAnthropicMessages(history))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, `"input":{}`) {
+		t.Errorf("zero-arg tool_use should emit \"input\":{}, got: %s", body)
+	}
+	// The user text block and the tool_result block must not carry an input key.
+	if strings.Count(body, `"input"`) != 1 {
+		t.Errorf("exactly one input field (the tool_use) expected, got: %s", body)
+	}
+}
+
 func TestClaudeGenerateToolUseAndRequestShape(t *testing.T) {
 	var gotBody anthropicRequest
 	var gotKey, gotVersion string

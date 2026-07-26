@@ -26,13 +26,14 @@ type ClaudeClient struct {
 }
 
 const (
-	defaultClaudeModel   = "claude-opus-4-8"
+	defaultClaudeModel   = "claude-haiku-4-5"
 	anthropicVersion     = "2023-06-01"
 	claudeMaxOutputToken = 1024
 )
 
-// NewClaudeClient wires the client. model defaults to a current Opus model and
-// is allowlist-validated (reusing safeModel from gemini.go). The caller must
+// NewClaudeClient wires the client. model defaults to Haiku (fast and cheap —
+// the assistant is a short-turn Q&A helper, not a reasoning workload) and is
+// allowlist-validated (reusing safeModel from gemini.go). The caller must
 // ensure apiKey is non-empty.
 func NewClaudeClient(apiKey, model string, timeout time.Duration) *ClaudeClient {
 	if model == "" || !safeModel.MatchString(model) {
@@ -53,13 +54,17 @@ func NewClaudeClient(apiKey, model string, timeout time.Duration) *ClaudeClient 
 // ── Anthropic wire types ──────────────────────────────────────────────────────
 
 type anthropicBlock struct {
-	Type      string         `json:"type"`
-	Text      string         `json:"text,omitempty"`
-	ID        string         `json:"id,omitempty"`         // tool_use id
-	Name      string         `json:"name,omitempty"`       // tool_use name
-	Input     map[string]any `json:"input,omitempty"`      // tool_use args
-	ToolUseID string         `json:"tool_use_id,omitempty"` // tool_result link
-	Content   string         `json:"content,omitempty"`    // tool_result payload
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	ID   string `json:"id,omitempty"`   // tool_use id
+	Name string `json:"name,omitempty"` // tool_use name
+	// Input is a pointer so a tool_use block always emits an "input" object —
+	// even for zero-arg tools like get_balance — while text/tool_result blocks
+	// (nil) omit it. A non-pointer map with omitempty would drop an empty {},
+	// which Anthropic rejects with "tool_use.input: Field required".
+	Input     *map[string]any `json:"input,omitempty"`
+	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result link
+	Content   string          `json:"content,omitempty"`     // tool_result payload
 }
 
 type anthropicMessage struct {
@@ -165,7 +170,11 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		case "text":
 			text += block.Text
 		case "tool_use":
-			calls = append(calls, ToolCall{Name: block.Name, Args: block.Input})
+			var args map[string]any
+			if block.Input != nil {
+				args = *block.Input
+			}
+			calls = append(calls, ToolCall{Name: block.Name, Args: args})
 		}
 	}
 	return &LLMResult{Text: text, ToolCalls: calls}, nil
@@ -195,7 +204,13 @@ func toAnthropicMessages(history []Message) []anthropicMessage {
 					id := fmt.Sprintf("toolu_%d", seq)
 					seq++
 					pendingToolUseIDs = append(pendingToolUseIDs, id)
-					blocks = append(blocks, anthropicBlock{Type: "tool_use", ID: id, Name: call.Name, Input: call.Args})
+					// Anthropic requires tool_use.input to be present; a zero-arg
+					// tool has no Args, so emit an empty object rather than null.
+					args := call.Args
+					if args == nil {
+						args = map[string]any{}
+					}
+					blocks = append(blocks, anthropicBlock{Type: "tool_use", ID: id, Name: call.Name, Input: &args})
 				}
 				out = append(out, anthropicMessage{Role: "assistant", Content: blocks})
 			} else {

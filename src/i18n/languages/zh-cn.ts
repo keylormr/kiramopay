@@ -669,6 +669,7 @@ const zhCn: TranslationKeys = {
   assistant_placeholder: '输入你的问题…',
   assistant_send: '传送',
   assistant_error: '我无法回答，请再试一次。',
+  assistant_quota_reached: '您已达到助手每日使用上限，请明天再试。',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: '商家工具',
   escrow_menu: '保障付款',

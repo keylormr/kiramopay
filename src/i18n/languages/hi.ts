@@ -668,6 +668,7 @@ const hi: TranslationKeys = {
   assistant_placeholder: 'अपना सवाल लिखें…',
   assistant_send: 'भेजें',
   assistant_error: 'मैं जवाब नहीं दे सका। कृपया फिर से कोशिश करें।',
+  assistant_quota_reached: 'आपने सहायक की दैनिक सीमा पूरी कर ली है। कृपया कल फिर से प्रयास करें।',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'मर्चेंट टूल्स',
   escrow_menu: 'सुरक्षित भुगतान',
