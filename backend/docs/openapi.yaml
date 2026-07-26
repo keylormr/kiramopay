@@ -746,16 +746,6 @@ paths:
         '200':
           description: Points earn/spend history
 
-  /api/v1/loyalty/earn:
-    post:
-      tags: [Loyalty]
-      summary: Earn loyalty points
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Points earned
-
   /api/v1/loyalty/rewards:
     get:
       tags: [Loyalty]

@@ -36,22 +36,6 @@ func (h *Handler) GetTransactions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, txs)
 }
 
-func (h *Handler) EarnPoints(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
-	var req EarnPointsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
-		return
-	}
-
-	ptx, err := h.service.EarnPoints(r.Context(), userID, &req)
-	if err != nil {
-		response.Error(w, http.StatusBadRequest, "EARN_FAILED", err.Error())
-		return
-	}
-	response.JSON(w, http.StatusCreated, ptx)
-}
-
 func (h *Handler) GetRewards(w http.ResponseWriter, r *http.Request) {
 	rewards, err := h.service.GetRewards(r.Context())
 	if err != nil {

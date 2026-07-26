@@ -630,7 +630,9 @@ func main() {
 			// Loyalty
 			r.Get("/loyalty/account", loyaltyHandler.GetAccount)
 			r.Get("/loyalty/transactions", loyaltyHandler.GetTransactions)
-			r.Post("/loyalty/earn", loyaltyHandler.EarnPoints)
+			// No client-facing earn endpoint: points must be issued server-side
+			// from real captured margin (QR commission / FX spread), never from
+			// client-reported amounts.
 			r.Get("/loyalty/rewards", loyaltyHandler.GetRewards)
 			r.Post("/loyalty/redeem", loyaltyHandler.RedeemReward)
 			r.Get("/loyalty/redemptions", loyaltyHandler.GetRedemptions)

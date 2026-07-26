@@ -160,6 +160,66 @@ func (r *Repository) AddStaking(ctx context.Context, s *StakingRecord) error {
 	return err
 }
 
+func (r *Repository) GetStakingByID(ctx context.Context, id, userID string) (*StakingRecord, error) {
+	s := &StakingRecord{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, user_id, asset, amount, apy, start_date, locked, lock_days, earned, status, created_at
+		 FROM crypto_staking WHERE id = $1 AND user_id = $2`,
+		id, userID,
+	).Scan(&s.ID, &s.UserID, &s.Asset, &s.Amount, &s.APY, &s.StartDate, &s.Locked, &s.LockDays, &s.Earned, &s.Status, &s.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// CompleteStakingAndRelease marks an active staking position as completed and
+// returns its principal plus any accrued earnings to the user's asset balance,
+// in one transaction. The row lock prevents a double release under concurrent
+// unstake calls.
+func (r *Repository) CompleteStakingAndRelease(ctx context.Context, id, userID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var asset string
+	var amount, earned decimal.Decimal
+	err = tx.QueryRow(ctx,
+		`SELECT asset, amount, earned FROM crypto_staking
+		 WHERE id = $1 AND user_id = $2 AND status = 'active' FOR UPDATE`,
+		id, userID,
+	).Scan(&asset, &amount, &earned)
+	if err != nil {
+		return fmt.Errorf("active staking position not found")
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE crypto_staking SET status = 'completed' WHERE id = $1`, id); err != nil {
+		return err
+	}
+
+	release := amount.Add(earned)
+	ct, err := tx.Exec(ctx,
+		`UPDATE crypto_assets SET balance = balance + $3, updated_at = NOW()
+		 WHERE user_id = $1 AND symbol = $2`,
+		userID, asset, release)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
+			 VALUES ($1, $2, $3, $3, $4, 0, NOW(), NOW())`,
+			uuid.New().String(), userID, asset, release); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *Repository) UpdateStakingStatus(ctx context.Context, id, userID, status string) error {
 	_, err := r.db.Exec(ctx, `UPDATE crypto_staking SET status = $3 WHERE id = $1 AND user_id = $2`, id, userID, status)
 	return err

@@ -207,6 +207,16 @@ func (s *Service) GetStakingPositions(ctx context.Context, userID string) ([]Sta
 	return s.repo.GetStakingPositions(ctx, userID)
 }
 
+// Server-side staking rates: the client-sent APY is ignored so a caller can
+// never inflate the recorded rate. These are the program's target rates;
+// earnings accrual is not live yet (Earned stays zero until it is).
+var stakingAPY = map[string]float64{
+	"ETH":  4.5,
+	"USDT": 8.0,
+	"USDC": 6.5,
+	"SOL":  7.2,
+}
+
 func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (*StakingRecord, error) {
 	if !req.Amount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
@@ -227,7 +237,7 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		UserID:    userID,
 		Asset:     req.Asset,
 		Amount:    req.Amount,
-		APY:       req.APY,
+		APY:       stakingAPY[req.Asset],
 		StartDate: time.Now(),
 		Locked:    req.Locked,
 		LockDays:  req.LockDays,
@@ -242,7 +252,20 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID string) error {
-	return s.repo.UpdateStakingStatus(ctx, positionID, userID, "completed")
+	pos, err := s.repo.GetStakingByID(ctx, positionID, userID)
+	if err != nil {
+		return fmt.Errorf("staking position not found")
+	}
+	if pos.Status != "active" {
+		return fmt.Errorf("staking position is not active")
+	}
+	if pos.Locked {
+		unlockAt := pos.StartDate.AddDate(0, 0, pos.LockDays)
+		if time.Now().Before(unlockAt) {
+			return fmt.Errorf("position is locked until %s", unlockAt.Format("2006-01-02"))
+		}
+	}
+	return s.repo.CompleteStakingAndRelease(ctx, positionID, userID)
 }
 
 func (s *Service) GetPriceAlerts(ctx context.Context, userID string) ([]PriceAlertRecord, error) {
