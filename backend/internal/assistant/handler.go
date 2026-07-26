@@ -51,6 +51,8 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
 	case errors.Is(err, ErrQuota):
 		response.Error(w, http.StatusTooManyRequests, "ASSISTANT_QUOTA", "daily assistant limit reached")
+	case errors.Is(err, ErrAssistantBusy):
+		response.Error(w, http.StatusTooManyRequests, "ASSISTANT_BUSY", "assistant temporarily at capacity")
 	case errors.Is(err, ErrLLM):
 		response.Error(w, http.StatusBadGateway, "ASSISTANT_FAILED", "the assistant could not answer right now")
 	default:

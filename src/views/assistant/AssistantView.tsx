@@ -9,6 +9,42 @@ import type { AssistantTurn, AssistantProposal } from '@/api';
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
 type ProposalState = 'idle' | 'pending' | 'done' | 'error';
 
+// The model replies in light Markdown (**bold**, "- " bullets). Render just
+// those inline so the assistant bubble doesn't show raw ** or - characters.
+// Deliberately minimal: no HTML injection, no external parser.
+const renderInline = (text: string, keyPrefix: string): React.ReactNode[] => {
+  const nodes: React.ReactNode[] = [];
+  const boldRe = /\*\*(.+?)\*\*/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let idx = 0;
+  while ((match = boldRe.exec(text)) !== null) {
+    if (match.index > last) nodes.push(text.slice(last, match.index));
+    nodes.push(<strong key={`${keyPrefix}-b${idx++}`}>{match[1]}</strong>);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes.length ? nodes : [text];
+};
+
+const FormattedText: React.FC<{ text: string }> = ({ text }) => (
+  <>
+    {text.split('\n').map((line, i) => {
+      const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+      if (bullet) {
+        return (
+          <div key={i} className="flex gap-2">
+            <span aria-hidden="true">•</span>
+            <span>{renderInline(bullet[1], `l${i}`)}</span>
+          </div>
+        );
+      }
+      if (line.trim() === '') return <div key={i} className="h-2" />;
+      return <div key={i}>{renderInline(line, `l${i}`)}</div>;
+    })}
+  </>
+);
+
 export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -51,9 +87,12 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     if (res.success && res.data) {
       setMessages([...next, { role: 'assistant', text: res.data.reply, proposals: res.data.proposals }]);
     } else {
-      const text = res.error?.code === 'ASSISTANT_QUOTA'
+      const code = res.error?.code;
+      const text = code === 'ASSISTANT_QUOTA'
         ? t('assistant_quota_reached')
-        : res.error?.message || t('assistant_error');
+        : code === 'ASSISTANT_BUSY'
+          ? t('assistant_busy')
+          : res.error?.message || t('assistant_error');
       setMessages([...next, { role: 'assistant', text }]);
     }
   };
@@ -156,7 +195,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                     : 'uv-surface-2 uv-text-primary rounded-bl-sm'
                 }`}
               >
-                {m.text}
+                {m.role === 'user' ? m.text : <FormattedText text={m.text} />}
               </div>
             </div>
 

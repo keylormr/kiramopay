@@ -34,9 +34,11 @@ type GeminiConfig struct {
 type AnthropicConfig struct {
 	APIKey string // ANTHROPIC_API_KEY
 	Model  string // ANTHROPIC_MODEL
-	// Daily assistant quota (protects the paid API budget). Non-positive ⇒
-	// package defaults (2 per user/day, 100 app-wide/day).
-	UserDailyLimit   int // ASSISTANT_USER_DAILY_LIMIT
+	// Daily assistant quota (protects the paid API budget), per billing plan.
+	// Non-positive ⇒ package defaults (free 2, plus 15, pro 50, 100 app-wide).
+	UserDailyLimit   int // ASSISTANT_USER_DAILY_LIMIT   (free tier)
+	PlusDailyLimit   int // ASSISTANT_PLUS_DAILY_LIMIT
+	ProDailyLimit    int // ASSISTANT_PRO_DAILY_LIMIT
 	GlobalDailyLimit int // ASSISTANT_GLOBAL_DAILY_LIMIT
 }
 
@@ -187,6 +189,8 @@ func Load() *Config {
 			// the cheapest current model fits and keeps the API budget lasting.
 			Model:            getEnv("ANTHROPIC_MODEL", "claude-haiku-4-5"),
 			UserDailyLimit:   getEnvInt("ASSISTANT_USER_DAILY_LIMIT", 2),
+			PlusDailyLimit:   getEnvInt("ASSISTANT_PLUS_DAILY_LIMIT", 15),
+			ProDailyLimit:    getEnvInt("ASSISTANT_PRO_DAILY_LIMIT", 50),
 			GlobalDailyLimit: getEnvInt("ASSISTANT_GLOBAL_DAILY_LIMIT", 100),
 		},
 	}
