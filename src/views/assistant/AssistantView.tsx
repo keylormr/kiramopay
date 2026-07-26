@@ -4,7 +4,7 @@ import { Icons } from '@/components/Icons';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
-import type { AssistantTurn, AssistantProposal } from '@/api';
+import type { AssistantTurn, AssistantProposal, AssistantConversationSummary } from '@/api';
 
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
 type ProposalState = 'idle' | 'pending' | 'done' | 'error';
@@ -51,6 +51,10 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  // Saved conversation history: the list, the active thread, and the panel.
+  const [conversations, setConversations] = useState<AssistantConversationSummary[]>([]);
+  const [activeConvId, setActiveConvId] = useState('');
+  const [showConvs, setShowConvs] = useState(false);
   // Per-proposal confirmation status, keyed by "<msgIndex>:<proposalIndex>".
   const [pstate, setPstate] = useState<Record<string, { status: ProposalState; error?: string }>>({});
   const [showMfa, setShowMfa] = useState(false);
@@ -62,13 +66,54 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     let cancelled = false;
     const run = async () => {
       const res = await getApiLayer().assistant.status();
-      if (!cancelled) setAvailable(res.success && res.data ? res.data.available : false);
+      if (cancelled) return;
+      const ok = res.success && res.data ? res.data.available : false;
+      setAvailable(ok);
+      if (ok) {
+        const list = await getApiLayer().assistant.listConversations();
+        if (!cancelled && list.success && list.data) setConversations(list.data);
+      }
     };
-    run();
+    // Swallow failures: a status/history load error must not become an unhandled
+    // rejection or block the chat — the assistant still works without the list.
+    run().catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const reloadConversations = async () => {
+    const list = await getApiLayer().assistant.listConversations();
+    if (list.success && list.data) setConversations(list.data);
+  };
+
+  // Open a saved thread: load its messages and make it active.
+  const selectConversation = async (id: string) => {
+    setShowConvs(false);
+    if (id === activeConvId) return;
+    const res = await getApiLayer().assistant.getConversation(id);
+    if (res.success && res.data) {
+      setActiveConvId(id);
+      setMessages(res.data.messages.map((m) => ({ role: m.role, text: m.text })));
+      setPstate({});
+    }
+  };
+
+  // Start a fresh thread; the server creates it on the first message.
+  const newConversation = () => {
+    setShowConvs(false);
+    setActiveConvId('');
+    setMessages([]);
+    setPstate({});
+  };
+
+  const deleteConversation = async (id: string) => {
+    const res = await getApiLayer().assistant.deleteConversation(id);
+    if (res.success) {
+      await reloadConversations();
+      if (id === activeConvId) newConversation();
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -82,17 +127,26 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     setMessages(next);
     setInput('');
     setSending(true);
-    const res = await getApiLayer().assistant.chat(trimmed, history);
+    const res = await getApiLayer().assistant.chat(trimmed, activeConvId || undefined, history);
     setSending(false);
     if (res.success && res.data) {
       setMessages([...next, { role: 'assistant', text: res.data.reply, proposals: res.data.proposals }]);
+      // The server may have created the thread on this first message; track it
+      // and refresh the list so it appears (with its derived title).
+      if (res.data.conversationId) {
+        if (!activeConvId) setActiveConvId(res.data.conversationId);
+        reloadConversations();
+      }
     } else {
       const code = res.error?.code;
-      const text = code === 'ASSISTANT_QUOTA'
-        ? t('assistant_quota_reached')
-        : code === 'ASSISTANT_BUSY'
-          ? t('assistant_busy')
-          : res.error?.message || t('assistant_error');
+      const text =
+        code === 'ASSISTANT_QUOTA'
+          ? t('assistant_quota_reached')
+          : code === 'ASSISTANT_BUSY'
+            ? t('assistant_busy')
+            : code === 'CONVERSATION_LIMIT'
+              ? t('assistant_conv_limit')
+              : res.error?.message || t('assistant_error');
       setMessages([...next, { role: 'assistant', text }]);
     }
   };
@@ -153,7 +207,67 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <Icons.MessageCircle size={16} className="text-white" />
         </div>
         <h1 className="text-lg font-bold">{t('assistant_title')}</h1>
+        {available !== false && (
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={newConversation}
+              className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+              aria-label={t('assistant_new_conversation')}
+            >
+              <Icons.Plus size={20} />
+            </button>
+            <button
+              onClick={() => setShowConvs((v) => !v)}
+              className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+              aria-label={t('assistant_history')}
+            >
+              <Icons.History size={20} />
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Conversation history panel */}
+      {showConvs && (
+        <div className="sticky top-14 z-10 bg-white dark:bg-surface-dark border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] max-h-[45vh] overflow-y-auto">
+          <div className="flex items-center justify-between px-4 py-2">
+            <span className="text-xs font-semibold uv-text-muted">{t('assistant_history')}</span>
+            <button
+              onClick={newConversation}
+              className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]"
+            >
+              <Icons.Plus size={14} />
+              {t('assistant_new_conversation')}
+            </button>
+          </div>
+          {conversations.length === 0 ? (
+            <p className="px-4 pb-3 text-xs uv-text-muted">{t('assistant_no_conversations')}</p>
+          ) : (
+            conversations.map((c) => (
+              <div
+                key={c.id}
+                className={`flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] ${
+                  c.id === activeConvId ? 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]' : ''
+                }`}
+              >
+                <button onClick={() => selectConversation(c.id)} className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium uv-text-primary truncate">
+                    {c.title || t('assistant_untitled_conversation')}
+                  </p>
+                  <p className="text-xs uv-text-muted">{c.messageCount} {t('assistant_messages_count')}</p>
+                </button>
+                <button
+                  onClick={() => deleteConversation(c.id)}
+                  className="p-1.5 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] text-red-500"
+                  aria-label={t('delete')}
+                >
+                  <Icons.X size={16} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

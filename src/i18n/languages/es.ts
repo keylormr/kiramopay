@@ -678,6 +678,12 @@ const es: TranslationKeys = {
   assistant_error: 'No pude responder. Inténtalo de nuevo.',
   assistant_quota_reached: 'Alcanzaste tu límite diario de consultas del asistente. Se renueva mañana; los planes con más consultas llegan pronto.',
   assistant_busy: 'El asistente está recibiendo muchas consultas en este momento. Vuelve a intentarlo en unos minutos.',
+  assistant_new_conversation: 'Nueva conversación',
+  assistant_history: 'Conversaciones',
+  assistant_no_conversations: 'Aún no tienes conversaciones guardadas.',
+  assistant_untitled_conversation: 'Conversación sin título',
+  assistant_messages_count: 'mensajes',
+  assistant_conv_limit: 'Alcanzaste el máximo de conversaciones guardadas de tu plan. Borra una para empezar otra, o mejora tu plan para guardar más (próximamente).',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'Herramientas de comercio',
   escrow_menu: 'Pagos protegidos',

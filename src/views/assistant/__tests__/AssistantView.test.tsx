@@ -4,7 +4,14 @@ import { LanguageProvider } from '@/i18n/LanguageContext';
 import { AssistantView } from '../AssistantView';
 
 const mockApi = vi.hoisted(() => ({
-  assistant: { status: vi.fn(), chat: vi.fn() },
+  assistant: {
+    status: vi.fn(),
+    chat: vi.fn(),
+    listConversations: vi.fn(),
+    getConversation: vi.fn(),
+    createConversation: vi.fn(),
+    deleteConversation: vi.fn(),
+  },
   sinpe: { send: vi.fn() },
   services: { recharge: vi.fn(), payBill: vi.fn() },
   mfa: { totpVerify: vi.fn() },
@@ -42,6 +49,7 @@ beforeEach(() => {
   // jsdom does not implement scrollIntoView; the chat auto-scrolls on new messages.
   Element.prototype.scrollIntoView = vi.fn();
   mockApi.assistant.status.mockResolvedValue({ success: true, data: { available: true } });
+  mockApi.assistant.listConversations.mockResolvedValue({ success: true, data: [] });
   mockApi.assistant.chat.mockResolvedValue({
     success: true,
     data: {

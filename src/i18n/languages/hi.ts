@@ -670,6 +670,12 @@ const hi: TranslationKeys = {
   assistant_error: 'मैं जवाब नहीं दे सका। कृपया फिर से कोशिश करें।',
   assistant_quota_reached: 'आपने सहायक की दैनिक सीमा पूरी कर ली है। यह कल रीसेट होगी; अधिक अनुरोधों वाले प्लान जल्द आ रहे हैं।',
   assistant_busy: 'सहायक अभी बहुत सारे अनुरोध संभाल रहा है। कृपया कुछ मिनटों में फिर से प्रयास करें।',
+  assistant_new_conversation: 'नई बातचीत',
+  assistant_history: 'बातचीत',
+  assistant_no_conversations: 'आपके पास अभी तक कोई सहेजी गई बातचीत नहीं है।',
+  assistant_untitled_conversation: 'बिना शीर्षक बातचीत',
+  assistant_messages_count: 'संदेश',
+  assistant_conv_limit: 'आपने अपने प्लान की अधिकतम सहेजी गई बातचीत सीमा पूरी कर ली है। दूसरी शुरू करने के लिए एक हटाएं, या अधिक सहेजने के लिए प्लान अपग्रेड करें (जल्द आ रहा है)।',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'मर्चेंट टूल्स',
   escrow_menu: 'सुरक्षित भुगतान',

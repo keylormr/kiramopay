@@ -678,6 +678,12 @@ const fr: TranslationKeys = {
   assistant_error: "Je n'ai pas pu répondre. Veuillez réessayer.",
   assistant_quota_reached: "Vous avez atteint votre limite quotidienne de l'assistant. Elle se réinitialise demain ; des forfaits avec plus de requêtes arrivent bientôt.",
   assistant_busy: "L'assistant reçoit beaucoup de requêtes en ce moment. Réessayez dans quelques minutes.",
+  assistant_new_conversation: 'Nouvelle conversation',
+  assistant_history: 'Conversations',
+  assistant_no_conversations: "Vous n'avez pas encore de conversations enregistrées.",
+  assistant_untitled_conversation: 'Conversation sans titre',
+  assistant_messages_count: 'messages',
+  assistant_conv_limit: "Vous avez atteint le nombre maximum de conversations enregistrées de votre forfait. Supprimez-en une pour en commencer une autre, ou passez à un forfait supérieur (bientôt disponible).",
   // Phase F — escrow + API keys + webhooks
   merchant_tools: 'Outils commerçant',
   escrow_menu: 'Paiements protégés',

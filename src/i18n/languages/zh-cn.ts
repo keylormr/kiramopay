@@ -671,6 +671,12 @@ const zhCn: TranslationKeys = {
   assistant_error: '我无法回答，请再试一次。',
   assistant_quota_reached: '您已达到助手每日使用上限，将于明天重置；提供更多次数的套餐即将推出。',
   assistant_busy: '助手当前请求繁忙，请几分钟后再试。',
+  assistant_new_conversation: '新对话',
+  assistant_history: '对话',
+  assistant_no_conversations: '您还没有已保存的对话。',
+  assistant_untitled_conversation: '无标题对话',
+  assistant_messages_count: '条消息',
+  assistant_conv_limit: '您已达到当前套餐可保存对话的上限。删除一个以开始新对话，或升级套餐以保存更多（即将推出）。',
   // Phase F — escrow + API keys + webhooks
   merchant_tools: '商家工具',
   escrow_menu: '保障付款',

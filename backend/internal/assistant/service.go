@@ -35,8 +35,9 @@ type Service struct {
 	llm      LLM // nil ⇒ assistant disabled (no API key)
 	tools    *Tools
 	audit    *audit.Logger
-	logger   *slog.Logger // nil ⇒ no logging
-	quota    Limiter      // nil ⇒ unlimited (tests / no Redis)
+	logger   *slog.Logger         // nil ⇒ no logging
+	quota    Limiter              // nil ⇒ unlimited (tests / no Redis)
+	conv     *ConversationService // nil ⇒ history disabled (ephemeral turns)
 	maxTurns int
 }
 
@@ -46,6 +47,12 @@ type ServiceOption func(*Service)
 // WithLimiter attaches a daily usage quota. Omit it (or pass nil) for unlimited.
 func WithLimiter(l Limiter) ServiceOption {
 	return func(s *Service) { s.quota = l }
+}
+
+// WithConversations attaches server-side conversation history. Omit it for
+// stateless turns that use the client-sent history.
+func WithConversations(c *ConversationService) ServiceOption {
+	return func(s *Service) { s.conv = c }
 }
 
 func NewService(llm LLM, tools *Tools, auditLogger *audit.Logger, logger *slog.Logger, opts ...ServiceOption) *Service {
@@ -61,7 +68,7 @@ func (s *Service) Available() bool { return s.llm != nil }
 
 // Chat runs one assistant turn: it loops the model with read-only tools until
 // the model returns a final answer (or the turn budget is exhausted).
-func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*ChatResponse, error) {
+func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (resp *ChatResponse, err error) {
 	if s.llm == nil {
 		return nil, ErrUnavailable
 	}
@@ -76,9 +83,9 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 	// Enforce the daily quota before spending any model tokens. Fail closed on a
 	// backing-store error so the paid API budget stays protected.
 	if s.quota != nil {
-		res, err := s.quota.Allow(ctx, userID)
-		if err != nil {
-			s.logLLMError(ctx, fmt.Errorf("quota check: %w", err))
+		res, qerr := s.quota.Allow(ctx, userID)
+		if qerr != nil {
+			s.logLLMError(ctx, fmt.Errorf("quota check: %w", qerr))
 			return nil, ErrUnavailable
 		}
 		if !res.Allowed {
@@ -87,18 +94,64 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (*C
 			}
 			return nil, ErrQuota
 		}
+		// Any failure after this point refunds the consumed unit so our own
+		// errors (or a blocked conversation) don't burn the user's allowance.
+		defer func() {
+			if err != nil {
+				s.quota.Refund(ctx, userID)
+			}
+		}()
 	}
 
-	resp, err := s.runTurn(ctx, userID, msg, req.History)
-	if err != nil {
-		// The turn passed the quota gate but failed on our side (model error);
-		// refund so our failure doesn't burn the user's allowance.
-		if s.quota != nil {
-			s.quota.Refund(ctx, userID)
+	// Resolve conversation history server-side when enabled: use an existing
+	// thread's stored messages as context, or create a new thread (subject to
+	// the per-plan limit). Otherwise fall back to the client-sent history.
+	var (
+		convID string
+		prior  []Turn
+	)
+	if s.conv != nil {
+		if req.ConversationID != "" {
+			c, cerr := s.conv.Get(ctx, userID, req.ConversationID)
+			if cerr != nil {
+				return nil, cerr
+			}
+			convID = c.ID
+			prior = toTurns(c.Messages)
+		} else {
+			c, cerr := s.conv.Create(ctx, userID)
+			if cerr != nil {
+				return nil, cerr
+			}
+			convID = c.ID
 		}
+	} else {
+		prior = req.History
+	}
+
+	resp, err = s.runTurn(ctx, userID, msg, prior)
+	if err != nil {
 		return nil, err
 	}
+
+	if s.conv != nil && convID != "" {
+		if perr := s.conv.persist(ctx, userID, convID, msg, resp.Reply); perr != nil {
+			// Non-fatal: the user already has their answer; just record it.
+			s.logLLMError(ctx, fmt.Errorf("persist conversation: %w", perr))
+		}
+		resp.ConversationID = convID
+	}
 	return resp, nil
+}
+
+// toTurns converts stored conversation messages into the provider-neutral turns
+// the model loop consumes as prior context.
+func toTurns(msgs []StoredMessage) []Turn {
+	out := make([]Turn, 0, len(msgs))
+	for _, m := range msgs {
+		out = append(out, Turn{Role: m.Role, Text: m.Content})
+	}
+	return out
 }
 
 // runTurn drives the model tool-call loop until it returns a final answer or the

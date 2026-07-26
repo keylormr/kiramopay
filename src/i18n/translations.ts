@@ -754,6 +754,12 @@ export type TranslationKeys = {
   assistant_error: string;
   assistant_quota_reached: string;
   assistant_busy: string;
+  assistant_new_conversation: string;
+  assistant_history: string;
+  assistant_no_conversations: string;
+  assistant_untitled_conversation: string;
+  assistant_messages_count: string;
+  assistant_conv_limit: string;
   // Phase F — escrow + API keys + webhooks
   merchant_tools: string;
   escrow_menu: string;

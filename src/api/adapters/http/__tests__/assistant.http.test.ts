@@ -33,11 +33,12 @@ describe('HttpAssistantRepository', () => {
       .fn()
       .mockResolvedValue({ success: true, data: { reply: 'You have ₡15,000.', tools_used: ['get_balance'] } });
     const repo = new HttpAssistantRepository(fakeClient({ post }));
-    const res = await repo.chat('balance?', [{ role: 'user', text: 'hi' }]);
+    const res = await repo.chat('balance?', undefined, [{ role: 'user', text: 'hi' }]);
     expect(res.data?.reply).toBe('You have ₡15,000.');
     expect(res.data?.toolsUsed).toEqual(['get_balance']);
     expect(post).toHaveBeenCalledWith('/api/v1/assistant/chat', {
       message: 'balance?',
+      conversation_id: undefined,
       history: [{ role: 'user', text: 'hi' }],
     });
   });
