@@ -80,7 +80,7 @@ describe('SinpeView — send', () => {
         idempotencyKey: expect.any(String),
       }),
     );
-    expect(await screen.findByText('Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
     expect(mocks.dispatch).toHaveBeenCalled();
   });
 
@@ -103,6 +103,6 @@ describe('SinpeView — send', () => {
       expect(mocks.api.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText('Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
   });
 });

@@ -83,7 +83,7 @@ describe('LoginView', () => {
     await user.click(continueBtn);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Contrasena')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
     });
   });
 
@@ -104,11 +104,11 @@ describe('LoginView', () => {
 
     // Wait for password stage
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Contrasena')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
     });
 
     // Enter password and submit
-    const passwordInput = screen.getByPlaceholderText('Contrasena');
+    const passwordInput = screen.getByPlaceholderText('Contraseña');
     await user.type(passwordInput, 'Kiramopay2024!');
     await user.click(screen.getByText('Ingresar'));
 
