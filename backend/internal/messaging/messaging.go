@@ -1,5 +1,5 @@
 // Package messaging delivers one-time codes and account emails over real
-// providers (Telnyx for SMS, Amazon SES over SMTP for email). Every sender is
+// providers (Telnyx for SMS, an SMTP relay for email). Every sender is
 // optional: when the relevant provider is not configured the constructor
 // returns a nil interface, and callers treat nil as "no delivery channel" and
 // fall back to the dev-mode echo. This mirrors the no-op gating used for the
@@ -41,20 +41,32 @@ func (c SMSConfig) Enabled() bool {
 	return c.TelnyxAPIKey != "" && (c.TelnyxFrom != "" || c.MessagingProfileID != "")
 }
 
-// EmailConfig configures the email provider. Amazon SES is spoken over plain
-// SMTP+STARTTLS, so any SES-compatible SMTP relay works with the same fields.
+// EmailConfig configures the email provider. Every supported provider is spoken
+// over plain SMTP+STARTTLS, so the same fields cover all of them: switching
+// providers is a change of credentials, not of code.
 type EmailConfig struct {
-	Provider     string // "ses" (empty disables email)
-	SMTPHost     string // e.g. email-smtp.us-east-1.amazonaws.com
+	Provider     string // see emailProviderHosts (empty disables email)
+	SMTPHost     string // e.g. smtp.resend.com
 	SMTPPort     int    // 587 (STARTTLS)
-	SMTPUser     string // SES SMTP username
-	SMTPPassword string // SES SMTP password
+	SMTPUser     string // SMTP username ("resend" for Resend, the SMTP user for SES)
+	SMTPPassword string // SMTP password (the API key for Resend)
 	From         string // verified sender, e.g. "KiramoPay <no-reply@kiramopay.com>"
+}
+
+// emailProviderHosts lists the accepted EMAIL_PROVIDER values mapped to the
+// SMTP host used when none is given explicitly. "smtp" is the generic relay and
+// always requires SMTP_HOST.
+var emailProviderHosts = map[string]string{
+	"ses":      "email-smtp.us-east-1.amazonaws.com",
+	"resend":   "smtp.resend.com",
+	"postmark": "smtp.postmarkapp.com",
+	"brevo":    "smtp-relay.brevo.com",
+	"smtp":     "",
 }
 
 // Enabled reports whether the email provider has enough config to send.
 func (c EmailConfig) Enabled() bool {
-	if strings.ToLower(c.Provider) != "ses" {
+	if _, ok := emailProviderHosts[strings.ToLower(c.Provider)]; !ok {
 		return false
 	}
 	return c.SMTPHost != "" && c.SMTPUser != "" && c.SMTPPassword != "" && c.From != ""
@@ -72,7 +84,8 @@ type Config struct {
 // LoadConfig reads messaging configuration from the environment. All values are
 // optional; unset providers stay disabled.
 func LoadConfig() Config {
-	port, _ := strconv.Atoi(getenv("SES_SMTP_PORT", "587"))
+	emailProvider := os.Getenv("EMAIL_PROVIDER")
+	port, _ := strconv.Atoi(firstenv("587", "SMTP_PORT", "SES_SMTP_PORT"))
 	return Config{
 		SMS: SMSConfig{
 			Provider:           os.Getenv("SMS_PROVIDER"),
@@ -81,11 +94,11 @@ func LoadConfig() Config {
 			MessagingProfileID: os.Getenv("TELNYX_MESSAGING_PROFILE_ID"),
 		},
 		Email: EmailConfig{
-			Provider:     os.Getenv("EMAIL_PROVIDER"),
-			SMTPHost:     getenv("SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com"),
+			Provider:     emailProvider,
+			SMTPHost:     firstenv(emailProviderHosts[strings.ToLower(emailProvider)], "SMTP_HOST", "SES_SMTP_HOST"),
 			SMTPPort:     port,
-			SMTPUser:     os.Getenv("SES_SMTP_USER"),
-			SMTPPassword: os.Getenv("SES_SMTP_PASSWORD"),
+			SMTPUser:     firstenv("", "SMTP_USER", "SES_SMTP_USER"),
+			SMTPPassword: firstenv("", "SMTP_PASSWORD", "SES_SMTP_PASSWORD"),
 			From:         os.Getenv("EMAIL_FROM"),
 		},
 		PublicAppURL: strings.TrimRight(os.Getenv("PUBLIC_APP_URL"), "/"),
@@ -111,9 +124,14 @@ func NewEmailSender(cfg EmailConfig) EmailSender {
 	return newSMTPEmail(cfg)
 }
 
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// firstenv returns the first non-empty value among keys, or fallback. It lets
+// the generic SMTP_* variables take precedence while the older SES_* ones keep
+// working, so a deployment configured for SES keeps sending after this change.
+func firstenv(fallback string, keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
 	}
 	return fallback
 }

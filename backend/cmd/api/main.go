@@ -185,7 +185,7 @@ func main() {
 
 	// ── Messaging (SMS / email delivery) ─────────────────────────────────
 	// Real OTP and password-reset delivery. Each sender is nil until its provider
-	// is configured (SMS_PROVIDER/TELNYX_* for SMS, EMAIL_PROVIDER/SES_* for
+	// is configured (SMS_PROVIDER/TELNYX_* for SMS, EMAIL_PROVIDER/SMTP_* for
 	// email), in which case the flow falls back to the dev-only secret echo —
 	// same no-op gating as the assistant and web push.
 	msgCfg := messaging.LoadConfig()

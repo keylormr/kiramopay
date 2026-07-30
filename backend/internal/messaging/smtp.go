@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// smtpEmail sends transactional email over SMTP+STARTTLS. Amazon SES exposes a
-// standard SMTP endpoint (email-smtp.<region>.amazonaws.com:587), so this speaks
-// plain SMTP and works with SES or any compatible relay.
+// smtpEmail sends transactional email over SMTP+STARTTLS. Resend, Amazon SES,
+// Postmark and Brevo all expose a standard SMTP endpoint on port 587, so this
+// one client covers every provider: only host and credentials change.
 type smtpEmail struct {
 	host     string
 	port     int
