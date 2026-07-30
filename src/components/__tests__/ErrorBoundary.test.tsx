@@ -55,9 +55,9 @@ describe('ErrorBoundary', () => {
     );
 
     // Should show the Spanish error translations
-    expect(screen.getByText('Algo salio mal')).toBeInTheDocument();
+    expect(screen.getByText('Algo salió mal')).toBeInTheDocument();
     expect(
-      screen.getByText('Ocurrio un error inesperado. Puedes intentar de nuevo o volver al inicio.'),
+      screen.getByText('Ocurrió un error inesperado. Puedes intentar de nuevo o volver al inicio.'),
     ).toBeInTheDocument();
     expect(screen.getByText('Reintentar')).toBeInTheDocument();
     expect(screen.getByText('Inicio')).toBeInTheDocument();
@@ -91,7 +91,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText('Algo salio mal')).toBeInTheDocument();
+    expect(screen.getByText('Algo salió mal')).toBeInTheDocument();
   });
 
   it('should reset error state and re-render children when retry is clicked', async () => {
@@ -110,7 +110,7 @@ describe('ErrorBoundary', () => {
     );
 
     // Error UI should be visible
-    expect(screen.getByText('Algo salio mal')).toBeInTheDocument();
+    expect(screen.getByText('Algo salió mal')).toBeInTheDocument();
 
     // Now stop throwing so that after retry, children render normally
     shouldThrow = false;
@@ -120,7 +120,7 @@ describe('ErrorBoundary', () => {
 
     // After retry, children should render again
     expect(screen.getByText('Recovered successfully')).toBeInTheDocument();
-    expect(screen.queryByText('Algo salio mal')).not.toBeInTheDocument();
+    expect(screen.queryByText('Algo salió mal')).not.toBeInTheDocument();
   });
 
   it('should navigate to / when home button is clicked', async () => {

@@ -67,12 +67,12 @@ async function navigateToPasswordStep(user: ReturnType<typeof userEvent.setup>) 
   // Step 1: Phone
   await user.type(screen.getByPlaceholderText('8888-0000'), '88881234');
   await user.click(screen.getByText(/Continuar/i));
-  await waitFor(() => expect(screen.getByText(/Verifica tu numero/i)).toBeInTheDocument(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByText(/Verifica tu número/i)).toBeInTheDocument(), { timeout: 3000 });
 
   // Step 2: OTP
   fillOtp();
   await user.click(screen.getByText(/Verificar/i));
-  await waitFor(() => expect(screen.getByText(/identificacion/i)).toBeInTheDocument(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByText(/identificación/i)).toBeInTheDocument(), { timeout: 3000 });
 
   // Step 3: Cedula
   await user.type(screen.getByPlaceholderText('1'), '7');
@@ -85,7 +85,7 @@ async function navigateToPasswordStep(user: ReturnType<typeof userEvent.setup>) 
   await user.type(screen.getByPlaceholderText(/^Nombre$/i), 'Test');
   await user.type(screen.getByPlaceholderText(/Apellido/i), 'User');
   await user.click(screen.getByText(/Continuar/i));
-  await waitFor(() => expect(screen.getByText(/Crea tu contrasena/i)).toBeInTheDocument(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByText(/Crea tu contraseña/i)).toBeInTheDocument(), { timeout: 3000 });
 }
 
 describe('RegisterView', () => {
@@ -97,7 +97,7 @@ describe('RegisterView', () => {
   it('should render step 1 (phone input)', () => {
     renderRegisterView();
     expect(screen.getByPlaceholderText('8888-0000')).toBeInTheDocument();
-    expect(screen.getByText(/numero de telefono/i)).toBeInTheDocument();
+    expect(screen.getByText(/número de teléfono/i)).toBeInTheDocument();
   });
 
   it('should call onBack when clicking back on step 1', async () => {
@@ -118,7 +118,7 @@ describe('RegisterView', () => {
     await user.click(screen.getByText(/Continuar/i));
 
     await waitFor(() => {
-      expect(screen.getByText(/Verifica tu numero/i)).toBeInTheDocument();
+      expect(screen.getByText(/Verifica tu número/i)).toBeInTheDocument();
     }, { timeout: 3000 });
   });
 
@@ -126,7 +126,7 @@ describe('RegisterView', () => {
     const user = userEvent.setup();
     renderRegisterView();
     await navigateToPasswordStep(user);
-    expect(screen.getByPlaceholderText(/Contrasena/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/^Contraseña$/i)).toBeInTheDocument();
   }, 30000);
 
   it('should show password strength indicator', async () => {
@@ -134,9 +134,9 @@ describe('RegisterView', () => {
     renderRegisterView();
     await navigateToPasswordStep(user);
 
-    const passwordInput = screen.getByPlaceholderText(/^Contrasena$/i);
+    const passwordInput = screen.getByPlaceholderText(/^Contraseña$/i);
     await user.type(passwordInput, 'ab');
-    expect(screen.getByText(/Debil/i)).toBeInTheDocument();
+    expect(screen.getByText(/Débil/i)).toBeInTheDocument();
 
     await user.clear(passwordInput);
     await user.type(passwordInput, 'StrongP@ss123');
@@ -148,7 +148,7 @@ describe('RegisterView', () => {
     renderRegisterView();
     await navigateToPasswordStep(user);
 
-    await user.type(screen.getByPlaceholderText(/^Contrasena$/i), 'Password123!');
+    await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'Password123!');
     await user.type(screen.getByPlaceholderText(/Confirmar/i), 'Different456!');
 
     expect(screen.getByText(/no coinciden/i)).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('RegisterView', () => {
     const { onComplete } = renderRegisterView();
     await navigateToPasswordStep(user);
 
-    await user.type(screen.getByPlaceholderText(/^Contrasena$/i), 'StrongP@ss1');
+    await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
     await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
 
     await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
@@ -185,7 +185,7 @@ describe('RegisterView', () => {
     renderRegisterView();
     await navigateToPasswordStep(user);
 
-    await user.type(screen.getByPlaceholderText(/^Contrasena$/i), 'StrongP@ss1');
+    await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
     await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
 
     await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));

@@ -134,7 +134,7 @@ describe('HomeView', () => {
 
   it('should render the quick actions section with all four buttons', () => {
     renderHomeView();
-    expect(screen.getByText('Acciones rapidas')).toBeInTheDocument();
+    expect(screen.getByText('Acciones rápidas')).toBeInTheDocument();
     expect(screen.getByText('Enviar')).toBeInTheDocument();
     expect(screen.getByText('Recibir')).toBeInTheDocument();
     expect(screen.getByText('Escanear QR')).toBeInTheDocument();

@@ -59,7 +59,7 @@ describe('RecoverPasswordView', () => {
     await user.click(screen.getByText('Ya tengo un código'));
 
     await user.type(screen.getByPlaceholderText('Pega el código aquí'), 'reset-token-123');
-    await user.type(screen.getByPlaceholderText('Contrasena'), 'NewPass2024!');
+    await user.type(screen.getByPlaceholderText('Contraseña'), 'NewPass2024!');
     await user.type(screen.getByPlaceholderText('Confirmar contraseña'), 'NewPass2024!');
     await user.click(screen.getByText('Restablecer contraseña'));
 
@@ -75,7 +75,7 @@ describe('RecoverPasswordView', () => {
     await user.click(screen.getByText('Ya tengo un código'));
 
     await user.type(screen.getByPlaceholderText('Pega el código aquí'), 'tok');
-    await user.type(screen.getByPlaceholderText('Contrasena'), 'NewPass2024!');
+    await user.type(screen.getByPlaceholderText('Contraseña'), 'NewPass2024!');
     await user.type(screen.getByPlaceholderText('Confirmar contraseña'), 'Different1!');
 
     expect(screen.getByText('Restablecer contraseña').closest('button')).toBeDisabled();

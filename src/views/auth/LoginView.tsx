@@ -302,7 +302,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                     type="button"
                     onClick={() => setShowPasswordText(!showPasswordText)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
-                    aria-label={showPasswordText ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    aria-label={showPasswordText ? t('hide_password') : t('show_password')}
                   >
                     {showPasswordText ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
                   </button>
