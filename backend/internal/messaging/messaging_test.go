@@ -48,6 +48,52 @@ func TestEmailConfigEnabled(t *testing.T) {
 	}
 }
 
+func TestEmailConfigEnabledAcceptsEverySMTPProvider(t *testing.T) {
+	for provider := range emailProviderHosts {
+		cfg := EmailConfig{Provider: provider, SMTPHost: "h", SMTPUser: "u", SMTPPassword: "p", From: "a@b.c"}
+		if !cfg.Enabled() {
+			t.Fatalf("provider %q should be enabled when fully configured", provider)
+		}
+	}
+	upper := EmailConfig{Provider: "Resend", SMTPHost: "h", SMTPUser: "u", SMTPPassword: "p", From: "a@b.c"}
+	if !upper.Enabled() {
+		t.Fatal("provider matching should be case-insensitive")
+	}
+}
+
+func TestLoadConfigEmailProviderHostAndAliases(t *testing.T) {
+	// Resend without an explicit host falls back to its SMTP endpoint, and the
+	// generic SMTP_* variables feed the credentials.
+	t.Setenv("EMAIL_PROVIDER", "resend")
+	t.Setenv("SMTP_USER", "resend")
+	t.Setenv("SMTP_PASSWORD", "re_key")
+	t.Setenv("EMAIL_FROM", "KiramoPay <soporte@kiramopay.com>")
+	cfg := LoadConfig().Email
+	if cfg.SMTPHost != "smtp.resend.com" {
+		t.Fatalf("host = %q, want the Resend endpoint", cfg.SMTPHost)
+	}
+	if cfg.SMTPPort != 587 || !cfg.Enabled() {
+		t.Fatalf("port = %d, enabled = %v; want 587 and enabled", cfg.SMTPPort, cfg.Enabled())
+	}
+
+	// A deployment still configured with the older SES_* variables keeps working.
+	t.Setenv("EMAIL_PROVIDER", "ses")
+	t.Setenv("SMTP_USER", "")
+	t.Setenv("SMTP_PASSWORD", "")
+	t.Setenv("SES_SMTP_USER", "AKIAUSER")
+	t.Setenv("SES_SMTP_PASSWORD", "sespass")
+	ses := LoadConfig().Email
+	if ses.SMTPHost != "email-smtp.us-east-1.amazonaws.com" || ses.SMTPUser != "AKIAUSER" || !ses.Enabled() {
+		t.Fatalf("SES fallback broken: %+v", ses)
+	}
+
+	// An explicit host always wins over the per-provider default.
+	t.Setenv("SMTP_HOST", "smtp.example.test")
+	if got := LoadConfig().Email.SMTPHost; got != "smtp.example.test" {
+		t.Fatalf("host = %q, want the explicit SMTP_HOST", got)
+	}
+}
+
 func TestConstructorsReturnNilWhenDisabled(t *testing.T) {
 	if s := NewSMSSender(SMSConfig{}); s != nil {
 		t.Fatal("NewSMSSender should return a true nil when disabled")
