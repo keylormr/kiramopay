@@ -94,6 +94,35 @@ func TestLoadConfigEmailProviderHostAndAliases(t *testing.T) {
 	}
 }
 
+func TestEmailMisconfigured(t *testing.T) {
+	// Deliberately unconfigured: silence, because that is the dev/CI setup.
+	if got := EmailMisconfigured(EmailConfig{}); got != "" {
+		t.Fatalf("an unset provider should not warn, got %q", got)
+	}
+	// Fully configured: silence.
+	ok := EmailConfig{Provider: "resend", SMTPHost: "h", SMTPUser: "u", SMTPPassword: "p", From: "a@b.c"}
+	if got := EmailMisconfigured(ok); got != "" {
+		t.Fatalf("a usable config should not warn, got %q", got)
+	}
+	// Typo in the provider name: the whole point of the check.
+	typo := EmailConfig{Provider: "resendd", SMTPHost: "h", SMTPUser: "u", SMTPPassword: "p", From: "a@b.c"}
+	got := EmailMisconfigured(typo)
+	if !strings.Contains(got, "resendd") || !strings.Contains(got, "resend") {
+		t.Fatalf("the warning should name the bad value and the supported ones, got %q", got)
+	}
+	// Right provider, missing credentials: the warning names the variables.
+	incompleta := EmailConfig{Provider: "resend", SMTPHost: "h"}
+	got = EmailMisconfigured(incompleta)
+	for _, want := range []string{"SMTP_USER", "SMTP_PASSWORD", "EMAIL_FROM"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the warning should mention %s, got %q", want, got)
+		}
+	}
+	if strings.Contains(got, "SMTP_HOST") {
+		t.Fatalf("SMTP_HOST is set, it should not be listed as missing: %q", got)
+	}
+}
+
 func TestConstructorsReturnNilWhenDisabled(t *testing.T) {
 	if s := NewSMSSender(SMSConfig{}); s != nil {
 		t.Fatal("NewSMSSender should return a true nil when disabled")

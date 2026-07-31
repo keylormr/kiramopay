@@ -641,6 +641,12 @@ export type TranslationKeys = {
   analytics_all: string;
   analytics_flow: string;
   analytics_by_category: string;
+  analytics_cat_transfers: string;
+  analytics_cat_services: string;
+  analytics_cat_shopping: string;
+  analytics_cat_income: string;
+  analytics_cat_cash: string;
+  analytics_cat_other: string;
   analytics_no_expenses: string;
   analytics_insight: string;
   analytics_top_category: string;
