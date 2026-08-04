@@ -43,6 +43,13 @@ self.addEventListener('fetch', (event) => {
   // Skip WebSocket
   if (url.protocol === 'ws:' || url.protocol === 'wss:') return;
 
+  // Skip anything that is not same-origin. The API now lives on its own host
+  // (api.kiramopay.com), and its responses are authenticated: caching them here
+  // would leave one user's data in a shared cache that survives logout, and
+  // could serve it to whoever opens the app next on the same device. The path
+  // still starts with /api/, so without this check the rule below would match.
+  if (url.origin !== self.location.origin) return;
+
   // API requests: Network-first with cache fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirst(event.request, API_CACHE));
