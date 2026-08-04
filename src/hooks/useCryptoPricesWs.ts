@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { resolveWsBaseUrl } from '@/api/baseUrl';
 
 interface PriceData {
   symbol: string;
@@ -29,10 +30,10 @@ export function useCryptoPricesWs(options: UseCryptoPricesWsOptions = {}) {
   const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl || !enabled) return;
+    const wsBase = resolveWsBaseUrl();
+    if (!wsBase || !enabled) return;
 
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/prices';
+    const wsUrl = wsBase + '/ws/prices';
 
     try {
       const ws = new WebSocket(wsUrl);
