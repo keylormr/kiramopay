@@ -8,7 +8,7 @@ import { LanguageSheet } from '../../components/LanguageSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
 import { ApiKeysSheet } from './ApiKeysSheet';
 import { WebhooksSheet } from './WebhooksSheet';
-import { APP_VERSION, getVersionString, getAllVersions } from '../../config/version';
+import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 interface ProfileViewProps {
@@ -859,7 +859,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <h2 className="text-xl font-black uv-text-primary">KiramoPay</h2>
             <p className="uv-text-muted">{getVersionString()}</p>
             <p className="text-xs text-gray-400 mt-1">
-              Lanzado: {APP_VERSION.current.releaseDate}
+              {t('released')}: {getBuildDate(currentLanguage.code)}
             </p>
           </div>
 

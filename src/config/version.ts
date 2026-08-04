@@ -1,5 +1,21 @@
-// Sistema de versionado de KiramoPay
-// Cuando el usuario diga "Versionar", incrementar la version y agregar entrada al changelog
+// Sistema de versionado de KiramoPay.
+//
+// La VERSION y los datos del build ya no se escriben a mano: salen de
+// package.json y de la plataforma que compila, inyectados por el `define` de
+// vite.config.ts. Lo único que se mantiene a mano es el CHANGELOG de abajo,
+// que es editorial: describe los cambios en lenguaje de usuario.
+//
+// Al cortar una versión: subir "version" en package.json y agregar aquí su
+// entrada de changelog. El número de build y la fecha se resuelven solos.
+
+/** Versión del paquete (package.json), fijada en tiempo de build. */
+export const BUILD_VERSION: string = __APP_VERSION__;
+
+/** Commit con el que se compiló: lo aporta Vercel o GitHub Actions. */
+export const BUILD_SHA: string = __BUILD_SHA__;
+
+/** Momento del build, en ISO 8601. */
+export const BUILD_DATE: string = __BUILD_DATE__;
 
 export interface VersionInfo {
   version: string;
@@ -73,9 +89,15 @@ export const APP_VERSION: AppVersion = {
   ],
 };
 
-// Helper para obtener version formateada
-export const getVersionString = (): string => {
-  return `v${APP_VERSION.current.version} (Build ${APP_VERSION.current.buildNumber})`;
+// Version formateada para la interfaz: sale del build, no del changelog.
+export const getVersionString = (): string => `v${BUILD_VERSION} (${BUILD_SHA})`;
+
+// Fecha del build en formato legible, para la pantalla "Acerca de".
+export const getBuildDate = (locale = 'es-CR'): string => {
+  const d = new Date(BUILD_DATE);
+  return Number.isNaN(d.getTime())
+    ? BUILD_DATE
+    : d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 // Helper para obtener todas las versiones (actual + historial)
