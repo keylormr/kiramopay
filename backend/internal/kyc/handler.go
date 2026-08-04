@@ -107,9 +107,10 @@ func (h *Handler) Decide(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, v)
 }
 
+// clientIP delega en middleware.RequestIP, que valida el valor antes de
+// devolverlo. Antes esta funcion devolvia la cabecera cruda: con mas de un salto
+// eso es "1.2.3.4, 5.6.7.8", que revienta el cast ::INET del INSERT de auditoria
+// y hace que el evento se pierda entero.
 func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return ip
-	}
-	return r.RemoteAddr
+	return middleware.RequestIP(r)
 }

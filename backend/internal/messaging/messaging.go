@@ -9,7 +9,9 @@ package messaging
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -122,6 +124,41 @@ func NewEmailSender(cfg EmailConfig) EmailSender {
 		return nil
 	}
 	return newSMTPEmail(cfg)
+}
+
+// EmailMisconfigured reports why email delivery is off despite EMAIL_PROVIDER
+// being set, and returns an empty string when email is either usable or
+// deliberately left unconfigured. Leaving the provider unset is a legitimate
+// dev/CI setup; setting it and getting it wrong is not, and it fails silently:
+// the service boots and password-reset mail simply stops going out.
+func EmailMisconfigured(cfg EmailConfig) string {
+	if cfg.Provider == "" || cfg.Enabled() {
+		return ""
+	}
+	if _, ok := emailProviderHosts[strings.ToLower(cfg.Provider)]; !ok {
+		known := make([]string, 0, len(emailProviderHosts))
+		for name := range emailProviderHosts {
+			known = append(known, name)
+		}
+		sort.Strings(known)
+		return fmt.Sprintf("EMAIL_PROVIDER=%q is not a supported provider (expected one of: %s)",
+			cfg.Provider, strings.Join(known, ", "))
+	}
+	var falta []string
+	if cfg.SMTPHost == "" {
+		falta = append(falta, "SMTP_HOST")
+	}
+	if cfg.SMTPUser == "" {
+		falta = append(falta, "SMTP_USER")
+	}
+	if cfg.SMTPPassword == "" {
+		falta = append(falta, "SMTP_PASSWORD")
+	}
+	if cfg.From == "" {
+		falta = append(falta, "EMAIL_FROM")
+	}
+	return fmt.Sprintf("EMAIL_PROVIDER=%q is set but these are missing: %s",
+		cfg.Provider, strings.Join(falta, ", "))
 }
 
 // firstenv returns the first non-empty value among keys, or fallback. It lets

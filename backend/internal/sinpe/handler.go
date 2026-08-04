@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -109,14 +108,8 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip == "" {
-		raw := r.RemoteAddr
-		if idx := strings.LastIndex(raw, ":"); idx > 0 {
-			raw = raw[:idx]
-		}
-		ip = raw
-	}
+	// Validada: termina en la auditoria, que la castea a inet.
+	ip := middleware.RequestIP(r)
 
 	result, err := h.service.Send(r.Context(), userID, &req, ip)
 	if err != nil {

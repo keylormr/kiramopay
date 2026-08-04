@@ -6,6 +6,7 @@ import { BottomSheet } from '../../components/BottomSheet';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { txTitle } from '../../utils/txTitle';
 import { getApiLayer } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
@@ -544,7 +545,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold uv-text-primary text-sm truncate">{tx.title}</div>
+                  <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
                   <div className="text-xs uv-text-muted mt-0.5">{tx.date}</div>
                 </div>
                 <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
@@ -669,7 +670,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
              <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-4 ${selectedTx.amount < 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                 {selectedTx.amount < 0 ? <Icons.Bank size={32} /> : <Icons.Wallet size={32} />}
              </div>
-             <div className="text-2xl font-bold mb-1">{selectedTx.title}</div>
+             <div className="text-2xl font-bold mb-1">{txTitle(selectedTx, t)}</div>
              <div className={`text-3xl font-black mb-6 ${selectedTx.amount < 0 ? 'uv-text-primary' : 'text-green-600'}`}>
                 {selectedTx.amount > 0 ? '+' : ''}{formatCurrency(selectedTx.amount, selectedTx.ccy)}
              </div>
