@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/kiramopay/backend/internal/middleware"
@@ -30,19 +29,14 @@ func noStore(w http.ResponseWriter) {
 }
 
 func loginContext(r *http.Request) LoginContext {
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip == "" {
-		// Strip trailing :port if present.
-		raw := r.RemoteAddr
-		if idx := strings.LastIndex(raw, ":"); idx > 0 {
-			raw = raw[:idx]
-		}
-		ip = raw
-	} else {
-		ip = strings.TrimSpace(strings.SplitN(ip, ",", 2)[0])
-	}
+	// La IP se valida antes de salir: acaba en NULLIF($6,'')::inet al crear la
+	// sesion, y un valor no parseable —"unknown" es real, lo emiten varios
+	// proxies corporativos— hacia fallar el INSERT, luego CreateSession, luego
+	// Login, y el handler respondia 401 "invalid credentials". Es decir, dejaba
+	// sin poder entrar a quien pasara por ese proxy, con un mensaje que apuntaba
+	// al lado equivocado. Si no hay IP utilizable se guarda NULL.
 	return LoginContext{
-		IPAddress: ip,
+		IPAddress: middleware.RequestIP(r),
 		UserAgent: r.UserAgent(),
 	}
 }
