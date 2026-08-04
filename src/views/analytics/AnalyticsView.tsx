@@ -4,20 +4,23 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import type { Transaction } from '@/types';
 
+// Keyed by the category slugs the transaction adapter emits (see mapCategory in
+// api/adapters/http/transaction.http.ts). They used to be English display names,
+// which matched nothing coming from the backend: every category fell through to
+// the grey default and the raw slug was printed as its label.
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; darkBg: string }> = {
-  Transfer: { color: '#3b82f6', bg: 'bg-blue-100', darkBg: 'dark:bg-blue-900/30' },
-  'QR Payment': { color: '#a855f7', bg: 'bg-purple-100', darkBg: 'dark:bg-purple-900/30' },
-  Services: { color: '#f59e0b', bg: 'bg-amber-100', darkBg: 'dark:bg-amber-900/30' },
-  Recharge: { color: '#14b8a6', bg: 'bg-teal-100', darkBg: 'dark:bg-teal-900/30' },
-  SINPE: { color: '#6366f1', bg: 'bg-indigo-100', darkBg: 'dark:bg-indigo-900/30' },
-  Food: { color: '#f97316', bg: 'bg-orange-100', darkBg: 'dark:bg-orange-900/30' },
-  Shopping: { color: '#ec4899', bg: 'bg-pink-100', darkBg: 'dark:bg-pink-900/30' },
-  Transport: { color: '#06b6d4', bg: 'bg-cyan-100', darkBg: 'dark:bg-cyan-900/30' },
-  General: { color: '#6b7280', bg: 'bg-gray-100', darkBg: 'dark:bg-gray-800' },
+  transfers: { color: '#3b82f6', bg: 'bg-blue-100', darkBg: 'dark:bg-blue-900/30' },
+  services: { color: '#f59e0b', bg: 'bg-amber-100', darkBg: 'dark:bg-amber-900/30' },
+  shopping: { color: '#ec4899', bg: 'bg-pink-100', darkBg: 'dark:bg-pink-900/30' },
+  income: { color: '#10b981', bg: 'bg-emerald-100', darkBg: 'dark:bg-emerald-900/30' },
+  cash: { color: '#14b8a6', bg: 'bg-teal-100', darkBg: 'dark:bg-teal-900/30' },
+  other: { color: '#6b7280', bg: 'bg-gray-100', darkBg: 'dark:bg-gray-800' },
 };
 
+const FALLBACK_CATEGORY = 'other';
+
 function getCategoryConfig(cat: string) {
-  return CATEGORY_CONFIG[cat] || CATEGORY_CONFIG.General;
+  return CATEGORY_CONFIG[cat] || CATEGORY_CONFIG[FALLBACK_CATEGORY];
 }
 
 // Income (green) and expense (red) — the app-wide cash-flow semantics. In the
@@ -150,6 +153,11 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const [monthOffset, setMonthOffset] = useState(0);
 
   const locale = LOCALE_BY_LANG[language] || 'es-CR';
+
+  // The stored category is a slug, never a display string: it goes through i18n
+  // so the breakdown reads in the selected language.
+  const categoryLabel = (cat: string) =>
+    t(`analytics_cat_${cat in CATEGORY_CONFIG ? cat : FALLBACK_CATEGORY}`);
   const allTransactions = state.transactions;
 
   // The active date window for the selected period.
@@ -184,7 +192,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     const totals: Record<string, number> = {};
 
     for (const tx of expenses) {
-      const cat = tx.category || 'General';
+      const cat = tx.category || FALLBACK_CATEGORY;
       totals[cat] = (totals[cat] || 0) + Math.abs(tx.amount);
     }
 
@@ -466,7 +474,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${config.bg} ${config.darkBg}`}>
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: config.color }} />
                           </div>
-                          <span className="text-sm font-bold uv-text-primary">{item.category}</span>
+                          <span className="text-sm font-bold uv-text-primary">{categoryLabel(item.category)}</span>
                         </div>
                         <div className="text-right">
                           <span className="text-sm font-extrabold uv-text-primary">
@@ -504,7 +512,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                 <div>
                   <h4 className="font-bold uv-text-primary text-sm mb-1">{t('analytics_insight')}</h4>
                   <p className="text-xs uv-text-secondary leading-relaxed">
-                    {t('analytics_top_category')}: <strong>{topCategory.category}</strong> ({topCategory.percentage.toFixed(0)}% {t('analytics_of_spending')})
+                    {t('analytics_top_category')}: <strong>{categoryLabel(topCategory.category)}</strong> ({topCategory.percentage.toFixed(0)}% {t('analytics_of_spending')})
                   </p>
                 </div>
               </div>

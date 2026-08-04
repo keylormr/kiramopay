@@ -191,6 +191,13 @@ func main() {
 	msgCfg := messaging.LoadConfig()
 	smsSender := messaging.NewSMSSender(msgCfg.SMS)
 	emailSender := messaging.NewEmailSender(msgCfg.Email)
+	// A wrong EMAIL_PROVIDER value leaves emailSender nil and the service boots as
+	// if nothing happened, while password-reset mail silently stops being sent.
+	// Warn loudly instead: this is the failure mode of editing the variables by
+	// hand in the deployment dashboard.
+	if reason := messaging.EmailMisconfigured(msgCfg.Email); reason != "" {
+		log.Printf("WARNING: email delivery is disabled — %s", reason)
+	}
 	// Fail closed on a lockout misconfiguration: requiring phone verification with
 	// no SMS provider means nobody could ever obtain a registration code.
 	if cfg.Server.RequirePhoneVerification && smsSender == nil {
