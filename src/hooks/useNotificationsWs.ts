@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { Notification } from '@/types';
+import { resolveWsBaseUrl } from '@/api/baseUrl';
 
 interface NotificationWsMessage {
   type: 'notification' | 'auth_ok' | 'auth_error';
@@ -23,10 +24,10 @@ export function useNotificationsWs(options: UseNotificationsWsOptions = {}) {
   const addNotification = useNotificationStore((s) => s.addNotification);
 
   const connect = useCallback(() => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl || !enabled || !isAuthenticated) return;
+    const wsBase = resolveWsBaseUrl();
+    if (!wsBase || !enabled || !isAuthenticated) return;
 
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/notifications';
+    const wsUrl = wsBase + '/ws/notifications';
 
     try {
       const ws = new WebSocket(wsUrl);

@@ -10,6 +10,7 @@ import type { ISettingsRepository } from './repositories/settings.repository';
 import type { IMarketplaceRepository } from './repositories/marketplace.repository';
 import type { ILoyaltyRepository } from './repositories/loyalty.repository';
 import type { IQRPaymentRepository } from './repositories/qrpayment.repository';
+import { resolveApiBaseUrl } from './baseUrl';
 import type { ISplitPayRepository } from './repositories/splitpay.repository';
 import type { ICardsRepository } from './repositories/cards.repository';
 import type { ICountryRepository } from './repositories/country.repository';
@@ -69,7 +70,7 @@ function detectMode(): 'mock' | 'http' {
 
 export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   const resolvedMode = mode || detectMode();
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+  const baseUrl = resolveApiBaseUrl() || 'http://localhost:8080';
 
   if (resolvedMode === 'http') {
     return createHttpApiLayer(baseUrl);
