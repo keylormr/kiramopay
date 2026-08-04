@@ -44,6 +44,9 @@ export class HttpTransactionRepository implements ITransactionRepository {
       dateISO: tx.created_at, // raw ISO timestamp for filtering / charts
       status: tx.status as 'completed' | 'pending',
       category: mapCategory(tx.type),
+      // Kept so the UI can fall back to a name derived from the movement type
+      // when neither counterparty nor description carries one.
+      kind: tx.type,
     }));
 
     return apiSuccess(transactions);

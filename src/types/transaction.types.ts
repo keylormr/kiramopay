@@ -12,4 +12,8 @@ export interface Transaction {
   status?: 'completed' | 'pending';
   icon?: string;
   description?: string;
+  // Backend transaction type (sinpe_send, qr_payment, …). Kept apart from the
+  // credit/debit `type` above so the UI can name a movement whose counterparty
+  // and description are both empty, instead of leaving the row blank.
+  kind?: string;
 }

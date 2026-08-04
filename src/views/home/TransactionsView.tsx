@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { txTitle } from '@/utils/txTitle';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import {
@@ -60,13 +61,15 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
       const q = search.toLowerCase();
       txs = txs.filter(
         (tx) =>
-          tx.title.toLowerCase().includes(q) ||
+          txTitle(tx, t).toLowerCase().includes(q) ||
           (tx.category || '').toLowerCase().includes(q) ||
           tx.amount.toString().includes(q),
       );
     }
     return txs;
-  }, [allTransactions, selectedCategory, search]);
+    // `t` entra en las dependencias porque la búsqueda ahora compara contra el
+    // título resuelto, que depende del idioma activo.
+  }, [allTransactions, selectedCategory, search, t]);
 
   const totalIncome = useMemo(
     () => filtered.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0),
@@ -327,6 +330,7 @@ const TransactionCard: React.FC<{
   tx: Transaction;
   formatCurrency: (amount: number, ccy?: string) => string;
 }> = ({ tx, formatCurrency }) => {
+  const { t } = useLanguage();
   const style = getCategoryStyle(tx.category);
   const Icon = style.icon;
   const incoming = tx.amount > 0;
@@ -341,7 +345,7 @@ const TransactionCard: React.FC<{
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="font-semibold uv-text-primary text-sm truncate">
-          {tx.title}
+          {txTitle(tx, t)}
         </div>
         <div className="text-xs uv-text-muted flex items-center gap-1.5 mt-0.5">
           <Icons.Clock size={10} />

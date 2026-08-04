@@ -647,6 +647,18 @@ export type TranslationKeys = {
   analytics_cat_income: string;
   analytics_cat_cash: string;
   analytics_cat_other: string;
+  tx_title_sinpe_send: string;
+  tx_title_sinpe_receive: string;
+  tx_title_qr_payment: string;
+  tx_title_qr_receive: string;
+  tx_title_bill_payment: string;
+  tx_title_recharge: string;
+  tx_title_deposit: string;
+  tx_title_withdrawal: string;
+  tx_title_p2p_send: string;
+  tx_title_p2p_receive: string;
+  tx_title_generic_in: string;
+  tx_title_generic_out: string;
   analytics_no_expenses: string;
   analytics_insight: string;
   analytics_top_category: string;
