@@ -590,6 +590,8 @@ const en: TranslationKeys = {
   tx_title_generic_in: 'Money received',
   tx_title_generic_out: 'Money sent',
   analytics_no_expenses: 'No expenses recorded',
+  analytics_partial: 'Showing {shown} of {total} transactions',
+  analytics_offline: 'Could not load the full period: showing only recent transactions',
   analytics_insight: 'Smart Insight',
   analytics_top_category: 'Top spending on',
   analytics_of_spending: 'of total',

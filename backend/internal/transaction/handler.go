@@ -2,8 +2,10 @@ package transaction
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
@@ -60,11 +62,27 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 
+	// Date bounds are rejected when malformed rather than ignored: silently
+	// dropping a bad filter would return the WHOLE history as if it matched.
+	from, err := parseTimeParam(q.Get("from"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid 'from': use RFC3339 or YYYY-MM-DD")
+		return
+	}
+	to, err := parseTimeParam(q.Get("to"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid 'to': use RFC3339 or YYYY-MM-DD")
+		return
+	}
+
 	req := &ListTransactionsRequest{
-		Limit:  limit,
-		Offset: offset,
-		Type:   q.Get("type"),
-		Status: q.Get("status"),
+		Limit:    limit,
+		Offset:   offset,
+		Type:     q.Get("type"),
+		Status:   q.Get("status"),
+		Currency: q.Get("currency"),
+		From:     from,
+		To:       to,
 	}
 
 	result, err := h.service.ListTransactions(r.Context(), userID, req)
@@ -74,6 +92,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, result)
+}
+
+// parseTimeParam accepts RFC3339 ("2026-08-01T00:00:00Z") or a bare date
+// ("2026-08-01", interpreted as midnight UTC). Empty means "not set".
+func parseTimeParam(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	if ts, err := time.Parse(time.RFC3339, s); err == nil {
+		return ts, nil
+	}
+	if ts, err := time.Parse("2006-01-02", s); err == nil {
+		return ts, nil
+	}
+	return time.Time{}, fmt.Errorf("unparseable time %q", s)
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {

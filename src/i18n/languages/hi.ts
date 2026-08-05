@@ -588,6 +588,8 @@ const hi: TranslationKeys = {
   tx_title_generic_in: 'प्राप्त धनराशि',
   tx_title_generic_out: 'भेजी गई धनराशि',
   analytics_no_expenses: 'कोई खर्च दर्ज नहीं',
+  analytics_partial: '{total} में से {shown} लेन-देन दिखाए जा रहे हैं',
+  analytics_offline: 'पूरी अवधि लोड नहीं हो सकी: केवल हाल के लेन-देन दिखाए जा रहे हैं',
   analytics_insight: 'स्मार्ट विश्लेषण',
   analytics_top_category: 'सबसे अधिक खर्च',
   analytics_of_spending: 'कुल का',

@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import { getApiLayer } from '@/api';
 import type { Transaction } from '@/types';
 
 // Keyed by the category slugs the transaction adapter emits (see mapCategory in
@@ -41,6 +42,14 @@ const LOCALE_BY_LANG: Record<string, string> = {
 };
 
 type Period = 'week' | 'month' | 'all';
+
+// Server pagination for the active window. The synced store only ever holds
+// the LAST 50 transactions (dataSync), so computing analytics off it made
+// "all" and older months silently wrong; the view now asks the API for the
+// whole window, page by page. The page cap bounds a pathological history —
+// when it is hit, the UI says so instead of pretending the window is complete.
+const PAGE_SIZE = 100;
+const MAX_PAGES = 10;
 
 // Machine timestamp for a transaction, or null when it has no parseable date.
 // dateISO is the reliable field; the localized `date` string only parses when it
@@ -176,15 +185,94 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     return { start: -Infinity, end: Infinity, label: '' };
   }, [period, monthOffset, locale]);
 
-  // Transactions inside the active window (undated ones are excluded from
-  // week/month and kept only in "all").
+  // Identity of the active window, used to match a fetch result to the
+  // selection that requested it (a stale response must not repaint a window
+  // the user already left).
+  const windowKey = period === 'month' ? `month:${monthOffset}` : period;
+
+  // The window fetched from the server, or null while loading / when the very
+  // first page failed (the synced store then serves as fallback).
+  const [serverWindow, setServerWindow] = useState<{
+    key: string;
+    txs: Transaction[];
+    total: number;
+  } | null>(null);
+
+  // Set when the window could not be fetched at all and the charts are running
+  // on the synced store, which holds only the last 50 movements — the very
+  // problem this view exists to fix, so it must be visible, not silent.
+  const [fallbackKey, setFallbackKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const api = getApiLayer();
+        const from = Number.isFinite(range.start) ? new Date(range.start).toISOString() : undefined;
+        const to = Number.isFinite(range.end) ? new Date(range.end).toISOString() : undefined;
+        // Accumulate by id. OFFSET paging is not stable against writes: a
+        // transaction landing between two page requests shifts every later
+        // offset by one, so a row already collected would come back again and
+        // be counted twice in the totals.
+        const byId = new Map<string, Transaction>();
+        let total = 0;
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const res = await api.transactions.listTransactions({
+            from,
+            to,
+            limit: PAGE_SIZE,
+            offset: page * PAGE_SIZE,
+          });
+          // A failed page keeps whatever earlier pages returned: partial data
+          // still beats the 50-item store, and the coverage note below tells
+          // the user it is partial rather than passing it off as complete.
+          if (!res.success || !res.data) break;
+          for (const tx of res.data.transactions) byId.set(tx.id, tx);
+          total = res.data.total;
+          if (byId.size >= total || res.data.transactions.length < PAGE_SIZE) break;
+        }
+        if (cancelled) return;
+        if (byId.size > 0) {
+          setServerWindow({ key: windowKey, txs: [...byId.values()], total });
+          setFallbackKey(null);
+        } else {
+          // Nothing arrived: keep serverWindow null so the store fallback stays
+          // in place rather than rendering an empty month, and flag it.
+          setFallbackKey(windowKey);
+        }
+      } catch {
+        // Offline / API error: analytics still render from the synced store.
+        if (!cancelled) setFallbackKey(windowKey);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [windowKey, range.start, range.end]);
+
+  // Transactions inside the active window: the server-fetched window when it
+  // matches the current selection, else the synced store filtered locally
+  // (undated ones are excluded from week/month and kept only in "all").
   const transactions = useMemo(() => {
+    if (serverWindow && serverWindow.key === windowKey) return serverWindow.txs;
     if (period === 'all') return allTransactions;
     return allTransactions.filter((tx) => {
       const time = getTxTime(tx);
       return time !== null && time >= range.start && time < range.end;
     });
-  }, [allTransactions, period, range.start, range.end]);
+  }, [serverWindow, windowKey, allTransactions, period, range.start, range.end]);
+
+  // True when the window is short of its own total — the page cap cut it, or a
+  // page failed. Either way the charts cover only part of the period and the
+  // UI must say so instead of presenting them as the whole month.
+  const windowTruncated =
+    serverWindow !== null &&
+    serverWindow.key === windowKey &&
+    serverWindow.txs.length < serverWindow.total;
+
+  // The window could not be fetched and the charts are on the synced store.
+  const usingFallback =
+    fallbackKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
 
   // Category breakdown for expenses
   const categoryData = useMemo(() => {
@@ -366,6 +454,20 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               </button>
             ))}
           </div>
+
+          {/* Honest coverage note: the window is incomplete, either because the
+              page cap cut it or because a page failed. Never present partial
+              charts as the whole period. */}
+          {windowTruncated && serverWindow && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">
+              {t('analytics_partial')
+                .replace('{shown}', String(serverWindow.txs.length))
+                .replace('{total}', String(serverWindow.total))}
+            </p>
+          )}
+          {usingFallback && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">{t('analytics_offline')}</p>
+          )}
 
           {/* Month navigator (only for the monthly view) */}
           {period === 'month' && (

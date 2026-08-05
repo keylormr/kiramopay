@@ -590,6 +590,8 @@ const pt: TranslationKeys = {
   tx_title_generic_in: 'Dinheiro recebido',
   tx_title_generic_out: 'Dinheiro enviado',
   analytics_no_expenses: 'Nenhum gasto registrado',
+  analytics_partial: 'Mostrando {shown} de {total} movimentações',
+  analytics_offline: 'Não foi possível carregar o período completo: exibindo apenas as movimentações recentes',
   analytics_insight: 'Resumo inteligente',
   analytics_top_category: 'Maior gasto em',
   analytics_of_spending: 'do total',

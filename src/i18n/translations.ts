@@ -660,6 +660,8 @@ export type TranslationKeys = {
   tx_title_generic_in: string;
   tx_title_generic_out: string;
   analytics_no_expenses: string;
+  analytics_partial: string;
+  analytics_offline: string;
   analytics_insight: string;
   analytics_top_category: string;
   analytics_of_spending: string;

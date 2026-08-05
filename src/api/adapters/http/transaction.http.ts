@@ -1,55 +1,77 @@
-import type { ITransactionRepository } from '../../repositories/transaction.repository';
+import type {
+  ITransactionRepository,
+  TransactionListParams,
+  TransactionPage,
+} from '../../repositories/transaction.repository';
 import type { ApiResponse } from '../../types';
 import type { Transaction } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
 
+interface BackendTransactionRow {
+  id: string;
+  type: string;
+  amount: number;
+  currency: string;
+  fee: number;
+  counterparty_name: string;
+  counterparty_phone: string;
+  status: string;
+  created_at: string;
+  metadata: string;
+}
+
+function mapRow(tx: BackendTransactionRow): Transaction {
+  return {
+    id: tx.id,
+    title: tx.counterparty_name || parseDescription(tx.metadata),
+    type: mapTxType(tx.type) as 'credit' | 'debit',
+    // Backend returns the amount as a positive magnitude with direction encoded
+    // in `type`; sign it here so income shows as +/green and spends as -/red.
+    amount: (isIncoming(tx.type) ? 1 : -1) * (Math.abs(tx.amount) / 100), // centimos → colones
+    ccy: tx.currency,
+    description: tx.counterparty_name || parseDescription(tx.metadata),
+    date: new Date(tx.created_at).toLocaleDateString('es-CR'),
+    dateISO: tx.created_at, // raw ISO timestamp for filtering / charts
+    status: tx.status as 'completed' | 'pending',
+    category: mapCategory(tx.type),
+    // Kept so the UI can fall back to a name derived from the movement type
+    // when neither counterparty nor description carries one.
+    kind: tx.type,
+  };
+}
+
 export class HttpTransactionRepository implements ITransactionRepository {
   constructor(private client: HttpClient) {}
 
-  async getTransactions(limit?: number): Promise<ApiResponse<Transaction[]>> {
-    const params = new URLSearchParams();
-    if (limit) params.set('limit', String(limit));
+  async listTransactions(params: TransactionListParams): Promise<ApiResponse<TransactionPage>> {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
 
     const res = await this.client.get<{
-      transactions: Array<{
-        id: string;
-        type: string;
-        amount: number;
-        currency: string;
-        fee: number;
-        counterparty_name: string;
-        counterparty_phone: string;
-        status: string;
-        created_at: string;
-        metadata: string;
-      }>;
+      transactions: BackendTransactionRow[];
       total: number;
-    }>(`/api/v1/transactions?${params.toString()}`);
+    }>(`/api/v1/transactions?${qs.toString()}`);
 
     if (!res.success || !res.data) {
       return apiError('FETCH_FAILED', 'Failed to fetch transactions');
     }
 
-    const transactions: Transaction[] = res.data.transactions.map((tx) => ({
-      id: tx.id,
-      title: tx.counterparty_name || parseDescription(tx.metadata),
-      type: mapTxType(tx.type) as 'credit' | 'debit',
-      // Backend returns the amount as a positive magnitude with direction encoded
-      // in `type`; sign it here so income shows as +/green and spends as -/red.
-      amount: (isIncoming(tx.type) ? 1 : -1) * (Math.abs(tx.amount) / 100), // centimos → colones
-      ccy: tx.currency,
-      description: tx.counterparty_name || parseDescription(tx.metadata),
-      date: new Date(tx.created_at).toLocaleDateString('es-CR'),
-      dateISO: tx.created_at, // raw ISO timestamp for filtering / charts
-      status: tx.status as 'completed' | 'pending',
-      category: mapCategory(tx.type),
-      // Kept so the UI can fall back to a name derived from the movement type
-      // when neither counterparty nor description carries one.
-      kind: tx.type,
-    }));
+    return apiSuccess({
+      transactions: res.data.transactions.map(mapRow),
+      total: res.data.total,
+    });
+  }
 
-    return apiSuccess(transactions);
+  async getTransactions(limit?: number): Promise<ApiResponse<Transaction[]>> {
+    const res = await this.listTransactions({ limit });
+    if (!res.success || !res.data) {
+      return apiError('FETCH_FAILED', 'Failed to fetch transactions');
+    }
+    return apiSuccess(res.data.transactions);
   }
 
   async addTransaction(transaction: Transaction): Promise<ApiResponse<Transaction>> {
