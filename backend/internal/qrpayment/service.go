@@ -14,9 +14,22 @@ import (
 )
 
 // userLookup resolves an employee from the cedula the owner types when adding
-// staff. Satisfied by *user.Repository.
+// staff, and display names for payment history rows. Satisfied by
+// *user.Repository.
 type userLookup interface {
 	FindByCedula(ctx context.Context, cedula string) (*user.UserRecord, error)
+	FindByID(ctx context.Context, id string) (*user.UserRecord, error)
+}
+
+// displayName resolves a user's full name for a history row. Best-effort: a
+// failed lookup returns "" and the frontend falls back to a generic title —
+// a name must never fail a payment.
+func (s *Service) displayName(ctx context.Context, userID string) string {
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil || u == nil {
+		return ""
+	}
+	return strings.TrimSpace(u.FirstName + " " + u.LastName)
 }
 
 type Service struct {
@@ -231,6 +244,9 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	// P2P codes carry no merchant, so they stay 1:1.
 	var fee int64
 	feeFromReceiver := false
+	// The payer's history row names who was paid: the shop for a merchant QR,
+	// the QR creator for a personal one.
+	payeeName := ""
 	if qr.MerchantID != "" {
 		merchant, err := s.repo.GetMerchant(ctx, qr.MerchantID)
 		if err != nil {
@@ -241,6 +257,9 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		}
 		fee = commissionFee(amount, merchant.CommissionBps)
 		feeFromReceiver = fee > 0
+		payeeName = merchant.Name
+	} else {
+		payeeName = s.displayName(ctx, qr.CreatorID)
 	}
 
 	// Move the money THROUGH THE LEDGER: debit the payer, credit the QR creator
@@ -253,19 +272,28 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		toUserID, toMerchantID = "", qr.MerchantID
 	}
 
+	// The receiver row only exists for personal QRs, so only resolve the payer's
+	// name when someone will actually see it.
+	payerName := ""
+	if toMerchantID == "" {
+		payerName = s.displayName(ctx, payerID)
+	}
+
 	idem := fmt.Sprintf("qr:%s:%s", qr.ID, payerID)
 	sender, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-		FromUserID:      payerID,
-		ToUserID:        toUserID,
-		ToMerchantID:    toMerchantID,
-		Amount:          amount,
-		Currency:        currency,
-		Fee:             fee,
-		FeeFromReceiver: feeFromReceiver,
-		Description:     qr.Note,
-		IdempotencyKey:  idem,
-		TxType:          transaction.TypeQRPayment,
-		ReceiveType:     transaction.TypeQRReceive,
+		FromUserID:               payerID,
+		ToUserID:                 toUserID,
+		ToMerchantID:             toMerchantID,
+		Amount:                   amount,
+		Currency:                 currency,
+		Fee:                      fee,
+		FeeFromReceiver:          feeFromReceiver,
+		Description:              qr.Note,
+		IdempotencyKey:           idem,
+		TxType:                   transaction.TypeQRPayment,
+		ReceiveType:              transaction.TypeQRReceive,
+		SenderCounterpartyName:   payeeName,
+		ReceiverCounterpartyName: payerName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("qr payment transfer: %w", err)
@@ -401,7 +429,7 @@ func (s *Service) WithdrawToOwner(
 	// No balance pre-check here: the transaction service replays idempotent
 	// retries first, and the ledger enforces the funds atomically — a read
 	// here would just reintroduce the check-then-post race.
-	_, err = s.tx.WithdrawMerchantToUser(ctx, merchantID, userID, currency, amount, idempotencyKey)
+	_, err = s.tx.WithdrawMerchantToUser(ctx, merchantID, m.Name, userID, currency, amount, idempotencyKey)
 	return err
 }
 

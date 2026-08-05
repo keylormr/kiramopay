@@ -91,12 +91,23 @@ func TestCreateTransfer_FeePayerAbsorbed_BackCompat(t *testing.T) {
 	const amount int64 = 100000
 	const fee int64 = 500
 
-	if _, _, err := svc.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+	senderTx, receiverTx, err := svc.CreateTransfer(ctx, &transaction.CreateTransferRequest{
 		FromUserID: payer, ToUserID: merchant, Amount: amount, Currency: "CRC",
 		Fee: fee, FeeFromReceiver: false, IdempotencyKey: "payer-absorbed-1",
 		TxType: transaction.TypeQRPayment, ReceiveType: transaction.TypeQRReceive,
-	}); err != nil {
+		SenderCounterpartyName: "Soda La Esquina", ReceiverCounterpartyName: "Maria Lopez",
+	})
+	if err != nil {
 		t.Fatalf("CreateTransfer: %v", err)
+	}
+
+	// Each side's history row names the OTHER party; they used to be written
+	// empty and the UI showed a generic per-type title instead of a name.
+	if senderTx.CounterpartyName != "Soda La Esquina" {
+		t.Fatalf("sender counterparty = %q, want %q", senderTx.CounterpartyName, "Soda La Esquina")
+	}
+	if receiverTx.CounterpartyName != "Maria Lopez" {
+		t.Fatalf("receiver counterparty = %q, want %q", receiverTx.CounterpartyName, "Maria Lopez")
 	}
 
 	if got, want := crcWallet(t, pool, payer), payer0-amount-fee; got != want {

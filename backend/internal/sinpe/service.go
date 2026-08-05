@@ -147,21 +147,33 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		idem = "sinpe:" + uuid.New().String()
 	}
 
+	// The sender's own name goes on the receiver's history row. Best-effort:
+	// a failed lookup degrades to the frontend's generic title, never blocks
+	// the transfer.
+	senderName := ""
+	if internal {
+		if sender, _ := s.userRepo.FindByID(ctx, userID); sender != nil {
+			senderName = strings.TrimSpace(sender.FirstName + " " + sender.LastName)
+		}
+	}
+
 	var (
 		senderTx   *transaction.TransactionRecord
 		receiverTx *transaction.TransactionRecord
 	)
 	if internal {
 		senderTx, receiverTx, err = s.txService.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-			FromUserID:     userID,
-			ToUserID:       peer.ID,
-			Amount:         req.Amount,
-			Currency:       "CRC",
-			Fee:            fee,
-			Description:    req.Description,
-			IdempotencyKey: idem,
-			TxType:         transaction.TypeSinpeSend,
-			ReceiveType:    transaction.TypeSinpeReceive,
+			FromUserID:               userID,
+			ToUserID:                 peer.ID,
+			Amount:                   req.Amount,
+			Currency:                 "CRC",
+			Fee:                      fee,
+			Description:              req.Description,
+			IdempotencyKey:           idem,
+			TxType:                   transaction.TypeSinpeSend,
+			ReceiveType:              transaction.TypeSinpeReceive,
+			SenderCounterpartyName:   contactName,
+			ReceiverCounterpartyName: senderName,
 		})
 	} else {
 		senderTx, err = s.txService.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
@@ -208,11 +220,15 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// Receiver side (only when internal — for external transfers the bank
 	// keeps the receive record).
 	if internal && receiverTx != nil {
+		receiverContact := senderName
+		if receiverContact == "" {
+			receiverContact = "KiramoPay user"
+		}
 		_ = s.repo.AddHistory(ctx, &HistoryRecord{
 			ID:          uuid.New().String(),
 			UserID:      peer.ID,
 			Phone:       w.UserID, // sender id stand-in; real impl would use sender phone
-			ContactName: "KiramoPay user",
+			ContactName: receiverContact,
 			Amount:      req.Amount,
 			Fee:         0,
 			Type:        "received",
