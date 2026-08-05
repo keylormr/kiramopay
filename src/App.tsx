@@ -16,6 +16,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { User } from './types';
 import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
+import { takeResetToken } from './utils/resetToken';
 import { useAuthStore } from './stores/auth.store';
 import { useBusinessStore } from './stores/business.store';
 import { useBusinessData } from './hooks/useBusinessData';
@@ -31,6 +32,7 @@ const CryptoView = React.lazy(() => import('./views/crypto/CryptoView').then(m =
 const NotificationsView = React.lazy(() => import('./views/shared/NotificationsView').then(m => ({ default: m.NotificationsView })));
 const FAQView = React.lazy(() => import('./views/shared/FAQView').then(m => ({ default: m.FAQView })));
 const RegisterView = React.lazy(() => import('./views/auth/RegisterView').then(m => ({ default: m.RegisterView })));
+const RecoverPasswordView = React.lazy(() => import('./views/auth/RecoverPasswordView').then(m => ({ default: m.RecoverPasswordView })));
 const BudgetView = React.lazy(() => import('./views/budget/BudgetView').then(m => ({ default: m.BudgetView })));
 const RecurringView = React.lazy(() => import('./views/services/RecurringView').then(m => ({ default: m.RecurringView })));
 const TransactionsView = React.lazy(() => import('./views/home/TransactionsView').then(m => ({ default: m.TransactionsView })));
@@ -519,10 +521,23 @@ const Layout = () => {
 const AuthScreen = () => {
   const { dispatch } = useApp();
   const [showRegister, setShowRegister] = useState(false);
+  // Read once on mount: the URL is cleaned immediately, so a later render must
+  // not try to read it again and come up empty.
+  const [resetToken, setResetToken] = useState(takeResetToken);
 
   const handleLogin = (user: User) => {
     dispatch({ type: 'LOGIN', payload: user });
   };
+
+  // Arriving from the email link opens the reset step directly, with the token
+  // already filled in.
+  if (resetToken) {
+    return (
+      <Suspense fallback={<LoadingSkeleton />}>
+        <RecoverPasswordView initialToken={resetToken} onClose={() => setResetToken('')} />
+      </Suspense>
+    );
+  }
 
   if (showRegister) {
     return (
