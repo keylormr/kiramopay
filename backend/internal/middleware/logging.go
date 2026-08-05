@@ -26,6 +26,15 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// clientIPForLog logs the resolved client IP, keeping the raw RemoteAddr as a
+// fallback so a log line never loses the connection identity entirely.
+func clientIPForLog(r *http.Request) string {
+	if ip := RequestIP(r); ip != "" {
+		return ip
+	}
+	return r.RemoteAddr
+}
+
 // Logger is a structured logging middleware using slog.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +51,7 @@ func Logger(next http.Handler) http.Handler {
 			slog.String("path", r.URL.Path),
 			slog.Int("status", sw.status),
 			slog.Duration("duration", duration),
-			slog.String("ip", r.RemoteAddr),
+			slog.String("ip", clientIPForLog(r)),
 			slog.Int("bytes", sw.bytes),
 		}
 		if reqID != "" {

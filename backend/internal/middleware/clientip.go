@@ -1,11 +1,62 @@
 package middleware
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
 )
+
+// ipSource selects where RequestIP reads the client address from. It is set
+// once at boot via ConfigureClientIP and never changes afterwards, so reads
+// need no synchronisation.
+type ipSource int
+
+const (
+	// sourceXFFLeftmost is the historical behaviour: leftmost X-Forwarded-For
+	// entry, falling back to the TCP peer. Client-controlled and therefore
+	// spoofable — kept as the default so a deploy without the new env var
+	// changes nothing.
+	sourceXFFLeftmost ipSource = iota
+	// sourceXFFRightmost takes the RIGHTMOST syntactically valid entry: the one
+	// appended by the last proxy before us, which a client cannot displace as
+	// long as exactly one trusted proxy fronts the service.
+	sourceXFFRightmost
+	// sourceCFConnectingIP reads CF-Connecting-IP, which Cloudflare overwrites
+	// on every request it proxies. Only trustworthy when ALL traffic enters
+	// through Cloudflare (Render fronts services with it).
+	sourceCFConnectingIP
+	// sourceTrueClientIP reads True-Client-IP (Cloudflare Enterprise / Akamai).
+	sourceTrueClientIP
+	// sourcePeer trusts only the TCP peer address.
+	sourcePeer
+)
+
+var clientIPSource = sourceXFFLeftmost
+
+// ConfigureClientIP selects the trust boundary for RequestIP from the
+// CLIENT_IP_SOURCE environment value. Empty keeps the historical default
+// (leftmost X-Forwarded-For). An unknown value is a boot error: silently
+// falling back would leave the rate limiter keyed on a spoofable value while
+// the operator believes otherwise.
+func ConfigureClientIP(source string) error {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "", "xff-leftmost":
+		clientIPSource = sourceXFFLeftmost
+	case "xff-rightmost":
+		clientIPSource = sourceXFFRightmost
+	case "cf-connecting-ip":
+		clientIPSource = sourceCFConnectingIP
+	case "true-client-ip":
+		clientIPSource = sourceTrueClientIP
+	case "peer":
+		clientIPSource = sourcePeer
+	default:
+		return fmt.Errorf("CLIENT_IP_SOURCE %q no es válido (opciones: xff-leftmost, xff-rightmost, cf-connecting-ip, true-client-ip, peer)", source)
+	}
+	return nil
+}
 
 // RequestIP returns the client IP in a form that is safe to persist in a
 // Postgres `inet` column: either a syntactically valid address, or the empty
@@ -24,18 +75,52 @@ import (
 // Validating here means a malformed header degrades to the peer address, and a
 // malformed peer address degrades to NULL, instead of failing the write.
 //
-// NOTE ON TRUST: this keeps the historical source of truth — the leftmost
-// X-Forwarded-For entry — which is client-controlled and therefore spoofable.
-// It is not a security boundary and must not be treated as one; choosing a
-// trusted-proxy boundary requires knowing how many hops sit in front of this
-// service, which is a deployment question, not a code one.
+// TRUST: which value is authoritative depends on what sits in front of the
+// service, so it is chosen at deploy time via CLIENT_IP_SOURCE (see
+// ConfigureClientIP). The default remains the leftmost X-Forwarded-For entry,
+// which is client-controlled and spoofable; it must not be treated as a
+// security boundary until the operator verifies the real header layout (the
+// /metrics/client-ip endpoint echoes it) and switches the source.
 func RequestIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if ip := parseIP(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+	switch clientIPSource {
+	case sourceXFFRightmost:
+		if ip := rightmostXFF(r); ip != "" {
 			return ip
+		}
+	case sourceCFConnectingIP:
+		if ip := parseIP(r.Header.Get("CF-Connecting-IP")); ip != "" {
+			return ip
+		}
+	case sourceTrueClientIP:
+		if ip := parseIP(r.Header.Get("True-Client-IP")); ip != "" {
+			return ip
+		}
+	case sourcePeer:
+		// fall through to PeerIP below
+	default: // sourceXFFLeftmost
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if ip := parseIP(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+				return ip
+			}
 		}
 	}
 	return PeerIP(r)
+}
+
+// rightmostXFF returns the rightmost syntactically valid X-Forwarded-For
+// entry — the one written by the proxy closest to us.
+func rightmostXFF(r *http.Request) string {
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff == "" {
+		return ""
+	}
+	parts := strings.Split(xff, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if ip := parseIP(parts[i]); ip != "" {
+			return ip
+		}
+	}
+	return ""
 }
 
 // PeerIP returns the address of the TCP peer — the only value no client can

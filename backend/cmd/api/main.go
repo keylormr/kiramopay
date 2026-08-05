@@ -76,6 +76,11 @@ func main() {
 	if err := cfg.ValidateForProduction(); err != nil {
 		log.Fatalf("Config validation failed: %v", err)
 	}
+	// The client-IP trust boundary is a deployment fact, so it is chosen by env
+	// var; an invalid value must stop the boot, not degrade silently.
+	if err := middleware.ConfigureClientIP(os.Getenv("CLIENT_IP_SOURCE")); err != nil {
+		log.Fatalf("Config validation failed: %v", err)
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -456,7 +461,7 @@ func main() {
 	// for rate-limiting and audit. This is the pre-existing behavior; a proper
 	// trusted-proxy client-IP middleware (Render appends the real client last) is
 	// tracked as a follow-up. Silenced here so the CVE dependency bump can land.
-	r.Use(chimw.RealIP) //nolint:staticcheck // SA1019 — see comment above; trusted-proxy IP fix is a tracked follow-up
+	r.Use(chimw.RealIP)            //nolint:staticcheck // SA1019 — see comment above; trusted-proxy IP fix is a tracked follow-up
 	r.Use(middleware.OtelRouteTag) // refine the otelhttp span name to the chi route
 	r.Use(middleware.RequestTimeout(30 * time.Second))
 	r.Use(middleware.Logger)
@@ -498,6 +503,22 @@ func main() {
 	// behind METRICS_TOKEN; left open when unset so Prometheus scraping works
 	// out of the box.
 	r.Get("/metrics", metricsAuth(os.Getenv("METRICS_TOKEN"), middleware.MetricsHandler))
+	// /metrics/client-ip echoes the addressing headers exactly as the proxy
+	// chain delivers them, plus what RequestIP resolves under the current
+	// CLIENT_IP_SOURCE. It exists so the operator can pick the trust boundary
+	// from evidence instead of guessing (a wrong choice collapses every user
+	// onto a handful of rate-limit keys). Same gate as /metrics.
+	r.Get("/metrics/client-ip", metricsAuth(os.Getenv("METRICS_TOKEN"), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"remote_addr":%q,"x_forwarded_for":%q,"cf_connecting_ip":%q,"true_client_ip":%q,"x_real_ip":%q,"client_ip_source":%q,"resolved_ip":%q}`,
+			r.RemoteAddr,
+			r.Header.Get("X-Forwarded-For"),
+			r.Header.Get("CF-Connecting-IP"),
+			r.Header.Get("True-Client-IP"),
+			r.Header.Get("X-Real-IP"),
+			os.Getenv("CLIENT_IP_SOURCE"),
+			middleware.RequestIP(r))
+	}))
 	r.Get("/api/docs", docs.ServeSwaggerUI)
 	r.Get("/api/docs/openapi.yaml", docs.ServeOpenAPISpec)
 
