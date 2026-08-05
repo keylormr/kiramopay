@@ -88,7 +88,7 @@ func TestConfigureClientIPRechazaValoresDesconocidos(t *testing.T) {
 	if err := ConfigureClientIP("nginx"); err == nil {
 		t.Fatal("ConfigureClientIP(\"nginx\") debía devolver error y no lo hizo")
 	}
-	for _, v := range []string{"", "xff-leftmost", "xff-rightmost", "cf-connecting-ip", "true-client-ip", "peer", " XFF-Rightmost "} {
+	for _, v := range []string{"", "xff-leftmost", "xff-rightmost", "cf-connecting-ip", "true-client-ip", "x-real-ip", "peer", " XFF-Rightmost "} {
 		if err := ConfigureClientIP(v); err != nil {
 			t.Fatalf("ConfigureClientIP(%q) devolvió error inesperado: %v", v, err)
 		}
@@ -159,5 +159,53 @@ func TestRequestIPSoloPeer(t *testing.T) {
 	r.Header.Set("CF-Connecting-IP", "7.7.7.7")
 	if got := RequestIP(r); got != "203.0.113.7" {
 		t.Fatalf("RequestIP() = %q, se esperaba solo el peer TCP", got)
+	}
+}
+
+// Ninguna cabecera que el cliente pueda escribir debe poder desplazar al peer
+// TCP en modo "peer". La garantía se rompía porque chimw.RealIP sobrescribía
+// r.RemoteAddr con True-Client-IP / X-Real-IP / el XFF más a la izquierda; ese
+// middleware ya no se registra (ver cmd/api/main.go). Si alguien lo reintroduce,
+// el modo "peer" vuelve a ser falsificable y con él la clave del rate limit.
+func TestPeerNoSeFalsificaConCabeceras(t *testing.T) {
+	withSource(t, "peer")
+	for _, h := range []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP", "CF-Connecting-IP", "Forwarded"} {
+		t.Run(h, func(t *testing.T) {
+			r := requestWith("", "203.0.113.7:5555")
+			r.Header.Set(h, "6.6.6.6")
+			if got := RequestIP(r); got != "203.0.113.7" {
+				t.Fatalf("con %s: RequestIP() = %q, la cabecera desplazó al peer TCP", h, got)
+			}
+		})
+	}
+}
+
+// Cada request de un atacante que varía la cabecera debe seguir cayendo en la
+// MISMA clave de rate limit; si cada una produjera una clave distinta, el
+// contador nunca acumularía y el límite no dispararía nunca.
+func TestClaveDeRateLimitEstableBajoCabecerasVariables(t *testing.T) {
+	withSource(t, "peer")
+	claves := map[string]bool{}
+	for _, forjada := range []string{"6.6.6.1", "6.6.6.2", "6.6.6.3"} {
+		r := requestWith(forjada, "203.0.113.7:5555")
+		r.Header.Set("X-Real-IP", forjada)
+		r.Header.Set("True-Client-IP", forjada)
+		claves[limiterIP(r)] = true
+	}
+	if len(claves) != 1 {
+		t.Fatalf("se generaron %d claves distintas (%v); el rate limit nunca acumularía", len(claves), claves)
+	}
+}
+
+func TestRequestIPXRealIP(t *testing.T) {
+	withSource(t, "x-real-ip")
+	r := requestWith("6.6.6.6", "10.0.0.1:443")
+	r.Header.Set("X-Real-IP", "203.0.113.7")
+	if got := RequestIP(r); got != "203.0.113.7" {
+		t.Fatalf("RequestIP() = %q, se esperaba X-Real-IP", got)
+	}
+	// Sin la cabecera cae al peer, nunca a X-Forwarded-For.
+	if got := RequestIP(requestWith("6.6.6.6", "203.0.113.9:443")); got != "203.0.113.9" {
+		t.Fatalf("RequestIP() sin X-Real-IP = %q, se esperaba el peer", got)
 	}
 }

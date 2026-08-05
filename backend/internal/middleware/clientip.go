@@ -29,7 +29,13 @@ const (
 	sourceCFConnectingIP
 	// sourceTrueClientIP reads True-Client-IP (Cloudflare Enterprise / Akamai).
 	sourceTrueClientIP
-	// sourcePeer trusts only the TCP peer address.
+	// sourceXRealIP reads X-Real-IP, which the nginx in this repo sets from
+	// $remote_addr (nginx.conf, nginx/default.conf). Trustworthy only when that
+	// nginx is the sole entry point.
+	sourceXRealIP
+	// sourcePeer trusts only the TCP peer address. This is the genuine TCP
+	// peer: chimw.RealIP, which used to overwrite r.RemoteAddr from
+	// client-controlled headers, is no longer registered (see cmd/api/main.go).
 	sourcePeer
 )
 
@@ -50,10 +56,12 @@ func ConfigureClientIP(source string) error {
 		clientIPSource = sourceCFConnectingIP
 	case "true-client-ip":
 		clientIPSource = sourceTrueClientIP
+	case "x-real-ip":
+		clientIPSource = sourceXRealIP
 	case "peer":
 		clientIPSource = sourcePeer
 	default:
-		return fmt.Errorf("CLIENT_IP_SOURCE %q no es válido (opciones: xff-leftmost, xff-rightmost, cf-connecting-ip, true-client-ip, peer)", source)
+		return fmt.Errorf("CLIENT_IP_SOURCE %q no es válido (opciones: xff-leftmost, xff-rightmost, cf-connecting-ip, true-client-ip, x-real-ip, peer)", source)
 	}
 	return nil
 }
@@ -93,6 +101,10 @@ func RequestIP(r *http.Request) string {
 		}
 	case sourceTrueClientIP:
 		if ip := parseIP(r.Header.Get("True-Client-IP")); ip != "" {
+			return ip
+		}
+	case sourceXRealIP:
+		if ip := parseIP(r.Header.Get("X-Real-IP")); ip != "" {
 			return ip
 		}
 	case sourcePeer:
