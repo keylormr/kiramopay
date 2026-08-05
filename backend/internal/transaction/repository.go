@@ -158,7 +158,12 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 	                 COALESCE(external_reference, ''), COALESCE(metadata::text, '{}'),
 	                 created_at, processed_at, completed_at, created_date::text
 	          FROM transactions WHERE ` + where +
-		fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+		// id breaks ties so the order is TOTAL: two rows sharing a created_at
+		// (same-instant writes are routine — a transfer inserts both legs at
+		// once) would otherwise come back in an arbitrary order that Postgres
+		// may vary between the queries of a paginated read, silently dropping
+		// one row and repeating another across page boundaries.
+		fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
 	queryArgs := append(append([]interface{}{}, args...), limit, offset)
 
 	rows, err := r.db.Query(ctx, query, queryArgs...)

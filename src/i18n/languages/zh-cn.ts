@@ -590,6 +590,7 @@ const zhCn: TranslationKeys = {
   tx_title_generic_out: '发出的款项',
   analytics_no_expenses: '尚无支出记录',
   analytics_partial: '显示{total}笔中的{shown}笔交易',
+  analytics_offline: '无法加载完整周期：仅显示最近的交易',
   analytics_insight: '智慧洞察',
   analytics_top_category: '最高支出',
   analytics_of_spending: '占总额',

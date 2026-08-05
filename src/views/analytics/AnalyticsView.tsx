@@ -190,13 +190,18 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   // the user already left).
   const windowKey = period === 'month' ? `month:${monthOffset}` : period;
 
-  // The full window fetched from the server, or null while loading / when the
-  // fetch failed (the synced store then serves as fallback).
+  // The window fetched from the server, or null while loading / when the very
+  // first page failed (the synced store then serves as fallback).
   const [serverWindow, setServerWindow] = useState<{
     key: string;
     txs: Transaction[];
     total: number;
   } | null>(null);
+
+  // Set when the window could not be fetched at all and the charts are running
+  // on the synced store, which holds only the last 50 movements — the very
+  // problem this view exists to fix, so it must be visible, not silent.
+  const [fallbackKey, setFallbackKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,7 +210,11 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         const api = getApiLayer();
         const from = Number.isFinite(range.start) ? new Date(range.start).toISOString() : undefined;
         const to = Number.isFinite(range.end) ? new Date(range.end).toISOString() : undefined;
-        const acc: Transaction[] = [];
+        // Accumulate by id. OFFSET paging is not stable against writes: a
+        // transaction landing between two page requests shifts every later
+        // offset by one, so a row already collected would come back again and
+        // be counted twice in the totals.
+        const byId = new Map<string, Transaction>();
         let total = 0;
         for (let page = 0; page < MAX_PAGES; page++) {
           const res = await api.transactions.listTransactions({
@@ -214,14 +223,26 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             limit: PAGE_SIZE,
             offset: page * PAGE_SIZE,
           });
-          if (!res.success || !res.data) return; // keep the store fallback
-          acc.push(...res.data.transactions);
+          // A failed page keeps whatever earlier pages returned: partial data
+          // still beats the 50-item store, and the coverage note below tells
+          // the user it is partial rather than passing it off as complete.
+          if (!res.success || !res.data) break;
+          for (const tx of res.data.transactions) byId.set(tx.id, tx);
           total = res.data.total;
-          if (acc.length >= total || res.data.transactions.length < PAGE_SIZE) break;
+          if (byId.size >= total || res.data.transactions.length < PAGE_SIZE) break;
         }
-        if (!cancelled) setServerWindow({ key: windowKey, txs: acc, total });
+        if (cancelled) return;
+        if (byId.size > 0) {
+          setServerWindow({ key: windowKey, txs: [...byId.values()], total });
+          setFallbackKey(null);
+        } else {
+          // Nothing arrived: keep serverWindow null so the store fallback stays
+          // in place rather than rendering an empty month, and flag it.
+          setFallbackKey(windowKey);
+        }
       } catch {
         // Offline / API error: analytics still render from the synced store.
+        if (!cancelled) setFallbackKey(windowKey);
       }
     })();
     return () => {
@@ -241,12 +262,17 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     });
   }, [serverWindow, windowKey, allTransactions, period, range.start, range.end]);
 
-  // True when the page cap cut the window short — the charts then cover only
-  // the newest transactions and the UI must say so.
+  // True when the window is short of its own total — the page cap cut it, or a
+  // page failed. Either way the charts cover only part of the period and the
+  // UI must say so instead of presenting them as the whole month.
   const windowTruncated =
     serverWindow !== null &&
     serverWindow.key === windowKey &&
     serverWindow.txs.length < serverWindow.total;
+
+  // The window could not be fetched and the charts are on the synced store.
+  const usingFallback =
+    fallbackKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
 
   // Category breakdown for expenses
   const categoryData = useMemo(() => {
@@ -429,14 +455,18 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             ))}
           </div>
 
-          {/* Honest coverage note: the page cap cut this window short, so the
-              charts only cover the newest movements. */}
+          {/* Honest coverage note: the window is incomplete, either because the
+              page cap cut it or because a page failed. Never present partial
+              charts as the whole period. */}
           {windowTruncated && serverWindow && (
             <p className="mt-2 px-1 text-xs uv-text-muted">
               {t('analytics_partial')
                 .replace('{shown}', String(serverWindow.txs.length))
                 .replace('{total}', String(serverWindow.total))}
             </p>
+          )}
+          {usingFallback && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">{t('analytics_offline')}</p>
           )}
 
           {/* Month navigator (only for the monthly view) */}
