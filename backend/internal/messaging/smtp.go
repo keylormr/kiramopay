@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"mime"
@@ -94,8 +95,14 @@ func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBo
 
 // buildMessage assembles an RFC 5322 message. Subject is RFC 2047 encoded so
 // accented Spanish renders correctly. When htmlBody is set the message is
-// multipart/alternative (text + HTML); otherwise it is text/plain. Lines are
-// CRLF-terminated as SMTP requires.
+// multipart/alternative (text + HTML); otherwise it is text/plain.
+//
+// Both bodies are base64-encoded, which is what makes accented Spanish safe to
+// write in the templates. Declaring charset=UTF-8 without a transfer encoding
+// implies 7bit, so raw multi-byte characters were only surviving on the good
+// will of 8BITMIME servers; base64 also wraps at 76 columns, keeping the HTML
+// under the 998-character line ceiling that RFC 5322 imposes — our one-line
+// markup blew past it and could be mangled or rejected in transit.
 func buildMessage(from, to, subject, textBody, htmlBody string) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
@@ -105,8 +112,9 @@ func buildMessage(from, to, subject, textBody, htmlBody string) ([]byte, error) 
 	b.WriteString("MIME-Version: 1.0\r\n")
 
 	if htmlBody == "" {
-		b.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\n")
-		b.WriteString(normalizeCRLF(textBody))
+		b.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		b.WriteString(base64Body(textBody))
 		return []byte(b.String()), nil
 	}
 
@@ -116,16 +124,37 @@ func buildMessage(from, to, subject, textBody, htmlBody string) ([]byte, error) 
 	}
 	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
 
+	// Plain text first: multipart/alternative is ordered least- to
+	// most-preferred, so a client that shows the last part it understands
+	// lands on the HTML.
 	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\n")
-	b.WriteString(normalizeCRLF(textBody) + "\r\n")
+	b.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+	b.WriteString(base64Body(textBody) + "\r\n")
 
 	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n\r\n")
-	b.WriteString(normalizeCRLF(htmlBody) + "\r\n")
+	b.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+	b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+	b.WriteString(base64Body(htmlBody) + "\r\n")
 
 	b.WriteString("--" + boundary + "--\r\n")
 	return []byte(b.String()), nil
+}
+
+// base64MaxLine is the column at which base64 bodies wrap. RFC 2045 caps
+// encoded lines at 76 characters.
+const base64MaxLine = 76
+
+// base64Body encodes a body and folds it into CRLF-terminated 76-column lines.
+func base64Body(s string) string {
+	enc := base64.StdEncoding.EncodeToString([]byte(normalizeCRLF(s)))
+	var b strings.Builder
+	for len(enc) > base64MaxLine {
+		b.WriteString(enc[:base64MaxLine] + "\r\n")
+		enc = enc[base64MaxLine:]
+	}
+	b.WriteString(enc + "\r\n")
+	return b.String()
 }
 
 // normalizeCRLF converts bare LFs to CRLF so the body is SMTP-safe regardless of

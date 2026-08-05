@@ -442,6 +442,28 @@ func (s *Service) Logout(ctx context.Context, accessJTI string, accessRemainingT
 //  Password reset flow
 // ─────────────────────────────────────────────────────────────────────────
 
+// emailSendTimeout bounds a detached delivery attempt. Generous enough for a
+// slow SMTP handshake, short enough that a dead provider cannot leave goroutines
+// parked for minutes.
+const emailSendTimeout = 30 * time.Second
+
+// sendEmailDetached delivers on a context of its own, so a slow or unreachable
+// SMTP provider cannot hold the HTTP request open.
+//
+// It used to send inline on the request context, which meant a provider that
+// merely hung — as happened when the host blocked outbound port 587 — burned the
+// whole 30-second request timeout and returned a gateway error to a user whose
+// reset token had, in fact, already been issued. Delivery is best-effort by
+// design: ForgotPassword must answer identically whether or not the mail goes
+// out, or the response itself becomes an account-enumeration oracle.
+func (s *Service) sendEmailDetached(userID, to, subject, textBody, htmlBody string) {
+	ctx, cancel := context.WithTimeout(context.Background(), emailSendTimeout)
+	defer cancel()
+	if err := s.emailSender.SendEmail(ctx, to, subject, textBody, htmlBody); err != nil {
+		slog.Warn("auth: password reset email delivery failed", "user_id", userID, "err", err.Error())
+	}
+}
+
 // ForgotPassword always returns nil regardless of whether the user exists
 // (anti-enumeration). When the user exists, a token is issued and stored.
 // The caller is responsible for delivering the token via email/SMS.
@@ -474,9 +496,10 @@ func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginCon
 	// a provider the handler echoes the token in dev only.
 	if s.emailSender != nil && u.Email != "" {
 		subject, textBody, htmlBody := messaging.PasswordResetEmail(raw, s.publicAppURL)
-		if derr := s.emailSender.SendEmail(ctx, u.Email, subject, textBody, htmlBody); derr != nil {
-			slog.Warn("auth: password reset email delivery failed", "user_id", u.ID, "err", derr.Error())
-		}
+		// #nosec G118 -- intentionally detached: the request context dies with
+		// the response, and delivery must outlive it (sendEmailDetached uses its
+		// own bounded context).
+		go s.sendEmailDetached(u.ID, u.Email, subject, textBody, htmlBody)
 	}
 	if s.auditLogger != nil {
 		s.auditLogger.Log(audit.Event{
