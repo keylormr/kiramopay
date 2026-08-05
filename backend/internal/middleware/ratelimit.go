@@ -11,6 +11,18 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// limiterIP keys rate-limit windows by the resolved client IP instead of the
+// raw RemoteAddr. Behind the Render proxy RemoteAddr is the proxy's address
+// plus an ephemeral port, so keying on it neither identified the client nor
+// produced stable windows. When nothing parses, fall back to RemoteAddr so a
+// request is never left without a key.
+func limiterIP(r *http.Request) string {
+	if ip := RequestIP(r); ip != "" {
+		return ip
+	}
+	return r.RemoteAddr
+}
+
 // inProcLimiter is a fixed-window in-process limiter used as a FAIL-DEGRADED
 // fallback when Redis is unavailable, so rate limiting on sensitive routes does
 // not silently disappear during a Redis outage. It is best-effort and
@@ -56,7 +68,7 @@ func RateLimit(redisClient *redis.Client, limit int, window time.Duration) func(
 	fallback := newInProcLimiter()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := fmt.Sprintf("ratelimit:%s", r.RemoteAddr)
+			key := fmt.Sprintf("ratelimit:%s", limiterIP(r))
 
 			ctx := context.Background()
 			count, err := redisClient.Incr(ctx, key).Result()
@@ -94,7 +106,7 @@ func UserRateLimit(redisClient *redis.Client, limit int, window time.Duration) f
 			userID := GetUserID(r.Context())
 			key := fmt.Sprintf("userlimit:%s", userID)
 			if userID == "" {
-				key = fmt.Sprintf("userlimit:ip:%s", r.RemoteAddr)
+				key = fmt.Sprintf("userlimit:ip:%s", limiterIP(r))
 			}
 
 			ctx := context.Background()

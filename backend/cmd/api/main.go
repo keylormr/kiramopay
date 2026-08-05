@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -74,6 +75,11 @@ func metricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
 func main() {
 	cfg := config.Load()
 	if err := cfg.ValidateForProduction(); err != nil {
+		log.Fatalf("Config validation failed: %v", err)
+	}
+	// The client-IP trust boundary is a deployment fact, so it is chosen by env
+	// var; an invalid value must stop the boot, not degrade silently.
+	if err := middleware.ConfigureClientIP(os.Getenv("CLIENT_IP_SOURCE")); err != nil {
 		log.Fatalf("Config validation failed: %v", err)
 	}
 
@@ -451,12 +457,14 @@ func main() {
 
 	// Global middleware
 	r.Use(chimw.RequestID)
-	// RealIP is deprecated in chi v5.3 (SA1019): it takes the leftmost, fully
-	// client-controlled X-Forwarded-For value, so a client can spoof the IP used
-	// for rate-limiting and audit. This is the pre-existing behavior; a proper
-	// trusted-proxy client-IP middleware (Render appends the real client last) is
-	// tracked as a follow-up. Silenced here so the CVE dependency bump can land.
-	r.Use(chimw.RealIP) //nolint:staticcheck // SA1019 — see comment above; trusted-proxy IP fix is a tracked follow-up
+	// chimw.RealIP is deliberately NOT registered — this is the trusted-proxy
+	// follow-up its old comment pointed at. It MUTATES r.RemoteAddr with
+	// True-Client-IP / X-Real-IP / the leftmost X-Forwarded-For entry, all
+	// client-controlled, which is why chi deprecated it (GHSA-3fxj-6jh8-hvhx).
+	// Keeping it would poison the one value no client can forge, making every
+	// CLIENT_IP_SOURCE below — including "peer" — spoofable, and letting an
+	// attacker mint a fresh rate-limit key per request. The trust boundary now
+	// lives in middleware.RequestIP, where it is explicit and configurable.
 	r.Use(middleware.OtelRouteTag) // refine the otelhttp span name to the chi route
 	r.Use(middleware.RequestTimeout(30 * time.Second))
 	r.Use(middleware.Logger)
@@ -498,6 +506,25 @@ func main() {
 	// behind METRICS_TOKEN; left open when unset so Prometheus scraping works
 	// out of the box.
 	r.Get("/metrics", metricsAuth(os.Getenv("METRICS_TOKEN"), middleware.MetricsHandler))
+	// /metrics/client-ip echoes the addressing headers exactly as the proxy
+	// chain delivers them, plus what RequestIP resolves under the current
+	// CLIENT_IP_SOURCE. It exists so the operator can pick the trust boundary
+	// from evidence instead of guessing (a wrong choice collapses every user
+	// onto a handful of rate-limit keys). Same gate as /metrics.
+	r.Get("/metrics/client-ip", metricsAuth(os.Getenv("METRICS_TOKEN"), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// json.Encoder escapes the client-supplied header values, so echoing
+		// them back cannot inject into the response.
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"remote_addr":      r.RemoteAddr,
+			"x_forwarded_for":  r.Header.Get("X-Forwarded-For"),
+			"cf_connecting_ip": r.Header.Get("CF-Connecting-IP"),
+			"true_client_ip":   r.Header.Get("True-Client-IP"),
+			"x_real_ip":        r.Header.Get("X-Real-IP"),
+			"client_ip_source": os.Getenv("CLIENT_IP_SOURCE"),
+			"resolved_ip":      middleware.RequestIP(r),
+		})
+	}))
 	r.Get("/api/docs", docs.ServeSwaggerUI)
 	r.Get("/api/docs/openapi.yaml", docs.ServeOpenAPISpec)
 
