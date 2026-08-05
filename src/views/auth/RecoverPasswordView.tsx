@@ -8,6 +8,13 @@ interface RecoverPasswordViewProps {
   onClose: () => void;
   /** Pre-fills the cédula field (e.g. the one already typed on the login screen). */
   initialCedula?: string;
+  /**
+   * Reset token carried by the email link. When present the view opens straight
+   * at the reset step with the field filled, so following the link lands on
+   * "choose a new password" instead of asking for the code that the link
+   * already provided.
+   */
+  initialToken?: string;
 }
 
 type Step = 'request' | 'reset' | 'done';
@@ -27,11 +34,12 @@ const inputClass = (invalid: boolean) =>
 export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
   onClose,
   initialCedula = '',
+  initialToken = '',
 }) => {
   const { t } = useLanguage();
-  const [step, setStep] = useState<Step>('request');
+  const [step, setStep] = useState<Step>(initialToken ? 'reset' : 'request');
   const [cedula, setCedula] = useState(initialCedula.replace(/\D/g, '').slice(0, 12));
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(initialToken);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -197,12 +205,16 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
             </h1>
             <p className="text-[var(--color-text-secondary-dark)] mb-6">{t('recover_reset_subtitle')}</p>
 
-            <div className="mb-4 p-3.5 rounded-xl bg-white/[0.04] border border-white/10 flex items-start gap-2.5">
-              <Icons.Mail size={16} className="text-[var(--color-primary-300)] mt-0.5 shrink-0" />
-              <p className="text-[13px] text-[var(--color-text-secondary-dark)] leading-relaxed">
-                {t('recover_sent_desc')}
-              </p>
-            </div>
+            {/* "Check your inbox" only helps someone who has yet to open the
+                mail; arriving from the link itself, it is noise. */}
+            {!initialToken && (
+              <div className="mb-4 p-3.5 rounded-xl bg-white/[0.04] border border-white/10 flex items-start gap-2.5">
+                <Icons.Mail size={16} className="text-[var(--color-primary-300)] mt-0.5 shrink-0" />
+                <p className="text-[13px] text-[var(--color-text-secondary-dark)] leading-relaxed">
+                  {t('recover_sent_desc')}
+                </p>
+              </div>
+            )}
 
             {devToken && (
               <div className="mb-4 p-3 rounded-xl bg-[var(--color-warning-soft)] border border-[var(--color-warning)]/30">
@@ -226,7 +238,9 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
                 id="recover-token"
                 type="text"
                 autoComplete="one-time-code"
-                autoFocus
+                // Coming from the link the code is already in; the cursor
+                // belongs in the first field the user still has to fill.
+                autoFocus={!initialToken}
                 value={token}
                 onChange={(e) => {
                   setToken(e.target.value);
@@ -244,6 +258,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
                   id="recover-new-password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
+                  autoFocus={!!initialToken}
                   value={newPassword}
                   onChange={(e) => {
                     setNewPassword(e.target.value);

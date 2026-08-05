@@ -8,7 +8,7 @@ import { RecoverPasswordView } from '../RecoverPasswordView';
 const mockForgot = vi.fn();
 const mockReset = vi.fn();
 
-function renderView(props?: Partial<{ onClose: () => void; initialCedula: string }>) {
+function renderView(props?: Partial<{ onClose: () => void; initialCedula: string; initialToken: string }>) {
   const defaultProps = { onClose: vi.fn(), ...props };
   return {
     ...render(
@@ -87,5 +87,38 @@ describe('RecoverPasswordView', () => {
     const { onClose } = renderView();
     await user.click(screen.getByLabelText('Volver'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // Llegar desde el enlace del correo tiene que caer directo en "elegí una
+  // contraseña nueva". Antes el enlace aterrizaba en el login y el token se
+  // ignoraba: la recuperación por correo no se podía completar.
+  describe('llegando desde el enlace del correo', () => {
+    it('abre el paso de restablecer con el código ya puesto', () => {
+      renderView({ initialToken: 'tok_del_correo' });
+
+      expect(screen.getByText('Nueva contraseña')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Pega el código aquí')).toHaveValue('tok_del_correo');
+      // No debe pedir la cédula: el enlace ya identifica la cuenta.
+      expect(screen.queryByPlaceholderText('Ej: 702650930')).not.toBeInTheDocument();
+    });
+
+    it('no muestra el aviso de revisar el correo', () => {
+      renderView({ initialToken: 'tok_del_correo' });
+      expect(screen.queryByText(/revis/i)).not.toBeInTheDocument();
+    });
+
+    it('restablece con el código del enlace sin que el usuario lo escriba', async () => {
+      const user = userEvent.setup();
+      mockReset.mockResolvedValue({ success: true });
+      renderView({ initialToken: 'tok_del_correo' });
+
+      await user.type(screen.getByPlaceholderText('Contraseña'), 'NewPass2024!');
+      await user.type(screen.getByPlaceholderText('Confirmar contraseña'), 'NewPass2024!');
+      await user.click(screen.getByText('Restablecer contraseña').closest('button')!);
+
+      await waitFor(() => {
+        expect(mockReset).toHaveBeenCalledWith('tok_del_correo', 'NewPass2024!');
+      });
+    });
   });
 });
