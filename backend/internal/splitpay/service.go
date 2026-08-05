@@ -111,17 +111,29 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 	// the split creator. The creator's own share moves no money. Only mark the
 	// share paid AFTER the transfer succeeds.
 	if userID != group.CreatorID && share.Amount > 0 {
+		// Counterparty names come from the shares already loaded: the creator's
+		// name for the payer's row, the payer's for the creator's row. Optional —
+		// missing names degrade to the frontend's generic title.
+		creatorName := ""
+		for i := range shares {
+			if shares[i].UserID == group.CreatorID {
+				creatorName = shares[i].UserName
+				break
+			}
+		}
 		idem := fmt.Sprintf("split:%s:%s", groupID, userID)
 		if _, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-			FromUserID:     userID,
-			ToUserID:       group.CreatorID,
-			Amount:         share.Amount,
-			Currency:       group.Currency,
-			Fee:            0,
-			Description:    "Split: " + group.Title,
-			IdempotencyKey: idem,
-			TxType:         transaction.TypeP2PSend,
-			ReceiveType:    transaction.TypeP2PReceive,
+			FromUserID:               userID,
+			ToUserID:                 group.CreatorID,
+			Amount:                   share.Amount,
+			Currency:                 group.Currency,
+			Fee:                      0,
+			Description:              "Split: " + group.Title,
+			IdempotencyKey:           idem,
+			TxType:                   transaction.TypeP2PSend,
+			ReceiveType:              transaction.TypeP2PReceive,
+			SenderCounterpartyName:   creatorName,
+			ReceiverCounterpartyName: share.UserName,
 		}); err != nil {
 			return fmt.Errorf("settle split share: %w", err)
 		}

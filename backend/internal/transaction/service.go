@@ -160,8 +160,13 @@ func (s *Service) MerchantBalance(ctx context.Context, merchantID, currency stri
 // withdrawal that already drained the balance must return the original result,
 // not "insufficient". The balance pre-check here is a fast-fail courtesy only —
 // the race-free enforcement is the ledger's in-tx negativity check.
+//
+// merchantName is the shop's display name for the history row; this service has
+// no merchant repository, and the caller already loaded the merchant to check
+// ownership. Empty is fine (the frontend falls back to a generic title) — it
+// used to store the merchant UUID, which surfaced raw in the history.
 func (s *Service) WithdrawMerchantToUser(
-	ctx context.Context, merchantID, userID, currency string, amount int64, idempotencyKey string,
+	ctx context.Context, merchantID, merchantName, userID, currency string, amount int64, idempotencyKey string,
 ) (*TransactionRecord, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
@@ -189,7 +194,7 @@ func (s *Service) WithdrawMerchantToUser(
 		Amount:           amount,
 		Currency:         currency,
 		CounterpartyType: "merchant",
-		CounterpartyName: merchantID,
+		CounterpartyName: merchantName,
 		Description:      "Retiro del saldo del negocio",
 		IdempotencyKey:   idempotencyKey,
 	})
@@ -241,6 +246,14 @@ type CreateTransferRequest struct {
 	IdempotencyKey string
 	TxType         string // for the sender's transactions row
 	ReceiveType    string // for the receiver's transactions row (e.g. p2p_receive)
+
+	// SenderCounterpartyName is the display name of WHO RECEIVES, shown on the
+	// sender's history row; ReceiverCounterpartyName is who sent, shown on the
+	// receiver's row. Both optional — the frontend falls back to a generic
+	// per-type title when empty, so callers pass what they know (SINPE knows the
+	// contact, QR knows the shop) and never fail a transfer over a name.
+	SenderCounterpartyName   string
+	ReceiverCounterpartyName string
 
 	// FeeFromReceiver selects who absorbs Fee. Default (false) is the historical
 	// payer-absorbed model: the payer pays Amount + Fee, the receiver is credited
@@ -350,7 +363,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Currency:         req.Currency,
 		Fee:              senderFee,
 		CounterpartyType: "user",
-		CounterpartyName: "", // populated by caller (sinpe handler resolves)
+		CounterpartyName: req.SenderCounterpartyName,
 		Description:      req.Description,
 		IdempotencyKey:   req.IdempotencyKey,
 	}
@@ -360,6 +373,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Currency:         req.Currency,
 		Fee:              receiverFee,
 		CounterpartyType: "user",
+		CounterpartyName: req.ReceiverCounterpartyName,
 		Description:      req.Description,
 		// Receiver idempotency: derive deterministically to avoid double-credit.
 		IdempotencyKey: pairKey(req.IdempotencyKey, "recv"),

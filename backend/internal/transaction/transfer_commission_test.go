@@ -4,7 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/ledger"
@@ -91,12 +93,23 @@ func TestCreateTransfer_FeePayerAbsorbed_BackCompat(t *testing.T) {
 	const amount int64 = 100000
 	const fee int64 = 500
 
-	if _, _, err := svc.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+	senderTx, receiverTx, err := svc.CreateTransfer(ctx, &transaction.CreateTransferRequest{
 		FromUserID: payer, ToUserID: merchant, Amount: amount, Currency: "CRC",
 		Fee: fee, FeeFromReceiver: false, IdempotencyKey: "payer-absorbed-1",
 		TxType: transaction.TypeQRPayment, ReceiveType: transaction.TypeQRReceive,
-	}); err != nil {
+		SenderCounterpartyName: "Soda La Esquina", ReceiverCounterpartyName: "Maria Lopez",
+	})
+	if err != nil {
 		t.Fatalf("CreateTransfer: %v", err)
+	}
+
+	// Each side's history row names the OTHER party; they used to be written
+	// empty and the UI showed a generic per-type title instead of a name.
+	if senderTx.CounterpartyName != "Soda La Esquina" {
+		t.Fatalf("sender counterparty = %q, want %q", senderTx.CounterpartyName, "Soda La Esquina")
+	}
+	if receiverTx.CounterpartyName != "Maria Lopez" {
+		t.Fatalf("receiver counterparty = %q, want %q", receiverTx.CounterpartyName, "Maria Lopez")
 	}
 
 	if got, want := crcWallet(t, pool, payer), payer0-amount-fee; got != want {
@@ -107,6 +120,43 @@ func TestCreateTransfer_FeePayerAbsorbed_BackCompat(t *testing.T) {
 	}
 	if got, want := feesCRC(t, pool), fees0+fee; got != want {
 		t.Fatalf("system fees = %d, want %d", got, want)
+	}
+}
+
+// counterparty_name is VARCHAR(100) but the names now fed into it come from
+// wider columns (qr_merchants.name is 200; first+last name can reach 201). An
+// over-long name must be truncated, never abort the payment.
+func TestCreateTransfer_NombreLargoNoRompeElPago(t *testing.T) {
+	svc, pool, payer, merchant := setupTransferService(t)
+	ctx := context.Background()
+
+	// 150 runes, accented so a byte-wise cut would produce invalid UTF-8.
+	largo := strings.Repeat("á", 150)
+
+	sender, receiver, err := svc.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+		FromUserID: payer, ToUserID: merchant, Amount: 100000, Currency: "CRC",
+		IdempotencyKey: "nombre-largo-1",
+		TxType:         transaction.TypeQRPayment, ReceiveType: transaction.TypeQRReceive,
+		SenderCounterpartyName: largo, ReceiverCounterpartyName: largo,
+	})
+	if err != nil {
+		t.Fatalf("CreateTransfer con nombre largo: %v", err)
+	}
+	for _, c := range []struct {
+		lado string
+		name string
+	}{{"emisor", sender.CounterpartyName}, {"receptor", receiver.CounterpartyName}} {
+		if n := len([]rune(c.name)); n != 100 {
+			t.Fatalf("%s: nombre de %d runas, se esperaba recorte a 100", c.lado, n)
+		}
+		if !utf8.ValidString(c.name) {
+			t.Fatalf("%s: el recorte partió una runa y produjo UTF-8 inválido", c.lado)
+		}
+	}
+
+	// Y la plata se movió de verdad: el recorte no puede haber abortado el asiento.
+	if got := crcWallet(t, pool, merchant); got == 0 {
+		t.Fatal("el receptor no fue acreditado: el pago no se completó")
 	}
 }
 

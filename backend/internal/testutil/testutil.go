@@ -257,7 +257,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		fee BIGINT DEFAULT 0,
 		counterparty_type VARCHAR(30),
 		counterparty_id UUID,
-		counterparty_name VARCHAR(200),
+		-- Must match migration 001 exactly: this column was VARCHAR(200) here
+		-- while production is VARCHAR(100), so an over-long name passed the
+		-- tests and only failed in production.
+		counterparty_name VARCHAR(100),
 		counterparty_phone VARCHAR(20),
 		status VARCHAR(20) DEFAULT 'pending',
 		external_reference VARCHAR(100),
