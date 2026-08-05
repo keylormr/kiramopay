@@ -23,6 +23,29 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // Pool returns the underlying pool (used by Service to begin its own tx).
 func (r *Repository) Pool() *pgxpool.Pool { return r.db }
 
+// counterpartyNameMax is the width of transactions.counterparty_name
+// (migration 001). Names now come from sources with WIDER columns —
+// qr_merchants.name is VARCHAR(200), and users.first_name + last_name can
+// concatenate to 201 — so an over-long name would abort the INSERT with
+// SQLSTATE 22001 and, since CreateTransfer aborts on any non-duplicate error,
+// fail the whole payment. A display name is never worth failing money over:
+// truncate it here, at the single choke point every caller goes through.
+const counterpartyNameMax = 100
+
+// truncateCounterpartyName cuts on RUNE boundaries: Postgres counts characters,
+// not bytes, and slicing bytes would split a multi-byte rune (an accented name
+// is routine here) into invalid UTF-8.
+func truncateCounterpartyName(name string) string {
+	if len(name) <= counterpartyNameMax {
+		return name // fast path: ASCII-length under the cap is always fine
+	}
+	runes := []rune(name)
+	if len(runes) <= counterpartyNameMax {
+		return name
+	}
+	return string(runes[:counterpartyNameMax])
+}
+
 // Create inserts a transaction in pending status with idempotency_key
 // promoted to its own column (and metadata still preserved for legacy reads).
 // If a row already exists for (user_id, idempotency_key), returns it with
@@ -53,7 +76,7 @@ func (r *Repository) CreateTx(
 		Currency:          req.Currency,
 		Fee:               req.Fee,
 		CounterpartyType:  req.CounterpartyType,
-		CounterpartyName:  req.CounterpartyName,
+		CounterpartyName:  truncateCounterpartyName(req.CounterpartyName),
 		CounterpartyPhone: req.CounterpartyPhone,
 		Status:            StatusPending,
 		Metadata:          metadata,
