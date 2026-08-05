@@ -123,24 +123,32 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 		offset = 0
 	}
 
-	countQuery := "SELECT COUNT(*) FROM transactions WHERE user_id = $1"
+	// One WHERE clause shared by the count and the page query, so the two can
+	// never drift apart (they used to be built twice by hand).
+	where := "user_id = $1"
 	args := []interface{}{userID}
-	argIdx := 2
-
+	addFilter := func(cond string, val interface{}) {
+		args = append(args, val)
+		where += fmt.Sprintf(" AND "+cond, len(args))
+	}
 	if req.Type != "" {
-		countQuery += fmt.Sprintf(" AND type = $%d", argIdx)
-		args = append(args, req.Type)
-		argIdx++
+		addFilter("type = $%d", req.Type)
 	}
 	if req.Status != "" {
-		countQuery += fmt.Sprintf(" AND status = $%d", argIdx)
-		args = append(args, req.Status)
-		argIdx++
+		addFilter("status = $%d", req.Status)
 	}
-	_ = argIdx // optional-filter counter; final value intentionally unused
+	if req.Currency != "" {
+		addFilter("currency = $%d", req.Currency)
+	}
+	if !req.From.IsZero() {
+		addFilter("created_at >= $%d", req.From)
+	}
+	if !req.To.IsZero() {
+		addFilter("created_at < $%d", req.To)
+	}
 
 	var total int
-	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM transactions WHERE "+where, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count transactions: %w", err)
 	}
 
@@ -149,24 +157,9 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 	                 COALESCE(counterparty_phone, ''), status,
 	                 COALESCE(external_reference, ''), COALESCE(metadata::text, '{}'),
 	                 created_at, processed_at, completed_at, created_date::text
-	          FROM transactions WHERE user_id = $1`
-
-	queryArgs := []interface{}{userID}
-	qArgIdx := 2
-
-	if req.Type != "" {
-		query += fmt.Sprintf(" AND type = $%d", qArgIdx)
-		queryArgs = append(queryArgs, req.Type)
-		qArgIdx++
-	}
-	if req.Status != "" {
-		query += fmt.Sprintf(" AND status = $%d", qArgIdx)
-		queryArgs = append(queryArgs, req.Status)
-		qArgIdx++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", qArgIdx, qArgIdx+1)
-	queryArgs = append(queryArgs, limit, offset)
+	          FROM transactions WHERE ` + where +
+		fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	queryArgs := append(append([]interface{}{}, args...), limit, offset)
 
 	rows, err := r.db.Query(ctx, query, queryArgs...)
 	if err != nil {

@@ -588,6 +588,7 @@ const ja: TranslationKeys = {
   tx_title_generic_in: '受け取った金額',
   tx_title_generic_out: '送った金額',
   analytics_no_expenses: '支出記録なし',
+  analytics_partial: '{total}件中{shown}件を表示',
   analytics_insight: 'スマート分析',
   analytics_top_category: '最大支出',
   analytics_of_spending: '（全体比）',

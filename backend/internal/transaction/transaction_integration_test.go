@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/testutil"
@@ -124,6 +125,53 @@ func TestListTransactions_Pagination(t *testing.T) {
 	}
 	if len(resp.Transactions) != 2 {
 		t.Fatalf("expected page size 2, got %d", len(resp.Transactions))
+	}
+}
+
+// The analytics view asks the SERVER for a date window and a currency; before
+// these filters it could only see whatever page the client happened to hold.
+func TestListTransactions_FilterByDateAndCurrency(t *testing.T) {
+	svc, userID := setupTxService(t)
+	ctx := context.Background()
+	if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+		Type: "deposit", Amount: 1000000, Currency: "CRC",
+	}); err != nil {
+		t.Fatalf("deposit CRC: %v", err)
+	}
+	if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+		Type: "deposit", Amount: 2000, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("deposit USD: %v", err)
+	}
+
+	// A window that starts in the future matches nothing.
+	future := time.Now().Add(time.Hour)
+	resp, err := svc.ListTransactions(ctx, userID, &transaction.ListTransactionsRequest{From: future, Limit: 20})
+	if err != nil {
+		t.Fatalf("list future: %v", err)
+	}
+	if resp.Total != 0 || len(resp.Transactions) != 0 {
+		t.Fatalf("future window: total=%d len=%d, se esperaba 0/0", resp.Total, len(resp.Transactions))
+	}
+
+	// A window around now matches both, and the count agrees with the page.
+	resp, err = svc.ListTransactions(ctx, userID, &transaction.ListTransactionsRequest{
+		From: time.Now().Add(-time.Hour), To: future, Limit: 20,
+	})
+	if err != nil {
+		t.Fatalf("list window: %v", err)
+	}
+	if resp.Total != 2 || len(resp.Transactions) != 2 {
+		t.Fatalf("window: total=%d len=%d, se esperaba 2/2", resp.Total, len(resp.Transactions))
+	}
+
+	// Currency narrows to the USD deposit only.
+	resp, err = svc.ListTransactions(ctx, userID, &transaction.ListTransactionsRequest{Currency: "USD", Limit: 20})
+	if err != nil {
+		t.Fatalf("list USD: %v", err)
+	}
+	if resp.Total != 1 || len(resp.Transactions) != 1 || resp.Transactions[0].Currency != "USD" {
+		t.Fatalf("USD filter: total=%d len=%d, se esperaba solo el deposito USD", resp.Total, len(resp.Transactions))
 	}
 }
 

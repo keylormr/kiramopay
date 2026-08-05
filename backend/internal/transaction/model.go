@@ -37,11 +37,11 @@ const (
 	TypeP2PReceive   = "p2p_receive"
 	// Owner moving money from a shop's balance into their personal wallet.
 	TypeMerchantWithdrawal = "merchant_withdrawal"
-	TypeRefund       = "refund"
-	TypeCryptoBuy    = "crypto_buy"       // fiat leaves the wallet to buy crypto
-	TypeCryptoSell   = "crypto_sell"      // fiat enters the wallet from selling crypto
-	TypeSavingsDeposit  = "savings_deposit"  // wallet -> SYSTEM:SAVINGS
-	TypeSavingsWithdraw = "savings_withdraw" // SYSTEM:SAVINGS -> wallet
+	TypeRefund             = "refund"
+	TypeCryptoBuy          = "crypto_buy"       // fiat leaves the wallet to buy crypto
+	TypeCryptoSell         = "crypto_sell"      // fiat enters the wallet from selling crypto
+	TypeSavingsDeposit     = "savings_deposit"  // wallet -> SYSTEM:SAVINGS
+	TypeSavingsWithdraw    = "savings_withdraw" // SYSTEM:SAVINGS -> wallet
 )
 
 // Transaction statuses
@@ -66,10 +66,15 @@ type CreateTransactionRequest struct {
 }
 
 type ListTransactionsRequest struct {
-	Limit  int    `json:"limit"`
-	Offset int    `json:"offset"`
-	Type   string `json:"type,omitempty"`
-	Status string `json:"status,omitempty"`
+	Limit    int    `json:"limit"`
+	Offset   int    `json:"offset"`
+	Type     string `json:"type,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Currency string `json:"currency,omitempty"`
+	// From/To bound created_at: From inclusive, To exclusive, so a calendar
+	// month is exactly [first, first-of-next). Zero values mean unbounded.
+	From time.Time `json:"from,omitempty"`
+	To   time.Time `json:"to,omitempty"`
 }
 
 type TransactionListResponse struct {
