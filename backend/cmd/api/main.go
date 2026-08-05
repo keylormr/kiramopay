@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -510,14 +511,17 @@ func main() {
 	// onto a handful of rate-limit keys). Same gate as /metrics.
 	r.Get("/metrics/client-ip", metricsAuth(os.Getenv("METRICS_TOKEN"), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"remote_addr":%q,"x_forwarded_for":%q,"cf_connecting_ip":%q,"true_client_ip":%q,"x_real_ip":%q,"client_ip_source":%q,"resolved_ip":%q}`,
-			r.RemoteAddr,
-			r.Header.Get("X-Forwarded-For"),
-			r.Header.Get("CF-Connecting-IP"),
-			r.Header.Get("True-Client-IP"),
-			r.Header.Get("X-Real-IP"),
-			os.Getenv("CLIENT_IP_SOURCE"),
-			middleware.RequestIP(r))
+		// json.Encoder escapes the client-supplied header values, so echoing
+		// them back cannot inject into the response.
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"remote_addr":      r.RemoteAddr,
+			"x_forwarded_for":  r.Header.Get("X-Forwarded-For"),
+			"cf_connecting_ip": r.Header.Get("CF-Connecting-IP"),
+			"true_client_ip":   r.Header.Get("True-Client-IP"),
+			"x_real_ip":        r.Header.Get("X-Real-IP"),
+			"client_ip_source": os.Getenv("CLIENT_IP_SOURCE"),
+			"resolved_ip":      middleware.RequestIP(r),
+		})
 	}))
 	r.Get("/api/docs", docs.ServeSwaggerUI)
 	r.Get("/api/docs/openapi.yaml", docs.ServeOpenAPISpec)
