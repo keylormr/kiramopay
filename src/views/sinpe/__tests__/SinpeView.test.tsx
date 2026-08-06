@@ -105,4 +105,43 @@ describe('SinpeView — send', () => {
     });
     expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
   });
+
+  // El envío a un número que NO es de KiramoPay se debita pero NO se entrega:
+  // el riel a otros bancos sigue pendiente de licencia. Mostrarlo como "enviado"
+  // hace que alguien crea que su amigo recibió la plata. El backend lo marca con
+  // internal:false y status pending; la vista TIENE que reflejarlo.
+  //
+  // Este caso existe porque el aviso ya estaba escrito pero era código muerto:
+  // la vista rearmaba la transacción campo por campo y se dejaba `internal`
+  // afuera, así que la condición comparaba `undefined === false` y siempre caía
+  // en la rama verde de éxito.
+  it('avisa que la entrega queda pendiente cuando el destinatario no es usuario', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({
+      success: true,
+      data: { ...sentTx, status: 'pending', internal: false },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText('Envío en proceso')).toBeInTheDocument();
+    expect(screen.getByText(/no pertenece a KiramoPay/)).toBeInTheDocument();
+    // Y NO puede decir que se envió.
+    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+  });
+
+  it('mantiene el mensaje de éxito cuando el destinatario sí es usuario', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({
+      success: true,
+      data: { ...sentTx, internal: true },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(screen.queryByText('Envío en proceso')).not.toBeInTheDocument();
+  });
 });

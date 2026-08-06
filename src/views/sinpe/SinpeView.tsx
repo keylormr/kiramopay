@@ -144,6 +144,13 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       date: 'Ahora',
       status: res.data.status,
       reference,
+      // Carry `internal` through: the success sheet decides between "sent" and
+      // "pending delivery" with `internal === false`. Dropping it here left
+      // that check comparing `undefined === false`, so a transfer to someone
+      // who is NOT a KiramoPay user — debited but never delivered, since the
+      // cross-bank rail is still unlicensed — was shown with the green success
+      // tick. The whole warning branch was dead code.
+      internal: res.data.internal,
     };
 
     dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
