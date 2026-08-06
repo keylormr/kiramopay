@@ -155,6 +155,121 @@ func TestChangePassword_Success(t *testing.T) {
 	}
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Recuperación de contraseña
+//
+//  Todo este flujo estaba SIN cobertura pese a ser el camino por el que se
+//  cambia una credencial sin conocer la anterior: el que mas importa que este
+//  bien. Los casos de abajo cubren el exito de punta a punta y las tres
+//  propiedades de seguridad que el token debe cumplir.
+// ─────────────────────────────────────────────────────────────────────────
+
+// registrarUsuario deja una cuenta lista y devuelve su contraseña inicial.
+func registrarUsuario(t *testing.T, svc *auth.Service) string {
+	t.Helper()
+	const inicial = "Kiramopay2024!"
+	if _, err := svc.Register(context.Background(), &auth.RegisterRequest{
+		Cedula: "702650930", Phone: "+50688881234",
+		FirstName: "Keilor", LastName: "Martinez", Password: inicial,
+	}, emptyCtx); err != nil {
+		t.Fatalf("registro: %v", err)
+	}
+	return inicial
+}
+
+func TestResetPassword_FlujoCompleto(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	ctx := context.Background()
+	inicial := registrarUsuario(t, svc)
+
+	token, err := svc.ForgotPassword(ctx, "702650930", emptyCtx)
+	if err != nil {
+		t.Fatalf("solicitud de recuperación: %v", err)
+	}
+	if token == "" {
+		t.Fatal("no se emitió token de recuperación")
+	}
+
+	const nueva = "NuevaClave2026!"
+	if err := svc.ResetPassword(ctx, &auth.ResetPasswordRequest{
+		Token: token, NewPassword: nueva,
+	}, emptyCtx); err != nil {
+		t.Fatalf("restablecimiento: %v", err)
+	}
+
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Cedula: "702650930", Password: nueva,
+	}, emptyCtx); err != nil {
+		t.Fatalf("no se pudo entrar con la contraseña nueva: %v", err)
+	}
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Cedula: "702650930", Password: inicial,
+	}, emptyCtx); err == nil {
+		t.Fatal("la contraseña vieja debe dejar de servir")
+	}
+}
+
+// Un token de recuperación es de un solo uso. Si se pudiera repetir, quien lo
+// viera una vez (en un correo reenviado, en el historial del navegador) podria
+// volver a tomar la cuenta despues de que el dueño la recupere.
+func TestResetPassword_ElTokenNoSeReutiliza(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	ctx := context.Background()
+	registrarUsuario(t, svc)
+
+	token, err := svc.ForgotPassword(ctx, "702650930", emptyCtx)
+	if err != nil {
+		t.Fatalf("solicitud de recuperación: %v", err)
+	}
+	if err := svc.ResetPassword(ctx, &auth.ResetPasswordRequest{
+		Token: token, NewPassword: "NuevaClave2026!",
+	}, emptyCtx); err != nil {
+		t.Fatalf("primer restablecimiento: %v", err)
+	}
+
+	if err := svc.ResetPassword(ctx, &auth.ResetPasswordRequest{
+		Token: token, NewPassword: "OtraDistinta2026!",
+	}, emptyCtx); err == nil {
+		t.Fatal("el token se aceptó dos veces: debe consumirse en el primer uso")
+	}
+	// Y la contraseña no puede haber quedado en la del segundo intento.
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Cedula: "702650930", Password: "OtraDistinta2026!",
+	}, emptyCtx); err == nil {
+		t.Fatal("el segundo intento llegó a cambiar la contraseña")
+	}
+}
+
+func TestResetPassword_TokenInvalido(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	ctx := context.Background()
+	inicial := registrarUsuario(t, svc)
+
+	if err := svc.ResetPassword(ctx, &auth.ResetPasswordRequest{
+		Token: "token-que-nadie-emitió", NewPassword: "NuevaClave2026!",
+	}, emptyCtx); err == nil {
+		t.Fatal("un token inventado no debe restablecer nada")
+	}
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Cedula: "702650930", Password: inicial,
+	}, emptyCtx); err != nil {
+		t.Fatalf("la contraseña original debía seguir intacta: %v", err)
+	}
+}
+
+// Pedir recuperación para una cédula inexistente responde igual que para una
+// real: si respondiera distinto, el endpoint serviria para averiguar quien
+// tiene cuenta.
+func TestForgotPassword_NoRevelaSiLaCuentaExiste(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	ctx := context.Background()
+	registrarUsuario(t, svc)
+
+	if _, err := svc.ForgotPassword(ctx, "111111111", emptyCtx); err != nil {
+		t.Fatalf("una cédula inexistente no debe producir error: %v", err)
+	}
+}
+
 func TestRefreshTokenRotation(t *testing.T) {
 	svc, _ := setupAuthService(t)
 	ctx := context.Background()
