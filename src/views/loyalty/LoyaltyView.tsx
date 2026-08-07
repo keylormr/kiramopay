@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import { HelpButton } from '@/components/HelpSheet';
 import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
@@ -80,7 +81,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('loyalty_title')}</h1>
-        <div className="w-8" />
+        {/* Ocupa el hueco del espaciador que centraba el titulo, asi que el
+            titulo sigue centrado y la cabecera no cambia de alto. */}
+        <HelpButton topic="loyalty" className="w-8 flex items-center justify-center" />
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">

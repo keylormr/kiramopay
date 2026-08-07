@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Icons } from '../../components/Icons';
+import { HelpButton } from '../../components/HelpSheet';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import type { WebhookEndpoint, WebhookDelivery } from '@/api';
@@ -121,7 +122,12 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
         : 'uv-text-muted';
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={handleClose} title={t('webhooks_title')}>
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={t('webhooks_title')}
+      titleAccessory={<HelpButton topic="webhooks" />}
+    >
       <div className="space-y-4">
         {step === 'list' && (
           <>

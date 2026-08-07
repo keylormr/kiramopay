@@ -870,6 +870,22 @@ const pt: TranslationKeys = {
   kyc_verify_mismatch: 'O nome não corresponde ao registro oficial',
   kyc_verify_not_found: 'Não encontramos seu documento no registro',
   kyc_verify_unavailable: 'Serviço indisponível, tente novamente mais tarde',
+  contact_qr_button: 'Meu QR de contato',
+  contact_qr_desc: 'Quem escanear adiciona você como contato, sem digitar seu número.',
+  // Ayuda contextual (HelpSheet).
+  help_what_is_this: 'O que é isto?',
+  help_webhooks_title: 'Avisos automáticos para o seu sistema',
+  help_webhooks_body: 'Se você tem um sistema próprio, o KiramoPay pode avisá-lo quando algo acontece na conta do seu negócio. Você cadastra um endereço web e mostramos uma chave secreta uma única vez: com ela o seu sistema confirma que o aviso saiu de nós.\\n\\nHoje avisamos apenas as mudanças de status dos pagamentos garantidos e dos saques. Não há avisos de transferências, SINPE nem recargas.\\n\\nSe o seu servidor não responder, tentamos até 8 vezes no total: o envio original mais 7 novas tentativas.',
+  help_staking_title: 'Staking: você reserva sua cripto, mas ainda sem rendimento',
+  help_staking_body: 'Ao fazer staking, a quantidade que você escolhe sai do seu saldo disponível e fica reservada em uma posição. A porcentagem anual é definida pelo servidor.\\n\\nImportante: o rendimento ainda NÃO é creditado, então hoje você está apenas imobilizando sua cripto. Se alguma posição mostrar ganhos, são dados de exemplo, e o botão de resgatar não credita nada real.\\n\\nVocê pode encerrar a posição quando quiser e recupera exatamente o que colocou.',
+  help_mfa_title: 'Verificação em duas etapas',
+  help_mfa_body: 'É um código de 6 dígitos gerado por um aplicativo de autenticação, que pedimos antes de movimentar valores altos: a partir de ₡100.000 ou US$200 em uma única operação.\\n\\nO aplicativo pede o código em transferências e SINPE, nos pagamentos garantidos e nos saques. Atenção: em pagamentos de serviços, recargas e compra ou venda de cripto com valores altos, a operação hoje é recusada sem que o código seja oferecido a você.\\n\\nCada verificação autoriza uma única operação e vale por 5 minutos. Ao ativá-la, entregamos 10 códigos de recuperação de uso único: guarde-os, são a sua única saída se você perder o telefone.',
+  help_loyalty_title: 'Pontos e níveis (ainda inativo)',
+  help_loyalty_body: 'Os pontos elevam o nível da sua conta: 5.000 dão Prata, 25.000 Ouro e 100.000 Platina, e cada nível multiplica o que você ganha.\\n\\nO programa ainda não está ligado: nenhuma operação do aplicativo credita pontos, ou seja, eles não se acumulam sozinhos, e o catálogo pode estar vazio ou mostrar regras de exemplo que ainda não creditam nada.\\n\\nSe você resgatar, os pontos são descontados e você recebe um código, mas por enquanto nenhum benefício é aplicado automaticamente. Os planos Plus e Pro são uma prévia: ainda não são cobrados nem liberam nada.',
+  help_payout_title: 'Saques para contas externas',
+  help_payout_body: 'Um saque tira dinheiro da sua carteira para uma conta de fora, por um caminho que chamamos de canal de pagamento: um banco, o SINPE ou um processador.\\n\\nHoje não há nenhum canal habilitado em produção, então a tela não deixa você criar o saque e o servidor recusa qualquer tentativa.\\n\\nQuando houver, o valor é descontado ao criar a solicitação e, se o canal recusar, ele volta para você automaticamente. Os saques altos pedem verificação em duas etapas.',
+  help_kyc_title: 'Validação de documento (nível 1)',
+  help_kyc_body: 'O nível 1 é validado sozinho, sem enviar fotos: consultamos o documento que você já cadastrou no registro de contribuintes da Hacienda e conferimos se o nome coincide.\\n\\nSe coincidir, seus limites passam de ₡100.000 para ₡500.000 por dia e de ₡500.000 para ₡5.000.000 por mês.\\n\\nAtenção ao que isso prova: é um registro tributário, não o registro civil. Ele confirma que o documento existe e em nome de quem está, mas não demonstra que você é essa pessoa. O nível 2, com foto do documento e prova de vida, ainda não está disponível.',
   kyc_n2_soon: 'Verificação completa (documento + selfie) em breve',
 };
 

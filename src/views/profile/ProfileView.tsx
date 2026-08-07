@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiLayer } from '@/api';
 import { Icons } from '../../components/Icons';
+import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
@@ -236,9 +237,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Account Section */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
-          {t('my_account')}
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+            {t('my_account')}
+          </h3>
+          <HelpButton topic="kyc" className="-mr-1" />
+        </div>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
             onClick={() => setShowPersonalData(true)}
@@ -305,9 +309,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Security Section */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
-          {t('security')}
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+            {t('security')}
+          </h3>
+          <HelpButton topic="mfa" className="-mr-1" />
+        </div>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           <button
             onClick={() => setShowPasswordSheet(true)}

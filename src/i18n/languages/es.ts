@@ -870,6 +870,26 @@ const es: TranslationKeys = {
   kyc_verify_mismatch: 'El nombre no coincide con el registro oficial',
   kyc_verify_not_found: 'No encontramos tu cédula en el registro',
   kyc_verify_unavailable: 'Servicio no disponible, intenta de nuevo más tarde',
+
+  contact_qr_button: 'Mi QR de contacto',
+  contact_qr_desc: 'Quien lo escanee te agrega como contacto, sin escribir tu número.',
+  // Ayuda contextual (HelpSheet). El contenido describe lo que la app HACE
+  // hoy, incluidas las partes que todavia no funcionan: no prometer de mas
+  // es norma del proyecto.
+  help_what_is_this: '¿Qué es esto?',
+  help_webhooks_title: 'Avisos automáticos a tu sistema',
+  help_webhooks_body: 'Si tenés un sistema propio, KiramoPay puede avisarle cuando pasa algo en tu cuenta de comercio. Registrás una dirección web y te mostramos una clave secreta una sola vez: con ella tu sistema comprueba que el aviso salió de nosotros.\n\nHoy se avisan solo los cambios de estado de los pagos garantizados y de los retiros. No hay avisos de transferencias, SINPE ni recargas.\n\nSi tu servidor no responde, lo intentamos hasta 8 veces en total: el envío original más 7 reintentos.',
+  help_staking_title: 'Staking: apartás cripto, sin rendimiento aún',
+  help_staking_body: 'Al hacer staking, la cantidad que elegís sale de tu saldo disponible y queda apartada en una posición. El porcentaje anual lo fija el servidor.\n\nImportante: el rendimiento todavía NO se acredita, así que hoy solo estás inmovilizando tu cripto. Si alguna posición muestra ganancias, son datos de ejemplo, y el botón de reclamar no acredita nada real.\n\nPodés cerrar la posición cuando quieras y recuperás exactamente lo que pusiste.',
+  help_mfa_title: 'Verificación en dos pasos',
+  help_mfa_body: 'Es un código de 6 dígitos que sale de una app de autenticación y que te pedimos antes de mover montos altos: desde ₡100.000 o US$200 en una sola operación.\n\nLa app te pide el código en transferencias y SINPE, en los pagos garantizados y en los retiros. Ojo: en pagos de servicios, recargas y compra o venta de cripto por montos altos la operación hoy se rechaza sin ofrecerte el código.\n\nCada verificación autoriza una sola operación y vale 5 minutos. Al activarla te damos 10 códigos de recuperación de un solo uso: guardalos, son tu única salida si perdés el teléfono.',
+  help_loyalty_title: 'Puntos y niveles (aún inactivo)',
+  help_loyalty_body: 'Los puntos suben de nivel tu cuenta: 5.000 dan Plata, 25.000 Oro y 100.000 Platino, y cada nivel multiplica lo que ganás.\n\nEl programa todavía no está encendido: ninguna operación de la app acredita puntos, así que no se acumulan solos, y el catálogo puede estar vacío o mostrar reglas de ejemplo que aún no acreditan nada.\n\nSi canjeás, se descuentan los puntos y recibís un código, pero por ahora ningún beneficio se aplica automáticamente. Los planes Plus y Pro son una vista previa: todavía no se cobran ni habilitan nada.',
+  help_payout_title: 'Retiros a cuentas externas',
+  help_payout_body: 'Un retiro saca plata de tu billetera hacia una cuenta de afuera, por una vía que llamamos riel: un banco, SINPE o un procesador.\n\nHoy no hay ningún riel habilitado en producción, así que la pantalla no te deja crear el retiro y el servidor rechaza cualquier intento.\n\nCuando exista, el monto se descuenta al crear la solicitud y, si el riel la rechaza, se te devuelve automáticamente. Los retiros grandes piden verificación en dos pasos.',
+  help_kyc_title: 'Validación de cédula (nivel 1)',
+  help_kyc_body: 'El nivel 1 se valida solo, sin subir fotos: consultamos la cédula que ya registraste contra el registro de contribuyentes de Hacienda y comprobamos que el nombre coincida.\n\nSi coincide, tus límites pasan de ₡100.000 a ₡500.000 por día y de ₡500.000 a ₡5.000.000 al mes.\n\nOjo con qué prueba esto: es un registro tributario, no el registro civil. Confirma que la cédula existe y a nombre de quién está, pero no demuestra que vos seas esa persona. El nivel 2, con foto del documento y prueba de vida, todavía no está disponible.',
+
   kyc_n2_soon: 'Verificación completa (documento + selfie) próximamente',
 };
 

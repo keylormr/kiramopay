@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
+import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CryptoAsset, CryptoTransaction } from '../../types';
@@ -555,7 +556,10 @@ export const CryptoView: React.FC = () => {
       {/* Staking Tab */}
       {activeTab === 'staking' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('crypto_staking_positions')}</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('crypto_staking_positions')}</h3>
+            <HelpButton topic="staking" />
+          </div>
 
           {state.crypto.stakingPositions.length === 0 ? (
             <div className="uv-surface-1 rounded-2xl p-8 text-center border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">

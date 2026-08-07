@@ -7,9 +7,16 @@ interface BottomSheetProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  /**
+   * Elemento opcional que se dibuja pegado al titulo, antes del boton de
+   * cerrar. Pensado para el boton de ayuda: la hoja no siempre renderiza su
+   * propio encabezado, asi que sin esto no habria donde colgarlo. Si no se
+   * pasa, la cabecera queda exactamente igual que antes.
+   */
+  titleAccessory?: React.ReactNode;
 }
 
-export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, children, title }) => {
+export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, children, title, titleAccessory }) => {
   const { t } = useLanguage();
   const viewportHeight = CSS.supports?.('height', '100dvh') ? '100dvh' : '100vh';
   const [visible, setVisible] = useState(isOpen);
@@ -88,12 +95,15 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
 
         {title && (
           <div className="flex justify-between items-center mb-5">
-            <h2
-              id="bottom-sheet-title"
-              className="text-xl font-bold tracking-tight uv-text-primary"
-            >
-              {title}
-            </h2>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h2
+                id="bottom-sheet-title"
+                className="text-xl font-bold tracking-tight uv-text-primary truncate"
+              >
+                {title}
+              </h2>
+              {titleAccessory}
+            </div>
             <button
               onClick={onClose}
               aria-label={t('close')}

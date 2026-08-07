@@ -870,6 +870,22 @@ const en: TranslationKeys = {
   kyc_verify_mismatch: 'The name does not match the official registry',
   kyc_verify_not_found: 'We could not find your ID in the registry',
   kyc_verify_unavailable: 'Service unavailable, please try again later',
+  contact_qr_button: 'My contact QR',
+  contact_qr_desc: 'Anyone who scans it adds you as a contact without typing your number.',
+  // Ayuda contextual (HelpSheet).
+  help_what_is_this: 'What is this?',
+  help_webhooks_title: 'Automatic notifications to your system',
+  help_webhooks_body: 'If you have your own system, KiramoPay can notify it when something happens in your merchant account. You register a web address and we show you a secret key once: your system uses it to check that the notification really came from us.\\n\\nToday we only notify status changes for protected payments and payouts. There are no notifications for transfers, SINPE or top-ups.\\n\\nIf your server does not respond, we try up to 8 times in total: the original delivery plus 7 retries.',
+  help_staking_title: 'Staking: you set crypto aside, no yield yet',
+  help_staking_body: 'When you stake, the amount you choose leaves your available balance and is set aside in a position. The annual rate is set by the server.\\n\\nImportant: the yield is NOT credited yet, so right now you are only locking up your crypto. If a position shows earnings, those are sample figures, and the claim button does not credit anything real.\\n\\nYou can close the position whenever you want and you get back exactly what you put in.',
+  help_mfa_title: 'Two-factor verification',
+  help_mfa_body: 'It is a 6-digit code from an authenticator app that we ask for before you move large amounts: from ₡100,000 or US$200 in a single operation.\\n\\nThe app asks for the code on transfers and SINPE, on protected payments and on payouts. Note: for bill payments, top-ups and crypto buying or selling in large amounts, the operation is currently rejected without offering you the code.\\n\\nEach verification authorizes a single operation and is valid for 5 minutes. When you turn it on we give you 10 single-use recovery codes: save them, they are your only way back if you lose your phone.',
+  help_loyalty_title: 'Points and tiers (not active yet)',
+  help_loyalty_body: 'Points move your account up through tiers: 5,000 gets you Silver, 25,000 Gold and 100,000 Platinum, and each tier multiplies what you earn.\\n\\nThe program is not switched on yet: no operation in the app credits points, so they do not build up on their own, and the catalog may be empty or show sample rules that do not credit anything yet.\\n\\nIf you redeem, the points are deducted and you get a code, but for now no benefit is applied automatically. The Plus and Pro plans are a preview: they are not charged yet and do not unlock anything.',
+  help_payout_title: 'Payouts to external accounts',
+  help_payout_body: 'A payout moves money out of your wallet to an outside account, through a route we call a rail: a bank, SINPE or a processor.\\n\\nThere is no rail enabled in production today, so the screen will not let you create the payout and the server rejects any attempt.\\n\\nWhen there is one, the amount is deducted when you create the request and, if the rail rejects it, it is returned to you automatically. Large payouts ask for two-factor verification.',
+  help_kyc_title: 'ID validation (level 1)',
+  help_kyc_body: 'Level 1 validates on its own, with no photos to upload: we check the ID number you already registered against the taxpayer registry of Hacienda and confirm that the name matches.\\n\\nIf it matches, your limits go from ₡100,000 to ₡500,000 per day and from ₡500,000 to ₡5,000,000 per month.\\n\\nBe clear about what this proves: it is a tax registry, not the civil registry. It confirms that the ID exists and whose name it is under, but it does not prove that you are that person. Level 2, with a photo of your document and a liveness check, is not available yet.',
   kyc_n2_soon: 'Full verification (document + selfie) coming soon',
 };
 
