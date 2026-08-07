@@ -131,6 +131,24 @@ describe('SinpeView — send', () => {
     expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
   });
 
+  // El backend rechaza los envios a numeros sin cuenta: entregarlos exigiria el
+  // riel a otros bancos, que no esta licenciado. El mensaje debe explicarlo en
+  // el idioma del usuario, no devolver la cadena en ingles del servidor.
+  it('explica en español que el número no tiene cuenta', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({
+      success: false,
+      error: { code: 'RECIPIENT_NOT_USER', message: 'recipient is not a KiramoPay user' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText(/no tiene cuenta en KiramoPay/)).toBeInTheDocument();
+    // Y no puede filtrarse el texto crudo del backend.
+    expect(screen.queryByText(/recipient is not a KiramoPay user/)).not.toBeInTheDocument();
+  });
+
   it('mantiene el mensaje de éxito cuando el destinatario sí es usuario', async () => {
     mocks.api.sinpe.send.mockResolvedValue({
       success: true,

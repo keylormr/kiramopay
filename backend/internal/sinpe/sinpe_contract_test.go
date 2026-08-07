@@ -18,7 +18,7 @@ import (
 // SinpeSendResponse schema documented in openapi.yaml — catching drift between the
 // handler's response and the published contract.
 func TestSinpeSendResponseContract(t *testing.T) {
-	svc, user := setupSinpeService(t)
+	svc, user, _ := setupSinpeService(t)
 	h := sinpe.NewHandler(svc)
 
 	doc, err := contract.LoadSpec("../../docs/openapi.yaml")

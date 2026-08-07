@@ -1,6 +1,9 @@
 package sinpe
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type ContactRecord struct {
 	ID        string    `json:"id"`
@@ -36,8 +39,23 @@ type SendResponse struct {
 const (
 	DailyLimitCRC       int64 = 50000000 // 500,000 CRC in centimos
 	MaxSinglePaymentCRC int64 = 50000000 // 500,000 CRC per single tx
-	TransactionFee      int64 = 15000    // 150 CRC fee for cross-bank
-	MFAThresholdCRC     int64 = 10000000 // 100,000 CRC — MFA gated above this
+	// TransactionFee is the cross-bank fee. DORMANT: cross-bank sends are
+	// refused until the rail is licensed, so nothing charges it today. Kept so
+	// the number does not have to be rediscovered when that changes.
+	TransactionFee  int64 = 15000    // 150 CRC fee for cross-bank
+	MFAThresholdCRC int64 = 10000000 // 100,000 CRC — MFA gated above this
+)
+
+// Rejections the handler maps to their own error codes, so the client can show
+// a translated, actionable message instead of echoing an English string.
+var (
+	// ErrSelfSend rejects sending to your own number.
+	ErrSelfSend = errors.New("cannot send to your own number")
+	// ErrRecipientNotUser rejects sending to a phone that belongs to no
+	// KiramoPay account. Delivering it would need the cross-bank rail, which
+	// requires a licence we do not hold; accepting the money and parking it
+	// with no way to give it back is worse than refusing up front.
+	ErrRecipientNotUser = errors.New("recipient is not a KiramoPay user")
 )
 
 type HistoryRecord struct {

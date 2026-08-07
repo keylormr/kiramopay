@@ -109,30 +109,31 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("SINPE daily limit exceeded")
 	}
 
-	// Resolve recipient — internal vs external.
+	// Resolve the recipient. Only KiramoPay-to-KiramoPay transfers are accepted.
 	peer, _ := s.userRepo.FindByPhone(ctx, req.Phone)
-	// A user sending to their OWN number would fall into the external branch
-	// (peer.ID == userID makes internal=false), debiting them plus a cross-bank
-	// fee against SYSTEM:EXTERNAL with no credit back — a silent money loss.
-	// Reject it outright.
+	// Sending to your OWN number used to debit you plus a cross-bank fee with no
+	// credit back — a silent money loss. Reject it outright.
 	if peer != nil && peer.ID == userID {
-		return nil, fmt.Errorf("cannot send to your own number")
+		return nil, ErrSelfSend
 	}
-	internal := peer != nil && peer.ID != userID
+	// Sending to a number that is NOT a KiramoPay user is refused rather than
+	// accepted. The cross-bank rail needs a licence we do not hold, so such a
+	// transfer could only be debited and parked in SYSTEM:EXTERNAL: never
+	// delivered, and with no refund path to undo it. Taking the money and
+	// showing "pending" forever is worse than saying no up front.
+	if peer == nil {
+		return nil, ErrRecipientNotUser
+	}
 
-	contactName := req.Phone
-	contact, _ := s.repo.FindContactByPhone(ctx, userID, req.Phone)
-	if contact != nil {
+	contactName := peer.FirstName + " " + peer.LastName
+	if contact, _ := s.repo.FindContactByPhone(ctx, userID, req.Phone); contact != nil {
 		contactName = contact.Name
-	} else if peer != nil {
-		contactName = peer.FirstName + " " + peer.LastName
 	}
 
-	// Internal transfers have no fee; cross-bank charges a flat fee.
-	fee := int64(TransactionFee)
-	if internal {
-		fee = 0
-	}
+	// KiramoPay-to-KiramoPay moves inside our own ledger, so there is no fee.
+	// TransactionFee stays defined for the cross-bank rail, dormant until the
+	// licence exists.
+	const fee int64 = 0
 
 	w, err := s.walletRepo.FindByUserID(ctx, userID)
 	if err != nil {
@@ -151,43 +152,23 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// a failed lookup degrades to the frontend's generic title, never blocks
 	// the transfer.
 	senderName := ""
-	if internal {
-		if sender, _ := s.userRepo.FindByID(ctx, userID); sender != nil {
-			senderName = strings.TrimSpace(sender.FirstName + " " + sender.LastName)
-		}
+	if sender, _ := s.userRepo.FindByID(ctx, userID); sender != nil {
+		senderName = strings.TrimSpace(sender.FirstName + " " + sender.LastName)
 	}
 
-	var (
-		senderTx   *transaction.TransactionRecord
-		receiverTx *transaction.TransactionRecord
-	)
-	if internal {
-		senderTx, receiverTx, err = s.txService.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-			FromUserID:               userID,
-			ToUserID:                 peer.ID,
-			Amount:                   req.Amount,
-			Currency:                 "CRC",
-			Fee:                      fee,
-			Description:              req.Description,
-			IdempotencyKey:           idem,
-			TxType:                   transaction.TypeSinpeSend,
-			ReceiveType:              transaction.TypeSinpeReceive,
-			SenderCounterpartyName:   contactName,
-			ReceiverCounterpartyName: senderName,
-		})
-	} else {
-		senderTx, err = s.txService.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-			Type:              transaction.TypeSinpeSend,
-			Amount:            req.Amount,
-			Currency:          "CRC",
-			Fee:               fee,
-			CounterpartyType:  "bank",
-			CounterpartyName:  contactName,
-			CounterpartyPhone: req.Phone,
-			Description:       req.Description,
-			IdempotencyKey:    idem,
-		})
-	}
+	senderTx, receiverTx, err := s.txService.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+		FromUserID:               userID,
+		ToUserID:                 peer.ID,
+		Amount:                   req.Amount,
+		Currency:                 "CRC",
+		Fee:                      fee,
+		Description:              req.Description,
+		IdempotencyKey:           idem,
+		TxType:                   transaction.TypeSinpeSend,
+		ReceiveType:              transaction.TypeSinpeReceive,
+		SenderCounterpartyName:   contactName,
+		ReceiverCounterpartyName: senderName,
+	})
 	if err != nil {
 		if errors.Is(err, transaction.ErrMFARequired) {
 			return nil, err
@@ -217,9 +198,8 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			IPAddress: ipAddr,
 		})
 	}
-	// Receiver side (only when internal — for external transfers the bank
-	// keeps the receive record).
-	if internal && receiverTx != nil {
+	// Receiver side.
+	if receiverTx != nil {
 		receiverContact := senderName
 		if receiverContact == "" {
 			receiverContact = "KiramoPay user"
@@ -251,20 +231,17 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	if s.auditLogger != nil {
 		s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)
 	}
-	// External transfers are debited but not yet settled to other banks, so they
-	// are reported as "pending" (not "completed") and flagged non-internal; the
-	// client surfaces this honestly instead of claiming delivery.
-	status := "completed"
-	if !internal {
-		status = "pending"
-	}
+	// Every accepted transfer is now KiramoPay-to-KiramoPay and settles inside
+	// our ledger, so it is genuinely completed. Internal stays in the response:
+	// the client still distinguishes both cases, ready for the day the
+	// cross-bank rail is licensed.
 	return &SendResponse{
 		TransactionID: senderTx.ID,
-		Status:        status,
+		Status:        "completed",
 		Amount:        req.Amount,
 		Fee:           fee,
 		Recipient:     contactName,
-		Internal:      internal,
+		Internal:      true,
 	}, nil
 }
 
