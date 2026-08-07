@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import { HelpButton } from '@/components/HelpSheet';
 import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
@@ -155,18 +156,24 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('payout_title')}</h1>
-        <button
-          onClick={() => {
-            idempotencyKeyRef.current = '';
-            setShowCreate(true);
-            setError('');
-          }}
-          disabled={rails.length === 0}
-          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] disabled:opacity-40"
-          aria-label={t('payout_new')}
-        >
-          <Icons.Plus size={20} />
-        </button>
+        {/* Los tres huecos de la cabecera ya estaban ocupados, asi que la ayuda
+            comparte el de la derecha con la accion principal, que queda pegada
+            al borde. */}
+        <div className="flex items-center gap-0.5 -mr-2">
+          <HelpButton topic="payout" />
+          <button
+            onClick={() => {
+              idempotencyKeyRef.current = '';
+              setShowCreate(true);
+              setError('');
+            }}
+            disabled={rails.length === 0}
+            className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] disabled:opacity-40"
+            aria-label={t('payout_new')}
+          >
+            <Icons.Plus size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">

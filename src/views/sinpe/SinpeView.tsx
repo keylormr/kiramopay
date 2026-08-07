@@ -468,7 +468,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               className="mt-2.5 w-full bg-[var(--color-primary)] text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
               <Icons.QrCode size={16} />
-              {t('qr_code')}
+              {t('contact_qr_button')}
             </button>
           </div>
 
@@ -622,7 +622,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       <BottomSheet
         isOpen={showMyQrSheet}
         onClose={() => setShowMyQrSheet(false)}
-        title={t('qr_code')}
+        title={t('contact_qr_button')}
       >
         <div className="flex flex-col items-center space-y-4 py-2">
           <div className="bg-white p-4 rounded-2xl">
@@ -632,6 +632,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             <p className="text-lg font-bold uv-text-primary">{userName}</p>
             <p className="text-sm uv-text-muted tabular-nums">{userPhone}</p>
           </div>
+          {/* Antes solo decia "compartí este número". Explicar que el QR AGREGA
+              como contacto es lo que hace descubrible la funcion. */}
+          <p className="text-sm uv-text-secondary text-center px-4">{t('contact_qr_desc')}</p>
           <p className="text-xs uv-text-muted text-center px-4">{t('share_number_message')}</p>
           <button
             onClick={() => handleShare(t('app_name'), `${userName} · ${userPhone}`)}
