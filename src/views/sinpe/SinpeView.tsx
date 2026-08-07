@@ -129,7 +129,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       // A corrected retry (different amount/recipient) must be a new transfer.
       idemRef.current = '';
       setShowConfirm(false);
-      setSendError(res.error?.message || t('assistant_action_failed'));
+      // Codes the backend gives their own identity so we can explain them in the
+      // user's language. Everything else falls back to the server message.
+      const porCodigo: Record<string, string> = {
+        RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
+        SELF_SEND: t('sinpe_self_send_error'),
+      };
+      const code = res.error?.code ?? '';
+      setSendError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
       return;
     }
     // Success: release the key so the next send gets a fresh one.

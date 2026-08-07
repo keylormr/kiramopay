@@ -341,6 +341,7 @@ const es: TranslationKeys = {
   sent_success: '¡Enviado!',
   sinpe_transfer_success: 'Tu transferencia SINPE fue exitosa',
   sinpe_self_send_error: 'No puedes enviarte dinero a tu propio número',
+  sinpe_recipient_not_user: 'Ese número no tiene cuenta en KiramoPay. Por ahora solo podés enviar dinero a personas que ya usan la app.',
   sinpe_external_pending_title: 'Envío en proceso',
   sinpe_external_pending_desc: 'El número no pertenece a KiramoPay. La entrega a otros bancos aún no está habilitada; el monto quedó registrado como pendiente.',
   sent_to_label: 'Enviado a',

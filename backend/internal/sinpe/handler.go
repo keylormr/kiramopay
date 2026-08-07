@@ -118,6 +118,16 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 				"MFA challenge required for amounts >= 100,000 CRC")
 			return
 		}
+		// These two get their own codes so the client can translate them and
+		// explain what to do, instead of surfacing an English sentence.
+		if errors.Is(err, ErrRecipientNotUser) {
+			response.Error(w, http.StatusBadRequest, "RECIPIENT_NOT_USER", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSelfSend) {
+			response.Error(w, http.StatusBadRequest, "SELF_SEND", err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SINPE_FAILED", err.Error())
 		return
 	}

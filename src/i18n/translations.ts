@@ -370,6 +370,7 @@ export type TranslationKeys = {
   sent_success: string;
   sinpe_transfer_success: string;
   sinpe_self_send_error: string;
+  sinpe_recipient_not_user: string;
   sinpe_external_pending_title: string;
   sinpe_external_pending_desc: string;
   sent_to_label: string;

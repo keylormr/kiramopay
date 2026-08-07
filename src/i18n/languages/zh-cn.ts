@@ -342,6 +342,7 @@ const zhCn: TranslationKeys = {
   sent_success: '已发送！',
   sinpe_transfer_success: '您的SINPE转账已成功',
   sinpe_self_send_error: '不能向自己的号码转账',
+  sinpe_recipient_not_user: '该号码没有 KiramoPay 账户。目前您只能向已经使用本应用的人转账。',
   sinpe_external_pending_title: '转账处理中',
   sinpe_external_pending_desc: '该号码不是 KiramoPay 用户。尚未开通向其他银行的转账，该金额已记为待处理。',
   sent_to_label: '发送至',
