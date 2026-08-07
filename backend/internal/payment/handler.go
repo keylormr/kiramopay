@@ -2,9 +2,11 @@ package payment
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -36,6 +38,15 @@ func (h *Handler) PayBill(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.PayBill(r.Context(), userID, &req)
 	if err != nil {
+		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
+		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
+		// codigo generico y mostraba el mensaje en ingles del servidor, sin
+		// ofrecer nunca el desafio: la operacion moria ahi.
+		if errors.Is(err, transaction.ErrMFARequired) {
+			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
+				"verified MFA challenge required for this amount")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
 		return
 	}
@@ -63,6 +74,15 @@ func (h *Handler) Recharge(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Recharge(r.Context(), userID, &req)
 	if err != nil {
+		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
+		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
+		// codigo generico y mostraba el mensaje en ingles del servidor, sin
+		// ofrecer nunca el desafio: la operacion moria ahi.
+		if errors.Is(err, transaction.ErrMFARequired) {
+			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
+				"verified MFA challenge required for this amount")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "RECHARGE_FAILED", err.Error())
 		return
 	}
