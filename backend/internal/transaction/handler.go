@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -44,6 +45,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.CreateTransaction(r.Context(), userID, &req)
 	if err != nil {
+		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
+		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
+		// codigo generico y mostraba el mensaje en ingles del servidor, sin
+		// ofrecer nunca el desafio: la operacion moria ahi.
+		if errors.Is(err, ErrMFARequired) {
+			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
+				"verified MFA challenge required for this amount")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "TRANSACTION_FAILED", err.Error())
 		return
 	}

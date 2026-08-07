@@ -2,11 +2,13 @@ package crypto
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -48,6 +50,15 @@ func (h *Handler) Buy(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Buy(r.Context(), userID, &req)
 	if err != nil {
+		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
+		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
+		// codigo generico y mostraba el mensaje en ingles del servidor, sin
+		// ofrecer nunca el desafio: la operacion moria ahi.
+		if errors.Is(err, transaction.ErrMFARequired) {
+			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
+				"verified MFA challenge required for this amount")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "BUY_FAILED", err.Error())
 		return
 	}
@@ -64,6 +75,15 @@ func (h *Handler) Sell(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Sell(r.Context(), userID, &req)
 	if err != nil {
+		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
+		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
+		// codigo generico y mostraba el mensaje en ingles del servidor, sin
+		// ofrecer nunca el desafio: la operacion moria ahi.
+		if errors.Is(err, transaction.ErrMFARequired) {
+			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
+				"verified MFA challenge required for this amount")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SELL_FAILED", err.Error())
 		return
 	}

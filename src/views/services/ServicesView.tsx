@@ -4,6 +4,9 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Button } from '../../components/ui/Button';
+import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
+import { refreshAccounts } from '@/services/dataSync';
 
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
@@ -52,7 +55,7 @@ const CATEGORIES = [
 
 export const ServicesView: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'services' | 'recharge' | 'history'>('services');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +73,11 @@ export const ServicesView: React.FC = () => {
   const [rechargePhone, setRechargePhone] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [actionError, setActionError] = useState('');
+  // Desafio de MFA para montos altos: 'pendingAction' recuerda que operacion
+  // reintentar cuando el codigo se verifica.
+  const [showMfa, setShowMfa] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'bill' | 'recharge' | null>(null);
   const [lastPayment, setLastPayment] = useState<{ type: string; amount: number; detail: string } | null>(null);
 
   const formatCurrency = (amount: number) => {
@@ -97,74 +105,91 @@ export const ServicesView: React.FC = () => {
     setShowPaymentSheet(true);
   };
 
-  const handlePayService = () => {
-    if (!clientId || !billAmount || !selectedProvider) return;
+  // Periodo facturado. El backend lo guarda como etiqueta, asi que se arma con
+  // el mes en curso en el idioma del usuario en vez de la constante que estaba
+  // escrita a mano ("Diciembre 2024").
+  const periodoActual = () =>
+    new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric' }).format(new Date());
+
+  const handlePayService = async () => {
+    if (!clientId || !billAmount || !selectedProvider || isProcessing) return;
+    const amount = parseFloat(billAmount);
+    if (!(amount > 0)) return;
 
     setIsProcessing(true);
+    setActionError('');
+    const res = await getApiLayer().services.payBill({
+      providerId: selectedProvider.id,
+      providerName: selectedProvider.name,
+      clientId,
+      amount,
+      period: periodoActual(),
+    });
+    setIsProcessing(false);
 
-    setTimeout(() => {
-      const payment = {
-        id: Date.now().toString(),
-        providerId: selectedProvider.id,
-        providerName: selectedProvider.name,
-        clientId,
-        amount: parseFloat(billAmount),
-        dueDate: new Date().toISOString().split('T')[0],
-        period: 'Diciembre 2024',
-        status: 'paid' as const,
-      };
+    if (!res.success || !res.data) {
+      // Monto alto: pedir el codigo y reintentar. Antes este flujo ni siquiera
+      // llamaba al servidor, asi que el desafio no tenia donde aparecer.
+      if (res.error?.code === MFA_REQUIRED) {
+        setPendingAction('bill');
+        setShowMfa(true);
+        return;
+      }
+      setActionError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
 
-      dispatch({ type: 'ADD_BILL_PAYMENT', payload: payment });
+    dispatch({ type: 'ADD_BILL_PAYMENT', payload: res.data });
+    setLastPayment({
+      type: 'service',
+      amount,
+      detail: `${selectedProvider.name} - ${clientId}`,
+    });
+    setShowPaymentSheet(false);
+    setShowSuccessSheet(true);
+    // El pago debita la billetera: refrescar el saldo global.
+    refreshAccounts().catch(() => {});
 
-      setLastPayment({
-        type: 'service',
-        amount: parseFloat(billAmount),
-        detail: `${selectedProvider.name} - ${clientId}`,
-      });
-
-      setIsProcessing(false);
-      setShowPaymentSheet(false);
-      setShowSuccessSheet(true);
-
-      // Reset
-      setClientId('');
-      setBillAmount('');
-      setSelectedProvider(null);
-    }, 2000);
+    setClientId('');
+    setBillAmount('');
+    setSelectedProvider(null);
   };
 
-  const handleRecharge = () => {
-    if (!rechargePhone || !rechargeAmount || !selectedOperator) return;
+  const handleRecharge = async () => {
+    if (!rechargePhone || !rechargeAmount || !selectedOperator || isProcessing) return;
 
     setIsProcessing(true);
+    setActionError('');
+    const res = await getApiLayer().services.recharge({
+      operatorId: selectedOperator.id,
+      phone: rechargePhone,
+      amount: rechargeAmount,
+    });
+    setIsProcessing(false);
 
-    setTimeout(() => {
-      const recharge = {
-        id: Date.now().toString(),
-        operatorId: selectedOperator.id,
-        phone: rechargePhone,
-        amount: rechargeAmount,
-        date: 'Ahora',
-        status: 'completed' as const,
-      };
+    if (!res.success || !res.data) {
+      if (res.error?.code === MFA_REQUIRED) {
+        setPendingAction('recharge');
+        setShowMfa(true);
+        return;
+      }
+      setActionError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
 
-      dispatch({ type: 'ADD_RECHARGE', payload: recharge });
+    dispatch({ type: 'ADD_RECHARGE', payload: res.data });
+    setLastPayment({
+      type: 'recharge',
+      amount: rechargeAmount,
+      detail: `${selectedOperator.name} - ${rechargePhone}`,
+    });
+    setShowRechargeSheet(false);
+    setShowSuccessSheet(true);
+    refreshAccounts().catch(() => {});
 
-      setLastPayment({
-        type: 'recharge',
-        amount: rechargeAmount,
-        detail: `${selectedOperator.name} - ${rechargePhone}`,
-      });
-
-      setIsProcessing(false);
-      setShowRechargeSheet(false);
-      setShowSuccessSheet(true);
-
-      // Reset
-      setRechargePhone('');
-      setRechargeAmount(null);
-      setSelectedOperator(null);
-    }, 2000);
+    setRechargePhone('');
+    setRechargeAmount(null);
+    setSelectedOperator(null);
   };
 
   return (
@@ -505,6 +530,11 @@ export const ServicesView: React.FC = () => {
             )}
           </div>
 
+          {actionError && (
+            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+              {actionError}
+            </p>
+          )}
           <Button
             variant="primary"
             size="lg"
@@ -576,6 +606,11 @@ export const ServicesView: React.FC = () => {
             </div>
           </div>
 
+          {actionError && (
+            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+              {actionError}
+            </p>
+          )}
           <Button
             variant="primary"
             size="lg"
@@ -624,6 +659,23 @@ export const ServicesView: React.FC = () => {
           </Button>
         </div>
       </BottomSheet>
+
+      {/* Desafio de MFA para montos altos. El backend rechaza la operacion con
+          MFA_REQUIRED; al verificar el codigo se reintenta la misma. */}
+      <MfaChallengeSheet
+        isOpen={showMfa}
+        onClose={() => {
+          setShowMfa(false);
+          setPendingAction(null);
+        }}
+        onVerified={() => {
+          setShowMfa(false);
+          const accion = pendingAction;
+          setPendingAction(null);
+          if (accion === 'bill') handlePayService();
+          else if (accion === 'recharge') handleRecharge();
+        }}
+      />
     </div>
   );
 };

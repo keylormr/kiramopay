@@ -284,9 +284,12 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         };
         crypto.addTransaction(buyTx);
         accounts.updateAccountBalance(fromCurrency, -fromAmount);
+        // La llamada al backend NO va aca: la hace la vista y espera la
+        // respuesta. Antes se despachaba primero y se llamaba con
+        // .catch(() => {}), asi que un rechazo del servidor -incluido el de
+        // MFA por monto alto- se tragaba y la pantalla mostraba una operacion
+        // que nunca ocurrio.
         if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.buy({ asset, amount, price, fromCurrency, fromAmount }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;
@@ -308,9 +311,12 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         };
         crypto.addTransaction(sellTx);
         accounts.updateAccountBalance(toCurrency, toAmount);
+        // La llamada al backend NO va aca: la hace la vista y espera la
+        // respuesta. Antes se despachaba primero y se llamaba con
+        // .catch(() => {}), asi que un rechazo del servidor -incluido el de
+        // MFA por monto alto- se tragaba y la pantalla mostraba una operacion
+        // que nunca ocurrio.
         if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.sell({ asset, amount, price, toCurrency, toAmount }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;
