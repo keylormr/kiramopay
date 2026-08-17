@@ -172,7 +172,7 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInsufficient):
 		response.Error(w, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE", "insufficient balance")
 	case errors.Is(err, ErrMFARequired):
-		response.Error(w, http.StatusForbidden, "MFA_REQUIRED", "verified MFA challenge required for this amount")
+		response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED", "verified MFA challenge required for this amount")
 	case errors.Is(err, ErrInvalidRequest):
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
 	default:

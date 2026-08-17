@@ -5,6 +5,8 @@ import { Icons } from '../../components/Icons';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
+import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
 import { useUsdToCrcRate } from '@/hooks/useFxRate';
@@ -76,6 +78,11 @@ export const CryptoView: React.FC = () => {
 
   // Form states
   const [amount, setAmount] = useState('');
+  const [isTrading, setIsTrading] = useState(false);
+  const [tradeError, setTradeError] = useState('');
+  // Que operacion reintentar cuando se verifique el codigo de MFA.
+  const [pendingTrade, setPendingTrade] = useState<'buy' | 'sell' | null>(null);
+  const [showMfa, setShowMfa] = useState(false);
   const [convertTo, setConvertTo] = useState('CRC');
   const [sendAddress, setSendAddress] = useState('');
   const [showSendConfirm, setShowSendConfirm] = useState(false);
@@ -200,40 +207,72 @@ export const CryptoView: React.FC = () => {
     return n.toFixed(decimals).replace(/\.?0+$/, '');
   };
 
-  const handleBuy = () => {
-    if (!selectedAsset || !amount) return;
+  // Compra y venta esperan la respuesta del servidor ANTES de tocar el estado
+  // local. Antes se despachaba primero y la llamada iba con .catch(() => {}),
+  // asi que un rechazo -incluido el de MFA por monto alto- se tragaba en
+  // silencio y la pantalla mostraba una operacion que nunca ocurrio.
+  const handleBuy = async () => {
+    if (!selectedAsset || !amount || isTrading) return;
     const fiatAmount = parseFloat(amount);
+    if (!(fiatAmount > 0)) return;
     const cryptoAmount = fiatAmount / selectedAsset.currentPrice;
+    const payload = {
+      asset: selectedAsset.symbol,
+      amount: cryptoAmount,
+      price: selectedAsset.currentPrice,
+      fromCurrency: 'USD',
+      fromAmount: fiatAmount,
+    };
 
-    dispatch({
-      type: 'BUY_CRYPTO',
-      payload: {
-        asset: selectedAsset.symbol,
-        amount: cryptoAmount,
-        price: selectedAsset.currentPrice,
-        fromCurrency: 'USD',
-        fromAmount: fiatAmount
+    setIsTrading(true);
+    setTradeError('');
+    const res = await getApiLayer().crypto.buy(payload);
+    setIsTrading(false);
+
+    if (!res.success) {
+      if (res.error?.code === MFA_REQUIRED) {
+        setPendingTrade('buy');
+        setShowMfa(true);
+        return;
       }
-    });
+      setTradeError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
+
+    dispatch({ type: 'BUY_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
   };
 
-  const handleSell = () => {
-    if (!selectedAsset || !amount) return;
+  const handleSell = async () => {
+    if (!selectedAsset || !amount || isTrading) return;
     const cryptoAmount = parseFloat(amount);
+    if (!(cryptoAmount > 0)) return;
     const fiatAmount = cryptoAmount * selectedAsset.currentPrice;
+    const payload = {
+      asset: selectedAsset.symbol,
+      amount: cryptoAmount,
+      price: selectedAsset.currentPrice,
+      toCurrency: convertTo,
+      toAmount: convertTo === 'CRC' ? fiatAmount * crcRate : fiatAmount,
+    };
 
-    dispatch({
-      type: 'SELL_CRYPTO',
-      payload: {
-        asset: selectedAsset.symbol,
-        amount: cryptoAmount,
-        price: selectedAsset.currentPrice,
-        toCurrency: convertTo,
-        toAmount: convertTo === 'CRC' ? fiatAmount * crcRate : fiatAmount
+    setIsTrading(true);
+    setTradeError('');
+    const res = await getApiLayer().crypto.sell(payload);
+    setIsTrading(false);
+
+    if (!res.success) {
+      if (res.error?.code === MFA_REQUIRED) {
+        setPendingTrade('sell');
+        setShowMfa(true);
+        return;
       }
-    });
+      setTradeError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
+
+    dispatch({ type: 'SELL_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
   };
@@ -808,6 +847,11 @@ export const CryptoView: React.FC = () => {
             ))}
           </div>
 
+          {tradeError && (
+            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+              {tradeError}
+            </p>
+          )}
           <button
             onClick={handleBuy}
             disabled={!amount || parseFloat(amount) <= 0}
@@ -894,6 +938,11 @@ export const CryptoView: React.FC = () => {
             </div>
           </div>
 
+          {tradeError && (
+            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+              {tradeError}
+            </p>
+          )}
           <button
             onClick={handleSell}
             disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
@@ -1129,6 +1178,22 @@ export const CryptoView: React.FC = () => {
         </BottomSheet>
       )}
 
+      {/* Desafio de MFA para operaciones de monto alto. El backend las rechaza
+          con MFA_REQUIRED; al verificar el codigo se reintenta la misma. */}
+      <MfaChallengeSheet
+        isOpen={showMfa}
+        onClose={() => {
+          setShowMfa(false);
+          setPendingTrade(null);
+        }}
+        onVerified={() => {
+          setShowMfa(false);
+          const operacion = pendingTrade;
+          setPendingTrade(null);
+          if (operacion === 'buy') handleBuy();
+          else if (operacion === 'sell') handleSell();
+        }}
+      />
     </div>
   );
 };
