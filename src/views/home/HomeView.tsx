@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -56,17 +57,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Scanner / pay-by-QR states. The scanner reads a real QR via the camera
   // (or manual entry) and pays it through the backend QR rail (scanAndPay),
   // which moves money atomically on the ledger.
-  const [isScanning, setIsScanning] = useState(false);
-  const [cameraFailed, setCameraFailed] = useState(false);
-  const [manualCode, setManualCode] = useState('');
   const [scannedQrData, setScannedQrData] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
   const [payResult, setPayResult] = useState<QRPayment | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number | null>(null);
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
@@ -113,100 +108,22 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     setActiveSheet('none');
   };
 
-  // Abre la hoja del escáner; la cámara arranca en el efecto de abajo.
+  // Abre la hoja del escáner; la cámara la maneja QrScannerPanel.
   const startQRScan = () => {
-    setCameraFailed(false);
-    setManualCode('');
     setActiveSheet('scanner');
   };
 
-  // Escaneo real con la cámara, atado a que la hoja del escáner esté abierta. El
-  // cleanup detiene la cámara y el loop de decodificación → sin fugas al cerrar
-  // o al detectar un código.
-  useEffect(() => {
-    if (activeSheet !== 'scanner') return;
-    let cancelled = false;
-    const canvas = document.createElement('canvas');
-
-    const start = async () => {
-      try {
-        // jsQR (~110KB) se carga lazy solo al abrir el escáner, fuera del chunk
-        // de HomeView.
-        const jsQR = (await import('jsqr')).default;
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((tr) => tr.stop());
-          return;
-        }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play();
-        setIsScanning(true);
-        const tick = () => {
-          if (cancelled) return;
-          const v = videoRef.current;
-          if (v && v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth > 0) {
-            canvas.width = v.videoWidth;
-            canvas.height = v.videoHeight;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-              const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-              if (code && code.data) {
-                // A contact QR is added to contacts; it never hits the pay rail.
-                const contact = tryParseContactQr(code.data);
-                if (contact) {
-                  setScannedContact(contact);
-                  setActiveSheet('addContact'); // el cleanup detiene la cámara
-                  return;
-                }
-                setScannedQrData(code.data);
-                setPaymentAmount('');
-                setPayError('');
-                setPayResult(null);
-                setActiveSheet('scanResult'); // el cleanup detiene la cámara
-                return;
-              }
-            }
-          }
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
-      } catch {
-        if (!cancelled) setCameraFailed(true);
-      }
-    };
-    start();
-
-    return () => {
-      cancelled = true;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((tr) => tr.stop());
-        streamRef.current = null;
-      }
-      setIsScanning(false);
-    };
-  }, [activeSheet]);
-
-  // Fallback manual: el pagador pega/ingresa el código del QR.
-  const submitManualCode = () => {
-    if (!manualCode.trim()) return;
-    const raw = manualCode.trim();
+  // Un código leído aquí puede ser dos cosas distintas: un QR de contacto, que
+  // agrega a alguien y nunca toca el riel de pago, o cualquier otro, que va al
+  // flujo de cobro. Vale para la cámara y para el respaldo manual.
+  const handleScannedCode = (raw: string) => {
     const contact = tryParseContactQr(raw);
     if (contact) {
       setScannedContact(contact);
-      setManualCode('');
-      setActiveSheet('addContact');
+      setActiveSheet('addContact'); // cerrar la hoja apaga la cámara
       return;
     }
     setScannedQrData(raw);
-    setManualCode('');
     setPaymentAmount('');
     setPayError('');
     setPayResult(null);
@@ -709,61 +626,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         onClose={() => setActiveSheet('none')}
         title={t('qr_scanner')}
       >
-        <div className="flex flex-col items-center py-6">
-          {/* Scanner Viewport — feed real de la cámara */}
-          <div className="relative w-64 h-64 bg-slate-900 rounded-3xl overflow-hidden mb-6">
-            <video
-              ref={videoRef}
-              className="absolute inset-0 w-full h-full object-cover"
-              muted
-              playsInline
-            />
-            <div className="absolute inset-4 border-2 border-white/30 rounded-2xl">
-              <div className="absolute -top-0.5 -left-0.5 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg" />
-              <div className="absolute -top-0.5 -right-0.5 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg" />
-              <div className="absolute -bottom-0.5 -left-0.5 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg" />
-              <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg" />
-            </div>
-            {isScanning && (
-              <div className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent animate-scan" />
-            )}
-            {!isScanning && !cameraFailed && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Icons.Scan size={48} className="text-white/20" />
-              </div>
-            )}
-          </div>
-
-          {/* Status */}
-          <div className="text-center mb-6">
-            {cameraFailed ? (
-              <p className="text-[var(--color-danger)] text-sm">{t('camera_unavailable')}</p>
-            ) : (
-              <p className="uv-text-muted">{isScanning ? t('scanning') : t('point_camera')}</p>
-            )}
-          </div>
-
-          {/* Fallback manual: pegar el código del QR */}
-          <div className="w-full max-w-xs space-y-2">
-            <label className="text-xs text-gray-500 font-medium">{t('enter_code_manually')}</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                placeholder={t('qr_code')}
-                className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-3 py-2 text-sm outline-none uv-text-primary"
-              />
-              <button
-                onClick={submitManualCode}
-                disabled={!manualCode.trim()}
-                className="px-4 rounded-xl bg-[var(--color-primary)] text-white font-bold text-sm disabled:opacity-50"
-              >
-                {t('continue')}
-              </button>
-            </div>
-          </div>
-
+        <QrScannerPanel active={activeSheet === 'scanner'} onDecode={handleScannedCode}>
           {/* Monedas soportadas */}
           <div className="flex gap-4 justify-center mt-6">
             {(['BTC', 'ETH', 'CRC', 'USD'] as QRCurrency[]).map((ccy) => {
@@ -778,7 +641,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               );
             })}
           </div>
-        </div>
+        </QrScannerPanel>
       </BottomSheet>
 
       {/* Scan Result / Pay Sheet — pago real via scanAndPay (mueve dinero en el ledger) */}
