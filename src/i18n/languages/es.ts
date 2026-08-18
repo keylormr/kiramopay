@@ -441,6 +441,7 @@ const es: TranslationKeys = {
   crypto_since: 'Desde',
   crypto_staked: 'Stakeado',
   crypto_withdraw: 'Retirar',
+  crypto_claim_unavailable: 'El rendimiento todavía no se acredita: el servidor no tiene cómo pagarlo. Tu cripto en staking sigue intacta.',
   crypto_days: 'días',
   crypto_market_cap: 'Cap. de Mercado',
   crypto_volume_24h: 'Volumen 24h',

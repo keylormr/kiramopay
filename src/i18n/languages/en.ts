@@ -441,6 +441,7 @@ const en: TranslationKeys = {
   crypto_since: 'Since',
   crypto_staked: 'Staked',
   crypto_withdraw: 'Withdraw',
+  crypto_claim_unavailable: 'Yield is not credited yet: the server has no way to pay it. Your staked crypto is untouched.',
   crypto_days: 'days',
   crypto_market_cap: 'Market Cap',
   crypto_volume_24h: '24h Volume',

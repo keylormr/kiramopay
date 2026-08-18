@@ -442,6 +442,7 @@ const zhCn: TranslationKeys = {
   crypto_since: '自',
   crypto_staked: '已质押',
   crypto_withdraw: '提领',
+  crypto_claim_unavailable: '收益尚未发放：服务器还没有支付它的方式。你质押的加密货币不受影响。',
   crypto_days: '天',
   crypto_market_cap: '市值',
   crypto_volume_24h: '24小时交易量',

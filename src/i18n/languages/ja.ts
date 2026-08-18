@@ -441,6 +441,7 @@ const ja: TranslationKeys = {
   crypto_since: '開始日',
   crypto_staked: 'ステーク中',
   crypto_withdraw: '引き出す',
+  crypto_claim_unavailable: '報酬はまだ付与されません。サーバーに支払う仕組みがないためです。ステーキング中の暗号資産はそのままです。',
   crypto_days: '日',
   crypto_market_cap: '時価総額',
   crypto_volume_24h: '24時間出来高',
