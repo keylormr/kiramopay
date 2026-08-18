@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { HomeView } from '../home/HomeView';
 
@@ -192,5 +193,41 @@ describe('HomeView', () => {
     expect(screen.getByText('Accounts')).toBeInTheDocument();
     expect(screen.getByText('Recent Transactions')).toBeInTheDocument();
     expect(screen.getByText('View All')).toBeInTheDocument();
+  });
+});
+
+// La ayuda contextual solo servia una vez adentro de cada funcion. En Inicio, el
+// "?" permite preguntar QUE es algo antes de entrar, que es justo lo que no se
+// podia hacer.
+describe('HomeView — ayuda en las tarjetas', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('kiramopay_language', 'es');
+    mockDispatch.mockReset();
+  });
+
+  it('ofrece ayuda en cada tarjeta de funcion', () => {
+    renderHomeView();
+    // Asistente, ahorros, pagos divididos, lealtad, marketplace y tarjetas.
+    expect(screen.getAllByLabelText('¿Qué es esto?')).toHaveLength(6);
+  });
+
+  // El "?" se dibuja ENCIMA de una tarjeta que ya es un boton. Si abriera
+  // ademas la funcion, pedir ayuda te sacaria de la pantalla.
+  it('no abre la funcion al pedir ayuda', async () => {
+    const user = userEvent.setup();
+    const abrirAhorros = vi.fn();
+    render(
+      <LanguageProvider>
+        <HomeView onOpenSavings={abrirAhorros} />
+      </LanguageProvider>,
+    );
+
+    // El de ahorros es el segundo: asistente, ahorros, divididos, lealtad...
+    await user.click(screen.getAllByLabelText('¿Qué es esto?')[1]);
+
+    expect(await screen.findByText('Ahorros')).toBeInTheDocument();
+    expect(screen.getByText(/no genera intereses/)).toBeInTheDocument();
+    expect(abrirAhorros).not.toHaveBeenCalled();
   });
 });

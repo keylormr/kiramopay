@@ -1,141 +1,108 @@
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Icons } from '../../components/Icons';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 interface FAQViewProps {
   onClose: () => void;
 }
 
-interface FAQItem {
+/**
+ * Centro de ayuda: el índice desde AFUERA de cada función.
+ *
+ * La ayuda contextual (el botón "?") solo la encuentra quien ya llegó a la
+ * pantalla. Esto responde a la pregunta que la deja al descubierto: "¿cómo veo
+ * la guía de algo que no sé?". Aquí están todos los temas juntos y buscables,
+ * incluidos los mismos textos que muestra el "?", para no mantener dos
+ * versiones de la misma explicación.
+ *
+ * Antes esta pantalla era una lista fija escrita a mano y solo en español, con
+ * respuestas que el producto ya no cumple (envíos a otros bancos por ₡150,
+ * chat 24/7, reembolsos automáticos). Ahora sale de las claves de idioma y dice
+ * lo que la app hace hoy, incluido lo que todavía no funciona.
+ */
+
+type CategoryKey =
+  | 'help_cat_features'
+  | 'help_cat_general'
+  | 'help_cat_send'
+  | 'help_cat_limits'
+  | 'help_cat_payments'
+  | 'help_cat_security';
+
+interface HelpEntry {
   id: string;
-  question: string;
-  answer: string;
-  category: string;
+  category: CategoryKey;
+  titleKey: string;
+  bodyKey: string;
 }
 
-const FAQ_DATA: FAQItem[] = [
-  // General
-  {
-    id: '1',
-    category: 'General',
-    question: '¿Que es KiramoPay?',
-    answer: 'KiramoPay es una billetera digital costarricense que te permite realizar pagos, transferencias SINPE Movil, pago de servicios, recargas telefonicas y mucho mas, todo desde tu celular de forma rapida y segura.'
-  },
-  {
-    id: '2',
-    category: 'General',
-    question: '¿Es seguro usar KiramoPay?',
-    answer: 'Si, KiramoPay utiliza los mas altos estandares de seguridad incluyendo encriptacion de datos, autenticacion biometrica, PIN de seguridad y monitoreo constante de transacciones para proteger tu dinero y tu informacion personal.'
-  },
-  {
-    id: '3',
-    category: 'General',
-    question: '¿Como puedo crear una cuenta?',
-    answer: 'Para crear una cuenta necesitas tu numero de cedula costarricense, un numero de telefono activo y un correo electronico. El proceso de registro toma solo unos minutos y podras comenzar a usar la app inmediatamente.'
-  },
-  // Cuentas y Saldos
-  {
-    id: '4',
-    category: 'Cuentas y Saldos',
-    question: '¿Como puedo agregar dinero a mi cuenta?',
-    answer: 'Puedes agregar dinero a tu cuenta mediante: transferencia SINPE desde tu banco, deposito en puntos autorizados (supermercados, farmacias), o recibiendo pagos de otros usuarios de KiramoPay.'
-  },
-  {
-    id: '5',
-    category: 'Cuentas y Saldos',
-    question: '¿Puedo tener cuentas en diferentes monedas?',
-    answer: 'Si, KiramoPay te permite tener cuentas en colones (CRC) y dolares (USD). Puedes hacer cambios de moneda directamente desde la app con tasas competitivas.'
-  },
-  {
-    id: '6',
-    category: 'Cuentas y Saldos',
-    question: '¿Cual es el limite de saldo que puedo tener?',
-    answer: 'El limite depende de tu nivel de verificacion (KYC). Nivel basico: hasta 500,000 colones. Nivel intermedio: hasta 2,000,000 colones. Nivel completo: sin limite.'
-  },
-  // SINPE Movil
-  {
-    id: '7',
-    category: 'SINPE Movil',
-    question: '¿Que es SINPE Movil?',
-    answer: 'SINPE Movil es el sistema de pagos instantaneos del Banco Central de Costa Rica que permite enviar y recibir dinero usando solo el numero de telefono del destinatario, las 24 horas del dia, los 7 dias de la semana.'
-  },
-  {
-    id: '8',
-    category: 'SINPE Movil',
-    question: '¿Cuanto cuesta enviar dinero por SINPE?',
-    answer: 'Los envios entre usuarios de KiramoPay son completamente gratis. Para envios a otros bancos, el costo es de 150 colones por transaccion.'
-  },
-  {
-    id: '9',
-    category: 'SINPE Movil',
-    question: '¿Cual es el limite de SINPE Movil?',
-    answer: 'El limite diario de SINPE Movil es de 500,000 colones segun la regulacion del Banco Central de Costa Rica. Puedes realizar multiples transacciones hasta alcanzar este limite.'
-  },
-  // Pagos y Servicios
-  {
-    id: '10',
-    category: 'Pagos y Servicios',
-    question: '¿Que servicios puedo pagar con KiramoPay?',
-    answer: 'Puedes pagar servicios de electricidad (ICE, CNFL), agua (AyA), telefonia e internet (Kolbi, Claro, Movistar), cable, municipalidades, universidades y muchos mas. Tambien puedes hacer recargas telefonicas.'
-  },
-  {
-    id: '11',
-    category: 'Pagos y Servicios',
-    question: '¿Puedo programar pagos automaticos?',
-    answer: 'Si, puedes configurar pagos automaticos para tus servicios recurrentes. La app te notificara antes de cada pago y podras cancelarlo en cualquier momento.'
-  },
-  // Seguridad
-  {
-    id: '12',
-    category: 'Seguridad',
-    question: '¿Que hago si pierdo mi telefono?',
-    answer: 'Contacta inmediatamente a nuestro soporte al 800-KIRAMO o desde otro dispositivo ingresa a kiramopay.com para bloquear tu cuenta. Tus fondos estaran seguros gracias a nuestras medidas de seguridad.'
-  },
-  {
-    id: '13',
-    category: 'Seguridad',
-    question: '¿Como cambio mi PIN de seguridad?',
-    answer: 'Ve a Perfil > Seguridad > Cambiar PIN. Deberas ingresar tu PIN actual y luego configurar uno nuevo. Te recomendamos usar un PIN que no sea facil de adivinar.'
-  },
-  {
-    id: '14',
-    category: 'Seguridad',
-    question: '¿Como activo la autenticacion biometrica?',
-    answer: 'Ve a Perfil > Seguridad > Biometria. Activa la opcion y sigue las instrucciones para registrar tu huella dactilar o Face ID. Esto te permitira acceder mas rapido y de forma segura.'
-  },
-  // Soporte
-  {
-    id: '15',
-    category: 'Soporte',
-    question: '¿Como contacto a soporte?',
-    answer: 'Puedes contactarnos por: WhatsApp: +506 8888-0000, Telefono: 800-KIRAMO (547266), Email: soporte@kiramopay.cr, o a traves del chat en la app disponible 24/7.'
-  },
-  {
-    id: '16',
-    category: 'Soporte',
-    question: '¿Que hago si una transaccion falla?',
-    answer: 'Si una transaccion falla, tu dinero sera devuelto automaticamente en un plazo maximo de 24 horas. Si no ves el reembolso, contacta a soporte con el numero de referencia de la transaccion.'
-  },
+// Los temas de las funciones reusan las claves del botón "?" (help_<tema>_*),
+// así que una corrección se escribe una sola vez y aparece en los dos lugares.
+const FEATURE_TOPICS = [
+  'assistant',
+  'savings',
+  'splitpay',
+  'marketplace',
+  'cards',
+  'loyalty',
+  'staking',
+  'payout',
+  'kyc',
+  'mfa',
+  'webhooks',
+] as const;
+
+const ENTRIES: HelpEntry[] = [
+  ...FEATURE_TOPICS.map((topic) => ({
+    id: `topic-${topic}`,
+    category: 'help_cat_features' as const,
+    titleKey: `help_${topic}_title`,
+    bodyKey: `help_${topic}_body`,
+  })),
+  { id: 'faq1', category: 'help_cat_general', titleKey: 'faq_q1', bodyKey: 'faq_a1' },
+  { id: 'faq2', category: 'help_cat_general', titleKey: 'faq_q2', bodyKey: 'faq_a2' },
+  { id: 'faq3', category: 'help_cat_send', titleKey: 'faq_q3', bodyKey: 'faq_a3' },
+  { id: 'faq4', category: 'help_cat_send', titleKey: 'faq_q4', bodyKey: 'faq_a4' },
+  { id: 'faq5', category: 'help_cat_limits', titleKey: 'faq_q5', bodyKey: 'faq_a5' },
+  { id: 'faq6', category: 'help_cat_payments', titleKey: 'faq_q6', bodyKey: 'faq_a6' },
+  { id: 'faq7', category: 'help_cat_payments', titleKey: 'faq_q7', bodyKey: 'faq_a7' },
+  { id: 'faq8', category: 'help_cat_security', titleKey: 'faq_q8', bodyKey: 'faq_a8' },
+  { id: 'faq9', category: 'help_cat_general', titleKey: 'faq_q9', bodyKey: 'faq_a9' },
 ];
 
-const CATEGORIES = [...new Set(FAQ_DATA.map(item => item.category))];
+const CATEGORIES: CategoryKey[] = [
+  'help_cat_general',
+  'help_cat_send',
+  'help_cat_limits',
+  'help_cat_payments',
+  'help_cat_security',
+  'help_cat_features',
+];
 
 export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
+  const { t } = useLanguage();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('General');
+  // Arranca en "Todo" a propósito: quien no sabe qué busca necesita ver el
+  // catálogo completo, no una categoría elegida por nosotros.
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredFAQs = FAQ_DATA.filter(item => {
-    const matchesCategory = selectedCategory === 'Todas' || item.category === selectedCategory;
-    const matchesSearch = searchQuery === '' ||
-      item.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.answer.toLowerCase().includes(searchQuery.toLowerCase());
+  const entries = useMemo(
+    () => ENTRIES.map((e) => ({ ...e, title: t(e.titleKey), body: t(e.bodyKey) })),
+    [t],
+  );
+
+  const query = searchQuery.trim().toLowerCase();
+  const filtered = entries.filter((e) => {
+    // Buscar ignora la categoría: si escribís "staking" no deberías tener que
+    // adivinar primero en qué pestaña vive.
+    const matchesCategory = query !== '' || selectedCategory === 'all' || e.category === selectedCategory;
+    const matchesSearch =
+      query === '' || e.title.toLowerCase().includes(query) || e.body.toLowerCase().includes(query);
     return matchesCategory && matchesSearch;
   });
 
-  const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
+  const toggleExpand = (id: string) => setExpandedId(expandedId === id ? null : id);
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
@@ -144,21 +111,22 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
         <div className="flex items-center justify-between px-4 h-14">
           <button
             onClick={onClose}
+            aria-label={t('back')}
             className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]"
           >
             <Icons.ChevronLeft size={24} />
           </button>
-          <h1 className="text-lg font-bold">Preguntas Frecuentes</h1>
+          <h1 className="text-lg font-bold">{t('help_center')}</h1>
           <div className="w-10" />
         </div>
 
-        {/* Search */}
+        {/* Buscador */}
         <div className="px-4 pb-3">
           <div className="relative">
             <Icons.Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar pregunta..."
+              placeholder={t('help_search_ph')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -166,10 +134,10 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Categories */}
-        <div className="px-4 pb-3 overflow-x-auto">
+        {/* Categorías */}
+        <div className="px-4 pb-3 overflow-x-auto no-scrollbar">
           <div className="flex gap-2">
-            {CATEGORIES.map((category) => (
+            {(['all', ...CATEGORIES] as const).map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
@@ -179,37 +147,36 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
                     : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
                 }`}
               >
-                {category}
+                {category === 'all' ? t('help_cat_all') : t(category)}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Contenido */}
       <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-200px)]">
-        {filteredFAQs.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
               <Icons.HelpCircle size={40} className="uv-text-muted" />
             </div>
-            <h3 className="text-lg font-semibold mb-1">Sin resultados</h3>
-            <p className="text-gray-500 text-sm text-center">
-              No encontramos preguntas que coincidan con tu busqueda.
-            </p>
+            <h3 className="text-lg font-semibold mb-1">{t('help_no_results')}</h3>
+            <p className="text-gray-500 text-sm text-center">{t('help_no_results_desc')}</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredFAQs.map((item) => (
+            {filtered.map((item) => (
               <div
                 key={item.id}
                 className="uv-surface-1 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] overflow-hidden"
               >
                 <button
                   onClick={() => toggleExpand(item.id)}
+                  aria-expanded={expandedId === item.id}
                   className="w-full flex items-center justify-between p-4 text-left"
                 >
-                  <span className="font-medium text-sm pr-4">{item.question}</span>
+                  <span className="font-medium text-sm pr-4">{item.title}</span>
                   <Icons.ChevronRight
                     size={20}
                     className={`flex-shrink-0 text-gray-400 transition-transform ${
@@ -220,8 +187,8 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
                 {expandedId === item.id && (
                   <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                      <p className="text-sm uv-text-secondary leading-relaxed">
-                        {item.answer}
+                      <p className="text-sm uv-text-secondary leading-relaxed whitespace-pre-line">
+                        {item.body}
                       </p>
                     </div>
                   </div>
@@ -231,22 +198,11 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* Contact Support */}
-        <div className="mt-8 bg-gradient-to-r from-primary to-accent rounded-2xl p-6 text-white">
-          <h3 className="font-bold text-lg mb-2">¿No encontraste lo que buscabas?</h3>
-          <p className="text-white/80 text-sm mb-4">
-            Nuestro equipo de soporte esta disponible 24/7 para ayudarte.
-          </p>
-          <div className="flex gap-3">
-            <button className="flex-1 bg-white/20 hover:bg-white/30 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-              <Icons.MessageCircle size={18} />
-              Chat
-            </button>
-            <button className="flex-1 bg-white/20 hover:bg-white/30 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-              <Icons.Phone size={18} />
-              Llamar
-            </button>
-          </div>
+        {/* Soporte: antes prometía chat y llamada 24/7 con dos botones que no
+            hacían nada. Hoy el único canal real es el asistente. */}
+        <div className="mt-8 uv-surface-1 rounded-2xl p-5 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+          <h3 className="font-bold text-base uv-text-primary mb-1">{t('chat_support')}</h3>
+          <p className="uv-text-secondary text-sm">{t('support_soon_desc')}</p>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
+import { HelpButton } from '../../components/HelpSheet';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -293,18 +294,25 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         })();
         return (
           <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={onOpenAssistant}
-              className="col-span-2 uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive flex items-center gap-3"
-            >
-              <div className="w-10 h-10 shrink-0 rounded-xl uv-gradient-brand flex items-center justify-center">
-                <Icons.MessageCircle size={20} className="text-white" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-base font-extrabold uv-text-primary">{t('assistant_title')}</div>
-                <div className="text-[11px] uv-text-muted mt-0.5">{t('assistant_card_desc')}</div>
-              </div>
-            </button>
+            {/* El "?" va como hermano de la tarjeta, nunca adentro: la tarjeta
+                ya es un <button> y anidar un botón en otro es HTML inválido.
+                Puesto aquí, se puede preguntar qué es una función ANTES de
+                entrar a ella. */}
+            <div className="col-span-2 relative">
+              <button
+                onClick={onOpenAssistant}
+                className="w-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive flex items-center gap-3"
+              >
+                <div className="w-10 h-10 shrink-0 rounded-xl uv-gradient-brand flex items-center justify-center">
+                  <Icons.MessageCircle size={20} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-base font-extrabold uv-text-primary">{t('assistant_title')}</div>
+                  <div className="text-[11px] uv-text-muted mt-0.5">{t('assistant_card_desc')}</div>
+                </div>
+              </button>
+              <HelpButton topic="assistant" className="absolute top-2 right-2" />
+            </div>
 
             <button
               onClick={onOpenAnalytics}
@@ -322,75 +330,90 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               {topCat && <div className="text-[10px] uv-text-muted mt-0.5">{t('home_top_cat')}: {topCat}</div>}
             </button>
 
-            <button
-              onClick={onOpenSavings}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-success-soft)] flex items-center justify-center">
-                  <Icons.PiggyBank size={16} className="text-[var(--color-success)]" />
+            <div className="relative">
+              <button
+                onClick={onOpenSavings}
+                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-success-soft)] flex items-center justify-center">
+                    <Icons.PiggyBank size={16} className="text-[var(--color-success)]" />
+                  </div>
+                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_savings')}</span>
                 </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_savings')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary">{t('home_savings_view')}</div>
-              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_savings_desc')}</div>
-            </button>
+                <div className="text-lg font-extrabold uv-text-primary">{t('home_savings_view')}</div>
+                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_savings_desc')}</div>
+              </button>
+              <HelpButton topic="savings" className="absolute top-2 right-2" />
+            </div>
 
-            <button
-              onClick={onOpenSplitPay}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                  <Icons.Users size={16} className="text-[var(--color-primary)]" />
+            <div className="relative">
+              <button
+                onClick={onOpenSplitPay}
+                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
+                    <Icons.Users size={16} className="text-[var(--color-primary)]" />
+                  </div>
+                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_split')}</span>
                 </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_split')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary">{t('home_split_view')}</div>
-              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_split_desc')}</div>
-            </button>
+                <div className="text-lg font-extrabold uv-text-primary">{t('home_split_view')}</div>
+                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_split_desc')}</div>
+              </button>
+              <HelpButton topic="splitpay" className="absolute top-2 right-2" />
+            </div>
 
-            <button
-              onClick={onOpenLoyalty}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
-                  <Icons.Award size={16} className="text-[var(--color-accent)]" />
+            <div className="relative">
+              <button
+                onClick={onOpenLoyalty}
+                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
+                    <Icons.Award size={16} className="text-[var(--color-accent)]" />
+                  </div>
+                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_loyalty')}</span>
                 </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_loyalty')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
-              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_loyalty_desc')}</div>
-            </button>
+                <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
+                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_loyalty_desc')}</div>
+              </button>
+              <HelpButton topic="loyalty" className="absolute top-2 right-2" />
+            </div>
 
-            <button
-              onClick={onOpenMarketplace}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                  <Icons.ShoppingCart size={16} className="text-[var(--color-primary)]" />
+            <div className="relative">
+              <button
+                onClick={onOpenMarketplace}
+                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
+                    <Icons.ShoppingCart size={16} className="text-[var(--color-primary)]" />
+                  </div>
+                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_marketplace')}</span>
                 </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_marketplace')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary">{t('home_marketplace_view')}</div>
-              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_marketplace_desc')}</div>
-            </button>
+                <div className="text-lg font-extrabold uv-text-primary">{t('home_marketplace_view')}</div>
+                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_marketplace_desc')}</div>
+              </button>
+              <HelpButton topic="marketplace" className="absolute top-2 right-2" />
+            </div>
 
-            <button
-              onClick={onOpenCards}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
-                  <Icons.Card size={16} className="text-[var(--color-accent)]" />
+            <div className="relative">
+              <button
+                onClick={onOpenCards}
+                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
+                    <Icons.Card size={16} className="text-[var(--color-accent)]" />
+                  </div>
+                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_cards')}</span>
                 </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_cards')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary">{t('home_cards_view')}</div>
-              <div className="text-[10px] uv-text-muted mt-0.5">{t('home_cards_desc')}</div>
-            </button>
+                <div className="text-lg font-extrabold uv-text-primary">{t('home_cards_view')}</div>
+                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_cards_desc')}</div>
+              </button>
+              <HelpButton topic="cards" className="absolute top-2 right-2" />
+            </div>
           </div>
         );
       })()}
