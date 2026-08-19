@@ -441,6 +441,7 @@ const hi: TranslationKeys = {
   crypto_since: 'से',
   crypto_staked: 'स्टेक किया गया',
   crypto_withdraw: 'निकालें',
+  crypto_claim_unavailable: 'रिटर्न अभी जमा नहीं होता: सर्वर के पास इसे चुकाने का तरीका नहीं है। स्टेकिंग में रखी आपकी क्रिप्टो सुरक्षित है।',
   crypto_days: 'दिन',
   crypto_market_cap: 'मार्केट कैप',
   crypto_volume_24h: '24 घंटे का वॉल्यूम',

@@ -82,8 +82,18 @@ export const CryptoView: React.FC = () => {
   const [tradeError, setTradeError] = useState('');
   // Que operacion reintentar cuando se verifique el codigo de MFA.
   const [pendingTrade, setPendingTrade] = useState<'buy' | 'sell' | null>(null);
+  // Retirar y reclamar viven en la lista de posiciones, fuera de las hojas, asi
+  // que necesitan su propio estado de carga y de error.
+  const [stakingBusyId, setStakingBusyId] = useState<string | null>(null);
+  const [stakingError, setStakingError] = useState('');
   const [showMfa, setShowMfa] = useState(false);
+  // A donde se vende: moneda fiat. Es de la hoja de venta.
   const [convertTo, setConvertTo] = useState('CRC');
+  // A que cripto se convierte. Antes esta hoja reusaba `convertTo`, que arranca
+  // en 'CRC': ninguna opcion del selector coincidia, el <select> mostraba la
+  // primera pero el estado seguia siendo 'CRC', y al presionar "Convertir" la
+  // pantalla no hacia absolutamente nada. Se elige al abrir la hoja.
+  const [convertToAsset, setConvertToAsset] = useState('');
   const [sendAddress, setSendAddress] = useState('');
   const [showSendConfirm, setShowSendConfirm] = useState(false);
 
@@ -115,6 +125,16 @@ export const CryptoView: React.FC = () => {
 
   // Assets with balance
   const assetsWithBalance = state.crypto.assets.filter(a => a.balance > 0);
+
+  // Abrir la hoja de conversion elige un destino valido de entrada. Sin esto la
+  // hoja arrancaba con un destino que no existia entre sus opciones.
+  const openConvertSheet = () => {
+    const from = assetsWithBalance[0] || null;
+    setSelectedAsset(from);
+    setConvertToAsset(state.crypto.assets.find(a => a.symbol !== from?.symbol)?.symbol || '');
+    setTradeError('');
+    setActiveSheet('convert');
+  };
 
   // Use ref for dispatch to avoid re-creating callbacks on every render
   const dispatchRef = useRef(dispatch);
@@ -277,25 +297,38 @@ export const CryptoView: React.FC = () => {
     setAmount('');
   };
 
-  const handleConvert = () => {
-    if (!selectedAsset || !amount || !convertTo) return;
+  // Convertir, hacer staking, retirarlo y reclamar rendimiento seguian el patron
+  // viejo: despachar primero y llamar al servidor con .catch(() => {}). El
+  // rechazo se tragaba y la pantalla mostraba una operacion que no ocurrio. Es
+  // el mismo defecto que ya se corrigio en compra y venta.
+  const handleConvert = async () => {
+    if (!selectedAsset || !amount || !convertToAsset || isTrading) return;
     const fromAmount = parseFloat(amount);
-    const toAsset = state.crypto.assets.find(a => a.symbol === convertTo);
+    if (!(fromAmount > 0)) return;
+    const toAsset = state.crypto.assets.find(a => a.symbol === convertToAsset);
     if (!toAsset) return;
 
     const fromUsd = fromAmount * selectedAsset.currentPrice;
     const toAmount = fromUsd / toAsset.currentPrice;
+    const payload = {
+      fromAsset: selectedAsset.symbol,
+      toAsset: convertToAsset,
+      fromAmount,
+      toAmount,
+      price: toAsset.currentPrice,
+    };
 
-    dispatch({
-      type: 'CONVERT_CRYPTO',
-      payload: {
-        fromAsset: selectedAsset.symbol,
-        toAsset: convertTo,
-        fromAmount,
-        toAmount,
-        price: toAsset.currentPrice
-      }
-    });
+    setIsTrading(true);
+    setTradeError('');
+    const res = await getApiLayer().crypto.convert(payload);
+    setIsTrading(false);
+
+    if (!res.success) {
+      setTradeError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
+
+    dispatch({ type: 'CONVERT_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
   };
@@ -320,21 +353,61 @@ export const CryptoView: React.FC = () => {
     setSendAddress('');
   };
 
-  const handleStake = () => {
-    if (!selectedAsset || !amount) return;
+  const handleStake = async () => {
+    if (!selectedAsset || !amount || isTrading) return;
     const stakeAmount = parseFloat(amount);
+    if (!(stakeAmount > 0)) return;
+    const request = { asset: selectedAsset.symbol, amount: stakeAmount, apy: 0, locked: false };
 
-    dispatch({
-      type: 'STAKE_CRYPTO',
-      payload: {
-        asset: selectedAsset.symbol,
-        amount: stakeAmount,
-        apy: 0, // the backend sets the program rate server-side
-        locked: false
-      }
-    });
+    setIsTrading(true);
+    setTradeError('');
+    const res = await getApiLayer().crypto.stake(request);
+    setIsTrading(false);
+
+    if (!res.success) {
+      setTradeError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
+
+    // El programa lo fija el servidor: mostrar la tasa que devolvio, no un 0
+    // inventado por la pantalla.
+    dispatch({ type: 'STAKE_CRYPTO', payload: { ...request, apy: res.data?.apy ?? 0 } });
     setActiveSheet('none');
     setAmount('');
+  };
+
+  const handleUnstake = async (positionId: string) => {
+    if (stakingBusyId) return;
+    setStakingBusyId(positionId);
+    setStakingError('');
+    const res = await getApiLayer().crypto.unstake(positionId);
+    setStakingBusyId(null);
+
+    if (!res.success) {
+      setStakingError(res.error?.message || t('assistant_action_failed'));
+      return;
+    }
+    dispatch({ type: 'UNSTAKE_CRYPTO', payload: { positionId } });
+  };
+
+  const handleClaimYield = async (positionId: string, earned: number) => {
+    if (stakingBusyId) return;
+    setStakingBusyId(positionId);
+    setStakingError('');
+    const res = await getApiLayer().crypto.claimYield(positionId);
+    setStakingBusyId(null);
+
+    if (!res.success) {
+      // El servidor no acredita rendimiento todavia. Antes esto se ignoraba y
+      // la pantalla sumaba una ganancia que no existia.
+      setStakingError(
+        res.error?.code === 'CLAIM_NOT_AVAILABLE'
+          ? t('crypto_claim_unavailable')
+          : res.error?.message || t('assistant_action_failed'),
+      );
+      return;
+    }
+    dispatch({ type: 'CLAIM_STAKING_YIELD', payload: { positionId, amount: earned } });
   };
 
   const getTxIcon = (type: CryptoTransaction['type']) => {
@@ -423,7 +496,7 @@ export const CryptoView: React.FC = () => {
             <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
-            onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('convert'); }}
+            onClick={openConvertSheet}
             className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
@@ -617,6 +690,11 @@ export const CryptoView: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
+              {stakingError && (
+                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">
+                  {stakingError}
+                </p>
+              )}
               {state.crypto.stakingPositions.map(position => {
                 const asset = state.crypto.assets.find(a => a.symbol === position.asset);
                 const valueUsd = position.amount * (asset?.currentPrice || 0);
@@ -656,16 +734,18 @@ export const CryptoView: React.FC = () => {
                     <div className="flex gap-2 mt-3">
                       {position.earned > 0 && (
                         <button
-                          onClick={() => dispatch({ type: 'CLAIM_STAKING_YIELD', payload: { positionId: position.id, amount: position.earned } })}
-                          className="flex-1 bg-green-500 text-white py-2 rounded-xl text-sm font-bold"
+                          onClick={() => handleClaimYield(position.id, position.earned)}
+                          disabled={stakingBusyId === position.id}
+                          className="flex-1 bg-green-500 text-white py-2 rounded-xl text-sm font-bold disabled:opacity-50"
                         >
                           {t('claim')}
                         </button>
                       )}
                       {!position.locked && (
                         <button
-                          onClick={() => dispatch({ type: 'UNSTAKE_CRYPTO', payload: { positionId: position.id } })}
-                          className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-2 rounded-xl text-sm font-bold"
+                          onClick={() => handleUnstake(position.id)}
+                          disabled={stakingBusyId === position.id}
+                          className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-2 rounded-xl text-sm font-bold disabled:opacity-50"
                         >
                           {t('crypto_withdraw')}
                         </button>
@@ -954,14 +1034,22 @@ export const CryptoView: React.FC = () => {
       </BottomSheet>
 
       {/* Convert Sheet */}
-      <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('convert')} ${t('crypto_generic')}`}>
+      <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('convert')} ${t('crypto_generic')}`}>
         <div className="space-y-6">
           <div className="uv-surface-2 rounded-xl p-4">
             <label className="text-xs text-gray-500 font-bold">{t('from')}</label>
             <select
               className="w-full bg-transparent text-lg font-bold uv-text-primary mt-2 outline-none"
               value={selectedAsset?.symbol || ''}
-              onChange={(e) => setSelectedAsset(state.crypto.assets.find(a => a.symbol === e.target.value) || null)}
+              onChange={(e) => {
+                const from = state.crypto.assets.find(a => a.symbol === e.target.value) || null;
+                setSelectedAsset(from);
+                // Nadie convierte un activo en si mismo: si el destino paso a
+                // ser el mismo, correrlo al primero que quede.
+                if (from && from.symbol === convertToAsset) {
+                  setConvertToAsset(state.crypto.assets.find(a => a.symbol !== from.symbol)?.symbol || '');
+                }
+              }}
             >
               {assetsWithBalance.map(a => (
                 <option key={a.symbol} value={a.symbol}>{a.name} - {formatCrypto(a.balance)} {t('crypto_available_suffix')}</option>
@@ -989,8 +1077,8 @@ export const CryptoView: React.FC = () => {
             <label className="text-xs text-gray-500 font-bold">{t('crypto_to_label')}</label>
             <select
               className="w-full bg-transparent text-lg font-bold uv-text-primary mt-2 outline-none"
-              value={convertTo}
-              onChange={(e) => setConvertTo(e.target.value)}
+              value={convertToAsset}
+              onChange={(e) => setConvertToAsset(e.target.value)}
             >
               {state.crypto.assets.filter(a => a.symbol !== selectedAsset?.symbol).map(a => (
                 <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol})</option>
@@ -998,20 +1086,24 @@ export const CryptoView: React.FC = () => {
             </select>
           </div>
 
-          {amount && selectedAsset && convertTo && (
+          {amount && selectedAsset && convertToAsset && (
             <div className="text-center text-gray-500">
               {t('crypto_receive_approx')}: <span className="font-bold uv-text-primary">
-                {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / (state.crypto.assets.find(a => a.symbol === convertTo)?.currentPrice || 1))} {convertTo}
+                {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / (state.crypto.assets.find(a => a.symbol === convertToAsset)?.currentPrice || 1))} {convertToAsset}
               </span>
             </div>
           )}
 
+          {tradeError && (
+            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{tradeError}</p>
+          )}
+
           <button
             onClick={handleConvert}
-            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !convertToAsset || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-blue-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            {t('convert')}
+            {isTrading ? t('processing') : t('convert')}
           </button>
         </div>
       </BottomSheet>
@@ -1097,7 +1189,7 @@ export const CryptoView: React.FC = () => {
       </BottomSheet>
 
       {/* Stake Sheet */}
-      <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('staking')} ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('staking')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-4">
             <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_up_to_apy')}</p>
@@ -1118,12 +1210,16 @@ export const CryptoView: React.FC = () => {
             <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
 
+          {tradeError && (
+            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{tradeError}</p>
+          )}
+
           <button
             onClick={handleStake}
-            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-purple-600 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            {t('start_staking')}
+            {isTrading ? t('processing') : t('start_staking')}
           </button>
         </div>
       </BottomSheet>

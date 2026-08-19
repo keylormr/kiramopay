@@ -525,6 +525,7 @@ export type TranslationKeys = {
   crypto_since: string;
   crypto_staked: string;
   crypto_withdraw: string;
+  crypto_claim_unavailable: string;
   crypto_days: string;
   crypto_market_cap: string;
   crypto_volume_24h: string;

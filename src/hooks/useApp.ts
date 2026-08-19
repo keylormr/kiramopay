@@ -337,9 +337,11 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           status: 'completed' as const,
         };
         crypto.addTransaction(convertTx);
+        // La llamada al backend NO va aca: la hace la vista y espera la
+        // respuesta, igual que compra y venta. Antes se despachaba primero y se
+        // llamaba con .catch(() => {}), asi que un rechazo del servidor se
+        // tragaba y la pantalla mostraba una conversion que nunca ocurrio.
         if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.convert({ fromAsset, toAsset, fromAmount, toAmount, price }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;
@@ -401,9 +403,9 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           status: 'completed' as const,
         };
         crypto.addTransaction(stakeTx);
+        // Igual que en conversion: la vista ya espero la confirmacion del
+        // servidor antes de despachar esta accion.
         if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.stake({ asset, amount, apy, locked, lockDays }).catch(() => {});
           refreshAccounts().catch(() => {});
         }
         break;
@@ -427,8 +429,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           };
           crypto.addTransaction(unstakeTx);
           if (hasBackend) {
-            const api = getApiLayer();
-            api.crypto.unstake(action.payload.positionId).catch(() => {});
             refreshAccounts().catch(() => {});
           }
         }
@@ -452,8 +452,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           };
           crypto.addTransaction(yieldTx);
           if (hasBackend) {
-            const api = getApiLayer();
-            api.crypto.claimYield(positionId).catch(() => {});
             refreshAccounts().catch(() => {});
           }
         }

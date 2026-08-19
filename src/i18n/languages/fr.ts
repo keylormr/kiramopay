@@ -441,6 +441,7 @@ const fr: TranslationKeys = {
   crypto_since: 'Depuis',
   crypto_staked: 'Staké',
   crypto_withdraw: 'Retirer',
+  crypto_claim_unavailable: "Le rendement n'est pas encore crédité : le serveur n'a aucun moyen de le verser. Vos cryptos en staking restent intactes.",
   crypto_days: 'jours',
   crypto_market_cap: 'Capitalisation',
   crypto_volume_24h: 'Volume 24 h',

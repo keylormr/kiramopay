@@ -262,8 +262,10 @@ export class HttpCryptoRepository implements ICryptoRepository {
   }
 
   async claimYield(_positionId: string): Promise<ApiResponse<{ amount: number }>> {
-    // Yield claiming is automatic in the backend
-    return apiSuccess({ amount: 0 });
+    // El backend no acredita rendimiento: no existe el endpoint. Devolvia
+    // exito con amount 0, y como la vista despachaba igual, la pantalla sumaba
+    // una ganancia que ningun servidor respalda. Mejor decir que no se puede.
+    return apiError('CLAIM_NOT_AVAILABLE', 'Staking yield is not credited yet');
   }
 
   async getPriceAlerts(): Promise<ApiResponse<PriceAlert[]>> {
