@@ -375,6 +375,12 @@ export type TranslationKeys = {
   sent_to: string;
   received_from: string;
   add_sinpe_contact: string;
+  scan_contact_cta: string;
+  scan_contact_title: string;
+  scan_contact_hint: string;
+  scan_contact_invalid: string;
+  scan_contact_prefilled: string;
+  or_type_it: string;
   contact_name: string;
   bank_optional: string;
   mark_as_favorite: string;

@@ -8,7 +8,8 @@ import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
-import { encodeContactQr } from '@/utils/contactQr';
+import { QrScannerPanel } from '../../components/QrScannerPanel';
+import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 
 // Bancos de Costa Rica para selección
 const BANKS = [
@@ -59,6 +60,12 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactBank, setNewContactBank] = useState('Desconocido');
   const [newContactFavorite, setNewContactFavorite] = useState(false);
+  // Agregar un contacto no puede obligar a teclear: la misma hoja alterna entre
+  // el formulario y el escáner. Escanear rellena los campos y devuelve al
+  // formulario, así que el usuario siempre revisa y confirma antes de guardar.
+  const [contactSheetMode, setContactSheetMode] = useState<'form' | 'scan'>('form');
+  const [contactScanError, setContactScanError] = useState('');
+  const [contactPrefilled, setContactPrefilled] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
@@ -201,6 +208,46 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setReference('');
   };
 
+  // Deja la hoja como recién abierta. Se usa al cerrarla y después de guardar.
+  const resetContactForm = () => {
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactBank('Desconocido');
+    setNewContactFavorite(false);
+    setContactSheetMode('form');
+    setContactScanError('');
+    setContactPrefilled(false);
+  };
+
+  // Abre la hoja de agregar contacto directamente en el escáner.
+  const openContactScanner = () => {
+    setContactScanError('');
+    setContactSheetMode('scan');
+    setShowAddContactSheet(true);
+  };
+
+  /**
+   * Lectura del QR de contacto. Devuelve false cuando el código no es un
+   * contacto de KiramoPay para que el escáner siga encendido: cerrarlo ante un
+   * QR ajeno obligaría a volver a abrirlo por un error que no cometió el
+   * usuario.
+   */
+  const handleContactScan = (raw: string): boolean => {
+    const contact = tryParseContactQr(raw);
+    if (!contact) {
+      setContactScanError(t('scan_contact_invalid'));
+      return false;
+    }
+    const digits = contact.phone.replace(/\D/g, '').slice(-8);
+    setNewContactName(contact.name);
+    setNewContactPhone(digits);
+    setNewContactBank(contact.bank && BANKS.includes(contact.bank) ? contact.bank : 'Desconocido');
+    setContactScanError('');
+    setContactPrefilled(true);
+    setContactSheetMode('form');
+    return true;
+  };
+
   const handleAddContact = () => {
     if (!newContactName || !newContactPhone) return;
 
@@ -214,11 +261,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
     dispatch({ type: 'ADD_SINPE_CONTACT', payload: newContact });
 
-    // Reset form
-    setNewContactName('');
-    setNewContactPhone('');
-    setNewContactBank('Desconocido');
-    setNewContactFavorite(false);
+    resetContactForm();
     setShowAddContactSheet(false);
   };
 
@@ -366,25 +409,46 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
                 {t('sinpe_contacts')}
               </h3>
-              <button
-                onClick={() => setShowAddContactSheet(true)}
-                className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
-              >
-                <Icons.Plus size={16} />
-                {t('new_contact')}
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Escanear al mismo nivel que escribir: quien quiere agregar a
+                    alguien que tiene enfrente no debería entrar al formulario
+                    para recién ahí descubrir que se podía escanear. */}
+                <button
+                  onClick={openContactScanner}
+                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                >
+                  <Icons.Scan size={16} />
+                  {t('scan_qr')}
+                </button>
+                <button
+                  onClick={() => setShowAddContactSheet(true)}
+                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                >
+                  <Icons.Plus size={16} />
+                  {t('new_contact')}
+                </button>
+              </div>
             </div>
             <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
               {allContacts.length === 0 ? (
                 <div className="p-8 text-center">
                   <Icons.Users size={48} className="mx-auto uv-text-muted mb-4 opacity-50" />
-                  <p className="uv-text-secondary mb-2">{t('no_contacts_yet')}</p>
-                  <button
-                    onClick={() => setShowAddContactSheet(true)}
-                    className="text-[var(--color-primary)] font-semibold hover:underline"
-                  >
-                    {t('add_contact')}
-                  </button>
+                  <p className="uv-text-secondary mb-4">{t('no_contacts_yet')}</p>
+                  <div className="flex flex-col items-center gap-3">
+                    <button
+                      onClick={openContactScanner}
+                      className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 active:scale-[0.98] transition-transform"
+                    >
+                      <Icons.Scan size={18} />
+                      {t('scan_contact_cta')}
+                    </button>
+                    <button
+                      onClick={() => setShowAddContactSheet(true)}
+                      className="text-[var(--color-primary)] font-semibold hover:underline"
+                    >
+                      {t('add_contact')}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 allContacts.map((contact) => (
@@ -533,14 +597,58 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         isOpen={showAddContactSheet}
         onClose={() => {
           setShowAddContactSheet(false);
-          setNewContactName('');
-          setNewContactPhone('');
-          setNewContactBank('Desconocido');
-          setNewContactFavorite(false);
+          resetContactForm();
         }}
-        title={t('add_sinpe_contact')}
+        title={contactSheetMode === 'scan' ? t('scan_contact_title') : t('add_sinpe_contact')}
       >
+        {contactSheetMode === 'scan' ? (
+          <div className="space-y-4">
+            <QrScannerPanel
+              active={showAddContactSheet && contactSheetMode === 'scan'}
+              onDecode={handleContactScan}
+              hint={t('scan_contact_hint')}
+              error={contactScanError}
+            />
+            <button
+              onClick={() => {
+                setContactSheetMode('form');
+                setContactScanError('');
+              }}
+              className="w-full py-3 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+            >
+              {t('back')}
+            </button>
+          </div>
+        ) : (
         <div className="space-y-4">
+          {/* Escanear: el camino corto. El formulario de abajo queda como
+              alternativa, no como única forma de agregar a alguien. */}
+          <button
+            onClick={() => {
+              setContactScanError('');
+              setContactSheetMode('scan');
+            }}
+            className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <Icons.Scan size={20} />
+            {t('scan_contact_cta')}
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
+            <span className="text-xs uv-text-muted">{t('or_type_it')}</span>
+            <div className="flex-1 h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
+          </div>
+
+          {contactPrefilled && (
+            <p
+              aria-live="polite"
+              className="text-sm text-[var(--color-success)] bg-[var(--color-success-soft)] rounded-xl px-4 py-3"
+            >
+              {t('scan_contact_prefilled')}
+            </p>
+          )}
+
           {/* Nombre */}
           <div>
             <label className="text-sm text-gray-500 font-medium mb-2 block">
@@ -616,6 +724,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             {t('save_contact')}
           </button>
         </div>
+        )}
       </BottomSheet>
 
       {/* My contact QR — others scan this to add me as a contact */}
