@@ -471,7 +471,13 @@ func main() {
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.BodyLimit(1 << 20)) // 1MB
-	r.Use(middleware.RateLimit(redisClient, 100, time.Minute))
+	// /health queda fuera del limite global y lleva el suyo propio, abajo. Con
+	// CLIENT_IP_SOURCE=cf-connecting-ip, el trafico que no pasa por Cloudflare
+	// -la sonda de la plataforma, los monitores de uptime, las sondas internas-
+	// no trae esa cabecera y cae al respaldo: todo eso comparte UNA sola clave.
+	// Si esa ventana se llenaba, el propio health check empezaba a recibir 429 y
+	// la plataforma leia como caido un servicio que estaba sano.
+	r.Use(middleware.RateLimitExcept(middleware.RateLimit(redisClient, 100, time.Minute), "/health"))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORS.Origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -481,7 +487,10 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Limite propio y holgado: eximir del global no es abrir la puerta. Cada
+	// consulta hace un ping a la base y a Redis, asi que sigue habiendo techo,
+	// pero en su propia clave (`ratelimit:health:`), sin consumir la del resto.
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		dbOk := "ok"
 		if err := pool.Ping(r.Context()); err != nil {
@@ -500,7 +509,8 @@ func main() {
 		w.WriteHeader(httpStatus)
 		fmt.Fprintf(w, `{"status":%q,"version":"1.0.0","environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d}`,
 			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC())
-	})
+	}
+	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 
 	// /metrics exposes internal counters (incl. ledger drift). Optionally gate it
 	// behind METRICS_TOKEN; left open when unset so Prometheus scraping works
