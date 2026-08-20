@@ -2,8 +2,12 @@ package crypto_test
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/kiramopay/backend/internal/crypto"
@@ -18,12 +22,42 @@ import (
 // d is a terse helper for decimal literals in test fixtures.
 func d(f float64) decimal.Decimal { return decimal.NewFromFloat(f) }
 
+// startPriceStub serves the CoinGecko simple/price shape from memory, so the
+// suite never leaves the machine. La respuesta se arma con los ids que pide el
+// servicio, asi que sirve para cualquier simbolo sin tocar el stub.
+func startPriceStub(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make(map[string]map[string]float64)
+		for i, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
+			if id == "" {
+				continue
+			}
+			// Precios distintos por id: si el servicio cruzara un simbolo con
+			// otro, la prueba lo delataria en vez de pasar por casualidad.
+			body[id] = map[string]float64{
+				"usd":            1000 * float64(i+1),
+				"usd_24h_change": 1.5,
+				"usd_24h_vol":    2_000_000,
+				"usd_market_cap": 3_000_000,
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
 func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 	t.Helper()
 	pool := testutil.TestDB(t)
 
 	repo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
+	priceService.SetBaseURL(startPriceStub(t).URL)
 	txRepo := transaction.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
