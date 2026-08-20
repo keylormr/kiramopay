@@ -13,6 +13,13 @@ import (
 	"github.com/kiramopay/backend/internal/observability"
 )
 
+// CoinGecko endpoints. Free tier by default; the Pro host is used when an API
+// key is configured.
+const (
+	coinGeckoBaseURL    = "https://api.coingecko.com/api/v3"
+	coinGeckoProBaseURL = "https://pro-api.coingecko.com/api/v3"
+)
+
 // PriceService fetches real crypto prices from CoinGecko with circuit breaker.
 type PriceService struct {
 	cache               map[string]*PriceData
@@ -20,6 +27,7 @@ type PriceService struct {
 	lastFetch           time.Time
 	cacheTTL            time.Duration
 	apiKey              string
+	baseURL             string
 	consecutiveFailures int
 	circuitOpenUntil    time.Time
 	client              *http.Client
@@ -38,6 +46,19 @@ func (ps *PriceService) SetAPIKey(key string) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	ps.apiKey = key
+}
+
+// SetBaseURL points the service at another host that speaks the CoinGecko
+// simple/price API. Empty restores the default endpoint.
+//
+// Exists so the tests can serve their own prices instead of reaching
+// api.coingecko.com: the free tier rate-limits, the circuit breaker opens and
+// the test fails for reasons that have nothing to do with the change under
+// test. Nothing in production calls this.
+func (ps *PriceService) SetBaseURL(url string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.baseURL = strings.TrimSuffix(url, "/")
 }
 
 // Supported coins mapped to CoinGecko IDs
@@ -100,22 +121,24 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		return map[string]*PriceData{}, nil
 	}
 
-	url := fmt.Sprintf(
-		"https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true",
-		strings.Join(ids, ","),
-	)
-
-	// Use Pro API if key is configured
 	ps.mu.RLock()
 	apiKey := ps.apiKey
+	base := ps.baseURL
 	ps.mu.RUnlock()
 
-	if apiKey != "" {
-		url = fmt.Sprintf(
-			"https://pro-api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true",
-			strings.Join(ids, ","),
-		)
+	// Un base configurado manda sobre todo lo demas; es lo que usan las pruebas.
+	// Sin el, la clave Pro decide el host.
+	if base == "" {
+		base = coinGeckoBaseURL
+		if apiKey != "" {
+			base = coinGeckoProBaseURL
+		}
 	}
+
+	url := fmt.Sprintf(
+		"%s/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true",
+		base, strings.Join(ids, ","),
+	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
