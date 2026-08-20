@@ -22,6 +22,11 @@ import (
 // d is a terse helper for decimal literals in test fixtures.
 func d(f float64) decimal.Decimal { return decimal.NewFromFloat(f) }
 
+// stubPriceAt is the price startPriceStub serves for the id in position i of
+// the query. Las pruebas comparan contra esta funcion en vez de contra un
+// numero suelto, para que el stub y lo que se espera no se separen.
+func stubPriceAt(i int) float64 { return 1000 * float64(i+1) }
+
 // startPriceStub serves the CoinGecko simple/price shape from memory, so the
 // suite never leaves the machine. La respuesta se arma con los ids que pide el
 // servicio, asi que sirve para cualquier simbolo sin tocar el stub.
@@ -37,7 +42,7 @@ func startPriceStub(t *testing.T) *httptest.Server {
 			// Precios distintos por id: si el servicio cruzara un simbolo con
 			// otro, la prueba lo delataria en vez de pasar por casualidad.
 			body[id] = map[string]float64{
-				"usd":            1000 * float64(i+1),
+				"usd":            stubPriceAt(i),
 				"usd_24h_change": 1.5,
 				"usd_24h_vol":    2_000_000,
 				"usd_market_cap": 3_000_000,
@@ -94,8 +99,12 @@ func TestGetPrices(t *testing.T) {
 	if !ok {
 		t.Fatal("BTC not found in prices")
 	}
-	if btc.Price <= 0 {
-		t.Fatalf("expected positive BTC price, got %f", btc.Price)
+	// El precio exacto del stub, no solo "positivo". Un precio real de CoinGecko
+	// tambien es positivo: si alguien desconecta el servidor de prueba y la
+	// suite vuelve a salir a internet, con "> 0" pasaria igual y volveriamos al
+	// fallo intermitente sin enterarnos. Asi falla de una.
+	if want := stubPriceAt(0); btc.Price != want {
+		t.Fatalf("BTC price = %f, want %f from the stub", btc.Price, want)
 	}
 }
 
