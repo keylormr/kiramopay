@@ -347,6 +347,7 @@ const hi: TranslationKeys = {
   sent_success: 'भेजा गया!',
   sinpe_transfer_success: 'आपका SINPE ट्रांसफर सफल रहा',
   sinpe_self_send_error: 'आप अपने ही नंबर पर पैसे नहीं भेज सकते',
+  sinpe_phone_invalid: 'नंबर जांचें: इसमें 8 अंक होने चाहिए',
   sinpe_recipient_not_user: 'इस नंबर का KiramoPay खाता नहीं है। फिलहाल आप केवल उन लोगों को पैसे भेज सकते हैं जो पहले से ऐप का उपयोग करते हैं।',
   sinpe_external_pending_title: 'स्थानांतरण जारी है',
   sinpe_external_pending_desc: 'यह नंबर KiramoPay पर नहीं है। अन्य बैंकों में डिलीवरी अभी सक्षम नहीं है; राशि लंबित के रूप में दर्ज की गई है।',

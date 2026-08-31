@@ -10,6 +10,7 @@ import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
+import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
 
 // Bancos de Costa Rica para selección
 const BANKS = [
@@ -112,13 +113,23 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       return;
     }
 
+    // Un solo formato hacia el backend (+506XXXXXXXX). Los contactos ya traen
+    // el prefijo; la entrada manual son 8 digitos pelados y mandarla asi era
+    // un 400 de formato garantizado — el envio manual nunca funciono.
+    const telefono = normalizarTelefonoCR(phone);
+    if (!telefono) {
+      setShowConfirm(false);
+      setSendError(t('sinpe_phone_invalid'));
+      return;
+    }
+
     setIsProcessing(true);
     setSendError('');
     // Real transfer through the API layer: the mock adapter records it locally,
     // the HTTP adapter moves money on the backend (and may require MFA). The
     // idempotency key makes a double-submit collapse into one transfer.
     const res = await getApiLayer().sinpe.send({
-      phone,
+      phone: telefono,
       amount: numAmount,
       description: reference,
       idempotencyKey: genIdemKey(),
@@ -153,8 +164,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       id: res.data.id,
       type: 'sent',
       amount: numAmount,
-      phone,
-      name: selectedContact?.name || res.data.name || phone,
+      phone: telefono,
+      name: selectedContact?.name || res.data.name || formatearTelefonoCR(telefono),
       date: 'Ahora',
       status: res.data.status,
       reference,
@@ -758,7 +769,17 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       {/* Send Money Sheet */}
       <BottomSheet
         isOpen={showSendSheet}
-        onClose={() => { setShowSendSheet(false); setSelectedContact(null); setPhone(''); setSendError(''); idemRef.current = ''; }}
+        onClose={() => {
+          // La hoja se cierra limpia: dejar el monto o el detalle del intento
+          // anterior invitaba a reenviar una cifra vieja sin querer.
+          setShowSendSheet(false);
+          setSelectedContact(null);
+          setPhone('');
+          setAmount('');
+          setReference('');
+          setSendError('');
+          idemRef.current = '';
+        }}
         title={t('send_money')}
       >
         <div className="space-y-6">
@@ -877,7 +898,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         processing={isProcessing}
         confirmLabel={t('send')}
         rows={[
-          { label: t('recipient'), value: selectedContact?.name || `+506 ${phone}` },
+          { label: t('recipient'), value: selectedContact?.name || formatearTelefonoCR(phone) },
           ...(reference ? [{ label: t('detail_optional'), value: reference }] : []),
         ]}
       />
@@ -990,7 +1011,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <div className="flex justify-between py-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
                 <span className="uv-text-muted text-sm">{t('phone')}</span>
                 <span className="font-bold uv-text-primary tabular-nums">
-                  +506 {lastTransaction.phone}
+                  {formatearTelefonoCR(lastTransaction.phone)}
                 </span>
               </div>
               {lastTransaction.reference && (

@@ -347,6 +347,7 @@ const ja: TranslationKeys = {
   sent_success: '送金完了！',
   sinpe_transfer_success: 'SINPE送金が完了しました',
   sinpe_self_send_error: '自分の番号には送金できません',
+  sinpe_phone_invalid: '番号を確認してください（8桁で入力）',
   sinpe_recipient_not_user: 'この番号のKiramoPayアカウントはありません。現在は、すでにアプリを利用している方にのみ送金できます。',
   sinpe_external_pending_title: '送金処理中',
   sinpe_external_pending_desc: 'この番号は KiramoPay のユーザーではありません。他行への送金はまだ利用できず、金額は保留として記録されました。',
