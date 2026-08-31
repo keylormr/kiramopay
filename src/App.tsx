@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
@@ -24,33 +25,33 @@ import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
 import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingSheet';
 
 // Lazy-loaded views (code splitting)
-const HomeView = React.lazy(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
-const ProfileView = React.lazy(() => import('./views/profile/ProfileView').then(m => ({ default: m.ProfileView })));
-const SinpeView = React.lazy(() => import('./views/sinpe/SinpeView').then(m => ({ default: m.SinpeView })));
-const ServicesView = React.lazy(() => import('./views/services/ServicesView').then(m => ({ default: m.ServicesView })));
-const CryptoView = React.lazy(() => import('./views/crypto/CryptoView').then(m => ({ default: m.CryptoView })));
-const NotificationsView = React.lazy(() => import('./views/shared/NotificationsView').then(m => ({ default: m.NotificationsView })));
-const FAQView = React.lazy(() => import('./views/shared/FAQView').then(m => ({ default: m.FAQView })));
-const RegisterView = React.lazy(() => import('./views/auth/RegisterView').then(m => ({ default: m.RegisterView })));
-const RecoverPasswordView = React.lazy(() => import('./views/auth/RecoverPasswordView').then(m => ({ default: m.RecoverPasswordView })));
-const BudgetView = React.lazy(() => import('./views/budget/BudgetView').then(m => ({ default: m.BudgetView })));
-const RecurringView = React.lazy(() => import('./views/services/RecurringView').then(m => ({ default: m.RecurringView })));
-const TransactionsView = React.lazy(() => import('./views/home/TransactionsView').then(m => ({ default: m.TransactionsView })));
-const AnalyticsView = React.lazy(() => import('./views/analytics/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
-const SavingsView = React.lazy(() => import('./views/savings/SavingsView').then(m => ({ default: m.SavingsView })));
-const OnboardingView = React.lazy(() => import('./views/onboarding/OnboardingView').then(m => ({ default: m.OnboardingView })));
-const SplitPayView = React.lazy(() => import('./views/splitpay/SplitPayView').then(m => ({ default: m.SplitPayView })));
-const LoyaltyView = React.lazy(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
-const EscrowView = React.lazy(() => import('./views/escrow/EscrowView').then(m => ({ default: m.EscrowView })));
-const PayoutView = React.lazy(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
-const AdminMerchantsView = React.lazy(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
-const AssistantView = React.lazy(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
-const MarketplaceView = React.lazy(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
-const CardsView = React.lazy(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
-const BusinessHomeView = React.lazy(() => import('./views/business/BusinessHomeView').then(m => ({ default: m.BusinessHomeView })));
-const BusinessReportsView = React.lazy(() => import('./views/business/BusinessReportsView').then(m => ({ default: m.BusinessReportsView })));
-const BusinessMovementsView = React.lazy(() => import('./views/business/BusinessMovementsView').then(m => ({ default: m.BusinessMovementsView })));
-const BusinessSettingsView = React.lazy(() => import('./views/business/BusinessSettingsView').then(m => ({ default: m.BusinessSettingsView })));
+const HomeView = lazyConRecarga(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
+const ProfileView = lazyConRecarga(() => import('./views/profile/ProfileView').then(m => ({ default: m.ProfileView })));
+const SinpeView = lazyConRecarga(() => import('./views/sinpe/SinpeView').then(m => ({ default: m.SinpeView })));
+const ServicesView = lazyConRecarga(() => import('./views/services/ServicesView').then(m => ({ default: m.ServicesView })));
+const CryptoView = lazyConRecarga(() => import('./views/crypto/CryptoView').then(m => ({ default: m.CryptoView })));
+const NotificationsView = lazyConRecarga(() => import('./views/shared/NotificationsView').then(m => ({ default: m.NotificationsView })));
+const FAQView = lazyConRecarga(() => import('./views/shared/FAQView').then(m => ({ default: m.FAQView })));
+const RegisterView = lazyConRecarga(() => import('./views/auth/RegisterView').then(m => ({ default: m.RegisterView })));
+const RecoverPasswordView = lazyConRecarga(() => import('./views/auth/RecoverPasswordView').then(m => ({ default: m.RecoverPasswordView })));
+const BudgetView = lazyConRecarga(() => import('./views/budget/BudgetView').then(m => ({ default: m.BudgetView })));
+const RecurringView = lazyConRecarga(() => import('./views/services/RecurringView').then(m => ({ default: m.RecurringView })));
+const TransactionsView = lazyConRecarga(() => import('./views/home/TransactionsView').then(m => ({ default: m.TransactionsView })));
+const AnalyticsView = lazyConRecarga(() => import('./views/analytics/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const SavingsView = lazyConRecarga(() => import('./views/savings/SavingsView').then(m => ({ default: m.SavingsView })));
+const OnboardingView = lazyConRecarga(() => import('./views/onboarding/OnboardingView').then(m => ({ default: m.OnboardingView })));
+const SplitPayView = lazyConRecarga(() => import('./views/splitpay/SplitPayView').then(m => ({ default: m.SplitPayView })));
+const LoyaltyView = lazyConRecarga(() => import('./views/loyalty/LoyaltyView').then(m => ({ default: m.LoyaltyView })));
+const EscrowView = lazyConRecarga(() => import('./views/escrow/EscrowView').then(m => ({ default: m.EscrowView })));
+const PayoutView = lazyConRecarga(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
+const AdminMerchantsView = lazyConRecarga(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
+const AssistantView = lazyConRecarga(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
+const MarketplaceView = lazyConRecarga(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
+const CardsView = lazyConRecarga(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
+const BusinessHomeView = lazyConRecarga(() => import('./views/business/BusinessHomeView').then(m => ({ default: m.BusinessHomeView })));
+const BusinessReportsView = lazyConRecarga(() => import('./views/business/BusinessReportsView').then(m => ({ default: m.BusinessReportsView })));
+const BusinessMovementsView = lazyConRecarga(() => import('./views/business/BusinessMovementsView').then(m => ({ default: m.BusinessMovementsView })));
+const BusinessSettingsView = lazyConRecarga(() => import('./views/business/BusinessSettingsView').then(m => ({ default: m.BusinessSettingsView })));
 
 // Lock Screen Component — PIN entry for returning users.
 //
