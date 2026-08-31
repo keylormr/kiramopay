@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bufio"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -24,6 +27,26 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 	n, err := sw.ResponseWriter.Write(b)
 	sw.bytes += n
 	return n, err
+}
+
+// Hijack forwards the wrapped writer's http.Hijacker. Embedding only exposes
+// the methods of the http.ResponseWriter interface, so without this the
+// WebSocket upgrade sees a writer with no Hijack and fails with a 500
+// ("response does not implement http.Hijacker") on every /ws route.
+func (sw *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := sw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("middleware: underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return hj.Hijack()
+}
+
+// Flush forwards the wrapped writer's http.Flusher — same embedding pitfall as
+// Hijack, but for streaming responses.
+func (sw *statusWriter) Flush() {
+	if f, ok := sw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // clientIPForLog logs the resolved client IP, keeping the raw RemoteAddr as a
