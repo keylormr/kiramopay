@@ -81,7 +81,9 @@ describe('SinpeView — send', () => {
 
     await waitFor(() =>
       expect(mocks.api.sinpe.send).toHaveBeenCalledWith({
-        phone: '88887777',
+        // La entrada manual son 8 digitos; al backend SIEMPRE viaja el
+        // formato +506XXXXXXXX. Mandar los digitos pelados era un 400 seguro.
+        phone: '+50688887777',
         amount: 5000,
         description: '',
         idempotencyKey: expect.any(String),
