@@ -89,6 +89,88 @@ func TestPriceService_BaseURLOverride(t *testing.T) {
 	}
 }
 
+// Las claves Demo y Pro de CoinGecko NO son intercambiables: cada una viaja en
+// su propia cabecera y la Pro ademas cambia de host. Estas pruebas fijan que
+// cabecera manda cada modo contra el stub.
+func TestPriceService_ClaveDemoViajaEnSuCabecera(t *testing.T) {
+	cabeceras := make(chan [2]string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case cabeceras <- [2]string{r.Header.Get("x-cg-demo-api-key"), r.Header.Get("x-cg-pro-api-key")}:
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetDemoAPIKey("CG-demo-123")
+	ps.SetBaseURL(srv.URL)
+
+	if _, err := ps.GetPrices(context.Background(), []string{"BTC"}); err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	got := <-cabeceras
+	if got[0] != "CG-demo-123" {
+		t.Errorf("x-cg-demo-api-key = %q, se esperaba la clave demo", got[0])
+	}
+	if got[1] != "" {
+		t.Errorf("x-cg-pro-api-key = %q, no debia viajar en modo demo", got[1])
+	}
+}
+
+func TestPriceService_ClaveProViajaEnSuCabecera(t *testing.T) {
+	cabeceras := make(chan [2]string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case cabeceras <- [2]string{r.Header.Get("x-cg-demo-api-key"), r.Header.Get("x-cg-pro-api-key")}:
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetAPIKey("CG-pro-456")
+	ps.SetBaseURL(srv.URL)
+
+	if _, err := ps.GetPrices(context.Background(), []string{"BTC"}); err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	got := <-cabeceras
+	if got[1] != "CG-pro-456" {
+		t.Errorf("x-cg-pro-api-key = %q, se esperaba la clave pro", got[1])
+	}
+	if got[0] != "" {
+		t.Errorf("x-cg-demo-api-key = %q, no debia viajar en modo pro", got[0])
+	}
+}
+
+// La clave Demo se queda en el host publico: mandarla al host Pro es un
+// rechazo garantizado. Solo la Pro cambia de host, y un base explicito de
+// pruebas manda sobre todo.
+func TestResolverHost(t *testing.T) {
+	casos := []struct {
+		nombre string
+		base   string
+		clave  string
+		demo   bool
+		quiere string
+	}{
+		{"sin clave", "", "", false, coinGeckoBaseURL},
+		{"clave demo se queda en el publico", "", "CG-demo", true, coinGeckoBaseURL},
+		{"clave pro va al host pro", "", "CG-pro", false, coinGeckoProBaseURL},
+		{"el base de pruebas manda", "http://stub.local", "CG-pro", false, "http://stub.local"},
+	}
+	for _, c := range casos {
+		if got := resolverHost(c.base, c.clave, c.demo); got != c.quiere {
+			t.Errorf("%s: resolverHost = %q, se esperaba %q", c.nombre, got, c.quiere)
+		}
+	}
+}
+
 func TestPriceService_CacheRespected(t *testing.T) {
 	ps := NewPriceService()
 	ps.cacheTTL = 60 * time.Second

@@ -27,6 +27,7 @@ type PriceService struct {
 	lastFetch           time.Time
 	cacheTTL            time.Duration
 	apiKey              string
+	apiKeyDemo          bool
 	baseURL             string
 	consecutiveFailures int
 	circuitOpenUntil    time.Time
@@ -46,6 +47,31 @@ func (ps *PriceService) SetAPIKey(key string) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	ps.apiKey = key
+	ps.apiKeyDemo = false
+}
+
+// SetDemoAPIKey sets a CoinGecko Demo (free tier) API key. Demo keys are NOT
+// interchangeable with Pro keys: they authenticate against the PUBLIC host
+// with the x-cg-demo-api-key header, and the Pro host rejects them. Without
+// any key, CoinGecko rate-limits shared datacenter IPs (Render's) so hard
+// that production gets a 429 on its very first request.
+func (ps *PriceService) SetDemoAPIKey(key string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.apiKey = key
+	ps.apiKeyDemo = true
+}
+
+// resolverHost elige el host segun la clave: sin clave o con clave Demo, el
+// publico; con clave Pro, el de pago. Un base explicito (pruebas) manda.
+func resolverHost(base, apiKey string, demo bool) string {
+	if base != "" {
+		return base
+	}
+	if apiKey != "" && !demo {
+		return coinGeckoProBaseURL
+	}
+	return coinGeckoBaseURL
 }
 
 // SetBaseURL points the service at another host that speaks the CoinGecko
@@ -123,17 +149,9 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 
 	ps.mu.RLock()
 	apiKey := ps.apiKey
-	base := ps.baseURL
+	demo := ps.apiKeyDemo
+	base := resolverHost(ps.baseURL, ps.apiKey, ps.apiKeyDemo)
 	ps.mu.RUnlock()
-
-	// Un base configurado manda sobre todo lo demas; es lo que usan las pruebas.
-	// Sin el, la clave Pro decide el host.
-	if base == "" {
-		base = coinGeckoBaseURL
-		if apiKey != "" {
-			base = coinGeckoProBaseURL
-		}
-	}
 
 	url := fmt.Sprintf(
 		"%s/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true",
@@ -150,7 +168,11 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	}
 
 	if apiKey != "" {
-		req.Header.Set("x-cg-pro-api-key", apiKey)
+		if demo {
+			req.Header.Set("x-cg-demo-api-key", apiKey)
+		} else {
+			req.Header.Set("x-cg-pro-api-key", apiKey)
+		}
 	}
 
 	resp, err := ps.client.Do(req)
@@ -235,11 +257,13 @@ func (ps *PriceService) GetPrice(ctx context.Context, symbol string) (float64, e
 	return 0, fmt.Errorf("price not found for %s", symbol)
 }
 
-// GetInterval returns the recommended fetch interval based on API key.
+// GetInterval returns the recommended fetch interval based on API key. Only a
+// Pro key earns the fast interval; the Demo tier (30 req/min) keeps the same
+// pace as the keyless free tier.
 func (ps *PriceService) GetInterval() time.Duration {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
-	if ps.apiKey != "" {
+	if ps.apiKey != "" && !ps.apiKeyDemo {
 		return 5 * time.Second
 	}
 	return 15 * time.Second
