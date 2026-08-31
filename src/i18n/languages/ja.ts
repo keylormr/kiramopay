@@ -432,6 +432,7 @@ const ja: TranslationKeys = {
   crypto_updating: '更新中...',
   crypto_prices_updated: '価格が更新されました',
   crypto_refresh_prices: '価格を更新',
+  crypto_no_assets_to_convert: '変換できる資産がまだありません。先に仮想通貨を購入してください。',
   crypto_my_portfolio: 'マイポートフォリオ',
   crypto_market_live: 'ライブマーケット',
   crypto_refresh: '更新',

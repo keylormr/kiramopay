@@ -517,6 +517,7 @@ export type TranslationKeys = {
   crypto_updating: string;
   crypto_prices_updated: string;
   crypto_refresh_prices: string;
+  crypto_no_assets_to_convert: string;
   crypto_my_portfolio: string;
   crypto_market_live: string;
   crypto_refresh: string;

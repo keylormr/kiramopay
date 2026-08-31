@@ -1,4 +1,5 @@
 import { getApiLayer } from '@/api';
+import { fusionarConCatalogo } from '@/api/catalogoCripto';
 import { useAccountStore } from '@/stores/account.store';
 import { useTransactionStore } from '@/stores/transaction.store';
 import { useSinpeStore } from '@/stores/sinpe.store';
@@ -62,7 +63,10 @@ export async function syncAllData(): Promise<void> {
     }
 
     if (cryptoAssetsResult.status === 'fulfilled' && cryptoAssetsResult.value.success && cryptoAssetsResult.value.data) {
-      useCryptoStore.getState().setAssets(cryptoAssetsResult.value.data);
+      // El backend devuelve TENENCIAS; el catalogo pone el piso. Sin la fusion,
+      // una cuenta sin cripto recibia una lista vacia y el selector de Comprar
+      // quedaba sin opciones: imposible comprar la primera vez.
+      useCryptoStore.getState().setAssets(fusionarConCatalogo(cryptoAssetsResult.value.data));
     }
 
     if (savedServicesResult.status === 'fulfilled' && savedServicesResult.value.success && savedServicesResult.value.data) {

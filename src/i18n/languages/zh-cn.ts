@@ -433,6 +433,7 @@ const zhCn: TranslationKeys = {
   crypto_updating: '更新中...',
   crypto_prices_updated: '价格已更新',
   crypto_refresh_prices: '重新整理价格',
+  crypto_no_assets_to_convert: '您还没有可兑换的资产，请先购买加密货币。',
   crypto_my_portfolio: '我的投资组合',
   crypto_market_live: '即时市场',
   crypto_refresh: '重新整理',

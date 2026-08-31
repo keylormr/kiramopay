@@ -432,6 +432,7 @@ const en: TranslationKeys = {
   crypto_updating: 'Updating...',
   crypto_prices_updated: 'Prices updated',
   crypto_refresh_prices: 'Refresh prices',
+  crypto_no_assets_to_convert: 'You have no assets to convert yet. Buy crypto first.',
   crypto_my_portfolio: 'My Portfolio',
   crypto_market_live: 'Live Market',
   crypto_refresh: 'Refresh',
