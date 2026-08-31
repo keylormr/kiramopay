@@ -12,7 +12,9 @@ import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices
 import { useUsdToCrcRate } from '@/hooks/useFxRate';
 
 // Static list of crypto symbols to track
-const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'MATIC'];
+// La union del catalogo del backend (10 monedas con feed real) y las
+// stablecoins del modo demo, que cotizan por el simulador.
+const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI', 'ATOM'];
 
 // Helper function to format large numbers (safer than calling service method)
 const formatLargeNumber = (value: number | string | undefined | null): string => {
@@ -1036,6 +1038,13 @@ export const CryptoView: React.FC = () => {
       {/* Convert Sheet */}
       <BottomSheet isOpen={activeSheet === 'convert'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('convert')} ${t('crypto_generic')}`}>
         <div className="space-y-6">
+          {/* Sin activos no hay nada que convertir: decirlo es mejor que una
+              hoja con selectores vacios que ignora los clics en silencio. */}
+          {assetsWithBalance.length === 0 && (
+            <p className="text-sm uv-text-secondary bg-[var(--color-warning-soft,rgba(245,158,11,0.12))] text-[var(--color-warning,#F59E0B)] rounded-xl px-4 py-3">
+              {t('crypto_no_assets_to_convert')}
+            </p>
+          )}
           <div className="uv-surface-2 rounded-xl p-4">
             <label className="text-xs text-gray-500 font-bold">{t('from')}</label>
             <select

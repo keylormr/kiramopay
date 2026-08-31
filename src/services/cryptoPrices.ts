@@ -1,7 +1,14 @@
-// Crypto Price Service - Realistic Simulated Prices
-// Uses current market values as base with realistic volatility simulation
+// Crypto Price Service
+//
+// Con backend configurado pide los precios REALES (CoinGecko via
+// /api/v1/crypto/prices); el simulador de abajo queda como respaldo para el
+// modo demo, para los simbolos que el backend no cotiza (stablecoins) y para
+// cuando el feed real este caido. Antes la vista SOLO simulaba: mostraba
+// precios de enero 2025 con ruido aleatorio mientras el backend cobraba con
+// precios reales.
 
 import { getUsdToCrcRate } from './fxRate';
+import { resolveApiBaseUrl } from '@/api/baseUrl';
 
 // Base prices (approximate real market prices as of January 2025)
 const BASE_PRICES: Record<string, { price: number; marketCap: number; volume24h: number }> = {
@@ -136,8 +143,56 @@ class CryptoPriceService {
     return Math.max(newPrice, basePrice * 0.7); // Don't let price drop below 70% of base
   }
 
-  // Get current prices for multiple coins (simulated)
+  // Precios reales del backend; devuelve un mapa vacio si no hay backend, si
+  // el feed falla o si viene sin datos (CoinGecko limitando). Nunca lanza.
+  private async obtenerPreciosReales(symbols: string[]): Promise<Map<string, CryptoPriceData>> {
+    const reales = new Map<string, CryptoPriceData>();
+    const base = resolveApiBaseUrl();
+    if (!base) return reales;
+    try {
+      const r = await fetch(`${base}/api/v1/crypto/prices?symbols=${symbols.map(s => s.toUpperCase()).join(',')}`);
+      if (!r.ok) return reales;
+      const cuerpo = await r.json();
+      const datos: Record<string, { symbol: string; price: number; change_24h: number; volume_24h: number; market_cap: number }> =
+        cuerpo?.data ?? {};
+      const ahora = new Date().toISOString();
+      for (const p of Object.values(datos)) {
+        if (!p || typeof p.price !== 'number' || p.price <= 0) continue;
+        // El feed no trae maximo/minimo del dia; se estiman desde la variacion
+        // para que las tarjetas no muestren cero.
+        const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
+        reales.set(p.symbol, {
+          symbol: p.symbol,
+          price: p.price,
+          change24h: p.change_24h ?? 0,
+          marketCap: p.market_cap ?? 0,
+          volume24h: p.volume_24h ?? 0,
+          high24h: p.price * (1 + rango / 2),
+          low24h: p.price * (1 - rango / 2),
+          lastUpdated: ahora,
+        });
+        // Anclar el simulador al precio real: los historiales de sparkline
+        // terminan donde el mercado esta de verdad.
+        this.currentPrices.set(p.symbol, p.price);
+        this.dailyChanges.set(p.symbol, p.change_24h ?? 0);
+      }
+      return reales;
+    } catch {
+      return reales;
+    }
+  }
+
+  // Get current prices for multiple coins: reales primero, simulados de respaldo.
   async getPrices(symbols: string[]): Promise<CryptoPriceData[]> {
+    const reales = await this.obtenerPreciosReales(symbols);
+    const faltantes = symbols.filter(s => !reales.has(s.toUpperCase()));
+    const simulados = await this.simularPrecios(faltantes);
+    return [...reales.values(), ...simulados];
+  }
+
+  // Simulador original: cubre el modo demo y los simbolos sin feed real.
+  private async simularPrecios(symbols: string[]): Promise<CryptoPriceData[]> {
+    if (symbols.length === 0) return [];
     // Simulate small delay for realism
     await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
 
