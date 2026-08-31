@@ -870,6 +870,7 @@ const ja: TranslationKeys = {
   kyc_verify_not_found: '登録に本人確認書類が見つかりませんでした',
   kyc_verify_unavailable: 'サービスを利用できません。後でもう一度お試しください',
   contact_qr_button: '自分の連絡先QRコード',
+  my_qr_short: 'マイQR',
   contact_qr_desc: 'このコードを読み取った相手は、電話番号を入力せずにあなたを連絡先に追加できます。',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: 'これは何ですか？',

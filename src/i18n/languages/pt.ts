@@ -878,6 +878,7 @@ const pt: TranslationKeys = {
   kyc_verify_not_found: 'Não encontramos seu documento no registro',
   kyc_verify_unavailable: 'Serviço indisponível, tente novamente mais tarde',
   contact_qr_button: 'Meu QR de contato',
+  my_qr_short: 'Meu QR',
   contact_qr_desc: 'Quem escanear adiciona você como contato, sem digitar seu número.',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: 'O que é isto?',

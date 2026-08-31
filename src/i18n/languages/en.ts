@@ -878,6 +878,7 @@ const en: TranslationKeys = {
   kyc_verify_not_found: 'We could not find your ID in the registry',
   kyc_verify_unavailable: 'Service unavailable, please try again later',
   contact_qr_button: 'My contact QR',
+  my_qr_short: 'My QR',
   contact_qr_desc: 'Anyone who scans it adds you as a contact without typing your number.',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: 'What is this?',

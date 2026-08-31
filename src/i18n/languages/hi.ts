@@ -870,6 +870,7 @@ const hi: TranslationKeys = {
   kyc_verify_not_found: 'हमें रिकॉर्ड में आपकी आईडी नहीं मिली',
   kyc_verify_unavailable: 'सेवा उपलब्ध नहीं है, बाद में पुनः प्रयास करें',
   contact_qr_button: 'मेरा संपर्क QR',
+  my_qr_short: 'मेरा QR',
   contact_qr_desc: 'जो इसे स्कैन करता है, वह आपका नंबर लिखे बिना आपको संपर्क में जोड़ लेता है।',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: 'यह क्या है?',

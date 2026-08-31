@@ -410,6 +410,16 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 {t('sinpe_contacts')}
               </h3>
               <div className="flex items-center gap-3">
+                {/* El QR propio junto al escáner: donde uno ofrece escanear al
+                    otro, el otro busca cómo mostrarse. Tenerlo solo en la
+                    pestaña Solicitar lo volvía invisible justo aquí. */}
+                <button
+                  onClick={() => setShowMyQrSheet(true)}
+                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                >
+                  <Icons.QrCode size={16} />
+                  {t('my_qr_short')}
+                </button>
                 {/* Escanear al mismo nivel que escribir: quien quiere agregar a
                     alguien que tiene enfrente no debería entrar al formulario
                     para recién ahí descubrir que se podía escanear. */}
@@ -609,6 +619,20 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               hint={t('scan_contact_hint')}
               error={contactScanError}
             />
+            {/* La otra mitad del intercambio: si el de enfrente es quien
+                escanea, este botón muestra el QR propio sin salir a buscarlo
+                a la pestaña Solicitar. */}
+            <button
+              onClick={() => {
+                setShowAddContactSheet(false);
+                resetContactForm();
+                setShowMyQrSheet(true);
+              }}
+              className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Icons.QrCode size={18} />
+              {t('contact_qr_button')}
+            </button>
             <button
               onClick={() => {
                 setContactSheetMode('form');
