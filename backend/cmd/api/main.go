@@ -175,6 +175,16 @@ func main() {
 	paymentRepo := payment.NewRepository(pool)
 	cryptoRepo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
+	// CoinGecko limita las IPs compartidas de Render (429 desde el primer
+	// intento), asi que sin clave el modulo cripto queda sin precios. La clave
+	// Demo gratuita usa el host publico con su propia cabecera; la Pro, si
+	// algun dia se paga, manda sobre la Demo.
+	if k := os.Getenv("COINGECKO_API_KEY"); k != "" {
+		priceService.SetDemoAPIKey(k)
+	}
+	if k := os.Getenv("COINGECKO_PRO_API_KEY"); k != "" {
+		priceService.SetAPIKey(k)
+	}
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 
