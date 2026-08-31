@@ -18,6 +18,31 @@ func StepUpSMS(code string) string {
 	return fmt.Sprintf("KiramoPay: tu codigo de autorizacion es %s. Vence en 5 minutos. Si no fuiste vos, no lo uses.", code)
 }
 
+// RegistrationOTPEmail builds the subject and the text/HTML bodies for the
+// registration verification code. Email is the delivery channel that actually
+// works today (SES); SMS stays as the fallback for whenever a provider lands.
+func RegistrationOTPEmail(code string) (subject, textBody, htmlBody string) {
+	subject = "Tu código de verificación de KiramoPay"
+
+	var text strings.Builder
+	text.WriteString("Estás creando tu cuenta de KiramoPay.\n\n")
+	text.WriteString("Tu código de verificación es:\n")
+	text.WriteString(code + "\n\n")
+	text.WriteString("El código vence en 10 minutos y solo puede usarse una vez.\n")
+	text.WriteString("Si no estás creando una cuenta en KiramoPay, ignorá este mensaje.\n\n")
+	text.WriteString("KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.\n")
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph("Estás creando tu cuenta. Usá este código para verificar tu correo:"))
+	body.WriteString(codeBlock(code))
+	body.WriteString(note("El código vence en <strong>10 minutos</strong> y solo puede usarse una vez. " +
+		"Si no estás creando una cuenta en KiramoPay, ignorá este mensaje."))
+	body.WriteString(securityNotice())
+
+	htmlBody = emailShell("Verificá tu correo", "Tu código de verificación vence en 10 minutos.", body.String())
+	return subject, text.String(), htmlBody
+}
+
 // Brand colours, matching public/icon.svg and the app's primary action colour.
 const (
 	brandBlue     = "#0A84FF"

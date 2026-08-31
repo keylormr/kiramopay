@@ -9,6 +9,20 @@ vi.mock('@/services/dataSync', () => ({
 
 const mockRegister = vi.fn();
 
+// El registro ahora habla con el backend de verdad en los pasos de telefono y
+// codigo; las pruebas fijan ese contrato con la capa API simulada.
+const mockSendOtp = vi.fn().mockResolvedValue({ success: true, data: { devCode: '123456' } });
+const mockVerifyOtp = vi.fn().mockResolvedValue({ success: true, data: { verificationToken: 'tok-prueba' } });
+
+vi.mock('@/api', () => ({
+  getApiLayer: () => ({
+    auth: {
+      sendRegistrationOtp: mockSendOtp,
+      verifyRegistrationOtp: mockVerifyOtp,
+    },
+  }),
+}));
+
 // Mock useAuthStore
 vi.mock('@/stores/auth.store', () => {
   const hook = (selector: (s: Record<string, unknown>) => unknown) =>
@@ -64,10 +78,11 @@ function fillOtp() {
 
 // Navigate to the password step through all preceding steps
 async function navigateToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
-  // Step 1: Phone
+  // Step 1: Phone + email (el codigo viaja al correo)
   await user.type(screen.getByPlaceholderText('8888-0000'), '88881234');
+  await user.type(screen.getByPlaceholderText(/Correo electrónico/i), 'persona@example.com');
   await user.click(screen.getByText(/Continuar/i));
-  await waitFor(() => expect(screen.getByText(/Verifica tu número/i)).toBeInTheDocument(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByText(/Verifica tu correo/i)).toBeInTheDocument(), { timeout: 3000 });
 
   // Step 2: OTP
   fillOtp();
@@ -115,11 +130,34 @@ describe('RegisterView', () => {
     renderRegisterView();
 
     await user.type(screen.getByPlaceholderText('8888-0000'), '88881234');
+    await user.type(screen.getByPlaceholderText(/Correo electrónico/i), 'persona@example.com');
     await user.click(screen.getByText(/Continuar/i));
 
     await waitFor(() => {
-      expect(screen.getByText(/Verifica tu número/i)).toBeInTheDocument();
+      expect(screen.getByText(/Verifica tu correo/i)).toBeInTheDocument();
     }, { timeout: 3000 });
+    // El codigo se pidio DE VERDAD, con el telefono completo y el correo.
+    expect(mockSendOtp).toHaveBeenCalledWith('+50688881234', 'persona@example.com');
+  });
+
+  it('no avanza si el backend rechaza el código', async () => {
+    const user = userEvent.setup();
+    mockVerifyOtp.mockResolvedValueOnce({ success: false, error: { code: 'OTP_INVALID' } });
+    renderRegisterView();
+
+    await user.type(screen.getByPlaceholderText('8888-0000'), '88881234');
+    await user.type(screen.getByPlaceholderText(/Correo electrónico/i), 'persona@example.com');
+    await user.click(screen.getByText(/Continuar/i));
+    await waitFor(() => expect(screen.getByText(/Verifica tu correo/i)).toBeInTheDocument(), { timeout: 3000 });
+
+    fillOtp();
+    await user.click(screen.getByText(/Verificar/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Código inválido o vencido/i)).toBeInTheDocument();
+    }, { timeout: 3000 });
+    // Sigue en el paso del codigo: sin token no hay avance.
+    expect(screen.getByText(/Verifica tu correo/i)).toBeInTheDocument();
   });
 
   it('should progress through all steps to password', async () => {
@@ -173,6 +211,10 @@ describe('RegisterView', () => {
         firstName: 'Test',
         lastName: 'User',
         password: 'StrongP@ss1',
+        // La cuenta nace CON correo (sin el, ni la recuperacion funciona) y
+        // con la prueba de que el codigo llego a ese correo.
+        email: 'persona@example.com',
+        verificationToken: 'tok-prueba',
       });
       expect(onComplete).toHaveBeenCalled();
     });

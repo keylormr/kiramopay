@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -297,5 +298,83 @@ func TestRefreshTokenRotation(t *testing.T) {
 	// The newly issued one must ALSO be invalid now (family revoked).
 	if _, err := svc.Refresh(ctx, tokens.RefreshToken, emptyCtx); err == nil {
 		t.Fatal("after reuse-detection, all tokens in family must be invalid")
+	}
+}
+
+// Falsos de entrega para fijar el canal del OTP de registro.
+type correoCapturado struct {
+	to, subject, texto, html string
+}
+
+type emailFalso struct{ enviados []correoCapturado }
+
+func (f *emailFalso) SendEmail(ctx context.Context, to, subject, textBody, htmlBody string) error {
+	f.enviados = append(f.enviados, correoCapturado{to, subject, textBody, htmlBody})
+	return nil
+}
+
+type smsFalso struct{ enviados int }
+
+func (f *smsFalso) SendSMS(ctx context.Context, to, body string) error {
+	f.enviados++
+	return nil
+}
+
+// El codigo de registro viaja por CORREO cuando hay remitente configurado:
+// es el canal real hoy (SES). El SMS, aunque este configurado, queda de
+// respaldo — antes el codigo salia solo por SMS y como no hay proveedor en
+// produccion, nadie podia terminar de registrarse.
+func TestSendRegistrationOTP_ViajaPorCorreo(t *testing.T) {
+	pool := testutil.TestDB(t)
+	redis := testutil.TestRedis(t)
+	correo := &emailFalso{}
+	sms := &smsFalso{}
+
+	svc := auth.NewService(
+		auth.NewRepository(pool, redis),
+		user.NewRepository(pool),
+		wallet.NewRepository(pool),
+		jwtpkg.NewManager("test-secret-key", 15*time.Minute, 7*24*time.Hour),
+		&auth.Options{EmailSender: correo, SMSSender: sms},
+	)
+
+	codigo, err := svc.SendRegistrationOTP(context.Background(), "+50670000001", "persona@example.com")
+	if err != nil {
+		t.Fatalf("SendRegistrationOTP: %v", err)
+	}
+	if len(correo.enviados) != 1 {
+		t.Fatalf("se esperaba 1 correo, hubo %d", len(correo.enviados))
+	}
+	if sms.enviados != 0 {
+		t.Fatalf("el SMS no debia usarse habiendo correo; se enviaron %d", sms.enviados)
+	}
+	c := correo.enviados[0]
+	if c.to != "persona@example.com" {
+		t.Errorf("destinatario = %q", c.to)
+	}
+	if !strings.Contains(c.texto, codigo) || !strings.Contains(c.html, codigo) {
+		t.Error("el codigo devuelto no aparece en el cuerpo del correo")
+	}
+}
+
+// Sin correo en la peticion (o sin remitente), el SMS sigue siendo el respaldo.
+func TestSendRegistrationOTP_RespaldoPorSMS(t *testing.T) {
+	pool := testutil.TestDB(t)
+	redis := testutil.TestRedis(t)
+	sms := &smsFalso{}
+
+	svc := auth.NewService(
+		auth.NewRepository(pool, redis),
+		user.NewRepository(pool),
+		wallet.NewRepository(pool),
+		jwtpkg.NewManager("test-secret-key", 15*time.Minute, 7*24*time.Hour),
+		&auth.Options{SMSSender: sms},
+	)
+
+	if _, err := svc.SendRegistrationOTP(context.Background(), "+50670000002", ""); err != nil {
+		t.Fatalf("SendRegistrationOTP sin correo: %v", err)
+	}
+	if sms.enviados != 1 {
+		t.Fatalf("se esperaba 1 SMS de respaldo, hubo %d", sms.enviados)
 	}
 }

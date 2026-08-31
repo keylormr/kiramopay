@@ -478,8 +478,12 @@ const zhCn: TranslationKeys = {
 
   reg_phone_title: '您的电话号码',
   reg_phone_desc: '您将使用它通过SINPE Movil收发资金',
-  reg_verify_title: '验证您的号码',
+  reg_verify_title: '验证您的邮箱',
   reg_code_sent_to: '验证码已发送至',
+  reg_email_label: '电子邮箱',
+  reg_email_hint: '我们会将验证码发送到该邮箱',
+  reg_otp_send_failed: '无法发送验证码，请重试',
+  reg_otp_invalid: '验证码无效或已过期',
   verify: '验证',
   reg_cedula_title: '您的身份证明',
   reg_cedula_desc: '我们需要验证您的身份以符合法规',

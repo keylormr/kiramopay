@@ -5,6 +5,8 @@ import type {
   RegisterRequest,
   ChangePasswordRequest,
   ForgotPasswordResult,
+  SendRegistrationOtpResult,
+  VerifyRegistrationOtpResult,
   TokenPair,
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
@@ -87,6 +89,7 @@ export class HttpAuthRepository implements IAuthRepository {
         last_name: request.lastName,
         email: request.email,
         password: request.password,
+        verification_token: request.verificationToken,
       },
       false,
     );
@@ -135,6 +138,36 @@ export class HttpAuthRepository implements IAuthRepository {
     }
 
     return apiSuccess({ changed: true });
+  }
+
+  async sendRegistrationOtp(phone: string, email: string): Promise<ApiResponse<SendRegistrationOtpResult>> {
+    // auth=false: el registro ocurre antes de tener sesión. El código viaja al
+    // correo; `dev_code` solo aparece con el backend en desarrollo.
+    const res = await this.client.post<{ message?: string; dev_code?: string }>(
+      '/api/v1/auth/register/otp/send',
+      { phone, email },
+      false,
+    );
+
+    if (!res.success) {
+      return apiError('OTP_SEND_FAILED', res.error?.message || 'Could not send the verification code');
+    }
+
+    return apiSuccess<SendRegistrationOtpResult>({ devCode: res.data?.dev_code });
+  }
+
+  async verifyRegistrationOtp(phone: string, code: string): Promise<ApiResponse<VerifyRegistrationOtpResult>> {
+    const res = await this.client.post<{ verification_token?: string }>(
+      '/api/v1/auth/register/otp/verify',
+      { phone, code },
+      false,
+    );
+
+    if (!res.success || !res.data?.verification_token) {
+      return apiError('OTP_INVALID', res.error?.message || 'Invalid or expired verification code');
+    }
+
+    return apiSuccess<VerifyRegistrationOtpResult>({ verificationToken: res.data.verification_token });
   }
 
   async forgotPassword(cedula: string): Promise<ApiResponse<ForgotPasswordResult>> {

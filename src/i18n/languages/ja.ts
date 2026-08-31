@@ -477,8 +477,12 @@ const ja: TranslationKeys = {
 
   reg_phone_title: '電話番号',
   reg_phone_desc: 'SINPE Movilでの送受金に使用します',
-  reg_verify_title: '番号を確認',
+  reg_verify_title: 'メールを確認',
   reg_code_sent_to: '確認コード送信先',
+  reg_email_label: 'メールアドレス',
+  reg_email_hint: '確認コードをこちらに送信します',
+  reg_otp_send_failed: 'コードを送信できませんでした。もう一度お試しください',
+  reg_otp_invalid: 'コードが無効か期限切れです',
   verify: '確認',
   reg_cedula_title: '本人確認',
   reg_cedula_desc: '規制に準拠するため身元の確認が必要です',

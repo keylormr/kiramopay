@@ -26,6 +26,17 @@ export interface RegisterRequest {
   lastName: string;
   email?: string;
   password: string;
+  /** Token de un solo uso emitido por verifyRegistrationOtp (prueba el OTP). */
+  verificationToken?: string;
+}
+
+export interface SendRegistrationOtpResult {
+  /** Solo en desarrollo: eco del código para probar sin buzón real. */
+  devCode?: string;
+}
+
+export interface VerifyRegistrationOtpResult {
+  verificationToken: string;
 }
 
 export interface RegisterResponse {
@@ -52,6 +63,13 @@ export interface ForgotPasswordResult {
 export interface IAuthRepository {
   login(request: LoginRequest): Promise<ApiResponse<LoginResponse>>;
   register(request: RegisterRequest): Promise<ApiResponse<RegisterResponse>>;
+  /**
+   * Pide el código de verificación del registro. Viaja al CORREO (SES es el
+   * canal real hoy); el teléfono es la identidad a la que queda atado.
+   */
+  sendRegistrationOtp(phone: string, email: string): Promise<ApiResponse<SendRegistrationOtpResult>>;
+  /** Canjea el código por el token de un solo uso que consume register(). */
+  verifyRegistrationOtp(phone: string, code: string): Promise<ApiResponse<VerifyRegistrationOtpResult>>;
   validatePassword(cedula: string, password: string): Promise<ApiResponse<{ valid: boolean }>>;
   changePassword(request: ChangePasswordRequest): Promise<ApiResponse<{ changed: boolean }>>;
   /**

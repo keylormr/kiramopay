@@ -3,6 +3,7 @@ import { Icons } from '../../components/Icons';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { getApiLayer } from '@/api';
 
 interface RegisterViewProps {
   onComplete: () => void;
@@ -43,6 +44,12 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
+  // El código de verificación viaja al correo (SES es el canal real hoy); el
+  // teléfono queda como la identidad de la cuenta.
+  const [email, setEmail] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
+  // Eco del código cuando el backend corre en desarrollo (sin buzón real).
+  const [devCode, setDevCode] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [cedula, setCedula] = useState({ type: 'nacional', part1: '', part2: '', part3: '' });
   const [name, setName] = useState({ firstName: '', lastName: '' });
@@ -55,26 +62,44 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
 
   const register = useAuthStore((s) => s.register);
 
-  const handleNext = () => {
-    setIsLoading(true);
+  // Los pasos de teléfono y código hablan con el backend DE VERDAD. Antes esto
+  // era un setTimeout decorativo: nunca se pedía el código, la pantalla de OTP
+  // aceptaba cualquier cosa y la cuenta nacía sin verificar y sin correo.
+  const handleNext = async () => {
     setError('');
-    setTimeout(() => {
-      setIsLoading(false);
-      switch (step) {
-        case 'phone':
-          setStep('otp');
-          break;
-        case 'otp':
-          setStep('cedula');
-          break;
-        case 'cedula':
-          setStep('name');
-          break;
-        case 'name':
-          setStep('password');
-          break;
+    switch (step) {
+      case 'phone': {
+        setIsLoading(true);
+        const res = await getApiLayer().auth.sendRegistrationOtp(`+506${phone}`, email.trim());
+        setIsLoading(false);
+        if (!res.success) {
+          setError(res.error?.message || t('reg_otp_send_failed'));
+          return;
+        }
+        setDevCode(res.data?.devCode || '');
+        setOtp(['', '', '', '', '', '']);
+        setStep('otp');
+        break;
       }
-    }, 1000);
+      case 'otp': {
+        setIsLoading(true);
+        const res = await getApiLayer().auth.verifyRegistrationOtp(`+506${phone}`, otp.join(''));
+        setIsLoading(false);
+        if (!res.success || !res.data) {
+          setError(t('reg_otp_invalid'));
+          return;
+        }
+        setVerificationToken(res.data.verificationToken);
+        setStep('cedula');
+        break;
+      }
+      case 'cedula':
+        setStep('name');
+        break;
+      case 'name':
+        setStep('password');
+        break;
+    }
   };
 
   const handleRegister = async () => {
@@ -97,6 +122,10 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       firstName: name.firstName,
       lastName: name.lastName,
       password,
+      // El correo queda en la cuenta (sin él, ni la recuperación de contraseña
+      // puede funcionar) y el token prueba que el código llegó a ese correo.
+      email: email.trim(),
+      verificationToken,
     });
 
     setIsLoading(false);
@@ -136,7 +165,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               {t('reg_phone_desc')}
             </p>
 
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-3 mb-4">
               <div className="flex items-center gap-2 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)]">
                 <span className="text-xl">🇨🇷</span>
                 <span className="text-white font-medium">+506</span>
@@ -151,13 +180,28 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               />
             </div>
 
+            {/* El código de verificación viaja al correo: pedirlo aquí es lo
+                que permite completar el registro (no hay proveedor de SMS). */}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={t('reg_email_label')}
+              className="w-full bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)] transition-colors mb-2"
+            />
+            <p className="text-sm text-[var(--color-text-muted-dark)] mb-6">
+              {t('reg_email_hint')}
+            </p>
+
+            {error && <p className="text-red-400 text-sm mb-4" aria-live="polite">{error}</p>}
+
             <Button
               variant="primary"
               size="lg"
               fullWidth
               onClick={handleNext}
               loading={isLoading}
-              disabled={phone.length < 8}
+              disabled={phone.length < 8 || !/^\S+@\S+\.\S+$/.test(email.trim())}
             >
               {t('continue')}
             </Button>
@@ -174,8 +218,18 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               {t('reg_verify_title')}
             </h1>
             <p className="text-[var(--color-text-muted-dark)] mb-6">
-              {t('reg_code_sent_to')} +506 {phone}
+              {t('reg_code_sent_to')} {email.trim()}
             </p>
+
+            {/* Solo con el backend en desarrollo: eco del código para probar
+                sin buzón. En producción dev_code no existe. */}
+            {devCode && import.meta.env.DEV && (
+              <p className="text-xs text-[var(--color-text-muted-dark)] mb-4 text-center">
+                dev: {devCode}
+              </p>
+            )}
+
+            {error && <p className="text-red-400 text-sm mb-4 text-center" aria-live="polite">{error}</p>}
 
             <div className="flex gap-2 justify-center mb-6">
               {otp.map((digit, index) => (

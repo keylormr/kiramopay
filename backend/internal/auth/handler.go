@@ -111,9 +111,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, result)
 }
 
-// RegisterSendOTP issues a phone-verification code for a pending registration.
-// Response is generic; in dev the code is echoed (dev_code) like ForgotPassword,
-// since no SMS provider is wired yet (delivery is the licensing/partner gap).
+// RegisterSendOTP issues a verification code for a pending registration and
+// delivers it to the given email (SES). SMS remains the fallback for whenever
+// a provider is wired. In dev the code is also echoed (dev_code) like
+// ForgotPassword so local flows work without a mail sandbox.
 func (h *Handler) RegisterSendOTP(w http.ResponseWriter, r *http.Request) {
 	var req SendRegistrationOTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -124,7 +125,18 @@ func (h *Handler) RegisterSendOTP(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
 		return
 	}
-	code, err := h.service.SendRegistrationOTP(r.Context(), req.Phone)
+	// El correo es obligatorio: es adonde viaja el codigo. Aceptarlo vacio
+	// volveria al estado anterior — un codigo generado que no le llega a nadie.
+	// (ValidateEmail trata el vacio como opcional, por eso el chequeo aparte.)
+	if req.Email == "" {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "email is required")
+		return
+	}
+	if err := validator.ValidateEmail(req.Email); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+	code, err := h.service.SendRegistrationOTP(r.Context(), req.Phone, req.Email)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "OTP_SEND_FAILED", "could not send verification code")
 		return

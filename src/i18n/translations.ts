@@ -565,6 +565,10 @@ export type TranslationKeys = {
   reg_phone_desc: string;
   reg_verify_title: string;
   reg_code_sent_to: string;
+  reg_email_label: string;
+  reg_email_hint: string;
+  reg_otp_send_failed: string;
+  reg_otp_invalid: string;
   verify: string;
   reg_cedula_title: string;
   reg_cedula_desc: string;
