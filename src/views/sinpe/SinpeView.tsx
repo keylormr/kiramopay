@@ -11,6 +11,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
+import type { QRPaymentCode } from '@/api/repositories/qrpayment.repository';
 
 // Bancos de Costa Rica para selección
 const BANKS = [
@@ -55,6 +56,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [showMfa, setShowMfa] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<SinpeTransaction | null>(null);
+  // QR de solicitud de dinero generado (riel real de cobro por QR).
+  const [requestQr, setRequestQr] = useState<QRPaymentCode | null>(null);
+  const [requestQrError, setRequestQrError] = useState('');
 
   // Add contact form states
   const [newContactName, setNewContactName] = useState('');
@@ -191,14 +195,42 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setSelectedContact(null);
   };
 
+  // Solicitar dinero genera un QR de cobro REAL (mismo riel que "Cobrar con
+  // QR" del Inicio): el que paga solo lo escanea. Antes esto armaba apenas un
+  // texto para compartir — a pedido del cliente, ahora el QR es lo primero.
   const handleRequestMoney = async () => {
-    if (!amount || !phone) return;
+    if (!amount) return;
+    const numAmount = parseFloat(amount);
+    if (!(numAmount > 0)) return;
 
-    // There is no server-side "request" rail yet, so instead of faking a sent
-    // request we hand the user a real, shareable payment request they can send
-    // to the payer through any channel (it carries their own SINPE number).
+    const api = getApiLayer();
+    if (!api.qrPayments) {
+      setRequestQrError(t('qr_gen_error'));
+      return;
+    }
+
     setIsProcessing(true);
-    const myNumber = (state.user?.phone || '').replace(/\s/g, '');
+    setRequestQrError('');
+    const res = await api.qrPayments.createQRCode({
+      type: 'p2p_request',
+      amount: numAmount,
+      currency: 'CRC',
+      note: reference || undefined,
+      singleUse: true,
+    });
+    setIsProcessing(false);
+
+    if (res.success && res.data) {
+      setRequestQr(res.data);
+    } else {
+      setRequestQrError(res.error?.message || t('qr_gen_error'));
+    }
+  };
+
+  // Compartir la solicitud por cualquier canal (el texto lleva monto y numero
+  // propio como respaldo para quien no pueda escanear).
+  const handleShareRequest = async () => {
+    const myNumber = formatearTelefonoCR(state.user?.phone || '');
     const amountLabel = formatCurrency(parseFloat(amount || '0'));
     const msg = `${t('request_money')}: ${amountLabel}${reference ? ` (${reference})` : ''} - ${t('sinpe_mobile')} ${myNumber}`;
     try {
@@ -210,13 +242,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         setTimeout(() => setCopiedText(null), 2000);
       }
     } catch {
-      // User dismissed the share sheet — leave the form intact.
+      // User dismissed the share sheet — leave the QR on screen.
     }
-    setIsProcessing(false);
-    setShowReceiveSheet(false);
-    setAmount('');
-    setPhone('');
-    setReference('');
   };
 
   // Deja la hoja como recién abierta. Se usa al cerrarla y después de guardar.
@@ -930,26 +957,49 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       {/* Receive Money Sheet */}
       <BottomSheet
         isOpen={showReceiveSheet}
-        onClose={() => setShowReceiveSheet(false)}
+        onClose={() => {
+          setShowReceiveSheet(false);
+          setRequestQr(null);
+          setRequestQrError('');
+          setAmount('');
+          setReference('');
+        }}
         title={t('request_money')}
       >
-        <div className="space-y-6">
-          <div className="uv-surface-2 p-4 rounded-xl">
-            <label className="text-xs text-gray-500 font-bold uppercase block mb-2">
-              {t('request_to_number')}
-            </label>
-            <div className="flex gap-2">
-              <span className="text-lg text-gray-400">+506</span>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                placeholder="8888-0000"
-                className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
-              />
+        {requestQr ? (
+          /* QR generado: el que paga solo lo escanea. El numero de telefono
+             sobra en este riel — el QR ya identifica a quien cobra. */
+          <div className="space-y-6 text-center">
+            <div className="bg-white rounded-2xl p-6 inline-block mx-auto">
+              <QRCodeSVG value={requestQr.qrData} size={200} level="M" />
+            </div>
+            <div>
+              <div className="text-3xl font-black uv-text-primary tabular-nums">
+                {formatCurrency(requestQr.amount)}
+              </div>
+              {requestQr.note && (
+                <div className="text-sm uv-text-muted mt-1">{requestQr.note}</div>
+              )}
+              <p className="text-xs uv-text-muted mt-2">{t('charge_qr_help')}</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleShareRequest}
+                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <Icons.Share size={18} />
+                {copiedText === 'request' ? t('copied') : t('share')}
+              </button>
+              <button
+                onClick={() => { setRequestQr(null); setAmount(''); setReference(''); }}
+                className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+              >
+                {t('new_qr')}
+              </button>
             </div>
           </div>
-
+        ) : (
+        <div className="space-y-6">
           <div className="text-center">
             <label className="text-sm text-gray-500 mb-2 block">{t('amount_to_request')}</label>
             <div className="flex items-center justify-center gap-2">
@@ -977,24 +1027,29 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             />
           </div>
 
+          {requestQrError && (
+            <p className="text-red-500 text-sm text-center" aria-live="polite">{requestQrError}</p>
+          )}
+
           <button
             onClick={handleRequestMoney}
-            disabled={!phone || !amount || isProcessing}
+            disabled={!amount || isProcessing}
             className="w-full bg-[var(--color-success)] hover:opacity-90 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
           >
             {isProcessing ? (
               <>
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {t('sending_request')}
+                {t('generating')}
               </>
             ) : (
               <>
-                <Icons.Receive size={20} />
-                {t('request')} {amount && formatCurrency(parseFloat(amount))}
+                <Icons.QrCode size={20} />
+                {t('generate_qr')} {amount && formatCurrency(parseFloat(amount))}
               </>
             )}
           </button>
         </div>
+        )}
       </BottomSheet>
 
       {/* Success Sheet */}

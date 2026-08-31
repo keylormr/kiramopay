@@ -8,6 +8,7 @@ import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { LanguageSheet } from './components/LanguageSheet';
 import { OverlayShell } from './components/OverlayShell';
+import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
@@ -238,8 +239,35 @@ const Layout = () => {
   const [sinpeTab, setSinpeTab] = useState<'send' | 'receive' | 'history'>('send');
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
   const [showLanguage, setShowLanguage] = useState(false);
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
+
+  // En el APK, ofrecer la huella al primer ingreso: si queda activada desde el
+  // dia uno, los siguientes ingresos son un toque. Se ofrece UNA vez; "Ahora
+  // no" queda registrado y no se vuelve a molestar (siempre esta en Perfil).
+  const [showBioOffer, setShowBioOffer] = useState(false);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    if (state.settings.biometricEnabled) return;
+    try {
+      if (localStorage.getItem('kiramopay-biometria-ofrecida')) return;
+    } catch {
+      return;
+    }
+    let vivo = true;
+    biometricService.checkAvailability().then((disp) => {
+      if (vivo && disp.isAvailable) setShowBioOffer(true);
+    });
+    return () => { vivo = false; };
+  }, [state.settings.biometricEnabled]);
+
+  const cerrarOfertaBio = (activar: boolean) => {
+    try {
+      localStorage.setItem('kiramopay-biometria-ofrecida', '1');
+    } catch { /* sin storage, simplemente no se persiste la negativa */ }
+    if (activar) dispatch({ type: 'TOGGLE_BIOMETRIC' });
+    setShowBioOffer(false);
+  };
 
   // ── Business mode ────────────────────────────────────────────────────────
   // Same login, several profiles: personal wallet or any of the owner's shops.
@@ -500,6 +528,31 @@ const Layout = () => {
 
       {/* Global language picker, reachable from every tab via the top bar */}
       <LanguageSheet isOpen={showLanguage} onClose={() => setShowLanguage(false)} />
+
+      {/* Oferta de huella al primer ingreso en el APK (una sola vez). */}
+      <BottomSheet isOpen={showBioOffer} onClose={() => cerrarOfertaBio(false)} title="">
+        <div className="text-center py-4 px-2">
+          <div className="w-20 h-20 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
+            <Icons.Fingerprint size={40} />
+          </div>
+          <h3 className="text-xl font-black uv-text-primary mb-2">{t('bio_offer_title')}</h3>
+          <p className="text-sm uv-text-secondary mb-6">{t('bio_offer_desc')}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => cerrarOfertaBio(false)}
+              className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+            >
+              {t('bio_offer_later')}
+            </button>
+            <button
+              onClick={() => cerrarOfertaBio(true)}
+              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+            >
+              {t('bio_offer_accept')}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
 
       <ProfileSwitcherSheet
         isOpen={showSwitcher}
