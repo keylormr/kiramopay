@@ -10,6 +10,7 @@ import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
 import { useUsdToCrcRate } from '@/hooks/useFxRate';
+import { useCryptoPricesWs } from '@/hooks/useCryptoPricesWs';
 
 // Static list of crypto symbols to track
 // La union del catalogo del backend (10 monedas con feed real) y las
@@ -213,6 +214,43 @@ export const CryptoView: React.FC = () => {
       clearInterval(historyInterval);
     };
   }, [fetchPrices, fetchPriceHistories]);
+
+  // Precios en vivo por WebSocket mientras la vista esta abierta. El hook
+  // existia sin que nadie lo montara; el canal quedo sano en el PR #103. El
+  // sondeo REST de arriba sigue siendo el respaldo (primer pintado y caidas
+  // del socket): ambos alimentan el mismo estado, gana el ultimo en llegar.
+  const { prices: preciosWs, lastUpdate: preciosWsMomento } = useCryptoPricesWs();
+  useEffect(() => {
+    const entradas = Object.values(preciosWs).filter(p => p && p.price > 0);
+    if (entradas.length === 0) return;
+    // Diferido al proximo tick — mismo patron que el fetch inicial — para no
+    // disparar setState sincrono dentro del efecto.
+    const timer = setTimeout(() => {
+      dispatchRef.current({
+        type: 'UPDATE_CRYPTO_PRICES',
+        payload: entradas.map(p => ({ symbol: p.symbol, price: p.price, change24h: p.change_24h })),
+      });
+      setMarketData(prev => {
+        const siguiente = { ...prev };
+        for (const p of entradas) {
+          const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
+          siguiente[p.symbol] = {
+            symbol: p.symbol,
+            price: p.price,
+            change24h: p.change_24h ?? 0,
+            marketCap: p.market_cap ?? prev[p.symbol]?.marketCap ?? 0,
+            volume24h: p.volume_24h ?? prev[p.symbol]?.volume24h ?? 0,
+            high24h: prev[p.symbol]?.high24h ?? p.price * (1 + rango / 2),
+            low24h: prev[p.symbol]?.low24h ?? p.price * (1 - rango / 2),
+            lastUpdated: preciosWsMomento ?? new Date().toISOString(),
+          };
+        }
+        return siguiente;
+      });
+      setLastUpdated(new Date());
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [preciosWs, preciosWsMomento]);
 
   const formatUsd = (value: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
