@@ -142,6 +142,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		slog.Warn("price fetch: building request failed", "err", err)
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
@@ -154,6 +155,10 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 
 	resp, err := ps.client.Do(req)
 	if err != nil {
+		// Sin este log, un CoinGecko caido o limitando se veia como "no hay
+		// precios" sin causa: el servicio degrada en silencio a la cache (que
+		// arranca vacia) y nadie se entera. Paso hoy en produccion.
+		slog.Warn("price fetch: request failed", "host", base, "err", err)
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
@@ -162,6 +167,9 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// El status distingue las causas que importan operar distinto: 429 es
+		// rate limit del tier gratis, 401/403 es una clave Pro mala.
+		slog.Warn("price fetch: non-200 from provider", "host", base, "status", resp.StatusCode)
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
@@ -176,6 +184,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		slog.Warn("price fetch: decoding response failed", "host", base, "err", err)
 		ps.recordFailure()
 		return ps.cache, nil
 	}

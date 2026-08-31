@@ -1,12 +1,46 @@
 package crypto
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
+
+// Un proveedor que limita (429) degradaba a "cero precios" sin dejar rastro:
+// imposible de diagnosticar en produccion. La prueba fija que el fallo queda
+// en el log CON el status, que es lo que distingue un rate limit de una clave
+// mala.
+func TestGetPrices_FalloDelProveedorQuedaEnLog(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+	ps.cacheTTL = 0
+
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
+	if err != nil {
+		t.Fatalf("GetPrices() con proveedor en 429 debe degradar, no fallar: %v", err)
+	}
+	if len(prices) != 0 {
+		t.Fatalf("sin cache previa se esperaban 0 precios, llegaron %d", len(prices))
+	}
+	if !strings.Contains(buf.String(), "status=429") {
+		t.Fatalf("el log no registro el status del proveedor; log: %s", buf.String())
+	}
+}
 
 // TestPriceService_BaseURLOverride cubre el mecanismo del que dependen las
 // pruebas de integracion: con un base configurado, el servicio pide los precios
