@@ -872,6 +872,7 @@ const zhCn: TranslationKeys = {
   kyc_verify_not_found: '在登记中未找到你的证件',
   kyc_verify_unavailable: '服务不可用，请稍后再试',
   contact_qr_button: '我的联系人二维码',
+  my_qr_short: '我的二维码',
   contact_qr_desc: '对方扫码即可将你添加为联系人，无需输入你的号码。',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: '这是什么？',

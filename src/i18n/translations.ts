@@ -43,6 +43,7 @@ export type TranslationKeys = {
   kyc_verify_not_found: string;
   kyc_verify_unavailable: string;
   contact_qr_button: string;
+  my_qr_short: string;
   contact_qr_desc: string;
   help_what_is_this: string;
   help_webhooks_title: string;

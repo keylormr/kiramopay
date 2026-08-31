@@ -879,6 +879,7 @@ const fr: TranslationKeys = {
   kyc_verify_not_found: "Nous n'avons pas trouvé votre pièce d'identité dans le registre",
   kyc_verify_unavailable: 'Service indisponible, réessayez plus tard',
   contact_qr_button: 'Mon QR de contact',
+  my_qr_short: 'Mon QR',
   contact_qr_desc: 'Toute personne qui le scanne vous ajoute à ses contacts, sans saisir votre numéro.',
   // Ayuda contextual (HelpSheet).
   help_what_is_this: 'Qu\'est-ce que c\'est ?',

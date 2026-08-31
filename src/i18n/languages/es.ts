@@ -880,6 +880,7 @@ const es: TranslationKeys = {
   kyc_verify_unavailable: 'Servicio no disponible, intenta de nuevo más tarde',
 
   contact_qr_button: 'Mi QR de contacto',
+  my_qr_short: 'Mi QR',
   contact_qr_desc: 'Quien lo escanee te agrega como contacto, sin escribir tu número.',
   // Ayuda contextual (HelpSheet). El contenido describe lo que la app HACE
   // hoy, incluidas las partes que todavia no funcionan: no prometer de mas
