@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
+import { useNotificationsWs } from './hooks/useNotificationsWs';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
@@ -227,6 +228,11 @@ type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transacti
 
 // Main Layout Component
 const Layout = () => {
+  // Notificaciones en vivo por WebSocket. El hook existia desde el diseño de
+  // julio pero nadie lo montaba: el canal se arreglo en el backend (PR #103) y
+  // aun asi `websocket_clients` seguia en 0 porque la app nunca conectaba. Se
+  // autogestiona: solo conecta autenticado y reintenta solo.
+  useNotificationsWs();
   const [activeTab, setActiveTab] = useState<TabId>('home');
   // Which SINPE sub-tab to open when navigating there from Home's quick actions.
   const [sinpeTab, setSinpeTab] = useState<'send' | 'receive' | 'history'>('send');
