@@ -25,10 +25,12 @@ class BiometricService {
   // Verificar disponibilidad de biometría
   async checkAvailability(): Promise<BiometricAvailability> {
     if (!this.isNative) {
-      // En web, simular que está disponible para demo
+      // En web NO hay biometria y fingirla era un hueco de seguridad: el
+      // candado de PIN se auto-desbloqueaba con el authenticate() simulado.
+      // La biometria es una capacidad estrictamente nativa.
       return {
-        isAvailable: true,
-        biometryType: 'fingerprint',
+        isAvailable: false,
+        biometryType: 'none',
         errorMessage: undefined,
       };
     }
@@ -70,13 +72,8 @@ class BiometricService {
   // Autenticar con biometría
   async authenticate(reason?: string): Promise<BiometricResult> {
     if (!this.isNative) {
-      // En web, simular autenticación exitosa para demo
-      return new Promise((resolve) => {
-        // Simular un delay como si fuera real
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 500);
-      });
+      // En web no se finge exito: un candado que se abre solo no es candado.
+      return { success: false, error: 'Biometria no disponible en web' };
     }
 
     try {
@@ -86,6 +83,9 @@ class BiometricService {
         subtitle: 'Verifica tu identidad',
         description: 'Usa tu huella digital o Face ID para continuar',
         negativeButtonText: 'Cancelar',
+        // El default del plugin es UN intento: una lectura fallida del sensor
+        // cerraba el dialogo sin mas. Tres intentos es el estandar del SO.
+        maxAttempts: 3,
       });
 
       return { success: true };

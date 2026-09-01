@@ -619,6 +619,8 @@ const fr: TranslationKeys = {
   analytics_no_expenses: 'Aucune dépense enregistrée',
   analytics_partial: 'Affichage de {shown} sur {total} opérations',
   analytics_offline: 'Impossible de charger toute la période : seules les opérations récentes sont affichées',
+  boot_connecting: 'Connexion à KiramoPay...',
+  boot_waking: 'Le serveur se réveille, cela peut prendre un moment...',
   analytics_compare_less: 'Vous avez dépensé {pct}% de moins que {prev}',
   analytics_compare_more: 'Vous avez dépensé {pct}% de plus que {prev}',
   analytics_compare_flat: 'Vos dépenses sont stables par rapport à {prev}',

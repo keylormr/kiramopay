@@ -218,6 +218,12 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       }
       case 'TOGGLE_BIOMETRIC':
         settings.toggleBiometric();
+        // Tocar el toggle (en Perfil o donde sea) cuenta como haber visto la
+        // oferta: sin esta marca, DESACTIVAR la biometria re-disparaba la
+        // hoja de oferta encima del perfil (la oferta chequea !enabled).
+        try {
+          localStorage.setItem('kiramopay-biometria-ofrecida', '1');
+        } catch { /* sin storage no hay marca que dejar */ }
         // If biometrics was just turned OFF, forget the stored credentials so a
         // fingerprint/Face ID login can no longer retrieve them (native Keychain).
         if (!useSettingsStore.getState().biometricEnabled) {

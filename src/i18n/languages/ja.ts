@@ -617,6 +617,8 @@ const ja: TranslationKeys = {
   analytics_no_expenses: '支出記録なし',
   analytics_partial: '{total}件中{shown}件を表示',
   analytics_offline: '期間全体を読み込めませんでした。最近の取引のみ表示しています',
+  boot_connecting: 'KiramoPayに接続中...',
+  boot_waking: 'サーバーを起動しています。少々お待ちください...',
   analytics_compare_less: '{prev}より{pct}%支出が少なくなりました',
   analytics_compare_more: '{prev}より{pct}%支出が多くなりました',
   analytics_compare_flat: '支出は{prev}とほぼ同じです',

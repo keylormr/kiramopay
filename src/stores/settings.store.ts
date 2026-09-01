@@ -29,7 +29,10 @@ export const useSettingsStore = create<SettingsState>()(
       darkMode: false,
       offlineMode: false,
       isLocked: false,
-      biometricEnabled: true,
+      // Opt-in: la biometria la elige el usuario (la ofrece la app al primer
+      // ingreso nativo). Con true por defecto, la oferta jamas se mostraba y
+      // el candado intentaba biometria en dispositivos sin sensor enrolado.
+      biometricEnabled: false,
       notificationsEnabled: true,
       language: 'es',
       themeSchedule: 'off',
@@ -48,6 +51,17 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'kiramopay-settings',
+      // v1: biometricEnabled paso de true-por-defecto a opt-in. Los estados
+      // persistidos con el true que nadie eligio se resetean UNA vez; quien
+      // lo active de aqui en adelante persiste su eleccion normalmente.
+      version: 1,
+      migrate: (persisted, version) => {
+        const s = persisted as Partial<SettingsState>;
+        if (version < 1) {
+          return { ...s, biometricEnabled: false };
+        }
+        return s;
+      },
     },
   ),
 );
