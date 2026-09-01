@@ -4,8 +4,9 @@
 // de la app — que ahora se anuncian solas, asi que el canal existe.
 //
 // Los textos viven en i18n (claves por campana) para respetar los 7 idiomas.
-// REGLA DE LA CASA: nada de promesas falsas — una campana solo puede ofrecer
-// lo que el producto realmente hace hoy.
+// El copy de cada campana lo decide el dueno del producto. La de invitados
+// promete beneficios por decision suya del 2026-09-01; el programa de
+// referidos que los concrete esta en el backlog.
 
 export interface Campana {
   /** Identificador estable: gobierna el "ya la vi" en localStorage. */

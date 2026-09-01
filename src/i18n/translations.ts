@@ -769,6 +769,7 @@ export type TranslationKeys = {
   analytics_dir_out: string;
   analytics_no_moves: string;
   analytics_tx_line: string;
+  analytics_total_movido: string;
   analytics_insight: string;
   analytics_top_category: string;
   analytics_of_spending: string;

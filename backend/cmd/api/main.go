@@ -596,9 +596,13 @@ func main() {
 		})
 
 		r.Group(func(r chi.Router) {
-			// 20/min/IP para login/registro/reset — brute-force acotado ademas por
-			// el lockout por cuenta (5 intentos fallidos).
-			r.Use(middleware.RateLimit(redisClient, 20, time.Minute))
+			// 60/min/IP para login/registro/reset. Subido de 20 a pedido del
+			// dueno: en un demo con varias personas sobre el MISMO WiFi (una
+			// oficina, los testers de Play Console) 20 logins/min entre todos
+			// bloqueaba la plataforma entera. La defensa real contra fuerza
+			// bruta es el lockout POR CUENTA (5 intentos); el limite por IP es
+			// solo el tope de abuso masivo.
+			r.Use(middleware.RateLimit(redisClient, 60, time.Minute))
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)
