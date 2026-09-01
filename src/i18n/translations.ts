@@ -540,6 +540,9 @@ export type TranslationKeys = {
   crypto_low_24h: string;
   crypto_your_balance: string;
   crypto_avg_price: string;
+  crypto_holding_title: string;
+  crypto_pnl: string;
+  crypto_no_holdings: string;
   crypto_do_staking: string;
   crypto_generic: string;
   crypto_amount_to_sell: string;
