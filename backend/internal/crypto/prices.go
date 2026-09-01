@@ -36,8 +36,10 @@ type PriceService struct {
 
 func NewPriceService() *PriceService {
 	return &PriceService{
-		cache:    make(map[string]*PriceData),
-		cacheTTL: 60 * time.Second, // Increased from 30s for free tier
+		cache: make(map[string]*PriceData),
+		// Sin clave no hay cuota que administrar (el tier compartido igual
+		// rechaza por IP); 5 minutos evita martillar en vano.
+		cacheTTL: 5 * time.Minute,
 		client:   observability.HTTPClient(10 * time.Second),
 	}
 }
@@ -48,6 +50,8 @@ func (ps *PriceService) SetAPIKey(key string) {
 	defer ps.mu.Unlock()
 	ps.apiKey = key
 	ps.apiKeyDemo = false
+	// Pro paga por frescura: cache corto.
+	ps.cacheTTL = 30 * time.Second
 }
 
 // SetDemoAPIKey sets a CoinGecko Demo (free tier) API key. Demo keys are NOT
@@ -60,6 +64,10 @@ func (ps *PriceService) SetDemoAPIKey(key string) {
 	defer ps.mu.Unlock()
 	ps.apiKey = key
 	ps.apiKeyDemo = true
+	// La cuota Demo es 10.000 llamadas AL MES (~1 cada 4,3 min sostenido).
+	// Con el cache de 60s que habia, solo el broadcaster quemaba ~43.000/mes:
+	// la clave moria a mitad de mes. 5 minutos deja ~8.600/mes con margen.
+	ps.cacheTTL = 5 * time.Minute
 }
 
 // resolverHost elige el host segun la clave: sin clave o con clave Demo, el
@@ -123,7 +131,10 @@ func (ps *PriceService) GetPrices(ctx context.Context, symbols []string) (map[st
 	circuitOpen := time.Now().Before(ps.circuitOpenUntil)
 	ps.mu.RUnlock()
 	if circuitOpen {
-		slog.Warn("circuit breaker open, returning cached prices")
+		// Debug, no Warn: el broadcaster consulta cada pocos segundos y con el
+		// breaker abierto esto inundaba el log (un WARN cada 5s por minutos).
+		// La APERTURA del breaker si se loguea como Warn, una sola vez.
+		slog.Debug("circuit breaker open, returning cached prices")
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
 		return ps.cache, nil
@@ -190,8 +201,17 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 
 	if resp.StatusCode != http.StatusOK {
 		// El status distingue las causas que importan operar distinto: 429 es
-		// rate limit del tier gratis, 401/403 es una clave Pro mala.
-		slog.Warn("price fetch: non-200 from provider", "host", base, "status", resp.StatusCode)
+		// rate limit del tier gratis, 401/403 es una clave mala.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			// Config rota, no clima: gritarlo con la accion concreta. Una clave
+			// Demo va en COINGECKO_API_KEY (host publico); una Pro de pago va
+			// en COINGECKO_PRO_API_KEY (host pro-api). Cruzarlas da exactamente
+			// este error.
+			slog.Error("clave de CoinGecko rechazada: revisar COINGECKO_API_KEY (Demo) o COINGECKO_PRO_API_KEY (Pro) en el entorno",
+				"host", base, "status", resp.StatusCode)
+		} else {
+			slog.Warn("price fetch: non-200 from provider", "host", base, "status", resp.StatusCode)
+		}
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()

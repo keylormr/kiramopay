@@ -251,3 +251,25 @@ func TestPriceService_CacheTTLIncreased(t *testing.T) {
 		t.Errorf("cacheTTL = %v, want >= 60s for free tier", ps.cacheTTL)
 	}
 }
+
+// La cuota Demo es mensual (10k llamadas): el TTL del cache es la unica
+// valvula que la respeta. Pro paga por frescura y el keyless no tiene cuota
+// que cuidar pero si un 429 seguro — cada plan con su ritmo.
+func TestCacheTTLPorPlan(t *testing.T) {
+	sinClave := NewPriceService()
+	if sinClave.cacheTTL != 5*time.Minute {
+		t.Fatalf("sin clave: TTL = %v, esperaba 5m", sinClave.cacheTTL)
+	}
+
+	demo := NewPriceService()
+	demo.SetDemoAPIKey("CG-demo")
+	if demo.cacheTTL != 5*time.Minute {
+		t.Fatalf("demo: TTL = %v, esperaba 5m", demo.cacheTTL)
+	}
+
+	pro := NewPriceService()
+	pro.SetAPIKey("CG-pro")
+	if pro.cacheTTL != 30*time.Second {
+		t.Fatalf("pro: TTL = %v, esperaba 30s", pro.cacheTTL)
+	}
+}
