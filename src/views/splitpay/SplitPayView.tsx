@@ -86,7 +86,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
   const formatCurrency = (amount: number) => {
     try {
-      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
     } catch {
       return `₡${amount.toFixed(2)}`;
     }

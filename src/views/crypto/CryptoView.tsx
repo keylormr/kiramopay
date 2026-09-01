@@ -263,11 +263,11 @@ export const CryptoView: React.FC = () => {
   }, [preciosWs, preciosWsMomento]);
 
   const formatUsd = (value: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'USD' }).format(value);
   };
 
   const formatCrc = (value: number) => {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(value);
   };
 
   const formatCrypto = (value: number, decimals: number = 6) => {

@@ -53,9 +53,9 @@ const getTypeGradient = (type: RecurringPayment['type']) => {
 
 const formatCurrency = (amount: number, ccy: string) => {
   if (ccy === 'CRC') {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   }
-  return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(amount);
 };
 
 const formatDate = (dateStr: string) => {

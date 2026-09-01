@@ -127,9 +127,9 @@ describe('HomeView', () => {
 
   it('should display the formatted balance for the base account', () => {
     renderHomeView();
-    // CRC 850 000 formatted as es-CR currency ("₡850 000,00", no-break-space grouping)
+    // ₡850,000.00 — miles con coma (decision del dueno, ver utils/money.ts)
     // — appears in both the main card and account list.
-    const matches = screen.getAllByText(/850\s000/);
+    const matches = screen.getAllByText(/850,000/);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 

@@ -83,7 +83,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
   const formatCurrency = (amount: number, ccy?: string) => {
     try {
-      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy || 'CRC' }).format(amount);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy || 'CRC' }).format(amount);
     } catch {
       return `${amount.toFixed(2)} ${ccy || ''}`;
     }
