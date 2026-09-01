@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
+import { txTitle } from '@/utils/txTitle';
 import type { Transaction } from '@/types';
 
 // Keyed by the category slugs the transaction adapter emits (see mapCategory in
@@ -78,7 +79,7 @@ const CashflowChart: React.FC<{
   expenseLabel: string;
 }> = ({ buckets, format, incomeLabel, expenseLabel }) => {
   const [selected, setSelected] = useState<number | null>(null);
-  const half = 46; // px per side of the baseline
+  const half = 64; // px per side of the baseline
   const maxVal = Math.max(1, ...buckets.map((b) => Math.max(b.income, b.expense)));
   // Label density: always for few buckets, sparse for a full month.
   const step = buckets.length <= 10 ? 1 : Math.ceil(buckets.length / 6);
@@ -157,9 +158,13 @@ const CashflowChart: React.FC<{
 export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state } = useApp();
   const { t, language } = useLanguage();
-  const [period, setPeriod] = useState<Period>('month');
+  // Abre en "Todo": el mes en curso suele tener pocos movimientos y la vista
+  // arrancaba casi vacia — la primera impresion debe ser la historia completa.
+  const [period, setPeriod] = useState<Period>('all');
   // 0 = current month, -1 = previous, ... (only used when period === 'month')
   const [monthOffset, setMonthOffset] = useState(0);
+  // Filtro de direccion para la lista de movimientos principales.
+  const [direction, setDirection] = useState<'all' | 'in' | 'out'>('all');
 
   const locale = LOCALE_BY_LANG[language] || 'es-CR';
 
@@ -203,17 +208,27 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   // problem this view exists to fix, so it must be visible, not silent.
   const [fallbackKey, setFallbackKey] = useState<string | null>(null);
 
+  // Gastos del periodo ANTERIOR (semana pasada / mes pasado), para poner el
+  // periodo actual en contexto: "gastaste 23% menos que el mes pasado" dice
+  // algo; una cifra suelta no. En "todo" no hay periodo anterior.
+  const [prevExpense, setPrevExpense] = useState<{ key: string; value: number } | null>(null);
+
+  // Ventana visible cargando desde el servidor: gobierna los esqueletos de la
+  // vista para que la espera se VEA (pedido explicito del dueno: nada de
+  // pantallas mudas mientras se consulta).
+  const [loadingKey, setLoadingKey] = useState<string | null>(windowKey);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const api = getApiLayer();
-        const from = Number.isFinite(range.start) ? new Date(range.start).toISOString() : undefined;
-        const to = Number.isFinite(range.end) ? new Date(range.end).toISOString() : undefined;
-        // Accumulate by id. OFFSET paging is not stable against writes: a
-        // transaction landing between two page requests shifts every later
-        // offset by one, so a row already collected would come back again and
-        // be counted twice in the totals.
+      const api = getApiLayer();
+      // Accumulate by id. OFFSET paging is not stable against writes: a
+      // transaction landing between two page requests shifts every later
+      // offset by one, so a row already collected would come back again and
+      // be counted twice in the totals.
+      const fetchWindow = async (startMs: number, endMs: number) => {
+        const from = Number.isFinite(startMs) ? new Date(startMs).toISOString() : undefined;
+        const to = Number.isFinite(endMs) ? new Date(endMs).toISOString() : undefined;
         const byId = new Map<string, Transaction>();
         let total = 0;
         for (let page = 0; page < MAX_PAGES; page++) {
@@ -231,9 +246,15 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           total = res.data.total;
           if (byId.size >= total || res.data.transactions.length < PAGE_SIZE) break;
         }
+        return { txs: [...byId.values()], total };
+      };
+
+      setLoadingKey(windowKey);
+      try {
+        const win = await fetchWindow(range.start, range.end);
         if (cancelled) return;
-        if (byId.size > 0) {
-          setServerWindow({ key: windowKey, txs: [...byId.values()], total });
+        if (win.txs.length > 0) {
+          setServerWindow({ key: windowKey, txs: win.txs, total: win.total });
           setFallbackKey(null);
         } else {
           // Nothing arrived: keep serverWindow null so the store fallback stays
@@ -243,12 +264,39 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       } catch {
         // Offline / API error: analytics still render from the synced store.
         if (!cancelled) setFallbackKey(windowKey);
+      } finally {
+        if (!cancelled) setLoadingKey((k) => (k === windowKey ? null : k));
+      }
+
+      // Comparacion con el periodo anterior — best effort, nunca bloquea la
+      // vista principal. Solo aplica a semana y mes.
+      if (period === 'all') {
+        if (!cancelled) setPrevExpense(null);
+        return;
+      }
+      try {
+        let prevStart: number;
+        let prevEnd: number;
+        if (period === 'week') {
+          prevEnd = range.start;
+          prevStart = range.start - 7 * 86400000;
+        } else {
+          const now = new Date();
+          prevStart = new Date(now.getFullYear(), now.getMonth() + monthOffset - 1, 1).getTime();
+          prevEnd = range.start;
+        }
+        const prev = await fetchWindow(prevStart, prevEnd);
+        if (cancelled) return;
+        const spent = prev.txs.reduce((s, tx) => (tx.amount < 0 ? s + Math.abs(tx.amount) : s), 0);
+        setPrevExpense({ key: windowKey, value: spent });
+      } catch {
+        if (!cancelled) setPrevExpense(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [windowKey, range.start, range.end]);
+  }, [windowKey, range.start, range.end, period, monthOffset]);
 
   // Transactions inside the active window: the server-fetched window when it
   // matches the current selection, else the synced store filtered locally
@@ -394,8 +442,67 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     };
   }, [transactions, t]);
 
-  // Top spending category
-  const topCategory = categoryData.items[0];
+  // Movimientos principales del periodo: los montos mas grandes en absoluto,
+  // filtrables por direccion. Es lo que el usuario reconoce de un vistazo:
+  // nombres y montos, no abstracciones.
+  const topMoves = useMemo(() => {
+    const filtered = transactions.filter((tx) =>
+      direction === 'all' ? true : direction === 'in' ? tx.amount > 0 : tx.amount < 0,
+    );
+    return [...filtered].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 6);
+  }, [transactions, direction]);
+
+  // Gasto promedio por dia del periodo activo. Para el mes en curso divide
+  // entre los dias transcurridos (no los 30-31 del calendario); para "todo",
+  // entre el rango real de fechas con datos.
+  const dailyAvg = useMemo(() => {
+    if (summary.expenses <= 0) return 0;
+    const now = Date.now();
+    let days: number;
+    if (period === 'week') {
+      days = 7;
+    } else if (period === 'month') {
+      const start = (range as { monthStart?: Date }).monthStart || new Date();
+      const monthEnd = Math.min(range.end, now);
+      days = Math.max(1, Math.ceil((monthEnd - start.getTime()) / 86400000));
+    } else {
+      const times = transactions
+        .map(getTxTime)
+        .filter((x): x is number => x !== null);
+      if (times.length === 0) return 0;
+      days = Math.max(1, Math.ceil((Math.max(...times) - Math.min(...times)) / 86400000) + 1);
+    }
+    return summary.expenses / days;
+  }, [summary.expenses, period, range, transactions]);
+
+  // Dia de la semana con mas gasto (solo si hay senal).
+  const peakDay = hasWeekdayData
+    ? weekdaySpending.reduce((a, b) => (b.value > a.value ? b : a))
+    : null;
+
+  // Comparacion contra el periodo anterior, cuando su fetch corresponde a la
+  // ventana visible y hubo gasto contra el cual comparar.
+  const comparison = useMemo(() => {
+    if (period === 'all') return null;
+    if (!prevExpense || prevExpense.key !== windowKey) return null;
+    if (prevExpense.value <= 0 && summary.expenses <= 0) return null;
+    if (prevExpense.value <= 0) return null; // sin base: un % no significa nada
+    const pct = ((summary.expenses - prevExpense.value) / prevExpense.value) * 100;
+    return { pct };
+  }, [period, prevExpense, windowKey, summary.expenses]);
+
+  const txCounts = useMemo(
+    () => ({
+      total: transactions.length,
+      recibidos: transactions.filter((tx) => tx.amount > 0).length,
+      enviados: transactions.filter((tx) => tx.amount < 0).length,
+    }),
+    [transactions],
+  );
+
+  // Esqueletos mientras la ventana viaja desde el servidor: la espera se ve.
+  const isLoadingWindow =
+    loadingKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
 
   const formatCurrency = (amount: number) => {
     const ccy = state.baseCurrency || 'CRC';
@@ -415,11 +522,6 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       return `${Math.round(amount)}`;
     }
   };
-
-  // Income vs Expense ratio for the visual bar
-  const incomeRatio = summary.income + summary.expenses > 0
-    ? (summary.income / (summary.income + summary.expenses)) * 100
-    : 50;
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
@@ -492,65 +594,91 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           )}
         </div>
 
-        {/* Income vs Expenses Card */}
+        {/* Resumen del periodo: el neto manda, con ingresos y gastos al lado y
+            la comparacion contra el periodo anterior como lectura, no adorno. */}
         <div className="px-4 py-2">
           <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
-            <h3 className="text-sm font-bold uv-text-muted mb-4">{t('analytics_flow')}</h3>
-
-            {/* Visual ratio bar */}
-            <div className="h-4 rounded-full overflow-hidden flex mb-4 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]">
-              <div
-                className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-700 ease-out rounded-l-full"
-                style={{ width: `${incomeRatio}%` }}
-              />
-              <div
-                className="h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-700 ease-out rounded-r-full"
-                style={{ width: `${100 - incomeRatio}%` }}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-3 h-3 rounded-full bg-green-500" />
-                  <span className="text-xs font-medium text-gray-500">{t('income')}</span>
-                </div>
-                <div className="text-xl font-extrabold text-green-600 dark:text-green-400">
-                  {formatCurrency(summary.income)}
-                </div>
+            {isLoadingWindow ? (
+              <div className="animate-pulse space-y-4" aria-hidden="true">
+                <div className="h-3 w-24 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
+                <div className="h-8 w-40 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
+                <div className="h-24 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-3 h-3 rounded-full bg-red-500" />
-                  <span className="text-xs font-medium text-gray-500">{t('expenses')}</span>
+            ) : (
+              <>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wide">{t('net_balance')}</h3>
+                    <div className={`text-3xl font-black tracking-tight mt-1 ${summary.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                      {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
+                    </div>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <div className="flex items-center justify-end gap-1.5 text-sm font-bold text-green-600 dark:text-green-400">
+                      <Icons.ArrowDownLeft size={14} />
+                      {formatCurrency(summary.income)}
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 text-sm font-bold text-red-500 dark:text-red-400">
+                      <Icons.ArrowUpRight size={14} />
+                      {formatCurrency(summary.expenses)}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xl font-extrabold text-red-500 dark:text-red-400">
-                  {formatCurrency(summary.expenses)}
-                </div>
-              </div>
-            </div>
 
-            {/* Net */}
-            <div className="mt-4 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500">{t('net_balance')}</span>
-              <span className={`text-lg font-extrabold ${summary.net >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
-              </span>
-            </div>
+                {/* Lectura contra el periodo anterior */}
+                {comparison && (
+                  <p className="mt-3 text-sm uv-text-secondary">
+                    {(comparison.pct <= -1
+                      ? t('analytics_compare_less').replace('{pct}', Math.abs(comparison.pct).toFixed(0))
+                      : comparison.pct >= 1
+                        ? t('analytics_compare_more').replace('{pct}', comparison.pct.toFixed(0))
+                        : t('analytics_compare_flat')
+                    ).replace('{prev}', t(period === 'week' ? 'analytics_prev_week' : 'analytics_prev_month'))}
+                  </p>
+                )}
 
-            {/* Cash-flow trend over the period */}
-            {hasCashflow && (
-              <div className="mt-5 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <CashflowChart
-                  buckets={cashflowBuckets}
-                  format={formatCompact}
-                  incomeLabel={t('income')}
-                  expenseLabel={t('expenses')}
-                />
-              </div>
+                <p className="mt-1 text-xs uv-text-muted">
+                  {t('analytics_tx_line')
+                    .replace('{n}', String(txCounts.total))
+                    .replace('{in}', String(txCounts.recibidos))
+                    .replace('{out}', String(txCounts.enviados))}
+                </p>
+
+                {/* Cash-flow trend over the period */}
+                {hasCashflow && (
+                  <div className="mt-5 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                    <CashflowChart
+                      buckets={cashflowBuckets}
+                      format={formatCompact}
+                      incomeLabel={t('income')}
+                      expenseLabel={t('expenses')}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
+
+        {/* Dos lecturas rapidas que si dicen algo: cuanto se gasta por dia y
+            que dia de la semana pega mas fuerte. */}
+        {!isLoadingWindow && (dailyAvg > 0 || peakDay) && (
+          <div className="px-4 py-2 grid grid-cols-2 gap-3">
+            {dailyAvg > 0 && (
+              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
+                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wide">{t('analytics_daily_avg')}</p>
+                <p className="text-lg font-extrabold uv-text-primary mt-1 tabular-nums">{formatCurrency(dailyAvg)}</p>
+              </div>
+            )}
+            {peakDay && peakDay.value > 0 && (
+              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
+                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wide">{t('analytics_peak_day')}</p>
+                <p className="text-lg font-extrabold uv-text-primary mt-1">{peakDay.name}</p>
+                <p className="text-xs uv-text-muted tabular-nums">{formatCurrency(peakDay.value)}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Category Breakdown */}
         <div className="px-4 py-2">
@@ -603,72 +731,56 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </div>
         </div>
 
-        {/* Top Spending Insight */}
-        {topCategory && (
+        {/* Principales movimientos: nombres y montos reales, lo que el usuario
+            reconoce. Filtro por direccion en chips. */}
+        {!isLoadingWindow && (
           <div className="px-4 py-2">
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-3xl border border-amber-100 dark:border-amber-800/30 p-5">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-800/40 flex items-center justify-center flex-shrink-0">
-                  <Icons.TrendingUp size={20} className="text-amber-600" />
-                </div>
-                <div>
-                  <h4 className="font-bold uv-text-primary text-sm mb-1">{t('analytics_insight')}</h4>
-                  <p className="text-xs uv-text-secondary leading-relaxed">
-                    {t('analytics_top_category')}: <strong>{categoryLabel(topCategory.category)}</strong> ({topCategory.percentage.toFixed(0)}% {t('analytics_of_spending')})
-                  </p>
+            <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <h3 className="text-sm font-bold uv-text-muted">{t('analytics_top_moves')}</h3>
+                <div className="flex gap-1">
+                  {([['all', 'analytics_dir_all'], ['in', 'analytics_dir_in'], ['out', 'analytics_dir_out']] as const).map(([dir, key]) => (
+                    <button
+                      key={dir}
+                      onClick={() => setDirection(dir)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                        direction === dir
+                          ? 'bg-[var(--color-primary)] text-white'
+                          : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
+                      }`}
+                    >
+                      {t(key)}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {topMoves.length === 0 ? (
+                <p className="text-sm uv-text-muted py-4 text-center">{t('analytics_no_moves')}</p>
+              ) : (
+                <div className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+                  {topMoves.map((tx) => {
+                    const incoming = tx.amount > 0;
+                    return (
+                      <div key={tx.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                          {incoming ? <Icons.ArrowDownLeft size={16} /> : <Icons.ArrowUpRight size={16} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold uv-text-primary truncate">{txTitle(tx, t)}</p>
+                          <p className="text-xs uv-text-muted">{tx.date}</p>
+                        </div>
+                        <span className={`text-sm font-bold tabular-nums shrink-0 ${incoming ? 'text-green-600 dark:text-green-400' : 'uv-text-primary'}`}>
+                          {incoming ? '+' : ''}{formatCurrency(tx.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
-
-        {/* Spending Heatmap (Weekly) */}
-        <div className="px-4 py-2">
-          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
-            <h3 className="text-sm font-bold uv-text-muted mb-4">{t('analytics_weekly_pattern')}</h3>
-            {hasWeekdayData ? (
-              <div className="flex gap-2 justify-between">
-                {weekdaySpending.map((day) => (
-                  <div key={day.name} className="flex flex-col items-center gap-2 flex-1">
-                    <div
-                      className="w-full aspect-square rounded-xl transition-all duration-500"
-                      style={{
-                        backgroundColor: day.intensity > 0
-                          ? `rgba(10, 132, 255, ${0.15 + day.intensity * 0.7})`
-                          : 'rgba(94, 115, 160, 0.10)',
-                      }}
-                    />
-                    <span className="text-[10px] font-bold uv-text-muted">{day.name}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm uv-text-muted py-4 text-center">{t('analytics_no_expenses')}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Transaction Count Stats */}
-        <div className="px-4 py-2">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
-              <div className="text-2xl font-black text-primary mb-1">{transactions.length}</div>
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('analytics_total_tx')}</div>
-            </div>
-            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
-              <div className="text-2xl font-black text-green-600 mb-1">
-                {transactions.filter((tx: Transaction) => tx.amount > 0).length}
-              </div>
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('analytics_received')}</div>
-            </div>
-            <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-center">
-              <div className="text-2xl font-black text-red-500 mb-1">
-                {transactions.filter((tx: Transaction) => tx.amount < 0).length}
-              </div>
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('analytics_sent')}</div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
