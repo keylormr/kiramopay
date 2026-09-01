@@ -8,6 +8,7 @@ import {
   registerAuthFailureHandler,
 } from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
+import { limpiarDatosDeUsuario } from '@/stores/limpiarDatosDeUsuario';
 import { clearLockPin } from '@/services/lockKdf';
 import { secureTokenStore } from '@/services/secureTokenStore';
 
@@ -73,6 +74,10 @@ export const useAuthStore = create<AuthState>()(
         const api = getApiLayer();
         const result = await api.auth.login({ cedula, password });
         if (result.success && result.data) {
+          // Antes de hidratar la sesion nueva, vaciar lo que hubiera quedado
+          // de un usuario anterior en este dispositivo: sin esto, sus datos
+          // persistidos se mostraban hasta que el sync los pisara.
+          limpiarDatosDeUsuario();
           set({
             isAuthenticated: true,
             isOnboarded: true,
@@ -96,6 +101,9 @@ export const useAuthStore = create<AuthState>()(
         const api = getApiLayer();
         const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email, verificationToken });
         if (result.success && result.data) {
+          // Cuenta recien creada en un dispositivo posiblemente compartido:
+          // arrancar sin residuos del usuario anterior.
+          limpiarDatosDeUsuario();
           set({
             isAuthenticated: true,
             isOnboarded: true,
@@ -125,6 +133,11 @@ export const useAuthStore = create<AuthState>()(
         api.auth.logout?.().catch(() => {});
         clearLockPin();
         secureTokenStore.clear();
+        // La sesion termina: los datos del usuario no le pertenecen al
+        // dispositivo. Vaciar los stores persistidos (cuentas, SINPE,
+        // historial, cripto, notificaciones) para que el proximo usuario de
+        // este navegador no herede nada.
+        limpiarDatosDeUsuario();
         set({
           isAuthenticated: false,
           sessionHint: false,
@@ -152,6 +165,9 @@ export const useAuthStore = create<AuthState>()(
       forceLogout: () => {
         clearLockPin();
         secureTokenStore.clear();
+        // Igual que en logout: sesion invalidada (401 sin refresh posible)
+        // implica soltar los datos del usuario, no solo los tokens.
+        limpiarDatosDeUsuario();
         set({
           isAuthenticated: false,
           sessionHint: false,
