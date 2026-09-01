@@ -27,7 +27,7 @@ func TestLogLogin_GeneratesCorrectAction(t *testing.T) {
 		close(logger.done)
 	}()
 
-	logger.LogLogin("user-1", "192.168.1.1", "Mozilla/5.0", true)
+	logger.LogLogin("user-1", "192.168.1.1", "Mozilla/5.0", true, "cedula")
 
 	// Give time for async processing
 	time.Sleep(50 * time.Millisecond)
@@ -109,7 +109,7 @@ func TestConcurrentLogs_NoneDropped(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.LogLogin("user-concurrent", "127.0.0.1", "test", true)
+			logger.LogLogin("user-concurrent", "127.0.0.1", "test", true, "cedula")
 		}()
 	}
 
@@ -143,7 +143,7 @@ func TestLogLogin_FailedAttemptSetsMediumRisk(t *testing.T) {
 		close(logger.done)
 	}()
 
-	logger.LogLogin("user-3", "10.0.0.1", "curl", false)
+	logger.LogLogin("user-3", "10.0.0.1", "curl", false, "email")
 
 	time.Sleep(50 * time.Millisecond)
 	close(logger.events)

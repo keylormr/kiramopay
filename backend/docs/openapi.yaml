@@ -2051,14 +2051,24 @@ components:
 
     LoginRequest:
       type: object
-      required: [cedula, pin]
+      description: >
+        Se exige al menos uno de identifier o cedula. identifier acepta
+        cedula, correo o telefono en un solo campo (el tipo se decide por
+        forma); cedula queda como alias legado para clientes viejos.
+      required: [password]
       properties:
+        identifier:
+          type: string
+          description: Cedula, correo o telefono del usuario
+          example: "usuario@example.com"
         cedula:
           type: string
+          deprecated: true
+          description: Alias legado de identifier (solo cedula)
           example: "702650930"
-        pin:
+        password:
           type: string
-          example: "1234"
+          example: "MiClave2024!"
 
     AuthResponse:
       type: object

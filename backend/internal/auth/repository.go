@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -384,71 +386,112 @@ func regVerifyKey(token string) string      { return "auth:regverify:" + token }
 
 // PutRegistrationOTP stores the hashed code for a phone with a short TTL and
 // resets the attempt counter. The latest send wins.
-func (r *Repository) PutRegistrationOTP(ctx context.Context, phone, codeHash string) error {
+// regOTPRecord es el valor JSON del codigo pendiente. Email guarda a que
+// direccion se ENVIO el codigo (vacio si viajo por SMS): probar el codigo
+// prueba posesion de ese buzon, y Register lo usa para marcar email_verified.
+type regOTPRecord struct {
+	CodeHash string `json:"h"`
+	Email    string `json:"e,omitempty"`
+}
+
+func (r *Repository) PutRegistrationOTP(ctx context.Context, phone, codeHash, email string) error {
 	if r.redis == nil {
 		return fmt.Errorf("otp store unavailable")
 	}
+	val, err := json.Marshal(regOTPRecord{CodeHash: codeHash, Email: email})
+	if err != nil {
+		return fmt.Errorf("encode otp record: %w", err)
+	}
 	pipe := r.redis.TxPipeline()
-	pipe.Set(ctx, regOTPKey(phone), codeHash, regOTPTTL)
+	pipe.Set(ctx, regOTPKey(phone), string(val), regOTPTTL)
 	pipe.Set(ctx, regOTPAttemptsKey(phone), 0, regOTPTTL)
-	_, err := pipe.Exec(ctx)
+	_, err = pipe.Exec(ctx)
 	return err
 }
 
 // VerifyRegistrationOTP compares the supplied code hash against the stored one,
-// enforcing an attempt cap. On success it consumes the code (single use).
-func (r *Repository) VerifyRegistrationOTP(ctx context.Context, phone, codeHash string) (bool, error) {
+// enforcing an attempt cap. On success it consumes the code (single use) and
+// returns the email the code was delivered to ("" when it went out by SMS).
+func (r *Repository) VerifyRegistrationOTP(ctx context.Context, phone, codeHash string) (bool, string, error) {
 	if r.redis == nil {
-		return false, fmt.Errorf("otp store unavailable")
+		return false, "", fmt.Errorf("otp store unavailable")
 	}
 	stored, err := r.redis.Get(ctx, regOTPKey(phone)).Result()
 	if errors.Is(err, redis.Nil) {
-		return false, nil // expired or never sent
+		return false, "", nil // expired or never sent
 	}
 	if err != nil {
-		return false, fmt.Errorf("otp lookup: %w", err)
+		return false, "", fmt.Errorf("otp lookup: %w", err)
+	}
+	// Valor JSON desde que el codigo viaja con el correo; un valor plano es un
+	// codigo en vuelo emitido por la version anterior (TTL de minutos).
+	rec := regOTPRecord{CodeHash: stored}
+	if strings.HasPrefix(stored, "{") {
+		if jerr := json.Unmarshal([]byte(stored), &rec); jerr != nil {
+			return false, "", fmt.Errorf("decode otp record: %w", jerr)
+		}
 	}
 	attempts, err := r.redis.Incr(ctx, regOTPAttemptsKey(phone)).Result()
 	if err != nil {
-		return false, fmt.Errorf("otp attempts: %w", err)
+		return false, "", fmt.Errorf("otp attempts: %w", err)
 	}
 	if attempts > regOTPMaxAttempts {
 		_ = r.redis.Del(ctx, regOTPKey(phone)).Err() // burn after too many tries
-		return false, nil
+		return false, "", nil
 	}
-	if subtle.ConstantTimeCompare([]byte(stored), []byte(codeHash)) != 1 {
-		return false, nil
+	if subtle.ConstantTimeCompare([]byte(rec.CodeHash), []byte(codeHash)) != 1 {
+		return false, "", nil
 	}
 	_ = r.redis.Del(ctx, regOTPKey(phone), regOTPAttemptsKey(phone)).Err()
-	return true, nil
+	return true, rec.Email, nil
 }
 
-// PutPhoneVerificationToken records that `phone` proved ownership; the token
-// must be presented at register time (short TTL, single use).
-func (r *Repository) PutPhoneVerificationToken(ctx context.Context, token, phone string) error {
+// regVerifyRecord es el valor JSON del token de verificacion: el telefono que
+// probo posesion del codigo y, si el codigo viajo por correo, ese correo.
+type regVerifyRecord struct {
+	Phone string `json:"p"`
+	Email string `json:"e,omitempty"`
+}
+
+// PutPhoneVerificationToken records that `phone` proved ownership (and, when
+// the code was delivered by email, which address received it); the token must
+// be presented at register time (short TTL, single use).
+func (r *Repository) PutPhoneVerificationToken(ctx context.Context, token, phone, email string) error {
 	if r.redis == nil {
 		return fmt.Errorf("otp store unavailable")
 	}
-	return r.redis.Set(ctx, regVerifyKey(token), phone, regVerifyTokenTTL).Err()
+	val, err := json.Marshal(regVerifyRecord{Phone: phone, Email: email})
+	if err != nil {
+		return fmt.Errorf("encode verify record: %w", err)
+	}
+	return r.redis.Set(ctx, regVerifyKey(token), string(val), regVerifyTokenTTL).Err()
 }
 
-// ConsumePhoneVerificationToken returns the phone a token was issued for and
+// ConsumePhoneVerificationToken returns the phone (and verified email, if the
+// code traveled by email) a token was issued for and
 // deletes it (single use). Empty string if invalid/expired.
-func (r *Repository) ConsumePhoneVerificationToken(ctx context.Context, token string) (string, error) {
+func (r *Repository) ConsumePhoneVerificationToken(ctx context.Context, token string) (string, string, error) {
 	if r.redis == nil {
-		return "", fmt.Errorf("otp store unavailable")
+		return "", "", fmt.Errorf("otp store unavailable")
 	}
 	if token == "" {
-		return "", nil
+		return "", "", nil
 	}
-	phone, err := r.redis.GetDel(ctx, regVerifyKey(token)).Result()
+	stored, err := r.redis.GetDel(ctx, regVerifyKey(token)).Result()
 	if errors.Is(err, redis.Nil) {
-		return "", nil
+		return "", "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("verify token consume: %w", err)
+		return "", "", fmt.Errorf("verify token consume: %w", err)
 	}
-	return phone, nil
+	// Un valor plano es un token en vuelo de la version anterior (solo telefono).
+	rec := regVerifyRecord{Phone: stored}
+	if strings.HasPrefix(stored, "{") {
+		if jerr := json.Unmarshal([]byte(stored), &rec); jerr != nil {
+			return "", "", fmt.Errorf("decode verify record: %w", jerr)
+		}
+	}
+	return rec.Phone, rec.Email, nil
 }
 
 func nullable(s string) interface{} {
