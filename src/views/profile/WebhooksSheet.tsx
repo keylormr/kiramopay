@@ -90,10 +90,15 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
   };
 
   const remove = async (id: string) => {
+    if (loading) return;
     setConfirmDelete(null);
+    setLoading(true);
     const res = await getApiLayer().b2b.deleteWebhook(id);
     if (res.success) load();
-    else setError(res.error?.message || '');
+    else {
+      setLoading(false);
+      setError(res.error?.message || '');
+    }
   };
 
   const openDeliveries = async (id: string) => {
@@ -164,8 +169,12 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
                     </button>
                     {confirmDelete === e.id ? (
                       <>
-                        <button onClick={() => remove(e.id)} className="text-red-500 text-xs font-semibold">
-                          {t('webhooks_delete')}
+                        <button
+                          onClick={() => remove(e.id)}
+                          disabled={loading}
+                          className="text-red-500 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loading ? t('processing') : t('webhooks_delete')}
                         </button>
                         <button
                           onClick={() => setConfirmDelete(null)}

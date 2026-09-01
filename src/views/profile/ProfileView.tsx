@@ -58,6 +58,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const [biometricAction, setBiometricAction] = useState<'enable' | 'disable'>('enable');
   const [biometricError, setBiometricError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
@@ -113,19 +114,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const isPasswordValid = newPassword.length >= 8 && /[A-Z]/.test(newPassword) && /[a-z]/.test(newPassword) && /\d/.test(newPassword) && /[^A-Za-z0-9]/.test(newPassword);
 
   const handleChangePassword = () => {
+    if (isChangingPassword) return;
     if (!isPasswordValid || newPassword !== confirmPassword || !currentPassword) return;
     // Backend is the only authority on the current password — no client-side hash.
+    setIsChangingPassword(true);
     void (async () => {
-      const ok = await useAuthStore.getState().changePassword(currentPassword, newPassword);
-      if (!ok) {
-        setPasswordError(t('incorrect_password'));
-        return;
+      try {
+        const ok = await useAuthStore.getState().changePassword(currentPassword, newPassword);
+        if (!ok) {
+          setPasswordError(t('incorrect_password'));
+          return;
+        }
+        setShowPasswordSheet(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setPasswordError('');
+      } finally {
+        setIsChangingPassword(false);
       }
-      setShowPasswordSheet(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setPasswordError('');
     })();
   };
 
@@ -713,10 +720,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
           <button
             onClick={handleChangePassword}
-            disabled={!isPasswordValid || newPassword !== confirmPassword || !currentPassword}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed uv-shadow-primary active:scale-[0.98] transition-all"
+            disabled={!isPasswordValid || newPassword !== confirmPassword || !currentPassword || isChangingPassword}
+            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed uv-shadow-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            {t('change_password')}
+            {isChangingPassword ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                {t('processing')}
+              </>
+            ) : (
+              t('change_password')
+            )}
           </button>
         </div>
       </BottomSheet>

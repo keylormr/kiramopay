@@ -42,6 +42,7 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
   };
 
   const verify = async () => {
+    if (loading) return;
     if (code.length < 6) return;
     setLoading(true);
     setError('');

@@ -28,6 +28,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Bumping the nonce refetches after a mutation (same idiom as useBusinessData).
   const [nonce, setNonce] = useState(0);
@@ -79,20 +80,30 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
 
   const toggle = async (item: CatalogItem) => {
     const api = getApiLayer().qrPayments;
-    if (!api) return;
+    if (!api || busyId) return;
+    setBusyId(item.id);
     setError('');
-    const res = await api.updateCatalogItem(merchantId, item.id, { active: !item.active });
-    if (res.success) reload();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    try {
+      const res = await api.updateCatalogItem(merchantId, item.id, { active: !item.active });
+      if (res.success) reload();
+      else setError(res.error?.message || t('assistant_action_failed'));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const remove = async (item: CatalogItem) => {
     const api = getApiLayer().qrPayments;
-    if (!api) return;
+    if (!api || busyId) return;
+    setBusyId(item.id);
     setError('');
-    const res = await api.deleteCatalogItem(merchantId, item.id);
-    if (res.success) reload();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    try {
+      const res = await api.deleteCatalogItem(merchantId, item.id);
+      if (res.success) reload();
+      else setError(res.error?.message || t('assistant_action_failed'));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const money = (v: number) => `${currencySymbol}${v.toFixed(2)}`;
@@ -115,14 +126,15 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
                   </p>
                   <p className="text-[11px] uv-text-muted tabular-nums">{money(c.price)}</p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className={`flex items-center gap-3 shrink-0 ${busyId === c.id ? 'opacity-50' : ''}`}>
                   <button
                     onClick={() => void toggle(c)}
+                    disabled={busyId !== null}
                     className={`text-[11px] font-bold ${c.active ? 'uv-text-muted' : 'text-[var(--color-primary)]'}`}
                   >
                     {c.active ? t('business_location_deactivate') : t('business_location_activate')}
                   </button>
-                  <button onClick={() => void remove(c)} aria-label={t('business_catalog_delete')}>
+                  <button onClick={() => void remove(c)} disabled={busyId !== null} aria-label={t('business_catalog_delete')}>
                     <Icons.X size={15} className="text-[var(--color-danger)]" />
                   </button>
                 </div>

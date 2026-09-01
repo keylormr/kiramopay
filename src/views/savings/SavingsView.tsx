@@ -76,6 +76,9 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [showDepositSheet, setShowDepositSheet] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // New goal form
   const [goalName, setGoalName] = useState('');
@@ -96,24 +99,31 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   };
 
   const handleAddGoal = async () => {
+    if (isCreating) return;
     if (!goalName || !goalTarget) return;
     const api = getApiLayer();
     if (!api.savings) return;
-    const res = await api.savings.createGoal({
-      name: goalName,
-      target: parseFloat(goalTarget),
-      icon: goalIcon,
-      color: goalColor,
-    });
-    if (res.success && res.data) addGoal(res.data);
-    setGoalName('');
-    setGoalTarget('');
-    setGoalIcon('piggy-bank');
-    setGoalColor(GOAL_COLORS[0]);
-    setShowAddSheet(false);
+    setIsCreating(true);
+    try {
+      const res = await api.savings.createGoal({
+        name: goalName,
+        target: parseFloat(goalTarget),
+        icon: goalIcon,
+        color: goalColor,
+      });
+      if (res.success && res.data) addGoal(res.data);
+      setGoalName('');
+      setGoalTarget('');
+      setGoalIcon('piggy-bank');
+      setGoalColor(GOAL_COLORS[0]);
+      setShowAddSheet(false);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleDeposit = async () => {
+    if (isDepositing) return;
     if (!selectedGoal || !depositAmount) return;
     const amount = parseFloat(depositAmount);
     if (amount <= 0) return;
@@ -124,29 +134,40 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
     const api = getApiLayer();
     if (!api.savings) return;
-    const res = await api.savings.deposit(selectedGoal.id, amount);
-    if (res.success && res.data) {
-      updateGoal(selectedGoal.id, { saved: res.data.saved });
-      // http: the backend moved the money; sync the real balance.
-      // mock: mirror the wallet debit locally.
-      if (hasBackend) refreshAccounts().catch(() => {});
-      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
-    }
+    setIsDepositing(true);
+    try {
+      const res = await api.savings.deposit(selectedGoal.id, amount);
+      if (res.success && res.data) {
+        updateGoal(selectedGoal.id, { saved: res.data.saved });
+        // http: the backend moved the money; sync the real balance.
+        // mock: mirror the wallet debit locally.
+        if (hasBackend) refreshAccounts().catch(() => {});
+        else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      }
 
-    setDepositAmount('');
-    setShowDepositSheet(false);
-    setSelectedGoal(null);
+      setDepositAmount('');
+      setShowDepositSheet(false);
+      setSelectedGoal(null);
+    } finally {
+      setIsDepositing(false);
+    }
   };
 
   const handleDelete = async (goal: SavingsGoal) => {
+    if (deletingId) return;
     const api = getApiLayer();
     if (!api.savings) return;
-    const res = await api.savings.deleteGoal(goal.id);
-    if (res.success) {
-      removeGoal(goal.id);
-      // Deleting returns any held savings to the wallet.
-      if (hasBackend) refreshAccounts().catch(() => {});
-      else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
+    setDeletingId(goal.id);
+    try {
+      const res = await api.savings.deleteGoal(goal.id);
+      if (res.success) {
+        removeGoal(goal.id);
+        // Deleting returns any held savings to the wallet.
+        if (hasBackend) refreshAccounts().catch(() => {});
+        else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -294,7 +315,8 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     </button>
                     <button
                       onClick={() => handleDelete(goal)}
-                      className="px-4 py-2.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-500 text-sm font-bold active:scale-95 transition-all"
+                      disabled={deletingId !== null}
+                      className={`px-4 py-2.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-500 text-sm font-bold active:scale-95 transition-all disabled:opacity-50 ${deletingId === goal.id ? 'opacity-50' : ''}`}
                     >
                       <Icons.X size={16} />
                     </button>
@@ -380,7 +402,8 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             size="lg"
             fullWidth
             onClick={handleAddGoal}
-            disabled={!goalName || !goalTarget}
+            loading={isCreating}
+            disabled={isCreating || !goalName || !goalTarget}
           >
             {t('savings_create_goal')}
           </Button>
@@ -443,7 +466,8 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   size="lg"
                   fullWidth
                   onClick={handleDeposit}
-                  disabled={!depositAmount || numAmount <= 0 || isInsufficient}
+                  loading={isDepositing}
+                  disabled={isDepositing || !depositAmount || numAmount <= 0 || isInsufficient}
                 >
                   {t('savings_deposit')}
                 </Button>

@@ -97,6 +97,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   };
 
   const handleBiometricLogin = async () => {
+    if (isLoading) return;
     if (!lastUser) return;
 
     try {
@@ -186,6 +187,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   <Button
                     variant="ghost"
                     fullWidth
+                    loading={isLoading}
+                    disabled={isLoading}
                     onClick={handleBiometricLogin}
                     leftIcon={<Icons.Fingerprint size={18} />}
                     className="mt-3 !text-[var(--color-primary-300)] !bg-[var(--color-primary-soft)] hover:!bg-[var(--color-primary-soft)]"

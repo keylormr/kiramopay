@@ -14,9 +14,15 @@ interface BottomSheetProps {
    * pasa, la cabecera queda exactamente igual que antes.
    */
   titleAccessory?: React.ReactNode;
+  /**
+   * Cuando es false, ni el click en el fondo ni Escape cierran la hoja: una
+   * operacion en vuelo (p.ej. una transferencia) no debe perder su hoja por
+   * un toque accidental. Por defecto true, el comportamiento de siempre.
+   */
+  dismissable?: boolean;
 }
 
-export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, children, title, titleAccessory }) => {
+export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, children, title, titleAccessory, dismissable = true }) => {
   const { t } = useLanguage();
   const viewportHeight = CSS.supports?.('height', '100dvh') ? '100dvh' : '100vh';
   const [visible, setVisible] = useState(isOpen);
@@ -37,13 +43,13 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
 
   // Escape closes the sheet (User Control & Freedom).
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !dismissable) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, dismissable]);
 
   if (!visible && !isOpen) return null;
 
@@ -64,7 +70,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
       {/* Backdrop */}
       <div
         role="presentation"
-        onClick={onClose}
+        onClick={dismissable ? onClose : undefined}
         className={`transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
         style={{
           position: 'absolute',

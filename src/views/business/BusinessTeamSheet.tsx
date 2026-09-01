@@ -29,6 +29,7 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
   const [role, setRole] = useState<'cashier' | 'manager'>('cashier');
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Bumping the nonce refetches after a mutation (same idiom as useBusinessData).
   const [nonce, setNonce] = useState(0);
@@ -80,11 +81,16 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
 
   const revoke = async (staffId: string) => {
     const api = getApiLayer().qrPayments;
-    if (!api) return;
+    if (!api || busyId) return;
+    setBusyId(staffId);
     setError('');
-    const res = await api.revokeStaff(merchantId, staffId);
-    if (res.success) reload();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    try {
+      const res = await api.revokeStaff(merchantId, staffId);
+      if (res.success) reload();
+      else setError(res.error?.message || t('assistant_action_failed'));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const roleLabel = (r: 'cashier' | 'manager') =>
@@ -115,9 +121,10 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
                 {s.status === 'active' && (
                   <button
                     onClick={() => void revoke(s.id)}
-                    className="text-[11px] font-bold text-[var(--color-danger)] shrink-0"
+                    disabled={busyId !== null}
+                    className="text-[11px] font-bold text-[var(--color-danger)] shrink-0 disabled:opacity-50"
                   >
-                    {t('business_revoke')}
+                    {busyId === s.id ? t('processing') : t('business_revoke')}
                   </button>
                 )}
               </div>

@@ -26,6 +26,7 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Bumping the nonce refetches after a mutation (same idiom as useBusinessData).
   const [nonce, setNonce] = useState(0);
@@ -76,11 +77,16 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
 
   const toggle = async (loc: MerchantLocation) => {
     const api = getApiLayer().qrPayments;
-    if (!api) return;
+    if (!api || busyId) return;
+    setBusyId(loc.id);
     setError('');
-    const res = await api.updateLocation(merchantId, loc.id, { active: !loc.active });
-    if (res.success) reload();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    try {
+      const res = await api.updateLocation(merchantId, loc.id, { active: !loc.active });
+      if (res.success) reload();
+      else setError(res.error?.message || t('assistant_action_failed'));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const field = 'w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]';
@@ -104,9 +110,10 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
                 </div>
                 <button
                   onClick={() => void toggle(l)}
-                  className={`text-[11px] font-bold shrink-0 ${l.active ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}
+                  disabled={busyId !== null}
+                  className={`text-[11px] font-bold shrink-0 disabled:opacity-50 ${l.active ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}
                 >
-                  {l.active ? t('business_location_deactivate') : t('business_location_activate')}
+                  {busyId === l.id ? t('processing') : l.active ? t('business_location_deactivate') : t('business_location_activate')}
                 </button>
               </div>
             ))}

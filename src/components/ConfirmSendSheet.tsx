@@ -49,7 +49,7 @@ export const ConfirmSendSheet: React.FC<ConfirmSendSheetProps> = ({
   const headline = amountDisplay ?? formatMoney(amount ?? 0, currency);
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={title || t('confirm')}>
+    <BottomSheet isOpen={isOpen} onClose={onClose} title={title || t('confirm')} dismissable={!processing}>
       <div className="space-y-5">
         <div className="text-center py-2">
           <p className="text-xs uv-text-muted uppercase tracking-wider font-bold mb-1">
