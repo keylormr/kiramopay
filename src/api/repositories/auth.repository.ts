@@ -2,7 +2,17 @@ import type { ApiResponse } from '../types';
 import type { User } from '@/types';
 
 export interface LoginRequest {
-  cedula: string;
+  /**
+   * Cedula, correo o telefono en forma canonica (ver clasificarIdentificador).
+   * El backend decide el tipo por forma.
+   */
+  identifier: string;
+  /**
+   * Alias legado: se manda ADEMAS cuando el identificador es una cedula, para
+   * que el login siga funcionando contra un backend anterior durante la
+   * ventana de despliegue.
+   */
+  cedula?: string;
   password: string;
 }
 

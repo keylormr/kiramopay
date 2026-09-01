@@ -58,7 +58,7 @@ describe('HttpAuthRepository', () => {
   describe('login', () => {
     it('should login with valid credentials', async () => {
       mockLoginSuccess();
-      const result = await repo.login({ cedula: '702650930', password: 'Kiramopay2024!' });
+      const result = await repo.login({ identifier: '702650930', cedula: '702650930', password: 'Kiramopay2024!' });
       expect(result.success).toBe(true);
       expect(result.data?.user.firstName).toBe('Keilor');
       expect(result.data?.user.lastName).toBe('Martinez');
@@ -66,14 +66,14 @@ describe('HttpAuthRepository', () => {
         'http://localhost:8080/api/v1/auth/login',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ cedula: '702650930', password: 'Kiramopay2024!' }),
+          body: JSON.stringify({ identifier: '702650930', cedula: '702650930', password: 'Kiramopay2024!' }),
         }),
       );
     });
 
     it('should fail with invalid credentials', async () => {
       mockLoginFailure();
-      const result = await repo.login({ cedula: '999999999', password: 'wrong' });
+      const result = await repo.login({ identifier: '999999999', cedula: '999999999', password: 'wrong' });
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe('AUTH_FAILED');
     });
@@ -89,14 +89,14 @@ describe('HttpAuthRepository', () => {
         kyc_level: 2,
         status: 'active',
       });
-      const result = await repo.login({ cedula: '700000000', password: 'Admin2024!' });
+      const result = await repo.login({ identifier: '700000000', cedula: '700000000', password: 'Admin2024!' });
       expect(result.success).toBe(true);
       expect(result.data?.user.firstName).toBe('Administrador');
     });
 
     it('returns tokens in the response (kept in memory, never localStorage)', async () => {
       mockLoginSuccess();
-      const result = await repo.login({ cedula: '702650930', password: 'Kiramopay2024!' });
+      const result = await repo.login({ identifier: '702650930', cedula: '702650930', password: 'Kiramopay2024!' });
       // Tokens are returned for the store to hold in memory — they must NOT be
       // written to localStorage (XSS exfiltration risk; Phase 20 hardening).
       expect(result.data?.tokens?.access_token).toBe('test-access-token');
