@@ -1,3 +1,4 @@
+import { HttpAppVersionRepository } from './appversion.http';
 import type { ApiLayer } from '../../index';
 import { HttpClient } from './client';
 import { HttpAuthRepository } from './auth.http';
@@ -47,6 +48,7 @@ export function createHttpApiLayer(baseUrl: string): ApiLayer {
     marketplace: new HttpMarketplaceRepository(client),
     loyalty: new HttpLoyaltyRepository(client),
     qrPayments: new HttpQRPaymentRepository(client),
+    appVersion: new HttpAppVersionRepository(client),
     splitPay: new HttpSplitPayRepository(client),
     cards: new HttpCardsRepository(client),
     country: new HttpCountryRepository(client),

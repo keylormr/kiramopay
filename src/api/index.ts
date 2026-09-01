@@ -22,6 +22,7 @@ import type { IB2BRepository } from './repositories/b2b.repository';
 import type { IAssistantRepository } from './repositories/assistant.repository';
 import type { ISavingsRepository } from './repositories/savings.repository';
 import type { IKycRepository } from './repositories/kyc.repository';
+import type { IAppVersionRepository } from './repositories/appversion.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -31,6 +32,7 @@ import { HttpEscrowRepository } from './adapters/http/escrow.http';
 import { HttpPayoutRepository } from './adapters/http/payout.http';
 import { HttpB2BRepository } from './adapters/http/b2b.http';
 import { HttpAssistantRepository } from './adapters/http/assistant.http';
+import { HttpAppVersionRepository } from './adapters/http/appversion.http';
 import { HttpKycRepository } from './adapters/http/kyc.http';
 
 export interface ApiLayer {
@@ -59,6 +61,7 @@ export interface ApiLayer {
   country?: ICountryRepository;
   savings?: ISavingsRepository;
   kyc?: IKycRepository;
+  appVersion?: IAppVersionRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -89,6 +92,7 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   // KYC identity verification is security-sensitive: always hit the real backend
   // (like auth/mfa), even in mock mode.
   layer.kyc = new HttpKycRepository(client);
+  layer.appVersion = new HttpAppVersionRepository(client);
   return layer;
 }
 

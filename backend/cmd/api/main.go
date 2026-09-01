@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/kiramopay/backend/internal/assistant"
+	"github.com/kiramopay/backend/internal/appversion"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
@@ -568,6 +569,9 @@ func main() {
 			r.Get("/crypto/prices", cryptoHandler.GetPrices)
 			r.Get("/countries", countryHandler.GetCountries)
 			r.Get("/exchange-rates", countryHandler.GetExchangeRates)
+			// Ultima version del APK publicada: la app instalada la consulta
+			// para ofrecer actualizarse sola (sin tienda de por medio).
+			r.Get("/app/version", appversion.NewHandler().GetLatest)
 
 			// Public transparency endpoints
 			r.Get("/transparency/proof-of-reserves", transparencyHandler.ProofOfReserves)

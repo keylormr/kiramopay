@@ -746,6 +746,16 @@ export type TranslationKeys = {
   analytics_offline: string;
   boot_connecting: string;
   boot_waking: string;
+  update_title: string;
+  update_body: string;
+  update_download: string;
+  update_later: string;
+  promo_invite_title: string;
+  promo_invite_body: string;
+  promo_invite_cta: string;
+  promo_share_text: string;
+  promo_copied: string;
+  promo_dismiss: string;
   analytics_compare_less: string;
   analytics_compare_more: string;
   analytics_compare_flat: string;
