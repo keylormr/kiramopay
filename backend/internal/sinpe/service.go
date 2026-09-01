@@ -148,12 +148,14 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		idem = "sinpe:" + uuid.New().String()
 	}
 
-	// The sender's own name goes on the receiver's history row. Best-effort:
-	// a failed lookup degrades to the frontend's generic title, never blocks
-	// the transfer.
+	// The sender's own name and phone go on the receiver's history row.
+	// Best-effort: a failed lookup degrades to the frontend's generic title,
+	// never blocks the transfer.
 	senderName := ""
+	senderPhone := ""
 	if sender, _ := s.userRepo.FindByID(ctx, userID); sender != nil {
 		senderName = strings.TrimSpace(sender.FirstName + " " + sender.LastName)
+		senderPhone = sender.Phone
 	}
 
 	senderTx, receiverTx, err := s.txService.CreateTransfer(ctx, &transaction.CreateTransferRequest{
@@ -205,9 +207,12 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			receiverContact = "KiramoPay user"
 		}
 		_ = s.repo.AddHistory(ctx, &HistoryRecord{
-			ID:          uuid.New().String(),
-			UserID:      peer.ID,
-			Phone:       w.UserID, // sender id stand-in; real impl would use sender phone
+			ID:     uuid.New().String(),
+			UserID: peer.ID,
+			// El telefono REAL del emisor (ya se trajo para senderName). Antes
+			// se guardaba su UUID como relleno y el historial del receptor
+			// mostraba ese identificador en vez de un numero.
+			Phone:       senderPhone,
 			ContactName: receiverContact,
 			Amount:      req.Amount,
 			Fee:         0,
