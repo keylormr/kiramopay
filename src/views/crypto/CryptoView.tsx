@@ -820,61 +820,74 @@ export const CryptoView: React.FC = () => {
           onClose={() => setActiveSheet('none')}
           title={selectedAsset.name}
         >
-          <div className="space-y-6">
-            <div className="text-center py-4">
+          <div className="space-y-4">
+            {/* Precio actual + cambio 24h, compacto en una fila */}
+            <div className="flex items-center gap-3">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3"
+                className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0"
                 style={{ backgroundColor: selectedAsset.color }}
               >
                 {selectedAsset.icon}
               </div>
-              <div className="text-3xl font-black uv-text-primary">{formatUsd(selectedAsset.currentPrice)}</div>
-              <div className={`text-sm font-medium mt-1 ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
-              </div>
-
-              {/* Market Data */}
-              {marketData[selectedAsset.symbol] && marketData[selectedAsset.symbol].marketCap > 0 && (
-                <div className="grid grid-cols-2 gap-3 mt-4 text-left">
-                  <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">{t('crypto_market_cap')}</p>
-                    <p className="font-bold uv-text-primary">
-                      {formatLargeNumber(marketData[selectedAsset.symbol].marketCap)}
-                    </p>
-                  </div>
-                  <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">{t('crypto_volume_24h')}</p>
-                    <p className="font-bold uv-text-primary">
-                      {formatLargeNumber(marketData[selectedAsset.symbol].volume24h)}
-                    </p>
-                  </div>
-                  <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">{t('crypto_high_24h')}</p>
-                    <p className="font-bold text-green-500">{formatUsd(marketData[selectedAsset.symbol].high24h || 0)}</p>
-                  </div>
-                  <div className="uv-surface-2 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">{t('crypto_low_24h')}</p>
-                    <p className="font-bold text-red-500">{formatUsd(marketData[selectedAsset.symbol].low24h || 0)}</p>
-                  </div>
+              <div className="min-w-0">
+                <div className="text-2xl font-black uv-text-primary leading-tight">{formatUsd(selectedAsset.currentPrice)}</div>
+                <div className={`text-sm font-medium ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
                 </div>
-              )}
+              </div>
             </div>
 
-            {selectedAsset.balance > 0 && (
-              <div className="uv-surface-2 rounded-xl p-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500">{t('crypto_your_balance')}</p>
-                    <p className="font-bold uv-text-primary">{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</p>
-                    <p className="text-sm text-gray-500">{formatUsd(selectedAsset.balance * selectedAsset.currentPrice)}</p>
+            {/* Tu tenencia — lo primero y lo mas claro: cuanto tenes y cuanto
+                vale, con la ganancia/perdida en una linea sin ambiguedad. */}
+            {selectedAsset.balance > 0 ? (() => {
+              const valorActual = selectedAsset.balance * selectedAsset.currentPrice;
+              const pnl = selectedAsset.balance * (selectedAsset.currentPrice - selectedAsset.avgBuyPrice);
+              const pnlPct = selectedAsset.avgBuyPrice > 0
+                ? ((selectedAsset.currentPrice - selectedAsset.avgBuyPrice) / selectedAsset.avgBuyPrice) * 100
+                : 0;
+              const gano = pnl >= 0;
+              return (
+                <div className="rounded-2xl p-4 bg-[var(--color-primary-soft)]">
+                  <p className="text-xs uv-text-secondary uppercase tracking-wide">{t('crypto_holding_title')}</p>
+                  <p className="text-2xl font-black uv-text-primary leading-tight mt-1">
+                    {formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}
+                  </p>
+                  <p className="text-lg font-semibold uv-text-primary">≈ {formatUsd(valorActual)}</p>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]/30">
+                    <span className="text-sm uv-text-secondary">{t('crypto_pnl')}</span>
+                    <span className={`text-sm font-bold ${gano ? 'text-green-500' : 'text-red-500'}`}>
+                      {gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))} ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500">{t('crypto_avg_price')}</p>
-                    <p className="font-bold uv-text-primary">{formatUsd(selectedAsset.avgBuyPrice)}</p>
-                    <p className={`text-sm ${selectedAsset.currentPrice >= selectedAsset.avgBuyPrice ? 'text-green-500' : 'text-red-500'}`}>
-                      {((selectedAsset.currentPrice - selectedAsset.avgBuyPrice) / selectedAsset.avgBuyPrice * 100).toFixed(2)}%
-                    </p>
-                  </div>
+                  <p className="text-xs uv-text-muted mt-1">
+                    {t('crypto_avg_price')}: {formatUsd(selectedAsset.avgBuyPrice)}
+                  </p>
+                </div>
+              );
+            })() : (
+              <div className="rounded-2xl p-4 bg-[var(--color-primary-soft)] text-center">
+                <p className="text-sm uv-text-secondary">{t('crypto_no_holdings')}</p>
+              </div>
+            )}
+
+            {/* Datos de mercado, compactos: una fila para no tapar la tenencia */}
+            {marketData[selectedAsset.symbol] && marketData[selectedAsset.symbol].marketCap > 0 && (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="uv-surface-2 rounded-lg px-2 py-2 text-center">
+                  <p className="text-[10px] text-gray-500 leading-tight">{t('crypto_market_cap_short')}</p>
+                  <p className="text-xs font-bold uv-text-primary truncate">{formatLargeNumber(marketData[selectedAsset.symbol].marketCap)}</p>
+                </div>
+                <div className="uv-surface-2 rounded-lg px-2 py-2 text-center">
+                  <p className="text-[10px] text-gray-500 leading-tight">{t('crypto_volume_24h')}</p>
+                  <p className="text-xs font-bold uv-text-primary truncate">{formatLargeNumber(marketData[selectedAsset.symbol].volume24h)}</p>
+                </div>
+                <div className="uv-surface-2 rounded-lg px-2 py-2 text-center">
+                  <p className="text-[10px] text-gray-500 leading-tight">{t('crypto_high_24h')}</p>
+                  <p className="text-xs font-bold text-green-500 truncate">{formatLargeNumber(marketData[selectedAsset.symbol].high24h || 0)}</p>
+                </div>
+                <div className="uv-surface-2 rounded-lg px-2 py-2 text-center">
+                  <p className="text-[10px] text-gray-500 leading-tight">{t('crypto_low_24h')}</p>
+                  <p className="text-xs font-bold text-red-500 truncate">{formatLargeNumber(marketData[selectedAsset.symbol].low24h || 0)}</p>
                 </div>
               </div>
             )}
