@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Icons } from '../../components/Icons';
 import { Button, Card } from '../../components/ui';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSettingsStore } from '@/stores/settings.store';
 import { clasificarIdentificador } from '@/utils/identificador';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -78,7 +79,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         // on web, never localStorage) so the user can log in with fingerprint /
         // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
         // cleared when biometrics is disabled (see useApp TOGGLE_BIOMETRIC).
-        if (biometricAvailable) {
+        // Atado a la PREFERENCIA, no solo al hardware: guardar con la
+        // biometria desactivada deshacia en silencio el borrado de
+        // credenciales que ese apagado acababa de hacer.
+        if (biometricAvailable && useSettingsStore.getState().biometricEnabled) {
           void biometricService.setCredentials('kiramopay', cedulaPerfil, userPassword);
         }
         onLogin(user);
@@ -110,6 +114,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
           setIdentificador(lastUser.cedula);
           setShowPasswordStage(true);
         }
+      } else {
+        // authenticate() resuelve con success:false, nunca lanza: sin esta
+        // rama, un sensor que fallaba cerraba el dialogo y la pantalla no
+        // decia absolutamente nada.
+        setError(t('login_biometric_failed'));
       }
     } catch {
       setError(t('login_biometric_failed'));
@@ -381,7 +390,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('recover_link')}
             </button>
 
-            {biometricAvailable && (
+            {/* Sin usuario recordado no hay credenciales que la huella pueda
+                abrir: el boton aparecia en instalaciones frescas y no hacia
+                nada al tocarlo. */}
+            {biometricAvailable && lastUser && (
               <Button
                 variant="secondary"
                 fullWidth

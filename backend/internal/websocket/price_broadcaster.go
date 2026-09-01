@@ -30,7 +30,11 @@ func NewPriceBroadcaster(hub *Hub, priceService *crypto.PriceService, logger *sl
 	return &PriceBroadcaster{
 		hub:          hub,
 		priceService: priceService,
-		interval:     5 * time.Second,
+		// El ritmo lo dicta el plan de la clave (GetInterval), no un numero
+		// clavado: con 5s fijos el tick consultaba el servicio cada 5s aunque
+		// el tier Demo/keyless solo refresque su cache cada varios minutos —
+		// puro ruido de log y cero datos nuevos.
+		interval:     priceService.GetInterval(),
 		symbols:      []string{"BTC", "ETH", "SOL", "ADA", "DOT", "AVAX", "LINK", "MATIC", "UNI", "ATOM"},
 		logger:       logger,
 		stop:         make(chan struct{}),

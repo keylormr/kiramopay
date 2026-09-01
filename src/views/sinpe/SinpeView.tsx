@@ -620,7 +620,12 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                         {incoming ? `${t('received_from')} ${tx.name}` : `${t('sent_to')} ${tx.name}`}
                       </div>
                       <div className="text-xs uv-text-muted mt-0.5">
-                        {tx.date} · {tx.phone}
+                        {/* Filas recibidas viejas traen un UUID en `phone` (el
+                            backend guardaba el id del emisor como relleno):
+                            solo se muestra lo que normaliza como telefono. */}
+                        {normalizarTelefonoCR(tx.phone)
+                          ? `${tx.date} · ${formatearTelefonoCR(tx.phone)}`
+                          : tx.date}
                       </div>
                       {tx.reference && (
                         <div className="text-xs uv-text-muted italic mt-1">"{tx.reference}"</div>

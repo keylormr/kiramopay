@@ -617,6 +617,8 @@ const hi: TranslationKeys = {
   analytics_no_expenses: 'कोई खर्च दर्ज नहीं',
   analytics_partial: '{total} में से {shown} लेन-देन दिखाए जा रहे हैं',
   analytics_offline: 'पूरी अवधि लोड नहीं हो सकी: केवल हाल के लेन-देन दिखाए जा रहे हैं',
+  boot_connecting: 'KiramoPay से कनेक्ट हो रहा है...',
+  boot_waking: 'सर्वर शुरू हो रहा है, इसमें थोड़ा समय लग सकता है...',
   analytics_compare_less: 'आपने {prev} से {pct}% कम खर्च किया',
   analytics_compare_more: 'आपने {prev} से {pct}% अधिक खर्च किया',
   analytics_compare_flat: 'आपका खर्च {prev} के बराबर है',

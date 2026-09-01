@@ -744,6 +744,8 @@ export type TranslationKeys = {
   analytics_no_expenses: string;
   analytics_partial: string;
   analytics_offline: string;
+  boot_connecting: string;
+  boot_waking: string;
   analytics_compare_less: string;
   analytics_compare_more: string;
   analytics_compare_flat: string;

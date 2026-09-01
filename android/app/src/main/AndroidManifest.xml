@@ -54,4 +54,11 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- El escaner QR usa getUserMedia dentro del WebView: sin CAMERA aqui,
+         Capacitor no puede conceder la peticion y la camara falla con
+         "could not open the camera". El permiso de runtime lo pide el
+         sistema la primera vez; la feature va como no-requerida para no
+         excluir dispositivos sin camara en Play. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

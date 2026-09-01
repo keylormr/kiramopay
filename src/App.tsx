@@ -87,9 +87,13 @@ const LockScreen = () => {
 
   useEffect(() => {
     const checkBiometric = async () => {
-      const available = await biometricService.checkAvailability();
-      setBiometricAvailable(available && state.settings.biometricEnabled);
-      if (available && state.settings.biometricEnabled) {
+      const disponibilidad = await biometricService.checkAvailability();
+      // Se lee isAvailable, no el objeto: `objeto && boolean` siempre tomaba
+      // el boolean y el candado auto-disparaba biometria en dispositivos sin
+      // sensor enrolado (fallo silencioso en cada apertura).
+      const puede = disponibilidad.isAvailable && state.settings.biometricEnabled;
+      setBiometricAvailable(puede);
+      if (puede) {
         handleBiometric();
       }
     };
@@ -277,11 +281,17 @@ const Layout = () => {
     return () => { vivo = false; };
   }, [state.settings.biometricEnabled]);
 
-  const cerrarOfertaBio = (activar: boolean) => {
+  const cerrarOfertaBio = async (activar: boolean) => {
     try {
       localStorage.setItem('kiramopay-biometria-ofrecida', '1');
     } catch { /* sin storage, simplemente no se persiste la negativa */ }
-    if (activar) dispatch({ type: 'TOGGLE_BIOMETRIC' });
+    if (activar) {
+      // Confirmar que el sensor responde ANTES de prender la preferencia:
+      // activar una biometria que el dispositivo no puede completar dejaria
+      // el candado y el login peleando con un dialogo que siempre falla.
+      const res = await biometricService.authenticate(t('bio_offer_title'));
+      if (res.success) dispatch({ type: 'TOGGLE_BIOMETRIC' });
+    }
     setShowBioOffer(false);
   };
 
@@ -642,6 +652,7 @@ const hasBackend = !!import.meta.env.VITE_API_URL;
 // App Container - manages auth state
 const AppContainer = () => {
   const { state } = useApp();
+  const { t } = useLanguage();
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('kiramopay_onboarded');
   });
@@ -651,18 +662,35 @@ const AppContainer = () => {
   // request (which counts against the auth rate limit). Block the first paint
   // only while that restore is in flight.
   const [booting, setBooting] = useState(() => hasBackend && useAuthStore.getState().sessionHint);
+  // Pasados unos segundos de espera, la pantalla de arranque explica que el
+  // servidor esta despertando (Render Free tarda 30-90s en frio) en vez de
+  // dejar un esqueleto mudo que parece una app rota.
+  const [bootLento, setBootLento] = useState(false);
 
   useEffect(() => {
     if (!hasBackend || !useAuthStore.getState().sessionHint) return;
     let cancelled = false;
+    // Cota dura del arranque: si el restore no resolvio en 25s (dos intentos
+    // del cliente HTTP no alcanzan; uno si), se cae al login en vez de dejar
+    // al usuario rehen del esqueleto. Si bootstrap termina tarde CON exito,
+    // isAuthenticated cambia y la UI transiciona sola del login al home.
+    const tope = setTimeout(() => {
+      if (!cancelled) setBooting(false);
+    }, 25000);
+    const avisoLento = setTimeout(() => {
+      if (!cancelled) setBootLento(true);
+    }, 5000);
     useAuthStore
       .getState()
       .bootstrap()
       .finally(() => {
+        clearTimeout(tope);
         if (!cancelled) setBooting(false);
       });
     return () => {
       cancelled = true;
+      clearTimeout(tope);
+      clearTimeout(avisoLento);
     };
   }, []);
 
@@ -676,7 +704,20 @@ const AppContainer = () => {
   }, [state.isAuthenticated]);
 
   if (booting) {
-    return <LoadingSkeleton />;
+    // Arranque con marca y estado, no un esqueleto mudo: el usuario del APK
+    // mataba el proceso creyendo que la app estaba rota mientras el backend
+    // gratuito despertaba.
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[var(--color-background-dark)]">
+        <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary">
+          <span className="text-3xl font-black text-white">K</span>
+        </div>
+        <div className="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-hidden="true" />
+        <p className="text-sm text-[var(--color-text-secondary-dark)] px-8 text-center">
+          {bootLento ? t('boot_waking') : t('boot_connecting')}
+        </p>
+      </div>
+    );
   }
 
   // If not authenticated, show login

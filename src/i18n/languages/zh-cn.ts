@@ -618,6 +618,8 @@ const zhCn: TranslationKeys = {
   analytics_no_expenses: '尚无支出记录',
   analytics_partial: '显示{total}笔中的{shown}笔交易',
   analytics_offline: '无法加载完整周期：仅显示最近的交易',
+  boot_connecting: '正在连接KiramoPay...',
+  boot_waking: '服务器正在启动，可能需要一点时间...',
   analytics_compare_less: '你的支出比{prev}少{pct}%',
   analytics_compare_more: '你的支出比{prev}多{pct}%',
   analytics_compare_flat: '你的支出与{prev}基本持平',

@@ -90,6 +90,13 @@ export class HttpClient {
       }
     }
 
+    // Cota de espera: fetch no tiene timeout propio y una peticion contra un
+    // backend dormido (Render Free tarda 30-90s en despertar) o una red movil
+    // estancada colgaba a quien esperara la respuesta — el peor caso era el
+    // arranque en frio del APK: esqueleto gris eterno. 20s cubre el despertar
+    // tipico sin dejar la UI rehen; el abort cae al catch como NETWORK_ERROR.
+    const abortador = new AbortController();
+    const temporizador = setTimeout(() => abortador.abort(), 20000);
     try {
       const res = await fetch(`${this.baseUrl}${path}`, {
         method,
@@ -99,6 +106,7 @@ export class HttpClient {
         // sets Access-Control-Allow-Credentials: true).
         credentials: 'include',
         body: body ? JSON.stringify(body) : undefined,
+        signal: abortador.signal,
       });
 
       // Access token expired/revoked: try ONE silent refresh, then replay the
@@ -138,6 +146,8 @@ export class HttpClient {
       };
     } catch {
       return apiError<T>('NETWORK_ERROR', 'Network request failed. Check your connection.');
+    } finally {
+      clearTimeout(temporizador);
     }
   }
 
