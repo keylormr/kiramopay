@@ -70,6 +70,9 @@ const LockScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [setupMode, setSetupMode] = useState(!isLockPinSet());
+  // The PBKDF2 derivation is heavy: without this guard a repeated tap/Enter
+  // kicks off several derivations at once.
+  const [busy, setBusy] = useState(false);
 
   const handleBiometric = useCallback(async () => {
     try {
@@ -94,39 +97,45 @@ const LockScreen = () => {
   }, [handleBiometric, state.settings.biometricEnabled]);
 
   const handleSubmit = async () => {
+    if (busy) return;
     setError(null);
     if (!/^\d{4,6}$/.test(pin)) {
       setError(t('incorrect_password') || 'PIN must be 4-6 digits');
       return;
     }
-    if (setupMode) {
-      try {
-        await setLockPin(pin);
-        setSetupMode(false);
+    setBusy(true);
+    try {
+      if (setupMode) {
+        try {
+          await setLockPin(pin);
+          setSetupMode(false);
+          dispatch({ type: 'TOGGLE_LOCK', payload: false });
+          setPin('');
+        } catch {
+          setError('Failed to set PIN');
+        }
+        return;
+      }
+      const result = await verifyLockPin(pin);
+      if (result.ok) {
         dispatch({ type: 'TOGGLE_LOCK', payload: false });
         setPin('');
-      } catch {
-        setError('Failed to set PIN');
+        return;
       }
-      return;
+      if (result.exhausted) {
+        // Force full re-auth: clear local state, drop to login screen.
+        logout();
+        dispatch({ type: 'LOGOUT' });
+        return;
+      }
+      setError(`Incorrect PIN (${result.failCount}/${MAX_PIN_FAILS})`);
+      setTimeout(() => {
+        setPin('');
+        setError(null);
+      }, 1500);
+    } finally {
+      setBusy(false);
     }
-    const result = await verifyLockPin(pin);
-    if (result.ok) {
-      dispatch({ type: 'TOGGLE_LOCK', payload: false });
-      setPin('');
-      return;
-    }
-    if (result.exhausted) {
-      // Force full re-auth: clear local state, drop to login screen.
-      logout();
-      dispatch({ type: 'LOGOUT' });
-      return;
-    }
-    setError(`Incorrect PIN (${result.failCount}/${MAX_PIN_FAILS})`);
-    setTimeout(() => {
-      setPin('');
-      setError(null);
-    }, 1500);
   };
 
   return (
@@ -164,7 +173,7 @@ const LockScreen = () => {
               setError(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && pin.length >= 4) {
+              if (e.key === 'Enter' && pin.length >= 4 && !busy) {
                 handleSubmit();
               }
             }}
@@ -191,10 +200,17 @@ const LockScreen = () => {
 
         <button
           onClick={handleSubmit}
-          disabled={pin.length < 4}
-          className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all uv-shadow-primary"
+          disabled={pin.length < 4 || busy}
+          className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all uv-shadow-primary flex items-center justify-center gap-2"
         >
-          {setupMode ? 'Set PIN' : t('unlock')}
+          {busy ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              {t('processing')}
+            </>
+          ) : (
+            setupMode ? 'Set PIN' : t('unlock')
+          )}
         </button>
 
         {!setupMode && (

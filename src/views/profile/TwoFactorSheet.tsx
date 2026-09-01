@@ -65,6 +65,7 @@ export const TwoFactorSheet: React.FC<TwoFactorSheetProps> = ({
   };
 
   const confirmEnroll = async () => {
+    if (loading) return;
     if (code.length !== 6) return;
     setLoading(true);
     setError('');
@@ -85,6 +86,7 @@ export const TwoFactorSheet: React.FC<TwoFactorSheetProps> = ({
   };
 
   const disable = async () => {
+    if (loading) return;
     if (code.length < 6) return;
     setLoading(true);
     setError('');

@@ -987,10 +987,10 @@ export const CryptoView: React.FC = () => {
           )}
           <button
             onClick={handleBuy}
-            disabled={!amount || parseFloat(amount) <= 0}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0}
             className="w-full bg-green-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            {t('buy')} {selectedAsset?.symbol}
+            {isTrading ? t('processing') : <>{t('buy')} {selectedAsset?.symbol}</>}
           </button>
 
           {/* Alternative: fund with card/bank via an external on-ramp (scaffold).
@@ -1078,10 +1078,10 @@ export const CryptoView: React.FC = () => {
           )}
           <button
             onClick={handleSell}
-            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
             className="w-full bg-red-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
-            {t('crypto_sell_and_receive')} {convertTo}
+            {isTrading ? t('processing') : <>{t('crypto_sell_and_receive')} {convertTo}</>}
           </button>
         </div>
       </BottomSheet>

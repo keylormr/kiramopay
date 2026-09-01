@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { getApiLayer } from '@/api';
@@ -159,6 +160,7 @@ const DEMO_RESTAURANTS = [
 
 export const MarketplaceView: React.FC = () => {
   const { state, dispatch } = useApp();
+  const { t } = useLanguage();
   const [activeCategory, setActiveCategory] = useState<'all' | 'transport' | 'food' | 'supermarket' | 'entertainment'>('all');
   const [showPartnerSheet, setShowPartnerSheet] = useState(false);
   const [showRideSheet, setShowRideSheet] = useState(false);
@@ -177,6 +179,7 @@ export const MarketplaceView: React.FC = () => {
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
+  const [isConfirmingRide, setIsConfirmingRide] = useState(false);
 
   // In http mode the backend moves the money and we refresh; in mock mode the
   // view mirrors the wallet debit locally (there is no backend ledger).
@@ -201,6 +204,7 @@ export const MarketplaceView: React.FC = () => {
   const [cartItems, setCartItems] = useState<{ name: string; price: number; qty: number }[]>([]);
   const [orderStep, setOrderStep] = useState<'menu' | 'cart' | 'tracking'>('menu');
   const [activeOrder, setActiveOrder] = useState<FoodOrder | null>(null);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   // While tracking, poll the backend for the live order status. The status is
   // authoritative (server-derived); polling stops on unmount, sheet close, and
@@ -300,16 +304,22 @@ export const MarketplaceView: React.FC = () => {
   };
 
   const handleConfirmRide = async () => {
-    const api = getApiLayer();
-    if (api.marketplace && activeRide) {
-      const res = await api.marketplace.confirmRide(activeRide.id);
-      if (res.success && res.data) {
-        setActiveRide(res.data); // status confirmed; the tracker polls from here
-        if (hasBackend) refreshAccounts().catch(() => {});
-        else localDebit(activeRide.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
+    if (isConfirmingRide) return;
+    setIsConfirmingRide(true);
+    try {
+      const api = getApiLayer();
+      if (api.marketplace && activeRide) {
+        const res = await api.marketplace.confirmRide(activeRide.id);
+        if (res.success && res.data) {
+          setActiveRide(res.data); // status confirmed; the tracker polls from here
+          if (hasBackend) refreshAccounts().catch(() => {});
+          else localDebit(activeRide.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
+        }
       }
+      setRideStep('tracking');
+    } finally {
+      setIsConfirmingRide(false);
     }
-    setRideStep('tracking');
   };
 
   const closeRideSheet = () => {
@@ -321,22 +331,28 @@ export const MarketplaceView: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
+    if (isPlacingOrder) return;
     if (!selectedRestaurant || !selectedPartner || cartItems.length === 0) return;
-    const api = getApiLayer();
-    if (api.marketplace) {
-      const res = await api.marketplace.createFoodOrder({
-        partnerCode: selectedPartner.id,
-        restaurantName: selectedRestaurant.name,
-        items: cartItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
-      });
-      if (res.success && res.data) {
-        setActiveOrder(res.data);
-        // The charge already happened server-side at creation; just refresh.
-        if (hasBackend) refreshAccounts().catch(() => {});
-        else localDebit(cartTotal + deliveryFee, `${selectedRestaurant.name}`);
+    setIsPlacingOrder(true);
+    try {
+      const api = getApiLayer();
+      if (api.marketplace) {
+        const res = await api.marketplace.createFoodOrder({
+          partnerCode: selectedPartner.id,
+          restaurantName: selectedRestaurant.name,
+          items: cartItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
+        });
+        if (res.success && res.data) {
+          setActiveOrder(res.data);
+          // The charge already happened server-side at creation; just refresh.
+          if (hasBackend) refreshAccounts().catch(() => {});
+          else localDebit(cartTotal + deliveryFee, `${selectedRestaurant.name}`);
+        }
       }
+      setOrderStep('tracking');
+    } finally {
+      setIsPlacingOrder(false);
     }
-    setOrderStep('tracking');
   };
 
   const addToCart = (item: { name: string; price: number }) => {
@@ -673,9 +689,17 @@ export const MarketplaceView: React.FC = () => {
 
               <button
                 onClick={handleConfirmRide}
-                className={`w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'}`}
+                disabled={isConfirmingRide}
+                className={`w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'} disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
               >
-                Confirmar viaje
+                {isConfirmingRide ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {t('processing')}
+                  </>
+                ) : (
+                  'Confirmar viaje'
+                )}
               </button>
             </div>
           )}
@@ -905,9 +929,17 @@ export const MarketplaceView: React.FC = () => {
 
               <button
                 onClick={handlePlaceOrder}
-                className={`w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'}`}
+                disabled={isPlacingOrder}
+                className={`w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'} disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
               >
-                Pagar con KiramoPay
+                {isPlacingOrder ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {t('processing')}
+                  </>
+                ) : (
+                  'Pagar con KiramoPay'
+                )}
               </button>
             </div>
           )}

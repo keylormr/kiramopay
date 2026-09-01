@@ -87,10 +87,15 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
   };
 
   const revoke = async (id: string) => {
+    if (loading) return;
     setConfirmRevoke(null);
+    setLoading(true);
     const res = await getApiLayer().b2b.revokeKey(id);
     if (res.success) load();
-    else setError(res.error?.message || '');
+    else {
+      setLoading(false);
+      setError(res.error?.message || '');
+    }
   };
 
   const copyFull = async () => {
@@ -143,9 +148,10 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
                       <div className="flex gap-2 mt-2">
                         <button
                           onClick={() => revoke(k.id)}
-                          className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-xs font-semibold"
+                          disabled={loading}
+                          className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {t('apikeys_revoke')}
+                          {loading ? t('processing') : t('apikeys_revoke')}
                         </button>
                         <button
                           onClick={() => setConfirmRevoke(null)}
