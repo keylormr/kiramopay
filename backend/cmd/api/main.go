@@ -577,17 +577,29 @@ func main() {
 		// ─────────────────────────────────────────────────────────────
 		// Auth endpoints — tighter rate limit, lockout for login.
 		// ─────────────────────────────────────────────────────────────
+		// Session refresh vive en SU PROPIO bucket, aparte del limite estricto
+		// del login. Se llama en cada carga de pagina (restaurar sesion desde la
+		// cookie) y en cada 401 (rotacion de token); al arrancar, syncAllData
+		// dispara ~9 llamadas autenticadas que, si el access token aun no esta
+		// listo, disparan varios refresh en paralelo. Compartiendo el bucket de
+		// 20/min del login, eso agotaba el limite y el 429 deslogueaba una sesion
+		// perfectamente valida: el usuario caia al login y no veia nada suyo.
+		// Refresh NO es blanco de fuerza bruta: el refresh token es el secreto y
+		// su reuso se detecta y revoca toda la familia. Clave y limite propios.
 		r.Group(func(r chi.Router) {
-			// 20/min/IP for /auth/* — headroom for the per-load cookie refresh
-			// on boot; brute-force is bounded separately by the per-account
-			// lockout below (5 failed logins).
+			r.Use(middleware.RateLimitKeyed(redisClient, "ratelimit:auth_refresh", 120, time.Minute))
+			r.Post("/auth/refresh", authHandler.RefreshToken)
+		})
+
+		r.Group(func(r chi.Router) {
+			// 20/min/IP para login/registro/reset — brute-force acotado ademas por
+			// el lockout por cuenta (5 intentos fallidos).
 			r.Use(middleware.RateLimit(redisClient, 20, time.Minute))
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)
 			r.Post("/auth/register/otp/send", authHandler.RegisterSendOTP)
 			r.Post("/auth/register/otp/verify", authHandler.RegisterVerifyOTP)
-			r.Post("/auth/refresh", authHandler.RefreshToken)
 			r.Post("/auth/forgot-password", authHandler.ForgotPassword)
 			r.Post("/auth/reset-password", authHandler.ResetPassword)
 		})
