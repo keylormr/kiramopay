@@ -31,19 +31,22 @@ var DefaultParams = &Argon2Params{
 
 // DummyHash is a precomputed hash with DefaultParams used for constant-time
 // comparison when a user is not found. Without this, login latency leaks
-// account existence (Argon2 only runs when the user exists). Set lazily.
-var dummyHashCache string
+// account existence (Argon2 only runs when the user exists). Computed once at
+// startup: the old lazy init made the FIRST failed lookup pay a double Argon2
+// (hash + verify) — a measurable one-shot timing differential — and was a
+// benign data race under concurrent first calls.
+var dummyHashCache = func() string {
+	h, err := HashPassword("anti-enumeration-dummy", DefaultParams)
+	if err != nil {
+		return ""
+	}
+	return h
+}()
 
 // DummyVerify performs an Argon2id computation against a constant invalid
 // hash so callers can spend the same CPU budget when a user lookup fails.
 // This is the anti-enumeration step.
 func DummyVerify() {
-	if dummyHashCache == "" {
-		h, err := HashPassword("anti-enumeration-dummy", DefaultParams)
-		if err == nil {
-			dummyHashCache = h
-		}
-	}
 	if dummyHashCache != "" {
 		_, _ = VerifyPassword("never-matches-this-input", dummyHashCache)
 	}

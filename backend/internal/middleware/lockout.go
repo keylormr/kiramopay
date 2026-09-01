@@ -3,11 +3,11 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/kiramopay/backend/pkg/identifier"
 	"github.com/kiramopay/backend/pkg/response"
 	"github.com/redis/go-redis/v9"
 )
@@ -54,12 +54,16 @@ func (s *RedisLockoutStore) GetLockout(key string) int64 {
 	return val
 }
 
-// AccountLockoutCheck middleware blocks requests if the account has too many failed login attempts.
-// It reads the request body to extract the cedula, then checks the lockout counter.
+// AccountLockoutCheck middleware blocks requests if the account has too many
+// failed login attempts. It reads the request body to extract the login
+// identifier (cedula, correo o telefono — campo `identifier` o el alias legado
+// `cedula`) and checks the counter under identifier.LockoutKey: EXACTAMENTE la
+// misma clave canonica y hasheada que construye el servicio de auth. Si las
+// claves divergieran, el 423 y el contador quedarian desincronizados y cada
+// intento contra una cuenta bloqueada quemaria un Argon2 completo.
 func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Read body to get cedula
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				next.ServeHTTP(w, r)
@@ -68,18 +72,25 @@ func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler)
 			r.Body.Close()
 
 			var req struct {
-				Cedula string `json:"cedula"`
+				Identifier string `json:"identifier"`
+				Cedula     string `json:"cedula"`
 			}
-			if err := json.Unmarshal(body, &req); err != nil || req.Cedula == "" {
+			effective := ""
+			if err := json.Unmarshal(body, &req); err == nil {
+				effective = req.Identifier
+				if effective == "" {
+					effective = req.Cedula
+				}
+			}
+			_, canonical, cerr := identifier.Classify(effective)
+			if effective == "" || cerr != nil {
 				// Can't determine account - pass through and let handler validate
 				r.Body = io.NopCloser(newBytesReader(body))
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			key := fmt.Sprintf("lockout:%s", req.Cedula)
-			count := store.GetLockout(key)
-
+			count := store.GetLockout(identifier.LockoutKey(canonical))
 			if int(count) >= maxAttempts {
 				response.Error(w, http.StatusLocked, "ACCOUNT_LOCKED",
 					"account temporarily locked due to too many failed attempts")
@@ -93,16 +104,16 @@ func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler)
 	}
 }
 
-// IncrementLockout increments the lockout counter for a cedula. Call on failed login.
-func IncrementLockout(store LockoutStore, cedula string) {
-	key := fmt.Sprintf("lockout:%s", cedula)
-	store.IncrLockout(key)
+// IncrementLockout increments the lockout counter for a canonical identifier.
+// Call on failed login.
+func IncrementLockout(store LockoutStore, canonical string) {
+	store.IncrLockout(identifier.LockoutKey(canonical))
 }
 
-// ResetLockout resets the lockout counter for a cedula. Call on successful login.
-func ResetLockoutCounter(store LockoutStore, cedula string) {
-	key := fmt.Sprintf("lockout:%s", cedula)
-	store.ResetLockout(key)
+// ResetLockoutCounter resets the lockout counter for a canonical identifier.
+// Call on successful login.
+func ResetLockoutCounter(store LockoutStore, canonical string) {
+	store.ResetLockout(identifier.LockoutKey(canonical))
 }
 
 type bytesReader struct {

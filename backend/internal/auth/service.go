@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,7 @@ import (
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
+	"github.com/kiramopay/backend/pkg/identifier"
 	jwtpkg "github.com/kiramopay/backend/pkg/jwt"
 )
 
@@ -31,6 +33,12 @@ var ErrInvalidOTP = errors.New("invalid or expired verification code")
 // ErrPhoneNotVerified is returned by Register when phone verification is
 // required but no valid verification token was presented for the phone.
 var ErrPhoneNotVerified = errors.New("phone number not verified")
+
+// ErrCedulaNoUsableEnLogin se devuelve en Register cuando la cedula, aun
+// siendo de largo valido, clasificaria como otro tipo en el login (p.ej. 11
+// digitos con prefijo 506 = telefono) y por lo tanto nunca serviria para
+// entrar.
+var ErrCedulaNoUsableEnLogin = errors.New("cedula no utilizable para iniciar sesion")
 
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
@@ -135,8 +143,21 @@ func sessionWindowExceeded(now, tokenIssuedAt, familyOrigin time.Time, idle, abs
 }
 
 type LoginRequest struct {
-	Cedula   string `json:"cedula"`
-	Password string `json:"password"`
+	// Identifier acepta cedula, correo o telefono en un solo campo; el tipo se
+	// decide por forma (pkg/identifier). Cedula queda como alias legado: el APK
+	// v2.0.x y clientes viejos siguen mandando {cedula, password} y funcionan.
+	Identifier string `json:"identifier,omitempty"`
+	Cedula     string `json:"cedula,omitempty"`
+	Password   string `json:"password"`
+}
+
+// EffectiveIdentifier es el valor con el que se intenta entrar: identifier si
+// vino, si no el alias legado cedula.
+func (r *LoginRequest) EffectiveIdentifier() string {
+	if r.Identifier != "" {
+		return r.Identifier
+	}
+	return r.Cedula
 }
 
 type LoginContext struct {
@@ -187,32 +208,51 @@ type ResetPasswordRequest struct {
 }
 
 func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext) (*LoginResponse, error) {
-	u, err := s.userRepo.FindByCedula(ctx, req.Cedula)
-	if err != nil || u == nil {
+	// Clasificacion defensiva aunque el handler ya haya validado: el servicio
+	// jamas debe consultar la BD con un identificador sin canonicalizar.
+	kind, canonical, cerr := identifier.Classify(req.EffectiveIdentifier())
+	if cerr != nil {
+		// Mismo presupuesto de CPU y misma respuesta que un usuario inexistente.
+		hash.DummyVerify()
+		if s.auditLogger != nil {
+			s.auditLogger.LogLogin("", lc.IPAddress, lc.UserAgent, false, "")
+		}
+		return nil, ErrInvalidCredentials
+	}
+
+	u := s.resolveLoginUser(ctx, kind, canonical)
+	if u == nil {
 		// Anti-enumeration: spend the Argon2 budget anyway.
 		hash.DummyVerify()
-		s.incrementLockout(req.Cedula)
+		s.incrementLockout(canonical)
 		if s.auditLogger != nil {
-			s.auditLogger.LogLogin("", lc.IPAddress, lc.UserAgent, false)
+			s.auditLogger.LogLogin("", lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
 		return nil, ErrInvalidCredentials
 	}
 
 	valid, err := hash.VerifyPin(req.Password, u.PasswordHash)
 	if err != nil || !valid {
-		s.incrementLockout(req.Cedula)
+		s.incrementLockout(canonical)
+		// Segundo contador, por cuenta resuelta: sin el, una cuenta ganaria
+		// maxLoginAttempts intentos POR CADA identificador (cedula, correo y
+		// telefono llevan contadores distintos).
+		s.incrementUserLockout(u.ID)
 		if s.auditLogger != nil {
-			s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, false)
+			s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
 		return nil, ErrInvalidCredentials
 	}
 
 	// Block locked accounts AFTER hash verification too (defense in depth —
 	// the middleware should have already blocked, but if it didn't, do not
-	// issue tokens).
+	// issue tokens). Checks BOTH counters: per identifier and per account.
 	if s.lockoutStore != nil {
-		count := s.lockoutStore.GetLockout(fmt.Sprintf("lockout:%s", req.Cedula))
+		count := s.lockoutStore.GetLockout(identifier.LockoutKey(canonical))
 		if int(count) >= s.maxLoginAttempts {
+			return nil, ErrInvalidCredentials
+		}
+		if s.isUserLockedOut(u.ID) {
 			return nil, ErrInvalidCredentials
 		}
 	}
@@ -227,15 +267,60 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 
-	s.resetLockout(req.Cedula)
+	s.resetLockout(canonical)
+	s.resetUserLockout(u.ID)
 	_ = s.userRepo.UpdateLastLogin(ctx, u.ID)
 	if s.auditLogger != nil {
-		s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, true)
+		s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, true, string(kind))
 	}
 	return &LoginResponse{User: u, Tokens: tokens}, nil
 }
 
+// resolveLoginUser hace EXACTAMENTE una consulta segun el tipo clasificado
+// (nunca lookups en cascada: serian un oraculo de timing por tipo). Devuelve
+// nil en cualquier fallo; el llamador quema el presupuesto de Argon2 igual.
+func (s *Service) resolveLoginUser(ctx context.Context, kind identifier.Kind, canonical string) *user.UserRecord {
+	var (
+		u   *user.UserRecord
+		err error
+	)
+	switch kind {
+	case identifier.KindCedula:
+		u, err = s.userRepo.FindByCedula(ctx, canonical)
+	case identifier.KindPhone:
+		u, err = s.userRepo.FindByPhone(ctx, canonical)
+	case identifier.KindEmail:
+		u, err = s.userRepo.FindByEmail(ctx, canonical)
+		// Un correo sin verificar NO autentica: es opcional y editable, y sin
+		// este gate cualquiera podria apuntar un correo ajeno a su cuenta y
+		// capturar los intentos de login del dueno real. Se trata como un miss
+		// (mismo perfil de tiempo y misma respuesta).
+		if err == nil && u != nil && !u.EmailVerified {
+			u = nil
+		}
+	default:
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	return u
+}
+
 func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginContext) (*LoginResponse, error) {
+	// Canonicalizar la cedula (solo digitos) ANTES de buscar y de guardar: el
+	// HMAC de BD solo hace lower/trim, asi que "1-2345-6789" y "123456789"
+	// serian dos hashes distintos y la cuenta quedaria imposible de encontrar
+	// desde el login canonicalizado.
+	req.Cedula = soloDigitos(req.Cedula)
+	// La cedula debe clasificar COMO cedula para el login, o quedaria
+	// registrada pero imposible de usar para entrar: p.ej. 11 digitos que
+	// empiezan en 506 los toma el clasificador como telefono. ValidateCedula
+	// (9-12 digitos) aceptaba esos casos; aqui se cierran contra la misma
+	// regla que usa el login.
+	if kind, _, cerr := identifier.Classify(req.Cedula); cerr != nil || kind != identifier.KindCedula {
+		return nil, ErrCedulaNoUsableEnLogin
+	}
 	existing, _ := s.userRepo.FindByCedula(ctx, req.Cedula)
 	if existing != nil {
 		return nil, fmt.Errorf("user already registered")
@@ -264,12 +349,18 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	// When RequirePhoneVerification is on, a valid token for THIS phone is
 	// mandatory; otherwise it is best-effort (records phone_verified when given).
 	phoneVerified := false
+	emailVerified := false
 	if req.VerificationToken != "" {
-		verifiedPhone, verr := s.authRepo.ConsumePhoneVerificationToken(ctx, req.VerificationToken)
+		verifiedPhone, verifiedEmailHash, verr := s.authRepo.ConsumePhoneVerificationToken(ctx, req.VerificationToken)
 		if verr != nil {
 			return nil, fmt.Errorf("verify phone: %w", verr)
 		}
 		phoneVerified = verifiedPhone != "" && verifiedPhone == req.Phone
+		// El codigo viajo al correo: probarlo prueba posesion de ese buzon.
+		// Solo cuenta si es EL MISMO correo que se registra. Se compara por
+		// HASH del correo canonico (el buzon nunca viaja en claro por Redis).
+		emailVerified = phoneVerified && verifiedEmailHash != "" &&
+			verifiedEmailHash == hashCorreoCanonico(req.Email)
 	}
 	if s.requirePhoneVerification && !phoneVerified {
 		return nil, ErrPhoneNotVerified
@@ -288,6 +379,7 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		FirstName:     req.FirstName,
 		LastName:      req.LastName,
 		Email:         req.Email,
+		EmailVerified: emailVerified,
 		PasswordHash:  pwHash,
 		Status:        "active",
 		KYCLevel:      0,
@@ -471,7 +563,10 @@ func (s *Service) sendEmailDetached(userID, to, subject, textBody, htmlBody stri
 // (anti-enumeration). When the user exists, a token is issued and stored.
 // The caller is responsible for delivering the token via email/SMS.
 func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginContext) (string, error) {
-	u, _ := s.userRepo.FindByCedula(ctx, cedula)
+	// Misma canonicalizacion que el login y el registro: sin esto, una cedula
+	// tecleada con guiones no encuentra al usuario y la recuperacion falla en
+	// silencio (nunca llega el correo, sin error visible).
+	u, _ := s.userRepo.FindByCedula(ctx, soloDigitos(cedula))
 	if u == nil {
 		// Burn equivalent CPU so timing doesn't leak existence.
 		hash.DummyVerify()
@@ -577,18 +672,43 @@ func (s *Service) persistTokenRollout(
 	return s.authRepo.CreateSession(ctx, sess)
 }
 
-func (s *Service) incrementLockout(cedula string) {
-	if s.lockoutStore == nil || cedula == "" {
+func (s *Service) incrementLockout(canonical string) {
+	if s.lockoutStore == nil || canonical == "" {
 		return
 	}
-	middleware.IncrementLockout(s.lockoutStore, cedula)
+	s.lockoutStore.IncrLockout(identifier.LockoutKey(canonical))
 }
 
-func (s *Service) resetLockout(cedula string) {
-	if s.lockoutStore == nil || cedula == "" {
+func (s *Service) resetLockout(canonical string) {
+	if s.lockoutStore == nil || canonical == "" {
 		return
 	}
-	middleware.ResetLockoutCounter(s.lockoutStore, cedula)
+	s.lockoutStore.ResetLockout(identifier.LockoutKey(canonical))
+}
+
+// Contador por cuenta (ademas del contador por identificador): la clave usa el
+// user_id, que no es PII. Comparte umbral y TTL con el contador principal.
+func userLockoutKey(userID string) string { return "lockout:uid:" + userID }
+
+func (s *Service) incrementUserLockout(userID string) {
+	if s.lockoutStore == nil || userID == "" {
+		return
+	}
+	s.lockoutStore.IncrLockout(userLockoutKey(userID))
+}
+
+func (s *Service) resetUserLockout(userID string) {
+	if s.lockoutStore == nil || userID == "" {
+		return
+	}
+	s.lockoutStore.ResetLockout(userLockoutKey(userID))
+}
+
+func (s *Service) isUserLockedOut(userID string) bool {
+	if s.lockoutStore == nil || userID == "" {
+		return false
+	}
+	return int(s.lockoutStore.GetLockout(userLockoutKey(userID))) >= s.maxLoginAttempts
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -607,20 +727,29 @@ func (s *Service) SendRegistrationOTP(ctx context.Context, phone, email string) 
 	if err != nil {
 		return "", fmt.Errorf("generate code: %w", err)
 	}
-	if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code)); err != nil {
-		return "", fmt.Errorf("store otp: %w", err)
-	}
 	// Entrega por correo primero: es el canal real hoy (SES). El envio es
 	// sincrono a proposito — a diferencia de ForgotPassword no hay anti-
 	// enumeracion que proteger (el telefono aun no es una cuenta) y un fallo
 	// de entrega debe llegarle al cliente para que ofrezca reintentar, no
 	// dejarlo esperando un codigo que nunca va a llegar.
 	if email != "" && s.emailSender != nil {
+		// El registro del codigo lleva el HASH del correo canonico al que se
+		// envio: probar el codigo probara posesion de ese buzon, y Register
+		// compara ese hash para marcar email_verified. Se guarda hasheado (no
+		// en claro) y ANTES de enviar, para que no exista ventana en la que el
+		// codigo llegue y no se pueda verificar.
+		if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code), hashCorreoCanonico(email)); err != nil {
+			return "", fmt.Errorf("store otp: %w", err)
+		}
 		subject, textBody, htmlBody := messaging.RegistrationOTPEmail(code)
 		if err := s.emailSender.SendEmail(ctx, email, subject, textBody, htmlBody); err != nil {
 			return "", fmt.Errorf("deliver otp: %w", err)
 		}
 		return code, nil
+	}
+	// Canal SMS o eco en dev: el codigo no prueba nada sobre el correo.
+	if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code), ""); err != nil {
+		return "", fmt.Errorf("store otp: %w", err)
 	}
 	// Respaldo por SMS cuando haya proveedor. Sin ninguno de los dos, el
 	// handler hace eco del codigo solo en desarrollo.
@@ -638,7 +767,7 @@ func (s *Service) VerifyRegistrationOTP(ctx context.Context, phone, code string)
 	if phone == "" || code == "" {
 		return "", ErrInvalidOTP
 	}
-	ok, err := s.authRepo.VerifyRegistrationOTP(ctx, phone, hashOTP(code))
+	ok, verifiedEmailHash, err := s.authRepo.VerifyRegistrationOTP(ctx, phone, hashOTP(code))
 	if err != nil {
 		return "", fmt.Errorf("verify otp: %w", err)
 	}
@@ -649,10 +778,35 @@ func (s *Service) VerifyRegistrationOTP(ctx context.Context, phone, code string)
 	if err != nil {
 		return "", fmt.Errorf("token gen: %w", err)
 	}
-	if err := s.authRepo.PutPhoneVerificationToken(ctx, token, phone); err != nil {
+	if err := s.authRepo.PutPhoneVerificationToken(ctx, token, phone, verifiedEmailHash); err != nil {
 		return "", fmt.Errorf("store verify token: %w", err)
 	}
 	return token, nil
+}
+
+// hashCorreoCanonico devuelve un hash estable del correo en su forma canonica
+// (lower/trim). Se guarda esto en Redis en vez del correo en claro; el unico
+// consumidor (Register) solo necesita una comparacion de igualdad. Cadena
+// vacia entra y sale vacia (canal SMS, sin correo).
+func hashCorreoCanonico(email string) string {
+	canon := strings.ToLower(strings.TrimSpace(email))
+	if canon == "" {
+		return ""
+	}
+	h := sha256.Sum256([]byte("regemail:" + canon))
+	return hex.EncodeToString(h[:])
+}
+
+// soloDigitos deja unicamente los digitos de una cedula tecleada con guiones o
+// espacios; es la misma canonica que aplica pkg/identifier en el login.
+func soloDigitos(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func hashOTP(code string) string {

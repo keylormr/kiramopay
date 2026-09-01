@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/pkg/identifier"
 	"github.com/kiramopay/backend/pkg/response"
 	"github.com/kiramopay/backend/pkg/validator"
 )
@@ -47,8 +48,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := validator.ValidateCedula(req.Cedula); err != nil {
-		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+	// Un solo campo, tres formas: cedula, correo o telefono. El mensaje del 400
+	// es generico a proposito — no revela que forma fallo ni cuales existen.
+	if _, _, err := identifier.Classify(req.EffectiveIdentifier()); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid identifier")
 		return
 	}
 	// Login must NOT enforce the password-complexity policy — that belongs to

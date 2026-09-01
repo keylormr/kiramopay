@@ -67,10 +67,10 @@ func (r *Repository) Create(ctx context.Context, u *UserRecord) error {
 	// with searchable fn_pii_hmac tokens; no plaintext PII column is stored.
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, phone_verified,
-		        first_name, last_name, email_enc, email_hash, password_hash, status, kyc_level, kyc_status)
+		        first_name, last_name, email_enc, email_hash, email_verified, password_hash, status, kyc_level, kyc_status)
 		 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4,
-		         $5, $6, fn_pii_encrypt(NULLIF($7,'')), fn_pii_hmac(NULLIF($7,'')), $8, $9, $10, 'pending')`,
-		u.ID, u.Cedula, u.Phone, u.PhoneVerified, u.FirstName, u.LastName, u.Email, u.PasswordHash, u.Status, u.KYCLevel,
+		         $5, $6, fn_pii_encrypt(NULLIF($7,'')), fn_pii_hmac(NULLIF($7,'')), $8, $9, $10, $11, 'pending')`,
+		u.ID, u.Cedula, u.Phone, u.PhoneVerified, u.FirstName, u.LastName, u.Email, u.EmailVerified, u.PasswordHash, u.Status, u.KYCLevel,
 	)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
@@ -103,6 +103,19 @@ func (r *Repository) FindByPhone(ctx context.Context, phone string) (*UserRecord
 		`SELECT `+userSelectCols+` FROM users WHERE phone_hash = fn_pii_hmac($1) AND deleted_at IS NULL`, phone))
 	if err != nil {
 		return nil, fmt.Errorf("find user by phone: %w", err)
+	}
+	return u, nil
+}
+
+// FindByEmail returns the user record for a given email. Same HMAC lookup as
+// FindByPhone; fn_pii_hmac already lower(trim)s, so the match is
+// case-insensitive. Callers gate login on EmailVerified — an unverified email
+// must never authenticate (the address is optional and editable).
+func (r *Repository) FindByEmail(ctx context.Context, email string) (*UserRecord, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`SELECT `+userSelectCols+` FROM users WHERE email_hash = fn_pii_hmac($1) AND deleted_at IS NULL`, email))
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: %w", err)
 	}
 	return u, nil
 }
@@ -140,7 +153,12 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, req *UpdatePr
 		argIdx++
 	}
 	if req.Email != nil {
-		query += fmt.Sprintf(", email_enc = fn_pii_encrypt(NULLIF($%d,'')), email_hash = fn_pii_hmac(NULLIF($%d,''))", argIdx, argIdx)
+		// Cambiar el correo BAJA email_verified: la verificacion probaba el
+		// buzon anterior, no este. Sin esto, quien verifico un correo propio
+		// podia apuntar su cuenta a un correo ajeno conservando el flag en true
+		// y burlar el gate de login-por-correo (resolveLoginUser exige
+		// email_verified). El correo nuevo no autentica hasta re-verificarlo.
+		query += fmt.Sprintf(", email_enc = fn_pii_encrypt(NULLIF($%d,'')), email_hash = fn_pii_hmac(NULLIF($%d,'')), email_verified = false", argIdx, argIdx)
 		args = append(args, *req.Email)
 		argIdx++
 	}

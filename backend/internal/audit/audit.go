@@ -87,13 +87,19 @@ func (l *Logger) Log(evt Event) {
 	}
 }
 
-// LogLogin logs a login attempt.
-func (l *Logger) LogLogin(userID, ip, userAgent string, success bool) {
+// LogLogin logs a login attempt. identifierType dice CON QUE tipo de
+// identificador se intento entrar (cedula|email|phone; vacio si ni clasifico)
+// — jamas el identificador crudo: details es JSONB sin cifrar.
+func (l *Logger) LogLogin(userID, ip, userAgent string, success bool, identifierType string) {
 	action := "login_success"
 	risk := "low"
 	if !success {
 		action = "login_failed"
 		risk = "medium"
+	}
+	details := map[string]interface{}{"success": success}
+	if identifierType != "" {
+		details["identifier_type"] = identifierType
 	}
 	l.Log(Event{
 		UserID:       userID,
@@ -101,7 +107,7 @@ func (l *Logger) LogLogin(userID, ip, userAgent string, success bool) {
 		ResourceType: "session",
 		IPAddress:    ip,
 		UserAgent:    userAgent,
-		Details:      map[string]interface{}{"success": success},
+		Details:      details,
 		RiskLevel:    risk,
 	})
 }
