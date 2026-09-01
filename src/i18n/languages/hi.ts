@@ -477,8 +477,12 @@ const hi: TranslationKeys = {
 
   reg_phone_title: 'आपका फ़ोन नंबर',
   reg_phone_desc: 'SINPE Movil से पैसे भेजने और प्राप्त करने के लिए इसका उपयोग करें',
-  reg_verify_title: 'अपना नंबर सत्यापित करें',
+  reg_verify_title: 'अपना ईमेल सत्यापित करें',
   reg_code_sent_to: 'कोड भेजा गया',
+  reg_email_label: 'ईमेल पता',
+  reg_email_hint: 'हम वहां सत्यापन कोड भेजेंगे',
+  reg_otp_send_failed: 'कोड नहीं भेजा जा सका। फिर से कोशिश करें',
+  reg_otp_invalid: 'कोड अमान्य या समाप्त हो गया है',
   verify: 'सत्यापित करें',
   reg_cedula_title: 'आपकी पहचान',
   reg_cedula_desc: 'नियमों का पालन करने के लिए हमें आपकी पहचान सत्यापित करनी होगी',

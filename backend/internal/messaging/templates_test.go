@@ -75,3 +75,23 @@ func TestPasswordResetEmailEscapaElToken(t *testing.T) {
 		t.Error("se esperaba el token escapado")
 	}
 }
+
+func TestRegistrationOTPEmail(t *testing.T) {
+	const codigo = "482913"
+	subject, texto, htmlCuerpo := RegistrationOTPEmail(codigo)
+
+	if !strings.Contains(subject, "verificación") {
+		t.Errorf("el asunto perdió la tilde: %q", subject)
+	}
+	// El código debe estar en AMBAS partes: quien lea el texto plano tiene que
+	// poder completar el registro igual que quien ve el HTML.
+	if !strings.Contains(texto, codigo) {
+		t.Error("el código falta en la parte de texto")
+	}
+	if !strings.Contains(htmlCuerpo, codigo) {
+		t.Error("el código falta en la parte HTML")
+	}
+	if !strings.Contains(texto, "10 minutos") || !strings.Contains(htmlCuerpo, "10 minutos") {
+		t.Error("falta el vencimiento de 10 minutos")
+	}
+}

@@ -478,8 +478,12 @@ const en: TranslationKeys = {
   // Registration
   reg_phone_title: 'Your phone number',
   reg_phone_desc: 'You will use it to send and receive money with SINPE Movil',
-  reg_verify_title: 'Verify your number',
+  reg_verify_title: 'Verify your email',
   reg_code_sent_to: 'Code sent to',
+  reg_email_label: 'Email address',
+  reg_email_hint: 'We will send the verification code there',
+  reg_otp_send_failed: 'Could not send the code. Try again',
+  reg_otp_invalid: 'Invalid or expired code',
   verify: 'Verify',
   reg_cedula_title: 'Your identification',
   reg_cedula_desc: 'We need to verify your identity to comply with regulations',

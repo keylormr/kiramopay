@@ -23,6 +23,7 @@ interface RegisterParams {
   lastName: string;
   password: string;
   email?: string;
+  verificationToken?: string;
 }
 
 interface AuthState {
@@ -91,9 +92,9 @@ export const useAuthStore = create<AuthState>()(
         return { success: false, code: result.error?.code };
       },
 
-      register: async ({ cedula, phone, firstName, lastName, password, email }) => {
+      register: async ({ cedula, phone, firstName, lastName, password, email, verificationToken }) => {
         const api = getApiLayer();
-        const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email });
+        const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email, verificationToken });
         if (result.success && result.data) {
           set({
             isAuthenticated: true,

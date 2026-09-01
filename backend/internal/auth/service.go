@@ -162,6 +162,9 @@ type RegisterRequest struct {
 
 type SendRegistrationOTPRequest struct {
 	Phone string `json:"phone"`
+	// Email recibe el codigo de verificacion: es el canal que funciona hoy
+	// (SES). El SMS queda de respaldo para cuando haya proveedor.
+	Email string `json:"email"`
 }
 
 type VerifyRegistrationOTPRequest struct {
@@ -596,7 +599,7 @@ func (s *Service) resetLockout(cedula string) {
 // (short TTL, attempt-capped) and returns the plaintext code. Delivery is out
 // of band: a production SMS provider would send it; with none wired the handler
 // echoes it only in dev (mirroring ForgotPassword's dev_token).
-func (s *Service) SendRegistrationOTP(ctx context.Context, phone string) (string, error) {
+func (s *Service) SendRegistrationOTP(ctx context.Context, phone, email string) (string, error) {
 	if phone == "" {
 		return "", fmt.Errorf("phone required")
 	}
@@ -607,9 +610,20 @@ func (s *Service) SendRegistrationOTP(ctx context.Context, phone string) (string
 	if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code)); err != nil {
 		return "", fmt.Errorf("store otp: %w", err)
 	}
-	// Deliver the code by SMS when a provider is configured. Without one the
-	// handler echoes it in dev only. A delivery failure is surfaced so the client
-	// can prompt a retry instead of waiting for a code that never arrives.
+	// Entrega por correo primero: es el canal real hoy (SES). El envio es
+	// sincrono a proposito — a diferencia de ForgotPassword no hay anti-
+	// enumeracion que proteger (el telefono aun no es una cuenta) y un fallo
+	// de entrega debe llegarle al cliente para que ofrezca reintentar, no
+	// dejarlo esperando un codigo que nunca va a llegar.
+	if email != "" && s.emailSender != nil {
+		subject, textBody, htmlBody := messaging.RegistrationOTPEmail(code)
+		if err := s.emailSender.SendEmail(ctx, email, subject, textBody, htmlBody); err != nil {
+			return "", fmt.Errorf("deliver otp: %w", err)
+		}
+		return code, nil
+	}
+	// Respaldo por SMS cuando haya proveedor. Sin ninguno de los dos, el
+	// handler hace eco del codigo solo en desarrollo.
 	if s.smsSender != nil {
 		if err := s.smsSender.SendSMS(ctx, phone, messaging.VerificationSMS(code)); err != nil {
 			return "", fmt.Errorf("deliver otp: %w", err)
