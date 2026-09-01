@@ -1,10 +1,12 @@
 /**
  * Money formatting — single source of truth.
  *
- * Costa Rica (CRC) is the primary market, so colón/fiat amounts are formatted
- * with the es-CR locale everywhere (₡1.234,56), matching SinpeView. Using en-US
- * for CRC produces the wrong grouping (₡1,234.56) and was the source of
- * screen-to-screen inconsistency.
+ * Decision del dueno (2026-09-01): los montos se muestran con MILES EN COMA y
+ * decimales en punto (₡1,234,567.89), como los presentan los bancos de Costa
+ * Rica. El locale es-CR de los navegadores agrupa con espacio y decimales en
+ * coma (₡1 234 567,89) y fue rechazado explicitamente; TODOS los formateadores
+ * de la app usan esta misma agrupacion para no volver a la inconsistencia
+ * pantalla-a-pantalla.
  *
  * Backend amounts may arrive as decimal *strings* (Go decimal.Decimal
  * serializes to a string in JSON) or as numbers (mock mode); always coerce
@@ -13,8 +15,8 @@
 
 export type CurrencyCode = 'CRC' | 'USD' | 'PAB' | 'GTQ';
 
-/** Locale used for all in-app money formatting (primary market: Costa Rica). */
-export const MONEY_LOCALE = 'es-CR';
+/** Agrupacion de miles con coma y decimales con punto (ver nota de arriba). */
+export const MONEY_LOCALE = 'en-US';
 
 /** Coerce a backend amount (number | decimal-string | nullish) to a finite number. */
 export function toAmount(value: number | string | null | undefined): number {
@@ -42,6 +44,7 @@ export function formatMoney(
   const amount = toAmount(value);
   const nf = new Intl.NumberFormat(MONEY_LOCALE, {
     style: 'currency',
+    currencyDisplay: 'narrowSymbol',
     currency,
     minimumFractionDigits: opts.decimals ?? 0,
     maximumFractionDigits: opts.decimals ?? 2,

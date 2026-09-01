@@ -86,7 +86,7 @@ export const ServicesView: React.FC = () => {
   const [lastPayment, setLastPayment] = useState<{ type: string; amount: number; detail: string } | null>(null);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
   const crcAccount = state.accounts.find(a => a.ccy === 'CRC');

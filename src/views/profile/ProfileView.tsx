@@ -180,7 +180,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
   const totalBalance = state.accounts.reduce((acc, curr) => {

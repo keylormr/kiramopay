@@ -73,7 +73,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [contactPrefilled, setContactPrefilled] = useState(false);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
   const crcAccount = state.accounts.find(a => a.ccy === 'CRC');

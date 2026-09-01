@@ -513,7 +513,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const formatCurrency = (amount: number) => {
     const ccy = state.baseCurrency || 'CRC';
     try {
-      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(amount);
     } catch {
       return `${amount.toFixed(2)} ${ccy}`;
     }
@@ -523,7 +523,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const formatCompact = (amount: number) => {
     const ccy = state.baseCurrency || 'CRC';
     try {
-      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
     } catch {
       return `${Math.round(amount)}`;
     }

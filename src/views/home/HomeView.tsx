@@ -100,7 +100,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
-      return new Intl.NumberFormat('es-CR', { style: 'currency', currency: ccy }).format(amount);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(amount);
     } catch {
       return `${amount} ${ccy}`;
     }
@@ -369,68 +369,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </div>
 
-      {/* Gastado este mes: cifra viva con su curva acumulada del mes y el
-          contraste contra el mes pasado. Toca -> analitica completa. */}
-      {(() => {
-        const ahora = new Date();
-        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime();
-        const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).getTime();
-        const diaHoy = ahora.getDate();
-
-        // Acumulado diario del mes en curso (gastos del store sincronizado).
-        const porDia = new Array(diaHoy).fill(0);
-        let gastadoMesPasado = 0;
-        for (const tx of state.transactions) {
-          if (tx.amount >= 0) continue;
-          const time = getTxTime(tx);
-          if (time === null) continue;
-          if (time >= inicioMes) {
-            const d = new Date(time).getDate();
-            if (d >= 1 && d <= diaHoy) porDia[d - 1] += Math.abs(tx.amount);
-          } else if (time >= inicioMesPasado) {
-            gastadoMesPasado += Math.abs(tx.amount);
-          }
-        }
-        const acumulado: number[] = [];
-        porDia.reduce((s, v) => { const acc = s + v; acumulado.push(acc); return acc; }, 0);
-        const gastadoMes = acumulado[acumulado.length - 1] ?? 0;
-        const delta = gastadoMesPasado > 0
-          ? ((gastadoMes - gastadoMesPasado) / gastadoMesPasado) * 100
-          : null;
-        const etiquetas = acumulado.map((_, i) => `${i + 1}/${ahora.getMonth() + 1}`);
-
-        return (
-          <button
-            onClick={onOpenAnalytics}
-            className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
-                <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
-                  {formatCurrency(gastadoMes, 'CRC')}
-                </p>
-              </div>
-              {delta !== null && Math.abs(delta) >= 1 && (
-                <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${delta <= 0 ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
-                  {delta <= 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(0)}% {t('home_vs_last_month')}
-                </span>
-              )}
-            </div>
-            {acumulado.length >= 2 && gastadoMes > 0 && (
-              <GraficoArea
-                puntos={acumulado}
-                etiquetas={etiquetas}
-                alto={72}
-                className="mt-2 -mx-1"
-                formato={(v) => formatCurrency(v, 'CRC')}
-                titulo={t('home_spent_month')}
-              />
-            )}
-          </button>
-        );
-      })()}
-
       {/* Transacciones recientes: cuatro entradas; el refresco llega solo con
           la notificacion en vivo (efecto de arriba). */}
       <div>
@@ -624,6 +562,68 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           </button>
         </div>
       </div>
+
+      {/* Gastado este mes — al final a pedido del dueno: el resumen del
+          gasto es consulta ocasional, no lo primero del dia. */}
+      {(() => {
+        const ahora = new Date();
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime();
+        const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).getTime();
+        const diaHoy = ahora.getDate();
+
+        // Acumulado diario del mes en curso (gastos del store sincronizado).
+        const porDia = new Array(diaHoy).fill(0);
+        let gastadoMesPasado = 0;
+        for (const tx of state.transactions) {
+          if (tx.amount >= 0) continue;
+          const time = getTxTime(tx);
+          if (time === null) continue;
+          if (time >= inicioMes) {
+            const d = new Date(time).getDate();
+            if (d >= 1 && d <= diaHoy) porDia[d - 1] += Math.abs(tx.amount);
+          } else if (time >= inicioMesPasado) {
+            gastadoMesPasado += Math.abs(tx.amount);
+          }
+        }
+        const acumulado: number[] = [];
+        porDia.reduce((s, v) => { const acc = s + v; acumulado.push(acc); return acc; }, 0);
+        const gastadoMes = acumulado[acumulado.length - 1] ?? 0;
+        const delta = gastadoMesPasado > 0
+          ? ((gastadoMes - gastadoMesPasado) / gastadoMesPasado) * 100
+          : null;
+        const etiquetas = acumulado.map((_, i) => `${i + 1}/${ahora.getMonth() + 1}`);
+
+        return (
+          <button
+            onClick={onOpenAnalytics}
+            className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
+                <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
+                  {formatCurrency(gastadoMes, 'CRC')}
+                </p>
+              </div>
+              {delta !== null && Math.abs(delta) >= 1 && (
+                <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${delta <= 0 ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                  {delta <= 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(0)}% {t('home_vs_last_month')}
+                </span>
+              )}
+            </div>
+            {acumulado.length >= 2 && gastadoMes > 0 && (
+              <GraficoArea
+                puntos={acumulado}
+                etiquetas={etiquetas}
+                alto={72}
+                className="mt-2 -mx-1"
+                formato={(v) => formatCurrency(v, 'CRC')}
+                titulo={t('home_spent_month')}
+              />
+            )}
+          </button>
+        );
+      })()}
 
       {/* --- Bottom Sheets --- */}
 

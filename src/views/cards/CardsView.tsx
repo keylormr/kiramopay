@@ -53,7 +53,7 @@ export const CardsView: React.FC = () => {
   const frozen = card?.status === 'frozen';
 
   const formatCRC = (n: number) =>
-    new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(n);
 
   const handleCreate = async () => {
     if (!api || busy) return;

@@ -22,7 +22,7 @@ const DESTINATION_TYPE = 'bank_account';
 function money(amountMinor: number, currency: string): string {
   const amount = amountMinor / 100;
   try {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency }).format(amount);
   } catch {
     return `${currency} ${amount.toFixed(2)}`;
   }

@@ -259,7 +259,7 @@ export const MarketplaceView: React.FC = () => {
   }, [rideStep, activeRide?.id]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC' }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
   const isConnected = (partnerId: string) => state.connectedPartners.includes(partnerId);
