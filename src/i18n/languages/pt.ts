@@ -666,6 +666,10 @@ const pt: TranslationKeys = {
 
   // Home insights
   home_spending: 'Gastos',
+  home_spent_month: 'Gasto neste mês',
+  home_vs_last_month: 'vs mês passado',
+  sinpe_contact_saved: 'Contato salvo',
+  qr_te_solicitan: 'Solicitam de você',
   home_top_cat: 'Maior gasto',
   home_savings: 'Economia',
   home_savings_view: 'Minhas metas',

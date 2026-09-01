@@ -1,19 +1,24 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { HelpButton } from '../../components/HelpSheet';
+import { GraficoArea } from '../../components/GraficoArea';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
-import { getApiLayer } from '@/api';
+import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
+import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
+import { getTxTime } from '@/utils/fechasTx';
+import { parsearQrKiramo } from '@/utils/qrKiramo';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -55,10 +60,24 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   }, [ultimaNotificacion]);
 
   // Sheet States
-  const [activeSheet, setActiveSheet] = useState<'none' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'addContact'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'enviarA'>('none');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   // A scanned QR may be a contact (added to the list) instead of a payment.
   const [scannedContact, setScannedContact] = useState<ContactQrPayload | null>(null);
+
+  // Envio directo al escanear el QR de una persona: escanear -> monto ->
+  // enviar. Antes escanear solo agregaba el contacto y habia que ir a
+  // buscarlo a SINPE para transferirle; ahora la transferencia ES el flujo.
+  const [envioMonto, setEnvioMonto] = useState('');
+  const [envioNota, setEnvioNota] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [envioError, setEnvioError] = useState('');
+  const [envioListo, setEnvioListo] = useState(false);
+  const [contactoGuardado, setContactoGuardado] = useState(false);
+  const [showEnvioMfa, setShowEnvioMfa] = useState(false);
+  // Una misma intencion de envio conserva su clave de idempotencia (el
+  // reintento post-MFA no debe duplicar la transferencia).
+  const idemEnvioRef = useRef('');
 
   // "Cobrar con QR" — genera un QR de cobro REAL via la API (riel QR del backend,
   // contabilizado en el ledger). Generar el codigo no mueve dinero; el pago
@@ -135,8 +154,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const handleScannedCode = (raw: string) => {
     const contact = tryParseContactQr(raw);
     if (contact) {
+      // Directo a "cuanto le envias": el gesto de escanear a una persona ES
+      // querer transferirle (guardar el contacto queda como accion secundaria
+      // dentro de la misma hoja).
       setScannedContact(contact);
-      setActiveSheet('addContact'); // cerrar la hoja apaga la cámara
+      setEnvioMonto('');
+      setEnvioNota('');
+      setEnvioError('');
+      setEnvioListo(false);
+      setContactoGuardado(false);
+      idemEnvioRef.current = '';
+      setActiveSheet('enviarA'); // cerrar la hoja apaga la cámara
       return;
     }
     setScannedQrData(raw);
@@ -147,7 +175,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   };
 
   const handleAddScannedContact = () => {
-    if (!scannedContact) return;
+    if (!scannedContact || contactoGuardado) return;
     const contact: SinpeContact = {
       id: Date.now().toString(),
       name: scannedContact.name,
@@ -156,8 +184,55 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       isFavorite: false,
     };
     dispatch({ type: 'ADD_SINPE_CONTACT', payload: contact });
-    setScannedContact(null);
-    setActiveSheet('none');
+    setContactoGuardado(true);
+  };
+
+  // Transferencia real por el riel SINPE al usuario escaneado.
+  const handleEnviarAEscaneado = async () => {
+    if (!scannedContact || enviando) return;
+    const monto = parseFloat(envioMonto);
+    if (!(monto > 0)) return;
+    const telefono = normalizarTelefonoCR(scannedContact.phone);
+    if (!telefono) {
+      setEnvioError(t('sinpe_phone_invalid'));
+      return;
+    }
+    if (!idemEnvioRef.current) {
+      idemEnvioRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `scan-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    setEnviando(true);
+    setEnvioError('');
+    try {
+      const res = await getApiLayer().sinpe.send({
+        phone: telefono,
+        amount: monto,
+        description: envioNota,
+        idempotencyKey: idemEnvioRef.current,
+      });
+      if (!res.success || !res.data) {
+        if (res.error?.code === MFA_REQUIRED) {
+          setShowEnvioMfa(true);
+          return;
+        }
+        // Un reintento corregido debe ser una transferencia nueva.
+        idemEnvioRef.current = '';
+        const porCodigo: Record<string, string> = {
+          RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
+          SELF_SEND: t('sinpe_self_send_error'),
+        };
+        setEnvioError(porCodigo[res.error?.code ?? ''] || res.error?.message || t('assistant_action_failed'));
+        return;
+      }
+      idemEnvioRef.current = '';
+      setEnvioListo(true);
+      refreshAccounts().catch(() => {});
+      refreshTransactions().catch(() => {});
+    } finally {
+      setEnviando(false);
+    }
   };
 
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
@@ -273,9 +348,91 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </div>
 
-      {/* Transacciones recientes — al puro inicio, a pedido del cliente: lo
-          primero que quiere ver al abrir es qué se movió. Cuatro entradas; el
-          refresco llega solo con la notificación en vivo (efecto de arriba). */}
+      {/* Acciones rapidas primero: el gesto mas frecuente (enviar, escanear)
+          queda bajo el pulgar apenas abre la app. */}
+      <div>
+        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => onNavigateToSinpe?.('send') },
+            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => onNavigateToSinpe?.('receive') },
+            { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
+            { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
+          ].map((action, i) => (
+            <button key={i} onClick={action.action} className="flex flex-col items-center gap-2 group">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} uv-shadow-soft group-active:scale-[0.94] transition-transform`}>
+                <action.icon size={22} />
+              </div>
+              <span className="text-[11px] font-semibold uv-text-secondary">{action.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gastado este mes: cifra viva con su curva acumulada del mes y el
+          contraste contra el mes pasado. Toca -> analitica completa. */}
+      {(() => {
+        const ahora = new Date();
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime();
+        const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).getTime();
+        const diaHoy = ahora.getDate();
+
+        // Acumulado diario del mes en curso (gastos del store sincronizado).
+        const porDia = new Array(diaHoy).fill(0);
+        let gastadoMesPasado = 0;
+        for (const tx of state.transactions) {
+          if (tx.amount >= 0) continue;
+          const time = getTxTime(tx);
+          if (time === null) continue;
+          if (time >= inicioMes) {
+            const d = new Date(time).getDate();
+            if (d >= 1 && d <= diaHoy) porDia[d - 1] += Math.abs(tx.amount);
+          } else if (time >= inicioMesPasado) {
+            gastadoMesPasado += Math.abs(tx.amount);
+          }
+        }
+        const acumulado: number[] = [];
+        porDia.reduce((s, v) => { const acc = s + v; acumulado.push(acc); return acc; }, 0);
+        const gastadoMes = acumulado[acumulado.length - 1] ?? 0;
+        const delta = gastadoMesPasado > 0
+          ? ((gastadoMes - gastadoMesPasado) / gastadoMesPasado) * 100
+          : null;
+        const etiquetas = acumulado.map((_, i) => `${i + 1}/${ahora.getMonth() + 1}`);
+
+        return (
+          <button
+            onClick={onOpenAnalytics}
+            className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
+                <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
+                  {formatCurrency(gastadoMes, 'CRC')}
+                </p>
+              </div>
+              {delta !== null && Math.abs(delta) >= 1 && (
+                <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${delta <= 0 ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                  {delta <= 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(0)}% {t('home_vs_last_month')}
+                </span>
+              )}
+            </div>
+            {acumulado.length >= 2 && gastadoMes > 0 && (
+              <GraficoArea
+                puntos={acumulado}
+                etiquetas={etiquetas}
+                alto={72}
+                className="mt-2 -mx-1"
+                formato={(v) => formatCurrency(v, 'CRC')}
+                titulo={t('home_spent_month')}
+              />
+            )}
+          </button>
+        );
+      })()}
+
+      {/* Transacciones recientes: cuatro entradas; el refresco llega solo con
+          la notificacion en vivo (efecto de arriba). */}
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
@@ -311,40 +468,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </div>
 
-      {/* Quick Actions Grid */}
-      <div>
-        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => onNavigateToSinpe?.('send') },
-            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => onNavigateToSinpe?.('receive') },
-            { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
-            { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
-          ].map((action, i) => (
-            <button key={i} onClick={action.action} className="flex flex-col items-center gap-2 group">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} uv-shadow-soft group-active:scale-[0.94] transition-transform`}>
-                <action.icon size={22} />
-              </div>
-              <span className="text-[11px] font-semibold uv-text-secondary">{action.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Monthly Insights Card */}
       {(() => {
-        const monthlyExpenses = state.transactions
-          .filter(tx => tx.amount < 0)
-          .reduce((s, tx) => s + Math.abs(tx.amount), 0);
-        const topCat = (() => {
-          const cats: Record<string, number> = {};
-          state.transactions.filter(tx => tx.amount < 0).forEach(tx => {
-            const c = tx.category || 'General';
-            cats[c] = (cats[c] || 0) + Math.abs(tx.amount);
-          });
-          const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-          return sorted[0]?.[0] || null;
-        })();
         return (
           <div className="grid grid-cols-2 gap-3">
             {/* El "?" va como hermano de la tarjeta, nunca adentro: la tarjeta
@@ -367,22 +492,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <HelpButton topic="assistant" className="absolute top-2 right-2" />
             </div>
 
-            <button
-              onClick={onOpenAnalytics}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                  <Icons.TrendingUp size={16} className="text-[var(--color-primary)]" />
-                </div>
-                <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spending')}</span>
-              </div>
-              <div className="text-lg font-extrabold uv-text-primary truncate">
-                {formatCurrency(monthlyExpenses, baseAccount.ccy)}
-              </div>
-              {topCat && <div className="text-[10px] uv-text-muted mt-0.5">{t('home_top_cat')}: {topCat}</div>}
-            </button>
-
+            {/* La tarjeta de gastos vivio aqui hasta que "Gastado este mes"
+                (arriba, con curva) la volvio redundante. */}
             <div className="relative">
               <button
                 onClick={onOpenSavings}
@@ -707,88 +818,173 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 {t('done')}
               </button>
             </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-2xl p-6">
-                <p className="text-sm text-gray-500 mb-1">{t('qr_code')}</p>
-                <p className="font-mono text-xs uv-text-primary break-all">{scannedQrData}</p>
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-500 font-medium mb-2 block">
-                  {t('amount')} ({baseAccount?.ccy ?? 'CRC'})
-                </label>
-                <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
-                  <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
-                  <input
-                    type="number"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
-                    autoFocus
-                  />
+          ) : (() => {
+            // El QR de KiramoPay trae el monto adentro (en centimos): si es
+            // fijo, se MUESTRA grande y pagar es UN toque — nada de payload
+            // tecnico en pantalla ni de teclear lo que el codigo ya dice.
+            const qr = parsearQrKiramo(scannedQrData || '');
+            const montoFijo = qr && qr.monto > 0 ? qr.monto : null;
+            return (
+              <div className="space-y-6">
+                <div className="text-center py-2">
+                  {montoFijo !== null ? (
+                    <>
+                      <p className="text-sm uv-text-muted mb-1">{t('qr_te_solicitan')}</p>
+                      <p className="text-4xl font-black uv-text-primary tabular-nums">
+                        {formatCurrency(montoFijo, qr?.moneda || 'CRC')}
+                      </p>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="text-sm text-gray-500 font-medium mb-2 block">
+                        {t('amount')} ({baseAccount?.ccy ?? 'CRC'})
+                      </label>
+                      <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
+                        <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
+                        <input
+                          type="number"
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-gray-400 mt-2">{t('amount_qr_hint')}</p>
-              </div>
 
-              {payError && (
-                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{payError}</p>
-              )}
+                {payError && (
+                  <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{payError}</p>
+                )}
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
-                  className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  onClick={handleScannedPayment}
-                  disabled={payLoading}
-                  className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50"
-                >
-                  {payLoading ? t('paying') : t('pay')}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
+                    className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+                  >
+                    {t('cancel')}
+                  </button>
+                  <button
+                    onClick={handleScannedPayment}
+                    disabled={payLoading || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
+                    className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                    {payLoading ? t('paying') : t('pay')}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </BottomSheet>
       )}
 
-      {/* Add Contact from a scanned contact QR (never touches the pay rail) */}
+      {/* Envio directo al usuario escaneado: escanear -> monto -> enviar.
+          Guardar el contacto es la accion secundaria, no el destino. */}
       <BottomSheet
-        isOpen={activeSheet === 'addContact'}
+        isOpen={activeSheet === 'enviarA'}
         onClose={() => { setActiveSheet('none'); setScannedContact(null); }}
-        title={t('add_contact')}
+        dismissable={!enviando}
+        title={envioListo ? t('payment_done') : t('send_money')}
       >
         {scannedContact && (
-          <div className="space-y-6">
-            <div className="flex flex-col items-center py-2">
-              <div className="w-16 h-16 uv-gradient-brand rounded-full flex items-center justify-center text-white text-2xl font-bold mb-3">
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 uv-gradient-brand rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0">
                 {scannedContact.name.charAt(0)}
               </div>
-              <p className="text-lg font-bold uv-text-primary">{scannedContact.name}</p>
-              <p className="text-sm uv-text-muted tabular-nums">{scannedContact.phone}</p>
-              {scannedContact.bank && <p className="text-xs uv-text-muted mt-1">{scannedContact.bank}</p>}
+              <div className="min-w-0">
+                <p className="text-base font-bold uv-text-primary truncate">{scannedContact.name}</p>
+                <p className="text-sm uv-text-muted tabular-nums">{formatearTelefonoCR(scannedContact.phone)}</p>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setActiveSheet('none'); setScannedContact(null); }}
-                className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
-              >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={handleAddScannedContact}
-                className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
-              >
-                {t('add_contact')}
-              </button>
-            </div>
+
+            {envioListo ? (
+              <div className="flex flex-col items-center py-4 gap-3">
+                <div className="w-14 h-14 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] flex items-center justify-center">
+                  <Icons.Check size={28} />
+                </div>
+                <p className="text-2xl font-black uv-text-primary tabular-nums">{formatCurrency(parseFloat(envioMonto), 'CRC')}</p>
+                <button
+                  onClick={() => { setActiveSheet('none'); setScannedContact(null); }}
+                  className="mt-2 w-full py-3.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
+                >
+                  {t('done')}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Monto: el unico campo obligatorio, grande y con foco */}
+                <div className="text-center py-2">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="text-3xl font-bold uv-text-muted">₡</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      autoFocus
+                      value={envioMonto}
+                      onChange={(e) => { setEnvioMonto(e.target.value); setEnvioError(''); }}
+                      placeholder="0"
+                      className="text-4xl font-black uv-text-primary bg-transparent outline-none w-40 text-center tabular-nums placeholder:uv-text-muted"
+                    />
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  value={envioNota}
+                  onChange={(e) => setEnvioNota(e.target.value)}
+                  placeholder={t('sinpe_send_desc_ph')}
+                  maxLength={60}
+                  className="w-full h-12 px-4 rounded-xl uv-surface-2 uv-text-primary text-sm outline-none border border-transparent focus:border-[var(--color-primary)]"
+                />
+
+                {envioError && (
+                  <p className="text-[var(--color-danger)] text-sm flex items-center gap-1">
+                    <Icons.AlertCircle size={14} /> {envioError}
+                  </p>
+                )}
+
+                <button
+                  onClick={handleEnviarAEscaneado}
+                  disabled={enviando || !(parseFloat(envioMonto) > 0)}
+                  className="w-full py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {enviando ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                      {t('processing')}
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Send size={18} /> {t('send_money')}
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleAddScannedContact}
+                  disabled={contactoGuardado}
+                  className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] disabled:uv-text-muted"
+                >
+                  {contactoGuardado ? t('sinpe_contact_saved') : t('add_contact')}
+                </button>
+              </>
+            )}
           </div>
         )}
       </BottomSheet>
+
+      {/* TOTP para envios de monto alto desde el flujo de escaneo */}
+      <MfaChallengeSheet
+        isOpen={showEnvioMfa}
+        onClose={() => setShowEnvioMfa(false)}
+        onVerified={() => {
+          setShowEnvioMfa(false);
+          handleEnviarAEscaneado();
+        }}
+      />
 
     </div>
   );

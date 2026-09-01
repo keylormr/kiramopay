@@ -293,30 +293,36 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
               ))}
             </div>
 
-            {/* Cedula input */}
+            {/* Cedula input. min-w-0 y padding contenido: sin eso, la suma de
+                anchos fijos + px-4 desbordaba en pantallas angostas y corria
+                TODA la pagina hacia un lado (la barra de progreso se veia
+                "desbalanceada" — era el scroll horizontal de la fila). */}
             <div className="flex gap-2 mb-6">
               <input
                 type="text"
+                inputMode="numeric"
                 value={cedula.part1}
                 onChange={(e) => setCedula({ ...cedula, part1: e.target.value.replace(/\D/g, '').slice(0, 1) })}
                 placeholder="1"
-                className="w-14 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
+                className="w-12 shrink-0 bg-[var(--color-surface-2-dark)] px-1 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
               <span className="text-[var(--color-text-muted-dark)] self-center text-2xl">-</span>
               <input
                 type="text"
+                inputMode="numeric"
                 value={cedula.part2}
                 onChange={(e) => setCedula({ ...cedula, part2: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                 placeholder="1234"
-                className="flex-1 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
+                className="flex-1 min-w-0 bg-[var(--color-surface-2-dark)] px-2 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
               <span className="text-[var(--color-text-muted-dark)] self-center text-2xl">-</span>
               <input
                 type="text"
+                inputMode="numeric"
                 value={cedula.part3}
                 onChange={(e) => setCedula({ ...cedula, part3: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                 placeholder="5678"
-                className="flex-1 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
+                className="flex-1 min-w-0 bg-[var(--color-surface-2-dark)] px-2 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium text-center outline-none focus:border-[var(--color-primary)]"
               />
             </div>
 
@@ -494,7 +500,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[var(--color-background-dark)] to-[var(--color-surface-1-dark)] flex flex-col">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-b from-[var(--color-background-dark)] to-[var(--color-surface-1-dark)] flex flex-col">
       {/* Header */}
       <div className="p-4 pt-6">
         <div className="flex items-center justify-between mb-4">
