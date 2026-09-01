@@ -595,6 +595,12 @@ export type TranslationKeys = {
   // Login
   login_welcome: string;
   login_enter_cedula: string;
+  login_identifier_label: string;
+  login_identifier_placeholder: string;
+  login_identifier_invalid: string;
+  login_detected_cedula: string;
+  login_detected_correo: string;
+  login_detected_telefono: string;
   login_last_access: string;
   login_change_cedula: string;
   login_password_title: string;

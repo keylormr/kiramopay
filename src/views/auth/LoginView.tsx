@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Icons } from '../../components/Icons';
 import { Button, Card } from '../../components/ui';
 import { useAuthStore } from '@/stores/auth.store';
+import { clasificarIdentificador } from '@/utils/identificador';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
@@ -23,7 +24,9 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => {
   const { t } = useLanguage();
-  const [cedula, setCedula] = useState('');
+  // Un solo campo de entrada: cedula, correo o telefono. Se clasifica en vivo
+  // para habilitar Continuar y mostrar que tipo se detecto.
+  const [identificador, setIdentificador] = useState('');
   const [password, setPassword] = useState('');
   const [showPasswordStage, setShowPasswordStage] = useState(false);
   const [showPasswordText, setShowPasswordText] = useState(false);
@@ -45,32 +48,49 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     checkBiometric();
   }, []);
 
-  const handleCedulaSubmit = () => {
+  const clasificado = clasificarIdentificador(identificador);
+
+  const handleIdentificadorSubmit = () => {
+    if (!clasificado) {
+      setError(t('login_identifier_invalid'));
+      return;
+    }
     setError('');
     setShowPasswordStage(true);
   };
 
-  const handleLogin = async (userCedula: string, userPassword: string) => {
+  const handleLogin = async (userIdentificador: string, userPassword: string) => {
     setIsLoading(true);
     setError('');
 
-    const res = await useAuthStore.getState().login(userCedula, userPassword);
+    const res = await useAuthStore.getState().login(userIdentificador, userPassword);
     if (res.success) {
       const user = useAuthStore.getState().user;
       if (user) {
-        localStorage.setItem('kiramopay_last_cedula', userCedula);
+        // Se guarda SIEMPRE la cedula del perfil (no lo tecleado): el
+        // quick-login y la biometria releen este valor y la cedula es un
+        // identificador que el backend acepta siempre, sin importar si hoy
+        // se entro con correo o telefono.
+        const cedulaPerfil = user.cedula || userIdentificador;
+        localStorage.setItem('kiramopay_last_cedula', cedulaPerfil);
         localStorage.setItem('kiramopay_last_name', `${user.firstName} ${user.lastName}`);
         // Persist credentials to the OS Keychain/Keystore (native only; a no-op
         // on web, never localStorage) so the user can log in with fingerprint /
         // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
         // cleared when biometrics is disabled (see useApp TOGGLE_BIOMETRIC).
         if (biometricAvailable) {
-          void biometricService.setCredentials('kiramopay', userCedula, userPassword);
+          void biometricService.setCredentials('kiramopay', cedulaPerfil, userPassword);
         }
         onLogin(user);
       }
     } else {
-      setError(res.code === 'RATE_LIMITED' ? t('login_rate_limited') : t('login_wrong_credentials'));
+      setError(
+        res.code === 'RATE_LIMITED'
+          ? t('login_rate_limited')
+          : res.code === 'INVALID_IDENTIFIER'
+            ? t('login_identifier_invalid')
+            : t('login_wrong_credentials'),
+      );
       setPassword('');
     }
     setIsLoading(false);
@@ -86,7 +106,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         if (credentials?.password) {
           handleLogin(lastUser.cedula, credentials.password);
         } else {
-          setCedula(lastUser.cedula);
+          setIdentificador(lastUser.cedula);
           setShowPasswordStage(true);
         }
       }
@@ -97,7 +117,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
 
   const handleQuickLogin = () => {
     if (lastUser) {
-      setCedula(lastUser.cedula);
+      setIdentificador(lastUser.cedula);
       setShowPasswordStage(true);
     }
   };
@@ -176,10 +196,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               </Card>
             )}
 
-            {/* Cedula input */}
+            {/* Identifier input: cedula, correo o telefono en un solo campo */}
             <div className="mb-6">
               <label className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
-                {t('cedula_label')}
+                {t('login_identifier_label')}
               </label>
               <div className="relative">
                 <Icons.CardIcon
@@ -188,23 +208,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 />
                 <input
                   type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   autoFocus
-                  value={cedula}
+                  value={identificador}
                   onChange={(e) => {
-                    setCedula(e.target.value.replace(/\D/g, '').slice(0, 12));
+                    setIdentificador(e.target.value);
                     setError('');
                   }}
-                  placeholder={t('cedula_placeholder')}
+                  placeholder={t('login_identifier_placeholder')}
                   className={`w-full h-14 pl-12 pr-4 rounded-xl text-white text-lg font-semibold placeholder:text-[var(--color-text-muted-dark)] placeholder:font-normal bg-[var(--color-surface-2-dark)] border ${
                     error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border-dark)]'
-                  } focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] outline-none transition-all tabular-nums tracking-wider`}
+                  } focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] outline-none transition-all`}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && cedula.length >= 9) handleCedulaSubmit();
+                    if (e.key === 'Enter' && clasificado) handleIdentificadorSubmit();
                   }}
                 />
               </div>
+              {/* Tipo detectado en vivo: confirma sin estorbar */}
+              {clasificado && !error && (
+                <p className="text-[var(--color-text-muted-dark)] text-sm mt-2 flex items-center gap-1">
+                  <Icons.Check size={14} className="text-[var(--color-success)]" />
+                  {clasificado.tipo === 'cedula' && t('login_detected_cedula')}
+                  {clasificado.tipo === 'correo' && t('login_detected_correo')}
+                  {clasificado.tipo === 'telefono' && t('login_detected_telefono')}
+                </p>
+              )}
               {error && (
                 <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
                   <Icons.AlertCircle size={14} />
@@ -217,11 +248,24 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             <Button
               size="lg"
               fullWidth
-              onClick={handleCedulaSubmit}
-              disabled={cedula.length < 9 || isLoading}
+              onClick={handleIdentificadorSubmit}
+              disabled={!clasificado || isLoading}
               rightIcon={<Icons.ArrowRight size={20} />}
             >
               {t('continue')}
+            </Button>
+
+            {/* Registro a un toque: antes solo existia el enlace del pie, bajo
+                el pliegue en pantallas comunes. Quien llega sin cuenta debe
+                verlo sin scroll. */}
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              onClick={onRegister}
+              className="mt-3 !bg-[var(--color-surface-2-dark)] !text-[var(--color-primary-300)] !border-[var(--color-border-dark)] hover:!bg-[var(--color-surface-3-dark)]"
+            >
+              {t('create_account')}
             </Button>
 
             {/* Demo credentials hint — dev builds only; never shipped to production. */}
@@ -257,7 +301,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('login_password_title')}
             </h1>
             <p className="text-[var(--color-text-secondary-dark)] mb-8 font-mono text-sm">
-              {t('cedula')}: <span className="text-white">{cedula}</span>
+              <span className="text-white">{identificador}</span>
             </p>
 
             {/* Password form — a real <form> so browsers/password managers can
@@ -266,14 +310,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (password.length > 0 && !isLoading) handleLogin(cedula, password);
+                if (password.length > 0 && !isLoading) handleLogin(identificador, password);
               }}
             >
               <input
                 type="text"
                 name="username"
                 autoComplete="username"
-                value={cedula}
+                value={clasificado?.canonico ?? identificador}
                 readOnly
                 hidden
               />
@@ -380,7 +424,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       </footer>
 
       {showRecover && (
-        <RecoverPasswordView initialCedula={cedula} onClose={() => setShowRecover(false)} />
+        <RecoverPasswordView
+          // La recuperacion es por cedula; un correo o telefono tecleado aca
+          // no debe pre-llenar ese campo.
+          initialCedula={clasificado?.tipo === 'cedula' ? clasificado.canonico : ''}
+          onClose={() => setShowRecover(false)}
+        />
       )}
     </div>
   );

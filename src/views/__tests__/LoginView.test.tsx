@@ -66,17 +66,41 @@ describe('LoginView', () => {
     mockUser = null;
   });
 
-  it('should render the login form with cédula input', () => {
+  it('should render the login form with the identifier input', () => {
     renderLoginView();
-    expect(screen.getByPlaceholderText('Ej: 702650930')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Cédula, correo o teléfono')).toBeInTheDocument();
     expect(screen.getByText('Bienvenido')).toBeInTheDocument();
+  });
+
+  it('acepta correo y teléfono como identificador y deshabilita Continuar con basura', async () => {
+    const user = userEvent.setup();
+    renderLoginView();
+
+    const input = screen.getByPlaceholderText('Cédula, correo o teléfono');
+    const continueBtn = screen.getByText('Continuar').closest('button');
+
+    // Basura: no clasifica, Continuar queda deshabilitado
+    await user.type(input, 'hola');
+    expect(continueBtn).toBeDisabled();
+
+    // Correo válido: habilita y muestra el tipo detectado
+    await user.clear(input);
+    await user.type(input, 'keilor@example.com');
+    expect(continueBtn).not.toBeDisabled();
+    expect(screen.getByText('Vas a entrar con tu correo')).toBeInTheDocument();
+
+    // Teléfono de 8 dígitos: habilita
+    await user.clear(input);
+    await user.type(input, '88880001');
+    expect(continueBtn).not.toBeDisabled();
+    expect(screen.getByText('Vas a entrar con tu teléfono')).toBeInTheDocument();
   });
 
   it('should show password input after entering cédula', async () => {
     const user = userEvent.setup();
     renderLoginView();
 
-    const input = screen.getByPlaceholderText('Ej: 702650930');
+    const input = screen.getByPlaceholderText('Cédula, correo o teléfono');
     await user.type(input, '702650930');
 
     const continueBtn = screen.getByText('Continuar');
@@ -98,7 +122,7 @@ describe('LoginView', () => {
     const { onLogin } = renderLoginView();
 
     // Enter cédula
-    const cedulaInput = screen.getByPlaceholderText('Ej: 702650930');
+    const cedulaInput = screen.getByPlaceholderText('Cédula, correo o teléfono');
     await user.type(cedulaInput, '702650930');
     await user.click(screen.getByText('Continuar'));
 

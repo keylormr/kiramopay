@@ -8,6 +8,7 @@ import {
   registerAuthFailureHandler,
 } from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
+import { clasificarIdentificador } from '@/utils/identificador';
 import { limpiarDatosDeUsuario } from '@/stores/limpiarDatosDeUsuario';
 import { clearLockPin } from '@/services/lockKdf';
 import { secureTokenStore } from '@/services/secureTokenStore';
@@ -41,7 +42,7 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
 
-  login: (cedula: string, password: string) => Promise<{ success: boolean; code?: string }>;
+  login: (identificador: string, password: string) => Promise<{ success: boolean; code?: string }>;
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
@@ -70,9 +71,22 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
 
-      login: async (cedula, password) => {
+      login: async (identificador, password) => {
+        // Un solo campo: cedula, correo o telefono. Se clasifica y canonicaliza
+        // aca para que TODO login (manual, quick-login, biometrico) pase por
+        // las mismas reglas que el backend.
+        const clasificado = clasificarIdentificador(identificador);
+        if (!clasificado) {
+          return { success: false, code: 'INVALID_IDENTIFIER' };
+        }
         const api = getApiLayer();
-        const result = await api.auth.login({ cedula, password });
+        const result = await api.auth.login({
+          identifier: clasificado.canonico,
+          // Alias legado solo cuando ES cedula: cubre la ventana en la que el
+          // frontend nuevo habla con un backend que aun no conoce identifier.
+          ...(clasificado.tipo === 'cedula' ? { cedula: clasificado.canonico } : {}),
+          password,
+        });
         if (result.success && result.data) {
           // Antes de hidratar la sesion nueva, vaciar lo que hubiera quedado
           // de un usuario anterior en este dispositivo: sin esto, sus datos
