@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
+import { GraficoDona } from '@/components/GraficoDona';
 import { txTitle } from '@/utils/txTitle';
 import type { Transaction } from '@/types';
 
@@ -612,22 +613,45 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               </div>
             ) : (
               <>
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wide">{t('net_balance')}</h3>
-                    <div className={`text-3xl font-black tracking-tight mt-1 ${summary.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                      {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
+                {/* La dona compone el TOTAL del periodo: ingresos (todo lo
+                    recibido, sea SINPE, pago QR o lo que sea) + gastos = la
+                    cifra del centro. Pedido del dueno: que las partes den el
+                    total, a la vista. */}
+                <div className="flex flex-col items-center gap-4">
+                  <GraficoDona
+                    segmentos={[
+                      { valor: summary.income, color: '#10B981', etiqueta: t('income') },
+                      { valor: summary.expenses, color: '#EF4444', etiqueta: t('expenses') },
+                    ]}
+                  >
+                    <p className="text-[10px] font-bold uv-text-muted uppercase tracking-wide leading-tight">{t('analytics_total_movido')}</p>
+                    <p className="text-lg font-black uv-text-primary tabular-nums leading-tight mt-0.5">
+                      {formatCompact(summary.income + summary.expenses)}
+                    </p>
+                  </GraficoDona>
+
+                  <div className="w-full grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#10B981' }} />
+                      <div className="min-w-0">
+                        <p className="text-[11px] uv-text-muted leading-tight">{t('income')}</p>
+                        <p className="text-sm font-bold text-green-600 dark:text-green-400 tabular-nums truncate">{formatCurrency(summary.income)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end text-right">
+                      <div className="min-w-0">
+                        <p className="text-[11px] uv-text-muted leading-tight">{t('expenses')}</p>
+                        <p className="text-sm font-bold text-red-500 dark:text-red-400 tabular-nums truncate">{formatCurrency(summary.expenses)}</p>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#EF4444' }} />
                     </div>
                   </div>
-                  <div className="text-right space-y-1">
-                    <div className="flex items-center justify-end gap-1.5 text-sm font-bold text-green-600 dark:text-green-400">
-                      <Icons.ArrowDownLeft size={14} />
-                      {formatCurrency(summary.income)}
-                    </div>
-                    <div className="flex items-center justify-end gap-1.5 text-sm font-bold text-red-500 dark:text-red-400">
-                      <Icons.ArrowUpRight size={14} />
-                      {formatCurrency(summary.expenses)}
-                    </div>
+
+                  <div className="w-full flex items-center justify-between pt-3 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                    <span className="text-xs font-bold uv-text-muted uppercase tracking-wide">{t('net_balance')}</span>
+                    <span className={`text-lg font-black tabular-nums ${summary.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                      {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
+                    </span>
                   </div>
                 </div>
 
