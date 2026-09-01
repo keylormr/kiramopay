@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -10,7 +10,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
 import { getApiLayer } from '@/api';
-import { refreshAccounts } from '@/services/dataSync';
+import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
+import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 
@@ -38,6 +39,20 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
+
+  // Los movimientos se refrescan solos cuando llega una notificación en vivo
+  // (WebSocket): dinero que entra o sale aparece en la lista sin que el
+  // usuario tenga que salir y volver. Diferido al próximo tick para no
+  // disparar trabajo síncrono dentro del efecto.
+  const ultimaNotificacion = useNotificationStore((s) => s.notifications[0]?.id);
+  useEffect(() => {
+    if (!ultimaNotificacion) return;
+    const timer = setTimeout(() => {
+      refreshTransactions().catch(() => {});
+      refreshAccounts().catch(() => {});
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [ultimaNotificacion]);
 
   // Sheet States
   const [activeSheet, setActiveSheet] = useState<'none' | 'addMoney' | 'addAccount' | 'txDetail' | 'scanner' | 'scanResult' | 'cobrar' | 'addContact'>('none');
@@ -258,6 +273,44 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </div>
 
+      {/* Transacciones recientes — al puro inicio, a pedido del cliente: lo
+          primero que quiere ver al abrir es qué se movió. Cuatro entradas; el
+          refresco llega solo con la notificación en vivo (efecto de arriba). */}
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
+          <button
+            onClick={onViewAllTransactions}
+            className="text-[var(--color-primary)] text-sm font-semibold hover:underline"
+          >
+            {t('view_all')}
+          </button>
+        </div>
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          {state.transactions.slice(0, 4).map((tx) => {
+            const incoming = tx.amount > 0;
+            return (
+              <div
+                key={tx.id}
+                onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
+                className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
+              >
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                  {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
+                  <div className="text-xs uv-text-muted mt-0.5">{tx.date}</div>
+                </div>
+                <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
+                  {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Quick Actions Grid */}
       <div>
         <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
@@ -458,42 +511,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             </div>
             <span className="text-xs font-bold">{t('add_new')}</span>
           </button>
-        </div>
-      </div>
-
-      {/* Recent Transactions — cashflow-clear list */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
-          <button
-            onClick={onViewAllTransactions}
-            className="text-[var(--color-primary)] text-sm font-semibold hover:underline"
-          >
-            {t('view_all')}
-          </button>
-        </div>
-        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-          {state.transactions.slice(0, 5).map((tx) => {
-            const incoming = tx.amount > 0;
-            return (
-              <div
-                key={tx.id}
-                onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
-                className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
-              >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
-                  {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
-                  <div className="text-xs uv-text-muted mt-0.5">{tx.date}</div>
-                </div>
-                <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
-                  {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 

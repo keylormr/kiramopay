@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
+import {
+  Zap, Lightbulb, PlugZap, UtilityPole, Droplets, ShowerHead, Smartphone,
+  Signal, PhoneCall, Wifi, Tv, MonitorPlay, Cross, ShieldCheck, CarFront,
+  LayoutGrid, FileText,
+} from 'lucide-react';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
@@ -11,46 +16,46 @@ import { refreshAccounts } from '@/services/dataSync';
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
   // Electricidad
-  { id: 'ice', code: 'ICE', name: 'ICE Electricidad', category: 'electricity' as const, logo: '⚡', color: 'from-yellow-500 to-orange-500' },
-  { id: 'cnfl', code: 'CNFL', name: 'CNFL', category: 'electricity' as const, logo: '💡', color: 'from-yellow-400 to-yellow-600' },
-  { id: 'esph', code: 'ESPH', name: 'ESPH Heredia', category: 'electricity' as const, logo: '🔌', color: 'from-green-500 to-emerald-600' },
-  { id: 'coopelesca', code: 'COOPELESCA', name: 'Coopelesca', category: 'electricity' as const, logo: '⚡', color: 'from-blue-500 to-blue-600' },
+  { id: 'ice', code: 'ICE', name: 'ICE Electricidad', category: 'electricity' as const, logo: Zap, color: 'from-yellow-500 to-orange-500' },
+  { id: 'cnfl', code: 'CNFL', name: 'CNFL', category: 'electricity' as const, logo: Lightbulb, color: 'from-yellow-400 to-yellow-600' },
+  { id: 'esph', code: 'ESPH', name: 'ESPH Heredia', category: 'electricity' as const, logo: PlugZap, color: 'from-green-500 to-emerald-600' },
+  { id: 'coopelesca', code: 'COOPELESCA', name: 'Coopelesca', category: 'electricity' as const, logo: UtilityPole, color: 'from-blue-500 to-blue-600' },
 
   // Agua
-  { id: 'aya', code: 'AYA', name: 'AyA', category: 'water' as const, logo: '💧', color: 'from-blue-400 to-cyan-500' },
-  { id: 'esph-agua', code: 'ESPH-AGUA', name: 'ESPH Agua', category: 'water' as const, logo: '🚿', color: 'from-cyan-400 to-blue-500' },
+  { id: 'aya', code: 'AYA', name: 'AyA', category: 'water' as const, logo: Droplets, color: 'from-blue-400 to-cyan-500' },
+  { id: 'esph-agua', code: 'ESPH-AGUA', name: 'ESPH Agua', category: 'water' as const, logo: ShowerHead, color: 'from-cyan-400 to-blue-500' },
 
   // Telefonía
-  { id: 'kolbi', code: 'KOLBI', name: 'Kolbi', category: 'telecom' as const, logo: '📱', color: 'from-green-500 to-green-600' },
-  { id: 'claro', code: 'CLARO', name: 'Claro', category: 'telecom' as const, logo: '📶', color: 'from-red-500 to-red-600' },
-  { id: 'movistar', code: 'MOVISTAR', name: 'Movistar', category: 'telecom' as const, logo: '📞', color: 'from-blue-500 to-indigo-600' },
+  { id: 'kolbi', code: 'KOLBI', name: 'Kolbi', category: 'telecom' as const, logo: Smartphone, color: 'from-green-500 to-green-600' },
+  { id: 'claro', code: 'CLARO', name: 'Claro', category: 'telecom' as const, logo: Signal, color: 'from-red-500 to-red-600' },
+  { id: 'movistar', code: 'MOVISTAR', name: 'Movistar', category: 'telecom' as const, logo: PhoneCall, color: 'from-blue-500 to-indigo-600' },
 
   // Internet/Cable
-  { id: 'tigo', code: 'TIGO', name: 'Tigo', category: 'internet' as const, logo: '📡', color: 'from-blue-600 to-blue-700' },
-  { id: 'liberty', code: 'LIBERTY', name: 'Liberty', category: 'cable' as const, logo: '📺', color: 'from-purple-500 to-purple-600' },
-  { id: 'cabletica', code: 'CABLETICA', name: 'Cabletica', category: 'cable' as const, logo: '🖥️', color: 'from-orange-500 to-red-500' },
+  { id: 'tigo', code: 'TIGO', name: 'Tigo', category: 'internet' as const, logo: Wifi, color: 'from-blue-600 to-blue-700' },
+  { id: 'liberty', code: 'LIBERTY', name: 'Liberty', category: 'cable' as const, logo: Tv, color: 'from-purple-500 to-purple-600' },
+  { id: 'cabletica', code: 'CABLETICA', name: 'Cabletica', category: 'cable' as const, logo: MonitorPlay, color: 'from-orange-500 to-red-500' },
 
   // Otros
-  { id: 'ccss', code: 'CCSS', name: 'CCSS (Caja)', category: 'other' as const, logo: '🏥', color: 'from-green-600 to-emerald-700' },
-  { id: 'ins', code: 'INS', name: 'INS Seguros', category: 'insurance' as const, logo: '🛡️', color: 'from-blue-700 to-blue-800' },
-  { id: 'marchamo', code: 'MARCHAMO', name: 'Marchamo', category: 'other' as const, logo: '🚗', color: 'from-gray-600 to-gray-700' },
+  { id: 'ccss', code: 'CCSS', name: 'CCSS (Caja)', category: 'other' as const, logo: Cross, color: 'from-green-600 to-emerald-700' },
+  { id: 'ins', code: 'INS', name: 'INS Seguros', category: 'insurance' as const, logo: ShieldCheck, color: 'from-blue-700 to-blue-800' },
+  { id: 'marchamo', code: 'MARCHAMO', name: 'Marchamo', category: 'other' as const, logo: CarFront, color: 'from-gray-600 to-gray-700' },
 ];
 
 // Operadores para recargas
 const PHONE_OPERATORS = [
-  { id: 'kolbi', name: 'Kolbi', logo: '🟢', color: 'from-green-500 to-green-600', amounts: [1000, 2000, 3000, 5000, 10000, 20000] },
-  { id: 'claro', name: 'Claro', logo: '🔴', color: 'from-red-500 to-red-600', amounts: [1000, 2000, 5000, 10000, 15000, 20000] },
-  { id: 'movistar', name: 'Movistar', logo: '🔵', color: 'from-blue-500 to-blue-600', amounts: [1000, 2000, 5000, 10000, 20000] },
+  { id: 'kolbi', name: 'Kolbi', logo: Smartphone, color: 'from-green-500 to-green-600', amounts: [1000, 2000, 3000, 5000, 10000, 20000] },
+  { id: 'claro', name: 'Claro', logo: Signal, color: 'from-red-500 to-red-600', amounts: [1000, 2000, 5000, 10000, 15000, 20000] },
+  { id: 'movistar', name: 'Movistar', logo: PhoneCall, color: 'from-blue-500 to-blue-600', amounts: [1000, 2000, 5000, 10000, 20000] },
 ];
 
 const CATEGORIES = [
-  { id: 'all', label: 'cat_all', icon: '📋' },
-  { id: 'electricity', label: 'cat_electricity', icon: '⚡' },
-  { id: 'water', label: 'cat_water', icon: '💧' },
-  { id: 'telecom', label: 'cat_telecom', icon: '📱' },
-  { id: 'internet', label: 'cat_internet', icon: '📡' },
-  { id: 'cable', label: 'cat_cable', icon: '📺' },
-  { id: 'other', label: 'cat_other', icon: '📄' },
+  { id: 'all', label: 'cat_all', icon: LayoutGrid },
+  { id: 'electricity', label: 'cat_electricity', icon: Zap },
+  { id: 'water', label: 'cat_water', icon: Droplets },
+  { id: 'telecom', label: 'cat_telecom', icon: Smartphone },
+  { id: 'internet', label: 'cat_internet', icon: Wifi },
+  { id: 'cable', label: 'cat_cable', icon: Tv },
+  { id: 'other', label: 'cat_other', icon: FileText },
 ];
 
 export const ServicesView: React.FC = () => {
@@ -268,8 +273,8 @@ export const ServicesView: React.FC = () => {
                       onClick={() => handleSelectProvider(provider)}
                       className="min-w-[140px] uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]"
                     >
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-xl mb-2`}>
-                        {provider.logo}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-2`}>
+                        <provider.logo size={20} />
                       </div>
                       <div className="text-left">
                         <p className="font-bold uv-text-primary text-sm truncate">
@@ -315,7 +320,7 @@ export const ServicesView: React.FC = () => {
                     : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
                 }`}
               >
-                <span>{cat.icon}</span>
+                <cat.icon size={15} />
                 {t(cat.label)}
               </button>
             ))}
@@ -329,8 +334,8 @@ export const ServicesView: React.FC = () => {
                 onClick={() => handleSelectProvider(provider)}
                 className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors"
               >
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-2xl mb-3`}>
-                  {provider.logo}
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-3`}>
+                  <provider.logo size={24} />
                 </div>
                 <p className="font-bold uv-text-primary">{provider.name}</p>
                 <p className="text-xs text-gray-500">{provider.code}</p>
@@ -354,8 +359,8 @@ export const ServicesView: React.FC = () => {
                   onClick={() => { setSelectedOperator(op); setShowRechargeSheet(true); }}
                   className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors"
                 >
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-3xl mx-auto mb-2`}>
-                    {op.logo}
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mx-auto mb-2`}>
+                    <op.logo size={26} />
                   </div>
                   <p className="font-bold uv-text-primary">{op.name}</p>
                 </button>
@@ -374,8 +379,8 @@ export const ServicesView: React.FC = () => {
                   const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
                   return (
                     <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-xl mr-3`}>
-                        {op?.logo || '📱'}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
+                        {op ? <op.logo size={20} /> : <Smartphone size={20} />}
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{recharge.phone}</p>
@@ -411,8 +416,8 @@ export const ServicesView: React.FC = () => {
                   const provider = SERVICE_PROVIDERS.find(p => p.id === bill.providerId);
                   return (
                     <div key={bill.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-xl mr-3`}>
-                        {provider?.logo || '📄'}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
+                        {provider ? <provider.logo size={20} /> : <FileText size={20} />}
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{bill.providerName}</p>
@@ -450,8 +455,8 @@ export const ServicesView: React.FC = () => {
                   const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
                   return (
                     <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-xl mr-3`}>
-                        {op?.logo || '📱'}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
+                        {op ? <op.logo size={20} /> : <Smartphone size={20} />}
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{op?.name || 'Recarga'}</p>
@@ -488,8 +493,8 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {selectedProvider && (
             <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedProvider.color} flex items-center justify-center text-2xl`}>
-                {selectedProvider.logo}
+              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedProvider.color} flex items-center justify-center text-white`}>
+                <selectedProvider.logo size={26} />
               </div>
               <div>
                 <p className="font-bold uv-text-primary">{selectedProvider.name}</p>
@@ -557,8 +562,8 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {selectedOperator && (
             <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedOperator.color} flex items-center justify-center text-2xl`}>
-                {selectedOperator.logo}
+              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedOperator.color} flex items-center justify-center text-white`}>
+                <selectedOperator.logo size={26} />
               </div>
               <div>
                 <p className="font-bold uv-text-primary">{selectedOperator.name}</p>

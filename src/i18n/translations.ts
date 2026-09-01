@@ -134,6 +134,10 @@ export type TranslationKeys = {
   enter_pin: string;
   incorrect_pin: string;
   biometric_login: string;
+  bio_offer_title: string;
+  bio_offer_desc: string;
+  bio_offer_accept: string;
+  bio_offer_later: string;
   download_android_app: string;
   create_account: string;
   cedula_not_registered: string;

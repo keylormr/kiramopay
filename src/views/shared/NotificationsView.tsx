@@ -143,14 +143,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                 <Icons.X size={16} />
               </button>
 
-              {notification.action && (
-                <button
-                  type="button"
-                  className="mt-2 w-full py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg text-sm font-medium"
-                >
-                  {notification.action.label}
-                </button>
-              )}
+              {/* El boton de accion era codigo muerto: nada del backend llena
+                  `action` y no tenia onClick — un boton que no hacia nada. Si
+                  algun dia las notificaciones traen rutas, se recablea aqui. */}
             </li>
           ))}
         </ul>
