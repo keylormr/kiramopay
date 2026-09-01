@@ -664,6 +664,10 @@ const en: TranslationKeys = {
 
   // Home insights
   home_spending: 'Spending',
+  home_spent_month: 'Spent this month',
+  home_vs_last_month: 'vs last month',
+  sinpe_contact_saved: 'Contact saved',
+  qr_te_solicitan: 'Requested from you',
   home_top_cat: 'Top category',
   home_savings: 'Savings',
   home_savings_view: 'My Goals',

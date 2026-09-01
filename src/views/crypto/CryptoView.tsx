@@ -28,10 +28,12 @@ const formatLargeNumber = (value: number | string | undefined | null): string =>
   return `$${num.toFixed(2)}`;
 };
 
-// Mini Sparkline Chart Component
+// Mini sparkline: curva suavizada (Catmull-Rom a Bezier) con area
+// degradada, en vez de la polilinea quebrada que se veia de juguete.
 const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean }> = ({ data, positive }) => {
   // Need at least 2 valid numbers to draw a line
   const validData = Array.isArray(data) ? data.filter(d => typeof d === 'number' && !isNaN(d)) : [];
+  const tono = positive ? '#10B981' : '#EF4444';
 
   if (validData.length < 2) {
     // Show a flat line instead of loading skeleton when we have some data
@@ -47,23 +49,31 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
   const range = max - min || 1;
   const height = 40;
   const width = 80;
-
-  const points = validData.map((value, index) => {
-    const x = (index / (validData.length - 1)) * width;
-    const y = height - ((value - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
+  // Margen vertical para que el trazo no se corte en los extremos.
+  const pts = validData.map((value, index) => ({
+    x: (index / (validData.length - 1)) * width,
+    y: 3 + (1 - (value - min) / range) * (height - 6),
+  }));
+  let linea = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    linea += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)} ${(p1.y + (p2.y - p0.y) / 6).toFixed(1)}, ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)} ${(p2.y - (p3.y - p1.y) / 6).toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  const gradId = `spark-${positive ? 'up' : 'down'}`;
 
   return (
     <svg width={width} height={height} className="overflow-visible">
-      <polyline
-        fill="none"
-        stroke={positive ? '#10B981' : '#EF4444'}
-        strokeWidth="2"
-        points={points}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={tono} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={tono} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${linea} L ${width} ${height} L 0 ${height} Z`} fill={`url(#${gradId})`} />
+      <path d={linea} fill="none" stroke={tono} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 };

@@ -110,7 +110,7 @@ const CashflowChart: React.FC<{
       </div>
 
       {/* Columns */}
-      <div className="flex items-stretch gap-[2px]">
+      <div className="flex items-stretch gap-[3px]">
         {buckets.map((b, i) => {
           const active = selected === i;
           const dim = selected != null && !active;
@@ -120,22 +120,28 @@ const CashflowChart: React.FC<{
               type="button"
               onClick={() => setSelected(active ? null : i)}
               aria-label={`${b.label}: +${format(b.income)} / -${format(b.expense)}`}
-              className={`group flex-1 min-w-0 flex flex-col items-center transition-opacity ${dim ? 'opacity-40' : 'opacity-100'}`}
+              className={`group flex-1 min-w-0 flex flex-col items-center transition-opacity duration-200 ${dim ? 'opacity-30' : 'opacity-100'}`}
             >
               {/* income (up) */}
-              <div className="w-full flex flex-col justify-end" style={{ height: half }}>
+              <div className="w-full flex flex-col justify-end items-center" style={{ height: half }}>
                 <div
-                  className="w-full rounded-t-[3px] transition-all duration-500"
-                  style={{ height: Math.max(b.income > 0 ? 2 : 0, (b.income / maxVal) * half), backgroundColor: INCOME_COLOR }}
+                  className="w-full max-w-[14px] rounded-full transition-all duration-500"
+                  style={{
+                    height: Math.max(b.income > 0 ? 4 : 0, (b.income / maxVal) * half),
+                    background: `linear-gradient(to top, ${INCOME_COLOR}99, ${INCOME_COLOR})`,
+                  }}
                 />
               </div>
               {/* baseline */}
-              <div className="w-full h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
+              <div className="w-full h-px my-[2px] bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
               {/* expense (down) */}
-              <div className="w-full flex flex-col justify-start" style={{ height: half }}>
+              <div className="w-full flex flex-col justify-start items-center" style={{ height: half }}>
                 <div
-                  className="w-full rounded-b-[3px] transition-all duration-500"
-                  style={{ height: Math.max(b.expense > 0 ? 2 : 0, (b.expense / maxVal) * half), backgroundColor: EXPENSE_COLOR }}
+                  className="w-full max-w-[14px] rounded-full transition-all duration-500"
+                  style={{
+                    height: Math.max(b.expense > 0 ? 4 : 0, (b.expense / maxVal) * half),
+                    background: `linear-gradient(to bottom, ${EXPENSE_COLOR}99, ${EXPENSE_COLOR})`,
+                  }}
                 />
               </div>
             </button>

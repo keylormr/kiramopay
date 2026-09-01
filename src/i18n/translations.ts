@@ -789,6 +789,10 @@ export type TranslationKeys = {
 
   // Home insights
   home_spending: string;
+  home_spent_month: string;
+  home_vs_last_month: string;
+  sinpe_contact_saved: string;
+  qr_te_solicitan: string;
   home_top_cat: string;
   home_savings: string;
   home_savings_view: string;
