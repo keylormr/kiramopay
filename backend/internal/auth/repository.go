@@ -386,19 +386,21 @@ func regVerifyKey(token string) string      { return "auth:regverify:" + token }
 
 // PutRegistrationOTP stores the hashed code for a phone with a short TTL and
 // resets the attempt counter. The latest send wins.
-// regOTPRecord es el valor JSON del codigo pendiente. Email guarda a que
-// direccion se ENVIO el codigo (vacio si viajo por SMS): probar el codigo
-// prueba posesion de ese buzon, y Register lo usa para marcar email_verified.
+// regOTPRecord es el valor JSON del codigo pendiente. EmailHash guarda el
+// HASH del buzon al que se ENVIO el codigo (vacio si viajo por SMS): probar
+// el codigo prueba posesion de ese buzon, y Register compara este hash contra
+// el del correo que se registra para marcar email_verified. Se guarda hasheado
+// y no en claro para no dejar PII legible en Redis (replica, backup, MONITOR).
 type regOTPRecord struct {
-	CodeHash string `json:"h"`
-	Email    string `json:"e,omitempty"`
+	CodeHash  string `json:"h"`
+	EmailHash string `json:"eh,omitempty"`
 }
 
-func (r *Repository) PutRegistrationOTP(ctx context.Context, phone, codeHash, email string) error {
+func (r *Repository) PutRegistrationOTP(ctx context.Context, phone, codeHash, emailHash string) error {
 	if r.redis == nil {
 		return fmt.Errorf("otp store unavailable")
 	}
-	val, err := json.Marshal(regOTPRecord{CodeHash: codeHash, Email: email})
+	val, err := json.Marshal(regOTPRecord{CodeHash: codeHash, EmailHash: emailHash})
 	if err != nil {
 		return fmt.Errorf("encode otp record: %w", err)
 	}
@@ -443,24 +445,25 @@ func (r *Repository) VerifyRegistrationOTP(ctx context.Context, phone, codeHash 
 		return false, "", nil
 	}
 	_ = r.redis.Del(ctx, regOTPKey(phone), regOTPAttemptsKey(phone)).Err()
-	return true, rec.Email, nil
+	return true, rec.EmailHash, nil
 }
 
 // regVerifyRecord es el valor JSON del token de verificacion: el telefono que
-// probo posesion del codigo y, si el codigo viajo por correo, ese correo.
+// probo posesion del codigo y, si el codigo viajo por correo, el HASH de ese
+// correo (nunca el correo en claro).
 type regVerifyRecord struct {
-	Phone string `json:"p"`
-	Email string `json:"e,omitempty"`
+	Phone     string `json:"p"`
+	EmailHash string `json:"eh,omitempty"`
 }
 
 // PutPhoneVerificationToken records that `phone` proved ownership (and, when
-// the code was delivered by email, which address received it); the token must
-// be presented at register time (short TTL, single use).
-func (r *Repository) PutPhoneVerificationToken(ctx context.Context, token, phone, email string) error {
+// the code was delivered by email, the HASH of the address that received it);
+// the token must be presented at register time (short TTL, single use).
+func (r *Repository) PutPhoneVerificationToken(ctx context.Context, token, phone, emailHash string) error {
 	if r.redis == nil {
 		return fmt.Errorf("otp store unavailable")
 	}
-	val, err := json.Marshal(regVerifyRecord{Phone: phone, Email: email})
+	val, err := json.Marshal(regVerifyRecord{Phone: phone, EmailHash: emailHash})
 	if err != nil {
 		return fmt.Errorf("encode verify record: %w", err)
 	}
@@ -491,7 +494,7 @@ func (r *Repository) ConsumePhoneVerificationToken(ctx context.Context, token st
 			return "", "", fmt.Errorf("decode verify record: %w", jerr)
 		}
 	}
-	return rec.Phone, rec.Email, nil
+	return rec.Phone, rec.EmailHash, nil
 }
 
 func nullable(s string) interface{} {

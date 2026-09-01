@@ -526,3 +526,118 @@ func TestRegister_CedulaConGuionesQuedaCanonica(t *testing.T) {
 		t.Fatalf("login con cedula canonica: %v", err)
 	}
 }
+
+// La cedula que clasificaria como telefono (11 digitos con prefijo 506) se
+// rechaza en el registro: quedaria imposible de usar para entrar.
+func TestRegister_RechazaCedulaNoUsableEnLogin(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	if _, err := svc.Register(context.Background(), &auth.RegisterRequest{
+		Cedula: "50688880001", Phone: "+50688887777",
+		FirstName: "Cedula", LastName: "Telefonica", Password: "Kiramopay2024!",
+	}, emptyCtx); err == nil {
+		t.Fatal("una cedula de 11 digitos que empieza en 506 debia rechazarse")
+	}
+}
+
+// Cambiar el correo por perfil BAJA email_verified: el login por correo deja
+// de funcionar hasta re-verificar (cierra el squatting via UpdateProfile).
+func TestUpdateProfile_CambiarCorreoResetaVerificado(t *testing.T) {
+	svc, _ := armarServicioConCorreo(t)
+	ctx := context.Background()
+	pool := testutil.TestDB(t)
+	userRepo := user.NewRepository(pool)
+
+	resp := registrarVerificado(t, svc, "302220111", "+50688220001", "dueno@example.com", "Kiramopay2024!")
+	if !resp.User.EmailVerified {
+		t.Fatal("precondicion: el registro con OTP por correo debia verificar el correo")
+	}
+
+	// Entra por correo: funciona mientras esta verificado.
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Identifier: "dueno@example.com", Password: "Kiramopay2024!",
+	}, emptyCtx); err != nil {
+		t.Fatalf("login por correo verificado: %v", err)
+	}
+
+	// Cambia el correo por el flujo de perfil.
+	nuevo := "otro@example.com"
+	if err := userRepo.UpdateProfile(ctx, resp.User.ID, &user.UpdateProfileRequest{Email: &nuevo}); err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+
+	// El correo nuevo NO autentica (email_verified quedo en false).
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Identifier: nuevo, Password: "Kiramopay2024!",
+	}, emptyCtx); err == nil {
+		t.Fatal("el correo cambiado por perfil no debia autenticar sin re-verificar")
+	}
+	// La cedula sigue entrando.
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Identifier: "302220111", Password: "Kiramopay2024!",
+	}, emptyCtx); err != nil {
+		t.Fatalf("la cedula debia seguir entrando: %v", err)
+	}
+}
+
+// El contador de lockout por CUENTA impide que tres identificadores de la
+// misma cuenta multipliquen los intentos permitidos.
+func TestLogin_LockoutPorCuentaAcumulaEntreIdentificadores(t *testing.T) {
+	pool := testutil.TestDB(t)
+	redis := testutil.TestRedis(t)
+	svc := auth.NewService(
+		auth.NewRepository(pool, redis),
+		user.NewRepository(pool),
+		wallet.NewRepository(pool),
+		jwtpkg.NewManager("test-secret-key", 15*time.Minute, 7*24*time.Hour),
+		&auth.Options{
+			LockoutStore:     middleware.NewRedisLockoutStore(redis, time.Minute),
+			MaxLoginAttempts: 5,
+		},
+	)
+	ctx := context.Background()
+	if _, err := svc.Register(ctx, &auth.RegisterRequest{
+		Cedula: "303330222", Phone: "+50688330002",
+		FirstName: "Lock", LastName: "Cuenta", Password: "Kiramopay2024!",
+	}, emptyCtx); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	// 5 intentos fallidos repartidos entre cedula y telefono (identificadores
+	// distintos, misma cuenta): el contador por cuenta debe acumularlos.
+	ids := []string{"303330222", "+50688330002", "303330222", "88330002", "303330222"}
+	for _, id := range ids {
+		_, _ = svc.Login(ctx, &auth.LoginRequest{Identifier: id, Password: "malamala"}, emptyCtx)
+	}
+	// La clave correcta debe estar bloqueada por el contador de cuenta, aunque
+	// ningun identificador individual llego solo a 5.
+	if _, err := svc.Login(ctx, &auth.LoginRequest{
+		Identifier: "303330222", Password: "Kiramopay2024!",
+	}, emptyCtx); err == nil {
+		t.Fatal("la cuenta debia estar bloqueada por el contador por cuenta")
+	}
+}
+
+// Backcompat: un valor OTP plano (formato de la version anterior, sin JSON)
+// sigue verificandose; el correo simplemente no queda atado.
+func TestVerifyRegistrationOTP_ValorPlanoEnVuelo(t *testing.T) {
+	pool := testutil.TestDB(t)
+	redis := testutil.TestRedis(t)
+	repo := auth.NewRepository(pool, redis)
+	ctx := context.Background()
+	phone := "+50688440003"
+
+	// Simula el valor que dejaba la version anterior: el hash del codigo, plano.
+	if err := repo.PutRegistrationOTPRaw(ctx, phone, auth.HashOTPForTest("123456")); err != nil {
+		t.Fatalf("sembrar valor plano: %v", err)
+	}
+	ok, emailHash, err := repo.VerifyRegistrationOTP(ctx, phone, auth.HashOTPForTest("123456"))
+	if err != nil {
+		t.Fatalf("VerifyRegistrationOTP: %v", err)
+	}
+	if !ok {
+		t.Fatal("un codigo plano en vuelo debia verificarse")
+	}
+	if emailHash != "" {
+		t.Fatalf("un valor plano no ata correo; emailHash = %q", emailHash)
+	}
+}

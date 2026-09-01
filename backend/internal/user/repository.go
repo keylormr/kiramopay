@@ -153,7 +153,12 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, req *UpdatePr
 		argIdx++
 	}
 	if req.Email != nil {
-		query += fmt.Sprintf(", email_enc = fn_pii_encrypt(NULLIF($%d,'')), email_hash = fn_pii_hmac(NULLIF($%d,''))", argIdx, argIdx)
+		// Cambiar el correo BAJA email_verified: la verificacion probaba el
+		// buzon anterior, no este. Sin esto, quien verifico un correo propio
+		// podia apuntar su cuenta a un correo ajeno conservando el flag en true
+		// y burlar el gate de login-por-correo (resolveLoginUser exige
+		// email_verified). El correo nuevo no autentica hasta re-verificarlo.
+		query += fmt.Sprintf(", email_enc = fn_pii_encrypt(NULLIF($%d,'')), email_hash = fn_pii_hmac(NULLIF($%d,'')), email_verified = false", argIdx, argIdx)
 		args = append(args, *req.Email)
 		argIdx++
 	}

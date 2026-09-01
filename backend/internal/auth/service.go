@@ -34,6 +34,12 @@ var ErrInvalidOTP = errors.New("invalid or expired verification code")
 // required but no valid verification token was presented for the phone.
 var ErrPhoneNotVerified = errors.New("phone number not verified")
 
+// ErrCedulaNoUsableEnLogin se devuelve en Register cuando la cedula, aun
+// siendo de largo valido, clasificaria como otro tipo en el login (p.ej. 11
+// digitos con prefijo 506 = telefono) y por lo tanto nunca serviria para
+// entrar.
+var ErrCedulaNoUsableEnLogin = errors.New("cedula no utilizable para iniciar sesion")
+
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
 type SanctionScreener interface {
@@ -307,6 +313,14 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	// serian dos hashes distintos y la cuenta quedaria imposible de encontrar
 	// desde el login canonicalizado.
 	req.Cedula = soloDigitos(req.Cedula)
+	// La cedula debe clasificar COMO cedula para el login, o quedaria
+	// registrada pero imposible de usar para entrar: p.ej. 11 digitos que
+	// empiezan en 506 los toma el clasificador como telefono. ValidateCedula
+	// (9-12 digitos) aceptaba esos casos; aqui se cierran contra la misma
+	// regla que usa el login.
+	if kind, _, cerr := identifier.Classify(req.Cedula); cerr != nil || kind != identifier.KindCedula {
+		return nil, ErrCedulaNoUsableEnLogin
+	}
 	existing, _ := s.userRepo.FindByCedula(ctx, req.Cedula)
 	if existing != nil {
 		return nil, fmt.Errorf("user already registered")
@@ -337,16 +351,16 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	phoneVerified := false
 	emailVerified := false
 	if req.VerificationToken != "" {
-		verifiedPhone, verifiedEmail, verr := s.authRepo.ConsumePhoneVerificationToken(ctx, req.VerificationToken)
+		verifiedPhone, verifiedEmailHash, verr := s.authRepo.ConsumePhoneVerificationToken(ctx, req.VerificationToken)
 		if verr != nil {
 			return nil, fmt.Errorf("verify phone: %w", verr)
 		}
 		phoneVerified = verifiedPhone != "" && verifiedPhone == req.Phone
 		// El codigo viajo al correo: probarlo prueba posesion de ese buzon.
-		// Solo cuenta si es EL MISMO correo que se registra (comparacion en
-		// canonico lower/trim, igual que el HMAC de BD).
-		emailVerified = phoneVerified && verifiedEmail != "" &&
-			verifiedEmail == strings.ToLower(strings.TrimSpace(req.Email))
+		// Solo cuenta si es EL MISMO correo que se registra. Se compara por
+		// HASH del correo canonico (el buzon nunca viaja en claro por Redis).
+		emailVerified = phoneVerified && verifiedEmailHash != "" &&
+			verifiedEmailHash == hashCorreoCanonico(req.Email)
 	}
 	if s.requirePhoneVerification && !phoneVerified {
 		return nil, ErrPhoneNotVerified
@@ -549,7 +563,10 @@ func (s *Service) sendEmailDetached(userID, to, subject, textBody, htmlBody stri
 // (anti-enumeration). When the user exists, a token is issued and stored.
 // The caller is responsible for delivering the token via email/SMS.
 func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginContext) (string, error) {
-	u, _ := s.userRepo.FindByCedula(ctx, cedula)
+	// Misma canonicalizacion que el login y el registro: sin esto, una cedula
+	// tecleada con guiones no encuentra al usuario y la recuperacion falla en
+	// silencio (nunca llega el correo, sin error visible).
+	u, _ := s.userRepo.FindByCedula(ctx, soloDigitos(cedula))
 	if u == nil {
 		// Burn equivalent CPU so timing doesn't leak existence.
 		hash.DummyVerify()
@@ -716,12 +733,12 @@ func (s *Service) SendRegistrationOTP(ctx context.Context, phone, email string) 
 	// de entrega debe llegarle al cliente para que ofrezca reintentar, no
 	// dejarlo esperando un codigo que nunca va a llegar.
 	if email != "" && s.emailSender != nil {
-		// El registro del codigo lleva el correo (en canonico) al que se envio:
-		// probar el codigo probara posesion de ese buzon, y Register lo usara
-		// para marcar email_verified. Se guarda ANTES de enviar para que no
-		// exista ventana en la que el codigo llegue y no se pueda verificar.
-		canon := strings.ToLower(strings.TrimSpace(email))
-		if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code), canon); err != nil {
+		// El registro del codigo lleva el HASH del correo canonico al que se
+		// envio: probar el codigo probara posesion de ese buzon, y Register
+		// compara ese hash para marcar email_verified. Se guarda hasheado (no
+		// en claro) y ANTES de enviar, para que no exista ventana en la que el
+		// codigo llegue y no se pueda verificar.
+		if err := s.authRepo.PutRegistrationOTP(ctx, phone, hashOTP(code), hashCorreoCanonico(email)); err != nil {
 			return "", fmt.Errorf("store otp: %w", err)
 		}
 		subject, textBody, htmlBody := messaging.RegistrationOTPEmail(code)
@@ -750,7 +767,7 @@ func (s *Service) VerifyRegistrationOTP(ctx context.Context, phone, code string)
 	if phone == "" || code == "" {
 		return "", ErrInvalidOTP
 	}
-	ok, verifiedEmail, err := s.authRepo.VerifyRegistrationOTP(ctx, phone, hashOTP(code))
+	ok, verifiedEmailHash, err := s.authRepo.VerifyRegistrationOTP(ctx, phone, hashOTP(code))
 	if err != nil {
 		return "", fmt.Errorf("verify otp: %w", err)
 	}
@@ -761,10 +778,23 @@ func (s *Service) VerifyRegistrationOTP(ctx context.Context, phone, code string)
 	if err != nil {
 		return "", fmt.Errorf("token gen: %w", err)
 	}
-	if err := s.authRepo.PutPhoneVerificationToken(ctx, token, phone, verifiedEmail); err != nil {
+	if err := s.authRepo.PutPhoneVerificationToken(ctx, token, phone, verifiedEmailHash); err != nil {
 		return "", fmt.Errorf("store verify token: %w", err)
 	}
 	return token, nil
+}
+
+// hashCorreoCanonico devuelve un hash estable del correo en su forma canonica
+// (lower/trim). Se guarda esto en Redis en vez del correo en claro; el unico
+// consumidor (Register) solo necesita una comparacion de igualdad. Cadena
+// vacia entra y sale vacia (canal SMS, sin correo).
+func hashCorreoCanonico(email string) string {
+	canon := strings.ToLower(strings.TrimSpace(email))
+	if canon == "" {
+		return ""
+	}
+	h := sha256.Sum256([]byte("regemail:" + canon))
+	return hex.EncodeToString(h[:])
 }
 
 // soloDigitos deja unicamente los digitos de una cedula tecleada con guiones o

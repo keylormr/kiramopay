@@ -2029,25 +2029,29 @@ components:
 
     RegisterRequest:
       type: object
-      required: [cedula, full_name, pin, phone]
+      required: [cedula, first_name, last_name, password, phone]
       properties:
         cedula:
           type: string
           example: "702650930"
-        full_name:
+        first_name:
           type: string
-          example: "Keilor Martinez"
-        pin:
+          example: "Keilor"
+        last_name:
           type: string
-          minLength: 4
-          maxLength: 6
-          example: "1234"
+          example: "Martinez"
+        password:
+          type: string
+          example: "MiClave2024!"
         phone:
           type: string
           example: "+50688889999"
         email:
           type: string
           format: email
+        verification_token:
+          type: string
+          description: Prueba de posesion del telefono/correo emitida por /auth/register/otp/verify
 
     LoginRequest:
       type: object
