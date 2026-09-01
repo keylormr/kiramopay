@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
+import { useActualizacion } from './hooks/useActualizacion';
+import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
@@ -262,6 +264,34 @@ const Layout = () => {
   const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
 
+  // Actualizacion del APK y campana promocional vigente. La campana espera a
+  // que no haya otra hoja encima (ni oferta biometrica ni actualizacion): un
+  // solo pop-up a la vez o es spam.
+  const { actualizacion, posponer: posponerActualizacion, descargar: descargarActualizacion } = useActualizacion();
+  const [campana, setCampana] = useState<Campana | null>(null);
+  const [campanaCopiada, setCampanaCopiada] = useState(false);
+  const cerrarCampana = () => {
+    if (campana) marcarCampanaVista(campana.id);
+    setCampana(null);
+  };
+  const compartirCampana = async () => {
+    if (!campana) return;
+    const texto = t('promo_share_text');
+    const url = 'https://kiramopay.com';
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'KiramoPay', text: texto, url });
+        cerrarCampana();
+        return;
+      }
+    } catch { /* compartir cancelado: cae al portapapeles */ }
+    try {
+      await navigator.clipboard.writeText(`${texto} ${url}`);
+      setCampanaCopiada(true);
+      setTimeout(() => { setCampanaCopiada(false); cerrarCampana(); }, 1500);
+    } catch { /* sin portapapeles: el usuario cierra manualmente */ }
+  };
+
   // En el APK, ofrecer la huella al primer ingreso: si queda activada desde el
   // dia uno, los siguientes ingresos son un toque. Se ofrece UNA vez; "Ahora
   // no" queda registrado y no se vuelve a molestar (siempre esta en Perfil).
@@ -280,6 +310,16 @@ const Layout = () => {
     });
     return () => { vivo = false; };
   }, [state.settings.biometricEnabled]);
+
+  // La campana espera su turno: sin oferta biometrica ni actualizacion en
+  // pantalla, y con un respiro para no recibir al usuario con un pop-up.
+  useEffect(() => {
+    if (showBioOffer || actualizacion || campana) return;
+    const timer = setTimeout(() => {
+      setCampana(campanaPendiente());
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [showBioOffer, actualizacion, campana]);
 
   const cerrarOfertaBio = async (activar: boolean) => {
     try {
@@ -578,6 +618,69 @@ const Layout = () => {
             </button>
           </div>
         </div>
+      </BottomSheet>
+
+      {/* Actualizacion del APK disponible: un toque baja la nueva y Android
+          la instala encima (misma firma), sin tienda ni pasar archivos. */}
+      <BottomSheet
+        isOpen={actualizacion !== null}
+        onClose={posponerActualizacion}
+        title=""
+      >
+        <div className="text-center py-4 px-2">
+          <div className="w-20 h-20 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
+            <Icons.Download size={36} />
+          </div>
+          <h3 className="text-xl font-black uv-text-primary mb-2">{t('update_title')}</h3>
+          <p className="text-sm uv-text-secondary mb-6">
+            {t('update_body').replace('{version}', actualizacion?.version ?? '')}
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={posponerActualizacion}
+              className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+            >
+              {t('update_later')}
+            </button>
+            <button
+              onClick={descargarActualizacion}
+              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+            >
+              {t('update_download')}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Campana promocional vigente (una sola vez por dispositivo). */}
+      <BottomSheet
+        isOpen={campana !== null}
+        onClose={cerrarCampana}
+        title=""
+      >
+        {campana && (
+          <div className="text-center py-4 px-2">
+            <div className="w-20 h-20 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mx-auto mb-4">
+              {campana.icono === 'Gift' ? <Icons.Gift size={36} /> : campana.icono === 'Share' ? <Icons.Share size={36} /> : <Icons.TrendingUp size={36} />}
+            </div>
+            <h3 className="text-xl font-black uv-text-primary mb-2">{t(campana.tituloKey)}</h3>
+            <p className="text-sm uv-text-secondary mb-6">{t(campana.cuerpoKey)}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={cerrarCampana}
+                className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+              >
+                {t('promo_dismiss')}
+              </button>
+              <button
+                onClick={compartirCampana}
+                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+              >
+                {campanaCopiada ? t('promo_copied') : t(campana.ctaKey)}
+              </button>
+            </div>
+          </div>
+        )}
       </BottomSheet>
 
       <ProfileSwitcherSheet
