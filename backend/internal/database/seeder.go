@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/pkg/hash"
 )
 
@@ -124,11 +125,12 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) erro
 			return fmt.Errorf("hash password for %s: %w", u.Cedula, err)
 		}
 
-		// Insert user
+		// Insert user. referral_code is NOT NULL without a default since
+		// migration 051, so the seed generates one like the app does.
 		_, err = pool.Exec(ctx,
-			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status)
-			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified')`,
-			u.ID, u.Cedula, u.Phone, u.FirstName, u.LastName, pinHash, u.KYCLevel,
+			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status, referral_code)
+			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified', $8)`,
+			u.ID, u.Cedula, u.Phone, u.FirstName, u.LastName, pinHash, u.KYCLevel, user.NewReferralCode(),
 		)
 		if err != nil {
 			return fmt.Errorf("insert user %s: %w", u.Cedula, err)
@@ -588,7 +590,9 @@ func seedLoyalty(ctx context.Context, pool *pgxpool.Pool, userID string) {
 		{"earn", "Pago QR Auto Mercado - 1% cashback", "qr_payment", 185},
 		{"earn", "SINPE a Maria - 1% cashback", "sinpe", 150},
 		{"earn", "Uber Eats - 1.5% cashback", "services", 192},
-		{"earn", "Referido: Carlos Jimenez", "bonus", 500},
+		// Same shape as a real referral bonus (type/ref_type as the model). No
+		// ref_id on purpose: a fixed one would hit uq_loyalty_tx_referral on reseed.
+		{"bonus", "Invitado registrado", "referral", 500},
 		{"earn", "Compra BTC - 0.5% cashback", "crypto", 233},
 		{"redeem", "Canje: Cashback ₡500", "redemption", 500},
 		{"earn", "Pago AyA - 1.5% cashback", "services", 150},

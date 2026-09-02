@@ -756,6 +756,18 @@ export type TranslationKeys = {
   promo_share_text: string;
   promo_copied: string;
   promo_dismiss: string;
+  invite_section_title: string;
+  invite_code_label: string;
+  invite_copy: string;
+  invite_copied: string;
+  invite_share: string;
+  invite_count: string;
+  invite_points: string;
+  invite_how: string;
+  reg_referral_label: string;
+  reg_referral_placeholder: string;
+  reg_referral_from: string;
+  reg_referral_invalid: string;
   analytics_compare_less: string;
   analytics_compare_more: string;
   analytics_compare_flat: string;

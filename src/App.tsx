@@ -22,6 +22,8 @@ import { Capacitor } from '@capacitor/core';
 import { User } from './types';
 import { isLockPinSet, setLockPin, verifyLockPin, MAX_PIN_FAILS } from './services/lockKdf';
 import { takeResetToken } from './utils/resetToken';
+import { takeReferralCode } from './utils/referralCode';
+import { enlaceInvitacion, compartirEnlace } from './utils/compartir';
 import { useAuthStore } from './stores/auth.store';
 import { useBusinessStore } from './stores/business.store';
 import { useBusinessData } from './hooks/useBusinessData';
@@ -276,20 +278,21 @@ const Layout = () => {
   };
   const compartirCampana = async () => {
     if (!campana) return;
-    const texto = t('promo_share_text');
-    const url = 'https://kiramopay.com';
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'KiramoPay', text: texto, url });
-        cerrarCampana();
-        return;
-      }
-    } catch { /* compartir cancelado: cae al portapapeles */ }
-    try {
-      await navigator.clipboard.writeText(`${texto} ${url}`);
+    // El enlace lleva el codigo de invitacion del usuario: asi el invitado
+    // queda atribuido y el bono en puntos se paga de verdad.
+    const resultado = await compartirEnlace(
+      t('promo_share_text'),
+      enlaceInvitacion(state.user?.referralCode),
+    );
+    if (resultado === 'compartido') {
+      cerrarCampana();
+      return;
+    }
+    if (resultado === 'copiado') {
       setCampanaCopiada(true);
       setTimeout(() => { setCampanaCopiada(false); cerrarCampana(); }, 1500);
-    } catch { /* sin portapapeles: el usuario cierra manualmente */ }
+    }
+    // 'nada': sin portapapeles, el usuario cierra manualmente
   };
 
   // En el APK, ofrecer la huella al primer ingreso: si queda activada desde el
@@ -713,6 +716,10 @@ const AuthScreen = () => {
   // Read once on mount: the URL is cleaned immediately, so a later render must
   // not try to read it again and come up empty.
   const [resetToken, setResetToken] = useState(takeResetToken);
+  // Same deal for the invitation code (?ref=): read once here; it survives a
+  // reload in sessionStorage. Only applies to new accounts, so a logged-in
+  // user never mounts this screen and the parameter is ignored.
+  const [referralCode] = useState(takeReferralCode);
 
   const handleLogin = (user: User) => {
     dispatch({ type: 'LOGIN', payload: user });
@@ -732,6 +739,7 @@ const AuthScreen = () => {
     return (
       <Suspense fallback={<LoadingSkeleton />}>
         <RegisterView
+          referralCode={referralCode}
           onComplete={() => setShowRegister(false)}
           onBack={() => setShowRegister(false)}
         />

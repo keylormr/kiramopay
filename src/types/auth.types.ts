@@ -8,4 +8,6 @@ export interface User {
   avatar?: string;
   kycLevel: 0 | 1 | 2;
   createdAt: string;
+  /** Código de invitación propio (programa de referidos). Lo asigna el backend. */
+  referralCode?: string;
 }

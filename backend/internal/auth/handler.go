@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/pkg/identifier"
 	"github.com/kiramopay/backend/pkg/response"
 	"github.com/kiramopay/backend/pkg/validator"
@@ -103,9 +104,25 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", errs.Error())
 		return
 	}
+	// Codigo de invitacion (opcional): aqui se normaliza y se valida la FORMA;
+	// que exista en una cuenta activa lo decide el servicio. Un codigo mal
+	// formado nunca llega a la BD.
+	if req.ReferralCode != "" {
+		req.ReferralCode = user.NormalizeReferralCode(req.ReferralCode)
+		if req.ReferralCode != "" && !user.IsValidReferralCodeFormat(req.ReferralCode) {
+			response.Error(w, http.StatusBadRequest, "REFERRAL_CODE_INVALID", "codigo de invitacion invalido")
+			return
+		}
+	}
 
 	result, err := h.service.Register(r.Context(), &req, loginContext(r))
 	if err != nil {
+		// Codigo con buena forma pero sin cuenta activa detras: 400 propio para
+		// que el cliente lo distinga del 409 generico y deje corregirlo.
+		if errors.Is(err, ErrReferralCodeInvalid) {
+			response.Error(w, http.StatusBadRequest, "REFERRAL_CODE_INVALID", "codigo de invitacion invalido")
+			return
+		}
 		response.Error(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
 		return
 	}

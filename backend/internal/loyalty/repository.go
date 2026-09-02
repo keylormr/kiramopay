@@ -80,6 +80,53 @@ func (r *Repository) RecordTransaction(ctx context.Context, tx *PointsTransactio
 	return err
 }
 
+// GrantBonusOnce acredita un bono en UNA sentencia: inserta el movimiento
+// (ON CONFLICT DO NOTHING contra uq_loyalty_tx_referral) y suma el saldo solo
+// si el insert ocurrio. Devuelve false si ya existia (reintento): no acredita
+// doble y no deja movimientos huerfanos. Requiere cuenta existente
+// (GetOrCreateAccount antes).
+//
+// ON CONFLICT sin arbitro cubre cualquier indice unico, incluido el parcial;
+// sin ese indice en la BD no hay contra que chocar y acreditaria doble.
+func (r *Repository) GrantBonusOnce(ctx context.Context, tx *PointsTransaction) (granted bool, err error) {
+	result, err := r.db.Exec(ctx,
+		`WITH ins AS (
+		   INSERT INTO loyalty_transactions (id, user_id, type, points, description, ref_type, ref_id)
+		   VALUES ($1, $2, $3, $4, $5, $6, $7)
+		   ON CONFLICT DO NOTHING
+		   RETURNING points
+		 )
+		 UPDATE loyalty_accounts a
+		    SET total_points = a.total_points + ins.points,
+		        available_points = a.available_points + ins.points,
+		        lifetime_points = a.lifetime_points + GREATEST(ins.points, 0),
+		        updated_at = NOW()
+		   FROM ins
+		  WHERE a.user_id = $2`,
+		tx.ID, tx.UserID, tx.Type, tx.Points, tx.Description, tx.RefType, tx.RefID)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+// ReferralSummary reads the user's own code, how many accounts registered with
+// it and the points those referrals paid. BonusPoints is filled by the service
+// from its config.
+func (r *Repository) ReferralSummary(ctx context.Context, userID string) (*ReferralSummary, error) {
+	var s ReferralSummary
+	err := r.db.QueryRow(ctx,
+		`SELECT u.referral_code,
+		        (SELECT COUNT(*) FROM users x WHERE x.referred_by = u.id AND x.deleted_at IS NULL),
+		        (SELECT COALESCE(SUM(t.points), 0) FROM loyalty_transactions t WHERE t.user_id = u.id AND t.ref_type = 'referral')
+		   FROM users u WHERE u.id = $1`,
+		userID).Scan(&s.ReferralCode, &s.InvitedCount, &s.PointsEarned)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *Repository) GetTransactions(ctx context.Context, userID string, limit int) ([]PointsTransaction, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, type, points, description, COALESCE(ref_type, ''), COALESCE(ref_id, ''), created_at

@@ -2,11 +2,14 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/auth"
+	"github.com/kiramopay/backend/internal/loyalty"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/internal/user"
@@ -58,6 +61,10 @@ func TestRegister_Success(t *testing.T) {
 	}
 	if resp.Tokens.FamilyID == "" {
 		t.Fatal("family id missing")
+	}
+	// Every account is born with its own invitation code (generated on insert).
+	if len(resp.User.ReferralCode) != 8 {
+		t.Fatalf("expected an 8-char referral code, got %q", resp.User.ReferralCode)
 	}
 }
 
@@ -639,5 +646,214 @@ func TestVerifyRegistrationOTP_ValorPlanoEnVuelo(t *testing.T) {
 	}
 	if emailHash != "" {
 		t.Fatalf("un valor plano no ata correo; emailHash = %q", emailHash)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Programa de referidos
+//
+//  El codigo de invitacion viaja en el registro; el referidor cobra puntos de
+//  lealtad (nunca dinero) una sola vez por invitado. Corre contra la BD real:
+//  el indice unico del bono y el CHECK anti-auto-referido son parte del
+//  contrato, no un detalle del esquema.
+// ─────────────────────────────────────────────────────────────────────────
+
+const bonoReferidoPrueba = 500
+
+type entornoReferidos struct {
+	svc         *auth.Service
+	pool        *pgxpool.Pool
+	userRepo    *user.Repository
+	loyaltyRepo *loyalty.Repository
+}
+
+// armarEntornoReferidos deja el servicio de auth con el programa de referidos
+// conectado (bonus puntos por invitado registrado) y devuelve los repos para
+// inspeccionar la atribucion y el saldo.
+func armarEntornoReferidos(t *testing.T, bonus int) entornoReferidos {
+	t.Helper()
+	pool := testutil.TestDB(t)
+	redis := testutil.TestRedis(t)
+	userRepo := user.NewRepository(pool)
+	loyaltyRepo := loyalty.NewRepository(pool)
+	svc := auth.NewService(
+		auth.NewRepository(pool, redis),
+		userRepo,
+		wallet.NewRepository(pool),
+		jwtpkg.NewManager("test-secret-key", 15*time.Minute, 7*24*time.Hour),
+		&auth.Options{
+			Referrals: loyalty.NewService(loyaltyRepo, &loyalty.Options{ReferralBonusPoints: bonus}),
+		},
+	)
+	return entornoReferidos{svc: svc, pool: pool, userRepo: userRepo, loyaltyRepo: loyaltyRepo}
+}
+
+// registrarReferidor deja la cuenta A lista y devuelve su registro, con el
+// codigo de invitacion recien generado.
+func registrarReferidor(t *testing.T, svc *auth.Service) *user.UserRecord {
+	t.Helper()
+	resp, err := svc.Register(context.Background(), &auth.RegisterRequest{
+		Cedula: "304440111", Phone: "+50688550001",
+		FirstName: "Ana", LastName: "Referidora", Password: "Kiramopay2024!",
+	}, emptyCtx)
+	if err != nil {
+		t.Fatalf("registro del referidor: %v", err)
+	}
+	if len(resp.User.ReferralCode) != 8 {
+		t.Fatalf("el referidor nacio sin codigo de 8 simbolos: %q", resp.User.ReferralCode)
+	}
+	return resp.User
+}
+
+// registrarInvitado intenta registrar la cuenta B con el codigo dado.
+func registrarInvitado(svc *auth.Service, codigo string) (*auth.LoginResponse, error) {
+	return svc.Register(context.Background(), &auth.RegisterRequest{
+		Cedula: "304440222", Phone: "+50688550002",
+		FirstName: "Beto", LastName: "Invitado", Password: "Kiramopay2024!",
+		ReferralCode: codigo,
+	}, emptyCtx)
+}
+
+func contarInvitados(t *testing.T, repo *user.Repository, referidorID string) int {
+	t.Helper()
+	n, err := repo.CountReferrals(context.Background(), referidorID)
+	if err != nil {
+		t.Fatalf("CountReferrals: %v", err)
+	}
+	return n
+}
+
+func TestRegister_ConCodigoDeReferido(t *testing.T) {
+	env := armarEntornoReferidos(t, bonoReferidoPrueba)
+	ctx := context.Background()
+	a := registrarReferidor(t, env.svc)
+
+	b, err := registrarInvitado(env.svc, a.ReferralCode)
+	if err != nil {
+		t.Fatalf("registro del invitado: %v", err)
+	}
+
+	if n := contarInvitados(t, env.userRepo, a.ID); n != 1 {
+		t.Fatalf("invitados de A = %d, esperaba 1", n)
+	}
+
+	acct, err := env.loyaltyRepo.GetOrCreateAccount(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateAccount: %v", err)
+	}
+	if acct.AvailablePoints != bonoReferidoPrueba {
+		t.Fatalf("puntos disponibles de A = %d, esperaba %d", acct.AvailablePoints, bonoReferidoPrueba)
+	}
+
+	txs, err := env.loyaltyRepo.GetTransactions(ctx, a.ID, 100)
+	if err != nil {
+		t.Fatalf("GetTransactions: %v", err)
+	}
+	if len(txs) != 1 {
+		t.Fatalf("movimientos de A = %d, esperaba 1", len(txs))
+	}
+	if txs[0].Type != "bonus" || txs[0].RefType != "referral" || txs[0].RefID != b.User.ID || txs[0].Points != bonoReferidoPrueba {
+		t.Fatalf("movimiento inesperado: %+v", txs[0])
+	}
+
+	// El invitado no recibe nada en esta version: solo el referidor.
+	if txsB, _ := env.loyaltyRepo.GetTransactions(ctx, b.User.ID, 100); len(txsB) != 0 {
+		t.Fatalf("el invitado no debia recibir puntos; tiene %d movimientos", len(txsB))
+	}
+}
+
+// El codigo se normaliza (trim + mayusculas): " k7pm3xq2 " vale lo mismo que
+// "K7PM3XQ2". El codigo de A se fija a mano para que la prueba sea determinista.
+func TestRegister_CodigoNormalizado(t *testing.T) {
+	env := armarEntornoReferidos(t, bonoReferidoPrueba)
+	ctx := context.Background()
+	a := registrarReferidor(t, env.svc)
+	if _, err := env.pool.Exec(ctx, `UPDATE users SET referral_code = 'K7PM3XQ2' WHERE id = $1`, a.ID); err != nil {
+		t.Fatalf("fijar codigo del referidor: %v", err)
+	}
+
+	if _, err := registrarInvitado(env.svc, " k7pm3xq2 "); err != nil {
+		t.Fatalf("el codigo en minusculas y con espacios debia aceptarse: %v", err)
+	}
+	if n := contarInvitados(t, env.userRepo, a.ID); n != 1 {
+		t.Fatalf("invitados de A = %d, esperaba 1", n)
+	}
+}
+
+// Un codigo con buena forma pero sin cuenta detras rechaza el registro entero:
+// no queda usuario a medias.
+func TestRegister_CodigoInexistente(t *testing.T) {
+	env := armarEntornoReferidos(t, bonoReferidoPrueba)
+
+	_, err := registrarInvitado(env.svc, "ZZZZZZ22")
+	if !errors.Is(err, auth.ErrReferralCodeInvalid) {
+		t.Fatalf("esperaba ErrReferralCodeInvalid, obtuve %v", err)
+	}
+	if u, _ := env.userRepo.FindByCedula(context.Background(), "304440222"); u != nil {
+		t.Fatal("el invitado no debia quedar registrado con un codigo inexistente")
+	}
+}
+
+// El codigo de una cuenta que no esta activa se trata como inexistente: no se
+// premia a cuentas suspendidas.
+func TestRegister_CodigoDeCuentaSuspendida(t *testing.T) {
+	env := armarEntornoReferidos(t, bonoReferidoPrueba)
+	ctx := context.Background()
+	a := registrarReferidor(t, env.svc)
+	if _, err := env.pool.Exec(ctx, `UPDATE users SET status = 'suspended' WHERE id = $1`, a.ID); err != nil {
+		t.Fatalf("suspender al referidor: %v", err)
+	}
+
+	_, err := registrarInvitado(env.svc, a.ReferralCode)
+	if !errors.Is(err, auth.ErrReferralCodeInvalid) {
+		t.Fatalf("el codigo de una cuenta suspendida debia tratarse como inexistente; obtuve %v", err)
+	}
+	if n := contarInvitados(t, env.userRepo, a.ID); n != 0 {
+		t.Fatalf("una cuenta suspendida no debia sumar invitados; tiene %d", n)
+	}
+}
+
+// Sin Referrals (el armado de setupAuthService) el registro con codigo sigue
+// funcionando y la atribucion se guarda; simplemente nadie cobra.
+func TestRegister_SinReferrals(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	pool := testutil.TestDB(t)
+	userRepo := user.NewRepository(pool)
+	loyaltyRepo := loyalty.NewRepository(pool)
+
+	a := registrarReferidor(t, svc)
+	if _, err := registrarInvitado(svc, a.ReferralCode); err != nil {
+		t.Fatalf("sin programa de puntos el registro con codigo debia seguir funcionando: %v", err)
+	}
+	if n := contarInvitados(t, userRepo, a.ID); n != 1 {
+		t.Fatalf("invitados de A = %d, esperaba 1", n)
+	}
+	if txs, _ := loyaltyRepo.GetTransactions(context.Background(), a.ID, 100); len(txs) != 0 {
+		t.Fatalf("sin Referrals nadie cobra; A tiene %d movimientos", len(txs))
+	}
+}
+
+// REFERRAL_BONUS_POINTS=0 apaga la acreditacion pero NO la atribucion: el
+// invitado queda ligado a quien lo trajo, con cero puntos.
+func TestRegister_ProgramaApagado(t *testing.T) {
+	env := armarEntornoReferidos(t, 0)
+	ctx := context.Background()
+	a := registrarReferidor(t, env.svc)
+
+	if _, err := registrarInvitado(env.svc, a.ReferralCode); err != nil {
+		t.Fatalf("registro con el programa apagado: %v", err)
+	}
+	if n := contarInvitados(t, env.userRepo, a.ID); n != 1 {
+		t.Fatalf("invitados de A = %d, esperaba 1", n)
+	}
+	acct, err := env.loyaltyRepo.GetOrCreateAccount(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateAccount: %v", err)
+	}
+	if acct.AvailablePoints != 0 {
+		t.Fatalf("con el programa apagado A no debia cobrar; tiene %d puntos", acct.AvailablePoints)
+	}
+	if txs, _ := env.loyaltyRepo.GetTransactions(ctx, a.ID, 100); len(txs) != 0 {
+		t.Fatalf("con el programa apagado no debia haber movimientos; hay %d", len(txs))
 	}
 }

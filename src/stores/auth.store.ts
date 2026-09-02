@@ -26,6 +26,8 @@ interface RegisterParams {
   password: string;
   email?: string;
   verificationToken?: string;
+  /** Codigo de invitacion de otro usuario; solo viaja si el invitado lo tiene. */
+  referralCode?: string;
 }
 
 interface AuthState {
@@ -43,7 +45,7 @@ interface AuthState {
   refreshToken: string | null;
 
   login: (identificador: string, password: string) => Promise<{ success: boolean; code?: string }>;
-  register: (params: RegisterParams) => Promise<{ success: boolean; error?: string }>;
+  register: (params: RegisterParams) => Promise<{ success: boolean; error?: string; code?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
   /** Silently rotate the token pair using the in-memory refresh token. */
@@ -111,9 +113,9 @@ export const useAuthStore = create<AuthState>()(
         return { success: false, code: result.error?.code };
       },
 
-      register: async ({ cedula, phone, firstName, lastName, password, email, verificationToken }) => {
+      register: async ({ cedula, phone, firstName, lastName, password, email, verificationToken, referralCode }) => {
         const api = getApiLayer();
-        const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email, verificationToken });
+        const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email, verificationToken, referralCode });
         if (result.success && result.data) {
           // Cuenta recien creada en un dispositivo posiblemente compartido:
           // arrancar sin residuos del usuario anterior.
@@ -130,7 +132,9 @@ export const useAuthStore = create<AuthState>()(
           syncAllData().catch(() => {});
           return { success: true };
         }
-        return { success: false, error: result.error?.message || 'Error al registrar' };
+        // El codigo viaja igual que en login: la UI distingue un codigo de
+        // invitacion inexistente del error generico.
+        return { success: false, error: result.error?.message || 'Error al registrar', code: result.error?.code };
       },
 
       loginWithUser: (user) => {

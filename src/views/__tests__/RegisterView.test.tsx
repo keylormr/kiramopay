@@ -50,7 +50,7 @@ vi.mock('@/hooks/useApp', () => ({
 
 import { RegisterView } from '../auth/RegisterView';
 
-function renderRegisterView(props?: Partial<{ onComplete: () => void; onBack: () => void }>) {
+function renderRegisterView(props?: Partial<{ onComplete: () => void; onBack: () => void; referralCode: string }>) {
   const defaultProps = {
     onComplete: vi.fn(),
     onBack: vi.fn(),
@@ -236,4 +236,95 @@ describe('RegisterView', () => {
       expect(screen.getByText('Cedula ya registrada')).toBeInTheDocument();
     });
   }, 30000);
+
+  // Programa de referidos: el codigo que trae el enlace (?ref=) prellena el
+  // campo, viaja normalizado y SOLO cuando existe (el test de arriba fija que
+  // sin codigo el payload no cambia).
+  describe('codigo de invitacion', () => {
+    beforeEach(() => {
+      sessionStorage.clear();
+    });
+
+    it('viene prellenado desde el enlace y viaja en el payload', async () => {
+      mockRegister.mockResolvedValue({ success: true });
+
+      const user = userEvent.setup();
+      const { onComplete } = renderRegisterView({ referralCode: 'K7PM3XQ2' });
+
+      // Desde el primer paso se le dice que ya trae codigo.
+      expect(screen.getByText(/Te invitaron con el código K7PM3XQ2/i)).toBeInTheDocument();
+
+      await navigateToPasswordStep(user);
+
+      expect(screen.getByPlaceholderText('Ej. K7PM3XQ2')).toHaveValue('K7PM3XQ2');
+
+      await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+
+      await waitFor(() => {
+        expect(mockRegister).toHaveBeenCalledWith({
+          cedula: '702650930',
+          phone: '+50688881234',
+          firstName: 'Test',
+          lastName: 'User',
+          password: 'StrongP@ss1',
+          email: 'persona@example.com',
+          verificationToken: 'tok-prueba',
+          referralCode: 'K7PM3XQ2',
+        });
+        expect(onComplete).toHaveBeenCalled();
+      });
+    }, 30000);
+
+    it('el codigo tecleado viaja en mayusculas', async () => {
+      mockRegister.mockResolvedValue({ success: true });
+
+      const user = userEvent.setup();
+      renderRegisterView();
+      await navigateToPasswordStep(user);
+
+      await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText('Ej. K7PM3XQ2'), 'k7pm3xq2');
+      await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+
+      await waitFor(() => {
+        expect(mockRegister).toHaveBeenCalledWith(
+          expect.objectContaining({ referralCode: 'K7PM3XQ2' }),
+        );
+      });
+    }, 30000);
+
+    it('muestra el mensaje propio cuando el backend no encuentra el codigo', async () => {
+      mockRegister.mockResolvedValue({ success: false, code: 'REFERRAL_CODE_INVALID' });
+
+      const user = userEvent.setup();
+      const { onComplete } = renderRegisterView({ referralCode: 'K7PM3XQ2' });
+      await navigateToPasswordStep(user);
+
+      await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Ese código de invitación no existe/i)).toBeInTheDocument();
+      });
+      expect(onComplete).not.toHaveBeenCalled();
+    }, 30000);
+
+    it('un codigo a medias no se manda: pide corregirlo sin llamar al backend', async () => {
+      const user = userEvent.setup();
+      renderRegisterView();
+      await navigateToPasswordStep(user);
+
+      await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText('Ej. K7PM3XQ2'), 'ABC');
+      await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+
+      expect(await screen.findByText(/Ese código de invitación no existe/i)).toBeInTheDocument();
+      expect(mockRegister).not.toHaveBeenCalled();
+    }, 30000);
+  });
 });

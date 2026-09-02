@@ -10,11 +10,62 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo          *Repository
+	referralBonus int
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+// Options tunes the points program. nil is tolerated (referrals off).
+type Options struct {
+	// ReferralBonusPoints por invitado registrado; 0 = no acreditar.
+	ReferralBonusPoints int
+}
+
+func NewService(repo *Repository, opts *Options) *Service {
+	s := &Service{repo: repo}
+	if opts != nil && opts.ReferralBonusPoints > 0 {
+		s.referralBonus = opts.ReferralBonusPoints
+	}
+	return s
+}
+
+// RewardReferral acredita el bono de referido al referidor por el registro del
+// invitado. Idempotente por invitado (uq_loyalty_tx_referral). Ignora
+// referrerID == invitedUserID. Devuelve (false, nil) si ya estaba acreditado o
+// si el programa esta apagado.
+func (s *Service) RewardReferral(ctx context.Context, referrerID, invitedUserID string) (bool, error) {
+	if referrerID == "" || invitedUserID == "" || referrerID == invitedUserID || s.referralBonus <= 0 {
+		return false, nil
+	}
+	if _, err := s.repo.GetOrCreateAccount(ctx, referrerID); err != nil {
+		return false, err
+	}
+	granted, err := s.repo.GrantBonusOnce(ctx, &PointsTransaction{
+		ID:          uuid.New().String(),
+		UserID:      referrerID,
+		Type:        "bonus",
+		Points:      int64(s.referralBonus),
+		Description: "Invitado registrado",
+		RefType:     "referral",
+		RefID:       invitedUserID,
+	})
+	if err != nil {
+		return false, err
+	}
+	if granted {
+		s.checkTierUpgrade(ctx, referrerID)
+	}
+	return granted, nil
+}
+
+// GetReferralSummary returns the user's code, invited count, points earned and
+// the bonus the program currently promises (0 when it is off).
+func (s *Service) GetReferralSummary(ctx context.Context, userID string) (*ReferralSummary, error) {
+	summary, err := s.repo.ReferralSummary(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	summary.BonusPoints = s.referralBonus
+	return summary, nil
 }
 
 func (s *Service) GetAccount(ctx context.Context, userID string) (*PointsAccount, error) {

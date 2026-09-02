@@ -17,8 +17,8 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/kiramopay/backend/internal/assistant"
 	"github.com/kiramopay/backend/internal/appversion"
+	"github.com/kiramopay/backend/internal/assistant"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
@@ -251,10 +251,17 @@ func main() {
 		Hacienda: kyc.NewHaciendaClient("", ""),
 	})
 	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
+	// Loyalty nace ANTES que auth: el registro con codigo de invitacion le
+	// acredita el bono al referidor a traves de Referrals. Si se construyera
+	// despues, Referrals quedaria nil y nadie cobraria sin que nada fallara.
+	loyaltyService := loyalty.NewService(loyaltyRepo, &loyalty.Options{
+		ReferralBonusPoints: cfg.Loyalty.ReferralBonusPoints,
+	})
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
 		LockoutStore:             lockoutStore,
 		AuditLogger:              auditLogger,
 		Screener:                 kycService,
+		Referrals:                loyaltyService,
 		MaxLoginAttempts:         5,
 		IdleTimeout:              cfg.JWT.IdleTimeout,
 		AbsoluteTimeout:          cfg.JWT.RefreshDuration,
@@ -323,7 +330,6 @@ func main() {
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
 
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService)
-	loyaltyService := loyalty.NewService(loyaltyRepo)
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
 	splitService := splitpay.NewService(splitRepo, txService)
 	cardsService := cards.NewService(cardsRepo)
@@ -739,7 +745,11 @@ func main() {
 			r.Get("/loyalty/transactions", loyaltyHandler.GetTransactions)
 			// No client-facing earn endpoint: points must be issued server-side
 			// from real captured margin (QR commission / FX spread), never from
-			// client-reported amounts.
+			// client-reported amounts. The referral bonus follows the same rule:
+			// the server credits it after a verified registration with a valid
+			// invitation code (auth.Register -> loyalty.RewardReferral); this
+			// route only reads the summary.
+			r.Get("/loyalty/referrals", loyaltyHandler.GetReferrals)
 			r.Get("/loyalty/rewards", loyaltyHandler.GetRewards)
 			r.Post("/loyalty/redeem", loyaltyHandler.RedeemReward)
 			r.Get("/loyalty/redemptions", loyaltyHandler.GetRedemptions)

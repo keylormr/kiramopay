@@ -71,6 +71,22 @@ func (h *Handler) GetRedemptions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, redemptions)
 }
 
+// GetReferrals returns the caller's referral summary (own code, invited count,
+// points earned, promised bonus).
+func (h *Handler) GetReferrals(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
+	summary, err := h.service.GetReferralSummary(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, summary)
+}
+
 func (h *Handler) GetCashbackRules(w http.ResponseWriter, r *http.Request) {
 	rules, err := h.service.GetCashbackRules(r.Context())
 	if err != nil {

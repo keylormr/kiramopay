@@ -40,10 +40,22 @@ var ErrPhoneNotVerified = errors.New("phone number not verified")
 // entrar.
 var ErrCedulaNoUsableEnLogin = errors.New("cedula no utilizable para iniciar sesion")
 
+// ErrReferralCodeInvalid se devuelve en Register cuando el codigo de
+// invitacion no corresponde a ninguna cuenta activa. El invitado lo ve como
+// 400 y puede corregirlo o borrarlo; ignorarlo en silencio dejaria a ambos
+// lados esperando un bono que nunca llega.
+var ErrReferralCodeInvalid = errors.New("referral code not found")
+
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
 type SanctionScreener interface {
 	ScreenIsClear(ctx context.Context, fullName string) (bool, error)
+}
+
+// ReferralRewarder paga el bono de referido cuando un invitado completa el
+// registro. Implementado por loyalty.Service; opcional (nil desactiva).
+type ReferralRewarder interface {
+	RewardReferral(ctx context.Context, referrerID, invitedUserID string) (bool, error)
 }
 
 type Service struct {
@@ -54,6 +66,7 @@ type Service struct {
 	lockoutStore     middleware.LockoutStore
 	auditLogger      *audit.Logger
 	screener         SanctionScreener
+	referrals        ReferralRewarder
 	maxLoginAttempts int
 	idleTimeout      time.Duration
 	absoluteTimeout  time.Duration
@@ -70,9 +83,13 @@ type Service struct {
 
 // Options for service wiring.
 type Options struct {
-	LockoutStore     middleware.LockoutStore
-	AuditLogger      *audit.Logger
-	Screener         SanctionScreener
+	LockoutStore middleware.LockoutStore
+	AuditLogger  *audit.Logger
+	Screener     SanctionScreener
+	// Referrals acredita el bono al referidor al terminar un registro con
+	// codigo de invitacion. Nil: la atribucion (referred_by) se guarda igual,
+	// pero nadie cobra.
+	Referrals        ReferralRewarder
 	MaxLoginAttempts int
 	// IdleTimeout ends a session after this much inactivity (no refresh).
 	// AbsoluteTimeout caps the total session age from the original login.
@@ -118,6 +135,7 @@ func NewService(
 		lockoutStore:             opts.LockoutStore,
 		auditLogger:              opts.AuditLogger,
 		screener:                 opts.Screener,
+		referrals:                opts.Referrals,
 		maxLoginAttempts:         opts.MaxLoginAttempts,
 		idleTimeout:              opts.IdleTimeout,
 		absoluteTimeout:          opts.AbsoluteTimeout,
@@ -179,6 +197,9 @@ type RegisterRequest struct {
 	Email     string `json:"email,omitempty"`
 	// VerificationToken proves phone ownership (issued by VerifyRegistrationOTP).
 	VerificationToken string `json:"verification_token,omitempty"`
+	// ReferralCode es el codigo de invitacion de otro usuario (opcional). Se
+	// normaliza (trim + mayusculas) y debe existir en una cuenta activa.
+	ReferralCode string `json:"referral_code,omitempty"`
 }
 
 type SendRegistrationOTPRequest struct {
@@ -326,6 +347,19 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		return nil, fmt.Errorf("user already registered")
 	}
 
+	// Codigo de invitacion: se resuelve AQUI, antes de consumir el token de
+	// verificacion (es de un solo uso) y antes de hashear. Un codigo que no
+	// corresponde a una cuenta activa rechaza el registro entero, sin dejar
+	// nada a medias. El registro del referidor jamas sale al cliente.
+	var referrer *user.UserRecord
+	if code := user.NormalizeReferralCode(req.ReferralCode); code != "" {
+		found, rerr := s.userRepo.FindByReferralCode(ctx, code)
+		if rerr != nil || found == nil {
+			return nil, ErrReferralCodeInvalid
+		}
+		referrer = found
+	}
+
 	// AML onboarding gate: refuse registration of sanctioned individuals.
 	// Fail-open on screening *errors* (infra hiccup must not block all signups);
 	// fail-closed on an actual hit.
@@ -371,8 +405,17 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
+	newUserID := uuid.New().String()
+	// Atribucion: se escribe UNA vez, en el INSERT, y nunca se actualiza. La
+	// guardia contra auto-referido es redundante (el invitado no existe cuando
+	// se resuelve el codigo) pero gratis; la BD tiene su propio CHECK.
+	var referredBy *string
+	if referrer != nil && referrer.ID != newUserID {
+		referredBy = &referrer.ID
+	}
+	// ReferralCode se deja vacio: lo genera userRepo.Create.
 	newUser := &user.UserRecord{
-		ID:            uuid.New().String(),
+		ID:            newUserID,
 		Cedula:        req.Cedula,
 		Phone:         req.Phone,
 		PhoneVerified: phoneVerified,
@@ -383,12 +426,22 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		PasswordHash:  pwHash,
 		Status:        "active",
 		KYCLevel:      0,
+		ReferredBy:    referredBy,
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	if err := s.walletRepo.CreateForUser(ctx, newUser.ID); err != nil {
 		return nil, fmt.Errorf("create wallet: %w", err)
+	}
+
+	// Bono al referidor, best-effort: el registro ya es valido (usuario y
+	// wallet creados); si la acreditacion falla se loguea, no se deshace nada.
+	// RewardReferral es idempotente por invitado (uq_loyalty_tx_referral).
+	if referredBy != nil && s.referrals != nil {
+		if _, rerr := s.referrals.RewardReferral(ctx, referrer.ID, newUser.ID); rerr != nil {
+			slog.Warn("referral bonus not credited", "referrer", referrer.ID, "invited", newUser.ID, "err", rerr.Error())
+		}
 	}
 
 	tokens, err := s.jwt.GenerateTokenPair(newUser.ID)
@@ -400,7 +453,7 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	}
 
 	if s.auditLogger != nil {
-		s.auditLogger.Log(audit.Event{
+		evt := audit.Event{
 			UserID:       newUser.ID,
 			Action:       "user_register",
 			ResourceType: "user",
@@ -408,7 +461,12 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 			IPAddress:    lc.IPAddress,
 			UserAgent:    lc.UserAgent,
 			RiskLevel:    "low",
-		})
+		}
+		// Solo el id del referidor (no es PII): details es JSONB sin cifrar.
+		if referredBy != nil {
+			evt.Details = map[string]interface{}{"referred_by": *referredBy}
+		}
+		s.auditLogger.Log(evt)
 	}
 	return &LoginResponse{User: newUser, Tokens: tokens}, nil
 }

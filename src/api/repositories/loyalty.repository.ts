@@ -47,9 +47,20 @@ export interface CashbackRule {
   active: boolean;
 }
 
+// Programa de referidos: el resumen que ve el usuario en Perfil. bonusPoints
+// es lo que la UI promete y viene del servidor (REFERRAL_BONUS_POINTS); 0
+// significa que el programa esta apagado y la UI no promete nada.
+export interface ReferralSummary {
+  referralCode: string;
+  invitedCount: number;
+  pointsEarned: number;
+  bonusPoints: number;
+}
+
 // Points are issued server-side from real captured margin; there is no
 // client-facing earn call (a client-reported amount would allow
-// self-crediting redeemable points).
+// self-crediting redeemable points). The referral bonus is likewise issued by
+// the server after a verified registration.
 export interface ILoyaltyRepository {
   getAccount(): Promise<ApiResponse<PointsAccount>>;
   getTransactions(): Promise<ApiResponse<PointsTransaction[]>>;
@@ -57,4 +68,5 @@ export interface ILoyaltyRepository {
   redeemReward(rewardId: string): Promise<ApiResponse<Redemption>>;
   getRedemptions(): Promise<ApiResponse<Redemption[]>>;
   getCashbackRules(): Promise<ApiResponse<CashbackRule[]>>;
+  getReferrals(): Promise<ApiResponse<ReferralSummary>>;
 }
