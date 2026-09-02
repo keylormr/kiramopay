@@ -1,15 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs><clipPath id="esquinas"><rect width="512" height="512" rx="112"/></clipPath></defs>
+  <g clip-path="url(#esquinas)">
   <defs>
-    <linearGradient id="kp" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="kp-fondo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="512" y2="512">
       <stop offset="0" stop-color="#2D7BFF"/>
-      <stop offset="1" stop-color="#0A84FF"/>
+      <stop offset="0.5" stop-color="#2562DA"/>
+      <stop offset="1" stop-color="#1B294A"/>
+    </linearGradient>
+    <radialGradient id="kp-luz" gradientUnits="userSpaceOnUse" cx="128" cy="112" r="330">
+      <stop offset="0" stop-color="#6FD0FF" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#4FA6FF" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#4FA6FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="kp-hondo" gradientUnits="userSpaceOnUse" cx="440" cy="450" r="320">
+      <stop offset="0" stop-color="#0C1730" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#0C1730" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="kp-cinta" gradientUnits="userSpaceOnUse" x1="220" y1="256" x2="371.7" y2="256">
+      <stop offset="0" stop-color="#EDF2FC"/>
+      <stop offset="0.5" stop-color="#F8FAFF"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="kp-asta" gradientUnits="userSpaceOnUse" x1="150" y1="137" x2="220" y2="375">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6EDFA"/>
+    </linearGradient>
+    <linearGradient id="kp-naranja" gradientUnits="userSpaceOnUse" x1="286.2" y1="197.8" x2="347" y2="137">
+      <stop offset="0" stop-color="#F07518"/>
+      <stop offset="0.35" stop-color="#FF8A2B"/>
+      <stop offset="1" stop-color="#FFA04A"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#kp)"/>
-  <!-- "K" mark, drawn as paths so it renders identically without a font -->
-  <g fill="#ffffff">
-    <rect x="150" y="140" width="46" height="232" rx="6"/>
-    <path d="M206 256 L320 140 L372 140 L250 262 L206 262 Z"/>
-    <path d="M250 250 L372 372 L318 372 L206 260 L206 250 Z"/>
+  <g id="fondo">
+    <rect x="0" y="0" width="512" height="512" fill="url(#kp-fondo)"/>
+    <rect x="0" y="0" width="512" height="512" fill="url(#kp-luz)"/>
+    <rect x="0" y="0" width="512" height="512" fill="url(#kp-hondo)"/>
   </g>
+  <g id="frente" transform="translate(256 256) scale(0.94) translate(-256 -256)">
+    <polygon points="178.5,256 322.3,112.3 371.7,161.7 277.5,256 371.7,350.3 322.3,399.7" fill="url(#kp-cinta)"/>
+    <polygon points="261.4,173.1 322.3,112.3 371.7,161.7 310.9,222.6" fill="url(#kp-naranja)"/>
+    <polygon points="220,214.5 236,198.5 236,313.5 220,297.5" fill="#DCE6F5"/>
+    <rect x="150" y="137" width="70" height="238" fill="url(#kp-asta)"/>
+  </g>
+</g>
 </svg>
