@@ -172,6 +172,14 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
+	-- Same fallback for the two CHECKs: ADD COLUMN never adds constraints and
+	-- Postgres has no ADD CONSTRAINT IF NOT EXISTS, so a duplicate is swallowed.
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_referral_code CHECK (referral_code ~ '^[A-Z0-9]{8}$');
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 	CREATE TABLE IF NOT EXISTS wallets (
 		id UUID PRIMARY KEY,
