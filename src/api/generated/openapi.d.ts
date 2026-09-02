@@ -202,6 +202,15 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
+                /** @description Validation error (VALIDATION_ERROR) or invitation code rejected (REFERRAL_CODE_INVALID: bad format, unknown code, or the referrer's account is not active). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 409: components["responses"]["Conflict"];
             };
         };
@@ -385,13 +394,16 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description User profile */
+                /** @description User profile (includes the user's own referral_code) */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": {
+                            success?: boolean;
+                            data?: components["schemas"]["UserProfile"];
+                        };
                     };
                 };
             };
@@ -1807,6 +1819,49 @@ export interface paths {
                     };
                     content?: never;
                 };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/loyalty/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's referral summary
+         * @description Own invitation code, how many invited users registered with it and the loyalty points earned from them. bonus_points is what the server pays per registered invitee (0 = program switched off); clients must show this value, never a hardcoded one.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Referral summary */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: components["schemas"]["ReferralSummary"];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -4506,20 +4561,39 @@ export interface components {
         RegisterRequest: {
             /** @example 702650930 */
             cedula: string;
-            /** @example Keilor Martinez */
-            full_name: string;
-            /** @example 1234 */
-            pin: string;
+            /** @example Keilor */
+            first_name: string;
+            /** @example Martinez */
+            last_name: string;
+            /** @example MiClave2024! */
+            password: string;
             /** @example +50688889999 */
             phone: string;
             /** Format: email */
             email?: string;
+            /** @description Prueba de posesion del telefono/correo emitida por /auth/register/otp/verify */
+            verification_token?: string;
+            /**
+             * @description Codigo de invitacion de otro usuario (opcional). Se normaliza a mayusculas; debe pertenecer a una cuenta activa o el registro responde 400 REFERRAL_CODE_INVALID.
+             * @example K7PM3XQ2
+             */
+            referral_code?: string;
         };
+        /** @description Se exige al menos uno de identifier o cedula. identifier acepta cedula, correo o telefono en un solo campo (el tipo se decide por forma); cedula queda como alias legado para clientes viejos. */
         LoginRequest: {
-            /** @example 702650930 */
-            cedula: string;
-            /** @example 1234 */
-            pin: string;
+            /**
+             * @description Cedula, correo o telefono del usuario
+             * @example usuario@example.com
+             */
+            identifier?: string;
+            /**
+             * @deprecated
+             * @description Alias legado de identifier (solo cedula)
+             * @example 702650930
+             */
+            cedula?: string;
+            /** @example MiClave2024! */
+            password: string;
         };
         AuthResponse: {
             success?: boolean;
@@ -4531,8 +4605,54 @@ export interface components {
                     id?: string;
                     cedula?: string;
                     full_name?: string;
+                    /** @description The new user's own invitation code (8 chars) */
+                    referral_code?: string;
                 };
             };
+        };
+        /** @description The authenticated user's own record (GET /users/me). */
+        UserProfile: {
+            /** Format: uuid */
+            id?: string;
+            cedula?: string;
+            phone?: string;
+            phone_verified?: boolean;
+            /** Format: email */
+            email?: string;
+            email_verified?: boolean;
+            first_name?: string;
+            last_name?: string;
+            /** Format: date-time */
+            birth_date?: string;
+            profile_picture_url?: string;
+            biometric_enabled?: boolean;
+            kyc_level?: number;
+            kyc_status?: string;
+            status?: string;
+            /**
+             * @description Own invitation code to share (stable, not PII)
+             * @example K7PM3XQ2
+             */
+            referral_code?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            /** Format: date-time */
+            last_login_at?: string;
+        };
+        ReferralSummary: {
+            /** @example K7PM3XQ2 */
+            referral_code?: string;
+            /** @description Registered (non-deleted) users who signed up with this code */
+            invited_count?: number;
+            /**
+             * Format: int64
+             * @description Loyalty points credited by the referral program
+             */
+            points_earned?: number;
+            /** @description Points paid per registered invitee; 0 means the program is off */
+            bonus_points?: number;
         };
         UpdateProfileRequest: {
             full_name?: string;

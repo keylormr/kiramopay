@@ -38,6 +38,12 @@ export interface RegisterRequest {
   password: string;
   /** Token de un solo uso emitido por verifyRegistrationOtp (prueba el OTP). */
   verificationToken?: string;
+  /**
+   * Código de invitación de otro usuario (8 caracteres, ya normalizado). Se
+   * manda solo si el invitado lo tiene; el backend responde
+   * REFERRAL_CODE_INVALID cuando no existe.
+   */
+  referralCode?: string;
 }
 
 export interface SendRegistrationOtpResult {

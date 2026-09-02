@@ -5,6 +5,7 @@ import type {
   Reward,
   Redemption,
   CashbackRule,
+  ReferralSummary,
 } from '../../repositories/loyalty.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -122,5 +123,26 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       maxPoints: r.max_points_per_tx,
       active: r.active,
     })));
+  }
+
+  async getReferrals(): Promise<ApiResponse<ReferralSummary>> {
+    const res = await this.client.get<{
+      referral_code: string; invited_count: number;
+      points_earned: number; bonus_points: number;
+    }>('/api/v1/loyalty/referrals');
+
+    // Un cuerpo con otra forma (un stub, un proxy que responde con una lista)
+    // no debe llegar a la vista como resumen: sin codigo no hay resumen, y los
+    // contadores se fuerzan a numero para que nunca viaje un undefined.
+    if (!res.success || !res.data || typeof res.data.referral_code !== 'string') {
+      return apiError('FETCH_FAILED', 'Failed to fetch referrals');
+    }
+
+    return apiSuccess({
+      referralCode: res.data.referral_code,
+      invitedCount: Number(res.data.invited_count) || 0,
+      pointsEarned: Number(res.data.points_earned) || 0,
+      bonusPoints: Number(res.data.bonus_points) || 0,
+    });
   }
 }

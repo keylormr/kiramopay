@@ -153,11 +153,25 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		kyc_verified_at TIMESTAMPTZ,
 		role VARCHAR(20) NOT NULL DEFAULT 'user',
 		status VARCHAR(20) DEFAULT 'active',
+		-- Referral program (migration 051). Production has NO default (the app
+		-- generates the code); the DEFAULT here only keeps the bare
+		-- INSERT INTO users of older tests working. Hex upper still satisfies
+		-- the format CHECK.
+		referral_code VARCHAR(8) NOT NULL DEFAULT upper(substr(md5(random()::text), 1, 8)),
+		referred_by UUID REFERENCES users(id) ON DELETE SET NULL,
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW(),
 		last_login_at TIMESTAMPTZ,
-		deleted_at TIMESTAMPTZ
+		deleted_at TIMESTAMPTZ,
+		CONSTRAINT chk_users_referral_code CHECK (referral_code ~ '^[A-Z0-9]{8}$'),
+		CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id)
 	);
+	-- A persisted local test DB predates the columns above (CREATE TABLE IF NOT
+	-- EXISTS is a no-op there); CI always starts from an empty database.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(8) NOT NULL DEFAULT upper(substr(md5(random()::text), 1, 8));
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
+	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
 
 	CREATE TABLE IF NOT EXISTS wallets (
 		id UUID PRIMARY KEY,
@@ -842,6 +856,35 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		price BIGINT NOT NULL
 	);
 
+	-- Loyalty (migration 006, points account + history) and the referral-bonus
+	-- idempotency index (migration 051). GrantBonusOnce relies on
+	-- uq_loyalty_tx_referral: without it ON CONFLICT DO NOTHING has nothing to
+	-- hit and the bonus would be credited twice.
+	CREATE TABLE IF NOT EXISTS loyalty_accounts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+		total_points BIGINT DEFAULT 0,
+		available_points BIGINT DEFAULT 0,
+		lifetime_points BIGINT DEFAULT 0,
+		tier VARCHAR(20) DEFAULT 'bronze',
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS loyalty_transactions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		type VARCHAR(20) NOT NULL,
+		points BIGINT NOT NULL,
+		description TEXT DEFAULT '',
+		ref_type VARCHAR(30),
+		ref_id VARCHAR(100),
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS idx_loyalty_tx_user ON loyalty_transactions(user_id, created_at DESC);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_loyalty_tx_referral
+		ON loyalty_transactions (ref_id) WHERE ref_type = 'referral';
+
 	CREATE TABLE IF NOT EXISTS savings_goals (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -897,6 +940,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
+		"loyalty_transactions", "loyalty_accounts",
 		"journal_entries", "journal_postings",
 		"transactions",
 		"totp_recovery_codes", "user_totp",

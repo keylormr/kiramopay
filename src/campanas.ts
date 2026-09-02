@@ -4,9 +4,11 @@
 // de la app — que ahora se anuncian solas, asi que el canal existe.
 //
 // Los textos viven en i18n (claves por campana) para respetar los 7 idiomas.
-// El copy de cada campana lo decide el dueno del producto. La de invitados
-// promete beneficios por decision suya del 2026-09-01; el programa de
-// referidos que los concrete esta en el backlog.
+// El copy de cada campana lo decide el dueno del producto. Regla: solo se
+// ofrece lo que existe. La de invitados promete puntos por cada invitado
+// registrado y eso ya lo paga el programa de referidos (enlace con el codigo
+// del usuario, bono en puntos de lealtad al referidor). Si se quiere que
+// quienes ya la vieron la vuelvan a ver ahora que es real, cambiar el `id`.
 
 export interface Campana {
   /** Identificador estable: gobierna el "ya la vi" en localStorage. */

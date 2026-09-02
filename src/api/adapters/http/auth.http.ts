@@ -78,6 +78,7 @@ export class HttpAuthRepository implements IAuthRepository {
         first_name: string;
         last_name: string;
         email: string;
+        referral_code?: string;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -90,12 +91,16 @@ export class HttpAuthRepository implements IAuthRepository {
         email: request.email,
         password: request.password,
         verification_token: request.verificationToken,
+        // undefined se omite en el JSON: sin codigo no viaja la clave.
+        referral_code: request.referralCode,
       },
       false,
     );
 
     if (!res.success || !res.data) {
-      return apiError('REGISTER_FAILED', res.error?.message || 'Registration failed');
+      // Conservar el codigo del backend: la UI distingue un codigo de
+      // invitacion inexistente (REFERRAL_CODE_INVALID) del error generico.
+      return apiError(res.error?.code || 'REGISTER_FAILED', res.error?.message || 'Registration failed');
     }
 
     const { user: u, tokens } = res.data;
@@ -110,6 +115,7 @@ export class HttpAuthRepository implements IAuthRepository {
       avatar: '',
       createdAt: new Date().toISOString(),
       kycLevel: 0,
+      referralCode: u.referral_code,
     };
 
     return apiSuccess({
@@ -244,6 +250,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kyc_level: number;
       profile_picture_url?: string;
       created_at?: string;
+      referral_code?: string;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
@@ -261,6 +268,7 @@ export class HttpAuthRepository implements IAuthRepository {
       avatar: u.profile_picture_url || '',
       createdAt: u.created_at || new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
+      referralCode: u.referral_code,
     };
     return apiSuccess<User>(user);
   }

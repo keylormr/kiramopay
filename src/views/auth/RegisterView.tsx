@@ -4,10 +4,13 @@ import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
+import { normalizarCodigoInvitacion, clearReferralCode } from '@/utils/referralCode';
 
 interface RegisterViewProps {
   onComplete: () => void;
   onBack: () => void;
+  /** Código de invitación que trajo el enlace (?ref=); prellena el campo. */
+  referralCode?: string;
 }
 
 type Step = 'phone' | 'otp' | 'cedula' | 'name' | 'password';
@@ -40,9 +43,11 @@ const isPasswordComplex = (pwd: string): boolean =>
   /[0-9]/.test(pwd) &&
   /[^A-Za-z0-9]/.test(pwd);
 
-export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }) => {
+export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, referralCode }) => {
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>('phone');
+  // Editable: el invitado puede corregirlo o borrarlo si el backend lo rechaza.
+  const [codigoInvitacion, setCodigoInvitacion] = useState(referralCode ?? '');
   const [phone, setPhone] = useState('');
   // El código de verificación viaja al correo (SES es el canal real hoy); el
   // teléfono queda como la identidad de la cuenta.
@@ -112,6 +117,14 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       return;
     }
 
+    // Un código a medias no se manda "vacío" en silencio: el invitado lo
+    // corrige o lo borra, igual que cuando el backend no lo encuentra.
+    const codigo = normalizarCodigoInvitacion(codigoInvitacion);
+    if (codigoInvitacion.trim() && !codigo) {
+      setError(t('reg_referral_invalid'));
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
@@ -126,12 +139,17 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
       // puede funcionar) y el token prueba que el código llegó a ese correo.
       email: email.trim(),
       verificationToken,
+      // Solo viaja si existe: sin código, el payload queda igual que siempre.
+      ...(codigo ? { referralCode: codigo } : {}),
     });
 
     setIsLoading(false);
 
     if (result.success) {
+      clearReferralCode();
       onComplete();
+    } else if (result.code === 'REFERRAL_CODE_INVALID') {
+      setError(t('reg_referral_invalid'));
     } else {
       setError(result.error || t('reg_error_default'));
     }
@@ -192,6 +210,15 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
             <p className="text-sm text-[var(--color-text-muted-dark)] mb-6">
               {t('reg_email_hint')}
             </p>
+
+            {/* Vino por un enlace de invitación: se lo decimos desde el primer
+                paso para que sepa que el código ya está puesto. */}
+            {referralCode && (
+              <p className="flex items-center gap-2 text-sm text-[var(--color-text-muted-dark)] mb-6">
+                <Icons.Gift size={16} className="text-[var(--color-accent)] shrink-0" />
+                <span>{t('reg_referral_from').replace('{code}', referralCode)}</span>
+              </p>
+            )}
 
             {error && <p className="text-red-400 text-sm mb-4" aria-live="polite">{error}</p>}
 
@@ -467,11 +494,34 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack }
                 </div>
               </div>
 
+              <div>
+                <label htmlFor="reg-referral" className="text-sm text-[var(--color-text-muted-dark)] mb-2 block">
+                  {t('reg_referral_label')}
+                </label>
+                {/* Solo el alfabeto del backend (^[A-Z0-9]{8}$): se pasa a
+                    mayúsculas y se quitan espacios al teclear o pegar. */}
+                <input
+                  id="reg-referral"
+                  type="text"
+                  value={codigoInvitacion}
+                  onChange={(e) => {
+                    setCodigoInvitacion(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8));
+                    setError('');
+                  }}
+                  placeholder={t('reg_referral_placeholder')}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={8}
+                  className="w-full bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-mono tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)] transition-colors"
+                />
+              </div>
+
               {confirmPassword && password !== confirmPassword && (
                 <p className="text-[var(--color-danger)] text-sm">{t('passwords_dont_match')}</p>
               )}
               {error && (
-                <p className="text-[var(--color-danger)] text-sm flex items-center gap-1">
+                <p className="text-[var(--color-danger)] text-sm flex items-center gap-1" aria-live="polite">
                   <Icons.AlertCircle size={14} />
                   {error}
                 </p>

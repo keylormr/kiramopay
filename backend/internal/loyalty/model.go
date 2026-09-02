@@ -31,12 +31,21 @@ const (
 type PointsTransaction struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
-	Type        string    `json:"type"` // earn, redeem, expire, bonus
+	Type        string    `json:"type"` // earn, redeem, expire, bonus (bonus: referral program, ref_type='referral')
 	Points      int64     `json:"points"`
 	Description string    `json:"description"`
-	RefType     string    `json:"ref_type,omitempty"` // transaction, sinpe, service, ride, food_order
-	RefID       string    `json:"ref_id,omitempty"`
+	RefType     string    `json:"ref_type,omitempty"` // transaction, sinpe, service, ride, food_order, referral
+	RefID       string    `json:"ref_id,omitempty"`   // for ref_type='referral': the invited user's id (unique per invitee)
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// ── Referral Summary ─────────────────────────────────────────────────────────
+
+type ReferralSummary struct {
+	ReferralCode string `json:"referral_code"`
+	InvitedCount int    `json:"invited_count"`
+	PointsEarned int64  `json:"points_earned"`
+	BonusPoints  int    `json:"bonus_points"` // lo que promete la UI: viene del server, nunca hardcodeado en el front
 }
 
 // ── Cashback Rule ────────────────────────────────────────────────────────────

@@ -86,6 +86,7 @@ Ver `.env.example` para todas las variables. Las mas importantes:
 | `EXCHANGE_RATE_API_KEY` | *(vacio)* | API key de exchangerate-api.com |
 | `EXCHANGE_RATE_INTERVAL` | `15m` | Intervalo de actualizacion de tasas |
 | `COINGECKO_API_KEY` | *(vacio)* | API key Pro de CoinGecko (opcional) |
+| `REFERRAL_BONUS_POINTS` | `500` | Puntos de lealtad que recibe quien invita por cada registro con su codigo (0 apaga el pago, conserva la atribucion) |
 | `JWT_SECRET` | `dev-secret-...` | Secreto para firmar JWT (cambiar en produccion) |
 | `JWT_ACCESS_MINUTES` | `15` | Duracion del access token en minutos |
 | `JWT_REFRESH_DAYS` | `7` | Duracion del refresh token en dias |

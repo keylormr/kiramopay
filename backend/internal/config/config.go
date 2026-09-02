@@ -18,6 +18,14 @@ type Config struct {
 	Telemetry TelemetryConfig
 	Gemini    GeminiConfig
 	Anthropic AnthropicConfig
+	Loyalty   LoyaltyConfig
+}
+
+// LoyaltyConfig controls the points program (referrals for now).
+type LoyaltyConfig struct {
+	// ReferralBonusPoints: puntos que recibe quien invita cuando el invitado
+	// completa su registro. 0 apaga la acreditacion (la atribucion se guarda igual).
+	ReferralBonusPoints int // REFERRAL_BONUS_POINTS
 }
 
 // GeminiConfig controls the conversational assistant. The assistant is a no-op
@@ -208,6 +216,11 @@ func Load() *Config {
 			MsgLimitFree:     getEnvInt("ASSISTANT_MSG_LIMIT_FREE", 30),
 			MsgLimitPlus:     getEnvInt("ASSISTANT_MSG_LIMIT_PLUS", 60),
 			MsgLimitPro:      getEnvInt("ASSISTANT_MSG_LIMIT_PRO", 120),
+		},
+		Loyalty: LoyaltyConfig{
+			// Negative values are clamped to 0 (program off) rather than debiting
+			// the referrer.
+			ReferralBonusPoints: max(getEnvInt("REFERRAL_BONUS_POINTS", 500), 0),
 		},
 	}
 }

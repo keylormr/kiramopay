@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiLayer } from '@/api';
+import type { ReferralSummary } from '@/api/repositories/loyalty.repository';
+import { compartirEnlace, enlaceInvitacion } from '@/utils/compartir';
 import { Icons } from '../../components/Icons';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -96,6 +98,59 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   }, []);
   const dailyLimit = limits?.daily ?? 500000;
   const monthlyLimit = limits?.monthly ?? 5000000;
+
+  // Programa de referidos. El codigo propio ya viene en /users/me, asi que se
+  // muestra de inmediato; el resumen (invitados, puntos y cuanto paga el
+  // programa) llega del servidor: la promesa de puntos nunca se fija aca.
+  const [referidos, setReferidos] = useState<ReferralSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getApiLayer().loyalty?.getReferrals();
+        if (!cancelled && res?.success && res.data) setReferidos(res.data);
+      } catch {
+        /* sin resumen: queda el codigo del perfil y las metricas en blanco */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const codigoInvitacion = referidos?.referralCode || state.user?.referralCode || '';
+  const bonusPoints = referidos?.bonusPoints ?? 0;
+
+  const [codigoCopiado, setCodigoCopiado] = useState(false);
+  const [enlaceCopiado, setEnlaceCopiado] = useState(false);
+  const [compartiendo, setCompartiendo] = useState(false);
+  const copiadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const avisarCopiado = (setter: (v: boolean) => void) => {
+    if (copiadoTimer.current) clearTimeout(copiadoTimer.current);
+    setter(true);
+    copiadoTimer.current = setTimeout(() => setter(false), 1500);
+  };
+  useEffect(() => () => { if (copiadoTimer.current) clearTimeout(copiadoTimer.current); }, []);
+
+  const copiarCodigo = async () => {
+    if (!codigoInvitacion) return;
+    try {
+      await navigator.clipboard.writeText(codigoInvitacion);
+      avisarCopiado(setCodigoCopiado);
+    } catch {
+      /* sin portapapeles: el codigo sigue visible en pantalla */
+    }
+  };
+
+  const compartirInvitacion = async () => {
+    if (!codigoInvitacion || compartiendo) return;
+    setCompartiendo(true);
+    try {
+      const resultado = await compartirEnlace(t('promo_share_text'), enlaceInvitacion(codigoInvitacion));
+      if (resultado === 'copiado') avisarCopiado(setEnlaceCopiado);
+    } finally {
+      setCompartiendo(false);
+    }
+  };
 
   const getPasswordStrength = (pwd: string): 'weak' | 'medium' | 'strong' => {
     let score = 0;
@@ -311,6 +366,95 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
+        </div>
+      </div>
+
+      {/* Invite Section — referral program (points to the referrer only) */}
+      <div>
+        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+          {t('invite_section_title')}
+        </h3>
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+          <div className="flex items-center px-4 py-3.5">
+            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mr-3 shrink-0">
+              <Icons.Gift size={18} className="text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p
+                className={`text-xs transition-colors ${codigoCopiado ? 'text-green-600 font-semibold' : 'uv-text-muted'}`}
+                aria-live="polite"
+              >
+                {codigoCopiado ? t('invite_copied') : t('invite_code_label')}
+              </p>
+              <p className="font-mono text-base font-bold uv-text-primary tabular-nums tracking-widest mt-0.5 truncate">
+                {codigoInvitacion || '········'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={copiarCodigo}
+              disabled={!codigoInvitacion}
+              aria-label={codigoCopiado ? t('invite_copied') : t('invite_copy')}
+              className="w-10 h-10 -mr-2 rounded-xl flex items-center justify-center uv-text-muted hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] hover:uv-text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-default"
+            >
+              {codigoCopiado ? (
+                <Icons.Check size={18} className="text-green-600" />
+              ) : (
+                <Icons.Copy size={18} />
+              )}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={compartirInvitacion}
+            disabled={!codigoInvitacion || compartiendo}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors disabled:opacity-60 disabled:cursor-default"
+          >
+            <div className="w-10 h-10 bg-sky-100 dark:bg-sky-900/30 rounded-xl flex items-center justify-center mr-3 shrink-0">
+              <Icons.Share size={18} className="text-sky-600" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('invite_share')}</p>
+              <p
+                className={`text-xs mt-0.5 truncate transition-colors ${enlaceCopiado ? 'text-green-600 font-semibold' : 'uv-text-muted'}`}
+                aria-live="polite"
+              >
+                {enlaceCopiado
+                  ? t('promo_copied')
+                  : codigoInvitacion ? enlaceInvitacion(codigoInvitacion).replace(/^https?:\/\//, '') : ''}
+              </p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
+          <div className="flex items-center px-4 py-3.5">
+            <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center mr-3 shrink-0">
+              <Icons.Users size={18} className="text-violet-600" />
+            </div>
+            <div className="flex-1 min-w-0 grid grid-cols-2 gap-3">
+              <div className="min-w-0">
+                <p className="text-xs uv-text-muted truncate">{t('invite_count')}</p>
+                <p className="font-bold uv-text-primary text-base tabular-nums mt-0.5">
+                  {referidos ? referidos.invitedCount.toLocaleString('en-US') : '—'}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs uv-text-muted truncate">{t('invite_points')}</p>
+                <p className="font-bold uv-text-primary text-base tabular-nums mt-0.5">
+                  {referidos ? referidos.pointsEarned.toLocaleString('en-US') : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Lo que promete la UI viene de bonus_points del servidor; con el
+              programa apagado (0) la promesa no se muestra, solo el codigo. */}
+          {bonusPoints > 0 && (
+            <p className="px-4 py-3 text-xs uv-text-muted">
+              {t('invite_how').replace('{points}', String(bonusPoints))}
+            </p>
+          )}
         </div>
       </div>
 

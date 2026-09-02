@@ -5,6 +5,7 @@ import type {
   Reward,
   Redemption,
   CashbackRule,
+  ReferralSummary,
 } from '../../repositories/loyalty.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -48,6 +49,14 @@ const initialRewards: Reward[] = [
   { id: 'rw-3', name: '10% descuento Uber', description: 'Codigo de 10% de descuento en tu proximo viaje Uber', category: 'discount', pointsCost: 500, imageUrl: '/rewards/uber.png', partnerCode: 'UBER', stock: 200 },
   { id: 'rw-4', name: 'Gift Card Netflix ₡10,000', description: 'Tarjeta de regalo Netflix Costa Rica', category: 'gift_card', pointsCost: 5000, imageUrl: '/rewards/netflix.png', stock: 25 },
 ];
+
+// Resumen fijo: en modo mock nadie se registra con un codigo.
+const demoReferrals: ReferralSummary = {
+  referralCode: 'DEMO2026',
+  invitedCount: 0,
+  pointsEarned: 0,
+  bonusPoints: 500,
+};
 
 const initialCashbackRules: CashbackRule[] = [
   { id: 'cb-1', category: 'Comida', percentage: 2, maxPoints: 500, active: true },
@@ -108,5 +117,9 @@ export class MockLoyaltyRepository implements ILoyaltyRepository {
 
   async getCashbackRules(): Promise<ApiResponse<CashbackRule[]>> {
     return apiSuccess(initialCashbackRules);
+  }
+
+  async getReferrals(): Promise<ApiResponse<ReferralSummary>> {
+    return apiSuccess(demoReferrals);
   }
 }
