@@ -507,6 +507,10 @@ const fr: TranslationKeys = {
   password_good: 'Bon',
   reg_creating_account: 'Création du compte...',
   reg_error_default: 'Erreur lors de la création du compte',
+  reg_err_user_exists: "Un compte existe déjà avec cette pièce d'identité, ce téléphone ou cet e-mail. Connectez-vous ou récupérez votre mot de passe.",
+  reg_err_phone_not_verified: 'La vérification du téléphone a expiré. Demandez à nouveau le code.',
+  reg_err_cedula_invalid: "Vérifiez le numéro d'identité : uniquement des chiffres, sans tirets.",
+  reg_err_generic: "Nous n'avons pas pu finaliser l'inscription. Réessayez dans un instant.",
   reg_password_min_length: 'Le mot de passe doit comporter au moins 8 caractères',
   reg_security_note: 'Vos informations sont protégées par un chiffrement de niveau bancaire',
   login_welcome: 'Bienvenue',
@@ -993,6 +997,8 @@ const fr: TranslationKeys = {
   faq_a8: "Le profil vous donne trois choses : le PIN de verrouillage, la connexion par empreinte ou visage si votre téléphone le permet, et la vérification en deux étapes, également exigée d'office sur les montants élevés.\n\nPersonne chez KiramoPay ne vous demandera jamais votre PIN ni votre code de vérification.",
   faq_q9: "Y a-t-il quelqu'un à qui écrire ?",
   faq_a9: "Le chat en direct avec le support n'existe pas encore. Dans l'app il y a l'assistant, qui répond aux questions sur vos mouvements et sur le fonctionnement de KiramoPay ; dans l'offre gratuite, 2 questions par jour.",
+  faq_q10: 'Comment mes informations sont-elles protégées ?',
+  faq_a10: "Tout ce que l'app envoie et reçoit circule chiffré. Même si quelqu'un espionne la connexion, il ne peut pas le lire.\n\nVotre numéro d'identité, votre téléphone et votre e-mail sont enregistrés chiffrés dans la base de données, avec une clé qui vit en dehors d'elle. Quiconque copie la base ne peut pas les lire.\n\nVotre mot de passe n'est jamais enregistré. Seule une empreinte mathématique impossible à inverser est conservée ; nous-mêmes ne pouvons pas le voir.\n\nDans le navigateur, votre session vit dans un cookie qu'aucun script ne peut lire. Votre empreinte ou votre visage ne quittent jamais votre téléphone : c'est le téléphone lui-même qui les vérifie. Et vous pouvez activer une deuxième étape avec une app d'authentification.\n\nAucun système n'est infaillible. Ce qui dépend de vous : ne partagez jamais votre mot de passe ni votre code de vérification.",
   kyc_n2_soon: 'Vérification complète (document + selfie) bientôt disponible',
 };
 

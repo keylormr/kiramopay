@@ -78,11 +78,38 @@ func TestRegister_DuplicateCedula(t *testing.T) {
 	}, emptyCtx); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	if _, err := svc.Register(ctx, &auth.RegisterRequest{
+	_, err := svc.Register(ctx, &auth.RegisterRequest{
 		Cedula: "702650930", Phone: "+50688885678",
 		FirstName: "Otro", LastName: "Usuario", Password: "Other2024!",
-	}, emptyCtx); err == nil {
-		t.Fatal("expected error for duplicate cedula")
+	}, emptyCtx)
+	if !errors.Is(err, auth.ErrUserExists) {
+		t.Fatalf("expected ErrUserExists for duplicate cedula, got %v", err)
+	}
+}
+
+// El telefono repetido no lo detecta la busqueda previa por cedula: choca en
+// el indice unico al insertar y debe salir como el MISMO ErrUserExists (no
+// como un error crudo de la BD), sin dejar la cuenta nueva a medias.
+func TestRegister_DuplicatePhone(t *testing.T) {
+	svc, _ := setupAuthService(t)
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+
+	if _, err := svc.Register(ctx, &auth.RegisterRequest{
+		Cedula: "702650930", Phone: "+50688881234",
+		FirstName: "Keilor", LastName: "Martinez", Password: "Kiramopay2024!",
+	}, emptyCtx); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	_, err := svc.Register(ctx, &auth.RegisterRequest{
+		Cedula: "304440999", Phone: "+50688881234",
+		FirstName: "Otro", LastName: "Usuario", Password: "Other2024!",
+	}, emptyCtx)
+	if !errors.Is(err, auth.ErrUserExists) {
+		t.Fatalf("expected ErrUserExists for duplicate phone, got %v", err)
+	}
+	if u, _ := user.NewRepository(pool).FindByCedula(ctx, "304440999"); u != nil {
+		t.Fatal("el telefono repetido no debia dejar la cuenta nueva creada")
 	}
 }
 
@@ -538,11 +565,12 @@ func TestRegister_CedulaConGuionesQuedaCanonica(t *testing.T) {
 // rechaza en el registro: quedaria imposible de usar para entrar.
 func TestRegister_RechazaCedulaNoUsableEnLogin(t *testing.T) {
 	svc, _ := setupAuthService(t)
-	if _, err := svc.Register(context.Background(), &auth.RegisterRequest{
+	_, err := svc.Register(context.Background(), &auth.RegisterRequest{
 		Cedula: "50688880001", Phone: "+50688887777",
 		FirstName: "Cedula", LastName: "Telefonica", Password: "Kiramopay2024!",
-	}, emptyCtx); err == nil {
-		t.Fatal("una cedula de 11 digitos que empieza en 506 debia rechazarse")
+	}, emptyCtx)
+	if !errors.Is(err, auth.ErrCedulaNoUsableEnLogin) {
+		t.Fatalf("una cedula de 11 digitos que empieza en 506 debia rechazarse con ErrCedulaNoUsableEnLogin; obtuve %v", err)
 	}
 }
 

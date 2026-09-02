@@ -507,6 +507,10 @@ const pt: TranslationKeys = {
   password_good: 'Boa',
   reg_creating_account: 'Criando conta...',
   reg_error_default: 'Erro ao criar a conta',
+  reg_err_user_exists: 'Já existe uma conta com esse documento, telefone ou e-mail. Entre ou recupere sua senha.',
+  reg_err_phone_not_verified: 'A verificação do telefone venceu. Peça o código de novo.',
+  reg_err_cedula_invalid: 'Confira o documento: só dígitos, sem traços.',
+  reg_err_generic: 'Não conseguimos concluir o cadastro. Tente de novo em instantes.',
   reg_password_min_length: 'A senha deve ter pelo menos 8 caracteres',
   reg_security_note: 'Suas informações estão protegidas com criptografia de nível bancário',
   login_welcome: 'Bem-vindo',
@@ -993,6 +997,8 @@ const pt: TranslationKeys = {
   faq_a8: 'No Perfil você tem três coisas: o PIN de bloqueio, a entrada por digital ou rosto se o seu celular permitir, e a verificação em duas etapas, que também é pedida sozinha em valores altos.\n\nNinguém do KiramoPay vai pedir seu PIN nem seu código de verificação.',
   faq_q9: 'Existe alguém para quem escrever?',
   faq_a9: 'O chat ao vivo com suporte ainda não existe. Dentro do app está o assistente, que responde dúvidas sobre suas movimentações e sobre como o KiramoPay funciona; no plano gratuito são 2 perguntas por dia.',
+  faq_q10: 'Como minhas informações são protegidas?',
+  faq_a10: 'Tudo o que o app envia e recebe viaja criptografado. Mesmo que alguém espie a conexão, não consegue ler.\n\nSeu documento, seu telefone e seu e-mail ficam guardados criptografados no banco de dados, com uma chave que vive fora dele. Quem copiar o banco não consegue lê-los.\n\nSua senha nunca é guardada. Só fica uma impressão matemática que não pode ser revertida; nem nós conseguimos vê-la.\n\nNo navegador, sua sessão vive em um cookie que nenhum script consegue ler. Sua digital ou seu rosto nunca saem do celular: é o próprio celular que os confere. E você pode ativar uma segunda etapa com um app autenticador.\n\nNenhum sistema é infalível. O que depende de você: nunca compartilhe sua senha nem seu código de verificação com ninguém.',
   kyc_n2_soon: 'Verificação completa (documento + selfie) em breve',
 };
 

@@ -5,6 +5,7 @@ import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
 import { GraficoDona } from '@/components/GraficoDona';
 import { txTitle } from '@/utils/txTitle';
+import { getTxTime } from '@/utils/fechasTx';
 import type { Transaction } from '@/types';
 
 // Keyed by the category slugs the transaction adapter emits (see mapCategory in
@@ -52,18 +53,6 @@ type Period = 'week' | 'month' | 'all';
 // when it is hit, the UI says so instead of pretending the window is complete.
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
-
-// Machine timestamp for a transaction, or null when it has no parseable date.
-// dateISO is the reliable field; the localized `date` string only parses when it
-// happens to be ISO-ish, otherwise it is skipped rather than faked.
-function getTxTime(tx: Transaction): number | null {
-  if (tx.dateISO) {
-    const t = Date.parse(tx.dateISO);
-    if (!Number.isNaN(t)) return t;
-  }
-  const t2 = Date.parse(tx.date);
-  return Number.isNaN(t2) ? null : t2;
-}
 
 interface Bucket {
   label: string;
