@@ -5,6 +5,7 @@ import { getApiLayer } from '@/api';
 import type { ReferralSummary } from '@/api/repositories/loyalty.repository';
 import { compartirEnlace, enlaceInvitacion } from '@/utils/compartir';
 import { Icons } from '../../components/Icons';
+import { MarcaKiramo } from '../../components/MarcaKiramo';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { LanguageSheet } from '../../components/LanguageSheet';
@@ -1019,7 +1020,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {/* Logo y version */}
           <div className="text-center">
             <div className="w-20 h-20 uv-gradient-brand rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-3xl font-black text-white">K</span>
+              <MarcaKiramo size={50} />
             </div>
             <h2 className="text-xl font-black uv-text-primary">KiramoPay</h2>
             <p className="uv-text-muted">{getVersionString()}</p>
