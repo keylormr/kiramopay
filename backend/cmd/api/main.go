@@ -172,14 +172,16 @@ func main() {
 	userRepo := user.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
 	authRepo := auth.NewRepository(pool, redisClient)
-	// Repone en Redis las marcas auth:blocked:<id> de las cuentas bloqueadas
-	// (cubre FLUSHDB, reinicio y eviccion). Sin marca una cuenta bloqueada sigue
-	// fuera por BD (sesiones revocadas), solo que responde SESSION_REVOKED en
-	// vez de ACCOUNT_BLOCKED: por eso una falla aqui advierte, no detiene el boot.
-	if n, err := authRepo.WarmBlockedUsers(context.Background()); err != nil {
-		log.Printf("Warning: could not restore blocked-user marks in Redis: %v", err)
-	} else if n > 0 {
-		log.Printf("Restored %d blocked-user mark(s) in Redis", n)
+	// Pone al dia las marcas auth:blocked:<id> contra la BD: repone las que
+	// faltan (FLUSHDB, reinicio, eviccion) y borra las que sobran (un desbloqueo
+	// que se corto entre el DEL y el UPDATE). Sin marca una cuenta bloqueada
+	// sigue fuera por BD (sesiones revocadas), solo que responde SESSION_REVOKED
+	// en vez de ACCOUNT_BLOCKED: por eso una falla aqui advierte, no detiene el
+	// boot. El barrido repite este mismo repaso cada tanto.
+	if puestas, quitadas, err := authRepo.ReconcileBlockedMarks(context.Background()); err != nil {
+		log.Printf("Warning: could not reconcile blocked-user marks in Redis: %v", err)
+	} else if puestas > 0 || quitadas > 0 {
+		log.Printf("Reconciled blocked-user marks in Redis: %d restored, %d cleared", puestas, quitadas)
 	}
 	txRepo := transaction.NewRepository(pool)
 	sinpeRepo := sinpe.NewRepository(pool)

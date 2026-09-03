@@ -20,8 +20,9 @@ import (
 //  2. Redis: marca auth:blocked:<user_id> SIN TTL. Es lo que consulta el
 //     middleware RejectBlocked para responder ACCOUNT_BLOCKED (distinguible de
 //     SESSION_REVOKED) sin ir a la BD en cada peticion.
-//  3. WarmBlockedUsers al arranque repone las marcas desde la BD (cubre
-//     FLUSHDB, reinicio de Redis, eviccion).
+//  3. ReconcileBlockedMarks pone las marcas al dia contra la BD, al arranque y
+//     cada tanto desde el barrido (cubre FLUSHDB, reinicio de Redis, eviccion,
+//     y tambien la marca que sobra tras un desbloqueo a medias).
 //
 // Regla ante fallo parcial: la cuenta queda siempre en el estado MAS
 // restrictivo, nunca en uno contradictorio. Bloquear = 1) tx BD, 2) SET de la
@@ -244,6 +245,22 @@ func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed 
 		return 0, 0, nil
 	}
 
+	// Redis PRIMERO y la BD despues, y ese orden decide quien gana los empates.
+	// Solo se borra una marca que ya existia cuando empezo el repaso Y que la BD
+	// desmiente despues: una cuenta bloqueada mientras el repaso corre no
+	// aparece en la lectura de Redis, asi que no puede caer en el borrado. Al
+	// reves — leer la BD primero — una cuenta bloqueada en el medio quedaria
+	// fuera de la foto de la BD pero con marca en Redis, y el repaso le borraria
+	// una marca legitima.
+	enRedis := make(map[string]bool)
+	iter := r.redis.Scan(ctx, 0, blockedKey("*"), 100).Iterator()
+	for iter.Next(ctx) {
+		enRedis[strings.TrimPrefix(iter.Val(), blockedKey(""))] = true
+	}
+	if err := iter.Err(); err != nil {
+		return 0, 0, fmt.Errorf("scan blocked marks: %w", err)
+	}
+
 	enBD := make(map[string]bool)
 	rows, err := r.db.Query(ctx,
 		`SELECT id::text FROM users WHERE status = 'blocked' AND deleted_at IS NULL`)
@@ -260,15 +277,6 @@ func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed 
 	}
 	if err := rows.Err(); err != nil {
 		return 0, 0, fmt.Errorf("iterate blocked users: %w", err)
-	}
-
-	enRedis := make(map[string]bool)
-	iter := r.redis.Scan(ctx, 0, blockedKey("*"), 100).Iterator()
-	for iter.Next(ctx) {
-		enRedis[strings.TrimPrefix(iter.Val(), blockedKey(""))] = true
-	}
-	if err := iter.Err(); err != nil {
-		return 0, 0, fmt.Errorf("scan blocked marks: %w", err)
 	}
 
 	pipe := r.redis.Pipeline()
@@ -291,40 +299,4 @@ func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed 
 		return 0, 0, fmt.Errorf("apply blocked mark fixes: %w", err)
 	}
 	return added, removed, nil
-}
-
-// WarmBlockedUsers repone en Redis la marca de toda cuenta bloqueada en BD.
-// Se llama al arranque. Devuelve cuantas marcas puso. Sin Redis: (0, nil).
-func (r *Repository) WarmBlockedUsers(ctx context.Context) (int, error) {
-	if r.redis == nil {
-		return 0, nil
-	}
-	rows, err := r.db.Query(ctx,
-		`SELECT id::text FROM users WHERE status = 'blocked' AND deleted_at IS NULL`)
-	if err != nil {
-		return 0, fmt.Errorf("list blocked users: %w", err)
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return 0, fmt.Errorf("scan blocked user: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("iterate blocked users: %w", err)
-	}
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	pipe := r.redis.Pipeline()
-	for _, id := range ids {
-		pipe.Set(ctx, blockedKey(id), "1", 0)
-	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return 0, fmt.Errorf("warm blocked marks: %w", err)
-	}
-	return len(ids), nil
 }

@@ -232,7 +232,7 @@ func TestBlock_UsuarioInexistente(t *testing.T) {
 	}
 }
 
-func TestWarmBlockedUsers_ReponeLaMarca(t *testing.T) {
+func TestReconcileBlockedMarks_ReponeLaMarca(t *testing.T) {
 	env := armarEntornoBloqueo(t)
 	ctx := context.Background()
 	resp := registerTestUser(t, env.svc)
@@ -246,19 +246,28 @@ func TestWarmBlockedUsers_ReponeLaMarca(t *testing.T) {
 		t.Fatal("precondicion: sin marca en Redis IsUserBlocked debia ser false")
 	}
 
-	n, err := env.authRepo.WarmBlockedUsers(ctx)
+	puestas, quitadas, err := env.authRepo.ReconcileBlockedMarks(ctx)
 	if err != nil {
-		t.Fatalf("WarmBlockedUsers: %v", err)
+		t.Fatalf("ReconcileBlockedMarks: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("marcas repuestas = %d, esperaba 1", n)
+	if puestas != 1 || quitadas != 0 {
+		t.Fatalf("marcas puestas/quitadas = %d/%d, esperaba 1/0", puestas, quitadas)
 	}
 	if blocked, err := env.authRepo.IsUserBlocked(ctx, resp.User.ID); err != nil || !blocked {
-		t.Fatalf("tras el warm-up IsUserBlocked = (%v, %v), esperaba true", blocked, err)
+		t.Fatalf("tras el repaso IsUserBlocked = (%v, %v), esperaba true", blocked, err)
 	}
 	// Sin marca no queda ninguna clave suelta.
 	if keys, _ := env.redis.Keys(ctx, "auth:blocked:*").Result(); len(keys) != 1 {
 		t.Fatalf("claves auth:blocked:* = %d, esperaba 1", len(keys))
+	}
+
+	// La llave del turno vive fuera de ese prefijo: si compartiera prefijo, el
+	// propio repaso la leeria como la marca de un usuario y la borraria.
+	if _, err := env.authRepo.TryClaimBlockedReconcile(ctx, time.Minute); err != nil {
+		t.Fatalf("TryClaimBlockedReconcile: %v", err)
+	}
+	if keys, _ := env.redis.Keys(ctx, "auth:blocked:*").Result(); len(keys) != 1 {
+		t.Fatalf("la llave del turno cayo dentro del prefijo de las marcas: %v", keys)
 	}
 }
 
