@@ -254,6 +254,9 @@ func main() {
 		// webhook-secret key and from the JWT signing secret (key separation),
 		// so analysis of one ciphertext domain never reveals another's key.
 		TOTPEncryptionKey: []byte("kiramopay-totp-secret\x00" + cfg.JWT.Secret),
+		// Encender y apagar el segundo factor cambia que tan protegida esta la
+		// cuenta: va al mismo rastro que un cambio de contrasena.
+		AuditLogger: auditLogger,
 		// Deliver the step-up code by SMS when a provider is configured; the phone
 		// is resolved from the encrypted user record on demand.
 		SMS: smsSender,

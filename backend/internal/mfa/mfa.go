@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/messaging"
 )
 
@@ -36,6 +37,26 @@ type Service struct {
 	// code and the handler no longer echoes it (except in dev).
 	sms         messaging.SMSSender
 	phoneLookup PhoneLookup
+	// auditLogger deja rastro de los cambios del segundo factor. Encenderlo y
+	// apagarlo cambia la fuerza con la que se protege la cuenta, asi que
+	// pertenece al mismo registro que un cambio de contrasena. Nil-safe.
+	auditLogger *audit.Logger
+}
+
+// audita registra un evento si hay logger. Los eventos del segundo factor no
+// llevan detalles: el secreto, los codigos y el codigo tecleado jamas entran al
+// rastro, que es JSONB sin cifrar.
+func (s *Service) audita(userID, action, risk string) {
+	if s.auditLogger == nil {
+		return
+	}
+	s.auditLogger.Log(audit.Event{
+		UserID:       userID,
+		Action:       action,
+		ResourceType: "user_totp",
+		ResourceID:   userID,
+		RiskLevel:    risk,
+	})
 }
 
 // PhoneLookup resolves a user's E.164 phone for step-up code delivery.
@@ -54,6 +75,8 @@ type Config struct {
 	// optional: leave nil to keep the dev-echo behavior (no SMS provider).
 	SMS         messaging.SMSSender
 	PhoneLookup PhoneLookup
+	// AuditLogger registra los cambios del segundo factor. Opcional.
+	AuditLogger *audit.Logger
 }
 
 func NewService(db *pgxpool.Pool, cfg *Config) *Service {
@@ -76,6 +99,7 @@ func NewService(db *pgxpool.Pool, cfg *Config) *Service {
 		verifyWindow: cfg.VerifyWindow,
 		sms:          cfg.SMS,
 		phoneLookup:  cfg.PhoneLookup,
+		auditLogger:  cfg.AuditLogger,
 	}
 	if len(cfg.TOTPEncryptionKey) > 0 {
 		key := sha256.Sum256(cfg.TOTPEncryptionKey)
