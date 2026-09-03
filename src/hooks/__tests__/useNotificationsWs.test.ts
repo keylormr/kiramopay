@@ -145,6 +145,32 @@ describe('useNotificationsWs', () => {
     expect(mockAddNotification).not.toHaveBeenCalled();
   });
 
+  it('closes the socket on auth_error and waits longer before retrying', () => {
+    vi.useFakeTimers();
+    try {
+      renderHook(() => useNotificationsWs({ reconnectInterval: 5000, authErrorInterval: 30000 }));
+
+      const ws = MockWebSocket.instances[0];
+      act(() => ws.simulateOpen());
+
+      // El servidor rechaza el token: pasa al bloquear la cuenta, cuando el
+      // token en memoria ya quedo revocado y el socket abierto se corto.
+      act(() => ws.simulateMessage({ type: 'auth_error' }));
+      expect(ws.close).toHaveBeenCalled();
+
+      // A los 5 s (la espera normal) todavia no reintenta.
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      // A los 30 s si: el caso benigno (token vencido que se renovara) tiene
+      // que curarse solo, asi que la espera es mas larga, no infinita.
+      act(() => { vi.advanceTimersByTime(25000); });
+      expect(MockWebSocket.instances).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('cleans up WebSocket on unmount', () => {
     const { unmount } = renderHook(() => useNotificationsWs());
 

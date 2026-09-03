@@ -40,6 +40,11 @@ const keilorConVencimiento: AdminUser = {
   expiresAt: '2027-01-15T12:00:00Z',
 };
 
+const keilorVencida: AdminUser = {
+  ...keilor,
+  expiresAt: '2020-01-15T12:00:00Z',
+};
+
 const keilorBlocked: AdminUser = {
   ...keilor,
   status: 'blocked',
@@ -179,6 +184,18 @@ describe('AdminUsersView', () => {
     // La cuenta sigue activa: programar no bloquea nada todavia.
     expect(await screen.findByText('Vence el')).toBeInTheDocument();
     expect(screen.getByText('Activa')).toBeInTheDocument();
+  });
+
+  it('marks the card as expired when the scheduled moment already passed', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilorVencida] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+
+    // El barrido del servidor la cerrara en el proximo minuto; la tarjeta lo
+    // avisa en vez de mostrar solo una fecha.
+    expect(await screen.findByText('Vencida', { exact: false })).toBeInTheDocument();
   });
 
   it('refuses to save an expiry with an empty date', async () => {

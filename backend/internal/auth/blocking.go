@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -36,9 +37,54 @@ func blockedKey(userID string) string { return "auth:blocked:" + userID }
 // todo o no queda nada. Las API keys tambien: el canal B2B autentica por key,
 // no por JWT, y sin revocarlas el bloqueado seguiria moviendo dinero por ahi.
 // Idempotente: repetir sobre una cuenta ya bloqueada refresca el rastro y no
-// falla. found=false si la cuenta no existe o esta borrada. adminID vacio se
-// guarda como NULL (bloqueo sin autor, p.ej. un barrido automatico futuro).
+// falla, que es lo que hace inofensivo el doble clic del administrador.
+// found=false si la cuenta no existe o esta borrada. adminID vacio se guarda
+// como NULL (bloqueo sin autor).
+//
+// Este es el camino MANUAL. El barrido de vencimientos usa
+// BlockExpiredUserAndRevokeSessions, que no repisa un bloqueo ajeno.
 func (r *Repository) BlockUserAndRevokeSessions(ctx context.Context, userID, reason, adminID string) (found bool, sessionsRevoked int, err error) {
+	return r.blockAndRevoke(ctx, userID, reason,
+		`UPDATE users
+		    SET status = 'blocked', blocked_at = NOW(), blocked_reason = $2,
+		        blocked_by = NULLIF($3::text, '')::uuid, updated_at = NOW()
+		  WHERE id = $1::uuid AND deleted_at IS NULL`,
+		[]any{userID, reason, adminID})
+}
+
+// BlockExpiredUserAndRevokeSessions es el bloqueo del barrido de vencimientos.
+// Hace lo mismo que el manual salvo en una cosa: su UPDATE vuelve a comprobar,
+// en el mismo statement, la razon por la que la cuenta entro en el lote.
+//
+// El barrido lee una lista de candidatos y despues los bloquea uno por uno, asi
+// que entre la lectura y el turno de una fila pueden pasar segundos. En esa
+// ventana un administrador puede haber bloqueado la cuenta a mano por otro
+// motivo, haber extendido o quitado su vencimiento, o haberla ascendido a
+// administrador. Con el UPDATE incondicional del camino manual, el barrido
+// llegaba tarde y pisaba esas tres decisiones: la peor era dejar
+// blocked_reason='demo vencido' y blocked_by=NULL sobre un bloqueo humano,
+// borrando de la ficha el motivo real y a su autor.
+//
+// found=false (sin error) significa "ya no corresponde": la cuenta se bloqueo
+// por otra via, dejo de estar vencida o dejo de ser bloqueable. El barrido lo
+// trata como un salto, no como un fallo.
+func (r *Repository) BlockExpiredUserAndRevokeSessions(ctx context.Context, userID, reason string, now time.Time) (found bool, sessionsRevoked int, err error) {
+	return r.blockAndRevoke(ctx, userID, reason,
+		`UPDATE users
+		    SET status = 'blocked', blocked_at = NOW(), blocked_reason = $2,
+		        blocked_by = NULL, updated_at = NOW()
+		  WHERE id = $1::uuid AND deleted_at IS NULL
+		    AND status <> 'blocked'
+		    AND expires_at IS NOT NULL AND expires_at <= $3
+		    AND COALESCE(role, 'user') <> 'admin'`,
+		[]any{userID, reason, now})
+}
+
+// blockAndRevoke corre el UPDATE que le den y, si toco la fila, revoca en la
+// MISMA tx serializable las familias de refresh, las sesiones y las API keys.
+// La diferencia entre el bloqueo manual y el automatico es solo ese UPDATE; lo
+// que viene despues tiene que ser identico, y por eso vive en un solo lugar.
+func (r *Repository) blockAndRevoke(ctx context.Context, userID, reason, updateSQL string, args []any) (found bool, sessionsRevoked int, err error) {
 	// El CHECK chk_users_blocked_coherente exige motivo; '' lo pasaria (no es
 	// NULL) y dejaria un bloqueo sin explicacion en la auditoria.
 	if strings.TrimSpace(reason) == "" {
@@ -50,13 +96,7 @@ func (r *Repository) BlockUserAndRevokeSessions(ctx context.Context, userID, rea
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op once committed
 
-	tag, err := tx.Exec(ctx,
-		`UPDATE users
-		    SET status = 'blocked', blocked_at = NOW(), blocked_reason = $2,
-		        blocked_by = NULLIF($3::text, '')::uuid, updated_at = NOW()
-		  WHERE id = $1::uuid AND deleted_at IS NULL`,
-		userID, reason, adminID,
-	)
+	tag, err := tx.Exec(ctx, updateSQL, args...)
 	if err != nil {
 		return false, 0, fmt.Errorf("block user: %w", err)
 	}

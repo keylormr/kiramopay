@@ -25,7 +25,17 @@ type Poller struct {
 	interval time.Duration
 	batch    int
 	logger   *slog.Logger
+
+	// ticks cuenta las pasadas para espaciar el repaso de las marcas de Redis,
+	// que no hace falta en cada tick. Solo lo toca tick(), que corre en la
+	// unica goroutine de Run.
+	ticks int
 }
+
+// Cada cuantos ticks se repasan las marcas de bloqueo en Redis. Con el tick de
+// un minuto, cada diez: una marca perdida por un fallo de Redis se repone en
+// menos de diez minutos en vez de esperar al proximo reinicio del proceso.
+const ticksPorRepaso = 10
 
 // NewPoller cablea el barrido. pool se usa solo para el lock de lider.
 // interval por defecto 60s; batch por defecto 100 cuentas por tick.
@@ -51,10 +61,21 @@ func (p *Poller) Run(ctx context.Context) {
 }
 
 func (p *Poller) tick(ctx context.Context) {
+	p.ticks++
+	repasar := p.ticks%ticksPorRepaso == 0
+
 	ran, err := cluster.TryRunExclusive(ctx, p.pool, cluster.KeyDemoExpiry, func(c context.Context) error {
 		n, rerr := p.svc.ExpireDue(c, time.Now(), p.batch)
 		if n > 0 && p.logger != nil {
 			p.logger.Info("cuentas vencidas bloqueadas", "count", n)
+		}
+		if !repasar {
+			return rerr
+		}
+		// El repaso va DESPUES del barrido y no lo tapa: si el barrido fallo,
+		// ese error es el que se reporta.
+		if _, werr := p.svc.ReconcileBlockedMarks(c); werr != nil && p.logger != nil {
+			p.logger.Warn("repaso de marcas de bloqueo fallido", "error", werr)
 		}
 		return rerr
 	})

@@ -147,6 +147,21 @@ func (h *Hub) DisconnectUser(userID string) int {
 }
 
 // SendToUser sends a message to all connections of a specific user.
+//
+// The queueing happens UNDER the read lock, and that is load-bearing rather
+// than incidental. Every close(client.send) in this file happens while holding
+// the write lock (the unregister case of Run, and the slow-client eviction in
+// its broadcast case), so holding the read lock across the send makes it
+// impossible for a channel to be closed between reading the slice and writing
+// to it. Releasing it first — as this function used to — left a window where a
+// client that unregistered in between turned the send into a panic on a closed
+// channel, and the only production caller is a detached goroutine
+// (sinpe.Service.notifyReceiver) with no recover of its own, so that panic
+// would take the whole process down. Forcing a disconnect (DisconnectUser on a
+// blocked account) makes that window reachable on purpose instead of by luck.
+//
+// The send cannot block — it is a select with a default — so keeping the read
+// lock over the loop cannot stall the hub.
 func (h *Hub) SendToUser(userID string, data interface{}) {
 	msg, err := json.Marshal(data)
 	if err != nil {
@@ -155,10 +170,9 @@ func (h *Hub) SendToUser(userID string, data interface{}) {
 	}
 
 	h.mu.RLock()
-	clients := h.userClients[userID]
-	h.mu.RUnlock()
+	defer h.mu.RUnlock()
 
-	for _, client := range clients {
+	for _, client := range h.userClients[userID] {
 		select {
 		case client.send <- msg:
 		default:

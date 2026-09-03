@@ -64,6 +64,10 @@ function toInputValue(d: Date): string {
 
 const PRESET_DAYS = [1, 7, 30];
 
+// Cada cuanto avanza el reloj de la vista. El barrido del servidor corre cada
+// minuto, asi que medio minuto alcanza para que la pantalla no se quede atras.
+const RELOJ_MS = 30000;
+
 interface UserCardProps {
   user: AdminUser;
   busy: boolean;
@@ -197,8 +201,9 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const [blockedError, setBlockedError] = useState<string | null>(null);
 
   // Reloj de la vista. Vive en estado y no se lee durante el render (regla de
-  // pureza de React): se refresca al montar y cada vez que cambia la lista, que
-  // es cuando puede aparecer una cuenta recien vencida.
+  // pureza de React). Avanza por su cuenta: si solo se refrescara al cambiar la
+  // lista, una tarjeta abierta seguiria diciendo que la cuenta no ha vencido
+  // mucho despues de que el barrido del servidor la cerrara.
   const [ahora, setAhora] = useState(0);
 
   const [acting, setActing] = useState<string | null>(null);
@@ -212,7 +217,9 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   useEffect(() => {
     setAhora(Date.now());
-  }, [results, blocked]);
+    const id = window.setInterval(() => setAhora(Date.now()), RELOJ_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (tab !== 'blocked') return;
