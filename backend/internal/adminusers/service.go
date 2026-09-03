@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -41,13 +42,33 @@ const (
 	maxBlockedLimit     = 200
 )
 
+// ReasonDemoExpired es el motivo con el que el barrido bloquea una cuenta que
+// llego a su fecha de vencimiento. Es una constante y no un texto libre porque
+// distingue en la auditoria los bloqueos automaticos de los que decidio una
+// persona, y porque el administrador lo lee tal cual en la ficha.
+const ReasonDemoExpired = "demo vencido"
+
+// Disconnector corta las conexiones WebSocket abiertas de una cuenta. Lo
+// implementa websocket.Hub; la interfaz vive aqui, en el consumidor, porque el
+// hub se construye mucho despues que este servicio (mismo arreglo que
+// notification.Broadcaster).
+type Disconnector interface {
+	DisconnectUser(userID string) int
+}
+
 type Options struct{ AuditLogger *audit.Logger }
 
 type Service struct {
-	users       *user.Repository
-	auth        *auth.Repository
-	auditLogger *audit.Logger
+	users        *user.Repository
+	auth         *auth.Repository
+	auditLogger  *audit.Logger
+	disconnector Disconnector
 }
+
+// SetDisconnector cablea el hub una vez construido. Opcional: sin el, el
+// bloqueo sigue siendo efectivo para todo lo demas (REST, refresh, API keys) y
+// el socket abierto muere cuando el cliente lo cierre.
+func (s *Service) SetDisconnector(d Disconnector) { s.disconnector = d }
 
 func NewService(users *user.Repository, authRepo *auth.Repository, opts *Options) *Service {
 	if opts == nil {
@@ -140,23 +161,160 @@ func (s *Service) Block(ctx context.Context, targetID, adminID, reason string, a
 		return nil, ErrAdminTarget
 	}
 
-	found, revoked, err := s.auth.BlockUserAndRevokeSessions(ctx, targetID, reason, adminID)
+	found, err := s.enforceBlock(ctx, targetID, adminID, reason, ac, nil)
+	if !found {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		return nil, fmt.Errorf("block user: %w", err)
+		return nil, err
+	}
+	return s.Get(ctx, targetID)
+}
+
+// enforceBlock aplica el bloqueo en el UNICO orden admitido y es el camino
+// compartido por el bloqueo manual y el barrido de vencimientos: no debe haber
+// dos formas distintas de quedar bloqueado.
+//
+//  1. BD (autoritativa, en una tx): status, rastro, sesiones y API keys.
+//  2. Marca en Redis: lo que hace que el middleware responda ACCOUNT_BLOCKED.
+//  3. Corte de los sockets ya abiertos.
+//
+// El orden importa en las dos direcciones. Cortar el socket ANTES de la marca
+// abriria una ventana en la que el cliente reconecta sobre una cuenta que
+// todavia no rechaza peticiones. Y el corte se hace aunque la marca falle: ahi
+// la cuenta ya esta bloqueada en la fuente de verdad (responde SESSION_REVOKED
+// en vez de ACCOUNT_BLOCKED) y el error hace que el llamador reintente.
+//
+// due distingue los dos caminos. nil es el bloqueo manual: su UPDATE es
+// incondicional e idempotente, y repetirlo solo refresca el rastro. Con valor,
+// es el barrido de vencimientos: el UPDATE reconfirma en el mismo statement que
+// la cuenta sigue vencida, sin bloquear y sin ser administrador, asi que un
+// bloqueo manual, una extension del vencimiento o un ascenso a administrador
+// ocurridos desde que se leyo el lote ganan y el barrido se salta la fila. En
+// ese caso adminID viene vacio (blocked_by NULL) y la auditoria marca
+// automatic: no lo decidio una persona.
+func (s *Service) enforceBlock(ctx context.Context, targetID, adminID, reason string, ac ActorContext, due *time.Time) (found bool, err error) {
+	var revoked int
+	if due != nil {
+		found, revoked, err = s.auth.BlockExpiredUserAndRevokeSessions(ctx, targetID, reason, *due)
+	} else {
+		found, revoked, err = s.auth.BlockUserAndRevokeSessions(ctx, targetID, reason, adminID)
+	}
+	if err != nil {
+		return false, fmt.Errorf("block user: %w", err)
+	}
+	if !found {
+		return false, nil
+	}
+	markErr := s.auth.MarkUserBlocked(ctx, targetID)
+
+	details := map[string]interface{}{"reason": reason, "sessions_revoked": revoked}
+	if due != nil {
+		details["automatic"] = true
+	}
+	// El bloqueo en BD ya ocurrio: el rastro se escribe aunque la marca falle.
+	s.audit(adminID, "user_blocked", "user", targetID, "critical", ac, details)
+
+	if s.disconnector != nil {
+		s.disconnector.DisconnectUser(targetID)
+	}
+	if markErr != nil {
+		return true, fmt.Errorf("mark user blocked: %w", markErr)
+	}
+	return true, nil
+}
+
+// SetExpiry programa (o quita, con at nil) el vencimiento de una cuenta. No
+// bloquea nada por si mismo: la fecha la ejecuta el barrido, que pasa por
+// enforceBlock como cualquier bloqueo manual. Programar una fecha ya pasada es
+// legitimo — significa "que se cierre en el proximo tick".
+func (s *Service) SetExpiry(ctx context.Context, targetID, adminID string, at *time.Time, ac ActorContext) (*user.AdminUserView, error) {
+	target, err := s.Get(ctx, targetID)
+	if err != nil {
+		return nil, err
+	}
+	// Misma regla que el bloqueo: una cuenta de administrador no se programa
+	// para vencer. El barrido tambien las excluye en SQL, asi que esto no es la
+	// unica defensa, pero aqui el administrador recibe un error claro.
+	if target.Role == "admin" {
+		return nil, ErrAdminTarget
+	}
+	found, err := s.users.SetExpiresAt(ctx, targetID, at)
+	if err != nil {
+		return nil, fmt.Errorf("set expiry: %w", err)
 	}
 	if !found {
 		return nil, ErrNotFound
 	}
-	markErr := s.auth.MarkUserBlocked(ctx, targetID)
-	// El bloqueo en BD ya ocurrio: el rastro se escribe aunque la marca falle.
-	s.audit(adminID, "user_blocked", "user", targetID, "critical", ac, map[string]interface{}{
-		"reason":           reason,
-		"sessions_revoked": revoked,
-	})
-	if markErr != nil {
-		return nil, fmt.Errorf("mark user blocked: %w", markErr)
+	details := map[string]interface{}{"cleared": at == nil}
+	if at != nil {
+		details["expires_at"] = at.UTC().Format(time.RFC3339)
 	}
+	s.audit(adminID, "user_expiry_set", "user", targetID, "high", ac, details)
 	return s.Get(ctx, targetID)
+}
+
+// ExpireDue bloquea las cuentas cuyo vencimiento ya paso. Lo llama el barrido
+// periodico en cada tick, y devuelve cuantas bloqueo.
+//
+// La consulta excluye a las ya bloqueadas para no repisar su rastro ni duplicar
+// eventos criticos de auditoria, pero ese filtro es una foto: entre la lectura
+// del lote y el turno de cada fila pasan segundos. La condicion que de verdad
+// manda viaja en el UPDATE (ver BlockExpiredUserAndRevokeSessions), asi que una
+// fila que cambio de estado en el medio se salta en silencio.
+//
+// Un fallo sobre una cuenta no detiene al resto: se guarda el primero y el
+// barrido sigue, para que una fila problematica no deje vivas a las demas.
+func (s *Service) ExpireDue(ctx context.Context, now time.Time, limit int) (int, error) {
+	ids, err := s.users.ListDueForExpiry(ctx, now, limit)
+	if err != nil {
+		return 0, fmt.Errorf("list due for expiry: %w", err)
+	}
+	var (
+		blocked  int
+		firstErr error
+	)
+	for _, id := range ids {
+		if ctx.Err() != nil {
+			break
+		}
+		found, err := s.enforceBlock(ctx, id, "", ReasonDemoExpired, ActorContext{}, &now)
+		if found {
+			blocked++
+		}
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return blocked, firstErr
+}
+
+// ClaimMarkReconcile gana el turno de repasar las marcas de bloqueo para la
+// ventana pedida. Devuelve false si otra instancia ya lo gano o si no hay Redis
+// (sin Redis no hay marcas que repasar: el bloqueo se consulta contra la BD).
+func (s *Service) ClaimMarkReconcile(ctx context.Context, every time.Duration) (bool, error) {
+	return s.auth.TryClaimBlockedReconcile(ctx, every)
+}
+
+// ReconcileBlockedMarks pone al dia las marcas de Redis contra la BD, en las dos
+// direcciones, y devuelve cuantas puso y cuantas quito.
+//
+// Existe porque el bloqueo automatico no tiene a nadie que note un fallo. El
+// orden del bloqueo es BD primero y marca despues: si la marca falla, la cuenta
+// queda bloqueada de verdad (las sesiones ya murieron) pero el middleware
+// responde SESSION_REVOKED en vez de ACCOUNT_BLOCKED. En el bloqueo manual el
+// administrador ve el error y reintenta; en el barrido nadie lo ve, y la propia
+// consulta de candidatos ya excluye la cuenta por estar bloqueada, asi que no
+// hay segundo intento. Hasta ahora eso solo se arreglaba al reiniciar.
+func (s *Service) ReconcileBlockedMarks(ctx context.Context) (added, removed int, err error) {
+	added, removed, err = s.auth.ReconcileBlockedMarks(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("reconcile blocked marks: %w", err)
+	}
+	return added, removed, nil
 }
 
 // Unblock reactiva la cuenta. Las sesiones revocadas NO se resucitan: la

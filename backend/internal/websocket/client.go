@@ -93,6 +93,12 @@ type Client struct {
 	auth      *wsAuth // non-nil → authenticated per-user channel
 	readLimit int64
 	UserID    string // Set after a successful auth message
+
+	// dropped is set by Hub.dropClientLocked right before it closes send, and
+	// is guarded by the hub's lock like the maps are. It exists so a writer
+	// that does not run inside the hub's loop (trySend) can tell an open
+	// channel from a closed one instead of finding out by panicking.
+	dropped bool
 }
 
 // AuthMessage is sent by the client to authenticate.
@@ -181,7 +187,19 @@ func (c *Client) authenticate(token string) bool {
 }
 
 // trySend queues a frame without blocking the read loop; a full buffer drops it.
+//
+// It runs on the read pump's goroutine, outside the hub's loop, so it takes the
+// hub's read lock like every other writer to this channel. A select with a
+// default does NOT make the send safe: on a CLOSED channel that case is ready
+// and panics rather than falling through, and nothing in this package recovers
+// — the process would go down with it. Holding the read lock keeps the close
+// out, and the dropped flag covers the case where it already happened.
 func (c *Client) trySend(msg []byte) {
+	c.hub.mu.RLock()
+	defer c.hub.mu.RUnlock()
+	if c.dropped {
+		return
+	}
 	select {
 	case c.send <- msg:
 	default:

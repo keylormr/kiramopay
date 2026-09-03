@@ -1368,6 +1368,45 @@ paths:
         '500':
           description: UNBLOCK_FAILED
 
+  /api/v1/admin/users/{id}/expiry:
+    post:
+      tags: [Admin]
+      summary: Schedule or clear an account expiry (admin)
+      description: >-
+        Sets users.expires_at, the moment from which a periodic sweep blocks the
+        account with reason "demo vencido" — same path as a manual block, so the
+        session revocation, the ACCOUNT_BLOCKED mark and the WebSocket cut are
+        identical. Setting it does NOT block anything by itself; a date already
+        in the past is legitimate and means "close it on the next tick".
+        Unblocking an account by hand clears an expiry that already fired, so
+        the sweep does not undo the administrator's decision. Audited as
+        user_expiry_set (high).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminExpiryRequest'
+      responses:
+        '200':
+          description: Expiry scheduled or cleared (fresh card)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: INVALID_ID | INVALID_BODY | EXPIRY_REQUIRED | INVALID_EXPIRY (not RFC3339) | CANNOT_EXPIRE_ADMIN
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+        '500':
+          description: EXPIRY_FAILED
+
   # ── Push Notifications (Phase 9) ──────────────────────────────────
   /api/v1/push/subscribe:
     post:
@@ -2130,6 +2169,27 @@ components:
         blocked_at: { type: string, format: date-time, nullable: true }
         blocked_reason: { type: string, description: Empty unless blocked }
         blocked_by_name: { type: string, description: Full name of the administrator who blocked the account; empty unless blocked }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Scheduled expiry. When it passes, a periodic sweep blocks the
+            account with reason "demo vencido". Null means the account never
+            expires, which is the case for almost every account.
+
+    AdminExpiryRequest:
+      type: object
+      required: [expires_at]
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            RFC3339 moment from which the sweep blocks the account, or null to
+            clear the expiry. The key must always be present: an empty body is
+            rejected with EXPIRY_REQUIRED, not read as "clear it".
 
     AdminBlockRequest:
       type: object

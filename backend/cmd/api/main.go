@@ -138,6 +138,17 @@ func main() {
 		log.Println("Migrations up to date")
 	}
 
+	// Un CREATE INDEX CONCURRENTLY interrumpido deja el indice existente pero
+	// invalido, y el IF NOT EXISTS del reintento lo da por bueno: la migracion
+	// pasa a verde y la consulta que dependia de el recorre la tabla entera sin
+	// que nada lo diga. Esto lo grita.
+	if malos, err := database.InvalidIndexes(context.Background(), pool); err != nil {
+		log.Printf("Warning: could not check for invalid indexes: %v", err)
+	} else if len(malos) > 0 {
+		log.Printf("WARNING: invalid index(es) present, queries relying on them are doing full scans: %v "+
+			"(fix with DROP INDEX CONCURRENTLY <name> and redeploy)", malos)
+	}
+
 	redisClient, err := database.NewRedisClient(cfg.Redis)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
@@ -172,14 +183,16 @@ func main() {
 	userRepo := user.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
 	authRepo := auth.NewRepository(pool, redisClient)
-	// Repone en Redis las marcas auth:blocked:<id> de las cuentas bloqueadas
-	// (cubre FLUSHDB, reinicio y eviccion). Sin marca una cuenta bloqueada sigue
-	// fuera por BD (sesiones revocadas), solo que responde SESSION_REVOKED en
-	// vez de ACCOUNT_BLOCKED: por eso una falla aqui advierte, no detiene el boot.
-	if n, err := authRepo.WarmBlockedUsers(context.Background()); err != nil {
-		log.Printf("Warning: could not restore blocked-user marks in Redis: %v", err)
-	} else if n > 0 {
-		log.Printf("Restored %d blocked-user mark(s) in Redis", n)
+	// Pone al dia las marcas auth:blocked:<id> contra la BD: repone las que
+	// faltan (FLUSHDB, reinicio, eviccion) y borra las que sobran (un desbloqueo
+	// que se corto entre el DEL y el UPDATE). Sin marca una cuenta bloqueada
+	// sigue fuera por BD (sesiones revocadas), solo que responde SESSION_REVOKED
+	// en vez de ACCOUNT_BLOCKED: por eso una falla aqui advierte, no detiene el
+	// boot. El barrido repite este mismo repaso cada tanto.
+	if puestas, quitadas, err := authRepo.ReconcileBlockedMarks(context.Background()); err != nil {
+		log.Printf("Warning: could not reconcile blocked-user marks in Redis: %v", err)
+	} else if puestas > 0 || quitadas > 0 {
+		log.Printf("Reconciled blocked-user marks in Redis: %d restored, %d cleared", puestas, quitadas)
 	}
 	txRepo := transaction.NewRepository(pool)
 	sinpeRepo := sinpe.NewRepository(pool)
@@ -441,6 +454,11 @@ func main() {
 	notifService.SetBroadcaster(wsHub)
 	notifHandler := notification.NewHandler(notifService)
 
+	// Bloquear una cuenta tambien corta sus sockets abiertos. El hub nace mucho
+	// despues que el servicio de administracion, asi que se cablea aqui, igual
+	// que el broadcaster de arriba.
+	adminUsersService.SetDisconnector(wsHub)
+
 	// ── Reconciliation worker ────────────────────────────────────────────
 	// Auto-fix snaps the wallets cache to the journal (source of truth) under
 	// the same row lock the ledger uses. Drift above 1,000,000 CRC is alerted
@@ -480,6 +498,16 @@ func main() {
 	escrowPollerCtx, escrowPollerCancel := context.WithCancel(context.Background())
 	defer escrowPollerCancel()
 	go escrowPoller.Run(escrowPollerCtx)
+
+	// ── Barrido de cuentas vencidas ──────────────────────────────────────
+	// Bloquea las cuentas cuyo users.expires_at ya paso (demos) por el mismo
+	// camino que un bloqueo manual: tx en BD, marca en Redis y corte de los
+	// sockets abiertos. Cada tick corre bajo el lock de cluster para que, con
+	// la API escalada, solo una instancia cierre un mismo lote.
+	expiryPoller := adminusers.NewPoller(adminUsersService, pool, 60*time.Second, logger)
+	expiryPollerCtx, expiryPollerCancel := context.WithCancel(context.Background())
+	defer expiryPollerCancel()
+	go expiryPoller.Run(expiryPollerCtx)
 
 	// Router
 	r := chi.NewRouter()
@@ -904,6 +932,7 @@ func main() {
 					r.Get("/admin/users/{id}", adminUsersHandler.Get)
 					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)
 					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
+					r.Post("/admin/users/{id}/expiry", adminUsersHandler.SetExpiry)
 				})
 			})
 		})

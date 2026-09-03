@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { AdminUsersView } from '../AdminUsersView';
@@ -11,6 +11,7 @@ const mockApi = vi.hoisted(() => ({
     getUser: vi.fn(),
     blockUser: vi.fn(),
     unblockUser: vi.fn(),
+    setUserExpiry: vi.fn(),
   },
 }));
 
@@ -31,6 +32,12 @@ const keilor: AdminUser = {
   blockedAt: null,
   blockedReason: '',
   blockedByName: '',
+  expiresAt: null,
+};
+
+const keilorConVencimiento: AdminUser = {
+  ...keilor,
+  expiresAt: '2027-01-15T12:00:00Z',
 };
 
 const keilorBlocked: AdminUser = {
@@ -147,6 +154,90 @@ describe('AdminUsersView', () => {
 
     await waitFor(() => expect(mockApi.admin.unblockUser).toHaveBeenCalledWith('u1'));
     expect(await screen.findByText('Activa')).toBeInTheDocument();
+  });
+
+  it('schedules an expiry from the quick 7-day shortcut and shows it on the card', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    mockApi.admin.setUserExpiry.mockResolvedValue({ success: true, data: keilorConVencimiento });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: '7 días' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar vencimiento' }));
+
+    await waitFor(() => expect(mockApi.admin.setUserExpiry).toHaveBeenCalledTimes(1));
+    const [id, iso] = mockApi.admin.setUserExpiry.mock.calls[0] as [string, string | null];
+    expect(id).toBe('u1');
+    // El atajo manda una fecha real, en ISO y a siete dias vista (con holgura
+    // por el tiempo que tarda el propio test).
+    const dias = (new Date(iso as string).getTime() - Date.now()) / 86400000;
+    expect(dias).toBeGreaterThan(6.9);
+    expect(dias).toBeLessThan(7.1);
+
+    // La cuenta sigue activa: programar no bloquea nada todavia.
+    expect(await screen.findByText('Vence el')).toBeInTheDocument();
+    expect(screen.getByText('Activa')).toBeInTheDocument();
+  });
+
+  it('keeps its own clock, so an open card turns expired without a new search', async () => {
+    // El espia deja pasar la llamada real (no reemplaza setInterval: RTL lo usa
+    // para esperar) y solo captura el latido del reloj de la vista. Con el
+    // codigo anterior, que solo miraba la hora al cambiar la lista, no se
+    // registraba ningun intervalo y no hay nada que capturar.
+    const spy = vi.spyOn(window, 'setInterval');
+
+    try {
+      const porVencer: AdminUser = {
+        ...keilor,
+        expiresAt: new Date(Date.now() + 100).toISOString(),
+      };
+      mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [porVencer] });
+      const user = userEvent.setup();
+      setup();
+
+      await search(user, 'keil');
+      expect(await screen.findByText('Vence el')).toBeInTheDocument();
+
+      const latido = spy.mock.calls.find((c) => c[1] === 30000);
+      expect(latido, 'la vista no armo su reloj').toBeDefined();
+
+      await new Promise((r) => setTimeout(r, 150));
+      await act(async () => { (latido![0] as () => void)(); });
+
+      // El texto vive junto al separador dentro del mismo span: '. Vencida'.
+      expect(screen.getByText('Vencida', { exact: false })).toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('refuses to save an expiry with an empty date', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar vencimiento' }));
+
+    expect(await screen.findByText('Elige una fecha válida')).toBeInTheDocument();
+    expect(mockApi.admin.setUserExpiry).not.toHaveBeenCalled();
+  });
+
+  it('clears the expiry with an explicit null', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilorConVencimiento] });
+    mockApi.admin.setUserExpiry.mockResolvedValue({ success: true, data: keilor });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: 'Quitar vencimiento' }));
+
+    await waitFor(() => expect(mockApi.admin.setUserExpiry).toHaveBeenCalledWith('u1', null));
+    await waitFor(() => expect(screen.queryByText('Vence el')).not.toBeInTheDocument());
   });
 
   it('lists the blocked accounts on the second tab', async () => {

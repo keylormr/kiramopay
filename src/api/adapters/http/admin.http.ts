@@ -22,6 +22,7 @@ interface AdminUserDTO {
   blocked_at?: string | null;
   blocked_reason?: string | null;
   blocked_by_name?: string | null;
+  expires_at?: string | null;
 }
 
 const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed'];
@@ -46,6 +47,7 @@ function mapAdminUser(d: AdminUserDTO): AdminUser {
     blockedAt: d.blocked_at ?? null,
     blockedReason: String(d.blocked_reason ?? ''),
     blockedByName: String(d.blocked_by_name ?? ''),
+    expiresAt: d.expires_at ?? null,
   };
 }
 
@@ -94,6 +96,17 @@ export class HttpAdminRepository implements IAdminRepository {
 
   async unblockUser(id: string): Promise<ApiResponse<AdminUser>> {
     const res = await this.client.post<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}/unblock`, {});
+    if (!res.success || !isUserDTO(res.data)) return fail(res);
+    return apiSuccess(mapAdminUser(res.data));
+  }
+
+  async setUserExpiry(id: string, expiresAt: string | null): Promise<ApiResponse<AdminUser>> {
+    // La clave viaja siempre, tambien cuando vale null: para el servidor un
+    // cuerpo sin ella es un error, no una orden de quitar el vencimiento.
+    const res = await this.client.post<unknown>(
+      `/api/v1/admin/users/${encodeURIComponent(id)}/expiry`,
+      { expires_at: expiresAt },
+    );
     if (!res.success || !isUserDTO(res.data)) return fail(res);
     return apiSuccess(mapAdminUser(res.data));
   }

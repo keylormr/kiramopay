@@ -36,6 +36,9 @@ function errorKey(code?: string | null): string {
     case 'CANNOT_BLOCK_ADMIN': return 'admin_users_err_admin';
     case 'REASON_REQUIRED': return 'admin_users_err_reason';
     case 'SEARCH_TERM_TOO_SHORT': return 'admin_users_search_hint';
+    case 'CANNOT_EXPIRE_ADMIN': return 'admin_users_err_expire_admin';
+    case 'EXPIRY_REQUIRED':
+    case 'INVALID_EXPIRY': return 'admin_users_err_expiry';
     default: return 'admin_users_action_failed';
   }
 }
@@ -51,17 +54,37 @@ function formatWhen(iso: string | null, locale: string, fallback: string): strin
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
+// Valor que entiende <input type="datetime-local">: hora LOCAL sin zona. El
+// navegador la interpreta en el huso del administrador y toISOString la lleva a
+// UTC al enviarla, asi que lo que se ve escrito es lo que se programa.
+function toInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const PRESET_DAYS = [1, 7, 30];
+
+// Cada cuanto avanza el reloj de la vista. El barrido del servidor corre cada
+// minuto, asi que medio minuto alcanza para que la pantalla no se quede atras.
+const RELOJ_MS = 30000;
+
 interface UserCardProps {
   user: AdminUser;
   busy: boolean;
+  /** Instante con el que se compara el vencimiento; llega de fuera del render. */
+  now: number;
   locale: string;
   t: Translate;
   onBlock: (u: AdminUser) => void;
   onUnblock: (u: AdminUser) => void;
+  onExpiry: (u: AdminUser) => void;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ user, busy, locale, t, onBlock, onUnblock }) => {
+const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock, onUnblock, onExpiry }) => {
   const blocked = user.status === 'blocked';
+  // Una cuenta puede tener vencimiento sin estar bloqueada todavia: ese dato se
+  // muestra siempre que exista, no solo cuando ya se ejecuto.
+  const expired = user.expiresAt !== null && new Date(user.expiresAt).getTime() <= now;
   return (
     <article className="uv-surface-1 rounded-2xl uv-shadow-soft p-4">
       <div className="flex items-start justify-between gap-3">
@@ -91,22 +114,35 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, locale, t, onBlock, onU
         </li>
       </ul>
 
-      {blocked && (
+      {(blocked || user.expiresAt) && (
         <dl className="mt-3 pt-3 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="uv-text-muted">{t('admin_users_blocked_at')}</dt>
-          <dd className="uv-text-primary tabular-nums">{formatWhen(user.blockedAt, locale, '—')}</dd>
-          {user.blockedByName && (
+          {blocked && (
             <>
-              <dt className="uv-text-muted">{t('admin_users_blocked_by')}</dt>
-              <dd className="uv-text-primary truncate">{user.blockedByName}</dd>
+              <dt className="uv-text-muted">{t('admin_users_blocked_at')}</dt>
+              <dd className="uv-text-primary tabular-nums">{formatWhen(user.blockedAt, locale, '—')}</dd>
+              {user.blockedByName && (
+                <>
+                  <dt className="uv-text-muted">{t('admin_users_blocked_by')}</dt>
+                  <dd className="uv-text-primary truncate">{user.blockedByName}</dd>
+                </>
+              )}
+              <dt className="uv-text-muted">{t('admin_users_blocked_reason_label')}</dt>
+              <dd className="uv-text-primary break-words">{user.blockedReason}</dd>
             </>
           )}
-          <dt className="uv-text-muted">{t('admin_users_blocked_reason_label')}</dt>
-          <dd className="uv-text-primary break-words">{user.blockedReason}</dd>
+          {user.expiresAt && (
+            <>
+              <dt className="uv-text-muted">{t('admin_users_expires_at')}</dt>
+              <dd className={`tabular-nums ${expired ? 'text-[var(--color-danger)]' : 'uv-text-primary'}`}>
+                {formatWhen(user.expiresAt, locale, '—')}
+                {expired && <span className="ml-1 font-semibold">· {t('admin_users_expired')}</span>}
+              </dd>
+            </>
+          )}
         </dl>
       )}
 
-      <div className="mt-3">
+      <div className="mt-3 flex gap-2">
         {blocked ? (
           <button
             type="button"
@@ -118,15 +154,26 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, locale, t, onBlock, onU
             {t('admin_users_unblock')}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => onBlock(user)}
-            disabled={busy}
-            className="w-full flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50"
-          >
-            <Icons.Lock size={16} aria-hidden="true" />
-            {t('admin_users_block')}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onBlock(user)}
+              disabled={busy}
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50"
+            >
+              <Icons.Lock size={16} aria-hidden="true" />
+              <span className="truncate">{t('admin_users_block')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onExpiry(user)}
+              disabled={busy}
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-secondary py-2.5 rounded-xl font-bold disabled:opacity-50"
+            >
+              <Icons.Clock size={16} aria-hidden="true" />
+              <span className="truncate">{t('admin_users_expiry')}</span>
+            </button>
+          </>
         )}
       </div>
     </article>
@@ -153,12 +200,26 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   const [blockedError, setBlockedError] = useState<string | null>(null);
 
+  // Reloj de la vista. Vive en estado y no se lee durante el render (regla de
+  // pureza de React). Avanza por su cuenta: si solo se refrescara al cambiar la
+  // lista, una tarjeta abierta seguiria diciendo que la cuenta no ha vencido
+  // mucho despues de que el barrido del servidor la cerrara.
+  const [ahora, setAhora] = useState(0);
+
   const [acting, setActing] = useState<string | null>(null);
   const actingRef = useRef(false);
   const [blocking, setBlocking] = useState<AdminUser | null>(null);
   const [unblocking, setUnblocking] = useState<AdminUser | null>(null);
+  const [expiring, setExpiring] = useState<AdminUser | null>(null);
+  const [expiryValue, setExpiryValue] = useState('');
   const [reason, setReason] = useState('');
   const [sheetError, setSheetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAhora(Date.now());
+    const id = window.setInterval(() => setAhora(Date.now()), RELOJ_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (tab !== 'blocked') return;
@@ -207,6 +268,12 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   const openBlock = (u: AdminUser) => { setReason(''); setSheetError(null); setBlocking(u); };
   const openUnblock = (u: AdminUser) => { setSheetError(null); setUnblocking(u); };
+  const openExpiry = (u: AdminUser) => {
+    const actual = u.expiresAt ? new Date(u.expiresAt) : null;
+    setExpiryValue(actual && !Number.isNaN(actual.getTime()) ? toInputValue(actual) : '');
+    setSheetError(null);
+    setExpiring(u);
+  };
 
   const confirmBlock = async () => {
     if (!blocking || actingRef.current) return;
@@ -257,6 +324,37 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
     }
   };
 
+  // clear=true quita el vencimiento; si no, se manda la fecha del campo. La
+  // guarda de doble envio es la misma que usan bloquear y desbloquear.
+  const confirmExpiry = async (clear: boolean) => {
+    if (!expiring || actingRef.current) return;
+    let iso: string | null = null;
+    if (!clear) {
+      const d = new Date(expiryValue);
+      if (!expiryValue || Number.isNaN(d.getTime())) { setSheetError('INVALID_EXPIRY'); return; }
+      iso = d.toISOString();
+    }
+    actingRef.current = true;
+    setActing(expiring.id);
+    setSheetError(null);
+    try {
+      const api = getApiLayer();
+      if (!api.admin) return;
+      const res = await api.admin.setUserExpiry(expiring.id, iso);
+      if (res.success && res.data) {
+        applyUpdate(res.data);
+        setExpiring(null);
+      } else {
+        setSheetError(res.error?.code || 'ADMIN_ACTION_FAILED');
+      }
+    } catch {
+      setSheetError('ADMIN_ACTION_FAILED');
+    } finally {
+      actingRef.current = false;
+      setActing(null);
+    }
+  };
+
   const spinner = (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
@@ -275,7 +373,7 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const list = (users: AdminUser[]) => (
     <div className="px-4 py-4 space-y-3">
       {users.map((u) => (
-        <UserCard key={u.id} user={u} busy={acting === u.id} locale={locale} t={t} onBlock={openBlock} onUnblock={openUnblock} />
+        <UserCard key={u.id} user={u} busy={acting === u.id} now={ahora} locale={locale} t={t} onBlock={openBlock} onUnblock={openUnblock} onExpiry={openExpiry} />
       ))}
     </div>
   );
@@ -402,6 +500,71 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
             >
               {acting ? t('loading') : t('admin_users_block_confirm')}
             </button>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet isOpen={expiring !== null} onClose={() => { if (!acting) setExpiring(null); }} title={t('admin_users_expiry_title')} dismissable={acting === null}>
+        {expiring && (
+          <div className="space-y-4">
+            {sheetPerson(expiring)}
+            <p className="text-sm uv-text-secondary">{t('admin_users_expiry_hint')}</p>
+
+            <div className="flex gap-2">
+              {PRESET_DAYS.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  disabled={acting !== null}
+                  onClick={() => {
+                    setExpiryValue(toInputValue(new Date(Date.now() + days * 86400000)));
+                    if (sheetError) setSheetError(null);
+                  }}
+                  className="flex-1 py-2 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-xs font-bold uv-text-secondary disabled:opacity-50"
+                >
+                  {t(`admin_users_expiry_in_${days}d`)}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label htmlFor="admin-users-expiry-at" className="text-sm font-medium uv-text-secondary mb-1.5 block">
+                {t('admin_users_expires_at')}
+              </label>
+              <input
+                id="admin-users-expiry-at"
+                type="datetime-local"
+                value={expiryValue}
+                onChange={(e) => { setExpiryValue(e.target.value); if (sheetError) setSheetError(null); }}
+                disabled={acting !== null}
+                aria-invalid={sheetError === 'INVALID_EXPIRY' || sheetError === 'EXPIRY_REQUIRED' || undefined}
+                className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
+              />
+              {expiryValue && !Number.isNaN(new Date(expiryValue).getTime()) && new Date(expiryValue).getTime() <= Date.now() && (
+                <p className="mt-1.5 text-xs text-[var(--color-danger)]">{t('admin_users_expiry_past')}</p>
+              )}
+            </div>
+
+            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+
+            <button
+              type="button"
+              onClick={() => void confirmExpiry(false)}
+              disabled={acting !== null}
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            >
+              {acting ? t('loading') : t('admin_users_expiry_save')}
+            </button>
+            {expiring.expiresAt && (
+              <button
+                type="button"
+                onClick={() => void confirmExpiry(true)}
+                disabled={acting !== null}
+                className="w-full border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-secondary py-3 rounded-xl font-bold disabled:opacity-50"
+              >
+                {t('admin_users_expiry_clear')}
+              </button>
+            )}
           </div>
         )}
       </BottomSheet>

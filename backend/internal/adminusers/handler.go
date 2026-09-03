@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -127,6 +128,68 @@ func (h *Handler) Unblock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, v)
+}
+
+// SetExpiry — POST /api/v1/admin/users/{id}/expiry {"expires_at": "<RFC3339>"|null} (admin)
+//
+// La clave debe venir SIEMPRE: un cuerpo vacio no significa "quitar el
+// vencimiento", significa que el cliente se equivoco. Quitarlo se pide con un
+// null explicito.
+func (h *Handler) SetExpiry(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id, ok := pathUserID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		ExpiresAt json.RawMessage `json:"expires_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	at, ok := parseExpiry(w, req.ExpiresAt)
+	if !ok {
+		return
+	}
+
+	v, err := h.service.SetExpiry(r.Context(), id, adminID, at, actorContext(r))
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAdminTarget):
+			response.Error(w, http.StatusBadRequest, "CANNOT_EXPIRE_ADMIN", "cannot schedule an administrator to expire")
+		case errors.Is(err, ErrNotFound):
+			response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+		default:
+			response.Error(w, http.StatusInternalServerError, "EXPIRY_FAILED", err.Error())
+		}
+		return
+	}
+	response.JSON(w, http.StatusOK, v)
+}
+
+// parseExpiry traduce el campo crudo a *time.Time: null -> nil (quitar el
+// vencimiento), fecha RFC3339 -> valor. Responde el error y devuelve ok=false
+// si falta o no es una fecha.
+func parseExpiry(w http.ResponseWriter, raw json.RawMessage) (*time.Time, bool) {
+	if len(raw) == 0 {
+		response.Error(w, http.StatusBadRequest, "EXPIRY_REQUIRED", "expires_at is required (a date, or null to clear it)")
+		return nil, false
+	}
+	if string(raw) == "null" {
+		return nil, true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_EXPIRY", "expires_at must be an RFC3339 date or null")
+		return nil, false
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_EXPIRY", "expires_at must be an RFC3339 date or null")
+		return nil, false
+	}
+	return &t, true
 }
 
 // pathUserID valida {id} como UUID antes de tocar el servicio; si no lo es,
