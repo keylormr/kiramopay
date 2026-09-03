@@ -97,11 +97,17 @@ func (r *Repository) BlockUserAndRevokeSessions(ctx context.Context, userID, rea
 // UnblockUser vuelve la cuenta a 'active' y limpia el rastro. Las sesiones
 // revocadas por el bloqueo NO se resucitan: la persona vuelve a entrar con su
 // contrasena. Idempotente; found=false si no existe o esta borrada.
+//
+// Un vencimiento YA CUMPLIDO se borra en el mismo UPDATE: sin eso, desbloquear
+// a mano una demo vencida duraria hasta el siguiente tick del barrido, que la
+// volveria a bloquear con el mismo motivo. Un vencimiento FUTURO se conserva:
+// ahi el desbloqueo resuelve otra cosa y la demo sigue teniendo su fecha.
 func (r *Repository) UnblockUser(ctx context.Context, userID string) (found bool, err error) {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE users
 		    SET status = 'active', blocked_at = NULL, blocked_reason = NULL,
-		        blocked_by = NULL, updated_at = NOW()
+		        blocked_by = NULL, updated_at = NOW(),
+		        expires_at = CASE WHEN expires_at <= NOW() THEN NULL ELSE expires_at END
 		  WHERE id = $1::uuid AND deleted_at IS NULL`,
 		userID,
 	)

@@ -358,6 +358,7 @@ func newRouter(h *adminusers.Handler, userRepo *user.Repository, actorID string)
 		r.Get("/admin/users/{id}", h.Get)
 		r.Post("/admin/users/{id}/block", h.Block)
 		r.Post("/admin/users/{id}/unblock", h.Unblock)
+		r.Post("/admin/users/{id}/expiry", h.SetExpiry)
 	})
 	return r
 }

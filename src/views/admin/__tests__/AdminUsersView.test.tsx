@@ -11,6 +11,7 @@ const mockApi = vi.hoisted(() => ({
     getUser: vi.fn(),
     blockUser: vi.fn(),
     unblockUser: vi.fn(),
+    setUserExpiry: vi.fn(),
   },
 }));
 
@@ -31,6 +32,12 @@ const keilor: AdminUser = {
   blockedAt: null,
   blockedReason: '',
   blockedByName: '',
+  expiresAt: null,
+};
+
+const keilorConVencimiento: AdminUser = {
+  ...keilor,
+  expiresAt: '2027-01-15T12:00:00Z',
 };
 
 const keilorBlocked: AdminUser = {
@@ -147,6 +154,58 @@ describe('AdminUsersView', () => {
 
     await waitFor(() => expect(mockApi.admin.unblockUser).toHaveBeenCalledWith('u1'));
     expect(await screen.findByText('Activa')).toBeInTheDocument();
+  });
+
+  it('schedules an expiry from the quick 7-day shortcut and shows it on the card', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    mockApi.admin.setUserExpiry.mockResolvedValue({ success: true, data: keilorConVencimiento });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: '7 días' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar vencimiento' }));
+
+    await waitFor(() => expect(mockApi.admin.setUserExpiry).toHaveBeenCalledTimes(1));
+    const [id, iso] = mockApi.admin.setUserExpiry.mock.calls[0] as [string, string | null];
+    expect(id).toBe('u1');
+    // El atajo manda una fecha real, en ISO y a siete dias vista (con holgura
+    // por el tiempo que tarda el propio test).
+    const dias = (new Date(iso as string).getTime() - Date.now()) / 86400000;
+    expect(dias).toBeGreaterThan(6.9);
+    expect(dias).toBeLessThan(7.1);
+
+    // La cuenta sigue activa: programar no bloquea nada todavia.
+    expect(await screen.findByText('Vence el')).toBeInTheDocument();
+    expect(screen.getByText('Activa')).toBeInTheDocument();
+  });
+
+  it('refuses to save an expiry with an empty date', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar vencimiento' }));
+
+    expect(await screen.findByText('Elige una fecha válida')).toBeInTheDocument();
+    expect(mockApi.admin.setUserExpiry).not.toHaveBeenCalled();
+  });
+
+  it('clears the expiry with an explicit null', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilorConVencimiento] });
+    mockApi.admin.setUserExpiry.mockResolvedValue({ success: true, data: keilor });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: 'Vencimiento' }));
+    await user.click(await screen.findByRole('button', { name: 'Quitar vencimiento' }));
+
+    await waitFor(() => expect(mockApi.admin.setUserExpiry).toHaveBeenCalledWith('u1', null));
+    await waitFor(() => expect(screen.queryByText('Vence el')).not.toBeInTheDocument());
   });
 
   it('lists the blocked accounts on the second tab', async () => {

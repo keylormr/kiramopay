@@ -3273,6 +3273,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/expiry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Schedule or clear an account expiry (admin)
+         * @description Sets users.expires_at, the moment from which a periodic sweep blocks the account with reason "demo vencido" — same path as a manual block, so the session revocation, the ACCOUNT_BLOCKED mark and the WebSocket cut are identical. Setting it does NOT block anything by itself; a date already in the past is legitimate and means "close it on the next tick". Unblocking an account by hand clears an expiry that already fired, so the sweep does not undo the administrator's decision. Audited as user_expiry_set (high).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdminExpiryRequest"];
+                };
+            };
+            responses: {
+                /** @description Expiry scheduled or cleared (fresh card) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"];
+                    };
+                };
+                /** @description INVALID_ID | INVALID_BODY | EXPIRY_REQUIRED | INVALID_EXPIRY (not RFC3339) | CANNOT_EXPIRE_ADMIN */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description EXPIRY_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/push/subscribe": {
         parameters: {
             query?: never;
@@ -4792,6 +4865,18 @@ export interface components {
             blocked_reason?: string;
             /** @description Full name of the administrator who blocked the account; empty unless blocked */
             blocked_by_name?: string;
+            /**
+             * Format: date-time
+             * @description Scheduled expiry. When it passes, a periodic sweep blocks the account with reason "demo vencido". Null means the account never expires, which is the case for almost every account.
+             */
+            expires_at?: string | null;
+        };
+        AdminExpiryRequest: {
+            /**
+             * Format: date-time
+             * @description RFC3339 moment from which the sweep blocks the account, or null to clear the expiry. The key must always be present: an empty body is rejected with EXPIRY_REQUIRED, not read as "clear it".
+             */
+            expires_at: string | null;
         };
         AdminBlockRequest: {
             /** @description Free text kept in the audit trail (never PII) */

@@ -22,6 +22,8 @@ export interface AdminUser {
   blockedAt: string | null;
   blockedReason: string;
   blockedByName: string;
+  /** Scheduled expiry (ISO-8601). Null when the account never expires. */
+  expiresAt: string | null;
 }
 
 /**
@@ -37,4 +39,10 @@ export interface IAdminRepository {
   /** Blocks the account and revokes every session. The reason is audited. */
   blockUser(id: string, reason: string): Promise<ApiResponse<AdminUser>>;
   unblockUser(id: string): Promise<ApiResponse<AdminUser>>;
+  /**
+   * Schedules when the account stops working, or clears it with null. Setting
+   * it blocks nothing right away: a sweep on the server closes the account once
+   * the moment passes, through the same path as a manual block.
+   */
+  setUserExpiry(id: string, expiresAt: string | null): Promise<ApiResponse<AdminUser>>;
 }

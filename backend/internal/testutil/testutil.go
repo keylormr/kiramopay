@@ -156,6 +156,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		blocked_at TIMESTAMPTZ,
 		blocked_reason TEXT,
 		blocked_by UUID REFERENCES users(id) ON DELETE SET NULL,
+		expires_at TIMESTAMPTZ,
 		-- Referral program (migration 051). Production has NO default (the app
 		-- generates the code); the DEFAULT here only keeps the bare
 		-- INSERT INTO users of older tests working. Hex upper still satisfies
@@ -203,6 +204,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			(status = 'blocked' AND blocked_at IS NOT NULL AND blocked_reason IS NOT NULL)
 			OR (status <> 'blocked' AND blocked_at IS NULL));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	-- Vencimiento programado (migracion 053): mismo espejo, mismo predicado
+	-- parcial que usa el barrido, para que el plan del test sea el de prod.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+	CREATE INDEX IF NOT EXISTS idx_users_expires_at ON users (expires_at)
+		WHERE expires_at IS NOT NULL AND status <> 'blocked' AND deleted_at IS NULL;
 
 	CREATE TABLE IF NOT EXISTS wallets (
 		id UUID PRIMARY KEY,

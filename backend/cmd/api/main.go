@@ -441,6 +441,11 @@ func main() {
 	notifService.SetBroadcaster(wsHub)
 	notifHandler := notification.NewHandler(notifService)
 
+	// Bloquear una cuenta tambien corta sus sockets abiertos. El hub nace mucho
+	// despues que el servicio de administracion, asi que se cablea aqui, igual
+	// que el broadcaster de arriba.
+	adminUsersService.SetDisconnector(wsHub)
+
 	// ── Reconciliation worker ────────────────────────────────────────────
 	// Auto-fix snaps the wallets cache to the journal (source of truth) under
 	// the same row lock the ledger uses. Drift above 1,000,000 CRC is alerted
@@ -480,6 +485,16 @@ func main() {
 	escrowPollerCtx, escrowPollerCancel := context.WithCancel(context.Background())
 	defer escrowPollerCancel()
 	go escrowPoller.Run(escrowPollerCtx)
+
+	// ── Barrido de cuentas vencidas ──────────────────────────────────────
+	// Bloquea las cuentas cuyo users.expires_at ya paso (demos) por el mismo
+	// camino que un bloqueo manual: tx en BD, marca en Redis y corte de los
+	// sockets abiertos. Cada tick corre bajo el lock de cluster para que, con
+	// la API escalada, solo una instancia cierre un mismo lote.
+	expiryPoller := adminusers.NewPoller(adminUsersService, pool, 60*time.Second, logger)
+	expiryPollerCtx, expiryPollerCancel := context.WithCancel(context.Background())
+	defer expiryPollerCancel()
+	go expiryPoller.Run(expiryPollerCtx)
 
 	// Router
 	r := chi.NewRouter()
@@ -904,6 +919,7 @@ func main() {
 					r.Get("/admin/users/{id}", adminUsersHandler.Get)
 					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)
 					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
+					r.Post("/admin/users/{id}/expiry", adminUsersHandler.SetExpiry)
 				})
 			})
 		})

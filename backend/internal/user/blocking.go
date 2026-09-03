@@ -25,6 +25,9 @@ type AdminUserView struct {
 	BlockedAt     *time.Time `json:"blocked_at"`
 	BlockedReason string     `json:"blocked_reason"`
 	BlockedByName string     `json:"blocked_by_name"`
+	// ExpiresAt es el vencimiento programado de la cuenta (demos). NULL para
+	// las cuentas que no vencen, que son casi todas.
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 // Topes de las listas admin. El handler pasa el limit del query string; aqui
@@ -69,7 +72,8 @@ const adminViewSelect = `
 	       COALESCE(u.status, 'active'), COALESCE(u.role, 'user'), COALESCE(u.kyc_level, 0),
 	       COALESCE(u.created_at, NOW()), u.last_login_at,
 	       u.blocked_at, COALESCE(u.blocked_reason, ''),
-	       COALESCE(b.first_name || ' ' || b.last_name, '')
+	       COALESCE(b.first_name || ' ' || b.last_name, ''),
+	       u.expires_at
 	  FROM users u
 	  LEFT JOIN users b ON b.id = u.blocked_by`
 
@@ -82,6 +86,7 @@ func scanAdminView(row interface{ Scan(...any) error }) (*AdminUserView, error) 
 		&v.CreatedAt, &v.LastLoginAt,
 		&v.BlockedAt, &v.BlockedReason,
 		&v.BlockedByName,
+		&v.ExpiresAt,
 	)
 	return v, err
 }

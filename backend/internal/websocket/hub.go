@@ -106,6 +106,46 @@ func (h *Hub) RegisterUserClient(client *Client, userID string) {
 	h.userClients[userID] = append(h.userClients[userID], client)
 }
 
+// DisconnectUser closes every open connection of a user, right away. It is
+// called when the account becomes blocked: a socket authenticates ONCE, on its
+// first message, and neither /ws/notifications nor /ws/prices goes through the
+// middleware that rejects blocked accounts — so without this cut an already
+// open socket would keep receiving notifications until the client closed it.
+//
+// It closes the connection and NOTHING else: it does not touch the maps and
+// does not close client.send. Those two steps belong solely to the unregister
+// case of Run, reached only by readPump's defer when its ReadMessage fails —
+// which is exactly what this Close causes. Closing send here would race that
+// path ("close of closed channel") and whoever is writing to it.
+//
+// The list is copied under the lock and the connections are closed OUTSIDE it,
+// as SendToUser does: holding h.mu while the close triggers the unregister
+// would leave Run waiting for the Lock and freeze the whole hub.
+//
+// Returns how many connections were closed. It only reaches identified sockets
+// (/ws/notifications); /ws/prices is a public feed that never registers a user
+// and carries no personal data.
+func (h *Hub) DisconnectUser(userID string) int {
+	h.mu.RLock()
+	clients := make([]*Client, len(h.userClients[userID]))
+	copy(clients, h.userClients[userID])
+	h.mu.RUnlock()
+
+	closed := 0
+	for _, client := range clients {
+		// conn is nil in the clients the hub tests build by hand.
+		if client == nil || client.conn == nil {
+			continue
+		}
+		_ = client.conn.Close()
+		closed++
+	}
+	if closed > 0 {
+		h.logger.Info("WebSocket connections closed for blocked user", "user_id", userID, "closed", closed)
+	}
+	return closed
+}
+
 // SendToUser sends a message to all connections of a specific user.
 func (h *Hub) SendToUser(userID string, data interface{}) {
 	msg, err := json.Marshal(data)
