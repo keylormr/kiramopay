@@ -279,7 +279,15 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                403: components["responses"]["Forbidden"];
+                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 413: components["responses"]["PayloadTooLarge"];
                 423: components["responses"]["Locked"];
             };
@@ -324,6 +332,7 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
+                403: components["responses"]["AccountBlocked"];
             };
         };
         delete?: never;
@@ -2950,6 +2959,320 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search accounts by cedula, phone, email or partial name (admin)
+         * @description A term that parses as a cedula, phone or email is looked up EXACTLY (by its searchable hash); anything else matches the full name case-insensitively. PII comes back masked. The term travels in the body, never in the URL (it would end up in proxy and provider logs). Rate limited to 30/min per administrator; every search is audited by kind, never by term.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        q: string;
+                        /** @default 20 */
+                        limit?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Matching accounts (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"][];
+                    };
+                };
+                /** @description SEARCH_TERM_TOO_SHORT (fewer than 3 characters) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/blocked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List blocked accounts, most recent first (admin) */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Blocked accounts */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"][];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one account's administrative card (admin) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account card */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"];
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Block an account and revoke all its sessions (admin)
+         * @description Sets status=blocked, revokes every session and refresh token, and marks the account so any further authenticated request answers 403 ACCOUNT_BLOCKED. Idempotent. Audited as user_blocked (critical) with the reason and the number of sessions revoked.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdminBlockRequest"];
+                };
+            };
+            responses: {
+                /** @description Account blocked (fresh card) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"];
+                    };
+                };
+                /** @description INVALID_ID | REASON_REQUIRED (empty or over 500 chars) | CANNOT_BLOCK_SELF | CANNOT_BLOCK_ADMIN */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description BLOCK_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unblock an account (admin)
+         * @description Sets status=active and clears the block trail. Revoked sessions are NOT restored; the person signs in again with their password. Idempotent. Audited as user_unblocked (high).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account unblocked (fresh card) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUser"];
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNBLOCK_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/push/subscribe": {
         parameters: {
             query?: never;
@@ -4442,6 +4765,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Administrative card of an account. PII is masked in SQL: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain. */
+        AdminUser: {
+            /** Format: uuid */
+            id?: string;
+            first_name?: string;
+            last_name?: string;
+            /** @example ••••••930 */
+            cedula_masked?: string;
+            /** @example ••••••••1234 */
+            phone_masked?: string;
+            /** @example k•••••@gmail.com */
+            email_masked?: string;
+            /** @enum {string} */
+            status?: "active" | "blocked" | "suspended" | "closed";
+            /** @enum {string} */
+            role?: "user" | "admin" | "support";
+            kyc_level?: number;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            last_login_at?: string | null;
+            /** Format: date-time */
+            blocked_at?: string | null;
+            /** @description Empty unless blocked */
+            blocked_reason?: string;
+            /** @description Full name of the administrator who blocked the account; empty unless blocked */
+            blocked_by_name?: string;
+        };
+        AdminBlockRequest: {
+            /** @description Free text kept in the audit trail (never PII) */
+            reason: string;
+        };
         EscrowCreateRequest: {
             /** Format: uuid */
             seller_id: string;
@@ -5057,6 +5412,15 @@ export interface components {
         };
         /** @description Request body exceeds 1MB limit */
         PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Account blocked by an administrator (code ACCOUNT_BLOCKED). Returned by login (only after the password was verified), refresh and every authenticated route. The reason is never disclosed to the client. */
+        AccountBlocked: {
             headers: {
                 [name: string]: unknown;
             };

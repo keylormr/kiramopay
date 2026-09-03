@@ -33,7 +33,10 @@ export class HttpAuthRepository implements IAuthRepository {
     }>('/api/v1/auth/login', request, false);
 
     if (!res.success || !res.data) {
-      return apiError('AUTH_FAILED', res.error?.message || 'Login failed');
+      // Keep the backend code (ACCOUNT_BLOCKED, RATE_LIMITED, ...): the login
+      // view tells them apart; a fixed AUTH_FAILED collapsed all of them into
+      // "wrong credentials".
+      return apiError(res.error?.code || 'AUTH_FAILED', res.error?.message || 'Login failed');
     }
 
     const { user: u, tokens } = res.data;

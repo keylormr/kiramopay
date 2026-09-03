@@ -23,6 +23,7 @@ import type { IAssistantRepository } from './repositories/assistant.repository';
 import type { ISavingsRepository } from './repositories/savings.repository';
 import type { IKycRepository } from './repositories/kyc.repository';
 import type { IAppVersionRepository } from './repositories/appversion.repository';
+import type { IAdminRepository } from './repositories/admin.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -34,6 +35,7 @@ import { HttpB2BRepository } from './adapters/http/b2b.http';
 import { HttpAssistantRepository } from './adapters/http/assistant.http';
 import { HttpAppVersionRepository } from './adapters/http/appversion.http';
 import { HttpKycRepository } from './adapters/http/kyc.http';
+import { HttpAdminRepository } from './adapters/http/admin.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -62,6 +64,7 @@ export interface ApiLayer {
   savings?: ISavingsRepository;
   kyc?: IKycRepository;
   appVersion?: IAppVersionRepository;
+  admin?: IAdminRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -93,6 +96,8 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   // (like auth/mfa), even in mock mode.
   layer.kyc = new HttpKycRepository(client);
   layer.appVersion = new HttpAppVersionRepository(client);
+  // Account blocking is admin-only and enforced server-side: real backend always.
+  layer.admin = new HttpAdminRepository(client);
   return layer;
 }
 
@@ -169,3 +174,4 @@ export type {
   CreateSavingsGoalRequest,
 } from './repositories/savings.repository';
 export type { IKycRepository, IdentityVerifyResult } from './repositories/kyc.repository';
+export type { IAdminRepository, AdminUser, AdminUserStatus } from './repositories/admin.repository';

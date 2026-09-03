@@ -6,6 +6,9 @@ import { LoginView } from '../auth/LoginView';
 // Create a shared mock login function
 const mockLogin = vi.fn();
 let mockUser: Record<string, unknown> | null = null;
+// Motivo de la ultima expulsion (bloqueo remoto) y su descarte.
+let mockLogoutReason: 'blocked' | null = null;
+const mockClearLogoutReason = vi.fn();
 
 // Mock dataSync to avoid heavy imports
 vi.mock('@/services/dataSync', () => ({
@@ -25,18 +28,20 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
-// Mock useAuthStore — needs to be a callable function (Zustand hook) AND have getState()
+// Mock useAuthStore — needs to be a callable function (Zustand hook) AND have getState().
+// La vista lee logoutReason/clearLogoutReason con selector, asi que el hook lo respeta.
 vi.mock('@/stores/auth.store', () => {
-  const hook = () => ({
+  const state = () => ({
     isAuthenticated: false,
-    user: null,
+    user: mockUser,
     passwordHash: '',
     login: mockLogin,
+    logoutReason: mockLogoutReason,
+    clearLogoutReason: mockClearLogoutReason,
   });
-  hook.getState = () => ({
-    login: mockLogin,
-    user: mockUser,
-  });
+  const hook = (selector?: (s: ReturnType<typeof state>) => unknown) =>
+    selector ? selector(state()) : state();
+  hook.getState = state;
   hook.setState = vi.fn();
   hook.subscribe = vi.fn();
   return { useAuthStore: hook };
@@ -63,7 +68,9 @@ describe('LoginView', () => {
     localStorage.clear();
     localStorage.setItem('kiramopay_language', 'es');
     mockLogin.mockReset();
+    mockClearLogoutReason.mockReset();
     mockUser = null;
+    mockLogoutReason = null;
   });
 
   it('should render the login form with the identifier input', () => {
@@ -146,5 +153,49 @@ describe('LoginView', () => {
     renderLoginView();
     expect(screen.getByText(/702650930/)).toBeInTheDocument();
     expect(screen.getByText(/700000000/)).toBeInTheDocument();
+  });
+
+  describe('cuenta bloqueada por un administrador', () => {
+    it('muestra el aviso con role=alert cuando la sesion se cerro por bloqueo', async () => {
+      mockLogoutReason = 'blocked';
+      const user = userEvent.setup();
+      renderLoginView();
+
+      const aviso = screen.getByRole('alert');
+      expect(aviso).toHaveTextContent('Cuenta bloqueada');
+      expect(aviso).toHaveTextContent(
+        'Un administrador bloqueó el acceso a esta cuenta. Si crees que es un error, escribe a soporte.',
+      );
+
+      // La X descarta el aviso.
+      await user.click(screen.getByLabelText('Cerrar'));
+      expect(mockClearLogoutReason).toHaveBeenCalledTimes(1);
+    });
+
+    it('no muestra el aviso cuando no hay motivo de expulsion', () => {
+      renderLoginView();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cuenta bloqueada')).not.toBeInTheDocument();
+    });
+
+    it('un login rechazado con ACCOUNT_BLOCKED muestra el mensaje especifico, no el generico', async () => {
+      mockLogin.mockResolvedValue({ success: false, code: 'ACCOUNT_BLOCKED' });
+      const user = userEvent.setup();
+      const { onLogin } = renderLoginView();
+
+      await user.type(screen.getByPlaceholderText('Cédula, correo o teléfono'), '702650930');
+      await user.click(screen.getByText('Continuar'));
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
+      });
+      await user.type(screen.getByPlaceholderText('Contraseña'), 'Kiramopay2024!');
+      await user.click(screen.getByText('Ingresar'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Esta cuenta está bloqueada. Escribe a soporte.')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Cédula o contraseña incorrecta')).not.toBeInTheDocument();
+      expect(onLogin).not.toHaveBeenCalled();
+    });
   });
 });

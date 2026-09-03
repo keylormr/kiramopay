@@ -4,6 +4,7 @@ import {
   registerTokenProvider,
   registerRefreshHandler,
   registerAuthFailureHandler,
+  registerAccountBlockedHandler,
 } from '../client';
 
 function makeRes(status: number, data: unknown) {
@@ -14,6 +15,15 @@ function makeRes(status: number, data: unknown) {
       data,
       error: status >= 400 ? { code: 'HTTP', message: 'err' } : undefined,
     }),
+  } as unknown as Response;
+}
+
+// Respuesta de error con el codigo que devolveria el backend.
+function makeErrRes(status: number, code: string) {
+  return {
+    status,
+    ok: false,
+    json: async () => ({ error: { code, message: 'err' } }),
   } as unknown as Response;
 }
 
@@ -90,5 +100,61 @@ describe('HttpClient refresh-on-401', () => {
 
     expect(r.success).toBe(false);
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('HttpClient cuenta bloqueada (403 ACCOUNT_BLOCKED)', () => {
+  const onBlocked = vi.fn<() => void>();
+  const refresh = vi.fn<() => Promise<boolean>>(async () => true);
+  const onFail = vi.fn<() => void>();
+
+  beforeEach(() => {
+    registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
+    onBlocked.mockClear();
+    refresh.mockClear();
+    onFail.mockClear();
+    registerRefreshHandler(refresh);
+    registerAuthFailureHandler(onFail);
+    registerAccountBlockedHandler(onBlocked);
+  });
+
+  it('en una peticion autenticada llama al handler una vez, preserva el code y no intenta refresh', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeErrRes(403, 'ACCOUNT_BLOCKED'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new HttpClient('http://x');
+    const r = await client.get('/api/v1/wallets');
+
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('ACCOUNT_BLOCKED');
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    // Sin refresh ni reintento: el backend ya revoco las sesiones.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    // Tampoco pasa por el camino de SESSION_EXPIRED.
+    expect(onFail).not.toHaveBeenCalled();
+  });
+
+  it('un 403 con otro code (FORBIDDEN) no llama al handler', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeErrRes(403, 'FORBIDDEN')));
+
+    const client = new HttpClient('http://x');
+    const r = await client.get('/api/v1/admin/kyc/pending');
+
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('FORBIDDEN');
+    expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  it('un 403 ACCOUNT_BLOCKED en una peticion sin auth (login) no llama al handler', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeErrRes(403, 'ACCOUNT_BLOCKED')));
+
+    const client = new HttpClient('http://x');
+    const r = await client.post('/api/v1/auth/login', { identifier: 'x', password: 'y' }, false);
+
+    // El code viaja igual: la vista de login lo discrimina por su cuenta.
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('ACCOUNT_BLOCKED');
+    expect(onBlocked).not.toHaveBeenCalled();
   });
 });

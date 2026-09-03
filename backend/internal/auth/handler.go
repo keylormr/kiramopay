@@ -62,6 +62,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Login(r.Context(), &req, loginContext(r))
 	if err != nil {
+		// Cuenta bloqueada: 403 con codigo propio para que el cliente lo
+		// muestre. Solo se llega aqui con la contrasena correcta (Service.Login).
+		if errors.Is(err, ErrAccountBlocked) {
+			noStore(w)
+			response.Error(w, http.StatusForbidden, "ACCOUNT_BLOCKED", "account blocked")
+			return
+		}
 		// Log the real cause for ops; the client always sees a constant
 		// "invalid credentials" message (constant-time anti-enumeration).
 		if !errors.Is(err, ErrInvalidCredentials) {
@@ -233,6 +240,12 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 			h.cookies.clearRefreshCookie(w)
 		}
 		noStore(w)
+		// Cuenta bloqueada: la cookie tambien se limpia (sus sesiones ya estan
+		// revocadas) y el cliente recibe el codigo distinguible.
+		if errors.Is(err, ErrAccountBlocked) {
+			response.Error(w, http.StatusForbidden, "ACCOUNT_BLOCKED", "account blocked")
+			return
+		}
 		response.Error(w, http.StatusUnauthorized, "REFRESH_FAILED", "invalid refresh token")
 		return
 	}

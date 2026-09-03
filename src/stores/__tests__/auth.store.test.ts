@@ -74,6 +74,7 @@ describe('useAuthStore', () => {
       user: null,
       accessToken: null,
       refreshToken: null,
+      logoutReason: null,
     });
   });
 
@@ -155,5 +156,47 @@ describe('useAuthStore', () => {
     const s = useAuthStore.getState();
     expect(s.isAuthenticated).toBe(false);
     expect(s.accessToken).toBeNull();
+  });
+
+  describe('expulsion por bloqueo remoto (logoutReason)', () => {
+    it("forceLogout('blocked') cierra la sesion y deja el motivo", async () => {
+      await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      useAuthStore.getState().forceLogout('blocked');
+      const s = useAuthStore.getState();
+      expect(s.isAuthenticated).toBe(false);
+      expect(s.user).toBeNull();
+      expect(s.accessToken).toBeNull();
+      expect(s.refreshToken).toBeNull();
+      expect(s.logoutReason).toBe('blocked');
+    });
+
+    it('forceLogout() sin motivo deja logoutReason en null', async () => {
+      await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      useAuthStore.getState().forceLogout();
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().logoutReason).toBeNull();
+    });
+
+    it('clearLogoutReason() descarta el motivo', () => {
+      useAuthStore.getState().forceLogout('blocked');
+      expect(useAuthStore.getState().logoutReason).toBe('blocked');
+      useAuthStore.getState().clearLogoutReason();
+      expect(useAuthStore.getState().logoutReason).toBeNull();
+    });
+
+    it('un login exitoso limpia el motivo de la expulsion anterior', async () => {
+      useAuthStore.getState().forceLogout('blocked');
+      const ok = await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      expect(ok.success).toBe(true);
+      expect(useAuthStore.getState().logoutReason).toBeNull();
+    });
+
+    it('el motivo NO se persiste: vive solo en memoria', () => {
+      useAuthStore.getState().forceLogout('blocked');
+      const persisted = localStorage.getItem('kiramopay-auth');
+      expect(persisted).not.toBeNull();
+      const parsed = JSON.parse(persisted!);
+      expect(parsed.state.logoutReason).toBeUndefined();
+    });
   });
 });

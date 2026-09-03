@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/kiramopay/backend/internal/adminusers"
 	"github.com/kiramopay/backend/internal/appversion"
 	"github.com/kiramopay/backend/internal/assistant"
 	"github.com/kiramopay/backend/internal/audit"
@@ -171,6 +172,15 @@ func main() {
 	userRepo := user.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
 	authRepo := auth.NewRepository(pool, redisClient)
+	// Repone en Redis las marcas auth:blocked:<id> de las cuentas bloqueadas
+	// (cubre FLUSHDB, reinicio y eviccion). Sin marca una cuenta bloqueada sigue
+	// fuera por BD (sesiones revocadas), solo que responde SESSION_REVOKED en
+	// vez de ACCOUNT_BLOCKED: por eso una falla aqui advierte, no detiene el boot.
+	if n, err := authRepo.WarmBlockedUsers(context.Background()); err != nil {
+		log.Printf("Warning: could not restore blocked-user marks in Redis: %v", err)
+	} else if n > 0 {
+		log.Printf("Restored %d blocked-user mark(s) in Redis", n)
+	}
 	txRepo := transaction.NewRepository(pool)
 	sinpeRepo := sinpe.NewRepository(pool)
 	paymentRepo := payment.NewRepository(pool)
@@ -251,6 +261,7 @@ func main() {
 		Hacienda: kyc.NewHaciendaClient("", ""),
 	})
 	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
+	adminUsersService := adminusers.NewService(userRepo, authRepo, &adminusers.Options{AuditLogger: auditLogger})
 	// Loyalty nace ANTES que auth: el registro con codigo de invitacion le
 	// acredita el bono al referidor a traves de Referrals. Si se construyera
 	// despues, Referrals quedaria nil y nadie cobraria sin que nada fallara.
@@ -403,6 +414,7 @@ func main() {
 	b2bHandler := b2b.NewHandler(b2bService)
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
+	adminUsersHandler := adminusers.NewHandler(adminUsersService)
 	transparencyHandler := transparency.NewHandler(pool)
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
@@ -623,6 +635,10 @@ func main() {
 		// ─────────────────────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthWithSessionCheck(jwtManager, authRepo))
+			// Cuenta bloqueada por un administrador: 403 ACCOUNT_BLOCKED en toda
+			// peticion autenticada (la marca vive en Redis; la BD ya revoco las
+			// sesiones, asi que sin marca igual cae como SESSION_REVOKED).
+			r.Use(middleware.RejectBlocked(authRepo))
 			r.Use(middleware.UserRateLimit(redisClient, 200, time.Minute))
 
 			// Auth
@@ -875,6 +891,19 @@ func main() {
 					fmt.Fprintf(w, `{"wallets_total":%d,"wallets_bad":%d,"drift_crc":%d,"drift_usd":%d,"duration_ms":%d}`,
 						rpt.WalletsTotal, rpt.WalletsBad, rpt.DriftCRC, rpt.DriftUSD,
 						rpt.FinishedAt.Sub(rpt.StartedAt).Milliseconds())
+				})
+
+				// Gestion de cuentas: busqueda con PII enmascarada y bloqueo
+				// remoto. Presupuesto propio y corto por administrador: la
+				// busqueda resuelve identificadores a personas, y 30/min alcanza
+				// para operar sin servir de enumerador.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.UserRateLimit(redisClient, 30, time.Minute))
+					r.Post("/admin/users/search", adminUsersHandler.Search)
+					r.Get("/admin/users/blocked", adminUsersHandler.ListBlocked)
+					r.Get("/admin/users/{id}", adminUsersHandler.Get)
+					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)
+					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
 				})
 			})
 		})

@@ -6,6 +6,7 @@ import {
   registerTokenProvider,
   registerRefreshHandler,
   registerAuthFailureHandler,
+  registerAccountBlockedHandler,
 } from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
 import { clasificarIdentificador } from '@/utils/identificador';
@@ -43,6 +44,11 @@ interface AuthState {
   // session. Persistence here is only profile + the onboarded flag.
   accessToken: string | null;
   refreshToken: string | null;
+  // Por que se cerro la ultima sesion sin que el usuario lo pidiera. Vive solo
+  // en memoria (fuera de partialize): el aviso se muestra una vez, en la
+  // pantalla de login que sigue a la expulsion, y no debe resucitar en una
+  // recarga ni heredarse al siguiente usuario del dispositivo.
+  logoutReason: 'blocked' | null;
 
   login: (identificador: string, password: string) => Promise<{ success: boolean; code?: string }>;
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string; code?: string }>;
@@ -57,8 +63,13 @@ interface AuthState {
    * what replaces the persisted "phantom" authenticated flag.
    */
   bootstrap: () => Promise<void>;
-  /** Clear the session locally without a backend call (refresh already failed). */
-  forceLogout: () => void;
+  /**
+   * Clear the session locally without a backend call (refresh already failed).
+   * `reason` marca por que: 'blocked' cuando un administrador bloqueo la cuenta.
+   */
+  forceLogout: (reason?: 'blocked') => void;
+  /** Descarta el aviso de expulsion (el usuario lo cerro). */
+  clearLogoutReason: () => void;
   completeOnboarding: () => void;
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
 }
@@ -72,6 +83,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
+      logoutReason: null,
 
       login: async (identificador, password) => {
         // Un solo campo: cedula, correo o telefono. Se clasifica y canonicaliza
@@ -101,6 +113,8 @@ export const useAuthStore = create<AuthState>()(
             user: result.data.user,
             accessToken: result.data.tokens?.access_token ?? null,
             refreshToken: result.data.tokens?.refresh_token ?? null,
+            // Entro alguien: el aviso de la expulsion anterior ya no aplica.
+            logoutReason: null,
           });
           // On native, stash the refresh token in OS secure storage (no-op on
           // web, where the HttpOnly cookie is the transport).
@@ -180,7 +194,7 @@ export const useAuthStore = create<AuthState>()(
         return false;
       },
 
-      forceLogout: () => {
+      forceLogout: (reason) => {
         clearLockPin();
         secureTokenStore.clear();
         // Igual que en logout: sesion invalidada (401 sin refresh posible)
@@ -192,7 +206,12 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           accessToken: null,
           refreshToken: null,
+          logoutReason: reason ?? null,
         });
+      },
+
+      clearLogoutReason: () => {
+        set({ logoutReason: null });
       },
 
       bootstrap: async () => {
@@ -295,3 +314,6 @@ registerTokenProvider(() => {
 // logout so the UI stops showing a phantom authenticated session.
 registerRefreshHandler(() => useAuthStore.getState().refresh());
 registerAuthFailureHandler(() => useAuthStore.getState().forceLogout());
+// 403 ACCOUNT_BLOCKED en una peticion autenticada: la sesion ya no existe en
+// el backend; se cierra localmente y el login explica el motivo.
+registerAccountBlockedHandler(() => useAuthStore.getState().forceLogout('blocked'));
