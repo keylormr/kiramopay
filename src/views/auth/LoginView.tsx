@@ -10,6 +10,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
 import { RecoverPasswordView } from './RecoverPasswordView';
 import { Capacitor } from '@capacitor/core';
+import { resolveApiBaseUrl } from '@/api/baseUrl';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -18,6 +19,29 @@ const ANDROID_APK_URL =
   'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk';
 // Only offer the download on the web — pointless inside the installed app.
 const SHOW_APK_DOWNLOAD = !Capacitor.isNativePlatform();
+
+// Cuentas que siembra `SeedDevelopment` del backend cuando ENVIRONMENT=development
+// (backend/internal/database/seeder.go). Fuera de ese entorno el sembrador exige
+// SEED_PASSWORD_<CEDULA> y estas contrasenas no valen, por eso el recuadro solo
+// aparece cuando la aplicacion habla con un backend local o con el modo simulado.
+const CUENTAS_LOCALES = [
+  { identificador: '702650930', password: 'Kiramopay2024!', nota: '' },
+  { identificador: '700000000', password: 'Admin2024!', nota: 'admin' },
+  { identificador: '701234567', password: 'DemoLocal2026!', nota: 'demo' },
+];
+
+const apiLocal = (() => {
+  const base = resolveApiBaseUrl();
+  if (!base) return true; // sin backend: modo simulado, el sembrador local aplica
+  try {
+    const host = new URL(base, window.location.origin).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  } catch {
+    return false;
+  }
+})();
+
+const MOSTRAR_CUENTAS_LOCALES = import.meta.env.DEV && apiLocal;
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -311,16 +335,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('create_account')}
             </Button>
 
-            {/* Demo credentials hint — dev builds only; never shipped to production. */}
-            {import.meta.env.DEV && (
+            {/* Cuentas sembradas por el backend local. Solo en build de
+                desarrollo Y contra un backend local: apuntando a produccion
+                estas contrasenas no existen y el recuadro enganaba. */}
+            {MOSTRAR_CUENTAS_LOCALES && (
               <div className="mt-8 p-3.5 rounded-xl bg-white/[0.04] border border-white/10">
                 <p className="text-[var(--color-primary-300)] text-xs font-semibold uppercase tracking-wider mb-2">
-                  Usuarios de prueba
+                  {t('test_users')}
                 </p>
                 <div className="space-y-1 text-[11px] text-[var(--color-text-muted-dark)] font-mono">
-                  <p>702650930 · Kiramopay2024!</p>
-                  <p>700000000 · Admin2024!</p>
+                  {CUENTAS_LOCALES.map((c) => (
+                    <p key={c.identificador}>
+                      {c.identificador} · {c.password}
+                      {c.nota ? ` · ${c.nota}` : ''}
+                    </p>
+                  ))}
                 </div>
+                <p className="mt-2 text-[10px] text-[var(--color-text-muted-dark)]">
+                  {t('test_users_hint')}
+                </p>
               </div>
             )}
           </div>

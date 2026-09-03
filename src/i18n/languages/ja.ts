@@ -178,6 +178,7 @@ const ja: TranslationKeys = {
   made_in_cr: 'コスタリカで愛を込めて作成',
   all_rights: '全著作権所有',
   test_users: 'テストユーザー',
+  test_users_hint: 'ローカルのシード済みバックエンドでのみ有効です。',
 
   // Additional UI
   add_money: '入金',

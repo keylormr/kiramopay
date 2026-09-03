@@ -178,6 +178,7 @@ const es: TranslationKeys = {
   made_in_cr: 'Hecho con amor en Costa Rica',
   all_rights: 'Todos los derechos reservados',
   test_users: 'Usuarios de prueba',
+  test_users_hint: 'Solo sirven contra un backend local sembrado.',
 
   // Additional UI
   add_money: 'Agregar dinero',

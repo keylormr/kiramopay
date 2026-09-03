@@ -178,6 +178,7 @@ const hi: TranslationKeys = {
   made_in_cr: 'कोस्टा रिका में प्यार से बनाया',
   all_rights: 'सर्वाधिकार सुरक्षित',
   test_users: 'परीक्षण उपयोगकर्ता',
+  test_users_hint: 'ये केवल स्थानीय रूप से सीड किए गए बैकएंड पर काम करते हैं।',
 
   // Additional UI
   add_money: 'पैसे जोड़ें',
