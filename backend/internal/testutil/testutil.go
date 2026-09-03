@@ -288,6 +288,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		failed_attempts INT NOT NULL DEFAULT 0,
 		locked_until TIMESTAMPTZ,
 		confirmed_at TIMESTAMPTZ,
+		disabled_at TIMESTAMPTZ,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
@@ -297,8 +298,12 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		code_hash VARCHAR(64) NOT NULL,
 		used_at TIMESTAMPTZ,
+		invalidated_at TIMESTAMPTZ,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+	-- Espejo de la 055 para bases de test ya persistidas.
+	ALTER TABLE user_totp ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMPTZ;
+	ALTER TABLE totp_recovery_codes ADD COLUMN IF NOT EXISTS invalidated_at TIMESTAMPTZ;
 
 	CREATE TABLE IF NOT EXISTS transactions (
 		id UUID PRIMARY KEY,

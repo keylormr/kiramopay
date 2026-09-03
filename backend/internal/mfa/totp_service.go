@@ -50,6 +50,11 @@ func (s *Service) TOTPEnabled(ctx context.Context, userID string) (bool, error) 
 // EnrollTOTP creates (or replaces) a pending enrollment and returns the base32
 // secret plus the otpauth:// provisioning URI for QR display. The enrollment is
 // inactive until ConfirmTOTP succeeds. account is a user-facing label.
+//
+// Enrolling again opens a NEW cycle, so it clears the previous one's dates: the
+// row describes the current enrollment and when it changed, not the account's
+// whole history. That history lives in audit_logs (mfa_totp_enabled /
+// mfa_totp_disabled), which is append-only and nothing here can rewrite.
 func (s *Service) EnrollTOTP(ctx context.Context, userID, account string) (secretB32, otpauth string, err error) {
 	if s.totpAEAD == nil {
 		return "", "", ErrTOTPNotConfigured
@@ -74,7 +79,8 @@ func (s *Service) EnrollTOTP(ctx context.Context, userID, account string) (secre
 		 VALUES ($1::uuid, $2, FALSE, 0, NULL, NOW())
 		 ON CONFLICT (user_id) DO UPDATE
 		   SET secret_enc = EXCLUDED.secret_enc,
-		       enabled = FALSE, last_used_step = 0, confirmed_at = NULL, updated_at = NOW()`,
+		       enabled = FALSE, last_used_step = 0, confirmed_at = NULL,
+		       disabled_at = NULL, updated_at = NOW()`,
 		userID, enc,
 	)
 	if err != nil {
@@ -138,6 +144,9 @@ func (s *Service) ConfirmTOTP(ctx context.Context, userID, code string) ([]strin
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	// La otra mitad del rastro: sin el evento de encendido no se puede saber
+	// desde cuando la cuenta estuvo protegida, solo cuando dejo de estarlo.
+	s.audita(userID, "mfa_totp_enabled", "medium")
 	return codes, nil
 }
 
@@ -240,7 +249,21 @@ func (s *Service) VerifyTOTP(ctx context.Context, userID, purpose, code string) 
 }
 
 // DisableTOTP turns off authenticator MFA after re-verifying a current code
-// (TOTP or recovery), deleting the enrollment and all recovery codes.
+// (TOTP or recovery).
+//
+// It MARKS the enrollment instead of deleting it. Turning the second factor off
+// weakens a control on the account, and the row is the only place that records
+// that the account ever had one, from when to when — precisely what has to be
+// reconstructible after an account takeover. Same shape as
+// user_sessions.revoked_at: the row stays, a timestamp says it is over.
+//
+// What does NOT stay is the credential: the secret is overwritten and the live
+// recovery codes are invalidated, so nothing that could still authenticate
+// survives the disable. VerifyTOTP refuses on `enabled` before it ever reads
+// the secret, so the emptied blob is never decrypted.
+//
+// Both writes go in one transaction: a half-disabled second factor (secret gone
+// but codes alive, or the reverse) is worse than either end state.
 func (s *Service) DisableTOTP(ctx context.Context, userID, code string) error {
 	if s.totpAEAD == nil {
 		return ErrTOTPNotConfigured
@@ -259,15 +282,31 @@ func (s *Service) DisableTOTP(ctx context.Context, userID, code string) error {
 	if !ok {
 		return ErrTOTPBadCode
 	}
-	if _, err := s.db.Exec(ctx,
-		`DELETE FROM user_totp WHERE user_id = $1::uuid`, userID); err != nil {
+
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
 		return err
 	}
-	// recovery codes cascade via FK ON DELETE CASCADE on users, but the
-	// enrollment delete does not cascade them — remove explicitly.
-	_, err = s.db.Exec(ctx,
-		`DELETE FROM totp_recovery_codes WHERE user_id = $1::uuid`, userID)
-	return err
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE user_totp
+		    SET enabled = FALSE, secret_enc = ''::bytea, last_used_step = 0,
+		        disabled_at = NOW(), updated_at = NOW()
+		  WHERE user_id = $1::uuid`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE totp_recovery_codes SET invalidated_at = NOW()
+		  WHERE user_id = $1::uuid AND used_at IS NULL AND invalidated_at IS NULL`,
+		userID); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	s.audita(userID, "mfa_totp_disabled", "high")
+	return nil
 }
 
 // markChallengeVerified writes a pre-verified challenge so HasVerifiedMFA picks
@@ -284,11 +323,17 @@ func (s *Service) markChallengeVerified(ctx context.Context, tx pgx.Tx, userID, 
 	return err
 }
 
-// replaceRecoveryCodes deletes any existing codes and issues a fresh batch,
+// replaceRecoveryCodes retires any live codes and issues a fresh batch,
 // returning the plaintext codes (shown to the user once).
+//
+// The old batch is invalidated, not deleted: a code that stops working without
+// anyone using it is part of the account's history, and invalidated_at keeps it
+// apart from used_at, which means someone actually spent it.
 func (s *Service) replaceRecoveryCodes(ctx context.Context, tx pgx.Tx, userID string) ([]string, error) {
 	if _, err := tx.Exec(ctx,
-		`DELETE FROM totp_recovery_codes WHERE user_id = $1::uuid`, userID); err != nil {
+		`UPDATE totp_recovery_codes SET invalidated_at = NOW()
+		  WHERE user_id = $1::uuid AND used_at IS NULL AND invalidated_at IS NULL`,
+		userID); err != nil {
 		return nil, err
 	}
 	codes := make([]string, 0, recoveryCodeCount)
@@ -309,12 +354,15 @@ func (s *Service) replaceRecoveryCodes(ctx context.Context, tx pgx.Tx, userID st
 	return codes, nil
 }
 
-// consumeRecoveryCode atomically marks a matching unused code as used.
+// consumeRecoveryCode atomically marks a matching live code as used. A code
+// that was invalidated (the batch was replaced, or MFA was turned off) is no
+// longer live even though it was never used.
 func (s *Service) consumeRecoveryCode(ctx context.Context, tx pgx.Tx, userID, code string) (bool, error) {
 	h := sha256.Sum256([]byte(normalizeRecovery(code)))
 	ct, err := tx.Exec(ctx,
 		`UPDATE totp_recovery_codes SET used_at = NOW()
-		 WHERE user_id = $1::uuid AND code_hash = $2 AND used_at IS NULL`,
+		 WHERE user_id = $1::uuid AND code_hash = $2
+		   AND used_at IS NULL AND invalidated_at IS NULL`,
 		userID, hex.EncodeToString(h[:]),
 	)
 	if err != nil {
