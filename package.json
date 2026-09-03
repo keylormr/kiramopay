@@ -1,12 +1,13 @@
 {
   "name": "kiramopay",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.3.4",
   "type": "module",
   "scripts": {
     "dev": "vite --port 9999",
     "gen:api": "openapi-typescript backend/docs/openapi.yaml -o src/api/generated/openapi.d.ts",
     "check:contracts": "bash scripts/contract-check.sh",
+    "check:version": "node scripts/check-version-sync.mjs",
     "prebuild": "npm run gen:api",
     "build": "vite build",
     "preview": "vite preview --port 9999",

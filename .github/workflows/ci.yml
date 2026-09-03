@@ -20,6 +20,17 @@ jobs:
       - run: npm ci
       - run: npm run lint
 
+  version-sync:
+    name: Version Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Sin npm ci: el script solo lee archivos, no necesita dependencias.
+      - run: npm run check:version
+
   frontend-typecheck:
     name: Frontend Typecheck
     runs-on: ubuntu-latest
