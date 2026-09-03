@@ -41,24 +41,7 @@ func (h *Hub) Run() {
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
-
-				// Clean up user tracking
-				if client.UserID != "" {
-					clients := h.userClients[client.UserID]
-					for i, c := range clients {
-						if c == client {
-							h.userClients[client.UserID] = append(clients[:i], clients[i+1:]...)
-							break
-						}
-					}
-					if len(h.userClients[client.UserID]) == 0 {
-						delete(h.userClients, client.UserID)
-					}
-				}
-			}
+			h.dropClientLocked(client)
 			h.mu.Unlock()
 			h.logger.Info("WebSocket client disconnected", "total", h.ClientCount())
 
@@ -68,16 +51,50 @@ func (h *Hub) Run() {
 				select {
 				case client.send <- message:
 				default:
+					// Slow consumer: drop it. This goes through the same
+					// teardown as an unregister — evicting it from h.clients
+					// alone used to leave it listed in h.userClients with its
+					// channel already closed, and the next SendToUser to that
+					// user would panic on it.
 					h.mu.RUnlock()
 					h.mu.Lock()
-					delete(h.clients, client)
-					close(client.send)
+					h.dropClientLocked(client)
 					h.mu.Unlock()
 					h.mu.RLock()
 				}
 			}
 			h.mu.RUnlock()
 		}
+	}
+}
+
+// dropClientLocked forgets a client and closes its send channel. It is the ONLY
+// place that closes it, and it must be called with the write lock held: every
+// reader (SendToUser, the broadcast loop) holds the read lock across its sends
+// precisely so that this cannot run underneath them.
+//
+// Being a no-op for a client that is already gone is what makes the two paths
+// that reach it — the unregister channel and the slow-consumer eviction — safe
+// to race with each other: whoever arrives second closes nothing twice.
+func (h *Hub) dropClientLocked(client *Client) {
+	if _, ok := h.clients[client]; !ok {
+		return
+	}
+	delete(h.clients, client)
+	close(client.send)
+
+	if client.UserID == "" {
+		return
+	}
+	clients := h.userClients[client.UserID]
+	for i, c := range clients {
+		if c == client {
+			h.userClients[client.UserID] = append(clients[:i], clients[i+1:]...)
+			break
+		}
+	}
+	if len(h.userClients[client.UserID]) == 0 {
+		delete(h.userClients, client.UserID)
 	}
 }
 

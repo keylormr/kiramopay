@@ -25,16 +25,13 @@ type Poller struct {
 	interval time.Duration
 	batch    int
 	logger   *slog.Logger
-
-	// ticks cuenta las pasadas para espaciar el repaso de las marcas de Redis,
-	// que no hace falta en cada tick. Solo lo toca tick(), que corre en la
-	// unica goroutine de Run.
-	ticks int
 }
 
 // Cada cuantos ticks se repasan las marcas de bloqueo en Redis. Con el tick de
 // un minuto, cada diez: una marca perdida por un fallo de Redis se repone en
-// menos de diez minutos en vez de esperar al proximo reinicio del proceso.
+// menos de diez minutos en vez de esperar al proximo reinicio del proceso. El
+// turno lo reparte el propio Redis (ver Service.ClaimMarkReconcile), no un
+// contador local, porque el lider de cluster cambia en cada tick.
 const ticksPorRepaso = 10
 
 // NewPoller cablea el barrido. pool se usa solo para el lock de lider.
@@ -61,22 +58,14 @@ func (p *Poller) Run(ctx context.Context) {
 }
 
 func (p *Poller) tick(ctx context.Context) {
-	p.ticks++
-	repasar := p.ticks%ticksPorRepaso == 0
-
 	ran, err := cluster.TryRunExclusive(ctx, p.pool, cluster.KeyDemoExpiry, func(c context.Context) error {
 		n, rerr := p.svc.ExpireDue(c, time.Now(), p.batch)
 		if n > 0 && p.logger != nil {
 			p.logger.Info("cuentas vencidas bloqueadas", "count", n)
 		}
-		if !repasar {
-			return rerr
-		}
 		// El repaso va DESPUES del barrido y no lo tapa: si el barrido fallo,
 		// ese error es el que se reporta.
-		if _, werr := p.svc.ReconcileBlockedMarks(c); werr != nil && p.logger != nil {
-			p.logger.Warn("repaso de marcas de bloqueo fallido", "error", werr)
-		}
+		p.repasarMarcas(c)
 		return rerr
 	})
 	if err != nil {
@@ -87,5 +76,30 @@ func (p *Poller) tick(ctx context.Context) {
 	}
 	if !ran && p.logger != nil {
 		p.logger.Debug("barrido de vencimientos omitido; otra instancia es lider")
+	}
+}
+
+// repasarMarcas pone al dia las marcas de bloqueo en Redis cuando le toca el
+// turno. Nunca es fatal: es una red de seguridad, no el camino principal.
+func (p *Poller) repasarMarcas(ctx context.Context) {
+	turno, err := p.svc.ClaimMarkReconcile(ctx, p.interval*ticksPorRepaso)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Warn("turno de repaso de marcas fallido", "error", err)
+		}
+		return
+	}
+	if !turno {
+		return
+	}
+	puestas, quitadas, err := p.svc.ReconcileBlockedMarks(ctx)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Warn("repaso de marcas de bloqueo fallido", "error", err)
+		}
+		return
+	}
+	if (puestas > 0 || quitadas > 0) && p.logger != nil {
+		p.logger.Info("marcas de bloqueo corregidas", "puestas", puestas, "quitadas", quitadas)
 	}
 }

@@ -200,6 +200,99 @@ func (r *Repository) IsUserBlocked(ctx context.Context, userID string) (bool, er
 	return n > 0, nil
 }
 
+// La llave del turno de repaso vive FUERA del prefijo de las marcas: si
+// compartiera prefijo, el propio repaso la leeria como si fuera la marca de un
+// usuario llamado "gate" y la borraria.
+const reconcileGateKey = "auth:blocked-reconcile:gate"
+
+// TryClaimBlockedReconcile gana el turno de repasar las marcas para la ventana
+// que se le pida, y devuelve false si otra instancia ya lo gano.
+//
+// El turno es una llave con TTL en vez de un contador en memoria a proposito.
+// El lock de cluster elige lider TICK A TICK, no de forma pegajosa, asi que con
+// la API escalada un contador local haria que el repaso dependiera de que la
+// misma instancia gane justo su tick numero diez. La llave es del cluster: la
+// gana cualquiera que este de turno y caduca sola.
+func (r *Repository) TryClaimBlockedReconcile(ctx context.Context, every time.Duration) (bool, error) {
+	if r.redis == nil || every <= 0 {
+		return false, nil
+	}
+	ok, err := r.redis.SetNX(ctx, reconcileGateKey, "1", every).Result()
+	if err != nil {
+		return false, fmt.Errorf("claim blocked reconcile: %w", err)
+	}
+	return ok, nil
+}
+
+// ReconcileBlockedMarks sincroniza las marcas de Redis con la BD en LAS DOS
+// direcciones: repone las que faltan y borra las que sobran. Devuelve cuantas
+// puso y cuantas quito.
+//
+// Reponer cubre la marca que se perdio por un fallo de Redis al bloquear (en el
+// barrido automatico nadie lo nota ni reintenta) o por una eviccion.
+//
+// Borrar es igual de necesario, y es lo que hace seguro repetir este repaso.
+// Desbloquear quita la marca ANTES de comprometer el UPDATE en BD — ese orden
+// es deliberado, deja la cuenta en el estado mas restrictivo si algo falla a
+// medias —, asi que un repaso que caiga en esa ventana lee la fila todavia como
+// bloqueada y repone una marca sobre una cuenta que un instante despues queda
+// activa. Sin la limpieza, esa marca sobrevive para siempre: la ficha del
+// administrador dice "activa" y la persona recibe ACCOUNT_BLOCKED en cada
+// peticion, sin nada que explique por que.
+func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed int, err error) {
+	if r.redis == nil {
+		return 0, 0, nil
+	}
+
+	enBD := make(map[string]bool)
+	rows, err := r.db.Query(ctx,
+		`SELECT id::text FROM users WHERE status = 'blocked' AND deleted_at IS NULL`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("list blocked users: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return 0, 0, fmt.Errorf("scan blocked user: %w", err)
+		}
+		enBD[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return 0, 0, fmt.Errorf("iterate blocked users: %w", err)
+	}
+
+	enRedis := make(map[string]bool)
+	iter := r.redis.Scan(ctx, 0, blockedKey("*"), 100).Iterator()
+	for iter.Next(ctx) {
+		enRedis[strings.TrimPrefix(iter.Val(), blockedKey(""))] = true
+	}
+	if err := iter.Err(); err != nil {
+		return 0, 0, fmt.Errorf("scan blocked marks: %w", err)
+	}
+
+	pipe := r.redis.Pipeline()
+	for id := range enBD {
+		if !enRedis[id] {
+			pipe.Set(ctx, blockedKey(id), "1", 0)
+			added++
+		}
+	}
+	for id := range enRedis {
+		if !enBD[id] {
+			pipe.Del(ctx, blockedKey(id))
+			removed++
+		}
+	}
+	if added+removed == 0 {
+		return 0, 0, nil
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, 0, fmt.Errorf("apply blocked mark fixes: %w", err)
+	}
+	return added, removed, nil
+}
+
 // WarmBlockedUsers repone en Redis la marca de toda cuenta bloqueada en BD.
 // Se llama al arranque. Devuelve cuantas marcas puso. Sin Redis: (0, nil).
 func (r *Repository) WarmBlockedUsers(ctx context.Context) (int, error) {

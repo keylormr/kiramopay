@@ -400,15 +400,44 @@ func TestReconcileBlockedMarks_ReponeLaMarcaPerdida(t *testing.T) {
 		t.Fatalf("la marca debia estar ausente para la prueba: blocked=%v err=%v", isBlocked, err)
 	}
 
-	n, err := f.svc.ReconcileBlockedMarks(ctx)
+	puestas, _, err := f.svc.ReconcileBlockedMarks(ctx)
 	if err != nil {
 		t.Fatalf("ReconcileBlockedMarks() error: %v", err)
 	}
-	if n < 1 {
-		t.Fatalf("el repaso repuso %d marcas, esperaba al menos 1", n)
+	if puestas < 1 {
+		t.Fatalf("el repaso repuso %d marcas, esperaba al menos 1", puestas)
 	}
 	if isBlocked, err := f.authRepo.IsUserBlocked(ctx, f.userID); err != nil || !isBlocked {
 		t.Fatalf("la marca no se repuso: blocked=%v err=%v", isBlocked, err)
+	}
+}
+
+// La otra direccion, que es la que hace seguro repetir el repaso: desbloquear
+// quita la marca ANTES de comprometer el UPDATE, asi que un repaso que caiga en
+// esa ventana repone una marca sobre una cuenta que queda activa. Si el repaso
+// solo supiera poner marcas, esa quedaria para siempre: la ficha diria "activa"
+// y la persona recibiria ACCOUNT_BLOCKED en todo, sin explicacion.
+func TestReconcileBlockedMarks_QuitaLaMarcaQueSobra(t *testing.T) {
+	f := setup(t, nil)
+	ctx := context.Background()
+
+	// Cuenta activa con una marca huerfana, como la dejaria esa carrera.
+	if err := f.authRepo.MarkUserBlocked(ctx, f.userID); err != nil {
+		t.Fatalf("MarkUserBlocked() error: %v", err)
+	}
+	if got := f.status(t, f.userID); got != "active" {
+		t.Fatalf("la cuenta debia seguir activa para la prueba: %s", got)
+	}
+
+	_, quitadas, err := f.svc.ReconcileBlockedMarks(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileBlockedMarks() error: %v", err)
+	}
+	if quitadas < 1 {
+		t.Fatalf("el repaso quito %d marcas, esperaba al menos 1", quitadas)
+	}
+	if isBlocked, err := f.authRepo.IsUserBlocked(ctx, f.userID); err != nil || isBlocked {
+		t.Fatalf("la marca huerfana sobrevivio: blocked=%v err=%v", isBlocked, err)
 	}
 }
 

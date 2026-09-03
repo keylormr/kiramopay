@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { AdminUsersView } from '../AdminUsersView';
@@ -38,11 +38,6 @@ const keilor: AdminUser = {
 const keilorConVencimiento: AdminUser = {
   ...keilor,
   expiresAt: '2027-01-15T12:00:00Z',
-};
-
-const keilorVencida: AdminUser = {
-  ...keilor,
-  expiresAt: '2020-01-15T12:00:00Z',
 };
 
 const keilorBlocked: AdminUser = {
@@ -186,16 +181,36 @@ describe('AdminUsersView', () => {
     expect(screen.getByText('Activa')).toBeInTheDocument();
   });
 
-  it('marks the card as expired when the scheduled moment already passed', async () => {
-    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilorVencida] });
-    const user = userEvent.setup();
-    setup();
+  it('keeps its own clock, so an open card turns expired without a new search', async () => {
+    // El espia deja pasar la llamada real (no reemplaza setInterval: RTL lo usa
+    // para esperar) y solo captura el latido del reloj de la vista. Con el
+    // codigo anterior, que solo miraba la hora al cambiar la lista, no se
+    // registraba ningun intervalo y no hay nada que capturar.
+    const spy = vi.spyOn(window, 'setInterval');
 
-    await search(user, 'keil');
+    try {
+      const porVencer: AdminUser = {
+        ...keilor,
+        expiresAt: new Date(Date.now() + 100).toISOString(),
+      };
+      mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [porVencer] });
+      const user = userEvent.setup();
+      setup();
 
-    // El barrido del servidor la cerrara en el proximo minuto; la tarjeta lo
-    // avisa en vez de mostrar solo una fecha.
-    expect(await screen.findByText('Vencida', { exact: false })).toBeInTheDocument();
+      await search(user, 'keil');
+      expect(await screen.findByText('Vence el')).toBeInTheDocument();
+
+      const latido = spy.mock.calls.find((c) => c[1] === 30000);
+      expect(latido, 'la vista no armo su reloj').toBeDefined();
+
+      await new Promise((r) => setTimeout(r, 150));
+      await act(async () => { (latido![0] as () => void)(); });
+
+      // El texto vive junto al separador dentro del mismo span: '. Vencida'.
+      expect(screen.getByText('Vencida', { exact: false })).toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('refuses to save an expiry with an empty date', async () => {

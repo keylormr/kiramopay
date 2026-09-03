@@ -99,6 +99,49 @@ func TestDisconnectUser_OtherUsersSurvive(t *testing.T) {
 	}
 }
 
+// TestSlowClientEviction_LeavesNoOrphan is the other half of the same hazard.
+// A client whose buffer is full during a price broadcast gets dropped; if that
+// eviction forgot h.userClients — as it did — the client stayed listed there
+// with an already-closed channel, and the next per-user send panicked on it.
+// That is the same crash SendToUser's locking is meant to rule out, reached
+// from the other side.
+func TestSlowClientEviction_LeavesNoOrphan(t *testing.T) {
+	hub := NewHub(testLogger())
+	go hub.Run()
+
+	client := &Client{hub: hub, send: make(chan []byte, 1)}
+	hub.mu.Lock()
+	hub.clients[client] = true
+	hub.mu.Unlock()
+	hub.RegisterUserClient(client, "user-lento")
+
+	// Fill the buffer so the broadcast's non-blocking send falls through to
+	// the eviction branch.
+	client.send <- []byte("ocupado")
+	hub.Broadcast(map[string]any{"type": "prices"})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		hub.mu.RLock()
+		total := len(hub.clients)
+		porUsuario := len(hub.userClients["user-lento"])
+		hub.mu.RUnlock()
+		if total == 0 {
+			if porUsuario != 0 {
+				t.Fatalf("the evicted client is still listed under its user: %d", porUsuario)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the slow client was never evicted")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Would panic on a closed channel if the user still pointed at it.
+	hub.SendToUser("user-lento", map[string]any{"type": "notification"})
+}
+
 // TestDisconnectUser_NoConnectionsIsHarmless covers the two cheap edge cases:
 // an unknown user, and the hand-built clients the other hub tests use, whose
 // conn is nil. Both must be no-ops rather than panics.

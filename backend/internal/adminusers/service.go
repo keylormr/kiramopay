@@ -292,8 +292,15 @@ func (s *Service) ExpireDue(ctx context.Context, now time.Time, limit int) (int,
 	return blocked, firstErr
 }
 
-// ReconcileBlockedMarks repone en Redis la marca de toda cuenta bloqueada en
-// BD, y devuelve cuantas repuso.
+// ClaimMarkReconcile gana el turno de repasar las marcas de bloqueo para la
+// ventana pedida. Devuelve false si otra instancia ya lo gano o si no hay Redis
+// (sin Redis no hay marcas que repasar: el bloqueo se consulta contra la BD).
+func (s *Service) ClaimMarkReconcile(ctx context.Context, every time.Duration) (bool, error) {
+	return s.auth.TryClaimBlockedReconcile(ctx, every)
+}
+
+// ReconcileBlockedMarks pone al dia las marcas de Redis contra la BD, en las dos
+// direcciones, y devuelve cuantas puso y cuantas quito.
 //
 // Existe porque el bloqueo automatico no tiene a nadie que note un fallo. El
 // orden del bloqueo es BD primero y marca despues: si la marca falla, la cuenta
@@ -301,14 +308,13 @@ func (s *Service) ExpireDue(ctx context.Context, now time.Time, limit int) (int,
 // responde SESSION_REVOKED en vez de ACCOUNT_BLOCKED. En el bloqueo manual el
 // administrador ve el error y reintenta; en el barrido nadie lo ve, y la propia
 // consulta de candidatos ya excluye la cuenta por estar bloqueada, asi que no
-// hay segundo intento. Hasta ahora eso se arreglaba solo al reiniciar el
-// proceso, que es cuando corre este mismo repaso.
-func (s *Service) ReconcileBlockedMarks(ctx context.Context) (int, error) {
-	n, err := s.auth.WarmBlockedUsers(ctx)
+// hay segundo intento. Hasta ahora eso solo se arreglaba al reiniciar.
+func (s *Service) ReconcileBlockedMarks(ctx context.Context) (added, removed int, err error) {
+	added, removed, err = s.auth.ReconcileBlockedMarks(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("reconcile blocked marks: %w", err)
+		return 0, 0, fmt.Errorf("reconcile blocked marks: %w", err)
 	}
-	return n, nil
+	return added, removed, nil
 }
 
 // Unblock reactiva la cuenta. Las sesiones revocadas NO se resucitan: la
