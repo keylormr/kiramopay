@@ -117,18 +117,42 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Register(r.Context(), &req, loginContext(r))
 	if err != nil {
-		// Codigo con buena forma pero sin cuenta activa detras: 400 propio para
-		// que el cliente lo distinga del 409 generico y deje corregirlo.
-		if errors.Is(err, ErrReferralCodeInvalid) {
-			response.Error(w, http.StatusBadRequest, "REFERRAL_CODE_INVALID", "codigo de invitacion invalido")
-			return
+		status, code, message := registerErrorResponse(err)
+		if status >= http.StatusInternalServerError {
+			// La causa real solo va al log (sin IP ni user-agent). response.Error
+			// ya reemplaza el mensaje de todo 5xx por uno generico: el cliente
+			// decide por el codigo, nunca por el texto.
+			slog.Error("register: internal error", "err", err.Error())
 		}
-		response.Error(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
+		response.Error(w, status, code, message)
 		return
 	}
 	h.cookies.setRefreshCookie(w, result.Tokens.RefreshToken, result.Tokens.RefreshExpiry)
 	noStore(w)
 	response.JSON(w, http.StatusCreated, result)
+}
+
+// registerFailedMessage es el texto del 500 REGISTER_FAILED antes de pasar por
+// response.Error, que lo sustituye por su generico: el cliente nunca ve el
+// error interno (texto de BD, invariantes), que solo va al log.
+const registerFailedMessage = "no se pudo completar el registro"
+
+// registerErrorResponse traduce el error de Service.Register al contrato de
+// POST /auth/register: estado, codigo y mensaje para el cliente. Todo lo que
+// no sea un error sentinela del servicio es un 500 REGISTER_FAILED.
+func registerErrorResponse(err error) (status int, code, message string) {
+	switch {
+	case errors.Is(err, ErrUserExists):
+		return http.StatusConflict, "USER_EXISTS", "ya existe una cuenta con esa cedula, telefono o correo"
+	case errors.Is(err, ErrPhoneNotVerified):
+		return http.StatusForbidden, "PHONE_NOT_VERIFIED", "falta verificar el telefono o la verificacion vencio"
+	case errors.Is(err, ErrCedulaNoUsableEnLogin):
+		return http.StatusBadRequest, "CEDULA_INVALID", "cedula no utilizable para iniciar sesion"
+	case errors.Is(err, ErrReferralCodeInvalid):
+		return http.StatusBadRequest, "REFERRAL_CODE_INVALID", "codigo de invitacion invalido"
+	default:
+		return http.StatusInternalServerError, "REGISTER_FAILED", registerFailedMessage
+	}
 }
 
 // RegisterSendOTP issues a verification code for a pending registration and

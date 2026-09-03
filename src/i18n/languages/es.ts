@@ -507,6 +507,10 @@ const es: TranslationKeys = {
   password_good: 'Buena',
   reg_creating_account: 'Creando cuenta...',
   reg_error_default: 'Error al crear la cuenta',
+  reg_err_user_exists: 'Ya existe una cuenta con esa cédula, teléfono o correo. Inicia sesión o recupera tu contraseña.',
+  reg_err_phone_not_verified: 'La verificación del teléfono venció. Vuelve a pedir el código.',
+  reg_err_cedula_invalid: 'Revisa la cédula: solo dígitos, sin guiones.',
+  reg_err_generic: 'No pudimos completar el registro. Intenta de nuevo en un momento.',
   reg_password_min_length: 'La contraseña debe tener al menos 8 caracteres',
   reg_security_note: 'Tu información está protegida con encriptación de nivel bancario',
   login_welcome: 'Bienvenido',
@@ -997,6 +1001,8 @@ const es: TranslationKeys = {
   faq_a8: 'En Perfil tenés tres cosas: el PIN de bloqueo, el ingreso con huella o rostro si tu teléfono lo permite, y la verificación en dos pasos, que además se pide sola en los montos altos.\n\nNadie de KiramoPay te va a pedir tu PIN ni tu código de verificación.',
   faq_q9: '¿Hay alguien a quién escribirle?',
   faq_a9: 'El chat en vivo con soporte todavía no existe. Dentro de la app está el asistente, que responde dudas sobre tus movimientos y sobre cómo funciona KiramoPay; en el plan gratuito son 2 preguntas por día.',
+  faq_q10: '¿Cómo se protege mi información?',
+  faq_a10: 'Todo lo que la app envía y recibe viaja cifrado. Aunque alguien espíe la conexión, no puede leerlo.\n\nTu cédula, tu teléfono y tu correo se guardan cifrados en la base de datos, con una llave que vive fuera de ella. Quien copie la base no puede leerlos.\n\nTu contraseña nunca se guarda. Solo se guarda una huella matemática que no se puede revertir; ni nosotros podemos verla.\n\nEn el navegador, tu sesión vive en una cookie que ningún script puede leer. Tu huella o tu rostro nunca salen del teléfono: es el propio teléfono el que los comprueba. Y puedes activar un segundo paso con una app de autenticación.\n\nNingún sistema es infalible. Lo que sí depende de ti: no compartas tu contraseña ni tu código de verificación con nadie.',
   kyc_n2_soon: 'Verificación completa (documento + selfie) próximamente',
 };
 

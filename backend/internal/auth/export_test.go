@@ -23,3 +23,9 @@ func (r *Repository) PutRegistrationOTPRaw(ctx context.Context, phone, codeHash 
 	_, err := pipe.Exec(ctx)
 	return err
 }
+
+// RegisterErrorResponseForTest expone el mapeo error -> respuesta HTTP del
+// registro para probar el contrato de POST /auth/register sin base de datos.
+func RegisterErrorResponseForTest(err error) (int, string, string) {
+	return registerErrorResponse(err)
+}

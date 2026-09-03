@@ -202,7 +202,7 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
-                /** @description Validation error (VALIDATION_ERROR) or invitation code rejected (REFERRAL_CODE_INVALID: bad format, unknown code, or the referrer's account is not active). */
+                /** @description Validation error (VALIDATION_ERROR), a cedula that would never work as a login identifier (CEDULA_INVALID: e.g. 11 digits starting with 506, which classifies as a phone), or invitation code rejected (REFERRAL_CODE_INVALID: bad format, unknown code, or the referrer's account is not active). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -211,7 +211,33 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                409: components["responses"]["Conflict"];
+                /** @description Phone verification is enforced and the verification token is missing, expired, or issued for another phone (PHONE_NOT_VERIFIED). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The cedula, phone or email already belongs to an account (USER_EXISTS). The response never says which field collided. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Any other failure (REGISTER_FAILED). The message is the generic "internal server error"; clients decide by code. The cause is only logged server-side, never returned to the client. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;

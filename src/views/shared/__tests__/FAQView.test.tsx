@@ -77,6 +77,22 @@ describe('Centro de ayuda', () => {
     expect(await screen.findByText(/el envío se rechaza/)).toBeInTheDocument();
   });
 
+  // La entrada de proteccion de datos vive en Seguridad y solo afirma lo que
+  // el sistema hace de verdad: cedula, telefono y correo cifrados en reposo,
+  // contrasena guardada como hash, sesion en cookie que los scripts no leen.
+  it('explica cómo se protege la información dentro de Seguridad', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('button', { name: /seguridad/i }));
+    expect(screen.getByText('¿Cómo se protege mi información?')).toBeInTheDocument();
+    expect(screen.queryByText('¿Qué es KiramoPay?')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('¿Cómo se protege mi información?'));
+    expect(await screen.findByText(/Tu contraseña nunca se guarda/)).toBeInTheDocument();
+    expect(screen.getByText(/Ningún sistema es infalible/)).toBeInTheDocument();
+  });
+
   it('se traduce con el idioma de la app', async () => {
     localStorage.setItem('kiramopay_language', 'en');
     setup();
