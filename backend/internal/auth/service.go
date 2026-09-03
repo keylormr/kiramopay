@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/messaging"
 	"github.com/kiramopay/backend/internal/middleware"
@@ -51,6 +53,11 @@ var ErrReferralCodeInvalid = errors.New("referral code not found")
 // DESPUES de verificar la contrasena, para que el codigo distinto no sirva de
 // oraculo de enumeracion. El motivo del bloqueo nunca sale al cliente.
 var ErrAccountBlocked = errors.New("account blocked")
+
+// ErrUserExists se devuelve en Register cuando la cedula, el telefono o el
+// correo ya pertenecen a una cuenta. El handler lo traduce a 409 USER_EXISTS;
+// que campo choco nunca sale al cliente.
+var ErrUserExists = errors.New("user already registered")
 
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
@@ -369,7 +376,7 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	}
 	existing, _ := s.userRepo.FindByCedula(ctx, req.Cedula)
 	if existing != nil {
-		return nil, fmt.Errorf("user already registered")
+		return nil, ErrUserExists
 	}
 
 	// Codigo de invitacion: se resuelve AQUI, antes de consumir el token de
@@ -379,7 +386,15 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	var referrer *user.UserRecord
 	if code := user.NormalizeReferralCode(req.ReferralCode); code != "" {
 		found, rerr := s.userRepo.FindByReferralCode(ctx, code)
-		if rerr != nil || found == nil {
+		switch {
+		case errors.Is(rerr, pgx.ErrNoRows):
+			return nil, ErrReferralCodeInvalid
+		case rerr != nil:
+			// Un fallo de BD no es un codigo invalido: mandaria al invitado a
+			// "corregir" un codigo que quiza es correcto. Se propaga como error
+			// interno.
+			return nil, fmt.Errorf("lookup referral code: %w", rerr)
+		case found == nil:
 			return nil, ErrReferralCodeInvalid
 		}
 		referrer = found
@@ -454,6 +469,11 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		ReferredBy:    referredBy,
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
+		// Telefono o correo ya registrados (la cedula se reviso arriba, pero
+		// una carrera entre dos registros tambien cae aqui).
+		if isUsersUniqueViolation(err) {
+			return nil, ErrUserExists
+		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	if err := s.walletRepo.CreateForUser(ctx, newUser.ID); err != nil {
@@ -885,6 +905,17 @@ func hashCorreoCanonico(email string) string {
 	}
 	h := sha256.Sum256([]byte("regemail:" + canon))
 	return hex.EncodeToString(h[:])
+}
+
+// isUsersUniqueViolation reporta un choque de unicidad al insertar el usuario
+// (cedula, telefono o correo ya registrados). El choque del codigo de referido
+// se excluye: el repositorio ya lo reintenta y, si aun asi falla, es un error
+// interno y no "usuario existente". Se decide por SQLSTATE y no por nombre de
+// indice porque el esquema de pruebas nombra los suyos distinto al de
+// produccion (users_phone_hash_key vs uq_users_phone_hash).
+func isUsersUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName != "uq_users_referral_code"
 }
 
 // soloDigitos deja unicamente los digitos de una cedula tecleada con guiones o

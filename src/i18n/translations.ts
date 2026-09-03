@@ -97,6 +97,8 @@ export type TranslationKeys = {
   faq_a8: string;
   faq_q9: string;
   faq_a9: string;
+  faq_q10: string;
+  faq_a10: string;
   kyc_n2_soon: string;
   cat_all: string;
   cat_electricity: string;
@@ -592,6 +594,10 @@ export type TranslationKeys = {
   password_good: string;
   reg_creating_account: string;
   reg_error_default: string;
+  reg_err_user_exists: string;
+  reg_err_phone_not_verified: string;
+  reg_err_cedula_invalid: string;
+  reg_err_generic: string;
   reg_password_min_length: string;
   reg_security_note: string;
 

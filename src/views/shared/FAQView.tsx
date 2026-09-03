@@ -67,6 +67,7 @@ const ENTRIES: HelpEntry[] = [
   { id: 'faq6', category: 'help_cat_payments', titleKey: 'faq_q6', bodyKey: 'faq_a6' },
   { id: 'faq7', category: 'help_cat_payments', titleKey: 'faq_q7', bodyKey: 'faq_a7' },
   { id: 'faq8', category: 'help_cat_security', titleKey: 'faq_q8', bodyKey: 'faq_a8' },
+  { id: 'faq10', category: 'help_cat_security', titleKey: 'faq_q10', bodyKey: 'faq_a10' },
   { id: 'faq9', category: 'help_cat_general', titleKey: 'faq_q9', bodyKey: 'faq_a9' },
 ];
 

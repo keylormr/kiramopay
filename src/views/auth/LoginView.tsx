@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../../components/Icons';
+import { MarcaKiramo } from '../../components/MarcaKiramo';
 import { Button, Card } from '../../components/ui';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -154,7 +155,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       <header className="relative px-6 pt-12 pb-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary">
-            <span className="text-2xl font-black text-white">K</span>
+            <MarcaKiramo size={30} />
           </div>
           <span className="text-2xl font-black text-white tracking-tight">KiramoPay</span>
         </div>

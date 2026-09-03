@@ -36,7 +36,7 @@ func postRegister(t *testing.T, h *auth.Handler, referralCode string) (int, stri
 
 // Un codigo de invitacion mal formado se rechaza en el handler con 400
 // REFERRAL_CODE_INVALID antes de tocar el servicio: el cliente lo distingue
-// del 409 generico del registro y deja corregirlo o borrarlo.
+// del 409 USER_EXISTS y del 500 REGISTER_FAILED y deja corregirlo o borrarlo.
 func TestRegisterHandler_ReferralCodeFormatoInvalido(t *testing.T) {
 	svc, _ := setupAuthService(t)
 	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true}, false)

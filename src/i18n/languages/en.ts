@@ -507,6 +507,10 @@ const en: TranslationKeys = {
   password_good: 'Good',
   reg_creating_account: 'Creating account...',
   reg_error_default: 'Error creating account',
+  reg_err_user_exists: 'There is already an account with that ID number, phone or email. Sign in or recover your password.',
+  reg_err_phone_not_verified: 'The phone verification expired. Request the code again.',
+  reg_err_cedula_invalid: 'Check the ID number: digits only, no dashes.',
+  reg_err_generic: 'We could not complete the sign-up. Try again in a moment.',
   reg_password_min_length: 'Password must be at least 8 characters',
   reg_security_note: 'Your information is protected with bank-level encryption',
   login_welcome: 'Welcome',
@@ -1029,6 +1033,8 @@ const en: TranslationKeys = {
   faq_a8: 'Profile gives you three things: the lock PIN, sign-in with fingerprint or face if your phone supports it, and two-step verification, which is also required on its own for large amounts.\n\nNobody from KiramoPay will ever ask you for your PIN or your verification code.',
   faq_q9: 'Is there anyone I can write to?',
   faq_a9: 'Live chat with support does not exist yet. Inside the app there is the assistant, which answers questions about your activity and about how KiramoPay works; on the free plan you get 2 questions per day.',
+  faq_q10: 'How is my information protected?',
+  faq_a10: 'Everything the app sends and receives travels encrypted. Even if someone spies on the connection, they cannot read it.\n\nYour ID number, phone and email are stored encrypted in the database, with a key that lives outside of it. Whoever copies the database cannot read them.\n\nYour password is never stored. Only a mathematical fingerprint that cannot be reversed is kept; not even we can see it.\n\nIn the browser, your session lives in a cookie that no script can read. Your fingerprint or face never leaves your phone: the phone itself checks them. And you can turn on a second step with an authenticator app.\n\nNo system is foolproof. What does depend on you: never share your password or your verification code with anyone.',
   kyc_n2_soon: 'Full verification (document + selfie) coming soon',
 };
 

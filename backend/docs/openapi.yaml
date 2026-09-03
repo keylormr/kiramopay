@@ -137,15 +137,40 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
           description: >-
-            Validation error (VALIDATION_ERROR) or invitation code rejected
+            Validation error (VALIDATION_ERROR), a cedula that would never work
+            as a login identifier (CEDULA_INVALID: e.g. 11 digits starting with
+            506, which classifies as a phone), or invitation code rejected
             (REFERRAL_CODE_INVALID: bad format, unknown code, or the referrer's
             account is not active).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >-
+            Phone verification is enforced and the verification token is
+            missing, expired, or issued for another phone (PHONE_NOT_VERIFIED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: >-
+            The cedula, phone or email already belongs to an account
+            (USER_EXISTS). The response never says which field collided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            Any other failure (REGISTER_FAILED). The message is the generic
+            "internal server error"; clients decide by code. The cause is only
+            logged server-side, never returned to the client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/auth/login:
     post:

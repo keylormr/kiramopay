@@ -11,7 +11,9 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#0A84FF',
+      // Mismo navy que el fondo plano de drawable*/splash.png: con CENTER_CROP
+      // el recorte no se nota en ningun aspecto de pantalla.
+      backgroundColor: '#1B294A',
       showSpinner: false,
       androidScaleType: 'CENTER_CROP',
     },

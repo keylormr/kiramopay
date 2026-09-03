@@ -220,22 +220,55 @@ describe('RegisterView', () => {
     });
   }, 30000);
 
-  it('should show error message on registration failure', async () => {
-    mockRegister.mockResolvedValue({ success: false, error: 'Cedula ya registrada' });
+  // Contrato de POST /auth/register: el mensaje sale del CODIGO, nunca del
+  // texto del servidor (un 409 llegaba a filtrar el detalle interno de la base).
+  describe('errores del registro', () => {
+    async function enviarRegistro(user: ReturnType<typeof userEvent.setup>) {
+      await navigateToPasswordStep(user);
+      await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
+      await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+    }
 
-    const user = userEvent.setup();
-    renderRegisterView();
-    await navigateToPasswordStep(user);
+    it('con USER_EXISTS dice que la cuenta ya existe', async () => {
+      mockRegister.mockResolvedValue({ success: false, error: 'user already registered', code: 'USER_EXISTS' });
 
-    await user.type(screen.getByPlaceholderText(/^Contraseña$/i), 'StrongP@ss1');
-    await user.type(screen.getByPlaceholderText(/Confirmar/i), 'StrongP@ss1');
+      const user = userEvent.setup();
+      const { onComplete } = renderRegisterView();
+      await enviarRegistro(user);
 
-    await user.click(screen.getByRole('button', { name: /Crear cuenta/i }));
+      expect(await screen.findByText(/Ya existe una cuenta con esa cédula/i)).toBeInTheDocument();
+      expect(screen.queryByText(/user already registered/i)).not.toBeInTheDocument();
+      expect(onComplete).not.toHaveBeenCalled();
+    }, 30000);
 
-    await waitFor(() => {
-      expect(screen.getByText('Cedula ya registrada')).toBeInTheDocument();
-    });
-  }, 30000);
+    it('con REGISTER_FAILED muestra el generico y nunca el texto del servidor', async () => {
+      mockRegister.mockResolvedValue({
+        success: false,
+        error: 'pq: duplicate key value violates unique constraint "users_pkey"',
+        code: 'REGISTER_FAILED',
+      });
+
+      const user = userEvent.setup();
+      const { onComplete } = renderRegisterView();
+      await enviarRegistro(user);
+
+      expect(await screen.findByText(/No pudimos completar el registro/i)).toBeInTheDocument();
+      expect(screen.queryByText(/duplicate key/i)).not.toBeInTheDocument();
+      expect(onComplete).not.toHaveBeenCalled();
+    }, 30000);
+
+    it('sin codigo (fallo de red) tambien cae al generico', async () => {
+      mockRegister.mockResolvedValue({ success: false, error: 'Error al registrar' });
+
+      const user = userEvent.setup();
+      renderRegisterView();
+      await enviarRegistro(user);
+
+      expect(await screen.findByText(/No pudimos completar el registro/i)).toBeInTheDocument();
+      expect(screen.queryByText('Error al registrar')).not.toBeInTheDocument();
+    }, 30000);
+  });
 
   // Programa de referidos: el codigo que trae el enlace (?ref=) prellena el
   // campo, viaja normalizado y SOLO cuando existe (el test de arriba fija que

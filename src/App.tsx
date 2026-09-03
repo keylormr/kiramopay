@@ -7,6 +7,7 @@ import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
+import { MarcaKiramo } from './components/MarcaKiramo';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { LanguageSheet } from './components/LanguageSheet';
 import { OverlayShell } from './components/OverlayShell';
@@ -160,7 +161,7 @@ const LockScreen = () => {
       />
       <div className="relative mb-8 flex flex-col items-center">
         <div className="w-20 h-20 uv-gradient-brand rounded-3xl mb-6 flex items-center justify-center uv-shadow-primary">
-          <span className="text-3xl font-black">K</span>
+          <MarcaKiramo size={50} />
         </div>
         <h1 className="text-2xl font-bold mb-2 tracking-tight">{t('welcome')}</h1>
         <p className="text-[var(--color-text-secondary-dark)] text-sm">
@@ -825,7 +826,7 @@ const AppContainer = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[var(--color-background-dark)]">
         <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary">
-          <span className="text-3xl font-black text-white">K</span>
+          <MarcaKiramo size={40} />
         </div>
         <div className="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-hidden="true" />
         <p className="text-sm text-[var(--color-text-secondary-dark)] px-8 text-center">

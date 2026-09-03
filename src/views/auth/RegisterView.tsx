@@ -43,6 +43,19 @@ const isPasswordComplex = (pwd: string): boolean =>
   /[0-9]/.test(pwd) &&
   /[^A-Za-z0-9]/.test(pwd);
 
+// Contrato de POST /auth/register: cada codigo tiene su mensaje propio y todo
+// lo demas cae al generico. El texto del servidor NUNCA se muestra: llegaba
+// crudo al usuario, incluido el detalle interno de la base de datos en un 409.
+const CLAVE_POR_CODIGO_REGISTRO: Record<string, string> = {
+  REFERRAL_CODE_INVALID: 'reg_referral_invalid',
+  USER_EXISTS: 'reg_err_user_exists',
+  PHONE_NOT_VERIFIED: 'reg_err_phone_not_verified',
+  CEDULA_INVALID: 'reg_err_cedula_invalid',
+};
+
+const claveErrorRegistro = (code?: string): string =>
+  (code && CLAVE_POR_CODIGO_REGISTRO[code]) || 'reg_err_generic';
+
 export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, referralCode }) => {
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>('phone');
@@ -148,11 +161,9 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
     if (result.success) {
       clearReferralCode();
       onComplete();
-    } else if (result.code === 'REFERRAL_CODE_INVALID') {
-      setError(t('reg_referral_invalid'));
-    } else {
-      setError(result.error || t('reg_error_default'));
+      return;
     }
+    setError(t(claveErrorRegistro(result.code)));
   };
 
   const handleOtpChange = (index: number, value: string) => {
