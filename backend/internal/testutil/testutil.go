@@ -204,8 +204,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			(status = 'blocked' AND blocked_at IS NOT NULL AND blocked_reason IS NOT NULL)
 			OR (status <> 'blocked' AND blocked_at IS NULL));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-	-- Vencimiento programado (migracion 053): mismo espejo, mismo predicado
-	-- parcial que usa el barrido, para que el plan del test sea el de prod.
+	-- Vencimiento programado (columna en la 053, indice en la 054): mismo
+	-- predicado parcial que usa el barrido, para que el plan del test sea el de
+	-- produccion. Aqui va sin CONCURRENTLY porque el esquema de pruebas se crea
+	-- en una sola consulta, que es de por si una transaccion.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 	CREATE INDEX IF NOT EXISTS idx_users_expires_at ON users (expires_at)
 		WHERE expires_at IS NOT NULL AND status <> 'blocked' AND deleted_at IS NULL;

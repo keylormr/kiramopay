@@ -70,8 +70,9 @@ func (h *Hub) Run() {
 
 // dropClientLocked forgets a client and closes its send channel. It is the ONLY
 // place that closes it, and it must be called with the write lock held: every
-// reader (SendToUser, the broadcast loop) holds the read lock across its sends
-// precisely so that this cannot run underneath them.
+// writer to that channel (SendToUser, the broadcast loop, Client.trySend) holds
+// the read lock across its send precisely so that this cannot run underneath
+// them.
 //
 // Being a no-op for a client that is already gone is what makes the two paths
 // that reach it — the unregister channel and the slow-consumer eviction — safe
@@ -81,6 +82,7 @@ func (h *Hub) dropClientLocked(client *Client) {
 		return
 	}
 	delete(h.clients, client)
+	client.dropped = true
 	close(client.send)
 
 	if client.UserID == "" {

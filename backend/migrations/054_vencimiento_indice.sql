@@ -1,0 +1,22 @@
+-- migrate:no-transaction
+--
+-- El indice del barrido de vencimientos, aparte de la 053 y fuera de
+-- transaccion. CONCURRENTLY no puede correr dentro de una, y este archivo lleva
+-- UNA sola sentencia a proposito: una consulta con varias es de por si una
+-- transaccion implicita y anularia el CONCURRENTLY.
+--
+-- El predicado espeja EXACTAMENTE el filtro de user.Repository.ListDueForExpiry
+-- para que cada tick lea unas pocas filas en vez de recorrer users entera; uno
+-- mas laxo haria que el planificador descarte el indice.
+--
+-- SI ESTE ARCHIVO FALLA A MEDIAS: un CREATE INDEX CONCURRENTLY interrumpido
+-- deja el indice creado pero INVALIDO. La migracion no queda registrada y el
+-- arranque aborta, asi que Render conserva la instancia vieja; pero en el
+-- reintento el IF NOT EXISTS ve el indice invalido y lo da por bueno, y el
+-- barrido se quedaria escaneando la tabla en silencio. Antes de redesplegar hay
+-- que borrarlo a mano:
+--     DROP INDEX CONCURRENTLY idx_users_expires_at;
+-- El arranque avisa de esto solo: revisa si quedo algun indice invalido y lo
+-- grita en el log (ver cmd/api/main.go).
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_expires_at ON users (expires_at)
+    WHERE expires_at IS NOT NULL AND status <> 'blocked' AND deleted_at IS NULL;

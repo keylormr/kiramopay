@@ -138,6 +138,17 @@ func main() {
 		log.Println("Migrations up to date")
 	}
 
+	// Un CREATE INDEX CONCURRENTLY interrumpido deja el indice existente pero
+	// invalido, y el IF NOT EXISTS del reintento lo da por bueno: la migracion
+	// pasa a verde y la consulta que dependia de el recorre la tabla entera sin
+	// que nada lo diga. Esto lo grita.
+	if malos, err := database.InvalidIndexes(context.Background(), pool); err != nil {
+		log.Printf("Warning: could not check for invalid indexes: %v", err)
+	} else if len(malos) > 0 {
+		log.Printf("WARNING: invalid index(es) present, queries relying on them are doing full scans: %v "+
+			"(fix with DROP INDEX CONCURRENTLY <name> and redeploy)", malos)
+	}
+
 	redisClient, err := database.NewRedisClient(cfg.Redis)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)

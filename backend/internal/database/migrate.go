@@ -247,3 +247,36 @@ func checksum(b []byte) string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
+
+// InvalidIndexes lista los indices marcados como NO validos en el esquema
+// public. Un CREATE INDEX CONCURRENTLY interrumpido deja exactamente eso: el
+// indice existe, Postgres no lo usa para planificar, y un reintento de la
+// migracion con IF NOT EXISTS lo da por bueno. Sin este aviso, la unica senal
+// seria una consulta que de golpe recorre la tabla entera.
+//
+// Se llama al arrancar. Nunca es fatal: informa, no decide.
+func InvalidIndexes(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT c.relname
+		   FROM pg_index i
+		   JOIN pg_class c ON c.oid = i.indexrelid
+		  WHERE NOT i.indisvalid
+		    AND c.relnamespace = 'public'::regnamespace
+		  ORDER BY c.relname`)
+	if err != nil {
+		return nil, fmt.Errorf("list invalid indexes: %w", err)
+	}
+	defer rows.Close()
+	var nombres []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("scan invalid index: %w", err)
+		}
+		nombres = append(nombres, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate invalid indexes: %w", err)
+	}
+	return nombres, nil
+}

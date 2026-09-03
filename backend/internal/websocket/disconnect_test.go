@@ -162,3 +162,20 @@ func TestDisconnectUser_NoConnectionsIsHarmless(t *testing.T) {
 		t.Fatalf("a client without a connection reported %d closed", closed)
 	}
 }
+
+// TestTrySend_AfterTheDropIsANoOp covers the third writer to the channel. The
+// auth handshake replies from the read pump's own goroutine, outside the hub
+// loop, so it can arrive after the client was already dropped. A select with a
+// default does not save it: on a closed channel that case is ready and panics,
+// and nothing here recovers.
+func TestTrySend_AfterTheDropIsANoOp(t *testing.T) {
+	hub := NewHub(testLogger())
+	client := &Client{hub: hub, send: make(chan []byte, 1)}
+
+	hub.mu.Lock()
+	hub.clients[client] = true
+	hub.dropClientLocked(client)
+	hub.mu.Unlock()
+
+	client.trySend([]byte("llego tarde"))
+}
