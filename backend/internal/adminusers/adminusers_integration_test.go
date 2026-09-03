@@ -353,7 +353,7 @@ func newRouter(h *adminusers.Handler, userRepo *user.Repository, actorID string)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAdmin(userRepo))
-		r.Get("/admin/users/search", h.Search)
+		r.Post("/admin/users/search", h.Search)
 		r.Get("/admin/users/blocked", h.ListBlocked)
 		r.Get("/admin/users/{id}", h.Get)
 		r.Post("/admin/users/{id}/block", h.Block)
@@ -399,7 +399,7 @@ func TestHandler_NoAdminRecibe403(t *testing.T) {
 	if status != http.StatusForbidden || errorCode(env) != "FORBIDDEN" {
 		t.Fatalf("no admin: %d %s, esperaba 403 FORBIDDEN", status, errorCode(env))
 	}
-	status, env = do(t, router, http.MethodGet, "/admin/users/search?q=keil", "")
+	status, env = do(t, router, http.MethodPost, "/admin/users/search", `{"q":"keil"}`)
 	if status != http.StatusForbidden || errorCode(env) != "FORBIDDEN" {
 		t.Fatalf("no admin (search): %d %s, esperaba 403 FORBIDDEN", status, errorCode(env))
 	}
@@ -446,7 +446,7 @@ func TestHandler_CodigosDeError(t *testing.T) {
 		{"id invalido", http.MethodGet, "/admin/users/not-a-uuid", "", "INVALID_ID", http.StatusBadRequest},
 		{"id invalido en block", http.MethodPost, "/admin/users/123/block", `{"reason":"x"}`, "INVALID_ID", http.StatusBadRequest},
 		{"inexistente", http.MethodGet, "/admin/users/" + sinCuentaID, "", "USER_NOT_FOUND", http.StatusNotFound},
-		{"termino corto", http.MethodGet, "/admin/users/search?q=ke", "", "SEARCH_TERM_TOO_SHORT", http.StatusBadRequest},
+		{"termino corto", http.MethodPost, "/admin/users/search", `{"q":"ke"}`, "SEARCH_TERM_TOO_SHORT", http.StatusBadRequest},
 		{"sin motivo", http.MethodPost, "/admin/users/" + f.userID + "/block", `{"reason":"  "}`, "REASON_REQUIRED", http.StatusBadRequest},
 		{"sin cuerpo", http.MethodPost, "/admin/users/" + f.userID + "/block", "", "REASON_REQUIRED", http.StatusBadRequest},
 		{"a si mismo", http.MethodPost, "/admin/users/" + f.adminID + "/block", `{"reason":"x"}`, "CANNOT_BLOCK_SELF", http.StatusBadRequest},

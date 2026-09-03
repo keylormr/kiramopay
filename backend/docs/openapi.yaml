@@ -1214,24 +1214,34 @@ paths:
 
   # ── Admin: user management (remote block) ─────────────────────────
   /api/v1/admin/users/search:
-    get:
+    post:
       tags: [Admin]
       summary: Search accounts by cedula, phone, email or partial name (admin)
       description: >-
         A term that parses as a cedula, phone or email is looked up EXACTLY
         (by its searchable hash); anything else matches the full name
-        case-insensitively. PII comes back masked. Rate limited to 30/min per
-        administrator; every search is audited by kind, never by term.
+        case-insensitively. PII comes back masked. The term travels in the
+        body, never in the URL (it would end up in proxy and provider logs).
+        Rate limited to 30/min per administrator; every search is audited by
+        kind, never by term.
       security:
         - bearerAuth: []
-      parameters:
-        - name: q
-          in: query
-          required: true
-          schema:
-            type: string
-            minLength: 3
-        - $ref: '#/components/parameters/Limit'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q:
+                  type: string
+                  minLength: 3
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 20
       responses:
         '200':
           description: Matching accounts (may be empty)

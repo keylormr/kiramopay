@@ -899,7 +899,7 @@ func main() {
 				// para operar sin servir de enumerador.
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.UserRateLimit(redisClient, 30, time.Minute))
-					r.Get("/admin/users/search", adminUsersHandler.Search)
+					r.Post("/admin/users/search", adminUsersHandler.Search)
 					r.Get("/admin/users/blocked", adminUsersHandler.ListBlocked)
 					r.Get("/admin/users/{id}", adminUsersHandler.Get)
 					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)

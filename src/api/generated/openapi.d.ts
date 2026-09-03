@@ -2966,21 +2966,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
          * Search accounts by cedula, phone, email or partial name (admin)
-         * @description A term that parses as a cedula, phone or email is looked up EXACTLY (by its searchable hash); anything else matches the full name case-insensitively. PII comes back masked. Rate limited to 30/min per administrator; every search is audited by kind, never by term.
+         * @description A term that parses as a cedula, phone or email is looked up EXACTLY (by its searchable hash); anything else matches the full name case-insensitively. PII comes back masked. The term travels in the body, never in the URL (it would end up in proxy and provider logs). Rate limited to 30/min per administrator; every search is audited by kind, never by term.
          */
-        get: {
+        post: {
             parameters: {
-                query: {
-                    q: string;
-                    limit?: components["parameters"]["Limit"];
-                };
+                query?: never;
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        q: string;
+                        /** @default 20 */
+                        limit?: number;
+                    };
+                };
+            };
             responses: {
                 /** @description Matching accounts (may be empty) */
                 200: {
@@ -3014,8 +3021,6 @@ export interface paths {
                 };
             };
         };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;

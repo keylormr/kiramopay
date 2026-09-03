@@ -25,7 +25,18 @@ func NewHandler(service *Service) *Handler {
 // Search — GET /api/v1/admin/users/search?q=<termino>&limit=20 (admin)
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	views, err := h.service.Search(r.Context(), r.URL.Query().Get("q"), queryLimit(r), adminID, actorContext(r))
+	// El termino viaja en el cuerpo, nunca en la URL: una cedula o un correo en
+	// la query string quedarian en logs de proxies y del proveedor. Mismo
+	// criterio que /kyc/business-lookup.
+	var req struct {
+		Q     string `json:"q"`
+		Limit int    `json:"limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	views, err := h.service.Search(r.Context(), req.Q, req.Limit, adminID, actorContext(r))
 	if err != nil {
 		if errors.Is(err, ErrTermTooShort) {
 			response.Error(w, http.StatusBadRequest, "SEARCH_TERM_TOO_SHORT", "search term must have at least 3 characters")

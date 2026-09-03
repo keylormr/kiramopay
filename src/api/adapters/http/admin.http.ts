@@ -67,8 +67,9 @@ export class HttpAdminRepository implements IAdminRepository {
   constructor(private client: HttpClient) {}
 
   async searchUsers(term: string): Promise<ApiResponse<AdminUser[]>> {
-    const q = encodeURIComponent(term.trim());
-    const res = await this.client.get<unknown>(`/api/v1/admin/users/search?q=${q}&limit=20`);
+    // El termino va en el cuerpo, nunca en la URL: una cedula o un correo en la
+    // query string quedarian en logs de proxies y del proveedor.
+    const res = await this.client.post<unknown>('/api/v1/admin/users/search', { q: term.trim(), limit: 20 });
     if (!res.success) return fail(res);
     return apiSuccess(mapList(res.data));
   }
