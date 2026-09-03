@@ -167,7 +167,14 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: >-
+            CSRF validation failed / origin not allowed, or the account is
+            blocked by an administrator (code ACCOUNT_BLOCKED, only after the
+            password was verified so it cannot be used to enumerate accounts).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '423':
@@ -194,6 +201,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
+        '403':
+          $ref: '#/components/responses/AccountBlocked'
 
   /api/v1/auth/logout:
     post:
@@ -1178,6 +1187,152 @@ paths:
         '200':
           description: User restricted
 
+  # ── Admin: user management (remote block) ─────────────────────────
+  /api/v1/admin/users/search:
+    get:
+      tags: [Admin]
+      summary: Search accounts by cedula, phone, email or partial name (admin)
+      description: >-
+        A term that parses as a cedula, phone or email is looked up EXACTLY
+        (by its searchable hash); anything else matches the full name
+        case-insensitively. PII comes back masked. Rate limited to 30/min per
+        administrator; every search is audited by kind, never by term.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching accounts (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: SEARCH_TERM_TOO_SHORT (fewer than 3 characters)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '429':
+          description: RATE_LIMITED
+
+  /api/v1/admin/users/blocked:
+    get:
+      tags: [Admin]
+      summary: List blocked accounts, most recent first (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: Blocked accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUser'
+        '403':
+          description: FORBIDDEN (not an administrator)
+
+  /api/v1/admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Get one account's administrative card (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Account card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: INVALID_ID (id is not a UUID)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+
+  /api/v1/admin/users/{id}/block:
+    post:
+      tags: [Admin]
+      summary: Block an account and revoke all its sessions (admin)
+      description: >-
+        Sets status=blocked, revokes every session and refresh token, and marks
+        the account so any further authenticated request answers 403
+        ACCOUNT_BLOCKED. Idempotent. Audited as user_blocked (critical) with
+        the reason and the number of sessions revoked.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminBlockRequest'
+      responses:
+        '200':
+          description: Account blocked (fresh card)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: INVALID_ID | REASON_REQUIRED (empty or over 500 chars) | CANNOT_BLOCK_SELF | CANNOT_BLOCK_ADMIN
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+        '500':
+          description: BLOCK_FAILED
+
+  /api/v1/admin/users/{id}/unblock:
+    post:
+      tags: [Admin]
+      summary: Unblock an account (admin)
+      description: >-
+        Sets status=active and clears the block trail. Revoked sessions are NOT
+        restored; the person signs in again with their password. Idempotent.
+        Audited as user_unblocked (high).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Account unblocked (fresh card)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: INVALID_ID (id is not a UUID)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+        '500':
+          description: UNBLOCK_FAILED
+
   # ── Push Notifications (Phase 9) ──────────────────────────────────
   /api/v1/push/subscribe:
     post:
@@ -1909,8 +2064,48 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    AccountBlocked:
+      description: >-
+        Account blocked by an administrator (code ACCOUNT_BLOCKED). Returned by
+        login (only after the password was verified), refresh and every
+        authenticated route. The reason is never disclosed to the client.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    AdminUser:
+      type: object
+      description: >-
+        Administrative card of an account. PII is masked in SQL: cedula keeps
+        its last 3 digits, phone its last 4, email its first letter and domain.
+      properties:
+        id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        cedula_masked: { type: string, example: "••••••930" }
+        phone_masked: { type: string, example: "••••••••1234" }
+        email_masked: { type: string, example: "k•••••@gmail.com" }
+        status: { type: string, enum: [active, blocked, suspended, closed] }
+        role: { type: string, enum: [user, admin, support] }
+        kyc_level: { type: integer }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
+        blocked_at: { type: string, format: date-time, nullable: true }
+        blocked_reason: { type: string, description: Empty unless blocked }
+        blocked_by_name: { type: string, description: Full name of the administrator who blocked the account; empty unless blocked }
+
+    AdminBlockRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Free text kept in the audit trail (never PII)
+
     EscrowCreateRequest:
       type: object
       required: [seller_id, amount_minor, description]

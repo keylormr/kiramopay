@@ -46,6 +46,12 @@ var ErrCedulaNoUsableEnLogin = errors.New("cedula no utilizable para iniciar ses
 // lados esperando un bono que nunca llega.
 var ErrReferralCodeInvalid = errors.New("referral code not found")
 
+// ErrAccountBlocked se devuelve cuando la cuenta no esta activa (bloqueada
+// por un administrador, suspendida o cerrada). En Login solo se llega aqui
+// DESPUES de verificar la contrasena, para que el codigo distinto no sirva de
+// oraculo de enumeracion. El motivo del bloqueo nunca sale al cliente.
+var ErrAccountBlocked = errors.New("account blocked")
+
 // SanctionScreener gates onboarding against a sanction watchlist. Implemented
 // by the kyc service; optional (nil disables the check).
 type SanctionScreener interface {
@@ -263,6 +269,25 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 			s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
 		return nil, ErrInvalidCredentials
+	}
+
+	// Cuenta no activa: se rechaza con codigo propio SOLO con la contrasena ya
+	// verificada (antes del hash revelaria que la cuenta existe). Cualquier
+	// status distinto de 'active' recibe el mismo codigo; el detalle queda en
+	// la auditoria, no en la respuesta.
+	if u.Status != "active" {
+		if s.auditLogger != nil {
+			s.auditLogger.Log(audit.Event{
+				UserID:       u.ID,
+				Action:       "login_blocked",
+				ResourceType: "session",
+				IPAddress:    lc.IPAddress,
+				UserAgent:    lc.UserAgent,
+				Details:      map[string]interface{}{"status": u.Status},
+				RiskLevel:    "medium",
+			})
+		}
+		return nil, ErrAccountBlocked
 	}
 
 	// Block locked accounts AFTER hash verification too (defense in depth —
@@ -507,6 +532,13 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 		return nil, fmt.Errorf("invalid refresh token")
 	}
 	tokenHash := jwtpkg.HashToken(refreshTokenRaw)
+
+	// Cuenta bloqueada: se corta ANTES de consumir el token, con codigo propio.
+	// `serr == nil` es a proposito: si la BD falla se sigue el camino normal,
+	// que igual rechaza (el bloqueo revoca la familia en la misma tx).
+	if st, serr := s.userRepo.GetStatus(ctx, claims.UserID); serr == nil && st != "active" {
+		return nil, ErrAccountBlocked
+	}
 
 	rec, reused, err := s.authRepo.ConsumeRefreshToken(ctx, claims.ID, tokenHash)
 	if err != nil {

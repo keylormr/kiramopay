@@ -39,6 +39,17 @@ export function registerAuthFailureHandler(h: AuthFailureHandler): void {
   authFailureHandler = h;
 }
 
+// Remote block: an admin blocked the account while a session was open. The
+// backend answers 403 ACCOUNT_BLOCKED (distinct from 401 SESSION_REVOKED) so
+// the UI can say WHY it kicked the user out instead of a generic "expired".
+type AccountBlockedHandler = () => void;
+
+let accountBlockedHandler: AccountBlockedHandler | null = null;
+
+export function registerAccountBlockedHandler(h: AccountBlockedHandler): void {
+  accountBlockedHandler = h;
+}
+
 function dedupedRefresh(): Promise<boolean> {
   if (!refreshHandler) return Promise.resolve(false);
   if (!refreshInFlight) {
@@ -134,10 +145,14 @@ export class HttpClient {
       const json = await res.json();
 
       if (!res.ok) {
-        return apiError<T>(
-          json.error?.code || 'HTTP_ERROR',
-          json.error?.message || `Request failed with status ${res.status}`,
-        );
+        const code = json.error?.code || 'HTTP_ERROR';
+        // Blocked mid-session: the backend already revoked every session, so a
+        // refresh would only fail with the same answer. Only for authenticated
+        // calls — the login's own 403 is handled by the login view.
+        if (auth && res.status === 403 && code === 'ACCOUNT_BLOCKED' && accountBlockedHandler) {
+          accountBlockedHandler();
+        }
+        return apiError<T>(code, json.error?.message || `Request failed with status ${res.status}`);
       }
 
       return {

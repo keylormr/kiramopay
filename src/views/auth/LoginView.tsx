@@ -25,6 +25,10 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => {
   const { t } = useLanguage();
+  // Expulsion remota: si la sesion anterior se cerro porque un administrador
+  // bloqueo la cuenta, esta pantalla lo dice en vez de parecer un logout mudo.
+  const logoutReason = useAuthStore((s) => s.logoutReason);
+  const clearLogoutReason = useAuthStore((s) => s.clearLogoutReason);
   // Un solo campo de entrada: cedula, correo o telefono. Se clasifica en vivo
   // para habilitar Continuar y mostrar que tipo se detecto.
   const [identificador, setIdentificador] = useState('');
@@ -89,11 +93,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       }
     } else {
       setError(
-        res.code === 'RATE_LIMITED'
-          ? t('login_rate_limited')
-          : res.code === 'INVALID_IDENTIFIER'
-            ? t('login_identifier_invalid')
-            : t('login_wrong_credentials'),
+        res.code === 'ACCOUNT_BLOCKED'
+          ? t('login_account_blocked')
+          : res.code === 'RATE_LIMITED'
+            ? t('login_rate_limited')
+            : res.code === 'INVALID_IDENTIFIER'
+              ? t('login_identifier_invalid')
+              : t('login_wrong_credentials'),
       );
       setPassword('');
     }
@@ -153,6 +159,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
           <span className="text-2xl font-black text-white tracking-tight">KiramoPay</span>
         </div>
       </header>
+
+      {/* Aviso de expulsion: la cuenta fue bloqueada por un administrador */}
+      {logoutReason === 'blocked' && (
+        <div
+          role="alert"
+          className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 p-4 animate-slide-up"
+        >
+          <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-white">{t('account_blocked_title')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+              {t('account_blocked_body')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearLogoutReason}
+            aria-label={t('close')}
+            className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Icons.X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="relative flex-1 px-6">

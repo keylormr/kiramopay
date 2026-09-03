@@ -153,6 +153,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		kyc_verified_at TIMESTAMPTZ,
 		role VARCHAR(20) NOT NULL DEFAULT 'user',
 		status VARCHAR(20) DEFAULT 'active',
+		blocked_at TIMESTAMPTZ,
+		blocked_reason TEXT,
+		blocked_by UUID REFERENCES users(id) ON DELETE SET NULL,
 		-- Referral program (migration 051). Production has NO default (the app
 		-- generates the code); the DEFAULT here only keeps the bare
 		-- INSERT INTO users of older tests working. Hex upper still satisfies
@@ -179,6 +182,15 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 	DO $$ BEGIN
 		ALTER TABLE users ADD CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	-- Account blocking trail (migration 052) and the status CHECK (018) it
+	-- relies on; same persisted-DB fallback as the referral columns above.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_at     TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_by     UUID REFERENCES users(id) ON DELETE SET NULL;
+	CREATE INDEX IF NOT EXISTS idx_users_blocked ON users (blocked_at DESC) WHERE status = 'blocked';
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_status CHECK (status IN ('active','suspended','blocked','closed'));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 	CREATE TABLE IF NOT EXISTS wallets (
@@ -904,6 +916,23 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		color VARCHAR(20) NOT NULL DEFAULT '',
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+
+	-- Audit trail (migration 023, partitioned there; flat here). No FK to
+	-- users, like production. details is plain JSONB: never PII.
+	CREATE TABLE IF NOT EXISTS audit_logs (
+		id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id       UUID,
+		action        VARCHAR(64) NOT NULL,
+		resource_type VARCHAR(64),
+		resource_id   TEXT,
+		ip_address    INET,
+		user_agent    TEXT,
+		details       JSONB DEFAULT '{}',
+		risk_level    VARCHAR(16),
+		created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		created_date  DATE NOT NULL DEFAULT CURRENT_DATE
+	);
+	CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, created_at DESC);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -955,6 +984,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"mfa_challenges", "password_reset_tokens", "refresh_tokens",
 		"user_sessions", "wallets",
 		"ledger_accounts",
+		"audit_logs",
 		"users",
 	}
 	for _, tbl := range tables {
