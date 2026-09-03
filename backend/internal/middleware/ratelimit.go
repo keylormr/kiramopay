@@ -142,9 +142,13 @@ func UserRateLimit(redisClient *redis.Client, limit int, window time.Duration) f
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := GetUserID(r.Context())
-			key := fmt.Sprintf("userlimit:%s", userID)
+			// El limite forma parte de la clave: dos UserRateLimit anidados (el
+			// general del grupo protegido y uno mas estrecho por ruta) tienen que
+			// llevar contadores distintos; con una sola clave por usuario cada
+			// peticion contaba dos veces y el presupuesto "propio" era compartido.
+			key := fmt.Sprintf("userlimit:%d:%s", limit, userID)
 			if userID == "" {
-				key = fmt.Sprintf("userlimit:ip:%s", limiterIP(r))
+				key = fmt.Sprintf("userlimit:%d:ip:%s", limit, limiterIP(r))
 			}
 
 			ctx := context.Background()

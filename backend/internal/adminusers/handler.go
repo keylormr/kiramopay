@@ -22,7 +22,7 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// Search — GET /api/v1/admin/users/search?q=<termino>&limit=20 (admin)
+// Search — POST /api/v1/admin/users/search {"q":"<termino>","limit":20} (admin)
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
 	// El termino viaja en el cuerpo, nunca en la URL: una cedula o un correo en

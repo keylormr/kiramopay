@@ -462,3 +462,38 @@ func TestAdminView_BusquedaPorNombreYHash(t *testing.T) {
 		t.Fatal("una columna fuera de la lista blanca debia rechazarse")
 	}
 }
+
+// El canal B2B autentica por API key, no por JWT: el bloqueo tiene que revocar
+// las keys en la misma tx o el bloqueado seguiria operando escrow y payouts.
+func TestBlock_RevocaAPIKeysDeComercio(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	ctx := context.Background()
+	resp := registerTestUser(t, env.svc)
+
+	if _, err := env.pool.Exec(ctx,
+		`INSERT INTO api_keys (user_id, name, prefix, key_hash, scopes)
+		 VALUES ($1::uuid, 'tienda', 'kp_test', 'hash-bloqueo-0001', 'escrow:read,escrow:write')`,
+		resp.User.ID); err != nil {
+		t.Fatalf("sembrar api key: %v", err)
+	}
+	bloquear(t, env, resp.User.ID, "")
+
+	var status string
+	var revokedAt *time.Time
+	if err := env.pool.QueryRow(ctx,
+		`SELECT status, revoked_at FROM api_keys WHERE key_hash = 'hash-bloqueo-0001'`).Scan(&status, &revokedAt); err != nil {
+		t.Fatalf("leer api key: %v", err)
+	}
+	if status != "revoked" || revokedAt == nil {
+		t.Fatalf("api key tras el bloqueo: status=%q revoked_at=%v, esperaba revoked con fecha", status, revokedAt)
+	}
+	// Desbloquear no la resucita: el comercio genera keys nuevas.
+	desbloquear(t, env, resp.User.ID)
+	if err := env.pool.QueryRow(ctx,
+		`SELECT status FROM api_keys WHERE key_hash = 'hash-bloqueo-0001'`).Scan(&status); err != nil {
+		t.Fatalf("releer api key: %v", err)
+	}
+	if status != "revoked" {
+		t.Fatalf("api key tras desbloquear: status=%q, debia seguir revoked", status)
+	}
+}

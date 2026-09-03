@@ -32,7 +32,9 @@ import (
 func blockedKey(userID string) string { return "auth:blocked:" + userID }
 
 // BlockUserAndRevokeSessions marca la cuenta como bloqueada y revoca todas sus
-// familias de refresh y sesiones en una sola tx: o queda todo o no queda nada.
+// familias de refresh, sesiones y API keys de comercio en una sola tx: o queda
+// todo o no queda nada. Las API keys tambien: el canal B2B autentica por key,
+// no por JWT, y sin revocarlas el bloqueado seguiria moviendo dinero por ahi.
 // Idempotente: repetir sobre una cuenta ya bloqueada refresca el rastro y no
 // falla. found=false si la cuenta no existe o esta borrada. adminID vacio se
 // guarda como NULL (bloqueo sin autor, p.ej. un barrido automatico futuro).
@@ -75,6 +77,16 @@ func (r *Repository) BlockUserAndRevokeSessions(ctx context.Context, userID, rea
 	)
 	if err != nil {
 		return false, 0, fmt.Errorf("revoke sessions: %w", err)
+	}
+	// ResolveKey solo acepta status = 'active', asi que esto corta el canal B2B
+	// en la siguiente peticion. Al desbloquear NO se resucitan (como las
+	// sesiones): el comercio genera keys nuevas.
+	if _, err := tx.Exec(ctx,
+		`UPDATE api_keys SET status = 'revoked', revoked_at = NOW()
+		 WHERE user_id = $1::uuid AND status = 'active'`,
+		userID,
+	); err != nil {
+		return false, 0, fmt.Errorf("revoke api keys: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, 0, fmt.Errorf("commit: %w", err)

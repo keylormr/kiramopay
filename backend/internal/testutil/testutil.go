@@ -192,6 +192,17 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	DO $$ BEGIN
 		ALTER TABLE users ADD CONSTRAINT chk_users_status CHECK (status IN ('active','suspended','blocked','closed'));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	-- Espejo de los CHECK de la 052: sin ellos una escritura incoherente
+	-- (blocked sin fecha ni motivo) pasaria verde en tests y fallaria en prod.
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_blocked_reason_len
+			CHECK (blocked_reason IS NULL OR char_length(blocked_reason) <= 500);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_blocked_coherente CHECK (
+			(status = 'blocked' AND blocked_at IS NOT NULL AND blocked_reason IS NOT NULL)
+			OR (status <> 'blocked' AND blocked_at IS NULL));
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 	CREATE TABLE IF NOT EXISTS wallets (
 		id UUID PRIMARY KEY,
