@@ -1,23 +1,15 @@
 # Android APK — build, sign and publish
 
-The signed APK is built by GitHub Actions and published to GitHub Releases. The
-website's login screen shows a **Download Android app** button that links to the
-latest release asset. Nothing needs a local Android toolchain.
+GitHub Actions builds and signs two things from the same compilation, and
+nothing needs a local Android toolchain:
 
-## Activate the workflow first (one-time)
-
-The workflow ships as **`docs/android-apk.workflow.yml`** because the machine
-that authored it has a git token without the `workflow` scope (GitHub blocks
-pushing `.github/workflows/*` without it). To activate it, put that file at
-`.github/workflows/android-apk.yml`, using either:
-
-- **GitHub web UI:** Add file → Create new file → path
-  `.github/workflows/android-apk.yml` → paste the contents of
-  `docs/android-apk.workflow.yml` → commit. (The web UI is allowed to create
-  workflows.)
-- **or a local push from a machine whose token has the `workflow` scope:**
-  `git mv docs/android-apk.workflow.yml .github/workflows/android-apk.yml`,
-  commit and push.
+- **`kiramopay.apk`** — attached to the GitHub Release. The website's login
+  screen shows a **Download Android app** button pointing at the latest one, and
+  the app updates itself from it.
+- **`kiramopay.aab`** — the Android App Bundle, the only format Google Play
+  accepts. It is kept as a workflow **artifact**, not attached to the release: a
+  bundle cannot be installed, so on a download page it would only confuse
+  someone who came for the APK.
 
 ## One-time setup
 
@@ -83,9 +75,32 @@ still need this CORS allow-list entry.
    git tag v2.0.1
    git push origin v2.0.1
    ```
-3. The workflow builds + signs the APK and attaches `kiramopay.apk` to the
-   `v2.0.1` release. The download button (which points at
-   `releases/latest/download/kiramopay.apk`) then serves it automatically.
+3. The workflow builds and signs both outputs. It attaches `kiramopay.apk` to
+   the `v2.0.1` release — the download button, which points at
+   `releases/latest/download/kiramopay.apk`, then serves it automatically — and
+   leaves `kiramopay.aab` as an artifact of that run.
+
+Keep `versionCode` and the app's own version in step: `npm run check:version`
+(the **Version Sync** job) fails the build if `package.json`, `versionName` and
+the changelog entry in `src/config/version.ts` disagree.
 
 To test a build without releasing, run the workflow manually from the Actions
-tab — it produces a downloadable `kiramopay-apk` artifact.
+tab — it produces both artifacts and publishes nothing.
+
+## Uploading to Google Play
+
+Play only accepts the **`.aab`**, and it comes from the artifacts of the run for
+that tag, not from the release page:
+
+1. Open the Actions run for the tag → **Artifacts** → download `kiramopay-aab`.
+2. Play Console → your app → **Production** (or a testing track) → **Create new
+   release** → upload `kiramopay.aab`.
+
+Two things to know before the first upload:
+
+- **`versionCode` must be higher than anything already uploaded**, forever. Play
+  orders releases by that number, not by `versionName`.
+- **Play App Signing re-signs the app** with a key Google holds. The keystore in
+  this repo's secrets becomes the *upload* key: the one that proves the bundle
+  comes from you. Losing it is recoverable through Play support; losing it
+  before enrolling in Play App Signing is not.

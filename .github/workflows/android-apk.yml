@@ -50,7 +50,10 @@ jobs:
           fi
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kiramopay-release.jks"
 
-      - name: Build signed release APK
+      # Dos salidas de la misma compilacion y la misma firma: el APK, que es lo
+      # que la gente instala de lado desde la pagina de releases, y el AAB, que
+      # es el unico formato que Google Play acepta para publicar.
+      - name: Build signed release APK and AAB
         working-directory: android
         env:
           KIRAMOPAY_KEYSTORE_FILE: ${{ runner.temp }}/kiramopay-release.jks
@@ -59,10 +62,13 @@ jobs:
           KIRAMOPAY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
       - name: Stage APK
         run: cp android/app/build/outputs/apk/release/app-release.apk kiramopay.apk
+
+      - name: Stage AAB
+        run: cp android/app/build/outputs/bundle/release/app-release.aab kiramopay.aab
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -70,6 +76,17 @@ jobs:
           name: kiramopay-apk
           path: kiramopay.apk
           if-no-files-found: error
+
+      # El AAB NO se adjunta a la release publica: no se puede instalar, y en la
+      # pagina de descargas solo confundiria a quien viene por el APK. Queda como
+      # artefacto de la corrida, que es de donde se sube a Play Console.
+      - name: Upload Play Store bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiramopay-aab
+          path: kiramopay.aab
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
