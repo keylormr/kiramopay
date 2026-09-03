@@ -179,6 +179,7 @@ const zhCn: TranslationKeys = {
   made_in_cr: '用爱制造于哥斯达黎加',
   all_rights: '版权所有',
   test_users: '测试用户',
+  test_users_hint: '仅在本地已填充数据的后端上有效。',
 
   // Additional UI
   add_money: '加值',

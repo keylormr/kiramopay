@@ -7,8 +7,12 @@
 // El copy de cada campana lo decide el dueno del producto. Regla: solo se
 // ofrece lo que existe. La de invitados promete puntos por cada invitado
 // registrado y eso ya lo paga el programa de referidos (enlace con el codigo
-// del usuario, bono en puntos de lealtad al referidor). Si se quiere que
-// quienes ya la vieron la vuelvan a ver ahora que es real, cambiar el `id`.
+// del usuario, bono en puntos de lealtad al referidor).
+//
+// El `id` gobierna el "ya la vi": cambiarlo reabre la campana para todo el
+// mundo. Se cambio una vez, de `invitar-2026-09` a la version `-referidos`,
+// porque la primera se mostro cuando el programa todavia no existia y quien la
+// descarto entonces se quedaba sin ver la oferta ya real.
 
 export interface Campana {
   /** Identificador estable: gobierna el "ya la vi" en localStorage. */
@@ -24,7 +28,7 @@ export interface Campana {
 
 export const CAMPANAS: Campana[] = [
   {
-    id: 'invitar-2026-09',
+    id: 'invitar-2026-09-referidos',
     tituloKey: 'promo_invite_title',
     cuerpoKey: 'promo_invite_body',
     ctaKey: 'promo_invite_cta',

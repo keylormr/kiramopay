@@ -264,6 +264,7 @@ export type TranslationKeys = {
   made_in_cr: string;
   all_rights: string;
   test_users: string;
+  test_users_hint: string;
 
   // Additional UI
   add_money: string;
