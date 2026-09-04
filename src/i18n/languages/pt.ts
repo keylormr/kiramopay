@@ -436,6 +436,8 @@ const pt: TranslationKeys = {
   crypto_tx_yield: 'Rendimento',
   crypto_updating: 'Atualizando...',
   crypto_prices_updated: 'Preços atualizados',
+  crypto_prices_unavailable: 'Preços não atualizados',
+  crypto_prices_unavailable_hint: 'Os valores podem estar desatualizados. Vamos tentar de novo automaticamente.',
   crypto_refresh_prices: 'Atualizar preços',
   crypto_no_assets_to_convert: 'Você ainda não tem ativos para converter. Compre cripto primeiro.',
   crypto_my_portfolio: 'Meu Portfólio',

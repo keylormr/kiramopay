@@ -113,7 +113,10 @@ export const CryptoView: React.FC = () => {
   // Real-time price states
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [, setPriceError] = useState<string | null>(null);
+  // El valor se usa: se descartaba con `const [, setPriceError]`, asi que el
+  // error se guardaba y nadie podia leerlo. La pantalla no tenia forma de
+  // avisar que los precios no llegaron.
+  const [priceError, setPriceError] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, CryptoPriceData>>({});
 
   // Calculate totals
@@ -139,6 +142,12 @@ export const CryptoView: React.FC = () => {
   // Assets with balance
   const assetsWithBalance = state.crypto.assets.filter(a => a.balance > 0);
 
+  // Tener saldo y ningun precio no es una cartera que vale cero: es una cartera
+  // que no se puede valorar. Mostrar $0.00 ahi es la peor mentira posible en
+  // esta pantalla, asi que en ese caso no se muestra un numero.
+  const sinPrecios = assetsWithBalance.length > 0
+    && assetsWithBalance.every(a => !(a.currentPrice > 0));
+
   // Abrir la hoja de conversion elige un destino valido de entrada. Sin esto la
   // hoja arrancaba con un destino que no existia entre sus opciones.
   const openConvertSheet = () => {
@@ -158,8 +167,13 @@ export const CryptoView: React.FC = () => {
   // Fetch prices from simulated service
   const fetchPrices = useCallback(async () => {
     try {
-      setPriceError(null);
       const prices = await cryptoPriceService.getPrices(CRYPTO_SYMBOLS);
+
+      // Una lista vacia NO es exito: es lo que devuelve el backend cuando el
+      // proveedor lo rechaza (clave mala) o lo limita, porque degrada a una
+      // cache que arranca vacia y responde 200 igual. Tratarlo como exito es
+      // lo que hacia que la pantalla se pintara "al dia" sin un solo precio.
+      setPriceError(prices.length === 0);
 
       if (prices.length > 0) {
         // Store full market data
@@ -178,7 +192,7 @@ export const CryptoView: React.FC = () => {
       }
       setIsLoading(false);
     } catch {
-      setPriceError('Error al obtener precios');
+      setPriceError(true);
       setIsLoading(false);
     }
   }, []);
@@ -506,13 +520,15 @@ export const CryptoView: React.FC = () => {
               <div aria-live="polite">
                 {isLoading ? (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
+                ) : priceError ? (
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-danger)]" title={t('crypto_prices_unavailable')} role="status" aria-label={t('crypto_prices_unavailable')} />
                 ) : (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" title={t('crypto_prices_updated')} role="status" aria-label={t('crypto_prices_updated')} />
                 )}
               </div>
             </div>
-            <h1 className="text-3xl font-black mt-1 tabular-nums">{formatUsd(totalUsdValue)}</h1>
-            <p className="text-white/70 text-sm mt-1 tabular-nums">{formatCrc(totalCrcValue)}</p>
+            <h1 className="text-3xl font-black mt-1 tabular-nums">{sinPrecios ? '—' : formatUsd(totalUsdValue)}</h1>
+            <p className="text-white/70 text-sm mt-1 tabular-nums">{sinPrecios ? ' ' : formatCrc(totalCrcValue)}</p>
           </div>
           <div className="text-right shrink-0">
             <div className={`px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur-sm border tabular-nums ${totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
@@ -530,6 +546,19 @@ export const CryptoView: React.FC = () => {
             )}
           </div>
         </div>
+
+        {priceError && (
+          <div
+            role="status"
+            className="relative mt-4 flex gap-2.5 rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 p-3"
+          >
+            <Icons.AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold">{t('crypto_prices_unavailable')}</p>
+              <p className="text-xs text-white/80 mt-0.5">{t('crypto_prices_unavailable_hint')}</p>
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="relative flex gap-2 mt-4">

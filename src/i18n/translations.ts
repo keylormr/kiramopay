@@ -523,6 +523,8 @@ export type TranslationKeys = {
   crypto_tx_yield: string;
   crypto_updating: string;
   crypto_prices_updated: string;
+  crypto_prices_unavailable: string;
+  crypto_prices_unavailable_hint: string;
   crypto_refresh_prices: string;
   crypto_no_assets_to_convert: string;
   crypto_my_portfolio: string;

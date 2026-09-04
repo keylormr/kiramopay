@@ -436,6 +436,8 @@ const hi: TranslationKeys = {
   crypto_tx_yield: 'प्रतिफल',
   crypto_updating: 'अपडेट हो रहा है...',
   crypto_prices_updated: 'कीमतें अपडेट हो गईं',
+  crypto_prices_unavailable: 'कीमतें अपडेट नहीं हो सकीं',
+  crypto_prices_unavailable_hint: 'कीमतें पुरानी हो सकती हैं। यह अपने आप फिर कोशिश करेगा।',
   crypto_refresh_prices: 'कीमतें रीफ्रेश करें',
   crypto_no_assets_to_convert: 'अभी आपके पास बदलने के लिए कोई संपत्ति नहीं है। पहले क्रिप्टो खरीदें।',
   crypto_my_portfolio: 'मेरा पोर्टफोलियो',
