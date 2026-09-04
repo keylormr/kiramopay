@@ -1,4 +1,24 @@
 import React from 'react';
+import { esErrorDeChunkViejo, recargarSaltandoCaches } from '../hooks/useGuardiaDeVersion';
+
+// Marca de "ya se hizo la recarga fuerte" para no repetirla en bucle.
+const CLAVE_RECARGA_FUERTE = 'kiramopay-recarga-fuerte';
+
+function yaSeRecargoFuerte(): boolean {
+  try {
+    return sessionStorage.getItem(CLAVE_RECARGA_FUERTE) === '1';
+  } catch {
+    return true; // sin sessionStorage no hay guardia: mejor no recargar en bucle
+  }
+}
+
+function marcarRecargaFuerte(): void {
+  try {
+    sessionStorage.setItem(CLAVE_RECARGA_FUERTE, '1');
+  } catch {
+    // sin storage, la guarda de arriba ya evita el bucle
+  }
+}
 import {
   Language,
   LANGUAGES,
@@ -43,6 +63,20 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Un import dinamico que falla no es un fallo de la aplicacion: es que
+    // este bundle pide un archivo que el despliegue actual ya borro.
+    // lazyConRecarga ya intento una recarga simple; si el error llego hasta
+    // aqui es que esa recarga devolvio lo mismo, cosa que pasa porque el HTML
+    // de kiramopay.com se sirve por una cache intermedia. Esta segunda vuelta
+    // es la fuerte: tira el service worker y sus caches, y vuelve a pedir la
+    // pagina con un parametro nuevo. Una sola vez por sesion, para no girar en
+    // vano si de verdad no hay red.
+    if (esErrorDeChunkViejo(error) && !yaSeRecargoFuerte()) {
+      marcarRecargaFuerte();
+      void recargarSaltandoCaches();
+      return;
+    }
+
     // Always log — in production the on-screen details are collapsed, so the
     // console is how a crash gets diagnosed. Previously the error was only
     // shown in DEV builds, making production crashes a black box.
