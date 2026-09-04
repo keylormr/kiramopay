@@ -2336,6 +2336,11 @@ components:
           enum: [ok, degraded]
         version:
           type: string
+          description: >-
+            Repository version this binary was built from (same value as
+            package.json and the Android versionName). Use it to confirm which
+            build a deploy is actually serving.
+          example: "2.3.5"
         environment:
           type: string
         services:

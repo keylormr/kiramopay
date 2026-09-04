@@ -24,6 +24,7 @@ import (
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
 	"github.com/kiramopay/backend/internal/budget"
+	"github.com/kiramopay/backend/internal/buildinfo"
 	"github.com/kiramopay/backend/internal/cards"
 	"github.com/kiramopay/backend/internal/config"
 	"github.com/kiramopay/backend/internal/country"
@@ -588,8 +589,11 @@ func main() {
 		// del proveedor. Es lo que permite ver desde afuera por que cripto no
 		// tiene precios sin abrir los logs de Render.
 		cripto, _ := json.Marshal(priceService.Diagnostics())
-		fmt.Fprintf(w, `{"status":%q,"version":"1.0.0","environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"crypto_prices":%s}`,
-			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), cripto)
+		// version: la del repositorio de la que salio este binario, no un "1.0.0"
+		// fijo. Es lo que permite confirmar un despliegue sin inventar marcadores
+		// de comportamiento.
+		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"crypto_prices":%s}`,
+			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), cripto)
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 

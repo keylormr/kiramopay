@@ -5012,6 +5012,10 @@ export interface components {
         HealthResponse: {
             /** @enum {string} */
             status?: "ok" | "degraded";
+            /**
+             * @description Repository version this binary was built from (same value as package.json and the Android versionName). Use it to confirm which build a deploy is actually serving.
+             * @example 2.3.5
+             */
             version?: string;
             environment?: string;
             services?: {
