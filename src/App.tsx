@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
 import { useActualizacion } from './hooks/useActualizacion';
+import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -255,6 +256,11 @@ const LockScreen = () => {
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
 type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'assistant' | 'marketplace' | 'cards' | null;
 
+// Keyed by TabId on purpose: adding a tab without deciding whether deep links
+// may reach it becomes a compile error instead of a silently dead route.
+const TAB_IDS: Record<TabId, true> = { home: true, sinpe: true, crypto: true, services: true, profile: true };
+const isTabId = (value: string): value is TabId => Object.prototype.hasOwnProperty.call(TAB_IDS, value);
+
 // Main Layout Component
 const Layout = () => {
   // Notificaciones en vivo por WebSocket. El hook existia desde el diseño de
@@ -375,6 +381,22 @@ const Layout = () => {
       void listener.then((handle) => handle.remove());
     };
   }, [overlayView, activeTab]);
+
+  // Apply deep link targets. The listener itself lives above the auth gate, so
+  // this only subscribes for the resolved destination; a target that resolved
+  // before this shell mounted (link tapped on the login screen) is replayed on
+  // subscribe. Any overlay is dismissed first, otherwise the new tab would
+  // render behind a full-screen sheet and the link would look dead.
+  // Business mode is deliberately left alone: the deep-linked destinations are
+  // personal-wallet surfaces, but silently dropping a cashier out of the shop
+  // profile is a product decision, not a routing one.
+  useEffect(() => subscribeDeepLink((target) => {
+    if (!isTabId(target.tab)) return;
+    setOverlayView(null);
+    // Mirror Home's quick actions: a payment link means "send".
+    if (target.tab === 'sinpe') setSinpeTab('send');
+    setActiveTab(target.tab);
+  }), []);
 
   const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
@@ -811,6 +833,14 @@ const AppContainer = () => {
       clearTimeout(avisoLento);
     };
   }, []);
+
+  // Deep links (kiramopay:// and https://app.kiramopay.com). Mounted here, above
+  // the auth gate, so a link that arrives on the login screen is parked by the
+  // hook and replayed once the session exists; Layout only applies the target.
+  const navigateTo = useCallback((tab: string, params?: Record<string, string>) => {
+    publishDeepLink({ tab, params: params ?? {} });
+  }, []);
+  useDeepLinks({ navigateTo, isAuthenticated: state.isAuthenticated });
 
   // Sync data from backend when app mounts with an authenticated user
   useEffect(() => {
