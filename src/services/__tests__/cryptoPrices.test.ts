@@ -1,7 +1,34 @@
-import { describe, it, expect } from 'vitest';
-import { cryptoPriceService } from '../cryptoPrices';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cryptoPriceService, SIMBOLOS_SIN_FEED } from '../cryptoPrices';
+
+// El servicio decide si hay backend preguntandole a resolveApiBaseUrl; hay que
+// controlar esa respuesta para poder probar los dos modos en el mismo archivo.
+const backend = vi.hoisted(() => ({ base: '' }));
+
+vi.mock('@/api/baseUrl', () => ({
+  API_URL: 'https://api.pruebas.local',
+  resolveApiBaseUrl: () => backend.base,
+  resolveWsBaseUrl: () => (backend.base ? backend.base.replace(/^http/, 'ws') : ''),
+}));
+
+/** Deja el fetch global respondiendo lo que el backend devolveria en `data`. */
+function backendResponde(datos: Record<string, unknown>): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, json: async () => ({ data: datos }) }))
+  );
+}
 
 describe('CryptoPriceService', () => {
+  // Por defecto, modo demo: es lo que asumen las pruebas historicas.
+  beforeEach(() => {
+    backend.base = '';
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   describe('getPrices', () => {
     it('returns price data for known symbols', async () => {
       const prices = await cryptoPriceService.getPrices(['BTC', 'ETH']);
@@ -262,6 +289,121 @@ describe('CryptoPriceService', () => {
       // Base marketCap for BTC is 840B
       expect(btc.marketCap).toBeGreaterThan(500e9);
       expect(btc.marketCap).toBeLessThan(1200e9);
+    });
+  });
+
+  describe('SIMBOLOS_SIN_FEED', () => {
+    it('solo lista las estables ancladas al dolar', () => {
+      expect([...SIMBOLOS_SIN_FEED].sort()).toEqual(['USDC', 'USDT']);
+    });
+
+    it('no incluye ningun simbolo que el backend si cotiza', () => {
+      const cotizados = ['BTC', 'ETH', 'SOL', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI', 'ATOM'];
+      cotizados.forEach(s => expect(SIMBOLOS_SIN_FEED).not.toContain(s));
+    });
+  });
+
+  describe('con backend configurado', () => {
+    beforeEach(() => {
+      backend.base = 'https://api.pruebas.local';
+    });
+
+    it('backend sin precios: no devuelve ningun activo volatil, solo el anclaje de las estables', async () => {
+      backendResponde({});
+
+      const precios = await cryptoPriceService.getPrices(['BTC', 'ETH', 'SOL', 'USDT', 'USDC']);
+
+      expect(precios.map(p => p.symbol).sort()).toEqual(['USDC', 'USDT']);
+      precios.forEach(p => {
+        expect(p.price).toBe(1);
+        expect(p.change24h).toBe(0);
+      });
+    });
+
+    it('backend caido: tampoco fabrica precios', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new Error('sin red');
+        })
+      );
+
+      const precios = await cryptoPriceService.getPrices(['BTC', 'ETH']);
+      expect(precios).toEqual([]);
+    });
+
+    it('backend que responde con error HTTP: tampoco fabrica precios', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({ ok: false, json: async () => ({}) }))
+      );
+
+      const precios = await cryptoPriceService.getPrices(['BTC']);
+      expect(precios).toEqual([]);
+    });
+
+    it('backend parcial: devuelve solo lo que trajo, con el precio real intacto', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 1.25, volume_24h: 111, market_cap: 222 },
+      });
+
+      const precios = await cryptoPriceService.getPrices(['BTC', 'ETH', 'SOL']);
+
+      expect(precios).toHaveLength(1);
+      expect(precios[0].symbol).toBe('BTC');
+      expect(precios[0].price).toBe(61234.5);
+      expect(precios[0].change24h).toBe(1.25);
+    });
+
+    it('el activo volatil sin feed queda sin precio aunque el backend cotice otros', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 0, volume_24h: 0, market_cap: 0 },
+      });
+
+      const eth = await cryptoPriceService.getPrice('ETH');
+      expect(eth).toBeNull();
+    });
+
+    it('descarta el simbolo que no se pidio, en vez de contestar por otra moneda', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 0, volume_24h: 0, market_cap: 0 },
+        ETH: { symbol: 'ETH', price: 2500, change_24h: 0, volume_24h: 0, market_cap: 0 },
+      });
+
+      const precios = await cryptoPriceService.getPrices(['ETH']);
+      expect(precios.map(p => p.symbol)).toEqual(['ETH']);
+      expect(precios[0].price).toBe(2500);
+    });
+
+    it('convertToFiat no usa el precio de otra moneda cuando la pedida no vino', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 0, volume_24h: 0, market_cap: 0 },
+      });
+
+      expect(await cryptoPriceService.convertToFiat('ETH', 1, 'USD')).toBe(0);
+    });
+
+    it('no entrega historiales inventados para las sparklines', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 0, volume_24h: 0, market_cap: 0 },
+      });
+
+      expect(await cryptoPriceService.getPriceHistory('BTC')).toEqual([]);
+      expect(await cryptoPriceService.getAllPriceHistories(['BTC', 'ETH'])).toEqual({ BTC: [], ETH: [] });
+    });
+  });
+
+  describe('modo demo (sin backend)', () => {
+    it('el simulador sigue cubriendo todos los simbolos', async () => {
+      const precios = await cryptoPriceService.getPrices(['BTC', 'ETH', 'SOL', 'USDT']);
+
+      expect(precios).toHaveLength(4);
+      precios.forEach(p => expect(p.price).toBeGreaterThan(0));
+    });
+
+    it('el simulador sigue entregando historiales para las sparklines', async () => {
+      const historial = await cryptoPriceService.getPriceHistory('BTC');
+      expect(historial.length).toBeGreaterThan(1);
     });
   });
 });

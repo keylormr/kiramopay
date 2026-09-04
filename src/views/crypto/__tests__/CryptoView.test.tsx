@@ -20,12 +20,15 @@ vi.mock('@/api', () => ({
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 
-// Sin red en las pruebas: los precios y el tipo de cambio son fijos.
+// Sin red en las pruebas: los precios y el tipo de cambio son fijos. La vista
+// lee SIMBOLOS_SIN_FEED al cargarse -para saber que simbolos no dependen del
+// feed-, asi que el doble tiene que exportarlo o el modulo ni se evalua.
 vi.mock('@/services/cryptoPrices', () => ({
   cryptoPriceService: {
-    getPrices: vi.fn().mockResolvedValue({}),
+    getPrices: vi.fn().mockResolvedValue([]),
     getAllPriceHistories: vi.fn().mockResolvedValue({}),
   },
+  SIMBOLOS_SIN_FEED: ['USDT', 'USDC'],
 }));
 vi.mock('@/services/fxRate', () => ({
   getUsdToCrcRate: vi.fn().mockResolvedValue(510),
