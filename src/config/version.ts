@@ -40,16 +40,25 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.3.4',
-    buildNumber: 10,
+    version: '2.3.5',
+    buildNumber: 11,
     releaseDate: '2026-09-03',
     changes: [
-      'Las cuentas de demostracion se pueden programar para que dejen de funcionar en una fecha, y se cierran solas al llegar',
-      'Al bloquear una cuenta, la sesion que tuviera abierta se corta en el acto',
-      'La invitacion a referidos vuelve a aparecer, ahora que las recompensas son reales',
+      'La pantalla "Acerca de" muestra la version que de verdad tienes instalada, y el historial de cambios vuelve a estar al dia',
+      'Apagar la verificacion en dos pasos queda registrado en el historial de seguridad de tu cuenta',
     ],
   },
   history: [
+    {
+      version: '2.3.4',
+      buildNumber: 10,
+      releaseDate: '2026-09-03',
+      changes: [
+        'Las cuentas de demostracion se pueden programar para que dejen de funcionar en una fecha, y se cierran solas al llegar',
+        'Al bloquear una cuenta, la sesion que tuviera abierta se corta en el acto',
+        'La invitacion a referidos vuelve a aparecer, ahora que las recompensas son reales',
+      ],
+    },
     {
       version: '2.3.3',
       buildNumber: 9,
