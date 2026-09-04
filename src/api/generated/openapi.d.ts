@@ -412,6 +412,187 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the devices with an open session
+         * @description Every login opens its own session and its own refresh family, and nothing revokes the previous ones, so an account stays open on as many devices as it was signed in from. This lists the live ones, most recent first, 50 at most, with `current` marking the session the request itself came from (matched by the access token's jti). It carries no tokens and no hashes: only what is needed to recognise a device and decide whether to close it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Open sessions, most recent first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Session"][];
+                    };
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED (this session was closed) */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description SESSIONS_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sessions/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close one of your own devices
+         * @description Closes a single session in one transaction that does two things: it marks the session row, so its access token is rejected on the very next request, and it revokes that session's whole refresh FAMILY. The second half is not optional — the access token only lasts fifteen minutes, so a device left holding a live refresh chain renews and walks straight back in: the session would look closed and would not be. The account id travels all the way into the WHERE clause, so a session id belonging to somebody else finds nothing to close and answers 404 without revealing that it exists elsewhere. Closing the session the request came from is allowed: that is "sign out of this device". Audited as session_revoked (high).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Session closed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description Always true; a session that was not closed answers 404 */
+                            revoked?: boolean;
+                        };
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description SESSION_NOT_FOUND (unknown, already closed, or another account's) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description REVOKE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close every other device and keep this one
+         * @description The "somebody else got into my account" button: closes every session except the one the request came from, each of them together with its refresh family, and answers how many it closed. The surviving session's refresh family is deliberately left alone — revoking it would kill this device at its next refresh and turn "close the others" into "close everything". Audited as sessions_revoked_others (high).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sessions closed (0 when there was no other device) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionsRevoked"];
+                    };
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description REVOKE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -3410,6 +3591,239 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the devices with an open session on one account (admin)
+         * @description The same view the person gets of their own devices, with one difference: no session comes back marked `current`, because the administrator is not that person. Shares the 30/min per-administrator budget with the rest of account management.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Open sessions (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Session"][];
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description SESSIONS_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/sessions/{sid}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close one device of an account (admin)
+         * @description Closes a single session of somebody else's account and revokes its refresh family in the same transaction — without the family the device renews inside fifteen minutes and comes back. The account is NOT blocked and its other devices stay signed in. It also cuts that person's WebSocket connections: the hub identifies connections by user and not by session, so all of them drop; the devices that are still valid reconnect on their own with their tokens, and the one just closed is the only one that cannot. Audited as admin_session_revoked (high).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    /** @description Session to close, as returned by GET /api/v1/admin/users/{id}/sessions */
+                    sid: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Session closed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description Always true; a session that was not closed answers 404 */
+                            revoked?: boolean;
+                        };
+                    };
+                };
+                /** @description INVALID_ID (id or sid is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description SESSION_NOT_FOUND (unknown, already closed, or another account's) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description REVOKE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close every device of an account without blocking it (admin)
+         * @description Closes every session of the account, revokes all of its refresh families and cuts its WebSocket connections. The account is NOT blocked: the person signs in again with their password and gets a fresh session. That is the difference with /block, and it is what a suspected device — rather than a suspected person — calls for. Audited as admin_sessions_revoked_all (critical) with the number of sessions closed.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sessions closed (0 when the account had none open) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionsRevoked"];
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description REVOKE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/plans/interest": {
         parameters: {
             query?: never;
@@ -5031,6 +5445,32 @@ export interface components {
         AdminBlockRequest: {
             /** @description Free text kept in the audit trail (never PII) */
             reason: string;
+        };
+        /** @description One open session, which is to say one device signed in to the account. It carries no token and no hash: only what is needed to recognise the device and decide whether to close it. */
+        Session: {
+            /** Format: uuid */
+            id?: string;
+            /**
+             * @description The User-Agent the session was opened with, or "Dispositivo desconocido" when the device did not send one.
+             * @example Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36
+             */
+            device_name?: string;
+            /**
+             * @description The address the session was opened from, cut to its /16 network: enough to tell one place from another without returning a full personal address. Empty when it was not recorded.
+             * @example 190.7.0.0
+             */
+            ip_masked?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            /** @description True for the session the request came from, matched by the access token's jti. Always false when an administrator is the one asking: the administrator is not that person. */
+            current?: boolean;
+        };
+        /** @description How many sessions were closed. Each one took its refresh family with it, so none of those devices can renew back in. */
+        SessionsRevoked: {
+            /** @example 3 */
+            revoked?: number;
         };
         EscrowCreateRequest: {
             /** Format: uuid */

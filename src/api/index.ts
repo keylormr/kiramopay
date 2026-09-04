@@ -25,6 +25,7 @@ import type { IKycRepository } from './repositories/kyc.repository';
 import type { IAppVersionRepository } from './repositories/appversion.repository';
 import type { IAdminRepository } from './repositories/admin.repository';
 import type { IPlansRepository } from './repositories/plans.repository';
+import type { ISessionsRepository } from './repositories/sessions.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -38,6 +39,7 @@ import { HttpAppVersionRepository } from './adapters/http/appversion.http';
 import { HttpKycRepository } from './adapters/http/kyc.http';
 import { HttpAdminRepository } from './adapters/http/admin.http';
 import { HttpPlansRepository } from './adapters/http/plans.http';
+import { HttpSessionsRepository } from './adapters/http/sessions.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -68,6 +70,7 @@ export interface ApiLayer {
   appVersion?: IAppVersionRepository;
   admin?: IAdminRepository;
   plans?: IPlansRepository;
+  sessions?: ISessionsRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -103,6 +106,8 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   layer.admin = new HttpAdminRepository(client);
   // El interes en un plan se escribe en la base y va autenticado: nunca al mock.
   layer.plans = new HttpPlansRepository(client);
+  // Cerrar una sesion destruye credenciales vivas: backend real siempre.
+  layer.sessions = new HttpSessionsRepository(client);
   return layer;
 }
 
@@ -181,3 +186,4 @@ export type {
 export type { IKycRepository, IdentityVerifyResult } from './repositories/kyc.repository';
 export type { IAdminRepository, AdminUser, AdminUserStatus } from './repositories/admin.repository';
 export type { IPlansRepository, PaidPlanId, PlanInterest } from './repositories/plans.repository';
+export type { ISessionsRepository, DeviceSession } from './repositories/sessions.repository';
