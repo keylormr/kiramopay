@@ -2330,12 +2330,22 @@ components:
 
     HealthResponse:
       type: object
+      # required + additionalProperties: sin ellos el test de contrato validaba
+      # cualquier cuerpo que no contradijera un tipo, asi que un campo que el
+      # handler dejara de emitir (o uno nuevo sin documentar) pasaba en verde.
+      additionalProperties: false
+      required: [status, version, environment, services, websocket_clients, last_drift_crc, crypto_prices]
       properties:
         status:
           type: string
           enum: [ok, degraded]
         version:
           type: string
+          description: >-
+            Repository version this binary was built from (same value as
+            package.json and the Android versionName). Use it to confirm which
+            build a deploy is actually serving.
+          example: "2.3.5"
         environment:
           type: string
         services:
@@ -2352,6 +2362,28 @@ components:
         last_drift_crc:
           type: integer
           description: Residual cache-vs-journal drift (minor units) from the last reconcile.
+        crypto_prices:
+          type: object
+          description: >-
+            CoinGecko price feed state. `plan` is what the provider accepted
+            for the configured key (demo, pro, none, or invalid when both hosts
+            reject it); `key` is only the last 4 characters of the key.
+          properties:
+            plan:
+              type: string
+              enum: [none, demo, pro, invalid]
+            key:
+              type: string
+            last_status:
+              type: integer
+            last_error:
+              type: string
+            last_success_at:
+              type: string
+            cached_assets:
+              type: integer
+            breaker_open:
+              type: boolean
 
     RegisterRequest:
       type: object
