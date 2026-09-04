@@ -55,6 +55,8 @@ tags:
     description: Read-only conversational assistant (LLM behind the backend; no money movement)
   - name: B2B
     description: Merchant platform — API keys, webhooks and the API-key-authenticated merchant API
+  - name: Plans
+    description: Paid plans — interest only; there is no charging path in the app yet
   - name: Admin
     description: Administrative endpoints
   - name: System
@@ -1172,6 +1174,39 @@ paths:
         '200':
           description: Transfer details
 
+  # ── Plans ──────────────────────────────────────────────────────────────
+  /api/v1/plans/interest:
+    post:
+      tags: [Plans]
+      summary: Register interest in a paid plan
+      description: >-
+        Records that the authenticated person wants a paid plan. This is NOT a
+        subscription and charges nothing: the app has no payment path for plans
+        yet, so the only honest thing to store is the intent. Idempotent per
+        (user, plan) — registering twice keeps a single row and refreshes its
+        date. Audited as plan_interest (low); the plan is the only detail kept.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanInterestRequest'
+      responses:
+        '200':
+          description: Interest registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanInterest'
+        '400':
+          description: PLAN_INVALID (plan must be negocio or cima) | INVALID_BODY
+        '401':
+          description: UNAUTHORIZED
+        '500':
+          description: INTEREST_FAILED
+
   # ── Admin ──────────────────────────────────────────────────────────────
   /api/v1/admin/fraud/alerts:
     get:
@@ -1406,6 +1441,38 @@ paths:
           description: USER_NOT_FOUND
         '500':
           description: EXPIRY_FAILED
+
+  # ── Admin: paid plan waiting list ─────────────────────────────────
+  /api/v1/admin/plans/interest:
+    get:
+      tags: [Admin]
+      summary: List who registered interest in a paid plan (admin)
+      description: >-
+        Most recent first. PII comes back masked in SQL, exactly as in the
+        account cards: cedula keeps its last 3 digits, phone its last 4, email
+        its first letter and domain.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 200
+      responses:
+        '200':
+          description: Registered interest (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanInterestAdmin'
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '500':
+          description: FETCH_FAILED
 
   # ── Push Notifications (Phase 9) ──────────────────────────────────
   /api/v1/push/subscribe:
@@ -2177,6 +2244,39 @@ components:
             Scheduled expiry. When it passes, a periodic sweep blocks the
             account with reason "demo vencido". Null means the account never
             expires, which is the case for almost every account.
+
+    PlanInterestRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [negocio, cima]
+          description: >-
+            Paid plan the person wants. The free plan is not registered: there
+            is nothing to contract.
+
+    PlanInterest:
+      type: object
+      description: Interest registered. Not a subscription — nothing was charged.
+      properties:
+        plan: { type: string, enum: [negocio, cima] }
+        registered_at: { type: string, format: date-time }
+
+    PlanInterestAdmin:
+      type: object
+      description: >-
+        One line of the paid plan waiting list. PII is masked in SQL, the same
+        way as in AdminUser.
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        cedula_masked: { type: string, example: "••••••930" }
+        phone_masked: { type: string, example: "••••••••1234" }
+        email_masked: { type: string, example: "k•••••@gmail.com" }
+        plan: { type: string, enum: [negocio, cima] }
+        registered_at: { type: string, format: date-time }
 
     AdminExpiryRequest:
       type: object

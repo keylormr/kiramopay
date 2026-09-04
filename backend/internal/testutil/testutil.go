@@ -941,6 +941,20 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
+	-- Interest in a paid plan (migration 056). Not a subscription: nothing
+	-- charges. The unique index is what makes registering twice one row.
+	CREATE TABLE IF NOT EXISTS plan_interest (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		plan VARCHAR(16) NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_plan_interest_plan CHECK (plan IN ('negocio', 'cima'))
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_plan_interest_user_plan
+		ON plan_interest (user_id, plan);
+	CREATE INDEX IF NOT EXISTS idx_plan_interest_created
+		ON plan_interest (created_at DESC);
+
 	-- Audit trail (migration 023, partitioned there; flat here). No FK to
 	-- users, like production. details is plain JSONB: never PII.
 	CREATE TABLE IF NOT EXISTS audit_logs (
@@ -1001,6 +1015,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
+		"plan_interest",
 		"loyalty_transactions", "loyalty_accounts",
 		"journal_entries", "journal_postings",
 		"transactions",
