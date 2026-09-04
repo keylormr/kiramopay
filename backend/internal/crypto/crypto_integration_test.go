@@ -293,7 +293,7 @@ func TestStake_Success(t *testing.T) {
 
 	// Fund the asset first (staking requires an existing balance).
 	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
-		Asset: "ETH", Amount: d(2.0), Price: d(3000000), FromCurrency: "CRC", FromAmount: d(6000000),
+		Asset: "ETH", FromCurrency: "CRC", FromAmount: d(6000000), // 12 ETH a 500.000
 	}); err != nil {
 		t.Fatalf("seed buy: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestUnstake_Success(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
-		Asset: "SOL", Amount: d(10.0), Price: d(50000), FromCurrency: "CRC", FromAmount: d(500000),
+		Asset: "SOL", FromCurrency: "CRC", FromAmount: d(5000000), // 10 SOL a 500.000
 	}); err != nil {
 		t.Fatalf("seed buy: %v", err)
 	}
@@ -386,11 +386,12 @@ func TestBuy_DecimalPrecision_Exact(t *testing.T) {
 
 	// The classic float trap: 0.1 + 0.2 == 0.30000000000000004 in float64.
 	// With decimal end-to-end the stored balance must be EXACTLY 0.3.
-	for _, amt := range []float64{0.1, 0.2} {
+	// Gastar 50.000 y 100.000 a 500.000 la unidad compra 0,1 y 0,2.
+	for _, fiat := range []float64{50000, 100000} {
 		if _, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
-			Asset: "BTC", Amount: d(amt), Price: d(1), FromCurrency: "CRC", FromAmount: d(1000),
+			Asset: "BTC", FromCurrency: "CRC", FromAmount: d(fiat),
 		}); err != nil {
-			t.Fatalf("buy %v: %v", amt, err)
+			t.Fatalf("buy %v: %v", fiat, err)
 		}
 	}
 
@@ -420,11 +421,11 @@ func TestGetTransactions_AfterBuySell(t *testing.T) {
 
 	// Buy
 	_, _ = svc.Buy(ctx, userID, &crypto.BuyRequest{
-		Asset: "BTC", Amount: d(0.1), Price: d(50000000), FromCurrency: "CRC", FromAmount: d(5000000),
+		Asset: "BTC", FromCurrency: "CRC", FromAmount: d(5000000),
 	})
 	// Sell
 	_, _ = svc.Sell(ctx, userID, &crypto.SellRequest{
-		Asset: "BTC", Amount: d(0.05), Price: d(50000000), ToCurrency: "CRC", ToAmount: d(2500000),
+		Asset: "BTC", Amount: d(0.05), ToCurrency: "CRC",
 	})
 
 	txs, err := svc.GetTransactions(ctx, userID)

@@ -38,9 +38,9 @@ func (s *Service) GetTransactions(ctx context.Context, userID string) ([]Transac
 }
 
 func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*TransactionRecord, error) {
-	if !req.Amount.IsPositive() {
-		return nil, fmt.Errorf("amount must be positive")
-	}
+	// req.Amount ya no se valida ni se usa: la cantidad de cripto la calcula el
+	// servidor. Se sigue aceptando en el cuerpo para no romper a los clientes
+	// desplegados, que todavia la mandan.
 	if !req.FromAmount.IsPositive() {
 		return nil, fmt.Errorf("from_amount must be positive")
 	}
