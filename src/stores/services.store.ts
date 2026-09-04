@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SavedService, Bill, Recharge } from '@/types';
 import { initialSavedServices, initialRechargeHistory } from '@/api/adapters/mock/mock-data';
+import { fusionConArrays } from './fusionPersistida';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
@@ -57,6 +58,9 @@ export const useServicesStore = create<ServicesState>()(
     }),
     {
       name: 'kiramopay-services',
+      // Un blob viejo o a medias puede traer estos campos con otra
+      // forma; recorrerlos en el render tumba la aplicacion entera.
+      merge: fusionConArrays<ServicesState>(['savedServices', 'billHistory', 'connectedPartners', 'rechargeHistory']),
     },
   ),
 );

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SinpeContact, SinpeTransaction } from '@/types';
 import { initialSinpeContacts, initialSinpeHistory } from '@/api/adapters/mock/mock-data';
+import { fusionConArrays } from './fusionPersistida';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
@@ -33,6 +34,9 @@ export const useSinpeStore = create<SinpeState>()(
     }),
     {
       name: 'kiramopay-sinpe',
+      // Un blob viejo o a medias puede traer estos campos con otra
+      // forma; recorrerlos en el render tumba la aplicacion entera.
+      merge: fusionConArrays<SinpeState>(['sinpeContacts', 'sinpeHistory']),
     },
   ),
 );
