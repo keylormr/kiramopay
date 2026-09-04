@@ -80,6 +80,15 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		return nil, fmt.Errorf("amount must be positive")
 	}
 
+	// Un tipo ENTRANTE acredita desde una cuenta de sistema, asi que solo puede
+	// originarlo otro servicio del backend. Sin esta puerta, cualquier tipo que
+	// no estuviera en isOutgoing caia por descarte en la rama de credito y
+	// acreditaba dinero real saltandose saldo, limite diario y MFA, que viven
+	// todos dentro del `if` de abajo.
+	if !isOutgoing(req.Type) && !req.Internal {
+		return nil, ErrCreditNotAllowed
+	}
+
 	if isOutgoing(req.Type) {
 		totalCost := req.Amount + req.Fee
 		if req.Currency == "CRC" && w.BalanceCRC < totalCost {
@@ -460,6 +469,10 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	}
 	return sender, receiver, nil
 }
+
+// ErrCreditNotAllowed indica que se pidio un tipo entrante desde fuera del
+// backend. Acreditar dinero lo decide el servicio que sabe de donde viene.
+var ErrCreditNotAllowed = errors.New("this transaction type cannot be requested by a client")
 
 // ErrMFARequired indicates the user must verify MFA before this tx proceeds.
 var ErrMFARequired = errors.New("mfa challenge required")

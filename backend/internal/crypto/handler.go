@@ -40,6 +40,22 @@ func (h *Handler) GetTransactions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, txs)
 }
 
+// errorDePrecio traduce los rechazos que vienen de poner el precio en el
+// servidor. Son estados distintos a proposito: sin precio es que el sistema no
+// puede cotizar ahora (503, se reintenta), y precio movido es que la persona
+// acepto otro numero (409, hay que volver a mostrarlo).
+func errorDePrecio(err error) (string, int, bool) {
+	switch {
+	case errors.Is(err, ErrSinPrecio):
+		return "PRICE_UNAVAILABLE", http.StatusServiceUnavailable, true
+	case errors.Is(err, ErrPrecioMovido):
+		return "PRICE_MOVED", http.StatusConflict, true
+	case errors.Is(err, ErrMonedaNoSoportada):
+		return "UNSUPPORTED_CURRENCY", http.StatusBadRequest, true
+	}
+	return "", 0, false
+}
+
 func (h *Handler) Buy(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var req BuyRequest
@@ -57,6 +73,10 @@ func (h *Handler) Buy(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, transaction.ErrMFARequired) {
 			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
 				"verified MFA challenge required for this amount")
+			return
+		}
+		if codigo, estado, ok := errorDePrecio(err); ok {
+			response.Error(w, estado, codigo, err.Error())
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "BUY_FAILED", err.Error())
@@ -84,6 +104,10 @@ func (h *Handler) Sell(w http.ResponseWriter, r *http.Request) {
 				"verified MFA challenge required for this amount")
 			return
 		}
+		if codigo, estado, ok := errorDePrecio(err); ok {
+			response.Error(w, estado, codigo, err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SELL_FAILED", err.Error())
 		return
 	}
@@ -100,6 +124,10 @@ func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Convert(r.Context(), userID, &req)
 	if err != nil {
+		if codigo, estado, ok := errorDePrecio(err); ok {
+			response.Error(w, estado, codigo, err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CONVERT_FAILED", err.Error())
 		return
 	}

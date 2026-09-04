@@ -42,6 +42,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "type is required")
 		return
 	}
+	// Lista blanca: esta ruta solo sirve para que una persona mueva SU dinero
+	// hacia afuera. Lo que entra al monedero lo origina el servicio que sabe por
+	// que entra, nunca el cliente.
+	if !IsUserInitiable(req.Type) {
+		response.Error(w, http.StatusBadRequest, "TYPE_NOT_ALLOWED",
+			"this transaction type cannot be created from this endpoint")
+		return
+	}
 
 	tx, err := h.service.CreateTransaction(r.Context(), userID, &req)
 	if err != nil {

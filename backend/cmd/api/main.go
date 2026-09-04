@@ -376,7 +376,18 @@ func main() {
 		Logger:      logger,
 	})
 	paymentService := payment.NewService(paymentRepo, txService)
-	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
+	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
+	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
+	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
+	// se opera: es preferible a operar con un numero inventado.
+	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
+		func(ctx context.Context, from, to string) (float64, error) {
+			r, err := countryRepo.GetExchangeRate(ctx, from, to)
+			if err != nil {
+				return 0, err
+			}
+			return r.Rate, nil
+		})
 
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService)
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
