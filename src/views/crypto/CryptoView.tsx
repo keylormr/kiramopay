@@ -8,7 +8,7 @@ import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { CryptoAsset, CryptoTransaction } from '../../types';
-import { cryptoPriceService, CryptoPriceData } from '../../services/cryptoPrices';
+import { cryptoPriceService, CryptoPriceData, SIMBOLOS_SIN_FEED } from '@/services/cryptoPrices';
 import { useUsdToCrcRate } from '@/hooks/useFxRate';
 import { useCryptoPricesWs } from '@/hooks/useCryptoPricesWs';
 
@@ -16,6 +16,19 @@ import { useCryptoPricesWs } from '@/hooks/useCryptoPricesWs';
 // La union del catalogo del backend (10 monedas con feed real) y las
 // stablecoins del modo demo, que cotizan por el simulador.
 const CRYPTO_SYMBOLS: string[] = ['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI', 'ATOM'];
+
+// Los simbolos que el backend SI cotiza. Las estables de SIMBOLOS_SIN_FEED no
+// pasan por el feed -valen 1 dolar por anclaje-, asi que su presencia no dice
+// nada sobre la salud del proveedor y no puede contar como precio recibido.
+const SIMBOLOS_CON_FEED: string[] = CRYPTO_SYMBOLS.filter(s => !SIMBOLOS_SIN_FEED.includes(s));
+
+// Falta algun simbolo que el backend deberia cotizar. El criterio viejo era
+// "la lista vino vacia", y con una respuesta parcial -el proveedor responde a
+// medias o limita por cuota- el punto volvia a verde sin avisar nada.
+const faltanPrecios = (recibidos: Iterable<string>): boolean => {
+  const presentes = new Set(recibidos);
+  return SIMBOLOS_CON_FEED.some(s => !presentes.has(s));
+};
 
 // Helper function to format large numbers (safer than calling service method)
 const formatLargeNumber = (value: number | string | undefined | null): string => {
@@ -145,8 +158,11 @@ export const CryptoView: React.FC = () => {
   // Tener saldo y ningun precio no es una cartera que vale cero: es una cartera
   // que no se puede valorar. Mostrar $0.00 ahi es la peor mentira posible en
   // esta pantalla, asi que en ese caso no se muestra un numero.
-  const sinPrecios = assetsWithBalance.length > 0
-    && assetsWithBalance.every(a => !(a.currentPrice > 0));
+  //
+  // Basta UN activo con saldo sin precio: `totalUsdValue` suma solo los que si
+  // tienen precio, y ese subtotal se presenta como el total de la cartera. Con
+  // una cartera mixta el numero que se mostraba era falso por lo bajo.
+  const sinPrecios = assetsWithBalance.some(a => !(a.currentPrice > 0));
 
   // Abrir la hoja de conversion elige un destino valido de entrada. Sin esto la
   // hoja arrancaba con un destino que no existia entre sus opciones.
@@ -169,11 +185,11 @@ export const CryptoView: React.FC = () => {
     try {
       const prices = await cryptoPriceService.getPrices(CRYPTO_SYMBOLS);
 
-      // Una lista vacia NO es exito: es lo que devuelve el backend cuando el
-      // proveedor lo rechaza (clave mala) o lo limita, porque degrada a una
-      // cache que arranca vacia y responde 200 igual. Tratarlo como exito es
-      // lo que hacia que la pantalla se pintara "al dia" sin un solo precio.
-      setPriceError(prices.length === 0);
+      // Una respuesta incompleta NO es exito: es lo que devuelve el backend
+      // cuando el proveedor lo rechaza (clave mala) o lo limita, porque degrada
+      // a una cache que puede estar vacia o a medias y responde 200 igual.
+      // Tratarlo como exito es lo que pintaba la pantalla "al dia" sin precios.
+      setPriceError(faltanPrecios(prices.filter(p => p.price > 0).map(p => p.symbol)));
 
       if (prices.length > 0) {
         // Store full market data
@@ -272,6 +288,14 @@ export const CryptoView: React.FC = () => {
         return siguiente;
       });
       setLastUpdated(new Date());
+      // El socket manda el mapa completo: si trae todo lo que el backend
+      // cotiza, los precios volvieron y el aviso ya no corresponde. Sin esto,
+      // el punto rojo y el aviso sobrevivian hasta el siguiente sondeo REST
+      // -cinco minutos- aunque la pantalla ya estuviera mostrando precios
+      // frescos. Una tanda parcial no limpia nada: no prueba que el feed sano.
+      if (!faltanPrecios(entradas.map(p => p.symbol))) {
+        setPriceError(false);
+      }
     }, 0);
     return () => clearTimeout(timer);
   }, [preciosWs, preciosWsMomento]);
@@ -290,6 +314,17 @@ export const CryptoView: React.FC = () => {
   // tampoco significa nada (da -100% o NaN), asi que se omite.
   const SIN_DATO = '—';
   const montoUsd = (value: number, precio: number) => (precio > 0 ? formatUsd(value) : SIN_DATO);
+
+  // Sin precio actual no hay orden que armar: comprar divide por cero, y
+  // vender o convertir mandan al servidor un monto en cero. La accion se
+  // bloquea y se dice por que, en vez de dejar tocar un boton que miente.
+  const sinPrecio = (activo: CryptoAsset | null) => !((activo?.currentPrice ?? 0) > 0);
+
+  // La conversion necesita el precio de las DOS puntas: el origen valora lo que
+  // se entrega y el destino dice cuanto se recibe. Faltando cualquiera de los
+  // dos no hay cuanto convertir.
+  const destinoConversion = state.crypto.assets.find(a => a.symbol === convertToAsset) || null;
+  const sinPrecioConversion = sinPrecio(selectedAsset) || sinPrecio(destinoConversion);
 
   const formatCrypto = (value: number, decimals: number = 6) => {
     const n = Number(value);
@@ -534,8 +569,20 @@ export const CryptoView: React.FC = () => {
                 )}
               </div>
             </div>
-            <h1 className="text-3xl font-black mt-1 tabular-nums">{sinPrecios ? '—' : formatUsd(totalUsdValue)}</h1>
-            <p className="text-white/70 text-sm mt-1 tabular-nums">{sinPrecios ? ' ' : formatCrc(totalCrcValue)}</p>
+            {/* El guion no se lee: un lector de pantalla anuncia "raya" o
+                nada. Sin el aria-label, quien no ve la pantalla escucha un
+                total mudo y no se entera de que el valor no esta disponible.
+                Por lo mismo el subtitulo desaparece en vez de quedar en un
+                espacio en blanco, que no dice nada a nadie. */}
+            <h1
+              className="text-3xl font-black mt-1 tabular-nums"
+              aria-label={sinPrecios ? t('crypto_value_unavailable') : undefined}
+            >
+              {sinPrecios ? SIN_DATO : formatUsd(totalUsdValue)}
+            </h1>
+            {!sinPrecios && (
+              <p className="text-white/70 text-sm mt-1 tabular-nums">{formatCrc(totalCrcValue)}</p>
+            )}
           </div>
           <div className="text-right shrink-0">
             {/* Sin precios, la ganancia se calcula contra cero y sale una
@@ -790,8 +837,11 @@ export const CryptoView: React.FC = () => {
               )}
               {state.crypto.stakingPositions.map(position => {
                 const asset = state.crypto.assets.find(a => a.symbol === position.asset);
-                const valueUsd = position.amount * (asset?.currentPrice || 0);
-                const earnedUsd = position.earned * (asset?.currentPrice || 0);
+                // El `|| 0` convierte "no hay precio" en "vale cero dolares", y
+                // asi se imprimia: mismo criterio que el resto de la pantalla.
+                const precioPosicion = asset?.currentPrice ?? 0;
+                const valueUsd = position.amount * precioPosicion;
+                const earnedUsd = position.earned * precioPosicion;
 
                 return (
                   <div key={position.id} className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
@@ -815,12 +865,12 @@ export const CryptoView: React.FC = () => {
                       <div>
                         <p className="text-xs text-gray-500">{t('crypto_staked')}</p>
                         <p className="font-bold uv-text-primary">{formatCrypto(position.amount)} {position.asset}</p>
-                        <p className="text-xs text-gray-500">{formatUsd(valueUsd)}</p>
+                        <p className="text-xs text-gray-500">{montoUsd(valueUsd, precioPosicion)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">{t('earned')}</p>
                         <p className="font-bold text-green-500">{formatCrypto(position.earned)} {position.asset}</p>
-                        <p className="text-xs text-gray-500">{formatUsd(earnedUsd)}</p>
+                        <p className="text-xs text-gray-500">{montoUsd(earnedUsd, precioPosicion)}</p>
                       </div>
                     </div>
 
@@ -1005,7 +1055,7 @@ export const CryptoView: React.FC = () => {
               onChange={(e) => setSelectedAsset(state.crypto.assets.find(a => a.symbol === e.target.value) || null)}
             >
               {state.crypto.assets.map(a => (
-                <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol}) - {formatUsd(a.currentPrice)}</option>
+                <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol}) - {montoUsd(a.currentPrice, a.currentPrice)}</option>
               ))}
             </select>
           </div>
@@ -1022,7 +1072,9 @@ export const CryptoView: React.FC = () => {
                 className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
               />
             </div>
-            {amount && selectedAsset && (
+            {/* Sin precio la division da Infinity y formatCrypto lo imprime
+                como "0": un estimado de cero cripta por el monto tecleado. */}
+            {amount && selectedAsset && selectedAsset.currentPrice > 0 && (
               <p className="text-sm text-gray-500 mt-2">
                 ≈ {formatCrypto(parseFloat(amount) / selectedAsset.currentPrice)} {selectedAsset.symbol}
               </p>
@@ -1046,9 +1098,12 @@ export const CryptoView: React.FC = () => {
               {tradeError}
             </p>
           )}
+          {sinPrecio(selectedAsset) && (
+            <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
+          )}
           <button
             onClick={handleBuy}
-            disabled={isTrading || !amount || parseFloat(amount) <= 0}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || sinPrecio(selectedAsset)}
             className="w-full bg-green-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
             {isTrading ? t('processing') : <>{t('buy')} {selectedAsset?.symbol}</>}
@@ -1112,7 +1167,7 @@ export const CryptoView: React.FC = () => {
             </div>
             {amount && selectedAsset && (
               <p className="text-sm text-gray-500 mt-2">
-                ≈ {formatUsd(parseFloat(amount) * selectedAsset.currentPrice)}
+                ≈ {montoUsd(parseFloat(amount) * selectedAsset.currentPrice, selectedAsset.currentPrice)}
               </p>
             )}
           </div>
@@ -1137,9 +1192,12 @@ export const CryptoView: React.FC = () => {
               {tradeError}
             </p>
           )}
+          {sinPrecio(selectedAsset) && (
+            <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
+          )}
           <button
             onClick={handleSell}
-            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0) || sinPrecio(selectedAsset)}
             className="w-full bg-red-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
             {isTrading ? t('processing') : <>{t('crypto_sell_and_receive')} {convertTo}</>}
@@ -1207,10 +1265,12 @@ export const CryptoView: React.FC = () => {
             </select>
           </div>
 
-          {amount && selectedAsset && convertToAsset && (
+          {/* El `|| 1` que habia aqui tapaba la falta del precio de destino
+              tratando la cripto como si valiera un dolar. */}
+          {amount && selectedAsset && convertToAsset && !sinPrecioConversion && destinoConversion && (
             <div className="text-center text-gray-500">
               {t('crypto_receive_approx')}: <span className="font-bold uv-text-primary">
-                {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / (state.crypto.assets.find(a => a.symbol === convertToAsset)?.currentPrice || 1))} {convertToAsset}
+                {formatCrypto((parseFloat(amount) * selectedAsset.currentPrice) / destinoConversion.currentPrice)} {convertToAsset}
               </span>
             </div>
           )}
@@ -1219,9 +1279,13 @@ export const CryptoView: React.FC = () => {
             <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{tradeError}</p>
           )}
 
+          {sinPrecioConversion && assetsWithBalance.length > 0 && (
+            <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
+          )}
+
           <button
             onClick={handleConvert}
-            disabled={isTrading || !convertToAsset || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !convertToAsset || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0) || sinPrecioConversion}
             className="w-full bg-blue-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
             {isTrading ? t('processing') : t('convert')}

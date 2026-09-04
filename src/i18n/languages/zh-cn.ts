@@ -439,6 +439,8 @@ const zhCn: TranslationKeys = {
   crypto_prices_updated: '价格已更新',
   crypto_prices_unavailable: '价格更新失败',
   crypto_prices_unavailable_hint: '数值可能过期，会自动重试。',
+  crypto_action_needs_price: '没有当前价格，无法交易。',
+  crypto_value_unavailable: '数值不可用',
   crypto_refresh_prices: '重新整理价格',
   crypto_no_assets_to_convert: '您还没有可兑换的资产，请先购买加密货币。',
   crypto_my_portfolio: '我的投资组合',

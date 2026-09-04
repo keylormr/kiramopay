@@ -438,6 +438,8 @@ const fr: TranslationKeys = {
   crypto_prices_updated: 'Prix mis à jour',
   crypto_prices_unavailable: 'Prix non mis à jour',
   crypto_prices_unavailable_hint: 'Les valeurs peuvent être obsolètes. Il réessaie automatiquement.',
+  crypto_action_needs_price: "Impossible d'opérer sans le prix actuel.",
+  crypto_value_unavailable: 'Valeur indisponible',
   crypto_refresh_prices: 'Actualiser les prix',
   crypto_no_assets_to_convert: "Vous n'avez pas encore d'actifs à convertir. Achetez d'abord des cryptos.",
   crypto_my_portfolio: 'Mon portefeuille',

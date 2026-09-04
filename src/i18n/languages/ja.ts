@@ -438,6 +438,8 @@ const ja: TranslationKeys = {
   crypto_prices_updated: '価格が更新されました',
   crypto_prices_unavailable: '価格が更新されませんでした',
   crypto_prices_unavailable_hint: '価格が最新でない場合があります。自動で再試行します。',
+  crypto_action_needs_price: '現在の価格がないため取引できません。',
+  crypto_value_unavailable: '価値を表示できません',
   crypto_refresh_prices: '価格を更新',
   crypto_no_assets_to_convert: '変換できる資産がまだありません。先に仮想通貨を購入してください。',
   crypto_my_portfolio: 'マイポートフォリオ',

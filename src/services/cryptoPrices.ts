@@ -1,11 +1,22 @@
 // Crypto Price Service
 //
 // Con backend configurado pide los precios REALES (CoinGecko via
-// /api/v1/crypto/prices); el simulador de abajo queda como respaldo para el
-// modo demo, para los simbolos que el backend no cotiza (stablecoins) y para
-// cuando el feed real este caido. Antes la vista SOLO simulaba: mostraba
-// precios de enero 2025 con ruido aleatorio mientras el backend cobraba con
-// precios reales.
+// /api/v1/crypto/prices) y NO rellena lo que el feed no traiga: inventar el
+// precio de un activo volatil en una aplicacion que mueve dinero es peor que
+// no mostrarlo, porque el usuario valora su cartera y decide comprar o vender
+// sobre un numero falso sin saberlo. Lo unico que se completa sin feed son las
+// estables ancladas al dolar (ver SIMBOLOS_SIN_FEED), cuyo valor no depende
+// del mercado.
+//
+// El simulador de abajo es el del MODO DEMO (sin backend configurado): ahi
+// cubre todos los simbolos, como siempre, porque no hay ninguna fuente real y
+// nadie mueve dinero de verdad.
+//
+// Antes esto fallaba de las dos formas: primero la vista SOLO simulaba, y
+// despues el simulador seguia tapando los huecos del feed real, asi que
+// produccion mostraba precios de enero 2025 con ruido aleatorio como si
+// fueran de hoy y el aviso de "no se pudieron actualizar los precios" nunca
+// llegaba a encenderse.
 
 import { getUsdToCrcRate } from './fxRate';
 import { resolveApiBaseUrl } from '@/api/baseUrl';
@@ -47,6 +58,22 @@ const VOLATILITY: Record<string, number> = {
   UNI: 0.03,     // 3%
   ATOM: 0.03,    // 3%
 };
+
+// Valor de las monedas que el backend NO consulta a ningun mercado: el mapa
+// coinGeckoIDs de backend/internal/crypto/prices.go cotiza BTC, ETH, SOL, ADA,
+// DOT, AVAX, LINK, MATIC, UNI y ATOM, y deja fuera a estas dos. No se les pide
+// precio porque no lo tienen que descubrir: estan ancladas al dolar.
+const ANCLAJE_AL_DOLAR: Record<string, number> = {
+  USDT: 1,
+  USDC: 1,
+};
+
+/**
+ * Simbolos que el backend nunca cotiza y cuyo valor no depende del mercado.
+ * Son los unicos que la aplicacion puede mostrar sin un precio real detras;
+ * cualquier otro simbolo sin feed se queda sin precio a proposito.
+ */
+export const SIMBOLOS_SIN_FEED: readonly string[] = Object.keys(ANCLAJE_AL_DOLAR);
 
 export interface CryptoPriceData {
   symbol: string;
@@ -143,11 +170,10 @@ class CryptoPriceService {
     return Math.max(newPrice, basePrice * 0.7); // Don't let price drop below 70% of base
   }
 
-  // Precios reales del backend; devuelve un mapa vacio si no hay backend, si
-  // el feed falla o si viene sin datos (CoinGecko limitando). Nunca lanza.
-  private async obtenerPreciosReales(symbols: string[]): Promise<Map<string, CryptoPriceData>> {
+  // Precios reales del backend; devuelve un mapa vacio si el feed falla o si
+  // viene sin datos (CoinGecko limitando). Nunca lanza.
+  private async obtenerPreciosReales(base: string, symbols: string[]): Promise<Map<string, CryptoPriceData>> {
     const reales = new Map<string, CryptoPriceData>();
-    const base = resolveApiBaseUrl();
     if (!base) return reales;
     try {
       const r = await fetch(`${base}/api/v1/crypto/prices?symbols=${symbols.map(s => s.toUpperCase()).join(',')}`);
@@ -156,13 +182,19 @@ class CryptoPriceService {
       const datos: Record<string, { symbol: string; price: number; change_24h: number; volume_24h: number; market_cap: number }> =
         cuerpo?.data ?? {};
       const ahora = new Date().toISOString();
+      // Solo se acepta lo que se pidio: un simbolo que no estaba en la consulta
+      // acabaria contestando por otro (getPrice devolveria el precio de una
+      // moneda distinta a la preguntada) y eso vale para convertir montos.
+      const pedidos = new Set(symbols.map(s => s.toUpperCase()));
       for (const p of Object.values(datos)) {
         if (!p || typeof p.price !== 'number' || p.price <= 0) continue;
+        if (typeof p.symbol !== 'string' || !pedidos.has(p.symbol.toUpperCase())) continue;
         // El feed no trae maximo/minimo del dia; se estiman desde la variacion
         // para que las tarjetas no muestren cero.
         const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
-        reales.set(p.symbol, {
-          symbol: p.symbol,
+        const simbolo = p.symbol.toUpperCase();
+        reales.set(simbolo, {
+          symbol: simbolo,
           price: p.price,
           change24h: p.change_24h ?? 0,
           marketCap: p.market_cap ?? 0,
@@ -173,8 +205,8 @@ class CryptoPriceService {
         });
         // Anclar el simulador al precio real: los historiales de sparkline
         // terminan donde el mercado esta de verdad.
-        this.currentPrices.set(p.symbol, p.price);
-        this.dailyChanges.set(p.symbol, p.change_24h ?? 0);
+        this.currentPrices.set(simbolo, p.price);
+        this.dailyChanges.set(simbolo, p.change_24h ?? 0);
       }
       return reales;
     } catch {
@@ -182,12 +214,42 @@ class CryptoPriceService {
     }
   }
 
-  // Get current prices for multiple coins: reales primero, simulados de respaldo.
+  // Precios actuales. Con backend, SOLO lo que el feed real trajo mas el
+  // anclaje de las estables; sin backend (modo demo), el simulador cubre todo.
   async getPrices(symbols: string[]): Promise<CryptoPriceData[]> {
-    const reales = await this.obtenerPreciosReales(symbols);
+    const base = resolveApiBaseUrl();
+    const reales = await this.obtenerPreciosReales(base, symbols);
     const faltantes = symbols.filter(s => !reales.has(s.toUpperCase()));
-    const simulados = await this.simularPrecios(faltantes);
-    return [...reales.values(), ...simulados];
+
+    if (!base) return [...reales.values(), ...(await this.simularPrecios(faltantes))];
+
+    // Hay backend: un simbolo sin precio real se queda sin precio. La unica
+    // excepcion son las estables, cuyo valor se ancla y no se inventa. Devolver
+    // menos precios de los pedidos es la senal que la vista necesita para
+    // avisar que no pudo actualizar, en vez de pintar numeros simulados.
+    const anclados = faltantes
+      .map(s => this.precioAnclado(s.toUpperCase()))
+      .filter((p): p is CryptoPriceData => p !== null);
+    return [...reales.values(), ...anclados];
+  }
+
+  // Precio de una estable anclada al dolar. marketCap y volumen quedan en 0
+  // porque no los conocemos sin feed: son metadatos, no el precio.
+  private precioAnclado(symbol: string): CryptoPriceData | null {
+    const precio = ANCLAJE_AL_DOLAR[symbol];
+    if (precio === undefined) return null;
+    this.currentPrices.set(symbol, precio);
+    this.dailyChanges.set(symbol, 0);
+    return {
+      symbol,
+      price: precio,
+      change24h: 0,
+      marketCap: 0,
+      volume24h: 0,
+      high24h: precio,
+      low24h: precio,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 
   // Simulador original: cubre el modo demo y los simbolos sin feed real.
@@ -238,14 +300,24 @@ class CryptoPriceService {
     return results;
   }
 
-  // Get single coin price
+  // Precio de una sola moneda. Se busca por simbolo, no por posicion: si la
+  // lista viniera con otra cosa, devolver el primer elemento entregaria el
+  // precio de una moneda distinta a la preguntada, y sobre este metodo se
+  // convierten montos (convertToFiat / convertFromFiat).
   async getPrice(symbol: string): Promise<CryptoPriceData | null> {
+    const buscado = symbol.toUpperCase();
     const prices = await this.getPrices([symbol]);
-    return prices[0] || null;
+    return prices.find(p => p.symbol === buscado) ?? null;
   }
 
-  // Get price history (7 days) for sparkline charts
+  // Historial de 7 dias para las sparklines. Con backend NO se devuelve nada:
+  // el feed real solo da el precio de hoy, asi que la curva de los ultimos
+  // dias seria una caminata aleatoria sobre precios de enero 2025 — una
+  // tendencia inventada, que es justo lo que un grafico le hace creer al
+  // usuario. Una lista vacia deja la sparkline en su marca de "sin datos".
   async getPriceHistory(symbol: string, days: number = 7): Promise<number[]> {
+    if (resolveApiBaseUrl()) return [];
+
     await new Promise(resolve => setTimeout(resolve, 50)); // Small delay
 
     const upperSymbol = symbol.toUpperCase();

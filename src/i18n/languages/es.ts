@@ -438,6 +438,8 @@ const es: TranslationKeys = {
   crypto_prices_updated: 'Precios actualizados',
   crypto_prices_unavailable: 'No se pudieron actualizar los precios',
   crypto_prices_unavailable_hint: 'Los valores pueden estar desactualizados. Se vuelve a intentar solo.',
+  crypto_action_needs_price: 'No se puede operar sin el precio actual.',
+  crypto_value_unavailable: 'Valor no disponible',
   crypto_refresh_prices: 'Actualizar precios',
   crypto_no_assets_to_convert: 'Aún no tienes activos para convertir. Compra crypto primero.',
   crypto_my_portfolio: 'Mi Portfolio',
