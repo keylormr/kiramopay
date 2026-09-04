@@ -110,7 +110,7 @@ func TestCreateTransaction_IdempotencyShortCircuits(t *testing.T) {
 	svc, userID := setupTxService(t)
 	ctx := context.Background()
 	req := &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 1000000, Currency: "CRC",
+		Type: "deposit", Amount: 1000000, Currency: "CRC", Internal: true,
 		IdempotencyKey: "tx-idem-1",
 	}
 	a, err := svc.CreateTransaction(ctx, userID, req)
@@ -156,7 +156,7 @@ func TestListTransactions_Pagination(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
 		if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-			Type: "deposit", Amount: int64((i + 1) * 1000000), Currency: "CRC",
+			Type: "deposit", Amount: int64((i + 1) * 1000000), Currency: "CRC", Internal: true,
 		}); err != nil {
 			t.Fatalf("create #%d: %v", i, err)
 		}
@@ -179,12 +179,12 @@ func TestListTransactions_FilterByDateAndCurrency(t *testing.T) {
 	svc, userID := setupTxService(t)
 	ctx := context.Background()
 	if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 1000000, Currency: "CRC",
+		Type: "deposit", Amount: 1000000, Currency: "CRC", Internal: true,
 	}); err != nil {
 		t.Fatalf("deposit CRC: %v", err)
 	}
 	if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 2000, Currency: "USD",
+		Type: "deposit", Amount: 2000, Currency: "USD", Internal: true,
 	}); err != nil {
 		t.Fatalf("deposit USD: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestListTransactions_FilterByType(t *testing.T) {
 	svc, userID := setupTxService(t)
 	ctx := context.Background()
 	if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 1000000, Currency: "CRC",
+		Type: "deposit", Amount: 1000000, Currency: "CRC", Internal: true,
 	}); err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
