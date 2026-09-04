@@ -273,3 +273,148 @@ func TestCacheTTLPorPlan(t *testing.T) {
 		t.Fatalf("pro: TTL = %v, esperaba 30s", pro.cacheTTL)
 	}
 }
+
+// Servidor que imita a CoinGecko en /ping: acepta la clave solo bajo la
+// cabecera del plan indicado (demo o pro) y responde 401 a la otra, como hace
+// el proveedor real. En /simple/price devuelve un precio y deja ver la cabecera.
+func servidorCoinGecko(t *testing.T, aceptaDemo, aceptaPro bool, cabeceras chan<- [2]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		demo, pro := r.Header.Get("x-cg-demo-api-key"), r.Header.Get("x-cg-pro-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/ping") {
+			if (demo != "" && aceptaDemo) || (pro != "" && aceptaPro) {
+				_, _ = w.Write([]byte(`{"gecko_says":"(V3) To the Moon!"}`))
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"status":{"error_code":10002,"error_message":"API Key Missing"}}`))
+			return
+		}
+		if cabeceras != nil {
+			select {
+			case cabeceras <- [2]string{demo, pro}:
+			default:
+			}
+		}
+		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+	}))
+}
+
+func TestAutoDetectPlan_ClaveDemoEnVariablePro(t *testing.T) {
+	cabeceras := make(chan [2]string, 1)
+	srv := servidorCoinGecko(t, true, false, cabeceras)
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetAPIKey("CG-demo-1234") // configurada como Pro por error
+	ps.SetBaseURL(srv.URL)
+
+	plan, st, err := ps.AutoDetectPlan(context.Background())
+	if err != nil {
+		t.Fatalf("AutoDetectPlan: %v", err)
+	}
+	if plan != PlanDemo || st != http.StatusOK {
+		t.Fatalf("plan=%s status=%d, esperaba demo/200", plan, st)
+	}
+	if _, err := ps.GetPrices(context.Background(), []string{"BTC"}); err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	got := <-cabeceras
+	if got[0] != "CG-demo-1234" || got[1] != "" {
+		t.Fatalf("tras la deteccion la clave debe viajar como Demo, viajo demo=%q pro=%q", got[0], got[1])
+	}
+	d := ps.Diagnostics()
+	// La huella son los ultimos 4 caracteres: la clave completa nunca sale.
+	if d.Plan != PlanDemo || !strings.HasSuffix(d.Key, "1234") || strings.Contains(d.Key, "demo") {
+		t.Fatalf("diagnostico %+v: esperaba plan demo y solo la huella de la clave", d)
+	}
+}
+
+func TestAutoDetectPlan_ClaveProEnVariableDemo(t *testing.T) {
+	srv := servidorCoinGecko(t, false, true, nil)
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetDemoAPIKey("CG-pro-9999")
+	ps.SetBaseURL(srv.URL)
+
+	plan, _, err := ps.AutoDetectPlan(context.Background())
+	if err != nil || plan != PlanPro {
+		t.Fatalf("plan=%s err=%v, esperaba pro", plan, err)
+	}
+	if ps.GetInterval() != 5*time.Second {
+		t.Fatalf("un plan Pro detectado debe usar el intervalo rapido, dio %s", ps.GetInterval())
+	}
+}
+
+func TestAutoDetectPlan_ClaveInvalidaEnLosDosPlanes(t *testing.T) {
+	srv := servidorCoinGecko(t, false, false, nil)
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetDemoAPIKey("CG-mala")
+	ps.SetBaseURL(srv.URL)
+
+	plan, st, err := ps.AutoDetectPlan(context.Background())
+	if err != nil || plan != PlanInvalid || st != http.StatusUnauthorized {
+		t.Fatalf("plan=%s status=%d err=%v, esperaba invalid/401", plan, st, err)
+	}
+	d := ps.Diagnostics()
+	if d.Plan != PlanInvalid || d.LastStatus != http.StatusUnauthorized || d.LastError == "" {
+		t.Fatalf("diagnostico %+v: debe decir invalid, 401 y un motivo", d)
+	}
+}
+
+func TestAutoDetectPlan_SinClaveNoConsulta(t *testing.T) {
+	llamadas := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { llamadas++ }))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+	plan, _, err := ps.AutoDetectPlan(context.Background())
+	if err != nil || plan != PlanNone || llamadas != 0 {
+		t.Fatalf("plan=%s err=%v llamadas=%d, esperaba none sin consultar", plan, err, llamadas)
+	}
+}
+
+func TestAutoDetectPlan_FalloDeRedNoCambiaNada(t *testing.T) {
+	srv := servidorCoinGecko(t, true, true, nil)
+	srv.Close() // cerrado a proposito: la red falla
+
+	ps := NewPriceService()
+	ps.SetAPIKey("CG-pro-1")
+	ps.SetBaseURL(srv.URL)
+	plan, _, err := ps.AutoDetectPlan(context.Background())
+	if err == nil {
+		t.Fatal("esperaba error de red")
+	}
+	if plan != PlanPro || ps.Diagnostics().Plan != PlanPro {
+		t.Fatalf("con la red caida el plan configurado debe quedar como estaba, dio %s", plan)
+	}
+}
+
+func TestDiagnostics_RegistraElUltimoEstadoDelProveedor(t *testing.T) {
+	status := http.StatusInternalServerError
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+	_, _ = ps.GetPrices(context.Background(), []string{"BTC"})
+	if d := ps.Diagnostics(); d.LastStatus != http.StatusInternalServerError || d.LastSuccessAt != "" || d.CachedAssets != 0 {
+		t.Fatalf("tras un 500: %+v", d)
+	}
+	status = http.StatusOK
+	if _, err := ps.GetPrices(context.Background(), []string{"BTC"}); err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	if d := ps.Diagnostics(); d.LastStatus != http.StatusOK || d.LastSuccessAt == "" || d.CachedAssets != 1 {
+		t.Fatalf("tras un 200: %+v", d)
+	}
+}

@@ -5023,6 +5023,17 @@ export interface components {
             websocket_clients?: number;
             /** @description Residual cache-vs-journal drift (minor units) from the last reconcile. */
             last_drift_crc?: number;
+            /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
+            crypto_prices?: {
+                /** @enum {string} */
+                plan?: "none" | "demo" | "pro" | "invalid";
+                key?: string;
+                last_status?: number;
+                last_error?: string;
+                last_success_at?: string;
+                cached_assets?: number;
+                breaker_open?: boolean;
+            };
         };
         RegisterRequest: {
             /** @example 702650930 */

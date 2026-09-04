@@ -32,6 +32,12 @@ type PriceService struct {
 	consecutiveFailures int
 	circuitOpenUntil    time.Time
 	client              *http.Client
+	// Estado para /health: ultimo status y error del proveedor, ultimo exito,
+	// y si la clave fue rechazada en los dos planes al arrancar.
+	lastStatus   int
+	lastError    string
+	lastSuccess  time.Time
+	planInvalido bool
 }
 
 func NewPriceService() *PriceService {
@@ -192,6 +198,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		// precios" sin causa: el servicio degrada en silencio a la cache (que
 		// arranca vacia) y nadie se entera. Paso hoy en produccion.
 		slog.Warn("price fetch: request failed", "host", base, "err", err)
+		ps.notarResultado(0, err.Error())
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
@@ -212,6 +219,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		} else {
 			slog.Warn("price fetch: non-200 from provider", "host", base, "status", resp.StatusCode)
 		}
+		ps.notarResultado(resp.StatusCode, "")
 		ps.recordFailure()
 		ps.mu.RLock()
 		defer ps.mu.RUnlock()
@@ -249,6 +257,9 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	}
 
 	ps.lastFetch = time.Now()
+	ps.lastSuccess = ps.lastFetch
+	ps.lastStatus = http.StatusOK
+	ps.lastError = ""
 	ps.consecutiveFailures = 0 // Reset on success
 	return result, nil
 }

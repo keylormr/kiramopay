@@ -209,6 +209,23 @@ func main() {
 	if k := os.Getenv("COINGECKO_PRO_API_KEY"); k != "" {
 		priceService.SetAPIKey(k)
 	}
+	// La variable puede estar cruzada (una Demo en la variable Pro recibe 401 en
+	// cada llamada y nadie ve precios): se comprueba la clave contra /ping y,
+	// si el otro plan la acepta, el servicio cambia solo. El resultado sale en
+	// el log y en /health ("crypto_prices"), para no tener que adivinar.
+	{
+		probeCtx, cancelProbe := context.WithTimeout(context.Background(), 8*time.Second)
+		plan, st, err := priceService.AutoDetectPlan(probeCtx)
+		cancelProbe()
+		switch {
+		case err != nil:
+			log.Printf("Warning: no se pudo comprobar la clave de CoinGecko (%v); se usa la configuracion tal cual", err)
+		case plan == crypto.PlanNone:
+			log.Println("CoinGecko sin clave: el tier compartido limita por IP, cripto quedara sin precios")
+		default:
+			log.Printf("CoinGecko plan=%s status=%d", plan, st)
+		}
+	}
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 
@@ -567,8 +584,12 @@ func main() {
 			httpStatus = http.StatusServiceUnavailable
 		}
 		w.WriteHeader(httpStatus)
-		fmt.Fprintf(w, `{"status":%q,"version":"1.0.0","environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d}`,
-			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC())
+		// crypto_prices: plan de CoinGecko, huella de la clave y ultimo estado
+		// del proveedor. Es lo que permite ver desde afuera por que cripto no
+		// tiene precios sin abrir los logs de Render.
+		cripto, _ := json.Marshal(priceService.Diagnostics())
+		fmt.Fprintf(w, `{"status":%q,"version":"1.0.0","environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"crypto_prices":%s}`,
+			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), cripto)
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 
