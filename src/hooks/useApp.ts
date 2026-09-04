@@ -17,6 +17,7 @@ import { useCryptoStore } from '@/stores/crypto.store';
 import { useServicesStore } from '@/stores/services.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { comoLista } from '@/stores/fusionPersistida';
 import { biometricService } from '@/services/biometric';
 import type { AppState, AppAction } from '@/types';
 import { getApiLayer } from '@/api';
@@ -47,29 +48,32 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
     // persisted; lock screen now operates on a separate PIN via lockKdf.
     passwordHash: '',
     baseCurrency: accounts.baseCurrency,
-    accounts: accounts.accounts,
-    transactions: txStore.transactions,
-    budgets: accounts.budgets,
-    sinpeContacts: sinpe.sinpeContacts,
-    sinpeHistory: sinpe.sinpeHistory,
-    savedServices: services.savedServices,
-    billHistory: services.billHistory,
-    connectedPartners: services.connectedPartners,
-    rechargeHistory: services.rechargeHistory,
+    // Cada una de estas se recorre en alguna vista. Si una porcion persistida
+    // rehidrata con otra forma, ese recorrido lanza durante el render y tumba
+    // la aplicacion entera. La guarda de verdad esta en el `merge` de cada
+    // store; esto es el cinturon por si algo llega por otro camino.
+    accounts: comoLista(accounts.accounts),
+    transactions: comoLista(txStore.transactions),
+    budgets: comoLista(accounts.budgets),
+    sinpeContacts: comoLista(sinpe.sinpeContacts),
+    sinpeHistory: comoLista(sinpe.sinpeHistory),
+    savedServices: comoLista(services.savedServices),
+    billHistory: comoLista(services.billHistory),
+    connectedPartners: comoLista(services.connectedPartners),
+    rechargeHistory: comoLista(services.rechargeHistory),
     crypto: {
-      // Default to [] so a missing/corrupt persisted crypto slice (e.g. an old
-      // localStorage blob where an array rehydrated as null/undefined) can never
-      // crash a consumer that calls .reduce/.filter/.map on it — an empty
-      // portfolio is a valid, already-handled state. Mirrors the `|| []` guard
-      // used for state.notifications in App.tsx.
-      assets: crypto.assets ?? [],
-      transactions: crypto.transactions ?? [],
-      stakingPositions: crypto.stakingPositions ?? [],
-      priceAlerts: crypto.priceAlerts ?? [],
-      favoriteAssets: crypto.favoriteAssets ?? [],
+      // Esta porcion ya tenia la guarda desde el commit 3707f01, cuando un
+      // estado de cripto corrupto tumbaba la aplicacion entera. Pasa de `?? []`
+      // a la misma comprobacion que el resto: `??` solo salva de null y
+      // undefined, y lo que hay que cubrir es que el valor tenga otra forma.
+      assets: comoLista(crypto.assets),
+      transactions: comoLista(crypto.transactions),
+      stakingPositions: comoLista(crypto.stakingPositions),
+      priceAlerts: comoLista(crypto.priceAlerts),
+      favoriteAssets: comoLista(crypto.favoriteAssets),
       defaultConvertCurrency: crypto.defaultConvertCurrency,
     },
-    notifications: notifications.notifications,
+    notifications: comoLista(notifications.notifications),
     settings: {
       darkMode: settings.darkMode,
       offlineMode: settings.offlineMode,

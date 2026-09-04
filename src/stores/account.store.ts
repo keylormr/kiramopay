@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Account, Budget } from '@/types';
 import { initialAccounts, initialBudgets } from '@/api/adapters/mock/mock-data';
+import { fusionConArrays } from './fusionPersistida';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
@@ -71,6 +72,9 @@ export const useAccountStore = create<AccountState>()(
     }),
     {
       name: 'kiramopay-accounts',
+      // Un blob viejo o a medias puede traer estos campos con otra
+      // forma; recorrerlos en el render tumba la aplicacion entera.
+      merge: fusionConArrays<AccountState>(['accounts', 'budgets']),
     },
   ),
 );
