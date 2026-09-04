@@ -614,6 +614,60 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 
 // Logout revokes the current access jti (Redis denylist for remaining TTL +
 // session row) and the refresh family.
+// ─────────────────────────────────────────────────────────────────────────
+//  Sesiones abiertas: verlas y cerrarlas, una o todas
+// ─────────────────────────────────────────────────────────────────────────
+
+// ListSessions devuelve las sesiones vivas de la persona, marcando la actual.
+func (s *Service) ListSessions(ctx context.Context, userID, currentJTI string) ([]SessionView, error) {
+	return s.authRepo.ListActiveSessions(ctx, userID, currentJTI)
+}
+
+// RevokeSession cierra UNA sesion propia. El userID viaja hasta el WHERE, asi
+// que un id de otra cuenta simplemente no encuentra nada que cerrar.
+//
+// Cerrar la sesion desde la que se pide esta permitido: es "salir de este
+// dispositivo", y el cliente ya sabe tratar un 401.
+func (s *Service) RevokeSession(ctx context.Context, userID, sessionID string, lc LoginContext) (bool, error) {
+	found, err := s.authRepo.RevokeSessionByID(ctx, userID, sessionID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, nil
+	}
+	s.auditSession(userID, "session_revoked", lc, map[string]interface{}{"session_id": sessionID})
+	return true, nil
+}
+
+// RevokeOtherSessions cierra todas las sesiones de la persona MENOS la actual:
+// es el "cerrar sesion en los demas dispositivos" de toda la vida, el que se usa
+// cuando uno sospecha que alguien mas entro.
+func (s *Service) RevokeOtherSessions(ctx context.Context, userID, currentJTI string, lc LoginContext) (int, error) {
+	n, err := s.authRepo.RevokeAllSessions(ctx, userID, currentJTI)
+	if err != nil {
+		return 0, err
+	}
+	s.auditSession(userID, "sessions_revoked_others", lc, map[string]interface{}{"count": n})
+	return n, nil
+}
+
+func (s *Service) auditSession(userID, action string, lc LoginContext, details map[string]interface{}) {
+	if s.auditLogger == nil {
+		return
+	}
+	s.auditLogger.Log(audit.Event{
+		UserID:       userID,
+		Action:       action,
+		ResourceType: "session",
+		ResourceID:   userID,
+		IPAddress:    lc.IPAddress,
+		UserAgent:    lc.UserAgent,
+		Details:      details,
+		RiskLevel:    "high",
+	})
+}
+
 func (s *Service) Logout(ctx context.Context, accessJTI string, accessRemainingTTL time.Duration) error {
 	if accessJTI == "" {
 		return nil

@@ -292,6 +292,69 @@ func (s *Service) ExpireDue(ctx context.Context, now time.Time, limit int) (int,
 	return blocked, firstErr
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Sesiones de una cuenta ajena
+// ─────────────────────────────────────────────────────────────────────────
+
+// Sessions lista los dispositivos con sesion abierta de una cuenta. No marca
+// ninguno como "actual": el administrador no es esa persona.
+func (s *Service) Sessions(ctx context.Context, targetID string) ([]auth.SessionView, error) {
+	if _, err := s.Get(ctx, targetID); err != nil {
+		return nil, err
+	}
+	sesiones, err := s.auth.ListActiveSessions(ctx, targetID, "")
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	return sesiones, nil
+}
+
+// RevokeSession cierra UN dispositivo de una cuenta ajena. found=false si esa
+// sesion no existe, ya estaba cerrada o es de otra cuenta.
+//
+// Corta ademas los sockets de esa persona. El hub identifica las conexiones por
+// usuario y no por sesion, asi que caen todas: los demas dispositivos se
+// reconectan solos con su token, que sigue siendo valido, y el que se acaba de
+// cerrar es el unico que no puede volver. Cortar de mas es aceptable; dejar al
+// dispositivo cerrado recibiendo notificaciones, no.
+func (s *Service) RevokeSession(ctx context.Context, targetID, sessionID, adminID string, ac ActorContext) (bool, error) {
+	found, err := s.auth.RevokeSessionByID(ctx, targetID, sessionID)
+	if err != nil {
+		return false, fmt.Errorf("revoke session: %w", err)
+	}
+	if !found {
+		return false, nil
+	}
+	s.audit(adminID, "admin_session_revoked", "session", targetID, "high", ac, map[string]interface{}{
+		"session_id": sessionID,
+	})
+	if s.disconnector != nil {
+		s.disconnector.DisconnectUser(targetID)
+	}
+	return true, nil
+}
+
+// RevokeAllSessions cierra TODOS los dispositivos de una cuenta y revoca sus
+// familias de refresh, sin bloquearla: la persona vuelve a entrar con su
+// contrasena. Es lo que hace falta cuando se sospecha que alguien mas tiene
+// acceso pero la cuenta en si no esta en cuestion.
+func (s *Service) RevokeAllSessions(ctx context.Context, targetID, adminID string, ac ActorContext) (int, error) {
+	if _, err := s.Get(ctx, targetID); err != nil {
+		return 0, err
+	}
+	n, err := s.auth.RevokeAllSessions(ctx, targetID, "")
+	if err != nil {
+		return 0, fmt.Errorf("revoke sessions: %w", err)
+	}
+	s.audit(adminID, "admin_sessions_revoked_all", "session", targetID, "critical", ac, map[string]interface{}{
+		"sessions_revoked": n,
+	})
+	if s.disconnector != nil {
+		s.disconnector.DisconnectUser(targetID)
+	}
+	return n, nil
+}
+
 // ClaimMarkReconcile gana el turno de repasar las marcas de bloqueo para la
 // ventana pedida. Devuelve false si otra instancia ya lo gano o si no hay Redis
 // (sin Redis no hay marcas que repasar: el bloqueo se consulta contra la BD).
