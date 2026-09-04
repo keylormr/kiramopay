@@ -20,6 +20,11 @@ name: iOS IPA
 on:
   push:
     tags: ['v*']
+    # TEMPORAL — quitar antes del merge. workflow_dispatch solo aparece cuando
+    # el workflow ya vive en la rama por defecto, asi que esta es la unica forma
+    # de probar el pipeline antes de mergearlo. El paso que publica el release
+    # esta atado a refs/tags, asi que un push de rama no publica nada.
+    branches: ['feat/ios-ipa-build']
   workflow_dispatch:
     inputs:
       export_method:
