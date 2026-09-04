@@ -40,15 +40,27 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.3.5',
-    buildNumber: 11,
-    releaseDate: '2026-09-03',
+    version: '2.3.6',
+    buildNumber: 12,
+    releaseDate: '2026-09-04',
     changes: [
-      'La pantalla "Acerca de" muestra la version que de verdad tienes instalada, y el historial de cambios vuelve a estar al dia',
-      'Apagar la verificacion en dos pasos queda registrado en el historial de seguridad de tu cuenta',
+      'Los precios de cripto ya no se inventan: si no se pueden obtener, la pantalla lo dice en vez de mostrar valores que no son',
+      'Si dejas la aplicacion abierta y sale una version nueva, te avisa y se actualiza sola',
+      'Los enlaces que abren la aplicacion desde fuera vuelven a funcionar',
+      'La aplicacion ya no se queda en blanco al encontrar datos guardados de una version anterior',
+      'Correcciones de seguridad en el manejo de saldos',
     ],
   },
   history: [
+    {
+      version: '2.3.5',
+      buildNumber: 11,
+      releaseDate: '2026-09-03',
+      changes: [
+        'La pantalla "Acerca de" muestra la version que de verdad tienes instalada, y el historial de cambios vuelve a estar al dia',
+        'Apagar la verificacion en dos pasos queda registrado en el historial de seguridad de tu cuenta',
+      ],
+    },
     {
       version: '2.3.4',
       buildNumber: 10,
