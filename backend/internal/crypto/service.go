@@ -14,10 +14,13 @@ type Service struct {
 	repo   *Repository
 	prices *PriceService
 	tx     *transaction.Service
+	// rates convierte el precio en dolares del feed a la moneda del monedero.
+	// Nil deja el servicio operando solo en dolares (ver precioEn).
+	rates RateLookup
 }
 
-func NewService(repo *Repository, prices *PriceService, tx *transaction.Service) *Service {
-	return &Service{repo: repo, prices: prices, tx: tx}
+func NewService(repo *Repository, prices *PriceService, tx *transaction.Service, rates RateLookup) *Service {
+	return &Service{repo: repo, prices: prices, tx: tx, rates: rates}
 }
 
 // toMinor converts a fiat amount (CRC/USD, 2 decimals) to integer centimos,
@@ -50,6 +53,20 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		return nil, fmt.Errorf("from_amount too small")
 	}
 
+	// El precio y la cantidad de cripto los pone el servidor. Lo que decide el
+	// cliente es cuanto de SU plata gasta, que es lo unico suyo que hay aqui.
+	precio, err := s.precioEn(ctx, req.Asset, currency)
+	if err != nil {
+		return nil, err
+	}
+	if err := comprobarDesviacion(req.Price, precio); err != nil {
+		return nil, err
+	}
+	cantidad := req.FromAmount.Div(precio)
+	if !cantidad.IsPositive() {
+		return nil, fmt.Errorf("from_amount too small for one unit of %s", req.Asset)
+	}
+
 	idem := req.IdempotencyKey
 	if idem == "" {
 		idem = "crypto:buy:" + uuid.New().String()
@@ -67,6 +84,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		CounterpartyName: req.Asset,
 		Description:      fmt.Sprintf("Buy %s", req.Asset),
 		IdempotencyKey:   idem,
+		Internal:         true,
 	}); err != nil {
 		return nil, fmt.Errorf("debit fiat: %w", err)
 	}
@@ -75,7 +93,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	//    fiat movement is already recorded in the transactions table + journal
 	//    and is caught by reconciliation (ref = idempotency key).
 	assetName := getAssetName(req.Asset)
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, assetName, req.Amount, req.Price); err != nil {
+	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, assetName, cantidad, precio); err != nil {
 		return nil, fmt.Errorf("credit crypto asset (fiat already debited, ref %s): %w", idem, err)
 	}
 
@@ -84,8 +102,8 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		UserID:   userID,
 		Type:     "buy",
 		Asset:    req.Asset,
-		Amount:   req.Amount,
-		Price:    req.Price,
+		Amount:   cantidad,
+		Price:    precio,
 		Total:    req.FromAmount,
 		Currency: currency,
 		Fee:      decimal.Zero,
@@ -102,16 +120,24 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	if !req.Amount.IsPositive() {
 		return nil, fmt.Errorf("amount must be positive")
 	}
-	if !req.ToAmount.IsPositive() {
-		return nil, fmt.Errorf("to_amount must be positive")
-	}
 	currency := req.ToCurrency
 	if currency == "" {
 		currency = "CRC"
 	}
-	fiatMinor := toMinor(req.ToAmount)
+
+	// Lo que el cliente decide es cuanto cripto vende; cuanto fiat recibe por
+	// el lo dice el servidor. Al reves era acreditarse el monto que uno quiera.
+	precio, err := s.precioEn(ctx, req.Asset, currency)
+	if err != nil {
+		return nil, err
+	}
+	if err := comprobarDesviacion(req.Price, precio); err != nil {
+		return nil, err
+	}
+	totalFiat := req.Amount.Mul(precio)
+	fiatMinor := toMinor(totalFiat)
 	if fiatMinor <= 0 {
-		return nil, fmt.Errorf("to_amount too small")
+		return nil, fmt.Errorf("amount too small to be worth one centimo")
 	}
 
 	// Check balance
@@ -141,6 +167,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		CounterpartyName: req.Asset,
 		Description:      fmt.Sprintf("Sell %s", req.Asset),
 		IdempotencyKey:   idem,
+		Internal:         true,
 	}); err != nil {
 		if cerr := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount, decimal.Zero); cerr != nil {
 			return nil, fmt.Errorf("credit fiat failed (%v) AND crypto compensation failed (%v) ref %s", err, cerr, idem)
@@ -154,8 +181,8 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Type:     "sell",
 		Asset:    req.Asset,
 		Amount:   req.Amount,
-		Price:    req.Price,
-		Total:    req.ToAmount,
+		Price:    precio,
+		Total:    totalFiat,
 		Currency: currency,
 		Fee:      decimal.Zero,
 		Status:   "completed",
@@ -178,12 +205,28 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		return nil, fmt.Errorf("insufficient %s balance", req.FromAsset)
 	}
 
+	// Cuanto se recibe del otro activo lo decide la relacion entre los dos
+	// precios de mercado, no el cliente: si no, convertir era acreditarse el
+	// activo que uno quisiera en la cantidad que quisiera.
+	precioOrigen, err := s.precioEn(ctx, req.FromAsset, "USD")
+	if err != nil {
+		return nil, err
+	}
+	precioDestino, err := s.precioEn(ctx, req.ToAsset, "USD")
+	if err != nil {
+		return nil, err
+	}
+	cantidadDestino := req.FromAmount.Mul(precioOrigen).Div(precioDestino)
+	if !cantidadDestino.IsPositive() {
+		return nil, fmt.Errorf("from_amount too small to convert into %s", req.ToAsset)
+	}
+
 	// Deduct from, add to
 	toName := getAssetName(req.ToAsset)
 	if err := s.repo.UpsertAsset(ctx, userID, req.FromAsset, fromAsset.Name, req.FromAmount.Neg(), decimal.Zero); err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpsertAsset(ctx, userID, req.ToAsset, toName, req.ToAmount, req.Price); err != nil {
+	if err := s.repo.UpsertAsset(ctx, userID, req.ToAsset, toName, cantidadDestino, precioDestino); err != nil {
 		return nil, err
 	}
 
@@ -193,8 +236,8 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		Type:     "convert",
 		Asset:    fmt.Sprintf("%s→%s", req.FromAsset, req.ToAsset),
 		Amount:   req.FromAmount,
-		Price:    req.Price,
-		Total:    req.ToAmount,
+		Price:    precioDestino,
+		Total:    cantidadDestino,
 		Currency: req.ToAsset,
 		Status:   "completed",
 	}

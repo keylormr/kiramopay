@@ -2,6 +2,7 @@ package transaction_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -31,13 +32,57 @@ func TestCreateTransaction_Deposit(t *testing.T) {
 	svc, userID := setupTxService(t)
 	ctx := context.Background()
 	tx, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 100000000, Currency: "CRC",
+		Type: "deposit", Amount: 100000000, Currency: "CRC", Internal: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateTransaction: %v", err)
 	}
 	if tx.ID == "" || tx.Type != "deposit" || tx.Amount != 100000000 {
 		t.Fatalf("unexpected tx %+v", tx)
+	}
+}
+
+// El agujero que esto cierra: cualquiera con sesion podia pedir por HTTP un
+// tipo ENTRANTE -"deposit"- y acreditarse el saldo que quisiera. Todos los
+// controles (saldo, limite diario, MFA) viven en la rama de salida, asi que un
+// tipo entrante los saltaba enteros y el credito entraba al libro mayor.
+func TestCreateTransaction_UnClienteNoPuedeAcreditarseDinero(t *testing.T) {
+	svc, userID := setupTxService(t)
+	ctx := context.Background()
+
+	// Sin Internal, que es como llega cualquier peticion HTTP: el decodificador
+	// de JSON no puede poner ese campo.
+	_, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+		Type: "deposit", Amount: 500_000_000, Currency: "CRC",
+	})
+	if !errors.Is(err, transaction.ErrCreditNotAllowed) {
+		t.Fatalf("deposito pedido por un cliente = %v, esperaba ErrCreditNotAllowed", err)
+	}
+
+	// Y ningun tipo entrante pasa, se llame como se llame.
+	for _, tipo := range []string{"deposit", "p2p_receive", "qr_receive", "refund", "crypto_sell", "savings_withdraw", "inventado"} {
+		if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+			Type: tipo, Amount: 1_000_000, Currency: "CRC",
+		}); !errors.Is(err, transaction.ErrCreditNotAllowed) {
+			t.Fatalf("tipo %q = %v, esperaba ErrCreditNotAllowed", tipo, err)
+		}
+	}
+}
+
+// La lista blanca del endpoint: solo lo que saca dinero del monedero propio,
+// que es lo que pasa por saldo, limite y MFA.
+func TestIsUserInitiable_SoloLoQueSale(t *testing.T) {
+	permitidos := []string{"sinpe_send", "qr_payment", "bill_payment", "recharge", "withdrawal", "p2p_send", "crypto_buy"}
+	for _, tipo := range permitidos {
+		if !transaction.IsUserInitiable(tipo) {
+			t.Fatalf("%q deberia poder pedirlo una persona", tipo)
+		}
+	}
+	prohibidos := []string{"deposit", "p2p_receive", "qr_receive", "refund", "crypto_sell", "savings_deposit", "savings_withdraw", "merchant_withdrawal", "", "cualquier_cosa"}
+	for _, tipo := range prohibidos {
+		if transaction.IsUserInitiable(tipo) {
+			t.Fatalf("%q NO deberia poder pedirlo una persona", tipo)
+		}
 	}
 }
 
@@ -85,7 +130,7 @@ func TestGetTransaction_Success(t *testing.T) {
 	svc, userID := setupTxService(t)
 	ctx := context.Background()
 	created, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type: "deposit", Amount: 50000000, Currency: "CRC",
+		Type: "deposit", Amount: 50000000, Currency: "CRC", Internal: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateTransaction: %v", err)

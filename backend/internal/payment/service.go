@@ -36,6 +36,7 @@ func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillReques
 		CounterpartyType: "service",
 		CounterpartyName: providerName,
 		Description:      fmt.Sprintf("Pago %s - Cliente %s", providerName, req.ClientID),
+		Internal:         true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process payment: %w", err)
@@ -87,6 +88,7 @@ func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequ
 		CounterpartyName:  operatorName,
 		CounterpartyPhone: req.Phone,
 		Description:       fmt.Sprintf("Recarga %s %s", operatorName, req.Phone),
+		Internal:          true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process recharge: %w", err)

@@ -3,6 +3,7 @@ package crypto_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -58,16 +59,36 @@ func startPriceStub(t *testing.T) *httptest.Server {
 
 func setupCryptoService(t *testing.T) (*crypto.Service, string) {
 	t.Helper()
+	return montarCripto(t, startPriceStub(t).URL)
+}
+
+// setupCryptoServiceSinPrecios apunta el feed a un servidor que no devuelve
+// nada, que es como se ve un proveedor caido o rechazando la clave.
+func setupCryptoServiceSinPrecios(t *testing.T) (*crypto.Service, string) {
+	t.Helper()
+	vacio := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	}))
+	t.Cleanup(vacio.Close)
+	return montarCripto(t, vacio.URL)
+}
+
+func montarCripto(t *testing.T, urlPrecios string) (*crypto.Service, string) {
+	t.Helper()
 	pool := testutil.TestDB(t)
 
 	repo := crypto.NewRepository(pool)
 	priceService := crypto.NewPriceService()
-	priceService.SetBaseURL(startPriceStub(t).URL)
+	priceService.SetBaseURL(urlPrecios)
 	txRepo := transaction.NewRepository(pool)
 	walletRepo := wallet.NewRepository(pool)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txService := transaction.NewService(txRepo, walletRepo, l, nil)
-	svc := crypto.NewService(repo, priceService, txService)
+	// Tipo de cambio fijo: las pruebas cotizan en colones y necesitan el mismo
+	// numero siempre para poder afirmar cantidades exactas.
+	svc := crypto.NewService(repo, priceService, txService,
+		func(context.Context, string, string) (float64, error) { return 500, nil })
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
@@ -112,10 +133,11 @@ func TestBuy_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
+	// El cliente solo dice cuanta plata gasta. La cantidad de cripto y el precio
+	// los pone el servidor: 1000 USD del stub por 500 de tipo de cambio son
+	// 500.000 CRC la unidad, asi que 50.000 CRC compran 0,1.
 	tx, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Amount:       d(0.001),
-		Price:        d(50000000),
 		FromCurrency: "CRC",
 		FromAmount:   d(50000),
 	})
@@ -128,17 +150,83 @@ func TestBuy_Success(t *testing.T) {
 	if tx.Asset != "BTC" {
 		t.Fatalf("expected asset BTC, got %s", tx.Asset)
 	}
+	if !tx.Price.Equal(d(500000)) {
+		t.Fatalf("precio = %s, esperaba 500000 (el del servidor)", tx.Price)
+	}
+	if !tx.Amount.Equal(d(0.1)) {
+		t.Fatalf("cantidad = %s, esperaba 0.1", tx.Amount)
+	}
+}
+
+// El corazon del arreglo: lo que el cliente diga de cantidad y precio da igual.
+// Antes, "debitame 50.000 y acreditame 1000 BTC" se ejecutaba tal cual.
+func TestBuy_IgnoraLaCantidadYElPrecioDelCliente(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	ctx := context.Background()
+
+	tx, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset:        "BTC",
+		Amount:       d(1000),   // absurdo, a proposito
+		Price:        d(500000), // el del servidor, para pasar la guarda de desvio
+		FromCurrency: "CRC",
+		FromAmount:   d(50000),
+	})
+	if err != nil {
+		t.Fatalf("Buy() error: %v", err)
+	}
+	if !tx.Amount.Equal(d(0.1)) {
+		t.Fatalf("se acredito %s BTC: la cantidad del cliente mando", tx.Amount)
+	}
+
+	activos, err := svc.GetAssets(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetAssets() error: %v", err)
+	}
+	for _, a := range activos {
+		if a.Symbol == "BTC" && !a.Balance.Equal(d(0.1)) {
+			t.Fatalf("saldo BTC = %s, esperaba 0.1", a.Balance)
+		}
+	}
+}
+
+// Un precio muy lejos del real se rechaza en vez de ejecutarse: protege a la
+// persona de un cambio brusco y frena una peticion armada a mano.
+func TestBuy_RechazaUnPrecioQueNoEsElDelMercado(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+
+	_, err := svc.Buy(context.Background(), userID, &crypto.BuyRequest{
+		Asset:        "BTC",
+		Price:        d(1), // el mercado dice 500000
+		FromCurrency: "CRC",
+		FromAmount:   d(50000),
+	})
+	if !errors.Is(err, crypto.ErrPrecioMovido) {
+		t.Fatalf("Buy con precio inventado = %v, esperaba ErrPrecioMovido", err)
+	}
+}
+
+// Sin precio no se opera. Es la consecuencia deliberada: cotizar sin precio es
+// justamente lo que se esta corrigiendo.
+func TestBuy_SinPrecioNoOpera(t *testing.T) {
+	svc, userID := setupCryptoServiceSinPrecios(t)
+
+	_, err := svc.Buy(context.Background(), userID, &crypto.BuyRequest{
+		Asset:        "BTC",
+		FromCurrency: "CRC",
+		FromAmount:   d(50000),
+	})
+	if !errors.Is(err, crypto.ErrSinPrecio) {
+		t.Fatalf("Buy sin precio = %v, esperaba ErrSinPrecio", err)
+	}
 }
 
 func TestSell_Success(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
-	// Buy first
+	// 3.000.000 CRC a 500.000 la unidad son 6 ETH.
 	_, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "ETH",
-		Amount:       d(1.0),
-		Price:        d(3000000),
 		FromCurrency: "CRC",
 		FromAmount:   d(3000000),
 	})
@@ -146,19 +234,21 @@ func TestSell_Success(t *testing.T) {
 		t.Fatalf("Buy() error: %v", err)
 	}
 
-	// Sell
+	// Vender 0,5 devuelve 250.000 CRC, lo diga el cliente o no.
 	tx, err := svc.Sell(ctx, userID, &crypto.SellRequest{
 		Asset:      "ETH",
 		Amount:     d(0.5),
-		Price:      d(3000000),
 		ToCurrency: "CRC",
-		ToAmount:   d(1500000),
+		ToAmount:   d(999999999), // el cliente pide una fortuna: se ignora
 	})
 	if err != nil {
 		t.Fatalf("Sell() error: %v", err)
 	}
 	if tx.Type != "sell" {
 		t.Fatalf("expected type sell, got %s", tx.Type)
+	}
+	if !tx.Total.Equal(d(250000)) {
+		t.Fatalf("acreditado = %s, esperaba 250000: el monto del cliente mando", tx.Total)
 	}
 }
 
@@ -181,8 +271,6 @@ func TestGetAssets_AfterBuy(t *testing.T) {
 
 	_, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Amount:       d(0.5),
-		Price:        d(50000000),
 		FromCurrency: "CRC",
 		FromAmount:   d(25000000),
 	})
