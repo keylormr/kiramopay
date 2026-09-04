@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -325,9 +326,13 @@ func TestAutoDetectPlan_ClaveDemoEnVariablePro(t *testing.T) {
 		t.Fatalf("tras la deteccion la clave debe viajar como Demo, viajo demo=%q pro=%q", got[0], got[1])
 	}
 	d := ps.Diagnostics()
-	// La huella son los ultimos 4 caracteres: la clave completa nunca sale.
-	if d.Plan != PlanDemo || !strings.HasSuffix(d.Key, "1234") || strings.Contains(d.Key, "demo") {
-		t.Fatalf("diagnostico %+v: esperaba plan demo y solo la huella de la clave", d)
+	if d.Plan != PlanDemo {
+		t.Fatalf("diagnostico %+v: esperaba plan demo", d)
+	}
+	// /health es publico: nada del diagnostico puede contener la clave, ni
+	// entera ni en pedazos.
+	if strings.Contains(fmt.Sprintf("%+v", d), "1234") {
+		t.Fatalf("el diagnostico %+v contiene parte de la clave", d)
 	}
 }
 
@@ -416,5 +421,60 @@ func TestDiagnostics_RegistraElUltimoEstadoDelProveedor(t *testing.T) {
 	}
 	if d := ps.Diagnostics(); d.LastStatus != http.StatusOK || d.LastSuccessAt == "" || d.CachedAssets != 1 {
 		t.Fatalf("tras un 200: %+v", d)
+	}
+}
+
+// El mapa que sale de GetPrices no puede ser el mapa interno: los caminos
+// degradados devolvian ps.cache vivo y el llamador (el hub del WebSocket y el
+// handler HTTP, dos goroutines sobre la misma instancia) lo serializaba
+// mientras fetchFromAPI escribia. Iterar y escribir un mapa a la vez es un
+// throw del runtime que mata el proceso entero, no un panic que se atrape.
+//
+// La prueba no persigue la carrera (seria intermitente y aqui no hay -race):
+// fija el invariante que la evita, escribiendo en la cache DESPUES de recibir
+// el mapa. Con el codigo viejo el mapa devuelto cambiaba con ella.
+func TestGetPrices_NoDevuelveElMapaInterno(t *testing.T) {
+	casos := []struct {
+		nombre string
+		montar func(ps *PriceService, srv *httptest.Server)
+	}{
+		{"breaker abierto", func(ps *PriceService, _ *httptest.Server) {
+			ps.mu.Lock()
+			ps.circuitOpenUntil = time.Now().Add(time.Minute)
+			ps.mu.Unlock()
+		}},
+		{"proveedor en 500", func(ps *PriceService, srv *httptest.Server) {
+			ps.SetBaseURL(srv.URL)
+			ps.cacheTTL = 0
+		}},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer srv.Close()
+
+			ps := NewPriceService()
+			ps.mu.Lock()
+			ps.cache["BTC"] = &PriceData{Symbol: "BTC", Price: 65000}
+			ps.mu.Unlock()
+			c.montar(ps, srv)
+
+			devuelto, err := ps.GetPrices(context.Background(), []string{"BTC"})
+			if err != nil {
+				t.Fatalf("GetPrices: %v", err)
+			}
+			antes := len(devuelto)
+
+			// Escritura como la de fetchFromAPI tras un exito.
+			ps.mu.Lock()
+			ps.cache["ETH"] = &PriceData{Symbol: "ETH", Price: 3000}
+			ps.mu.Unlock()
+
+			if len(devuelto) != antes {
+				t.Fatalf("el mapa devuelto cambio de %d a %d entradas: es el mapa interno, no una copia", antes, len(devuelto))
+			}
+		})
 	}
 }

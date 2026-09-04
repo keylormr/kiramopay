@@ -20,26 +20,16 @@ const (
 	PlanInvalid = "invalid"
 )
 
-// Diagnostics es la foto del servicio de precios que sale en /health. Nunca
-// lleva la clave completa: solo sus ultimos 4 caracteres para reconocerla.
+// Diagnostics es la foto del servicio de precios que sale en /health, que es
+// PUBLICO y sin autenticacion: nada de aqui puede revelar la clave, ni entera
+// ni en pedazos. El plan y el ultimo status alcanzan para el diagnostico.
 type Diagnostics struct {
 	Plan          string `json:"plan"`
-	Key           string `json:"key"`
 	LastStatus    int    `json:"last_status"`
 	LastError     string `json:"last_error"`
 	LastSuccessAt string `json:"last_success_at"`
 	CachedAssets  int    `json:"cached_assets"`
 	BreakerOpen   bool   `json:"breaker_open"`
-}
-
-func huella(key string) string {
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 4 {
-		return "…" + key
-	}
-	return "…" + key[len(key)-4:]
 }
 
 func (ps *PriceService) planConfigurado() string {
@@ -63,7 +53,6 @@ func (ps *PriceService) Diagnostics() Diagnostics {
 	}
 	d := Diagnostics{
 		Plan:         plan,
-		Key:          huella(ps.apiKey),
 		LastStatus:   ps.lastStatus,
 		LastError:    ps.lastError,
 		CachedAssets: len(ps.cache),
@@ -157,7 +146,7 @@ func (ps *PriceService) AutoDetectPlan(ctx context.Context) (string, int, error)
 	ps.lastStatus = ultimo
 	ps.lastError = "clave rechazada por CoinGecko en los dos planes"
 	ps.mu.Unlock()
-	slog.Error("clave de CoinGecko rechazada en el host Demo y en el Pro: revisar el valor en Render", "status", ultimo, "key", huella(key))
+	slog.Error("clave de CoinGecko rechazada en el host Demo y en el Pro: revisar el valor en Render", "status", ultimo, "largo_de_la_clave", len(key))
 	return PlanInvalid, ultimo, nil
 }
 

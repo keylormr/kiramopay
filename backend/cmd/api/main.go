@@ -214,10 +214,14 @@ func main() {
 	// cada llamada y nadie ve precios): se comprueba la clave contra /ping y,
 	// si el otro plan la acepta, el servicio cambia solo. El resultado sale en
 	// el log y en /health ("crypto_prices"), para no tener que adivinar.
-	{
+	// En una goroutine: son dos llamadas de red a un tercero y no pueden
+	// demorar la apertura del puerto. Cripto sin precios unos segundos mas es
+	// preferible a un arranque que el health check del proveedor pueda tomar
+	// por caido. El servicio ya es seguro para uso concurrente.
+	go func() {
 		probeCtx, cancelProbe := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancelProbe()
 		plan, st, err := priceService.AutoDetectPlan(probeCtx)
-		cancelProbe()
 		switch {
 		case err != nil:
 			log.Printf("Warning: no se pudo comprobar la clave de CoinGecko (%v); se usa la configuracion tal cual", err)
@@ -226,7 +230,7 @@ func main() {
 		default:
 			log.Printf("CoinGecko plan=%s status=%d", plan, st)
 		}
-	}
+	}()
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 

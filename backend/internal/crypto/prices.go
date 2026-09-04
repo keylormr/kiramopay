@@ -115,6 +115,26 @@ var coinGeckoIDs = map[string]string{
 	"ATOM":  "cosmos",
 }
 
+// copiaDeCache devuelve una COPIA del mapa de precios. Los caminos degradados
+// devolvian ps.cache, el mapa vivo: el `defer RUnlock` suelta el lock al
+// retornar, asi que el llamador (el hub del WebSocket y el handler HTTP, dos
+// goroutines sobre la MISMA instancia) lo serializaba mientras fetchFromAPI
+// escribia en el. Iterar y escribir un mapa a la vez no es un panic que el
+// Recoverer atrape: es un throw del runtime que mata el proceso entero, toda
+// la API y no solo cripto. Reproducido.
+//
+// Los *PriceData se comparten a proposito: se reemplazan enteros en cada
+// escritura, nunca se mutan en sitio.
+func (ps *PriceService) copiaDeCache() map[string]*PriceData {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	copia := make(map[string]*PriceData, len(ps.cache))
+	for k, v := range ps.cache {
+		copia[k] = v
+	}
+	return copia
+}
+
 func (ps *PriceService) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
 	ps.mu.RLock()
 	if time.Since(ps.lastFetch) < ps.cacheTTL && len(ps.cache) > 0 {
@@ -141,9 +161,7 @@ func (ps *PriceService) GetPrices(ctx context.Context, symbols []string) (map[st
 		// breaker abierto esto inundaba el log (un WARN cada 5s por minutos).
 		// La APERTURA del breaker si se loguea como Warn, una sola vez.
 		slog.Debug("circuit breaker open, returning cached prices")
-		ps.mu.RLock()
-		defer ps.mu.RUnlock()
-		return ps.cache, nil
+		return ps.copiaDeCache(), nil
 	}
 
 	return ps.fetchFromAPI(ctx, symbols)
@@ -179,9 +197,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	if err != nil {
 		slog.Warn("price fetch: building request failed", "err", err)
 		ps.recordFailure()
-		ps.mu.RLock()
-		defer ps.mu.RUnlock()
-		return ps.cache, nil
+		return ps.copiaDeCache(), nil
 	}
 
 	if apiKey != "" {
@@ -200,9 +216,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		slog.Warn("price fetch: request failed", "host", base, "err", err)
 		ps.notarResultado(0, err.Error())
 		ps.recordFailure()
-		ps.mu.RLock()
-		defer ps.mu.RUnlock()
-		return ps.cache, nil
+		return ps.copiaDeCache(), nil
 	}
 	defer resp.Body.Close()
 
@@ -221,9 +235,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		}
 		ps.notarResultado(resp.StatusCode, "")
 		ps.recordFailure()
-		ps.mu.RLock()
-		defer ps.mu.RUnlock()
-		return ps.cache, nil
+		return ps.copiaDeCache(), nil
 	}
 
 	var data map[string]struct {
@@ -236,7 +248,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		slog.Warn("price fetch: decoding response failed", "host", base, "err", err)
 		ps.recordFailure()
-		return ps.cache, nil
+		return ps.copiaDeCache(), nil
 	}
 
 	result := make(map[string]*PriceData)
@@ -260,6 +272,10 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	ps.lastSuccess = ps.lastFetch
 	ps.lastStatus = http.StatusOK
 	ps.lastError = ""
+	// Una peticion que funciona desmiente el veredicto del sondeo del arranque:
+	// sin esto, arreglar la clave en Render dejaba /health diciendo "invalid"
+	// para siempre, aunque los precios ya estuvieran llegando.
+	ps.planInvalido = false
 	ps.consecutiveFailures = 0 // Reset on success
 	return result, nil
 }

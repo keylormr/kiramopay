@@ -2330,6 +2330,11 @@ components:
 
     HealthResponse:
       type: object
+      # required + additionalProperties: sin ellos el test de contrato validaba
+      # cualquier cuerpo que no contradijera un tipo, asi que un campo que el
+      # handler dejara de emitir (o uno nuevo sin documentar) pasaba en verde.
+      additionalProperties: false
+      required: [status, version, environment, services, websocket_clients, last_drift_crc, crypto_prices]
       properties:
         status:
           type: string

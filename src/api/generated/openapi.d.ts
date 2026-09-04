@@ -5011,24 +5011,24 @@ export interface components {
         };
         HealthResponse: {
             /** @enum {string} */
-            status?: "ok" | "degraded";
+            status: "ok" | "degraded";
             /**
              * @description Repository version this binary was built from (same value as package.json and the Android versionName). Use it to confirm which build a deploy is actually serving.
              * @example 2.3.5
              */
-            version?: string;
-            environment?: string;
-            services?: {
+            version: string;
+            environment: string;
+            services: {
                 /** @enum {string} */
                 database?: "ok" | "error";
                 /** @enum {string} */
                 redis?: "ok" | "error";
             };
-            websocket_clients?: number;
+            websocket_clients: number;
             /** @description Residual cache-vs-journal drift (minor units) from the last reconcile. */
-            last_drift_crc?: number;
+            last_drift_crc: number;
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
-            crypto_prices?: {
+            crypto_prices: {
                 /** @enum {string} */
                 plan?: "none" | "demo" | "pro" | "invalid";
                 key?: string;
