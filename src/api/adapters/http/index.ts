@@ -25,6 +25,7 @@ import { HttpAssistantRepository } from './assistant.http';
 import { HttpSavingsRepository } from './savings.http';
 import { HttpKycRepository } from './kyc.http';
 import { HttpAdminRepository } from './admin.http';
+import { HttpPlansRepository } from './plans.http';
 
 export function createHttpApiLayer(baseUrl: string): ApiLayer {
   const client = new HttpClient(baseUrl);
@@ -56,5 +57,6 @@ export function createHttpApiLayer(baseUrl: string): ApiLayer {
     savings: new HttpSavingsRepository(client),
     kyc: new HttpKycRepository(client),
     admin: new HttpAdminRepository(client),
+    plans: new HttpPlansRepository(client),
   };
 }

@@ -23,9 +23,10 @@ interface ProfileViewProps {
   onOpenBusiness?: () => void;
   onOpenAdminMerchants?: () => void;
   onOpenAdminUsers?: () => void;
+  onOpenPlans?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenPlans }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -365,6 +366,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('transaction_limits')}</p>
               <p className="text-sm text-gray-500">{t('daily_limit')}: {formatCurrency(dailyLimit)}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
+
+          <button
+            onClick={() => onOpenPlans?.()}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-sky-100 dark:bg-sky-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Star size={18} className="text-sky-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('plans_menu')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('plans_menu_desc')}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>

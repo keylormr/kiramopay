@@ -44,6 +44,7 @@ import (
 	"github.com/kiramopay/backend/internal/observability"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/payout"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
 	"github.com/kiramopay/backend/internal/recurring"
@@ -398,6 +399,9 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 	savingsService := savings.NewService(savingsRepo, ledgerEngine, txService)
+	// Interes en los planes de pago. Registra la intencion, no cobra: hoy no
+	// hay pasarela ni suscripcion en la aplicacion.
+	plansService := plans.NewService(pool, &plans.Options{AuditLogger: auditLogger})
 
 	// Conversational assistant. The LLM stays a true nil interface when no
 	// provider key is set, so the service reports itself unavailable instead of
@@ -476,6 +480,7 @@ func main() {
 	budgetHandler := budget.NewHandler(budgetService)
 	recurringHandler := recurring.NewHandler(recurringService)
 	savingsHandler := savings.NewHandler(savingsService)
+	plansHandler := plans.NewHandler(plansService)
 
 	// ── WebSocket + price broadcaster ────────────────────────────────────
 	ws.SetAllowedOrigins(cfg.CORS.Origins) // Origin allowlist for the WS handshake (CSWSH defense)
@@ -925,6 +930,10 @@ func main() {
 			r.Post("/savings/goals/{id}/deposit", savingsHandler.Deposit)
 			r.Post("/savings/goals/{id}/withdraw", savingsHandler.Withdraw)
 
+			// Interes en un plan de pago. NO es una suscripcion: no hay cobro
+			// detras, solo queda anotado quien lo quiere.
+			r.Post("/plans/interest", plansHandler.RegisterInterest)
+
 			// ─────────────────────────────────────────────────────────
 			// Admin-only routes — gated on role = 'admin'.
 			// ─────────────────────────────────────────────────────────
@@ -977,6 +986,9 @@ func main() {
 					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
 					r.Post("/admin/users/{id}/expiry", adminUsersHandler.SetExpiry)
 				})
+
+				// Lista de espera de los planes de pago, con la PII enmascarada.
+				r.Get("/admin/plans/interest", plansHandler.List)
 			})
 		})
 	})
