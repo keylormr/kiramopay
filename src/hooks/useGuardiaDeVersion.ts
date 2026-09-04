@@ -7,17 +7,17 @@ import { Capacitor } from '@capacitor/core';
 // despliega una version nueva, Vercel cambia los hashes de los chunks y borra
 // los viejos, asi que esa pestana pide archivos que ya no existen en cuanto
 // navega a una vista diferida. `lazyConRecarga` cubre el caso recargando una
-// vez, pero esa recarga no siempre trae la version nueva: **Cloudflare cachea
-// el HTML de kiramopay.com**, asi que el navegador puede recibir otra vez el
-// index.html viejo, apuntando a los mismos chunks muertos. Al segundo intento
-// la guardia de esa utilidad ya no recarga y el error sube a la pantalla de
-// "Algo salio mal", que es lo que le paso a una persona en produccion.
+// vez, pero solo cuando el fallo ya ocurrio y solo si la recarga trae de verdad
+// la version nueva.
 //
-// Esto detecta la situacion antes de que reviente: pregunta cual es la version
-// desplegada y, si no coincide con la que se esta ejecutando, la aplicacion se
-// recarga sola. La consulta esquiva cualquier cache intermedia (no-store mas
-// un parametro irrepetible) porque de nada sirve preguntar y que respondan con
-// lo mismo que ya tenemos.
+// Esto lo detecta ANTES de que reviente: pregunta cual es la version desplegada
+// y, si no coincide con la que se esta ejecutando, la aplicacion se recarga
+// sola. La consulta esquiva cualquier cache (no-store mas un parametro
+// irrepetible) porque de nada sirve preguntar y que respondan con lo mismo que
+// ya tenemos.
+//
+// Limite conocido, y es inherente: esto solo protege desde la version que lo
+// incluye en adelante. Un bundle anterior no sabe que /version.json existe.
 
 /** Cada cuanto se vuelve a preguntar mientras la pestana esta abierta. */
 const INTERVALO_MS = 15 * 60 * 1000;

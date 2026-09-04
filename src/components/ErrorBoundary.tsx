@@ -66,11 +66,11 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     // Un import dinamico que falla no es un fallo de la aplicacion: es que
     // este bundle pide un archivo que el despliegue actual ya borro.
     // lazyConRecarga ya intento una recarga simple; si el error llego hasta
-    // aqui es que esa recarga devolvio lo mismo, cosa que pasa porque el HTML
-    // de kiramopay.com se sirve por una cache intermedia. Esta segunda vuelta
-    // es la fuerte: tira el service worker y sus caches, y vuelve a pedir la
-    // pagina con un parametro nuevo. Una sola vez por sesion, para no girar en
-    // vano si de verdad no hay red.
+    // aqui es que esa recarga no basto. Esta segunda vuelta es la fuerte: tira
+    // el service worker y sus caches -- que son los que pueden estar sirviendo
+    // un index.html viejo cuando la red falla -- y vuelve a pedir la pagina con
+    // un parametro nuevo. Una sola vez por sesion, para no girar en vano si de
+    // verdad no hay red.
     if (esErrorDeChunkViejo(error) && !yaSeRecargoFuerte()) {
       marcarRecargaFuerte();
       void recargarSaltandoCaches();
