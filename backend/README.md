@@ -85,7 +85,9 @@ Ver `.env.example` para todas las variables. Las mas importantes:
 | `VAPID_PRIVATE_KEY` | *(vacio)* | Clave privada VAPID para push notifications |
 | `EXCHANGE_RATE_API_KEY` | *(vacio)* | API key de exchangerate-api.com |
 | `EXCHANGE_RATE_INTERVAL` | `15m` | Intervalo de actualizacion de tasas |
-| `COINGECKO_API_KEY` | *(vacio)* | API key Pro de CoinGecko (opcional) |
+| `COINGECKO_API_KEY` | *(vacio)* | API key **Demo** (gratuita) de CoinGecko: host publico con `x-cg-demo-api-key`. Sin clave, el tier compartido limita por IP y cripto queda sin precios |
+| `COINGECKO_PRO_API_KEY` | *(vacio)* | API key **Pro** (de pago) de CoinGecko: host `pro-api`. Manda sobre la Demo. Al arrancar se comprueba la clave contra `/ping` y, si esta en la variable equivocada, el servicio cambia de plan solo y lo dice en el log y en `/health` (`crypto_prices`) |
+| `GITHUB_TOKEN` | *(vacio)* | Token de solo lectura para la API de GitHub que alimenta `/app/version`. Sin el, la API limita a 60 peticiones/hora por IP y la de Render es compartida; el endpoint igual funciona por la redireccion de releases/latest, que no tiene ese limite |
 | `REFERRAL_BONUS_POINTS` | `500` | Puntos de lealtad que recibe quien invita por cada registro con su codigo (0 apaga el pago, conserva la atribucion) |
 | `JWT_SECRET` | `dev-secret-...` | Secreto para firmar JWT (cambiar en produccion) |
 | `JWT_ACCESS_MINUTES` | `15` | Duracion del access token en minutos |

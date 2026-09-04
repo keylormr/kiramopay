@@ -63,7 +63,39 @@ type CreateTransactionRequest struct {
 	CounterpartyPhone string `json:"counterparty_phone,omitempty"`
 	Description       string `json:"description,omitempty"`
 	IdempotencyKey    string `json:"idempotency_key,omitempty"`
+
+	// Internal marca las llamadas que hace otro servicio del backend, no una
+	// persona por HTTP. Lleva `json:"-"` A PROPOSITO: el decodificador la
+	// ignora, asi que un cliente no puede activarla mandandola en el cuerpo.
+	//
+	// Solo con ella se admite un tipo ENTRANTE, que es el que acredita dinero
+	// desde una cuenta de sistema. Un usuario puede pedir mover SU plata hacia
+	// afuera; que entre lo decide el servicio que sabe por que entra (vender
+	// cripto, un reembolso), nunca el cliente.
+	Internal bool `json:"-"`
 }
+
+// userInitiableTypes es lo UNICO que se admite por POST /transactions. Son
+// todos salientes: sacan dinero del monedero de quien lo pide y por eso pasan
+// por saldo, limite diario y MFA.
+//
+// Es una lista blanca cerrada y no una lista negra a proposito: la version
+// anterior aceptaba cualquier cadena y decidia por descarte, asi que un tipo no
+// contemplado -"deposit", por ejemplo- caia en la rama de credito y acreditaba
+// dinero real sin pasar por ningun control. Agregar un tipo nuevo al sistema no
+// puede volver a abrir esa puerta por olvido.
+var userInitiableTypes = map[string]bool{
+	TypeSinpeSend:   true,
+	TypeQRPayment:   true,
+	TypeBillPayment: true,
+	TypeRecharge:    true,
+	TypeWithdrawal:  true,
+	TypeP2PSend:     true,
+	TypeCryptoBuy:   true,
+}
+
+// IsUserInitiable responde si una persona puede pedir este tipo por HTTP.
+func IsUserInitiable(txType string) bool { return userInitiableTypes[txType] }
 
 type ListTransactionsRequest struct {
 	Limit    int    `json:"limit"`

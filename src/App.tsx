@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
 import { useActualizacion } from './hooks/useActualizacion';
+import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -13,6 +14,8 @@ import { LanguageSheet } from './components/LanguageSheet';
 import { OverlayShell } from './components/OverlayShell';
 import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AppDesactualizada } from './components/AppDesactualizada';
+import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
 import type { LucideIcon } from 'lucide-react';
@@ -53,6 +56,7 @@ const EscrowView = lazyConRecarga(() => import('./views/escrow/EscrowView').then
 const PayoutView = lazyConRecarga(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
 const AdminMerchantsView = lazyConRecarga(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
 const AdminUsersView = lazyConRecarga(() => import('./views/admin/AdminUsersView').then(m => ({ default: m.AdminUsersView })));
+const PlansView = lazyConRecarga(() => import('./views/plans/PlansView').then(m => ({ default: m.PlansView })));
 const AssistantView = lazyConRecarga(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
 const MarketplaceView = lazyConRecarga(() => import('./views/marketplace/MarketplaceView').then(m => ({ default: m.MarketplaceView })));
 const CardsView = lazyConRecarga(() => import('./views/cards/CardsView').then(m => ({ default: m.CardsView })));
@@ -251,7 +255,12 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'assistant' | 'marketplace' | 'cards' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'plans' | 'assistant' | 'marketplace' | 'cards' | null;
+
+// Keyed by TabId on purpose: adding a tab without deciding whether deep links
+// may reach it becomes a compile error instead of a silently dead route.
+const TAB_IDS: Record<TabId, true> = { home: true, sinpe: true, crypto: true, services: true, profile: true };
+const isTabId = (value: string): value is TabId => Object.prototype.hasOwnProperty.call(TAB_IDS, value);
 
 // Main Layout Component
 const Layout = () => {
@@ -374,6 +383,22 @@ const Layout = () => {
     };
   }, [overlayView, activeTab]);
 
+  // Apply deep link targets. The listener itself lives above the auth gate, so
+  // this only subscribes for the resolved destination; a target that resolved
+  // before this shell mounted (link tapped on the login screen) is replayed on
+  // subscribe. Any overlay is dismissed first, otherwise the new tab would
+  // render behind a full-screen sheet and the link would look dead.
+  // Business mode is deliberately left alone: the deep-linked destinations are
+  // personal-wallet surfaces, but silently dropping a cashier out of the shop
+  // profile is a product decision, not a routing one.
+  useEffect(() => subscribeDeepLink((target) => {
+    if (!isTabId(target.tab)) return;
+    setOverlayView(null);
+    // Mirror Home's quick actions: a payment link means "send".
+    if (target.tab === 'sinpe') setSinpeTab('send');
+    setActiveTab(target.tab);
+  }), []);
+
   const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
     { id: 'home', icon: Icons.Home, label: t('nav_home') },
     { id: 'sinpe', icon: Icons.Smartphone, label: t('nav_sinpe') },
@@ -437,7 +462,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenPlans={() => setOverlayView('plans')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -584,6 +609,9 @@ const Layout = () => {
         )}
         {overlayView === 'adminUsers' && (
           <AdminUsersView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'plans' && (
+          <PlansView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'assistant' && (
           <AssistantView onClose={() => setOverlayView(null)} />
@@ -810,6 +838,14 @@ const AppContainer = () => {
     };
   }, []);
 
+  // Deep links (kiramopay:// and https://app.kiramopay.com). Mounted here, above
+  // the auth gate, so a link that arrives on the login screen is parked by the
+  // hook and replayed once the session exists; Layout only applies the target.
+  const navigateTo = useCallback((tab: string, params?: Record<string, string>) => {
+    publishDeepLink({ tab, params: params ?? {} });
+  }, []);
+  useDeepLinks({ navigateTo, isAuthenticated: state.isAuthenticated });
+
   // Sync data from backend when app mounts with an authenticated user
   useEffect(() => {
     if (state.isAuthenticated) {
@@ -917,11 +953,21 @@ const AppInit = () => {
   return <AppContainer />;
 };
 
+// Envoltura que corta el paso cuando el bundle que corre ya no es el
+// desplegado. Va DENTRO de LanguageProvider (la pantalla habla el idioma de la
+// persona) y por encima de todo lo demas: seguir usando una version vieja
+// termina en un error incomprensible en cuanto se abre una pantalla diferida.
+const AppConGuardia: React.FC = () => {
+  const { desactualizada, versionDesplegada } = useGuardiaDeVersion();
+  if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
+  return <AppInit />;
+};
+
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <LanguageProvider>
-        <AppInit />
+        <AppConGuardia />
       </LanguageProvider>
     </ErrorBoundary>
   );

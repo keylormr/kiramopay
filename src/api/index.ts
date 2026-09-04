@@ -24,6 +24,7 @@ import type { ISavingsRepository } from './repositories/savings.repository';
 import type { IKycRepository } from './repositories/kyc.repository';
 import type { IAppVersionRepository } from './repositories/appversion.repository';
 import type { IAdminRepository } from './repositories/admin.repository';
+import type { IPlansRepository } from './repositories/plans.repository';
 import { createMockApiLayer } from './adapters/mock';
 import { createHttpApiLayer } from './adapters/http';
 import { HttpClient } from './adapters/http/client';
@@ -36,6 +37,7 @@ import { HttpAssistantRepository } from './adapters/http/assistant.http';
 import { HttpAppVersionRepository } from './adapters/http/appversion.http';
 import { HttpKycRepository } from './adapters/http/kyc.http';
 import { HttpAdminRepository } from './adapters/http/admin.http';
+import { HttpPlansRepository } from './adapters/http/plans.http';
 
 export interface ApiLayer {
   auth: IAuthRepository;
@@ -65,6 +67,7 @@ export interface ApiLayer {
   kyc?: IKycRepository;
   appVersion?: IAppVersionRepository;
   admin?: IAdminRepository;
+  plans?: IPlansRepository;
 }
 
 let apiLayerInstance: ApiLayer | null = null;
@@ -98,6 +101,8 @@ export function createApiLayer(mode?: 'mock' | 'http'): ApiLayer {
   layer.appVersion = new HttpAppVersionRepository(client);
   // Account blocking is admin-only and enforced server-side: real backend always.
   layer.admin = new HttpAdminRepository(client);
+  // El interes en un plan se escribe en la base y va autenticado: nunca al mock.
+  layer.plans = new HttpPlansRepository(client);
   return layer;
 }
 
@@ -175,3 +180,4 @@ export type {
 } from './repositories/savings.repository';
 export type { IKycRepository, IdentityVerifyResult } from './repositories/kyc.repository';
 export type { IAdminRepository, AdminUser, AdminUserStatus } from './repositories/admin.repository';
+export type { IPlansRepository, PaidPlanId, PlanInterest } from './repositories/plans.repository';

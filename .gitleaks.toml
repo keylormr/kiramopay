@@ -1,12 +1,21 @@
 # Configuracion de gitleaks (Secret Scan en CI).
-# Solo se permiten aqui valores FIJOS de test, nunca credenciales reales.
+# Solo se permiten aqui valores FIJOS de test o checksums publicos, nunca
+# credenciales reales.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Fixtures de test conocidos — no son credenciales"
+description = "Fixtures de test conocidos y checksums publicos — no son credenciales"
 regexes = [
   # Clave fija de cifrado de PII usada por internal/testutil en los tests de
   # integracion (se inyecta como GUC kiramopay.encryption_key de la DB de test).
   '''test-pii-encryption-key-0123456789ab''',
+]
+paths = [
+  # Podfile.lock lista los SPEC CHECKSUMS de CocoaPods: SHA-1 de 40 caracteres
+  # que la regla generic-api-key marca por entropia. Son hashes publicos del
+  # codigo de cada pod —cualquiera los recalcula desde el podspec— y el archivo
+  # se versiona justamente para que el build sea reproducible. No es un lugar
+  # donde pueda haber un secreto.
+  '''^ios/App/Podfile\.lock$''',
 ]

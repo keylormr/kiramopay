@@ -2853,6 +2853,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plans/interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register interest in a paid plan
+         * @description Records that the authenticated person wants a paid plan. This is NOT a subscription and charges nothing: the app has no payment path for plans yet, so the only honest thing to store is the intent. Idempotent per (user, plan) — registering twice keeps a single row and refreshes its date. Audited as plan_interest (low); the plan is the only detail kept.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PlanInterestRequest"];
+                };
+            };
+            responses: {
+                /** @description Interest registered */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanInterest"];
+                    };
+                };
+                /** @description PLAN_INVALID (plan must be negocio or cima) | INVALID_BODY */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNAUTHORIZED */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INTEREST_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/fraud/alerts": {
         parameters: {
             query?: never;
@@ -3340,6 +3404,61 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/plans/interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List who registered interest in a paid plan (admin)
+         * @description Most recent first. PII comes back masked in SQL, exactly as in the account cards: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Registered interest (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanInterestAdmin"][];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FETCH_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4871,6 +4990,37 @@ export interface components {
              */
             expires_at?: string | null;
         };
+        PlanInterestRequest: {
+            /**
+             * @description Paid plan the person wants. The free plan is not registered: there is nothing to contract.
+             * @enum {string}
+             */
+            plan: "negocio" | "cima";
+        };
+        /** @description Interest registered. Not a subscription — nothing was charged. */
+        PlanInterest: {
+            /** @enum {string} */
+            plan?: "negocio" | "cima";
+            /** Format: date-time */
+            registered_at?: string;
+        };
+        /** @description One line of the paid plan waiting list. PII is masked in SQL, the same way as in AdminUser. */
+        PlanInterestAdmin: {
+            /** Format: uuid */
+            user_id?: string;
+            first_name?: string;
+            last_name?: string;
+            /** @example ••••••930 */
+            cedula_masked?: string;
+            /** @example ••••••••1234 */
+            phone_masked?: string;
+            /** @example k•••••@gmail.com */
+            email_masked?: string;
+            /** @enum {string} */
+            plan?: "negocio" | "cima";
+            /** Format: date-time */
+            registered_at?: string;
+        };
         AdminExpiryRequest: {
             /**
              * Format: date-time
@@ -5011,18 +5161,33 @@ export interface components {
         };
         HealthResponse: {
             /** @enum {string} */
-            status?: "ok" | "degraded";
-            version?: string;
-            environment?: string;
-            services?: {
+            status: "ok" | "degraded";
+            /**
+             * @description Repository version this binary was built from (same value as package.json and the Android versionName). Use it to confirm which build a deploy is actually serving.
+             * @example 2.3.5
+             */
+            version: string;
+            environment: string;
+            services: {
                 /** @enum {string} */
                 database?: "ok" | "error";
                 /** @enum {string} */
                 redis?: "ok" | "error";
             };
-            websocket_clients?: number;
+            websocket_clients: number;
             /** @description Residual cache-vs-journal drift (minor units) from the last reconcile. */
-            last_drift_crc?: number;
+            last_drift_crc: number;
+            /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
+            crypto_prices: {
+                /** @enum {string} */
+                plan?: "none" | "demo" | "pro" | "invalid";
+                key?: string;
+                last_status?: number;
+                last_error?: string;
+                last_success_at?: string;
+                cached_assets?: number;
+                breaker_open?: boolean;
+            };
         };
         RegisterRequest: {
             /** @example 702650930 */

@@ -24,6 +24,7 @@ import (
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/b2b"
 	"github.com/kiramopay/backend/internal/budget"
+	"github.com/kiramopay/backend/internal/buildinfo"
 	"github.com/kiramopay/backend/internal/cards"
 	"github.com/kiramopay/backend/internal/config"
 	"github.com/kiramopay/backend/internal/country"
@@ -43,6 +44,7 @@ import (
 	"github.com/kiramopay/backend/internal/observability"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/payout"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
 	"github.com/kiramopay/backend/internal/recurring"
@@ -209,6 +211,27 @@ func main() {
 	if k := os.Getenv("COINGECKO_PRO_API_KEY"); k != "" {
 		priceService.SetAPIKey(k)
 	}
+	// La variable puede estar cruzada (una Demo en la variable Pro recibe 401 en
+	// cada llamada y nadie ve precios): se comprueba la clave contra /ping y,
+	// si el otro plan la acepta, el servicio cambia solo. El resultado sale en
+	// el log y en /health ("crypto_prices"), para no tener que adivinar.
+	// En una goroutine: son dos llamadas de red a un tercero y no pueden
+	// demorar la apertura del puerto. Cripto sin precios unos segundos mas es
+	// preferible a un arranque que el health check del proveedor pueda tomar
+	// por caido. El servicio ya es seguro para uso concurrente.
+	go func() {
+		probeCtx, cancelProbe := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancelProbe()
+		plan, st, err := priceService.AutoDetectPlan(probeCtx)
+		switch {
+		case err != nil:
+			log.Printf("Warning: no se pudo comprobar la clave de CoinGecko (%v); se usa la configuracion tal cual", err)
+		case plan == crypto.PlanNone:
+			log.Println("CoinGecko sin clave: el tier compartido limita por IP, cripto quedara sin precios")
+		default:
+			log.Printf("CoinGecko plan=%s status=%d", plan, st)
+		}
+	}()
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 
@@ -354,7 +377,18 @@ func main() {
 		Logger:      logger,
 	})
 	paymentService := payment.NewService(paymentRepo, txService)
-	cryptoService := crypto.NewService(cryptoRepo, priceService, txService)
+	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
+	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
+	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
+	// se opera: es preferible a operar con un numero inventado.
+	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
+		func(ctx context.Context, from, to string) (float64, error) {
+			r, err := countryRepo.GetExchangeRate(ctx, from, to)
+			if err != nil {
+				return 0, err
+			}
+			return r.Rate, nil
+		})
 
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService)
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
@@ -365,6 +399,9 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 	savingsService := savings.NewService(savingsRepo, ledgerEngine, txService)
+	// Interes en los planes de pago. Registra la intencion, no cobra: hoy no
+	// hay pasarela ni suscripcion en la aplicacion.
+	plansService := plans.NewService(pool, &plans.Options{AuditLogger: auditLogger})
 
 	// Conversational assistant. The LLM stays a true nil interface when no
 	// provider key is set, so the service reports itself unavailable instead of
@@ -443,6 +480,7 @@ func main() {
 	budgetHandler := budget.NewHandler(budgetService)
 	recurringHandler := recurring.NewHandler(recurringService)
 	savingsHandler := savings.NewHandler(savingsService)
+	plansHandler := plans.NewHandler(plansService)
 
 	// ── WebSocket + price broadcaster ────────────────────────────────────
 	ws.SetAllowedOrigins(cfg.CORS.Origins) // Origin allowlist for the WS handshake (CSWSH defense)
@@ -567,8 +605,15 @@ func main() {
 			httpStatus = http.StatusServiceUnavailable
 		}
 		w.WriteHeader(httpStatus)
-		fmt.Fprintf(w, `{"status":%q,"version":"1.0.0","environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d}`,
-			status, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC())
+		// crypto_prices: plan de CoinGecko, huella de la clave y ultimo estado
+		// del proveedor. Es lo que permite ver desde afuera por que cripto no
+		// tiene precios sin abrir los logs de Render.
+		cripto, _ := json.Marshal(priceService.Diagnostics())
+		// version: la del repositorio de la que salio este binario, no un "1.0.0"
+		// fijo. Es lo que permite confirmar un despliegue sin inventar marcadores
+		// de comportamiento.
+		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"crypto_prices":%s}`,
+			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), cripto)
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 
@@ -890,6 +935,10 @@ func main() {
 			r.Post("/savings/goals/{id}/deposit", savingsHandler.Deposit)
 			r.Post("/savings/goals/{id}/withdraw", savingsHandler.Withdraw)
 
+			// Interes en un plan de pago. NO es una suscripcion: no hay cobro
+			// detras, solo queda anotado quien lo quiere.
+			r.Post("/plans/interest", plansHandler.RegisterInterest)
+
 			// ─────────────────────────────────────────────────────────
 			// Admin-only routes — gated on role = 'admin'.
 			// ─────────────────────────────────────────────────────────
@@ -947,6 +996,9 @@ func main() {
 					r.Post("/admin/users/{id}/sessions/revoke-all", adminUsersHandler.RevokeAllSessions)
 					r.Post("/admin/users/{id}/sessions/{sid}/revoke", adminUsersHandler.RevokeSession)
 				})
+
+				// Lista de espera de los planes de pago, con la PII enmascarada.
+				r.Get("/admin/plans/interest", plansHandler.List)
 			})
 		})
 	})
