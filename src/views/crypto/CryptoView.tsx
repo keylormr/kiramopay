@@ -284,6 +284,13 @@ export const CryptoView: React.FC = () => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(value);
   };
 
+  // Mismo criterio que el total de arriba, fila por fila: un precio en cero no
+  // es "vale cero", es "no lo pudimos traer". Un monto derivado de un precio
+  // ausente se muestra como guion; el porcentaje calculado sobre ese precio
+  // tampoco significa nada (da -100% o NaN), asi que se omite.
+  const SIN_DATO = '—';
+  const montoUsd = (value: number, precio: number) => (precio > 0 ? formatUsd(value) : SIN_DATO);
+
   const formatCrypto = (value: number, decimals: number = 6) => {
     const n = Number(value);
     if (!Number.isFinite(n) || n === 0) return '0';
@@ -531,8 +538,11 @@ export const CryptoView: React.FC = () => {
             <p className="text-white/70 text-sm mt-1 tabular-nums">{sinPrecios ? ' ' : formatCrc(totalCrcValue)}</p>
           </div>
           <div className="text-right shrink-0">
-            <div className={`px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur-sm border tabular-nums ${totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
-              {totalProfitLoss >= 0 ? '+' : ''}{formatUsd(totalProfitLoss)} ({totalProfitLossPercent.toFixed(2)}%)
+            {/* Sin precios, la ganancia se calcula contra cero y sale una
+                perdida enorme que nadie tuvo: es la mentira mas cara de esta
+                pantalla, peor que el total. Se muestra neutra. */}
+            <div className={`px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-white/15 border-white/25 text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
+              {sinPrecios ? SIN_DATO : `${totalProfitLoss >= 0 ? '+' : ''}${formatUsd(totalProfitLoss)} (${totalProfitLossPercent.toFixed(2)}%)`}
             </div>
             {lastUpdated && (
               <button
@@ -636,13 +646,15 @@ export const CryptoView: React.FC = () => {
                     <div className="flex-1 text-left">
                       <div className="flex justify-between items-center">
                         <span className="font-bold uv-text-primary">{asset.name}</span>
-                        <span className="font-bold uv-text-primary">{formatUsd(value)}</span>
+                        <span className="font-bold uv-text-primary">{montoUsd(value, asset.currentPrice)}</span>
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
-                        <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
-                        </span>
+                        {asset.currentPrice > 0 && (
+                          <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
+                          </span>
+                        )}
                       </div>
                     </div>
                     <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
@@ -720,13 +732,15 @@ export const CryptoView: React.FC = () => {
                     <div className="flex-1 text-left">
                       <div className="flex justify-between items-center">
                         <span className="font-bold uv-text-primary">{asset.name}</span>
-                        <span className="font-bold uv-text-primary">{formatUsd(asset.currentPrice)}</span>
+                        <span className="font-bold uv-text-primary">{montoUsd(asset.currentPrice, asset.currentPrice)}</span>
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-sm text-gray-500">{asset.symbol}</span>
-                        <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
-                        </span>
+                        {asset.currentPrice > 0 && (
+                          <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
+                          </span>
+                        )}
                       </div>
                       {mktData && mktData.marketCap > 0 && (
                         <div className="flex gap-4 mt-2 text-xs text-gray-400">
@@ -869,10 +883,14 @@ export const CryptoView: React.FC = () => {
                 {selectedAsset.icon}
               </div>
               <div className="min-w-0">
-                <div className="text-2xl font-black uv-text-primary leading-tight">{formatUsd(selectedAsset.currentPrice)}</div>
-                <div className={`text-sm font-medium ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
-                </div>
+                <div className="text-2xl font-black uv-text-primary leading-tight">{montoUsd(selectedAsset.currentPrice, selectedAsset.currentPrice)}</div>
+                {selectedAsset.currentPrice > 0 ? (
+                  <div className={`text-sm font-medium ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
+                  </div>
+                ) : (
+                  <div className="text-sm font-medium uv-text-muted">{t('crypto_prices_unavailable')}</div>
+                )}
               </div>
             </div>
 
@@ -891,12 +909,16 @@ export const CryptoView: React.FC = () => {
                   <p className="text-2xl font-black uv-text-primary leading-tight mt-1">
                     {formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}
                   </p>
-                  <p className="text-lg font-semibold uv-text-primary">≈ {formatUsd(valorActual)}</p>
+                  <p className="text-lg font-semibold uv-text-primary">≈ {montoUsd(valorActual, selectedAsset.currentPrice)}</p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]/30">
                     <span className="text-sm uv-text-secondary">{t('crypto_pnl')}</span>
-                    <span className={`text-sm font-bold ${gano ? 'text-green-500' : 'text-red-500'}`}>
-                      {gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))} ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
-                    </span>
+                    {selectedAsset.currentPrice > 0 ? (
+                      <span className={`text-sm font-bold ${gano ? 'text-green-500' : 'text-red-500'}`}>
+                        {gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))} ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
+                      </span>
+                    ) : (
+                      <span className="text-sm font-bold uv-text-muted">{SIN_DATO}</span>
+                    )}
                   </div>
                   <p className="text-xs uv-text-muted mt-1">
                     {t('crypto_avg_price')}: {formatUsd(selectedAsset.avgBuyPrice)}
