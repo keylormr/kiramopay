@@ -1,0 +1,304 @@
+name: iOS IPA
+
+# Espejo de android-apk.yml para iOS. La diferencia de fondo no es tecnica sino
+# de plataforma: Android permite instalar un binario firmado bajado de un link,
+# iOS no. Por eso este workflow tiene tres modos de salida en vez de uno:
+#
+#   unsigned          -> .ipa SIN firmar. No se instala tal cual en un iPhone;
+#                        sirve para re-firmarlo con AltStore/Sideloadly o para
+#                        que un tercero con cuenta lo firme. Es el default
+#                        mientras no haya cuenta de Apple Developer.
+#   release-testing   -> Ad Hoc. .ipa firmado que instala SOLO en los iPhone
+#                        cuyo UDID este registrado en el perfil (tope 100/ano).
+#   app-store-connect -> Build de distribucion; con upload_testflight=true se
+#                        sube a TestFlight, que es lo mas parecido al boton de
+#                        descarga del APK.
+#
+# Ojo: Xcode 26 RECHAZA los nombres viejos "ad-hoc" y "app-store". Los validos
+# desde Xcode 15.4 son "release-testing" y "app-store-connect".
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: 'Como exportar el .ipa'
+        type: choice
+        default: unsigned
+        options:
+          - unsigned
+          - release-testing
+          - app-store-connect
+      upload_testflight:
+        description: 'Subir a TestFlight (solo con app-store-connect)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # macos-26 es GA desde 2026-02-26 y trae Xcode 26, obligatorio para subir a
+    # App Store Connect desde el 2026-04-28. Corre nativo en Apple Silicon.
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    env:
+      WORKSPACE: ios/App/App.xcworkspace
+      SCHEME: App
+      BUNDLE_ID: com.kiramopay.app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Resolver modo de exportacion
+        id: modo
+        env:
+          # En un push de tag no hay inputs: manda la variable del repo, y si
+          # tampoco esta, el modo seguro (sin firma) en vez de fallar.
+          ENTRADA: ${{ inputs.export_method }}
+          VAR_REPO: ${{ vars.IOS_EXPORT_METHOD }}
+        run: |
+          metodo="${ENTRADA:-${VAR_REPO:-unsigned}}"
+          case "$metodo" in
+            unsigned|release-testing|app-store-connect) ;;
+            ad-hoc|app-store)
+              echo "::error::'$metodo' es el nombre viejo y Xcode 26 lo rechaza. Usa 'release-testing' o 'app-store-connect'."
+              exit 1 ;;
+            *)
+              echo "::error::export_method invalido: '$metodo'"
+              exit 1 ;;
+          esac
+          echo "metodo=$metodo" >> "$GITHUB_OUTPUT"
+          if [ "$metodo" = "unsigned" ]; then
+            echo "firmar=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "firmar=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Modo de exportacion: $metodo"
+
+      - name: Build del bundle web
+        env:
+          # Misma variable que usa el APK: la app nativa carga sus assets en
+          # local, asi que necesita la URL ABSOLUTA de la API (el proxy /api de
+          # vercel.json no aplica dentro de la app).
+          VITE_API_URL: ${{ vars.APK_API_URL || 'https://api.kiramopay.com' }}
+          VITE_ANDROID_APK_URL: 'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk'
+        run: npm run build
+
+      - name: Xcode en uso
+        run: xcodebuild -version
+
+      - name: Capacitor sync (ios)
+        env:
+          # Le dice a capacitor.config.ts que resuelva el hostname de iOS
+          # (localhost), sin depender de que el CLI reciba la plataforma.
+          CAP_PLATFORM: ios
+        run: npx cap sync ios
+
+      - name: Instalar certificado y perfil de aprovisionamiento
+        if: steps.modo.outputs.firmar == 'true'
+        id: firma
+        env:
+          CERT_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          faltan=""
+          [ -z "$CERT_P12_BASE64" ] && faltan="$faltan APPLE_CERTIFICATE_P12_BASE64"
+          [ -z "$CERT_PASSWORD" ]   && faltan="$faltan APPLE_CERTIFICATE_PASSWORD"
+          [ -z "$PROFILE_BASE64" ]  && faltan="$faltan APPLE_PROVISIONING_PROFILE_BASE64"
+          [ -z "$TEAM_ID" ]         && faltan="$faltan APPLE_TEAM_ID"
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan secretos para firmar:$faltan. Ver docs/IOS_IPA.md."
+            exit 1
+          fi
+
+          LLAVERO="$RUNNER_TEMP/firma.keychain-db"
+          CLAVE_LLAVERO="$(uuidgen)"
+          security create-keychain -p "$CLAVE_LLAVERO" "$LLAVERO"
+          security set-keychain-settings -lut 21600 "$LLAVERO"
+          security unlock-keychain -p "$CLAVE_LLAVERO" "$LLAVERO"
+
+          echo "$CERT_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$LLAVERO"
+          # Sin esto, codesign abre un dialogo de permiso que en CI nadie contesta.
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$CLAVE_LLAVERO" "$LLAVERO" >/dev/null
+          security list-keychain -d user -s "$LLAVERO" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          PERFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PERFILES"
+          echo "$PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/perfil.mobileprovision"
+          # El perfil viene firmado (CMS): hay que decodificarlo para leer su
+          # UUID y su nombre, que es lo que exportArchive espera.
+          security cms -D -i "$RUNNER_TEMP/perfil.mobileprovision" \
+            > "$RUNNER_TEMP/perfil.plist"
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/perfil.plist")
+          NOMBRE=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/perfil.plist")
+          cp "$RUNNER_TEMP/perfil.mobileprovision" "$PERFILES/$UUID.mobileprovision"
+
+          echo "perfil_nombre=$NOMBRE" >> "$GITHUB_OUTPUT"
+          echo "Perfil instalado: $NOMBRE ($UUID)"
+
+      - name: Archivar (sin firma)
+        if: steps.modo.outputs.firmar != 'true'
+        run: |
+          set -o pipefail
+          # xcbeautify viene en la imagen de macOS, pero si un dia no esta el
+          # build no tiene por que caerse por el formateador de logs.
+          formato=cat
+          command -v xcbeautify >/dev/null && formato="xcbeautify --renderer github-actions"
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | $formato
+
+          # Un .ipa es un zip con la .app dentro de Payload/. Sin firma el
+          # iPhone no lo instala directo: AltStore/Sideloadly lo re-firman con
+          # el Apple ID del usuario (y de paso re-firman los frameworks que
+          # mete CocoaPods con use_frameworks!).
+          cd "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos"
+          mkdir -p Payload
+          cp -R App.app Payload/
+          zip -qry "$RUNNER_TEMP/KiramoPay.ipa" Payload
+
+      - name: Archivar y exportar (firmado)
+        if: steps.modo.outputs.firmar == 'true'
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PERFIL: ${{ steps.firma.outputs.perfil_nombre }}
+          METODO: ${{ steps.modo.outputs.metodo }}
+        run: |
+          set -o pipefail
+          formato=cat
+          command -v xcbeautify >/dev/null && formato="xcbeautify --renderer github-actions"
+          # Firma manual: el perfil descargado manda, no la cuenta de Xcode
+          # (en CI no hay ninguna con la que negociar). Tanto release-testing
+          # como app-store-connect se firman con un cert Apple Distribution.
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/KiramoPay.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PERFIL" \
+            | $formato
+
+          cat > "$RUNNER_TEMP/exportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>${METODO}</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE_ID}</key><string>${PERFIL}</string>
+            </dict>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/KiramoPay.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/exportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            | $formato
+
+          mv "$RUNNER_TEMP/export"/*.ipa "$RUNNER_TEMP/KiramoPay.ipa"
+
+      - name: Preparar artefacto
+        id: artefacto
+        run: |
+          sufijo=""
+          [ "${{ steps.modo.outputs.metodo }}" = "unsigned" ] && sufijo="-unsigned"
+          nombre="KiramoPay${sufijo}.ipa"
+          cp "$RUNNER_TEMP/KiramoPay.ipa" "$nombre"
+          ls -lh "$nombre"
+          echo "nombre=$nombre" >> "$GITHUB_OUTPUT"
+
+      - name: Subir artefacto del build
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiramopay-ipa
+          path: ${{ steps.artefacto.outputs.nombre }}
+          if-no-files-found: error
+
+      - name: Subir a TestFlight
+        if: >-
+          inputs.upload_testflight &&
+          steps.modo.outputs.metodo == 'app-store-connect'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          faltan=""
+          [ -z "$ASC_KEY_ID" ]     && faltan="$faltan APP_STORE_CONNECT_KEY_ID"
+          [ -z "$ASC_ISSUER_ID" ]  && faltan="$faltan APP_STORE_CONNECT_ISSUER_ID"
+          [ -z "$ASC_KEY_BASE64" ] && faltan="$faltan APP_STORE_CONNECT_API_KEY_BASE64"
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan secretos para TestFlight:$faltan"
+            exit 1
+          fi
+          # fastlane resuelve la API de App Store Connect (altool dejo de
+          # aceptar --upload-app y su reemplazo pide metadata que aca no
+          # tenemos a mano). Viene preinstalado en el runner de macOS.
+          command -v fastlane >/dev/null || brew install fastlane
+
+          # fastlane espera la llave como JSON con el .p8 embebido, no el .p8 suelto.
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "$ASC_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/asc/key.p8"
+          jq -n \
+            --arg kid "$ASC_KEY_ID" \
+            --arg iss "$ASC_ISSUER_ID" \
+            --arg key "$(cat "$RUNNER_TEMP/asc/key.p8")" \
+            '{key_id: $kid, issuer_id: $iss, key: $key, in_house: false}' \
+            > "$RUNNER_TEMP/asc/api_key.json"
+
+          estado=0
+          fastlane run upload_to_testflight \
+            api_key_path:"$RUNNER_TEMP/asc/api_key.json" \
+            ipa:"$RUNNER_TEMP/KiramoPay.ipa" \
+            skip_waiting_for_build_processing:true || estado=$?
+          # La llave privada no debe sobrevivir al step, falle o no.
+          rm -rf "$RUNNER_TEMP/asc"
+          exit "$estado"
+
+      - name: Publicar en el GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artefacto.outputs.nombre }}
+          fail_on_unmatched_files: true
+
+      - name: Limpiar llavero de firma
+        if: always() && steps.modo.outputs.firmar == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/firma.keychain-db" || true
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision || true

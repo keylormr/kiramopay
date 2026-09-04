@@ -24,6 +24,11 @@ android/build
 android/app/release
 *.apk
 *.aab
+ios/App/build
+ios/App/Pods
+ios/App/output
+*.ipa
+*.xcarchive
 
 # Editor directories and files
 .vscode/*
