@@ -13,6 +13,8 @@ import { LanguageSheet } from './components/LanguageSheet';
 import { OverlayShell } from './components/OverlayShell';
 import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AppDesactualizada } from './components/AppDesactualizada';
+import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
 import type { LucideIcon } from 'lucide-react';
@@ -917,11 +919,21 @@ const AppInit = () => {
   return <AppContainer />;
 };
 
+// Envoltura que corta el paso cuando el bundle que corre ya no es el
+// desplegado. Va DENTRO de LanguageProvider (la pantalla habla el idioma de la
+// persona) y por encima de todo lo demas: seguir usando una version vieja
+// termina en un error incomprensible en cuanto se abre una pantalla diferida.
+const AppConGuardia: React.FC = () => {
+  const { desactualizada, versionDesplegada } = useGuardiaDeVersion();
+  if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
+  return <AppInit />;
+};
+
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <LanguageProvider>
-        <AppInit />
+        <AppConGuardia />
       </LanguageProvider>
     </ErrorBoundary>
   );

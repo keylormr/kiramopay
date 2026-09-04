@@ -28,6 +28,24 @@ function resolveBuildSha(env: Record<string, string>): string {
   }
 }
 
+// Deja en dist/version.json la version y el commit del build. La aplicacion
+// corriendo lo consulta para saber si sigue siendo la desplegada: es el unico
+// dato que distingue "esta al dia" de "quedo vieja en una pestana abierta o en
+// una cache intermedia". No va en public/ porque tiene que reflejar EL build,
+// no un archivo escrito a mano.
+function emitirVersion(version: string, sha: string) {
+  return {
+    name: 'kiramopay-version-json',
+    generateBundle(this: { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void }) {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version, sha, builtAt: new Date().toISOString() }),
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
@@ -39,7 +57,7 @@ export default defineConfig(({ mode }) => {
         port: 9999,
         host: '0.0.0.0',
       },
-      plugins: [react(), tailwindcss()],
+      plugins: [react(), tailwindcss(), emitirVersion(pkg.version, resolveBuildSha(env))],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),

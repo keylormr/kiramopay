@@ -654,6 +654,11 @@ export type TranslationKeys = {
   error_title: string;
   error_desc: string;
   error_retry: string;
+  update_required_title: string;
+  update_required_body: string;
+  update_required_countdown: string;
+  update_required_now: string;
+  update_required_version: string;
   error_home: string;
   error_details: string;
 
