@@ -192,6 +192,67 @@ func parseExpiry(w http.ResponseWriter, raw json.RawMessage) (*time.Time, bool) 
 	return &t, true
 }
 
+// Sessions — GET /api/v1/admin/users/{id}/sessions (admin)
+func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUserID(w, r)
+	if !ok {
+		return
+	}
+	sesiones, err := h.service.Sessions(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "SESSIONS_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, sesiones)
+}
+
+// RevokeSession — POST /api/v1/admin/users/{id}/sessions/{sid}/revoke (admin)
+func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id, ok := pathUserID(w, r)
+	if !ok {
+		return
+	}
+	sid, err := uuid.Parse(chi.URLParam(r, "sid"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "session id must be a UUID")
+		return
+	}
+	found, err := h.service.RevokeSession(r.Context(), id, sid.String(), adminID, actorContext(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "REVOKE_FAILED", err.Error())
+		return
+	}
+	if !found {
+		response.Error(w, http.StatusNotFound, "SESSION_NOT_FOUND", "session not found")
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]bool{"revoked": true})
+}
+
+// RevokeAllSessions — POST /api/v1/admin/users/{id}/sessions/revoke-all (admin)
+func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id, ok := pathUserID(w, r)
+	if !ok {
+		return
+	}
+	n, err := h.service.RevokeAllSessions(r.Context(), id, adminID, actorContext(r))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "REVOKE_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]int{"revoked": n})
+}
+
 // pathUserID valida {id} como UUID antes de tocar el servicio; si no lo es,
 // responde 400 INVALID_ID y devuelve ok=false.
 func pathUserID(w http.ResponseWriter, r *http.Request) (string, bool) {

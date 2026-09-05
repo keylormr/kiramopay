@@ -730,6 +730,11 @@ func main() {
 
 			// Auth
 			r.Post("/auth/logout", authHandler.Logout)
+			// Los dispositivos con sesion abierta, y el poder de cerrarlos:
+			// uno solo, o todos los demas.
+			r.Get("/auth/sessions", authHandler.Sessions)
+			r.Post("/auth/sessions/revoke-others", authHandler.RevokeOtherSessions)
+			r.Post("/auth/sessions/{id}/revoke", authHandler.RevokeSession)
 			r.Post("/auth/change-password", authHandler.ChangePassword)
 
 			// MFA
@@ -996,6 +1001,11 @@ func main() {
 					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)
 					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
 					r.Post("/admin/users/{id}/expiry", adminUsersHandler.SetExpiry)
+					// Cerrar sesiones sin bloquear la cuenta: cuando se
+					// sospecha de un dispositivo, no de la persona.
+					r.Get("/admin/users/{id}/sessions", adminUsersHandler.Sessions)
+					r.Post("/admin/users/{id}/sessions/revoke-all", adminUsersHandler.RevokeAllSessions)
+					r.Post("/admin/users/{id}/sessions/{sid}/revoke", adminUsersHandler.RevokeSession)
 				})
 
 				// Lista de espera de los planes de pago, con la PII enmascarada.

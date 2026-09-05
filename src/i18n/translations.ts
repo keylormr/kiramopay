@@ -1194,6 +1194,38 @@ export type TranslationKeys = {
   plans_cta_registered: string;
   plans_cta_note: string;
   plans_cta_error: string;
+
+  // Sesiones por dispositivo
+  sessions_menu: string;
+  sessions_menu_desc: string;
+  sessions_title: string;
+  sessions_intro: string;
+  sessions_this_device: string;
+  sessions_other_devices: string;
+  sessions_current_chip: string;
+  sessions_current_hint: string;
+  sessions_opened: string;
+  sessions_expires: string;
+  sessions_network: string;
+  sessions_device_on: string;
+  sessions_close: string;
+  sessions_close_title: string;
+  sessions_close_warning: string;
+  sessions_close_confirm: string;
+  sessions_close_others: string;
+  sessions_close_others_title: string;
+  sessions_close_others_warning: string;
+  sessions_close_others_warning_one: string;
+  sessions_close_others_confirm: string;
+  sessions_empty: string;
+  sessions_empty_hint: string;
+  sessions_done_one: string;
+  sessions_done_others: string;
+  sessions_err_generic: string;
+  sessions_err_load: string;
+  sessions_err_gone: string;
+  sessions_err_rate: string;
+  sessions_err_network: string;
   // Cobros que el servidor rechaza porque no hay a quien entregarlos
   // (SIN_CONVENIO / SIN_INTEGRACION).
   bill_no_agreement: string;

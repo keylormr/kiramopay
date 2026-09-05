@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/pkg/identifier"
@@ -252,6 +255,59 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	h.cookies.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiry)
 	noStore(w)
 	response.JSON(w, http.StatusOK, tokens)
+}
+
+// Sessions — GET /api/v1/auth/sessions
+//
+// Las sesiones abiertas de quien pregunta, con la actual marcada. No lleva
+// tokens ni hashes: solo lo que sirve para reconocer un dispositivo y decidir
+// cerrarlo.
+func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	noStore(w)
+	sesiones, err := h.service.ListSessions(r.Context(), userID, middleware.GetAccessJTI(r.Context()))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "SESSIONS_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, sesiones)
+}
+
+// RevokeSession — POST /api/v1/auth/sessions/{id}/revoke
+//
+// Cierra un dispositivo propio. Un id que no sea de esta cuenta no encuentra
+// nada que cerrar y devuelve 404, sin decir si existe en otra parte.
+func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "id must be a UUID")
+		return
+	}
+	found, err := h.service.RevokeSession(r.Context(), userID, id.String(), loginContext(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "REVOKE_FAILED", err.Error())
+		return
+	}
+	if !found {
+		response.Error(w, http.StatusNotFound, "SESSION_NOT_FOUND", "session not found")
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]bool{"revoked": true})
+}
+
+// RevokeOtherSessions — POST /api/v1/auth/sessions/revoke-others
+//
+// Cierra todos los demas dispositivos y deja vivo el actual: el boton de "me
+// parece que alguien mas entro en mi cuenta".
+func (h *Handler) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	n, err := h.service.RevokeOtherSessions(r.Context(), userID, middleware.GetAccessJTI(r.Context()), loginContext(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "REVOKE_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]int{"revoked": n})
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
