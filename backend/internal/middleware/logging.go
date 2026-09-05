@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -101,7 +102,19 @@ func Logger(next http.Handler) http.Handler {
 
 		slog.LogAttrs(r.Context(), level, "http request", attrs...)
 
-		// Record metrics
-		RecordRequest(r.Method, r.URL.Path, sw.status, duration)
+		// Metricas por PATRON de ruta, nunca por la URL cruda. Los mapas de
+		// metricas no desalojan nada y este middleware corre POR ENCIMA del
+		// limitador, asi que indexar por r.URL.Path dejaba que cualquiera los
+		// hiciera crecer sin limite pidiendo rutas inventadas: hasta las
+		// peticiones rechazadas con 429 dejaban su clave. El patron es el
+		// mismo que usa OtelRouteTag y solo esta resuelto despues de que la
+		// cadena corrio. Patron vacio = chi no reconocio la ruta (404) o la
+		// peticion murio antes de enrutarse (429): queda en el log, no en las
+		// metricas, que es lo unico acotado.
+		if rc := chi.RouteContext(r.Context()); rc != nil {
+			if patron := rc.RoutePattern(); patron != "" {
+				RecordRequest(r.Method, patron, sw.status, duration)
+			}
+		}
 	})
 }

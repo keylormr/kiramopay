@@ -3,6 +3,7 @@ package crypto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,9 +21,32 @@ const (
 	coinGeckoProBaseURL = "https://pro-api.coingecko.com/api/v3"
 )
 
+// Edad maxima que puede tener un precio para COBRAR contra el, en multiplos
+// del TTL del cache: pasado eso el numero esta muerto. El piso evita que un
+// precio recien traido cuente como viejo cuando el cache esta apagado
+// (cacheTTL 0, como en varias pruebas).
+const (
+	factorEdadMaxima = 3
+	edadMaximaMinima = 30 * time.Second
+)
+
+// ErrPrecioViejo: hay un precio en cache pero lleva demasiado sin refrescarse.
+//
+// GetPrices degrada al cache y NO devuelve error cuando el proveedor falla
+// (breaker abierto, 429, 401), asi que una compra o una venta reales se
+// ejecutaban contra el ultimo precio que llego, tuviera la edad que tuviera —
+// en produccion el proveedor estuvo semanas caido. Mostrar un precio viejo en
+// pantalla es aceptable; cobrar contra el no. Por eso el corte vive en
+// GetPrice (el camino de compra/venta/conversion) y no en GetPrices.
+var ErrPrecioViejo = errors.New("crypto price is too old to trade on")
+
 // PriceService fetches real crypto prices from CoinGecko with circuit breaker.
 type PriceService struct {
-	cache               map[string]*PriceData
+	cache map[string]*PriceData
+	// cachedAt guarda cuando llego cada precio. Va aparte del PriceData porque
+	// ese struct se serializa tal cual hacia el cliente y no se le agrega un
+	// campo por esto.
+	cachedAt            map[string]time.Time
 	mu                  sync.RWMutex
 	lastFetch           time.Time
 	cacheTTL            time.Duration
@@ -42,7 +66,8 @@ type PriceService struct {
 
 func NewPriceService() *PriceService {
 	return &PriceService{
-		cache: make(map[string]*PriceData),
+		cache:    make(map[string]*PriceData),
+		cachedAt: make(map[string]time.Time),
 		// Sin clave no hay cuota que administrar (el tier compartido igual
 		// rechaza por IP); 5 minutos evita martillar en vano.
 		cacheTTL: 5 * time.Minute,
@@ -255,6 +280,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
+	ahora := time.Now()
 	for cgID, prices := range data {
 		symbol := symbolToID[cgID]
 		pd := &PriceData{
@@ -266,9 +292,13 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		}
 		result[symbol] = pd
 		ps.cache[symbol] = pd
+		// El sello es POR SIMBOLO: una respuesta que trae BTC pero omite MATIC
+		// deja fresco al primero y no al segundo, y un sello global mentiria
+		// sobre el segundo.
+		ps.cachedAt[symbol] = ahora
 	}
 
-	ps.lastFetch = time.Now()
+	ps.lastFetch = ahora
 	ps.lastSuccess = ps.lastFetch
 	ps.lastStatus = http.StatusOK
 	ps.lastError = ""
@@ -293,15 +323,53 @@ func (ps *PriceService) recordFailure() {
 	}
 }
 
+// GetPrice devuelve el precio con el que SE OPERA. A diferencia de GetPrices,
+// que sirve la pantalla y puede degradar a un dato viejo, aqui un precio
+// vencido es un error: mas vale no ejecutar la orden que cobrarla contra un
+// numero muerto.
 func (ps *PriceService) GetPrice(ctx context.Context, symbol string) (float64, error) {
 	prices, err := ps.GetPrices(ctx, []string{symbol})
 	if err != nil {
 		return 0, err
 	}
-	if p, ok := prices[symbol]; ok {
-		return p.Price, nil
+	p, ok := prices[symbol]
+	if !ok {
+		return 0, fmt.Errorf("price not found for %s", symbol)
 	}
-	return 0, fmt.Errorf("price not found for %s", symbol)
+	if edad, vencido := ps.precioVencido(symbol); vencido {
+		if edad > 0 {
+			return 0, fmt.Errorf("%w: %s lleva %s sin actualizarse", ErrPrecioViejo, symbol, edad.Truncate(time.Second))
+		}
+		return 0, fmt.Errorf("%w: %s no tiene fecha de actualizacion", ErrPrecioViejo, symbol)
+	}
+	return p.Price, nil
+}
+
+// precioVencido dice si el precio en cache de un simbolo esta demasiado viejo
+// para operar con el, y que edad tiene. Un simbolo sin sello propio se juzga
+// por el ultimo exito del feed; sin ninguno de los dos cuenta como vencido,
+// porque no hay con que probar que es fresco.
+func (ps *PriceService) precioVencido(symbol string) (time.Duration, bool) {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	desde, ok := ps.cachedAt[symbol]
+	if !ok {
+		desde = ps.lastSuccess
+	}
+	if desde.IsZero() {
+		return 0, true
+	}
+	edad := time.Since(desde)
+	return edad, edad > ps.edadMaxima()
+}
+
+// edadMaxima exige el lock tomado (lo llama precioVencido, que lo sostiene).
+func (ps *PriceService) edadMaxima() time.Duration {
+	maxima := factorEdadMaxima * ps.cacheTTL
+	if maxima < edadMaximaMinima {
+		maxima = edadMaximaMinima
+	}
+	return maxima
 }
 
 // GetInterval returns the recommended fetch interval based on API key. Only a

@@ -439,6 +439,7 @@ const zhCn: TranslationKeys = {
   crypto_prices_updated: '价格已更新',
   crypto_prices_unavailable: '价格更新失败',
   crypto_prices_unavailable_hint: '数值可能过期，会自动重试。',
+  crypto_price_stale: '价格已过期，我们不会按过期价格扣款。请稍后重试。',
   crypto_action_needs_price: '没有当前价格，无法交易。',
   crypto_value_unavailable: '数值不可用',
   crypto_refresh_prices: '重新整理价格',
@@ -632,6 +633,7 @@ const zhCn: TranslationKeys = {
   analytics_no_expenses: '尚无支出记录',
   analytics_partial: '显示{total}笔中的{shown}笔交易',
   analytics_offline: '无法加载完整周期：仅显示最近的交易',
+  other_currency_note: '其他币种的交易：{n} 笔（未计入以上合计）',
   boot_connecting: '正在连接KiramoPay...',
   boot_waking: '服务器正在启动，可能需要一点时间...',
   update_title: '有可用更新',
@@ -1127,6 +1129,13 @@ const zhCn: TranslationKeys = {
   plans_cta_registered: '已记录，我们会联系你。',
   plans_cta_note: '目前还无法在应用内付款。这个按钮不会扣款：它只记录你的意向，等收款功能上线我们会联系你。',
   plans_cta_error: '无法记录你的意向，请重试。',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: '我们尚未与这家公司签订合作，无法把你的付款交给对方。没有扣款：你的余额保持不变。',
+  recharge_no_agreement: '我们尚未与这家运营商签订合作，充值无法到达该号码。没有扣款：你的余额保持不变。',
+  ride_no_integration: '我们尚未接入这款打车应用，无法为这趟行程付款。没有扣款：你的余额保持不变。',
+  order_no_integration: '我们尚未接入这个订餐服务，订单无法送到餐厅。没有扣款：你的余额保持不变。',
+  ride_price_after_quote: '服务方给出报价后，价格和时间才会显示。',
+  order_delivery_fee_pending: '配送费由服务方在下单时确认。',
 };
 
 export default zhCn;

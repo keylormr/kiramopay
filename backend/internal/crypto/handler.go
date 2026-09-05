@@ -42,10 +42,14 @@ func (h *Handler) GetTransactions(w http.ResponseWriter, r *http.Request) {
 
 // errorDePrecio traduce los rechazos que vienen de poner el precio en el
 // servidor. Son estados distintos a proposito: sin precio es que el sistema no
-// puede cotizar ahora (503, se reintenta), y precio movido es que la persona
-// acepto otro numero (409, hay que volver a mostrarlo).
+// puede cotizar ahora (503, se reintenta), precio viejo es que el ultimo dato
+// del feed ya no sirve para cobrar (503, pero con causa propia: el proveedor
+// lleva rato caido), y precio movido es que la persona acepto otro numero
+// (409, hay que volver a mostrarlo).
 func errorDePrecio(err error) (string, int, bool) {
 	switch {
+	case errors.Is(err, ErrPrecioViejo):
+		return "PRICE_STALE", http.StatusServiceUnavailable, true
 	case errors.Is(err, ErrSinPrecio):
 		return "PRICE_UNAVAILABLE", http.StatusServiceUnavailable, true
 	case errors.Is(err, ErrPrecioMovido):

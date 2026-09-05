@@ -26,7 +26,9 @@ func setupPaymentHandler(t *testing.T) (*payment.Handler, string) {
 	pool := testutil.TestDB(t)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
-	svc := payment.NewService(payment.NewRepository(pool), txSvc)
+	// Con convenios activos: este archivo verifica el contrato del cobro,
+	// no la negativa (esa vive en payment_sin_convenio_test.go).
+	svc := payment.NewService(payment.NewRepository(pool), txSvc, &payment.Options{ConveniosActivos: true})
 
 	pinHash, _ := hash.HashPin("Kiramopay2024!")
 	user := testutil.SeedTestUser(t, pool, "702650930", pinHash)

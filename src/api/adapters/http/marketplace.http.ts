@@ -68,7 +68,12 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       destination: request.destination,
     });
 
-    if (!res.success || !res.data) return apiError('RIDE_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) {
+      // El codigo del servidor tiene que sobrevivir hasta la vista: es lo que
+      // distingue "no hay integracion con el socio" (SIN_INTEGRACION) de un
+      // fallo cualquiera, y la pantalla lo explica distinto.
+      return apiError(res.error?.code || 'RIDE_FAILED', res.error?.message || 'Failed');
+    }
 
     return apiSuccess({
       id: res.data.id,
@@ -98,7 +103,11 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}/confirm`, {});
 
-    if (!res.success || !res.data) return apiError('CONFIRM_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) {
+      // Confirmar es el paso que cobra: si el servidor lo niega por falta de
+      // integracion (SIN_INTEGRACION), su codigo llega intacto a la vista.
+      return apiError(res.error?.code || 'CONFIRM_FAILED', res.error?.message || 'Failed');
+    }
 
     return apiSuccess({
       id: res.data.id,
@@ -191,7 +200,11 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       items: request.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price * 100 })),
     });
 
-    if (!res.success || !res.data) return apiError('ORDER_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) {
+      // Crear el pedido es el paso que cobra: si el servidor lo niega por falta
+      // de integracion (SIN_INTEGRACION), su codigo llega intacto a la vista.
+      return apiError(res.error?.code || 'ORDER_FAILED', res.error?.message || 'Failed');
+    }
 
     return apiSuccess({
       id: res.data.id,

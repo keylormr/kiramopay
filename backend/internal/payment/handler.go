@@ -38,6 +38,14 @@ func (h *Handler) PayBill(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.PayBill(r.Context(), userID, &req)
 	if err != nil {
+		// Sin convenio con la empresa o el operador: 503 con codigo propio para
+		// que la pantalla lo explique en vez de mostrar un error generico. No es
+		// un fallo del usuario ni de su saldo.
+		if errors.Is(err, ErrSinConvenio) {
+			response.Error(w, http.StatusServiceUnavailable, "SIN_CONVENIO",
+				"el pago no se puede entregar todavia")
+			return
+		}
 		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
 		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
 		// codigo generico y mostraba el mensaje en ingles del servidor, sin
@@ -74,6 +82,14 @@ func (h *Handler) Recharge(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Recharge(r.Context(), userID, &req)
 	if err != nil {
+		// Sin convenio con la empresa o el operador: 503 con codigo propio para
+		// que la pantalla lo explique en vez de mostrar un error generico. No es
+		// un fallo del usuario ni de su saldo.
+		if errors.Is(err, ErrSinConvenio) {
+			response.Error(w, http.StatusServiceUnavailable, "SIN_CONVENIO",
+				"el pago no se puede entregar todavia")
+			return
+		}
 		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
 		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
 		// codigo generico y mostraba el mensaje en ingles del servidor, sin

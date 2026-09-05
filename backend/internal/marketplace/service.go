@@ -19,14 +19,39 @@ type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
 }
 
+// ErrSinIntegracion se devuelve al intentar COBRAR un viaje o un pedido sin
+// integracion con el socio.
+//
+// El precio del viaje lo inventa este mismo archivo (rand) y el chofer sale
+// de una lista fija: cobrarlo debita la billetera de verdad contra un monto
+// que nadie cotizo, deja la plata en SYSTEM:EXTERNAL y no hay reverso. Es la
+// politica que el repositorio ya aplica en sinpe.Send (se niega a enviar a
+// quien no es usuario) y en el registro de rieles de payouts (no se registra
+// el de prueba en produccion porque debita y no desembolsa). Pedir el viaje y
+// verlo sigue funcionando: lo que se rechaza es el cobro.
+var ErrSinIntegracion = errors.New("sin integracion con el socio: el cobro no se puede entregar")
+
 type Service struct {
 	repo    *Repository
 	ledger  *ledger.Engine
 	history HistoryRecorder
+	// cobros habilita el debito. Falso mientras el precio y el socio sean
+	// simulados; se enciende por entorno igual que los rieles de payouts.
+	cobros bool
 }
 
-func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder) *Service {
-	return &Service{repo: repo, ledger: eng, history: history}
+// Options configura el servicio. CobrosActivos solo debe ser verdadero donde
+// exista una integracion real que cotice y entregue.
+type Options struct {
+	CobrosActivos bool
+}
+
+func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder, opts *Options) *Service {
+	s := &Service{repo: repo, ledger: eng, history: history}
+	if opts != nil {
+		s.cobros = opts.CobrosActivos
+	}
+	return s
 }
 
 // chargeWallet debits the user's wallet for a marketplace order, crediting
@@ -39,6 +64,10 @@ func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder) *
 // repeat charge collides on the ledger UNIQUE constraint and is a no-op instead
 // of a second debit.
 func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor int64, label, idemKey string) error {
+	// Una sola guarda cubre viaje y pedido: los dos cobros pasan por aqui.
+	if !s.cobros {
+		return ErrSinIntegracion
+	}
 	if amountMinor <= 0 {
 		return nil
 	}
@@ -79,6 +108,11 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 
 // ConfirmRide charges the rider the estimated price and marks the ride confirmed.
 func (s *Service) ConfirmRide(ctx context.Context, userID, rideID string) (*RideRequestRecord, error) {
+	// Antes de leer nada: sin integracion no hay cobro, y confirmar un viaje
+	// es exactamente el paso que cobra.
+	if !s.cobros {
+		return nil, ErrSinIntegracion
+	}
 	ride, err := s.repo.GetRideRequest(ctx, rideID, userID) // scoped: non-owner -> not found
 	if err != nil {
 		return nil, fmt.Errorf("ride not found")
@@ -283,6 +317,10 @@ func (s *Service) ListUserRides(ctx context.Context, userID string) ([]RideReque
 // ── Food Orders ──────────────────────────────────────────────────────────────
 
 func (s *Service) CreateFoodOrder(ctx context.Context, userID string, req *CreateFoodOrderRequest) (*FoodOrderRecord, error) {
+	// Igual que ConfirmRide: crear el pedido es el paso que cobra.
+	if !s.cobros {
+		return nil, ErrSinIntegracion
+	}
 	if req.RestaurantName == "" || len(req.Items) == 0 {
 		return nil, fmt.Errorf("restaurant name and at least one item required")
 	}
