@@ -11,6 +11,7 @@ interface AdminUserDTO {
   id?: string;
   first_name?: string;
   last_name?: string;
+  username?: string;
   cedula_masked?: string;
   phone_masked?: string;
   email_masked?: string;
@@ -36,6 +37,7 @@ function mapAdminUser(d: AdminUserDTO): AdminUser {
     id: String(d.id ?? ''),
     firstName: String(d.first_name ?? ''),
     lastName: String(d.last_name ?? ''),
+    username: String(d.username ?? ''),
     cedulaMasked: String(d.cedula_masked ?? ''),
     phoneMasked: String(d.phone_masked ?? ''),
     emailMasked: String(d.email_masked ?? ''),

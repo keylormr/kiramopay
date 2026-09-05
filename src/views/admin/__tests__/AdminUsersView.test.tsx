@@ -21,6 +21,7 @@ const keilor: AdminUser = {
   id: 'u1',
   firstName: 'Keilor',
   lastName: 'Martinez',
+  username: 'keilor',
   cedulaMasked: '••••••930',
   phoneMasked: '••••••••1234',
   emailMasked: 'k•••••@gmail.com',

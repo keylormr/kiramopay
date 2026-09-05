@@ -624,6 +624,7 @@ export type TranslationKeys = {
   login_detected_cedula: string;
   login_detected_correo: string;
   login_detected_telefono: string;
+  login_no_soy_yo: string;
   login_last_access: string;
   login_change_cedula: string;
   login_password_title: string;

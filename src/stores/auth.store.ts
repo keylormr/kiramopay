@@ -11,6 +11,7 @@ import {
 import { syncAllData } from '@/services/dataSync';
 import { clasificarIdentificador } from '@/utils/identificador';
 import { limpiarDatosDeUsuario } from '@/stores/limpiarDatosDeUsuario';
+import { olvidarUltimoAcceso } from '@/stores/olvidarUltimoAcceso';
 import { clearLockPin } from '@/services/lockKdf';
 import { secureTokenStore } from '@/services/secureTokenStore';
 
@@ -202,6 +203,11 @@ export const useAuthStore = create<AuthState>()(
         // Igual que en logout: sesion invalidada (401 sin refresh posible)
         // implica soltar los datos del usuario, no solo los tokens.
         limpiarDatosDeUsuario();
+        // Y a diferencia de un cierre de sesion normal, aqui la cuenta PERDIO
+        // el acceso: la tarjeta de acceso rapido y la credencial del llavero
+        // ya no sirven para entrar, asi que dejarlas solo deja el nombre de esa
+        // persona a la vista y una contrasena guardada sin proposito.
+        olvidarUltimoAcceso();
         set({
           isAuthenticated: false,
           sessionHint: false,

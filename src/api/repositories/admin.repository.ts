@@ -11,6 +11,8 @@ export interface AdminUser {
   id: string;
   firstName: string;
   lastName: string;
+  /** Nombre de usuario, SIN enmascarar: es lo que soporte tiene que poder dictar. */
+  username: string;
   cedulaMasked: string;
   phoneMasked: string;
   emailMasked: string;

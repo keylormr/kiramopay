@@ -534,6 +534,7 @@ const hi: TranslationKeys = {
   login_detected_cedula: 'आप अपनी पहचान संख्या से साइन इन करेंगे',
   login_detected_correo: 'आप अपने ईमेल से साइन इन करेंगे',
   login_detected_telefono: 'आप अपने फ़ोन से साइन इन करेंगे',
+  login_no_soy_yo: 'यह मैं नहीं हूँ, दूसरा खाता इस्तेमाल करें',
   login_last_access: 'अंतिम पहुंच:',
   login_change_cedula: 'बदलें',
   login_password_title: 'अपना पासवर्ड दर्ज करें',
