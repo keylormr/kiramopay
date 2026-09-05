@@ -278,10 +278,15 @@ const Layout = () => {
   const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
 
-  // Actualizacion del APK y campana promocional vigente. La campana espera a
+  // Actualizacion disponible y campana promocional vigente. La campana espera a
   // que no haya otra hoja encima (ni oferta biometrica ni actualizacion): un
   // solo pop-up a la vez o es spam.
-  const { actualizacion, posponer: posponerActualizacion, descargar: descargarActualizacion } = useActualizacion();
+  const {
+    actualizacion,
+    plataforma: plataformaApp,
+    posponer: posponerActualizacion,
+    actualizar: aplicarActualizacion,
+  } = useActualizacion();
   const [campana, setCampana] = useState<Campana | null>(null);
   const [campanaCopiada, setCampanaCopiada] = useState(false);
   const cerrarCampana = () => {
@@ -660,8 +665,11 @@ const Layout = () => {
         </div>
       </BottomSheet>
 
-      {/* Actualizacion del APK disponible: un toque baja la nueva y Android
-          la instala encima (misma firma), sin tienda ni pasar archivos. */}
+      {/* Actualizacion disponible. En Android un toque baja el .apk y el
+          sistema lo instala encima (misma firma), sin tienda. En iOS no se
+          puede instalar un binario bajado de un link: la URL lleva al canal
+          (TestFlight, App Store o instalador OTA), y por eso cambian el texto
+          y la accion. */}
       <BottomSheet
         isOpen={actualizacion !== null}
         onClose={posponerActualizacion}
@@ -673,7 +681,10 @@ const Layout = () => {
           </div>
           <h3 className="text-xl font-black uv-text-primary mb-2">{t('update_title')}</h3>
           <p className="text-sm uv-text-secondary mb-6">
-            {t('update_body').replace('{version}', actualizacion?.version ?? '')}
+            {t(plataformaApp === 'ios' ? 'update_body_ios' : 'update_body').replace(
+              '{version}',
+              actualizacion?.version ?? '',
+            )}
           </p>
           <div className="flex gap-3">
             <button
@@ -683,10 +694,10 @@ const Layout = () => {
               {t('update_later')}
             </button>
             <button
-              onClick={descargarActualizacion}
+              onClick={aplicarActualizacion}
               className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
             >
-              {t('update_download')}
+              {t(plataformaApp === 'ios' ? 'update_open' : 'update_download')}
             </button>
           </div>
         </div>
