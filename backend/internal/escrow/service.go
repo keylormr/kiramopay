@@ -30,9 +30,16 @@ type EventSink interface {
 }
 
 // HistoryRecorder makes escrow money movements visible in the user's
-// transaction list (the ledger posting itself happens here, in escrow).
+// transaction list (the ledger posting itself happens here, in escrow), y
+// ademas presta el control de tope diario del servicio de transacciones.
+//
+// Las dos cosas van juntas a proposito: escrow mueve dinero fuera de la
+// billetera por su propio camino, asi que tiene que anotarlo donde el tope se
+// cuenta Y consultar ese mismo tope. Con solo una de las dos, el tope diario
+// deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
+	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // Service drives the escrow state machine and its ledger postings.
@@ -143,6 +150,25 @@ func (s *Service) Fund(ctx context.Context, callerID, id string) (*Agreement, er
 	}
 	if bal < a.AmountMinor {
 		return nil, ErrInsufficient
+	}
+
+	// Tope diario. Faltaba: escrow comprobaba el saldo pero ningun limite, a
+	// diferencia de las transferencias. Se podia vaciar la billetera creando
+	// escrows hacia una cuenta propia en tramos por debajo del umbral que pide
+	// segundo factor, y liberandolos.
+	//
+	// Solo se comprueba al FINANCIAR: es el unico momento en que el dinero sale
+	// de la billetera del comprador. Liberar mueve desde la cuenta de escrow al
+	// vendedor y reembolsar devuelve al comprador; ninguno de los dos saca nada
+	// de una billetera, asi que volver a cobrar el tope ahi lo cobraria dos
+	// veces por el mismo dinero.
+	if s.history != nil {
+		if err := s.history.CheckDailyLimit(ctx, a.BuyerID, a.Currency, a.AmountMinor); err != nil {
+			if errors.Is(err, transaction.ErrDailyLimitExceeded) {
+				return nil, ErrDailyLimitExceeded
+			}
+			return nil, fmt.Errorf("daily limit check: %w", err)
+		}
 	}
 
 	if s.mfa != nil && s.mfa.IsMFARequired(a.AmountMinor, a.Currency) {
