@@ -80,4 +80,9 @@ var (
 	ErrInsufficient   = errors.New("escrow: insufficient balance")
 	ErrMFARequired    = errors.New("escrow: verified MFA challenge required for this amount")
 	ErrInvalidRequest = errors.New("escrow: invalid request")
+	// ErrDailyLimitExceeded: financiar este acuerdo pasaria el tope diario de
+	// salida de la billetera del comprador. La regla es la MISMA que la de las
+	// transferencias (transaction.CheckDailyLimit); aqui solo se traduce para
+	// que el handler de escrow pueda devolver su propio codigo.
+	ErrDailyLimitExceeded = errors.New("escrow: daily spending limit exceeded")
 )

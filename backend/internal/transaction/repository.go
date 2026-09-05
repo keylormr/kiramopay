@@ -247,18 +247,31 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error 
 // against this computed value because wallets.daily_spent is no longer
 // maintained after the journal-ledger refactor (migration 020 dropped its only
 // writer), which had silently disabled the cumulative daily cap.
-func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
-	var total int64
-	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(amount), 0)
+//
+// La lista de tipos es la definicion operativa de "salida". Un tipo que saque
+// dinero de la billetera y NO este aqui hace que el tope diario valga mas de lo
+// que dice: se gasta el tope entero por ese camino y despues otra vez por los
+// demas. Le paso a escrow_fund, que estuvo fuera de la lista mientras escrow
+// tampoco consultaba el tope. Al agregar un movimiento saliente hay que
+// agregarlo aqui tambien.
+//
+// savings_deposit queda fuera a proposito: mueve el dinero a SYSTEM:SAVINGS,
+// que sigue siendo del usuario y puede retirar cuando quiera. No sale de su
+// control, asi que no es gasto.
+// sqlSalidaDiaria esta en una constante, y no incrustada en la llamada, para
+// que una prueba pueda leer LA MISMA cadena que se ejecuta y comprobar que la
+// lista de tipos no se quede corta.
+const sqlSalidaDiaria = `SELECT COALESCE(SUM(amount), 0)
 		 FROM transactions
 		 WHERE user_id = $1
 		   AND currency = $2
 		   AND status = 'completed'
 		   AND created_date = CURRENT_DATE
-		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy')`,
-		userID, currency,
-	).Scan(&total)
+		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy','escrow_fund')`
+
+func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
+	var total int64
+	err := r.db.QueryRow(ctx, sqlSalidaDiaria, userID, currency).Scan(&total)
 	return total, err
 }
 

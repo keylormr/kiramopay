@@ -97,14 +97,8 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		if req.Currency == "USD" && w.BalanceUSD < totalCost {
 			return nil, fmt.Errorf("insufficient balance")
 		}
-		if w.DailyLimit > 0 {
-			spentToday, err := s.repo.DailyOutgoingMinor(ctx, userID, req.Currency)
-			if err != nil {
-				return nil, fmt.Errorf("daily spend check: %w", err)
-			}
-			if spentToday+req.Amount > w.DailyLimit {
-				return nil, fmt.Errorf("daily spending limit exceeded")
-			}
+		if err := s.checkDailyLimit(ctx, userID, req.Currency, req.Amount, w.DailyLimit); err != nil {
+			return nil, err
 		}
 
 		if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {
@@ -339,14 +333,8 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.Currency == "USD" && senderWallet.BalanceUSD < senderTotal {
 		return nil, nil, fmt.Errorf("insufficient balance")
 	}
-	if senderWallet.DailyLimit > 0 {
-		spentToday, err := s.repo.DailyOutgoingMinor(ctx, req.FromUserID, req.Currency)
-		if err != nil {
-			return nil, nil, fmt.Errorf("daily spend check: %w", err)
-		}
-		if spentToday+req.Amount > senderWallet.DailyLimit {
-			return nil, nil, fmt.Errorf("daily spending limit exceeded")
-		}
+	if err := s.checkDailyLimit(ctx, req.FromUserID, req.Currency, req.Amount, senderWallet.DailyLimit); err != nil {
+		return nil, nil, err
 	}
 
 	if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {
@@ -477,6 +465,12 @@ var ErrCreditNotAllowed = errors.New("this transaction type cannot be requested 
 // ErrMFARequired indicates the user must verify MFA before this tx proceeds.
 var ErrMFARequired = errors.New("mfa challenge required")
 
+// ErrDailyLimitExceeded: la salida del dia superaria el tope de la billetera,
+// que depende del nivel de KYC (kyc.LevelLimits). El texto es exactamente el
+// que ya salia al cliente antes de existir el sentinela, para no cambiarle el
+// mensaje a nadie.
+var ErrDailyLimitExceeded = errors.New("daily spending limit exceeded")
+
 // ErrInsufficientMerchantBalance rejects a withdrawal larger than the shop's
 // journal-derived balance. The exact string reaches the client as the 400
 // message, so keep it stable.
@@ -508,6 +502,36 @@ func (s *Service) GetTransaction(ctx context.Context, id string) (*TransactionRe
 
 func (s *Service) ListTransactions(ctx context.Context, userID string, req *ListTransactionsRequest) (*TransactionListResponse, error) {
 	return s.repo.ListByUser(ctx, userID, req)
+}
+
+// CheckDailyLimit comprueba que sacar amountMinor hoy no pase el tope diario de
+// la billetera. La expone escrow, que mueve dinero fuera de la billetera por su
+// propio camino y hasta ahora no consultaba ningun tope: se podia vaciar la
+// cuenta creando escrows en tramos por debajo del umbral que pide segundo
+// factor. La regla vive AQUI y en ningun otro lado; duplicarla es como se
+// llega a dos topes distintos.
+func (s *Service) CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error {
+	w, err := s.walletRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("wallet not found")
+	}
+	return s.checkDailyLimit(ctx, userID, currency, amountMinor, w.DailyLimit)
+}
+
+// checkDailyLimit es la version interna, para los llamantes que ya cargaron la
+// billetera y no tienen por que volver a consultarla.
+func (s *Service) checkDailyLimit(ctx context.Context, userID, currency string, amountMinor, dailyLimit int64) error {
+	if dailyLimit <= 0 {
+		return nil // sin tope configurado
+	}
+	spentToday, err := s.repo.DailyOutgoingMinor(ctx, userID, currency)
+	if err != nil {
+		return fmt.Errorf("daily spend check: %w", err)
+	}
+	if spentToday+amountMinor > dailyLimit {
+		return ErrDailyLimitExceeded
+	}
+	return nil
 }
 
 // buildSingleSidedPosting books external-counterparty transfers (deposits,
