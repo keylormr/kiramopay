@@ -188,6 +188,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(10) NOT NULL DEFAULT 'free';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS daily_limit_usd BIGINT NOT NULL DEFAULT 19000;
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS monthly_limit_usd BIGINT NOT NULL DEFAULT 95000;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
@@ -233,6 +235,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		balance_crc BIGINT DEFAULT 250000000,
 		balance_usd BIGINT DEFAULT 50000,
 		daily_limit BIGINT DEFAULT 100000000,
+		daily_limit_usd BIGINT NOT NULL DEFAULT 19000,
+		monthly_limit_usd BIGINT NOT NULL DEFAULT 95000,
 		monthly_limit BIGINT DEFAULT 500000000,
 		daily_spent BIGINT DEFAULT 0,
 		monthly_spent BIGINT DEFAULT 0,
