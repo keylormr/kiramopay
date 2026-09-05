@@ -188,8 +188,6 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(10) NOT NULL DEFAULT 'free';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
-	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS daily_limit_usd BIGINT NOT NULL DEFAULT 19000;
-	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS monthly_limit_usd BIGINT NOT NULL DEFAULT 95000;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
@@ -245,6 +243,12 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW()
 	);
+	-- Una base local persistida ya tiene la tabla creada, asi que el CREATE de
+	-- arriba es un no-op ahi. Los ALTER van DESPUES de su propio CREATE: puestos
+	-- junto a los de users fallaban con "relation wallets does not exist",
+	-- porque esa tabla se crea mas abajo.
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS daily_limit_usd BIGINT NOT NULL DEFAULT 19000;
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS monthly_limit_usd BIGINT NOT NULL DEFAULT 95000;
 
 	CREATE TABLE IF NOT EXISTS user_sessions (
 		id UUID PRIMARY KEY,
