@@ -7,7 +7,7 @@ import (
 
 func TestPasswordResetEmail(t *testing.T) {
 	const token = "tok_abc123"
-	subject, texto, htmlCuerpo := PasswordResetEmail(token, "https://kiramopay.com")
+	subject, texto, htmlCuerpo := PasswordResetEmail(token, "https://kiramopay.com", "")
 
 	if !strings.Contains(subject, "contraseña") {
 		t.Errorf("el asunto perdió la tilde: %q", subject)
@@ -31,7 +31,7 @@ func TestPasswordResetEmail(t *testing.T) {
 // Sin appURL no debe quedar ni el botón ni una URL a medio armar; el flujo
 // sigue siendo válido pegando el código en la app.
 func TestPasswordResetEmailSinEnlace(t *testing.T) {
-	_, texto, htmlCuerpo := PasswordResetEmail("tok_1", "")
+	_, texto, htmlCuerpo := PasswordResetEmail("tok_1", "", "")
 
 	if strings.Contains(texto, "http") || strings.Contains(htmlCuerpo, "href=\"http") {
 		t.Error("no debía incluirse ningún enlace cuando appURL está vacío")
@@ -45,7 +45,7 @@ func TestPasswordResetEmailSinEnlace(t *testing.T) {
 // imágenes remotas y descartan SVG en línea, así que un <img> aparecería roto
 // en la primera apertura.
 func TestPasswordResetEmailLlevaLaMarca(t *testing.T) {
-	_, _, htmlCuerpo := PasswordResetEmail("tok_1", "https://kiramopay.com")
+	_, _, htmlCuerpo := PasswordResetEmail("tok_1", "https://kiramopay.com", "")
 
 	if strings.Contains(htmlCuerpo, "<img") || strings.Contains(htmlCuerpo, "<svg") {
 		t.Error("el logo no debe depender de <img> ni de <svg>")
@@ -66,7 +66,7 @@ func TestPasswordResetEmailLlevaLaMarca(t *testing.T) {
 // Un token con caracteres especiales no puede romper el HTML ni inyectar
 // etiquetas. No es hipotético: el token entra en el href y en el cuerpo.
 func TestPasswordResetEmailEscapaElToken(t *testing.T) {
-	_, _, htmlCuerpo := PasswordResetEmail(`"><script>alert(1)</script>`, "https://kiramopay.com")
+	_, _, htmlCuerpo := PasswordResetEmail(`"><script>alert(1)</script>`, "https://kiramopay.com", "")
 
 	if strings.Contains(htmlCuerpo, "<script>") {
 		t.Fatal("el token se interpoló sin escapar: hay una etiqueta script en el HTML")

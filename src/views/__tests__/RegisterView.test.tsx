@@ -100,6 +100,11 @@ async function navigateToPasswordStep(user: ReturnType<typeof userEvent.setup>) 
   await user.type(screen.getByPlaceholderText(/^Nombre$/i), 'Test');
   await user.type(screen.getByPlaceholderText(/Apellido/i), 'User');
   await user.click(screen.getByText(/Continuar/i));
+  await waitFor(() => expect(screen.getByText(/Elige tu nombre de usuario/i)).toBeInTheDocument(), { timeout: 3000 });
+
+  // Step 5: nombre de usuario. Llega propuesto a partir del nombre ("test"),
+  // asi que basta con continuar.
+  await user.click(screen.getByText(/Continuar/i));
   await waitFor(() => expect(screen.getByText(/Crea tu contraseña/i)).toBeInTheDocument(), { timeout: 3000 });
 }
 
@@ -207,6 +212,7 @@ describe('RegisterView', () => {
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith({
         cedula: '702650930',
+        username: 'test',
         phone: '+50688881234',
         firstName: 'Test',
         lastName: 'User',
@@ -298,6 +304,7 @@ describe('RegisterView', () => {
       await waitFor(() => {
         expect(mockRegister).toHaveBeenCalledWith({
           cedula: '702650930',
+          username: 'test',
           phone: '+50688881234',
           firstName: 'Test',
           lastName: 'User',

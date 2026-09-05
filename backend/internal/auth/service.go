@@ -275,7 +275,21 @@ type ChangePasswordRequest struct {
 }
 
 type ForgotPasswordRequest struct {
-	Cedula string `json:"cedula"`
+	// Identifier acepta lo mismo que el login: nombre de usuario, cedula,
+	// correo o telefono. Cedula queda como alias legado, igual que en
+	// LoginRequest: los APK viejos mandan {cedula} y tienen que seguir
+	// recuperando su contrasena.
+	Identifier string `json:"identifier,omitempty"`
+	Cedula     string `json:"cedula,omitempty"`
+}
+
+// EffectiveIdentifier es el valor con el que se busca la cuenta: identifier si
+// vino, si no el alias legado cedula.
+func (r *ForgotPasswordRequest) EffectiveIdentifier() string {
+	if r.Identifier != "" {
+		return r.Identifier
+	}
+	return r.Cedula
 }
 
 type ResetPasswordRequest struct {
@@ -837,11 +851,24 @@ func (s *Service) sendEmailDetached(userID, to, subject, textBody, htmlBody stri
 // ForgotPassword always returns nil regardless of whether the user exists
 // (anti-enumeration). When the user exists, a token is issued and stored.
 // The caller is responsible for delivering the token via email/SMS.
-func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginContext) (string, error) {
-	// Misma canonicalizacion que el login y el registro: sin esto, una cedula
-	// tecleada con guiones no encuentra al usuario y la recuperacion falla en
-	// silencio (nunca llega el correo, sin error visible).
-	u, _ := s.userRepo.FindByCedula(ctx, soloDigitos(cedula))
+// ForgotPassword acepta CUALQUIERA de los identificadores con los que se puede
+// entrar, no solo la cedula.
+//
+// Antes solo aceptaba cedula, y eso ya estaba desalineado con un login que
+// aceptaba tres. Con el nombre de usuario se volvio una trampa: quien entra con
+// su usuario, olvida la contrasena y teclea ese usuario aqui leia "te enviamos
+// instrucciones" y no le llegaba nada nunca. Un 202 que miente es peor que un
+// error: el usuario espera un correo que no existe en vez de buscar otra via.
+//
+// Se reusa identifier.Classify —la misma regla del login— a proposito: una
+// segunda regla aqui terminaria aceptando cosas distintas de las que sirven
+// para entrar.
+func (s *Service) ForgotPassword(ctx context.Context, identificador string, lc LoginContext) (string, error) {
+	kind, canonical, cerr := identifier.Classify(identificador)
+	var u *user.UserRecord
+	if cerr == nil {
+		u = s.resolveLoginUser(ctx, kind, canonical)
+	}
 	if u == nil {
 		// Burn equivalent CPU so timing doesn't leak existence.
 		hash.DummyVerify()
@@ -868,7 +895,7 @@ func (s *Service) ForgotPassword(ctx context.Context, cedula string, lc LoginCon
 	// same response whether or not delivery succeeded (anti-enumeration). Without
 	// a provider the handler echoes the token in dev only.
 	if s.emailSender != nil && u.Email != "" {
-		subject, textBody, htmlBody := messaging.PasswordResetEmail(raw, s.publicAppURL)
+		subject, textBody, htmlBody := messaging.PasswordResetEmail(raw, s.publicAppURL, u.Username)
 		// #nosec G118 -- intentionally detached: the request context dies with
 		// the response, and delivery must outlive it (sendEmailDetached uses its
 		// own bounded context).

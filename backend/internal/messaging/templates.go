@@ -58,7 +58,15 @@ const (
 // reset. When appURL is non-empty a one-click link carrying the token is
 // included; the raw token is always shown so the in-app flow works without the
 // link. token is the single-use reset token from auth.ForgotPassword.
-func PasswordResetEmail(token, appURL string) (subject, textBody, htmlBody string) {
+// PasswordResetEmail arma el correo de restablecimiento. username puede venir
+// vacio (cuentas anteriores a la migracion 058); cuando viene, se incluye.
+//
+// Va aqui a proposito: desde que se entra con nombre de usuario, quien pide
+// recuperar la contrasena muchas veces tampoco recuerda con QUE usuario entra.
+// Este correo es el unico canal que ya llega a esa persona, asi que es el lugar
+// natural para decirselo. Sin eso, recuperar la contrasena no alcanza para
+// volver a entrar.
+func PasswordResetEmail(token, appURL, username string) (subject, textBody, htmlBody string) {
 	subject = "Restablece tu contraseña de KiramoPay"
 
 	var link string
@@ -68,6 +76,9 @@ func PasswordResetEmail(token, appURL string) (subject, textBody, htmlBody strin
 
 	var text strings.Builder
 	text.WriteString("Recibimos una solicitud para restablecer tu contraseña de KiramoPay.\n\n")
+	if username != "" {
+		text.WriteString("Tu nombre de usuario es: " + username + "\n\n")
+	}
 	text.WriteString("Tu código de restablecimiento es:\n")
 	text.WriteString(token + "\n\n")
 	if link != "" {
@@ -80,6 +91,12 @@ func PasswordResetEmail(token, appURL string) (subject, textBody, htmlBody strin
 
 	body := new(strings.Builder)
 	body.WriteString(paragraph("Recibimos una solicitud para restablecer tu contraseña. Usá este código para continuar:"))
+	if username != "" {
+		// Escapado: el nombre de usuario lo elige el propio usuario y aqui se
+		// interpola en HTML. Hoy su formato ya excluye los caracteres que
+		// importan, pero esto no puede depender de que esa regla no cambie.
+		body.WriteString(paragraph("Tu nombre de usuario es <strong>" + html.EscapeString(username) + "</strong>."))
+	}
 	body.WriteString(codeBlock(token))
 	if link != "" {
 		body.WriteString(button(link, "Restablecer contraseña"))

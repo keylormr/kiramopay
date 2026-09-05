@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import { normalizarCodigoInvitacion, clearReferralCode } from '@/utils/referralCode';
+import { esNombreDeUsuarioValido } from '@/utils/identificador';
 
 interface RegisterViewProps {
   onComplete: () => void;
@@ -13,7 +14,7 @@ interface RegisterViewProps {
   referralCode?: string;
 }
 
-type Step = 'phone' | 'otp' | 'cedula' | 'name' | 'password';
+type Step = 'phone' | 'otp' | 'cedula' | 'name' | 'usuario' | 'password';
 
 const getPasswordStrength = (pwd: string): { labelKey: string; color: string; textColor: string; width: string } => {
   if (pwd.length === 0) return { labelKey: '', color: '', textColor: '', width: '0%' };
@@ -51,6 +52,12 @@ const CLAVE_POR_CODIGO_REGISTRO: Record<string, string> = {
   USER_EXISTS: 'reg_err_user_exists',
   PHONE_NOT_VERIFIED: 'reg_err_phone_not_verified',
   CEDULA_INVALID: 'reg_err_cedula_invalid',
+  // El nombre de usuario tomado SI se dice, a diferencia de la cedula o el
+  // telefono, que se colapsan en USER_EXISTS para no confirmar que ese dato
+  // esta registrado: un nombre de usuario es publico por naturaleza y quien se
+  // registra necesita saber que tiene que elegir otro.
+  USERNAME_TAKEN: 'reg_usuario_tomado',
+  USERNAME_INVALID: 'reg_usuario_invalido',
 };
 
 const claveErrorRegistro = (code?: string): string =>
@@ -70,6 +77,9 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
   const [devCode, setDevCode] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [cedula, setCedula] = useState({ type: 'nacional', part1: '', part2: '', part3: '' });
+  // Nombre de usuario: es con lo que se va a entrar. Se propone uno a partir
+  // del nombre para que nadie tenga que inventarlo, pero se puede cambiar.
+  const [usuario, setUsuario] = useState('');
   const [name, setName] = useState({ firstName: '', lastName: '' });
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -115,6 +125,20 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
         setStep('name');
         break;
       case 'name':
+        // Propuesta a partir del nombre, solo si el usuario no escribio uno.
+        // Se limpia a lo que el formato admite y se recorta al maximo.
+        if (!usuario) {
+          const propuesta = name.firstName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9._-]/g, '')
+            .slice(0, 20);
+          if (esNombreDeUsuarioValido(propuesta)) setUsuario(propuesta);
+        }
+        setStep('usuario');
+        break;
+      case 'usuario':
         setStep('password');
         break;
     }
@@ -144,6 +168,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
     const fullCedula = `${cedula.part1}${cedula.part2}${cedula.part3}`;
     const result = await register({
       cedula: fullCedula,
+      username: usuario,
       phone: `+506${phone}`,
       firstName: name.firstName,
       lastName: name.lastName,
@@ -162,6 +187,12 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
       clearReferralCode();
       onComplete();
       return;
+    }
+    // Si lo que fallo es el nombre de usuario, se vuelve a ESE paso: dejar al
+    // usuario en la pantalla de la contrasena con un error sobre otro campo lo
+    // obligaria a rehacer el asistente para corregir una letra.
+    if (result.code === 'USERNAME_TAKEN' || result.code === 'USERNAME_INVALID') {
+      setStep('usuario');
     }
     setError(t(claveErrorRegistro(result.code)));
   };
@@ -420,6 +451,57 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
             </Button>
           </div>
         );
+
+      case 'usuario': {
+        const limpio = usuario.trim().toLowerCase();
+        const valido = esNombreDeUsuarioValido(limpio);
+        return (
+          <div className="animate-in fade-in slide-in-from-right duration-300">
+            <div className="w-16 h-16 uv-gradient-brand rounded-2xl flex items-center justify-center mb-6">
+              <Icons.User size={32} className="text-white" />
+            </div>
+            <h1 className="text-2xl font-black text-white mb-2">{t('reg_usuario_title')}</h1>
+            <p className="text-[var(--color-text-muted-dark)] mb-6">{t('reg_usuario_desc')}</p>
+
+            <div className="mb-2">
+              <input
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
+                value={usuario}
+                onChange={(e) => {
+                  // Se normaliza mientras se escribe: asi lo que se ve es
+                  // exactamente lo que se va a guardar, sin sorpresas al enviar.
+                  setUsuario(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 20));
+                  setError('');
+                }}
+                placeholder={t('reg_usuario_placeholder')}
+                className="w-full bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)] text-white text-lg font-medium placeholder:text-[var(--color-text-muted-dark)] outline-none focus:border-[var(--color-primary)]"
+                autoFocus
+              />
+            </div>
+            {/* La regla se dice ANTES de fallar, no despues: el formato lo
+                comparte el servidor y un rechazo al final del asistente seria
+                el peor momento para enterarse. */}
+            <p className={`text-sm mb-6 ${limpio && !valido ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted-dark)]'}`}>
+              {t('reg_usuario_regla')}
+            </p>
+
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={handleNext}
+              loading={isLoading}
+              disabled={!valido}
+            >
+              {t('continue')}
+            </Button>
+          </div>
+        );
+      }
 
       case 'password':
         return (

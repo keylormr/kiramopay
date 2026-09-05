@@ -30,6 +30,8 @@ export interface LoginResponse {
 }
 
 export interface RegisterRequest {
+  /** Nombre de usuario elegido (opcional). */
+  username?: string;
   cedula: string;
   phone: string;
   firstName: string;
@@ -93,7 +95,8 @@ export interface IAuthRepository {
    * regardless of whether the account exists (anti-enumeration) — a failure
    * here signals a transport/rate-limit problem, never "account not found".
    */
-  forgotPassword(cedula: string): Promise<ApiResponse<ForgotPasswordResult>>;
+  /** Acepta lo mismo que el login: nombre de usuario, cedula, correo o telefono. */
+  forgotPassword(identificador: string): Promise<ApiResponse<ForgotPasswordResult>>;
   /** Consumes a reset token and sets a new password for the owning account. */
   resetPassword(token: string, newPassword: string): Promise<ApiResponse<{ reset: boolean }>>;
   /** Exchanges a refresh token for a fresh token pair (rotation). */

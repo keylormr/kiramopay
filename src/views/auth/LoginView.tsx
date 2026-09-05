@@ -368,6 +368,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {t('continue')}
             </Button>
 
+            {/* La recuperacion vive TAMBIEN aqui, no solo en la etapa de la
+                contrasena. Estaba solo alla, y a esa etapa no se llega sin
+                teclear un identificador valido: quien olvido su nombre de
+                usuario no podia ni abrir la pantalla de recuperacion. Es la
+                diferencia entre "me equivoque" y "perdi la cuenta". */}
+            <button
+              type="button"
+              onClick={() => setShowRecover(true)}
+              className="mt-4 w-full text-center text-[var(--color-primary-300)] hover:text-[var(--color-primary-200)] text-sm font-semibold transition-colors"
+            >
+              {t('recover_link')}
+            </button>
+
             {/* Registro a un toque: antes solo existia el enlace del pie, bajo
                 el pliegue en pantallas comunes. Quien llega sin cuenta debe
                 verlo sin scroll. */}
