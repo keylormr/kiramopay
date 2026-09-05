@@ -22,8 +22,15 @@ import { useNotificationStore } from './notification.store';
 import { useSavingsStore } from './savings.store';
 import { useRecurringStore } from './recurring.store';
 import { useBusinessStore } from './business.store';
+import { nuevaGeneracion } from '@/services/generacionDeSesion';
 
 export function limpiarDatosDeUsuario(): void {
+  // PRIMERO, y fuera del early-return de abajo: invalidar el trabajo
+  // asincronico en vuelo. Sin esto, una sincronizacion disparada antes del
+  // cierre de sesion termina DESPUES de esta limpieza y vuelve a escribir los
+  // datos del usuario que ya salio sobre los stores recien vaciados.
+  nuevaGeneracion();
+
   // Leido por llamada (no a nivel de modulo) para que las pruebas puedan
   // alternarlo, igual que hace useCryptoPricesWs.test.
   if (!import.meta.env.VITE_API_URL) return;
