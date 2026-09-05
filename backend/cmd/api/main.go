@@ -376,7 +376,13 @@ func main() {
 		AuditLogger: auditLogger,
 		Logger:      logger,
 	})
-	paymentService := payment.NewService(paymentRepo, txService)
+	// Pago de recibos y recargas: sin convenio con la empresa o el operador,
+	// cobrar solo debita la billetera y deja la plata en SYSTEM:EXTERNAL, sin
+	// entrega y sin reverso. Misma politica que el registro de rieles de
+	// payouts de mas arriba: fuera de produccion se permite para las demos.
+	paymentService := payment.NewService(paymentRepo, txService, &payment.Options{
+		ConveniosActivos: cfg.Server.Environment != "production",
+	})
 	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
 	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
@@ -390,7 +396,12 @@ func main() {
 			return r.Rate, nil
 		})
 
-	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService)
+	// Viajes y pedidos: el precio lo inventa el servicio (rand) y el socio es
+	// una lista fija, asi que cobrar debitaria la billetera real contra un monto
+	// que nadie cotizo. Misma politica que los rieles de payouts.
+	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService, &marketplace.Options{
+		CobrosActivos: cfg.Server.Environment != "production",
+	})
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
 	splitService := splitpay.NewService(splitRepo, txService)
 	cardsService := cards.NewService(cardsRepo)

@@ -572,12 +572,19 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         const diaHoy = ahora.getDate();
 
         // Acumulado diario del mes en curso (gastos del store sincronizado).
+        // Esta tarjeta rotula colones a mano, asi que suma SOLO colones: un
+        // gasto en dolares sumado 1:1 aqui se imprimiria como si fueran colones.
         const porDia = new Array(diaHoy).fill(0);
         let gastadoMesPasado = 0;
+        let otrasMonedas = 0;
         for (const tx of state.transactions) {
           if (tx.amount >= 0) continue;
           const time = getTxTime(tx);
           if (time === null) continue;
+          if ((tx.ccy || 'CRC') !== 'CRC') {
+            if (time >= inicioMes) otrasMonedas++;
+            continue;
+          }
           if (time >= inicioMes) {
             const d = new Date(time).getDate();
             if (d >= 1 && d <= diaHoy) porDia[d - 1] += Math.abs(tx.amount);
@@ -620,6 +627,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 formato={(v) => formatCurrency(v, 'CRC')}
                 titulo={t('home_spent_month')}
               />
+            )}
+            {otrasMonedas > 0 && (
+              <p className="mt-2 text-[11px] uv-text-muted">
+                {t('other_currency_note').replace('{n}', String(otrasMonedas))}
+              </p>
             )}
           </button>
         );

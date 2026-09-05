@@ -438,6 +438,7 @@ const pt: TranslationKeys = {
   crypto_prices_updated: 'Preços atualizados',
   crypto_prices_unavailable: 'Preços não atualizados',
   crypto_prices_unavailable_hint: 'Os valores podem estar desatualizados. Vamos tentar de novo automaticamente.',
+  crypto_price_stale: 'O preco esta desatualizado e nao cobramos com base num preco velho. Tente de novo em instantes.',
   crypto_action_needs_price: 'Não é possível operar sem o preço atual.',
   crypto_value_unavailable: 'Valor indisponível',
   crypto_refresh_prices: 'Atualizar preços',
@@ -633,6 +634,7 @@ const pt: TranslationKeys = {
   analytics_no_expenses: 'Nenhum gasto registrado',
   analytics_partial: 'Mostrando {shown} de {total} movimentações',
   analytics_offline: 'Não foi possível carregar o período completo: exibindo apenas as movimentações recentes',
+  other_currency_note: 'Movimentações em outras moedas: {n} (fora destes totais)',
   boot_connecting: 'Conectando ao KiramoPay...',
   boot_waking: 'O servidor está acordando, isso pode levar um momento...',
   update_title: 'Atualização disponível',
@@ -1134,6 +1136,13 @@ const pt: TranslationKeys = {
   plans_cta_registered: 'Anotado. Entramos em contato.',
   plans_cta_note: 'Ainda não dá para pagar dentro do aplicativo. Este botão não cobra nada: registra o seu interesse e a gente escreve quando a cobrança existir.',
   plans_cta_error: 'Não foi possível registrar o seu interesse. Tente de novo.',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: 'Ainda não temos convênio com esta empresa, por isso não podemos entregar o seu pagamento. Nada foi cobrado: o seu saldo continua igual.',
+  recharge_no_agreement: 'Ainda não temos convênio com esta operadora, por isso a recarga não chegaria ao telefone. Nada foi cobrado: o seu saldo continua igual.',
+  ride_no_integration: 'Ainda não temos integração com este aplicativo de viagens, por isso não podemos pagar a corrida. Nada foi cobrado: o seu saldo continua igual.',
+  order_no_integration: 'Ainda não temos integração com este serviço de pedidos, por isso o pedido não chegaria ao restaurante. Nada foi cobrado: o seu saldo continua igual.',
+  ride_price_after_quote: 'O preço e o tempo aparecem quando o serviço os cotar.',
+  order_delivery_fee_pending: 'O serviço confirma o custo de entrega ao fazer o pedido.',
 };
 
 export default pt;

@@ -361,6 +361,12 @@ export const CryptoView: React.FC = () => {
         setShowMfa(true);
         return;
       }
+      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
+      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
+      if (res.error?.code === 'PRICE_STALE') {
+        setTradeError(t('crypto_price_stale'));
+        return;
+      }
       setTradeError(res.error?.message || t('assistant_action_failed'));
       return;
     }
@@ -392,6 +398,12 @@ export const CryptoView: React.FC = () => {
       if (res.error?.code === MFA_REQUIRED) {
         setPendingTrade('sell');
         setShowMfa(true);
+        return;
+      }
+      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
+      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
+      if (res.error?.code === 'PRICE_STALE') {
+        setTradeError(t('crypto_price_stale'));
         return;
       }
       setTradeError(res.error?.message || t('assistant_action_failed'));
@@ -430,6 +442,12 @@ export const CryptoView: React.FC = () => {
     setIsTrading(false);
 
     if (!res.success) {
+      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
+      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
+      if (res.error?.code === 'PRICE_STALE') {
+        setTradeError(t('crypto_price_stale'));
+        return;
+      }
       setTradeError(res.error?.message || t('assistant_action_failed'));
       return;
     }
@@ -471,6 +489,12 @@ export const CryptoView: React.FC = () => {
     setIsTrading(false);
 
     if (!res.success) {
+      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
+      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
+      if (res.error?.code === 'PRICE_STALE') {
+        setTradeError(t('crypto_price_stale'));
+        return;
+      }
       setTradeError(res.error?.message || t('assistant_action_failed'));
       return;
     }

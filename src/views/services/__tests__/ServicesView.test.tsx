@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { ServicesView } from '../ServicesView';
@@ -116,5 +116,59 @@ describe('ServicesView — pago de servicios', () => {
       expect(mocks.api.services.payBill).toHaveBeenCalledTimes(2);
     });
     expect(await screen.findByText('¡Pago exitoso!')).toBeInTheDocument();
+  });
+
+  // El servidor niega el cobro cuando no hay convenio con la empresa: la
+  // pantalla tiene que decir por que, y que el saldo no se movio. Antes solo
+  // repetia el texto crudo del servidor.
+  it('explica la negativa cuando no hay convenio con la empresa', async () => {
+    mocks.api.services.payBill.mockResolvedValue({
+      success: false,
+      error: { code: 'SIN_CONVENIO', message: 'el pago no se puede entregar todavia' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+
+    expect(
+      await screen.findByText(/Todavía no tenemos convenio con esta empresa/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/tu saldo sigue igual/)).toBeInTheDocument();
+    expect(screen.queryByText('el pago no se puede entregar todavia')).not.toBeInTheDocument();
+    expect(screen.queryByText('¡Pago exitoso!')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('ServicesView — recarga', () => {
+  /** Abre la recarga de Kolbi con numero y monto elegidos. */
+  async function completarRecarga(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('tab', { name: 'Recarga' }));
+    await user.click(screen.getByText('Kolbi'));
+    await user.type(await screen.findByPlaceholderText('8888-0000'), '88880000');
+    const montos = screen.getByText('Selecciona monto').parentElement as HTMLElement;
+    await user.click(within(montos).getAllByRole('button')[0]);
+    await user.click(screen.getByRole('button', { name: /^Recarga ₡/ }));
+  }
+
+  // Misma negativa, otro canal: sin convenio con el operador la recarga no
+  // llega al telefono, y eso hay que decirlo.
+  it('explica la negativa cuando no hay convenio con el operador', async () => {
+    mocks.api.services.recharge.mockResolvedValue({
+      success: false,
+      error: { code: 'SIN_CONVENIO', message: 'el pago no se puede entregar todavia' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarRecarga(user);
+
+    expect(
+      await screen.findByText(/Todavía no tenemos convenio con este operador/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('el pago no se puede entregar todavia')).not.toBeInTheDocument();
+    expect(screen.queryByText('¡Recarga exitosa!')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 });

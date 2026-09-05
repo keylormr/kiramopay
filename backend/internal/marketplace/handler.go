@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -35,6 +36,13 @@ func (h *Handler) ConfirmRide(w http.ResponseWriter, r *http.Request) {
 	rideID := chi.URLParam(r, "id")
 	ride, err := h.service.ConfirmRide(r.Context(), userID, rideID)
 	if err != nil {
+		// Sin integracion con el socio: 503 con codigo propio para que la
+		// pantalla lo explique. No es culpa del usuario ni de su saldo.
+		if errors.Is(err, ErrSinIntegracion) {
+			response.Error(w, http.StatusServiceUnavailable, "SIN_INTEGRACION",
+				"el cobro no se puede entregar todavia")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CONFIRM_FAILED", err.Error())
 		return
 	}
@@ -146,6 +154,13 @@ func (h *Handler) CreateFoodOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	order, err := h.service.CreateFoodOrder(r.Context(), userID, &req)
 	if err != nil {
+		// Sin integracion con el socio: 503 con codigo propio para que la
+		// pantalla lo explique. No es culpa del usuario ni de su saldo.
+		if errors.Is(err, ErrSinIntegracion) {
+			response.Error(w, http.StatusServiceUnavailable, "SIN_INTEGRACION",
+				"el cobro no se puede entregar todavia")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "ORDER_FAILED", err.Error())
 		return
 	}

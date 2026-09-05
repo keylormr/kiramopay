@@ -438,6 +438,7 @@ const en: TranslationKeys = {
   crypto_prices_updated: 'Prices updated',
   crypto_prices_unavailable: 'Prices could not be updated',
   crypto_prices_unavailable_hint: 'Values may be out of date. It retries on its own.',
+  crypto_price_stale: 'The price is out of date and we do not charge against a stale price. Try again in a moment.',
   crypto_action_needs_price: 'Trading is unavailable without a current price.',
   crypto_value_unavailable: 'Value unavailable',
   crypto_refresh_prices: 'Refresh prices',
@@ -633,6 +634,7 @@ const en: TranslationKeys = {
   analytics_no_expenses: 'No expenses recorded',
   analytics_partial: 'Showing {shown} of {total} transactions',
   analytics_offline: 'Could not load the full period: showing only recent transactions',
+  other_currency_note: 'Movements in other currencies: {n} (not in these totals)',
   boot_connecting: 'Connecting to KiramoPay...',
   boot_waking: 'The server is waking up, this may take a moment...',
   update_title: 'Update available',
@@ -1134,6 +1136,13 @@ const en: TranslationKeys = {
   plans_cta_registered: 'Noted. We will contact you.',
   plans_cta_note: 'You still cannot pay inside the app. This button charges nothing: it notes your interest and we write to you once billing exists.',
   plans_cta_error: 'We could not note your interest. Try again.',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: 'We do not have an agreement with this company yet, so we cannot deliver your payment. Nothing was charged: your balance is unchanged.',
+  recharge_no_agreement: 'We do not have an agreement with this carrier yet, so the top-up would not reach the phone. Nothing was charged: your balance is unchanged.',
+  ride_no_integration: 'We are not integrated with this ride app yet, so we cannot pay for the trip. Nothing was charged: your balance is unchanged.',
+  order_no_integration: 'We are not integrated with this delivery service yet, so the order would not reach the restaurant. Nothing was charged: your balance is unchanged.',
+  ride_price_after_quote: 'The price and the time show up once the service quotes them.',
+  order_delivery_fee_pending: 'The service confirms the delivery fee when the order is placed.',
 };
 
 export default en;

@@ -48,6 +48,11 @@ const PHONE_OPERATORS = [
   { id: 'movistar', name: 'Movistar', logo: PhoneCall, color: 'from-blue-500 to-blue-600', amounts: [1000, 2000, 5000, 10000, 20000] },
 ];
 
+// El servidor niega el cobro con este codigo cuando no hay convenio con la
+// empresa o el operador: no hay a quien entregarle la plata, asi que no la
+// debita. La pantalla lo explica en vez de mostrar un error generico.
+const SIN_CONVENIO = 'SIN_CONVENIO';
+
 const CATEGORIES = [
   { id: 'all', label: 'cat_all', icon: LayoutGrid },
   { id: 'electricity', label: 'cat_electricity', icon: Zap },
@@ -79,6 +84,9 @@ export const ServicesView: React.FC = () => {
   const [rechargeAmount, setRechargeAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState('');
+  // La negativa por falta de convenio no es un fallo del usuario ni de su
+  // saldo: se muestra en tono neutro, no en el rojo de los errores.
+  const [actionBlocked, setActionBlocked] = useState(false);
   // Desafio de MFA para montos altos: 'pendingAction' recuerda que operacion
   // reintentar cuando el codigo se verifica.
   const [showMfa, setShowMfa] = useState(false);
@@ -101,6 +109,9 @@ export const ServicesView: React.FC = () => {
 
   const handleSelectProvider = (provider: typeof SERVICE_PROVIDERS[0]) => {
     setSelectedProvider(provider);
+    // El aviso nombra a la empresa: no puede sobrevivir al cambio de proveedor.
+    setActionError('');
+    setActionBlocked(false);
     // Check if user has saved this service
     const saved = state.savedServices.find(s => s.providerId === provider.id);
     if (saved) {
@@ -123,6 +134,7 @@ export const ServicesView: React.FC = () => {
 
     setIsProcessing(true);
     setActionError('');
+    setActionBlocked(false);
     const res = await getApiLayer().services.payBill({
       providerId: selectedProvider.id,
       providerName: selectedProvider.name,
@@ -138,6 +150,11 @@ export const ServicesView: React.FC = () => {
       if (res.error?.code === MFA_REQUIRED) {
         setPendingAction('bill');
         setShowMfa(true);
+        return;
+      }
+      if (res.error?.code === SIN_CONVENIO) {
+        setActionBlocked(true);
+        setActionError(t('bill_no_agreement'));
         return;
       }
       setActionError(res.error?.message || t('assistant_action_failed'));
@@ -165,6 +182,7 @@ export const ServicesView: React.FC = () => {
 
     setIsProcessing(true);
     setActionError('');
+    setActionBlocked(false);
     const res = await getApiLayer().services.recharge({
       operatorId: selectedOperator.id,
       phone: rechargePhone,
@@ -176,6 +194,11 @@ export const ServicesView: React.FC = () => {
       if (res.error?.code === MFA_REQUIRED) {
         setPendingAction('recharge');
         setShowMfa(true);
+        return;
+      }
+      if (res.error?.code === SIN_CONVENIO) {
+        setActionBlocked(true);
+        setActionError(t('recharge_no_agreement'));
         return;
       }
       setActionError(res.error?.message || t('assistant_action_failed'));
@@ -196,6 +219,16 @@ export const ServicesView: React.FC = () => {
     setRechargeAmount(null);
     setSelectedOperator(null);
   };
+
+  const mensajeAccion = !actionError ? null : actionBlocked ? (
+    <div role="status" className="uv-surface-2 rounded-xl p-4 text-sm uv-text-secondary text-center">
+      {actionError}
+    </div>
+  ) : (
+    <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+      {actionError}
+    </p>
+  );
 
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
@@ -356,7 +389,7 @@ export const ServicesView: React.FC = () => {
               {PHONE_OPERATORS.map((op) => (
                 <button
                   key={op.id}
-                  onClick={() => { setSelectedOperator(op); setShowRechargeSheet(true); }}
+                  onClick={() => { setSelectedOperator(op); setActionError(''); setActionBlocked(false); setShowRechargeSheet(true); }}
                   className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors"
                 >
                   <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mx-auto mb-2`}>
@@ -535,11 +568,7 @@ export const ServicesView: React.FC = () => {
             )}
           </div>
 
-          {actionError && (
-            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
-              {actionError}
-            </p>
-          )}
+          {mensajeAccion}
           <Button
             variant="primary"
             size="lg"
@@ -611,11 +640,7 @@ export const ServicesView: React.FC = () => {
             </div>
           </div>
 
-          {actionError && (
-            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
-              {actionError}
-            </p>
-          )}
+          {mensajeAccion}
           <Button
             variant="primary"
             size="lg"

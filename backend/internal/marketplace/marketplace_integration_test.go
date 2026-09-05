@@ -22,7 +22,7 @@ func setupMarketplace(t *testing.T) (*marketplace.Service, *pgxpool.Pool, string
 	pool := testutil.TestDB(t)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
-	svc := marketplace.NewService(marketplace.NewRepository(pool), l, txSvc)
+	svc := marketplace.NewService(marketplace.NewRepository(pool), l, txSvc, &marketplace.Options{CobrosActivos: true})
 	pinHash, _ := hash.HashPin("Kiramopay2024!")
 	user := testutil.SeedTestUser(t, pool, "702650930", pinHash)
 	return svc, pool, user

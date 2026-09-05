@@ -2,21 +2,52 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kiramopay/backend/internal/transaction"
 )
 
+// ErrSinConvenio se devuelve cuando se intenta pagar un recibo o recargar un
+// telefono y no hay integracion con la empresa ni con el operador.
+//
+// Sin convenio, cobrar es debitar la billetera de verdad y dejar la plata en
+// SYSTEM:EXTERNAL: nadie la recibe, el recibo que se emite no vale nada y no
+// hay camino de reverso. Es exactamente el caso que este repositorio ya
+// rechaza en otros dos lugares —sinpe.Send se niega a enviar a quien no es
+// usuario ("tomar la plata y mostrar pendiente para siempre es peor que decir
+// que no") y cmd/api/main.go se niega a registrar el riel de prueba de payouts
+// en produccion porque "debita la billetera real pero nunca desembolsa"—.
+// Estas dos rutas se habian saltado esa politica.
+var ErrSinConvenio = errors.New("sin convenio con el proveedor: el cobro no se puede entregar")
+
 type Service struct {
 	repo      *Repository
 	txService *transaction.Service
+	// convenios habilita el cobro. Falso mientras no exista integracion real;
+	// se enciende por entorno igual que el registro de rieles de payouts, para
+	// que las demos fuera de produccion sigan funcionando.
+	convenios bool
 }
 
-func NewService(repo *Repository, txService *transaction.Service) *Service {
-	return &Service{repo: repo, txService: txService}
+// Options configura el servicio. ConveniosActivos solo debe ser verdadero
+// donde exista una integracion que de verdad entregue el pago.
+type Options struct {
+	ConveniosActivos bool
+}
+
+func NewService(repo *Repository, txService *transaction.Service, opts *Options) *Service {
+	s := &Service{repo: repo, txService: txService}
+	if opts != nil {
+		s.convenios = opts.ConveniosActivos
+	}
+	return s
 }
 
 func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillRequest) (*PayBillResponse, error) {
+	if !s.convenios {
+		return nil, ErrSinConvenio
+	}
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
@@ -63,6 +94,9 @@ func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillReques
 }
 
 func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequest) (*RechargeResponse, error) {
+	if !s.convenios {
+		return nil, ErrSinConvenio
+	}
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
