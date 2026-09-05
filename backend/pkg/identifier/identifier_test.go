@@ -97,10 +97,15 @@ func TestClassify_EspaciosDisjuntos(t *testing.T) {
 // cuya cedula es esa y dejarla fuera 15 minutos.
 func TestLockoutKey_SeparaPorTipo(t *testing.T) {
 	mismoTexto := "702650930"
-	if LockoutKey(KindCedula, mismoTexto) == LockoutKey(KindUsername, mismoTexto) {
+	porCedula := LockoutKey(KindCedula, mismoTexto)
+	porUsuario := LockoutKey(KindUsername, mismoTexto)
+	if porCedula == porUsuario {
 		t.Fatal("la cedula y el nombre de usuario comparten contador: uno puede bloquear al otro")
 	}
-	if LockoutKey(KindCedula, mismoTexto) != LockoutKey(KindCedula, mismoTexto) {
+	// Y cada espacio sigue siendo estable consigo mismo: si la clave variara
+	// entre llamadas, el contador nunca alcanzaria el umbral y el bloqueo por
+	// intentos fallidos dejaria de existir.
+	if repetida := LockoutKey(KindCedula, mismoTexto); porCedula != repetida {
 		t.Fatal("la clave no es determinista")
 	}
 }
