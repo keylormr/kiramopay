@@ -21,6 +21,8 @@ const hasBackend = !!import.meta.env.VITE_API_URL;
 
 interface RegisterParams {
   cedula: string;
+  /** Nombre de usuario elegido. Opcional: sin el, la cuenta no tiene uno. */
+  username?: string;
   phone: string;
   firstName: string;
   lastName: string;
@@ -127,9 +129,9 @@ export const useAuthStore = create<AuthState>()(
         return { success: false, code: result.error?.code };
       },
 
-      register: async ({ cedula, phone, firstName, lastName, password, email, verificationToken, referralCode }) => {
+      register: async ({ cedula, username, phone, firstName, lastName, password, email, verificationToken, referralCode }) => {
         const api = getApiLayer();
-        const result = await api.auth.register({ cedula, phone, firstName, lastName, password, email, verificationToken, referralCode });
+        const result = await api.auth.register({ cedula, username, phone, firstName, lastName, password, email, verificationToken, referralCode });
         if (result.success && result.data) {
           // Cuenta recien creada en un dispositivo posiblemente compartido:
           // arrancar sin residuos del usuario anterior.

@@ -91,6 +91,9 @@ export class HttpAuthRepository implements IAuthRepository {
       '/api/v1/auth/register',
       {
         cedula: request.cedula,
+        // Solo viaja si el usuario eligio uno: sin el, la cuenta queda sin
+        // nombre de usuario y entra por los otros tres identificadores.
+        username: request.username || undefined,
         phone: request.phone,
         first_name: request.firstName,
         last_name: request.lastName,
@@ -183,18 +186,22 @@ export class HttpAuthRepository implements IAuthRepository {
     return apiSuccess<VerifyRegistrationOtpResult>({ verificationToken: res.data.verification_token });
   }
 
-  async forgotPassword(cedula: string): Promise<ApiResponse<ForgotPasswordResult>> {
+  async forgotPassword(identificador: string): Promise<ApiResponse<ForgotPasswordResult>> {
     // auth=false: this is an unauthenticated endpoint. The backend replies 202
-    // with a constant message whether or not the cédula exists (anti-enumeration),
-    // so a `success` result here does NOT imply the account exists.
+    // with a constant message whether or not the account exists
+    // (anti-enumeration), so a `success` result here does NOT imply it exists.
+    //
+    // Se manda `identifier` —nombre de usuario, cedula, correo o telefono— y
+    // ademas `cedula` como alias legado, igual que en el login: el servidor
+    // sigue leyendo el segundo si el primero no viene.
     const res = await this.client.post<{ message?: string; dev_token?: string }>(
       '/api/v1/auth/forgot-password',
-      { cedula },
+      { identifier: identificador, cedula: identificador },
       false,
     );
 
     if (!res.success) {
-      return apiError('FORGOT_PASSWORD_FAILED', res.error?.message || 'Could not process the request');
+      return apiError(res.error?.code || 'FORGOT_PASSWORD_FAILED', res.error?.message || 'Could not process the request');
     }
 
     // `dev_token` is only present when the backend runs in a dev environment.

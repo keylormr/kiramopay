@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Icons } from '../../components/Icons';
 import { Button } from '../../components/ui';
+import { clasificarIdentificador } from '@/utils/identificador';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 
@@ -38,7 +39,10 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
 }) => {
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>(initialToken ? 'reset' : 'request');
-  const [cedula, setCedula] = useState(initialCedula.replace(/\D/g, '').slice(0, 12));
+  // Acepta lo mismo que el login: nombre de usuario, cedula, correo o telefono.
+  // Antes filtraba a digitos y exigia nueve, asi que quien entra con su nombre
+  // de usuario no tenia forma de pedir la recuperacion desde aqui.
+  const [identificador, setIdentificador] = useState(initialCedula.trim().slice(0, 254));
   const [token, setToken] = useState(initialToken);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -56,11 +60,13 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const clasificado = clasificarIdentificador(identificador);
+
   const handleRequest = async () => {
-    if (cedula.length < 9 || isLoading) return;
+    if (!clasificado || isLoading) return;
     setError('');
     setIsLoading(true);
-    const res = await getApiLayer().auth.forgotPassword(cedula);
+    const res = await getApiLayer().auth.forgotPassword(clasificado.canonico);
     setIsLoading(false);
     if (!res.success) {
       setError(res.error?.code === 'RATE_LIMITED' ? t('login_rate_limited') : t('recover_error_generic'));
@@ -137,8 +143,8 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
             </h1>
             <p className="text-[var(--color-text-secondary-dark)] mb-8">{t('recover_subtitle')}</p>
 
-            <label htmlFor="recover-cedula" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
-              {t('cedula_label')}
+            <label htmlFor="recover-identificador" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+              {t('login_identifier_label')}
             </label>
             <div className="relative mb-2">
               <Icons.CardIcon
@@ -146,21 +152,20 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] pointer-events-none z-10"
               />
               <input
-                id="recover-cedula"
+                id="recover-identificador"
                 type="text"
-                inputMode="numeric"
-                autoComplete="off"
+                autoComplete="username"
                 autoFocus
-                value={cedula}
+                value={identificador}
                 onChange={(e) => {
-                  setCedula(e.target.value.replace(/\D/g, '').slice(0, 12));
+                  setIdentificador(e.target.value.slice(0, 254));
                   setError('');
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && cedula.length >= 9) handleRequest();
+                  if (e.key === 'Enter' && clasificado) handleRequest();
                 }}
-                placeholder={t('cedula_placeholder')}
-                className={`${inputClass(!!error)} pl-12 tabular-nums tracking-wider`}
+                placeholder={t('login_identifier_placeholder')}
+                className={`${inputClass(!!error)} pl-12`}
               />
             </div>
 
@@ -176,7 +181,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
               fullWidth
               onClick={handleRequest}
               loading={isLoading}
-              disabled={cedula.length < 9 || isLoading}
+              disabled={!clasificado || isLoading}
               rightIcon={<Icons.ArrowRight size={20} />}
               className="mt-4"
             >

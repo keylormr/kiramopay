@@ -1128,6 +1128,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       >
         <div className="space-y-3">
           {[
+            // El nombre de usuario va PRIMERO: es con lo que se entra, y hasta
+            // ahora no habia una sola pantalla donde verlo. Quien no lo recuerda
+            // no puede iniciar sesion, asi que esconderlo era dejarlo afuera.
+            { label: t('profile_usuario'), value: state.user?.username },
             { label: t('first_name'), value: state.user?.firstName },
             { label: t('last_name'), value: state.user?.lastName },
             { label: t('cedula'), value: state.user?.cedula },

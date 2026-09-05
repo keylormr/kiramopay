@@ -149,7 +149,7 @@ func TestTemplates(t *testing.T) {
 		t.Fatalf("StepUpSMS missing code: %q", got)
 	}
 
-	subject, text, html := PasswordResetEmail("TOKEN123", "https://app.example.com")
+	subject, text, html := PasswordResetEmail("TOKEN123", "https://app.example.com", "")
 	if subject == "" {
 		t.Fatal("subject should not be empty")
 	}
@@ -161,7 +161,7 @@ func TestTemplates(t *testing.T) {
 	}
 
 	// Without an app URL, no link is embedded but the token still is.
-	_, textNoURL, _ := PasswordResetEmail("TOKEN123", "")
+	_, textNoURL, _ := PasswordResetEmail("TOKEN123", "", "")
 	if strings.Contains(textNoURL, "reset_token=") {
 		t.Fatal("no link should be present when appURL is empty")
 	}

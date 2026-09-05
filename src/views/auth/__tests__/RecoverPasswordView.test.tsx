@@ -34,7 +34,7 @@ describe('RecoverPasswordView', () => {
   it('renders the request step', () => {
     renderView();
     expect(screen.getByText('Recuperar contraseña')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Ej: 702650930')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Usuario, cédula, correo o teléfono')).toBeInTheDocument();
   });
 
   it('requests a reset code and advances to the reset step', async () => {
@@ -99,7 +99,7 @@ describe('RecoverPasswordView', () => {
       expect(screen.getByText('Nueva contraseña')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Pega el código aquí')).toHaveValue('tok_del_correo');
       // No debe pedir la cédula: el enlace ya identifica la cuenta.
-      expect(screen.queryByPlaceholderText('Ej: 702650930')).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Usuario, cédula, correo o teléfono')).not.toBeInTheDocument();
     });
 
     it('no muestra el aviso de revisar el correo', () => {

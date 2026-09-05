@@ -388,11 +388,15 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := validator.ValidateCedula(req.Cedula); err != nil {
-		response.JSON(w, http.StatusAccepted, map[string]string{"message": "if the account exists, a reset link has been sent"})
+	// La forma se comprueba con LA MISMA regla del login. Antes se exigia
+	// ValidateCedula y, al fallar, se respondia 202 sin consultar nada: quien
+	// tecleara su correo o su nombre de usuario leia "te enviamos
+	// instrucciones" y no le llegaba nada nunca.
+	if _, _, err := identifier.Classify(req.EffectiveIdentifier()); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid identifier")
 		return
 	}
-	token, err := h.service.ForgotPassword(r.Context(), req.Cedula, loginContext(r))
+	token, err := h.service.ForgotPassword(r.Context(), req.EffectiveIdentifier(), loginContext(r))
 	if err != nil {
 		// Still return generic — never leak internal errors here.
 		response.JSON(w, http.StatusAccepted, map[string]string{"message": "if the account exists, a reset link has been sent"})

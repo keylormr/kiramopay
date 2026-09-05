@@ -168,7 +168,9 @@ describe('HttpAuthRepository', () => {
         'http://localhost:8080/api/v1/auth/forgot-password',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ cedula: '702650930' }),
+          // Se manda `identifier` y ademas `cedula` como alias legado: el
+          // servidor lee el segundo si el primero no viene, igual que el login.
+          body: JSON.stringify({ identifier: '702650930', cedula: '702650930' }),
         }),
       );
     });
