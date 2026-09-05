@@ -1,3 +1,4 @@
+import { generacionActual, sigueVigente } from './generacionDeSesion';
 import { getApiLayer } from '@/api';
 import { fusionarConCatalogo } from '@/api/catalogoCripto';
 import { useAccountStore } from '@/stores/account.store';
@@ -17,6 +18,10 @@ export async function syncAllData(): Promise<void> {
   const syncStore = useSyncStore.getState();
   if (syncStore.isSyncing) return;
 
+  // Se guarda ANTES de disparar nada: si la sesion cambia de duenno mientras
+  // estas nueve peticiones estan en vuelo, lo que llegue ya no es de nadie.
+  const generacion = generacionActual();
+
   syncStore.setSyncing(true);
 
   try {
@@ -33,6 +38,17 @@ export async function syncAllData(): Promise<void> {
       api.budgets.getBudgets(),
       api.recurring.getPayments(),
     ]);
+
+    // La comprobacion va ANTES de la primera escritura, no repartida entre
+    // ellas: escribir la mitad de los stores con datos del usuario anterior es
+    // el mismo defecto, solo que a medias.
+    if (!sigueVigente(generacion)) {
+      // Se suelta la bandera igual: dejarla puesta bloquearia la
+      // sincronizacion del usuario que entre despues, que es peor que la
+      // carrera que se esta evitando.
+      useSyncStore.getState().setSyncComplete();
+      return;
+    }
 
     const [
       accountsResult,
@@ -93,8 +109,10 @@ export async function syncAllData(): Promise<void> {
 
 export async function refreshAccounts(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.accounts.getAccounts();
+  if (!sigueVigente(generacion)) return;
   if (res.success && res.data) {
     useAccountStore.getState().setAccounts(res.data);
   }
@@ -102,8 +120,10 @@ export async function refreshAccounts(): Promise<void> {
 
 export async function refreshTransactions(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.transactions.getTransactions(50);
+  if (!sigueVigente(generacion)) return;
   if (res.success && res.data) {
     useTransactionStore.getState().setTransactions(res.data);
   }
@@ -111,8 +131,10 @@ export async function refreshTransactions(): Promise<void> {
 
 export async function refreshBudgets(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.budgets.getBudgets();
+  if (!sigueVigente(generacion)) return;
   if (res.success && res.data) {
     useAccountStore.getState().setBudgets(res.data);
   }
@@ -120,8 +142,10 @@ export async function refreshBudgets(): Promise<void> {
 
 export async function refreshRecurring(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.recurring.getPayments();
+  if (!sigueVigente(generacion)) return;
   if (res.success && res.data) {
     useRecurringStore.getState().setPayments(res.data);
   }
@@ -129,8 +153,10 @@ export async function refreshRecurring(): Promise<void> {
 
 export async function refreshNotifications(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.notifications.getAll();
+  if (!sigueVigente(generacion)) return;
   if (res.success && res.data) {
     useNotificationStore.getState().setNotifications(res.data);
   }
@@ -138,11 +164,13 @@ export async function refreshNotifications(): Promise<void> {
 
 export async function refreshSinpe(): Promise<void> {
   if (!hasBackend) return;
+  const generacion = generacionActual();
   const api = getApiLayer();
   const [contacts, history] = await Promise.allSettled([
     api.sinpe.getContacts(),
     api.sinpe.getHistory(),
   ]);
+  if (!sigueVigente(generacion)) return;
   if (contacts.status === 'fulfilled' && contacts.value.success && contacts.value.data) {
     useSinpeStore.getState().setContacts(contacts.value.data);
   }
