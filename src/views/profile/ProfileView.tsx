@@ -84,9 +84,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     };
   }, []);
 
-  // Real transaction limits from the backend (they scale with KYC level). In
-  // mock mode api.kyc is undefined, so the sheet falls back to the defaults.
+  // Los limites reales los da el backend y dependen del nivel de KYC. Antes,
+  // si la consulta fallaba, la hoja caia a 500.000 y 5.000.000: son los del
+  // nivel VERIFICADO. A una cuenta basica —cuyo limite real es 100.000 al dia—
+  // se le mostraba cinco veces su tope. Es el mismo error que la migracion 042
+  // tuvo que corregir en la base de datos. Ahora, si no se sabe, se dice.
   const [limits, setLimits] = useState<{ daily: number; monthly: number } | null>(null);
+  const [limitsTrigger, setLimitsTrigger] = useState(0);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -98,9 +102,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     return () => {
       cancelled = true;
     };
-  }, []);
-  const dailyLimit = limits?.daily ?? 500000;
-  const monthlyLimit = limits?.monthly ?? 5000000;
+  }, [limitsTrigger]);
+  const SIN_DATO = '—';
 
   // Programa de referidos. El codigo propio ya viene en /users/me, asi que se
   // muestra de inmediato; el resumen (invitados, puntos y cuanto paga el
@@ -241,6 +244,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
+  // Un guion dice "no lo se"; un numero dice "es este". No son lo mismo.
+  const dailyLimit = limits ? formatCurrency(limits.daily) : SIN_DATO;
+  const monthlyLimit = limits ? formatCurrency(limits.monthly) : SIN_DATO;
+
   const totalBalance = state.accounts.reduce((acc, curr) => {
     const rate = curr.rateToUsd || 1;
     return acc + (curr.balance * rate);
@@ -365,7 +372,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('transaction_limits')}</p>
-              <p className="text-sm text-gray-500">{t('daily_limit')}: {formatCurrency(dailyLimit)}</p>
+              <p className="text-sm text-gray-500">{t('daily_limit')}: {dailyLimit}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -922,23 +929,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center">
               <span className="uv-text-muted">{t('daily_limit')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(dailyLimit)}</span>
+              <span className="font-bold uv-text-primary">{dailyLimit}</span>
             </div>
           </div>
 
           <div className="uv-surface-2 rounded-xl p-4">
             <div className="flex justify-between items-center">
               <span className="uv-text-muted">{t('monthly_limit')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(monthlyLimit)}</span>
+              <span className="font-bold uv-text-primary">{monthlyLimit}</span>
             </div>
           </div>
 
-          <div className="uv-surface-2 rounded-xl p-4">
-            <div className="flex justify-between items-center">
-              <span className="uv-text-muted">{t('per_transaction')}</span>
-              <span className="font-bold uv-text-primary">{formatCurrency(500000)}</span>
-            </div>
-          </div>
+          {!limits && (
+            <button
+              onClick={() => setLimitsTrigger((n) => n + 1)}
+              className="w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] py-2 text-sm font-bold uv-text-primary"
+            >
+              {t('error_retry')}
+            </button>
+          )}
 
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
             <div className="flex items-start gap-3">

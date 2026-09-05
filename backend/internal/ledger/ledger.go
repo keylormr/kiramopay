@@ -42,6 +42,7 @@ const (
 	SystemSuspenseCRC SystemAccountCode = "SYSTEM:SUSPENSE:CRC"
 	SystemSuspenseUSD SystemAccountCode = "SYSTEM:SUSPENSE:USD"
 	SystemExternalCRC SystemAccountCode = "SYSTEM:EXTERNAL:CRC"
+	SystemExternalUSD SystemAccountCode = "SYSTEM:EXTERNAL:USD"
 	SystemReserveCRC  SystemAccountCode = "SYSTEM:RESERVE:CRC"
 	SystemReserveUSD  SystemAccountCode = "SYSTEM:RESERVE:USD"
 	SystemEscrowCRC   SystemAccountCode = "SYSTEM:ESCROW:CRC"

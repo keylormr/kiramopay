@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,14 @@ type Logger struct {
 	repo   *Repository
 	events chan Event
 	done   chan struct{}
+
+	// mu protege el cierre del canal contra los productores. Stop se llama al
+	// apagar el proceso, pero los barridos de fondo (vencimiento de cuentas,
+	// conciliacion) no terminan en el instante en que se cancela su contexto:
+	// uno que estuviera a mitad de tick podia escribir en un canal ya cerrado,
+	// y eso es un panico que se lleva el proceso durante el apagado.
+	mu     sync.RWMutex
+	closed bool
 }
 
 // NewLogger creates a buffered async audit logger.
@@ -78,8 +87,16 @@ func (l *Logger) flush(events []Event) {
 	}
 }
 
-// Log queues an audit event for async persistence.
+// Log queues an audit event for async persistence. Es seguro llamarla desde
+// varias goroutines y tambien despues de Stop: en ese caso el evento se
+// descarta con un aviso, en vez de escribir en un canal cerrado.
 func (l *Logger) Log(evt Event) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.closed {
+		slog.Warn("audit log cerrado, evento descartado", "action", evt.Action)
+		return
+	}
 	select {
 	case l.events <- evt:
 	default:
@@ -158,8 +175,18 @@ func (l *Logger) LogCardCreated(userID, cardID, ip string) {
 	})
 }
 
-// Stop flushes remaining events and stops the logger.
+// Stop vacia lo que quede en la cola y detiene el logger. Es idempotente y
+// espera a que no haya ningun productor dentro de Log antes de cerrar: el
+// Lock exclusivo no se concede hasta que todos los RLock se soltaron.
 func (l *Logger) Stop() {
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		<-l.done
+		return
+	}
+	l.closed = true
 	close(l.events)
+	l.mu.Unlock()
 	<-l.done
 }

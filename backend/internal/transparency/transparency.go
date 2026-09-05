@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -84,44 +86,70 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Fees returns the public schedule of fees and FX spread. This is the
-// transparent-fees promise: nothing should be charged that isn't here.
+// Fees publica lo que de verdad se cobra hoy. La promesa de esta ruta es
+// "nada se cobra que no este aqui", y por eso lo contrario tambien tiene que
+// cumplirse: nada que este aqui puede dejar de cobrarse. La version anterior
+// publicaba una tarifa de transferencia interbancaria que nunca se cobra
+// (ese envio se rechaza: no hay licencia), un diferencial de cambio que el
+// codigo no aplica en ninguna parte, y una suscripcion de 500 colones al mes
+// que no existe ni se puede cobrar. Y callaba la unica comision que si se
+// cobra: la del comercio.
+//
+// Al cambiar una tarifa en el codigo hay que cambiarla aqui. Las pruebas de
+// este paquete atan los numeros a las constantes reales para que no se
+// separen en silencio.
 func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"version": "1.0.0",
-		"effective_from": "2026-01-01",
-		"sinpe": map[string]any{
-			"internal_p2p": "free",
-			"cross_bank": map[string]any{
-				"fee_minor": 15000,
-				"currency": "CRC",
-				"display": "₡150 per transfer",
-			},
-			"daily_limit_minor": 50000000,
-			"daily_limit_display": "₡500,000 per day",
+		"version":        "2.0.0",
+		"effective_from": "2026-09-04",
+		"note": "Esta es la lista completa de lo que se cobra. Lo que no aparece aqui, " +
+			"no se cobra.",
+
+		// Lo unico que hoy genera un cargo: la comision del comercio en un
+		// cobro por QR. La absorbe el comercio, nunca el pagador —quien paga
+		// entrega exactamente el monto del QR—.
+		"merchant_commission": map[string]any{
+			"bps":     qrpayment.DefaultCommissionBps,
+			"pct":     float64(qrpayment.DefaultCommissionBps) / 100,
+			"display": "0.5% del cobro, lo asume el comercio",
+			"applies_to": "Cobros por QR de un comercio verificado. Un QR personal " +
+				"no lleva comision.",
+			"payer_pays_extra": false,
+			"configurable_per_merchant": true,
 		},
-		"fx": map[string]any{
-			"spread_bps_default": 50,
-			"spread_pct_default": 0.50,
-			"note": "Final rate is shown to the user before they confirm any cross-border transfer.",
+
+		// Todo esto se mueve sin cargo.
+		"free": []string{
+			"Transferencias entre cuentas KiramoPay",
+			"Cobros y pagos con QR personal",
+			"Metas de ahorro: depositar y retirar",
+			"Compra y venta de cripto",
+			"Tarjeta virtual: emision y mantenimiento",
 		},
-		"cards": map[string]any{
-			"issuance_fee_minor": 0,
-			"monthly_fee_minor": 0,
-			"interchange_share_pct": null(),
+
+		// Lo que no se ofrece todavia no lleva tarifa porque no ocurre.
+		"not_offered": map[string]any{
+			"cross_bank_transfer": "Enviar a una cuenta de otro banco requiere " +
+				"licencia; hoy el envio se rechaza y no se cobra nada.",
+			"fx_conversion": "No hay conversion de moneda en la aplicacion, " +
+				"asi que no hay diferencial de cambio.",
+			"bill_payment_and_topup": "Sin convenio con las empresas ni con los " +
+				"operadores: el cobro se rechaza.",
 		},
-		"premium_subscription": map[string]any{
-			"price_minor": 50000,
-			"currency": "CRC",
-			"benefits": []string{
-				"Zero cross-bank fee",
-				"Tighter FX spread (15 bps)",
-				"Higher daily limits (when KYC level 2)",
+
+		// Los planes estan anunciados y su precio es publico, pero todavia no
+		// hay forma de cobrarlos: registrar interes no cobra ni otorga nada.
+		"plans": map[string]any{
+			"chargeable_today": false,
+			"note": "Los planes se anuncian y se puede registrar interes. Nadie " +
+				"tiene un cargo activo.",
+			"announced": []map[string]any{
+				{"code": "free", "price": 0, "currency": "USD", "commission_pct": 0.5},
+				{"code": "negocio", "price": 34.99, "currency": "USD", "period": "month",
+					"commission_pct": 0.25, "commission_free_monthly_billing": 12000},
+				{"code": "cima", "price": 54.99, "currency": "USD", "period": "month",
+					"commission_pct": 0.1, "commission_free_monthly_billing": 50000},
 			},
 		},
 	})
 }
-
-// null() is used to signal "not disclosed yet" in JSON; we prefer being
-// explicit over omitting fields silently.
-func null() any { return nil }

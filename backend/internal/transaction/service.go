@@ -513,9 +513,14 @@ func (s *Service) ListTransactions(ctx context.Context, userID string, req *List
 // buildSingleSidedPosting books external-counterparty transfers (deposits,
 // withdrawals, bill payments) where the second leg is a system account.
 func (s *Service) buildSingleSidedPosting(tx *TransactionRecord, req *CreateTransactionRequest) *ledger.Posting {
+	// La cuenta externa y la de comisiones se eligen por la moneda del
+	// movimiento. Anotar un asiento en dolares contra SYSTEM:EXTERNAL:CRC
+	// —una cuenta declarada en colones— deja la contraparte externa con dos
+	// monedas mezcladas y arruina cualquier conciliacion por moneda.
 	external := ledger.SystemExternalCRC
 	feeAccount := ledger.SystemFeesCRC
 	if req.Currency == "USD" {
+		external = ledger.SystemExternalUSD
 		feeAccount = ledger.SystemFeesUSD
 	}
 

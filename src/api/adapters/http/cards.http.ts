@@ -44,10 +44,15 @@ export class HttpCardsRepository implements ICardsRepository {
   }
 
   async updateLimits(cardId: string, request: UpdateLimitsRequest): Promise<ApiResponse<void>> {
+    // Comparar contra undefined, no por veracidad: un limite de 0 es la forma
+    // de dejar la tarjeta sin margen de gasto, y con `? :` se colaba como
+    // "no cambiar". El usuario ponia 0, la pantalla se cerraba sin error y la
+    // tarjeta seguia con el limite anterior.
+    const centimos = (v: number | undefined) => (v === undefined ? undefined : Math.round(v * 100));
     const res = await this.client.patch(`/api/v1/cards/${cardId}/limits`, {
-      daily_limit: request.dailyLimit ? request.dailyLimit * 100 : undefined,
-      monthly_limit: request.monthlyLimit ? request.monthlyLimit * 100 : undefined,
-      atm_limit: request.atmLimit ? request.atmLimit * 100 : undefined,
+      daily_limit: centimos(request.dailyLimit),
+      monthly_limit: centimos(request.monthlyLimit),
+      atm_limit: centimos(request.atmLimit),
     });
     if (!res.success) return apiError('UPDATE_FAILED', res.error?.message || 'Failed');
     return apiSuccess(undefined as unknown as void);

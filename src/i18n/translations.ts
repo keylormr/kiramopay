@@ -654,6 +654,12 @@ export type TranslationKeys = {
   // Error Boundary
   error_title: string;
   error_desc: string;
+  cards_load_failed_title: string;
+  cards_load_failed_desc: string;
+  loyalty_unavailable: string;
+  loyalty_redeem_failed: string;
+  business_sales_window: string;
+  business_sales_load_failed: string;
   error_retry: string;
   update_required_title: string;
   update_required_body: string;

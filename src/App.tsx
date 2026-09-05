@@ -353,7 +353,7 @@ const Layout = () => {
   // Same login, several profiles: personal wallet or any of the owner's shops.
   const activeMerchantId = useBusinessStore((s) => s.activeMerchantId);
   const setActiveMerchant = useBusinessStore((s) => s.setActiveMerchant);
-  const { merchants, active: activeMerchant, payments: bizPayments, loading: bizLoading, reload: reloadBiz } = useBusinessData();
+  const { merchants, active: activeMerchant, payments: bizPayments, loading: bizLoading, paymentsFailed: bizPaymentsFailed, reload: reloadBiz } = useBusinessData();
   const [bizTab, setBizTab] = useState<'home' | 'reports' | 'movements' | 'settings'>('home');
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -441,9 +441,9 @@ const Layout = () => {
           // Role may have changed under a persisted tab; fall back to home.
           return canSeeReports
             ? <BusinessReportsView merchant={activeMerchant} />
-            : <BusinessHomeView merchant={activeMerchant} payments={bizPayments} onReload={reloadBiz} />;
+            : <BusinessHomeView merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
         case 'movements':
-          return <BusinessMovementsView payments={bizPayments} />;
+          return <BusinessMovementsView payments={bizPayments} paymentsFailed={bizPaymentsFailed} />;
         case 'settings':
           return (
             <BusinessSettingsView
@@ -454,7 +454,7 @@ const Layout = () => {
             />
           );
         default:
-          return <BusinessHomeView merchant={activeMerchant} payments={bizPayments} onReload={reloadBiz} />;
+          return <BusinessHomeView merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
       }
     }
     switch (activeTab) {
