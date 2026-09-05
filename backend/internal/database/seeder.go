@@ -23,12 +23,23 @@ type TestUser struct {
 	KYCLevel   int
 	BalanceCRC int64
 	BalanceUSD int64
+	// Username es el nombre con el que se entra (migracion 058). La migracion
+	// tambien lo asigna, pero solo alcanza a cuentas QUE YA EXISTEN: en una
+	// base recien creada las migraciones corren ANTES que este sembrador, asi
+	// que el UPDATE no toca ninguna fila y la funcion naceria muerta en
+	// desarrollo y en CI sin que nada lo reporte. Por eso va tambien aqui.
+	Username string
+	// DemoLogin permite entrar SIN CONTRASENA (ademas exige que el servidor
+	// tenga DEMO_LOGIN_ENABLED encendida, que nace apagada).
+	DemoLogin bool
 }
 
 var DefaultTestUsers = []TestUser{
 	{
 		ID:         "a0000000-0000-0000-0000-000000000001",
 		Cedula:     "702650930",
+		Username:   "keilor",
+		DemoLogin:  true,
 		Phone:      "+50688880001",
 		FirstName:  "Keilor",
 		LastName:   "Martinez",
@@ -40,6 +51,8 @@ var DefaultTestUsers = []TestUser{
 	{
 		ID:         "a0000000-0000-0000-0000-000000000002",
 		Cedula:     "700000000",
+		Username:   "admin.kp",
+		DemoLogin:  false,
 		Phone:      "+50688880002",
 		FirstName:  "Admin",
 		LastName:   "KiramoPay",
@@ -54,6 +67,8 @@ var DefaultTestUsers = []TestUser{
 		// resolveSeedPassword); the real demo password is never stored in the repo.
 		ID:         "a0000000-0000-0000-0000-000000000003",
 		Cedula:     "701234567",
+		Username:   "demo",
+		DemoLogin:  true,
 		Phone:      "+50688880003",
 		FirstName:  "Demo",
 		LastName:   "KiramoPay",
@@ -68,6 +83,8 @@ var DefaultTestUsers = []TestUser{
 		// hardcoded fallback); the value below is only used for local dev.
 		ID:         "a0000000-0000-0000-0000-000000000004",
 		Cedula:     "101010101",
+		Username:   "victor",
+		DemoLogin:  true,
 		Phone:      "+50688880004",
 		FirstName:  "Victor",
 		LastName:   "Lobo",
@@ -81,6 +98,8 @@ var DefaultTestUsers = []TestUser{
 		// SEED_PASSWORD_202020202 (no hardcoded fallback).
 		ID:         "a0000000-0000-0000-0000-000000000005",
 		Cedula:     "202020202",
+		Username:   "emmanuel",
+		DemoLogin:  true,
 		Phone:      "+50688880005",
 		FirstName:  "Emmanuel",
 		LastName:   "Coto",
@@ -128,9 +147,10 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) erro
 		// Insert user. referral_code is NOT NULL without a default since
 		// migration 051, so the seed generates one like the app does.
 		_, err = pool.Exec(ctx,
-			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status, referral_code)
-			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified', $8)`,
+			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status, referral_code, username, demo_login)
+			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified', $8, NULLIF($9,''), $10)`,
 			u.ID, u.Cedula, u.Phone, u.FirstName, u.LastName, pinHash, u.KYCLevel, user.NewReferralCode(),
+			u.Username, u.DemoLogin,
 		)
 		if err != nil {
 			return fmt.Errorf("insert user %s: %w", u.Cedula, err)

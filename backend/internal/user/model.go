@@ -18,6 +18,13 @@ type UserRecord struct {
 	KYCLevel         int        `json:"kyc_level"`
 	KYCStatus        string     `json:"kyc_status"`
 	Status           string     `json:"status"`
+	// Username es el nombre de usuario con el que se entra. Vacio mientras la
+	// cuenta no tenga uno: hasta la migracion 058 no existia ninguno.
+	Username         string     `json:"username,omitempty"`
+	// DemoLogin permite entrar a esta cuenta SIN CONTRASENA. No alcanza por si
+	// sola: el servidor exige ademas que DEMO_LOGIN_ENABLED este encendida.
+	// Nunca sale al cliente.
+	DemoLogin        bool       `json:"-"`
 	ReferralCode     string     `json:"referral_code"`
 	ReferredBy       *string    `json:"-"` // atribucion interna; nunca sale al cliente
 	CreatedAt        time.Time  `json:"created_at"`

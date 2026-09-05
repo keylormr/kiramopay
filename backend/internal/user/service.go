@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"context"
 	"fmt"
 )
@@ -21,7 +22,25 @@ func (s *Service) GetProfile(ctx context.Context, userID string) (*UserRecord, e
 	return u, nil
 }
 
+// ErrCuentaDeDemostracion: se intento cambiar la identidad o las credenciales
+// de una cuenta que entra SIN CONTRASENA (users.demo_login).
+//
+// Esto corta una cadena concreta de tres pasos: quien entra sin contrasena
+// cambia el correo de la cuenta, pide un enlace de recuperacion —que se manda
+// al correo que este en la fila—, y se queda con la contrasena. A partir de
+// ahi la cuenta es suya PARA SIEMPRE: apagar la bandera de demostracion ya no
+// la recupera. Una cuenta de demostracion es un accesorio, no la cuenta de una
+// persona: no tiene por que poder cambiar su propia identidad.
+var ErrCuentaDeDemostracion = errors.New("una cuenta de demostracion no puede cambiar su identidad ni su contrasena")
+
 func (s *Service) UpdateProfile(ctx context.Context, userID string, req *UpdateProfileRequest) (*UserRecord, error) {
+	actual, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+	if actual.DemoLogin {
+		return nil, ErrCuentaDeDemostracion
+	}
 	if err := s.repo.UpdateProfile(ctx, userID, req); err != nil {
 		return nil, fmt.Errorf("update profile: %w", err)
 	}

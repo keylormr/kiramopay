@@ -79,6 +79,12 @@ type ServerConfig struct {
 	Environment  string // "development", "staging", "production"
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	// DemoLoginEnabled habilita la ENTRADA SIN CONTRASENA para las cuentas
+	// marcadas con users.demo_login (migracion 058). Nace apagada. Se enciende
+	// solo mientras dure una demostracion: con ella encendida, cualquiera que
+	// sepa el nombre de usuario de una cuenta marcada entra desde internet.
+	DemoLoginEnabled bool
+
 	// RequirePhoneVerification gates registration on a verified phone OTP.
 	// Keep false until an SMS provider can deliver the code.
 	RequirePhoneVerification bool
@@ -159,6 +165,7 @@ func Load() *Config {
 			ReadTimeout:              time.Duration(getEnvInt("SERVER_READ_TIMEOUT", 10)) * time.Second,
 			WriteTimeout:             time.Duration(getEnvInt("SERVER_WRITE_TIMEOUT", 10)) * time.Second,
 			RequirePhoneVerification: getEnv("REQUIRE_PHONE_VERIFICATION", "false") == "true",
+			DemoLoginEnabled:         getEnv("DEMO_LOGIN_ENABLED", "false") == "true",
 		},
 		Database: DatabaseConfig{
 			Host:        getEnv("DB_HOST", "localhost"),

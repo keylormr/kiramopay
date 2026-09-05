@@ -54,7 +54,8 @@ const userSelectCols = `id, fn_pii_decrypt(cedula_enc), fn_pii_decrypt(phone_enc
 	        COALESCE(fn_pii_decrypt(email_enc), ''), email_verified,
 	        first_name, last_name, birth_date, COALESCE(profile_picture_url, ''),
 	        password_hash, biometric_enabled, kyc_level, COALESCE(kyc_status, 'pending'), status,
-	        created_at, updated_at, last_login_at, referral_code`
+	        created_at, updated_at, last_login_at, referral_code,
+	        COALESCE(username, ''), demo_login`
 
 func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 	u := &UserRecord{}
@@ -63,6 +64,7 @@ func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 		&u.FirstName, &u.LastName, &u.BirthDate, &u.ProfilePictureURL,
 		&u.PasswordHash, &u.BiometricEnabled, &u.KYCLevel, &u.KYCStatus, &u.Status,
 		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt, &u.ReferralCode,
+		&u.Username, &u.DemoLogin,
 	)
 	return u, err
 }
@@ -88,12 +90,12 @@ func (r *Repository) Create(ctx context.Context, u *UserRecord) error {
 		_, err := r.db.Exec(ctx,
 			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, phone_verified,
 			        first_name, last_name, email_enc, email_hash, email_verified, password_hash, status, kyc_level, kyc_status,
-			        referral_code, referred_by)
+			        referral_code, referred_by, username)
 			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4,
 			         $5, $6, fn_pii_encrypt(NULLIF($7,'')), fn_pii_hmac(NULLIF($7,'')), $8, $9, $10, $11, 'pending',
-			         $12, $13)`,
+			         $12, $13, NULLIF($14,''))`,
 			u.ID, u.Cedula, u.Phone, u.PhoneVerified, u.FirstName, u.LastName, u.Email, u.EmailVerified, u.PasswordHash, u.Status, u.KYCLevel,
-			u.ReferralCode, u.ReferredBy,
+			u.ReferralCode, u.ReferredBy, u.Username,
 		)
 		if err == nil {
 			return nil
@@ -160,6 +162,23 @@ func (r *Repository) FindByPhone(ctx context.Context, phone string) (*UserRecord
 		`SELECT `+userSelectCols+` FROM users WHERE phone_hash = fn_pii_hmac($1) AND deleted_at IS NULL`, phone))
 	if err != nil {
 		return nil, fmt.Errorf("find user by phone: %w", err)
+	}
+	return u, nil
+}
+
+// FindByUsername resuelve el nombre de usuario. A diferencia de los otros tres
+// identificadores, este NO es PII y por eso no va cifrado ni hasheado: se
+// consulta en claro contra su indice unico. Eso lo hace muy barato, y el login
+// se apoya en ello — resolver primero y solo despues gastar el Argon2id.
+//
+// El valor llega ya canonicalizado por identifier.Classify (minusculas, sin
+// espacios a los lados). El lower() de la consulta es defensa en profundidad
+// por si algun llamante se saltara esa canonicalizacion.
+func (r *Repository) FindByUsername(ctx context.Context, username string) (*UserRecord, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`SELECT `+userSelectCols+` FROM users WHERE username = lower($1) AND deleted_at IS NULL`, username))
+	if err != nil {
+		return nil, fmt.Errorf("find user by username: %w", err)
 	}
 	return u, nil
 }

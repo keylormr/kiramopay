@@ -33,8 +33,26 @@ export async function stubBackend(page: Page) {
   // addInitScript re-applies on every navigation, surviving localStorage.clear().
   await page.addInitScript(() => localStorage.setItem('kiramopay_onboarded', '1'));
   await page.route('**/api/v1/**', (route) => jsonRoute(route, { success: true, data: [] }));
-  await page.route('**/api/v1/auth/login', (route) =>
-    jsonRoute(route, {
+  // El stub LEE EL CUERPO: la pantalla sondea primero con la contrasena vacia
+  // para saber si esta cuenta entra sin ella. Un stub que respondiera exito a
+  // cualquier cuerpo abriria la sesion en el paso 1, el campo de contrasena
+  // nunca se renderizaria, y toda la suite —que prueba justamente el flujo de
+  // dos pasos— quedaria comprobando otra cosa sin que nadie lo notara.
+  await page.route('**/api/v1/auth/login', (route) => {
+    let password = '';
+    try {
+      password = (JSON.parse(route.request().postData() || '{}') as { password?: string }).password || '';
+    } catch {
+      password = '';
+    }
+    if (!password) {
+      return jsonRoute(
+        route,
+        { success: false, error: { code: 'PASSWORD_REQUIRED', message: 'password required' } },
+        401,
+      );
+    }
+    return jsonRoute(route, {
       success: true,
       data: {
         user: BACKEND_USER,
@@ -44,8 +62,8 @@ export async function stubBackend(page: Page) {
           expires_at: Date.now() + 3_600_000,
         },
       },
-    }),
-  );
+    });
+  });
 }
 
 /** Drives the two-stage login form with the test user against a stubbed backend. */

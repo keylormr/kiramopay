@@ -613,6 +613,7 @@ export type TranslationKeys = {
   login_identifier_label: string;
   login_identifier_placeholder: string;
   login_identifier_invalid: string;
+  login_detected_usuario: string;
   login_detected_cedula: string;
   login_detected_correo: string;
   login_detected_telefono: string;

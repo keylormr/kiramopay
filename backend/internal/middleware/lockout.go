@@ -58,7 +58,7 @@ func (s *RedisLockoutStore) GetLockout(key string) int64 {
 // failed login attempts. It reads the request body to extract the login
 // identifier (cedula, correo o telefono — campo `identifier` o el alias legado
 // `cedula`) and checks the counter under identifier.LockoutKey: EXACTAMENTE la
-// misma clave canonica y hasheada que construye el servicio de auth. Si las
+// misma clave canonica, tipada y hasheada que construye el servicio de auth. Si las
 // claves divergieran, el 423 y el contador quedarian desincronizados y cada
 // intento contra una cuenta bloqueada quemaria un Argon2 completo.
 func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler) http.Handler {
@@ -82,7 +82,7 @@ func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler)
 					effective = req.Cedula
 				}
 			}
-			_, canonical, cerr := identifier.Classify(effective)
+			kind, canonical, cerr := identifier.Classify(effective)
 			if effective == "" || cerr != nil {
 				// Can't determine account - pass through and let handler validate
 				r.Body = io.NopCloser(newBytesReader(body))
@@ -90,7 +90,7 @@ func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler)
 				return
 			}
 
-			count := store.GetLockout(identifier.LockoutKey(canonical))
+			count := store.GetLockout(identifier.LockoutKey(kind, canonical))
 			if int(count) >= maxAttempts {
 				response.Error(w, http.StatusLocked, "ACCOUNT_LOCKED",
 					"account temporarily locked due to too many failed attempts")
@@ -105,15 +105,15 @@ func AccountLockoutCheck(store LockoutStore, maxAttempts int) func(http.Handler)
 }
 
 // IncrementLockout increments the lockout counter for a canonical identifier.
-// Call on failed login.
-func IncrementLockout(store LockoutStore, canonical string) {
-	store.IncrLockout(identifier.LockoutKey(canonical))
+// Call on failed login. El tipo forma parte de la clave: ver LockoutKey.
+func IncrementLockout(store LockoutStore, kind identifier.Kind, canonical string) {
+	store.IncrLockout(identifier.LockoutKey(kind, canonical))
 }
 
 // ResetLockoutCounter resets the lockout counter for a canonical identifier.
 // Call on successful login.
-func ResetLockoutCounter(store LockoutStore, canonical string) {
-	store.ResetLockout(identifier.LockoutKey(canonical))
+func ResetLockoutCounter(store LockoutStore, kind identifier.Kind, canonical string) {
+	store.ResetLockout(identifier.LockoutKey(kind, canonical))
 }
 
 type bytesReader struct {

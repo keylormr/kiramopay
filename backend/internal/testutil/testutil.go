@@ -152,6 +152,14 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		kyc_status VARCHAR(20) DEFAULT 'pending',
 		kyc_verified_at TIMESTAMPTZ,
 		role VARCHAR(20) NOT NULL DEFAULT 'user',
+		-- Plan de facturacion (migracion 048). Faltaba aqui: user.GetPlan lo
+		-- consulta y contra este esquema habria fallado. Este archivo declara la
+		-- tabla A MANO y no lee migrations/, asi que cada columna nueva hay que
+		-- ponerla en los dos lugares.
+		plan VARCHAR(10) NOT NULL DEFAULT 'free',
+		-- Nombre de usuario y entrada sin contrasena (migracion 058).
+		username VARCHAR(20),
+		demo_login BOOLEAN NOT NULL DEFAULT false,
 		status VARCHAR(20) DEFAULT 'active',
 		blocked_at TIMESTAMPTZ,
 		blocked_reason TEXT,
@@ -168,11 +176,18 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		last_login_at TIMESTAMPTZ,
 		deleted_at TIMESTAMPTZ,
 		CONSTRAINT chk_users_referral_code CHECK (referral_code ~ '^[A-Z0-9]{8}$'),
-		CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id)
+		CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id),
+		CONSTRAINT chk_users_plan CHECK (plan IN ('free', 'plus', 'pro')),
+		CONSTRAINT chk_users_username_formato CHECK (username IS NULL OR username ~ '^[a-z][a-z0-9._-]{2,19}$'),
+		CONSTRAINT chk_users_demo_login_no_admin CHECK (NOT (demo_login AND role = 'admin'))
 	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username ON users (username) WHERE username IS NOT NULL;
 	-- A persisted local test DB predates the columns above (CREATE TABLE IF NOT
 	-- EXISTS is a no-op there); CI always starts from an empty database.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(8) NOT NULL DEFAULT upper(substr(md5(random()::text), 1, 8));
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(10) NOT NULL DEFAULT 'free';
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;

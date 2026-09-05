@@ -54,6 +54,32 @@ var ErrReferralCodeInvalid = errors.New("referral code not found")
 // oraculo de enumeracion. El motivo del bloqueo nunca sale al cliente.
 var ErrAccountBlocked = errors.New("account blocked")
 
+// ErrPasswordRequired: se intento entrar sin contrasena a una cuenta que si la
+// pide. Tiene codigo propio para que la pantalla sepa que debe pedirla, en vez
+// de mostrar "credenciales incorrectas" antes de que el usuario teclee nada.
+//
+// Este camino NO incrementa ningun contador de bloqueo: la pantalla sondea con
+// la contrasena vacia para decidir si mostrar el campo, y si el sondeo contara
+// como intento fallido, cinco pulsaciones de Enter bloquearian la cuenta 15
+// minutos sin que nadie hubiera escrito una contrasena.
+var ErrPasswordRequired = errors.New("password required")
+
+// ErrUsernameInvalido: el nombre de usuario no calza el formato o esta en la
+// lista de nombres reservados. Tiene codigo propio para que la pantalla lo diga
+// junto al campo, en vez del 409 generico de "ya existe un usuario".
+var ErrUsernameInvalido = errors.New("invalid username")
+
+// ErrUsernameTomado: ese nombre de usuario ya es de alguien. A diferencia del
+// choque de cedula o telefono, este SI se distingue del resto: un nombre de
+// usuario es publico por naturaleza y decir que esta tomado no revela nada que
+// no revele el propio hecho de que exista.
+var ErrUsernameTomado = errors.New("username taken")
+
+// ErrCuentaDeDemostracion se reexporta desde internal/user para que quien lee
+// este paquete no tenga que saltar: una cuenta que abre sin contrasena no
+// cambia su identidad ni sus credenciales.
+var ErrCuentaDeDemostracion = user.ErrCuentaDeDemostracion
+
 // ErrUserExists se devuelve en Register cuando la cedula, el telefono o el
 // correo ya pertenecen a una cuenta. El handler lo traduce a 409 USER_EXISTS;
 // que campo choco nunca sale al cliente.
@@ -92,6 +118,12 @@ type Service struct {
 	smsSender    messaging.SMSSender
 	emailSender  messaging.EmailSender
 	publicAppURL string
+	// demoLoginEnabled habilita la entrada SIN CONTRASENA para las cuentas
+	// marcadas con users.demo_login. Nace APAGADA y se enciende solo mientras
+	// dure una demostracion: con ella encendida, cualquiera que sepa el nombre
+	// de usuario de una cuenta marcada entra desde internet. El dueno pidio
+	// esta funcion y asumio ese riesgo de forma explicita.
+	demoLoginEnabled bool
 }
 
 // Options for service wiring.
@@ -113,6 +145,10 @@ type Options struct {
 	// phone-verification token. Keep false until an SMS provider is wired
 	// (otherwise nobody could obtain a code in production).
 	RequirePhoneVerification bool
+	// DemoLoginEnabled habilita la entrada SIN CONTRASENA para las cuentas
+	// marcadas con users.demo_login. Se enciende con DEMO_LOGIN_ENABLED solo
+	// mientras dure una demostracion.
+	DemoLoginEnabled bool
 	// SMSSender / EmailSender deliver registration OTPs and the password-reset
 	// token. Nil disables delivery (dev-echo fallback). PublicAppURL is the
 	// frontend origin used to build the reset link in the email.
@@ -156,6 +192,7 @@ func NewService(
 		smsSender:                opts.SMSSender,
 		emailSender:              opts.EmailSender,
 		publicAppURL:             opts.PublicAppURL,
+		demoLoginEnabled:         opts.DemoLoginEnabled,
 	}
 }
 
@@ -203,6 +240,11 @@ type LoginResponse struct {
 
 type RegisterRequest struct {
 	Cedula    string `json:"cedula"`
+	// Username es el nombre de usuario con el que se va a entrar. Opcional por
+	// compatibilidad: los clientes viejos no lo mandan y siguen registrando
+	// cuentas, que quedan sin nombre de usuario y entran por los otros tres
+	// identificadores.
+	Username  string `json:"username,omitempty"`
 	Phone     string `json:"phone"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -258,16 +300,50 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 	if u == nil {
 		// Anti-enumeration: spend the Argon2 budget anyway.
 		hash.DummyVerify()
-		s.incrementLockout(canonical)
+		s.incrementLockout(kind, canonical)
 		if s.auditLogger != nil {
 			s.auditLogger.LogLogin("", lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
 		return nil, ErrInvalidCredentials
 	}
 
+	// ── Entrada sin contrasena ───────────────────────────────────────────
+	// Pedido explicito del dueno para hacer demostraciones sin teclear una
+	// contrasena delante de nadie. Exige DOS condiciones a la vez: que la
+	// cuenta este marcada (users.demo_login) y que el servidor tenga la
+	// bandera encendida (DEMO_LOGIN_ENABLED, que nace APAGADA). La bandera es
+	// la palanca de la demostracion: se enciende, se demuestra, se apaga, sin
+	// tocar ninguna fila.
+	//
+	// El riesgo esta asumido por el dueno y conviene que quede escrito: con la
+	// bandera encendida, cualquiera que sepa el nombre de usuario entra desde
+	// internet. Por eso queda en la auditoria con accion propia y riesgo alto.
+	if req.Password == "" {
+		if s.demoLoginEnabled && u.DemoLogin && u.Status == "active" {
+			if s.auditLogger != nil {
+				s.auditLogger.Log(audit.Event{
+					UserID: u.ID, Action: "login_demo", ResourceType: "session",
+					IPAddress: lc.IPAddress, UserAgent: lc.UserAgent,
+					Details:   map[string]interface{}{"identifier_type": string(kind)},
+					RiskLevel: "high",
+				})
+			}
+			return s.emitirSesion(ctx, u, kind, canonical, lc)
+		}
+		// La cuenta no abre sin contrasena. Se responde con un codigo PROPIO y,
+		// sobre todo, SIN tocar los contadores de bloqueo: la pantalla sondea
+		// con la contrasena vacia para saber si tiene que pedirla, y si ese
+		// sondeo contara como intento fallido, cinco pulsaciones de Enter
+		// dejarian la cuenta bloqueada 15 minutos sin que nadie escribiera una
+		// contrasena. Se quema el presupuesto de Argon2 igual, para que el
+		// tiempo no distinga una cuenta que existe de una que no.
+		hash.DummyVerify()
+		return nil, ErrPasswordRequired
+	}
+
 	valid, err := hash.VerifyPin(req.Password, u.PasswordHash)
 	if err != nil || !valid {
-		s.incrementLockout(canonical)
+		s.incrementLockout(kind, canonical)
 		// Segundo contador, por cuenta resuelta: sin el, una cuenta ganaria
 		// maxLoginAttempts intentos POR CADA identificador (cedula, correo y
 		// telefono llevan contadores distintos).
@@ -297,11 +373,19 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 		return nil, ErrAccountBlocked
 	}
 
+	return s.emitirSesion(ctx, u, kind, canonical, lc)
+}
+
+// emitirSesion es el tramo final del login, compartido por el camino con
+// contrasena y por el de las cuentas de demostracion. Se extrajo para que los
+// dos pasen EXACTAMENTE por los mismos controles finales y por el mismo
+// registro de sesion: dos copias divergirian.
+func (s *Service) emitirSesion(ctx context.Context, u *user.UserRecord, kind identifier.Kind, canonical string, lc LoginContext) (*LoginResponse, error) {
 	// Block locked accounts AFTER hash verification too (defense in depth —
 	// the middleware should have already blocked, but if it didn't, do not
 	// issue tokens). Checks BOTH counters: per identifier and per account.
 	if s.lockoutStore != nil {
-		count := s.lockoutStore.GetLockout(identifier.LockoutKey(canonical))
+		count := s.lockoutStore.GetLockout(identifier.LockoutKey(kind, canonical))
 		if int(count) >= s.maxLoginAttempts {
 			return nil, ErrInvalidCredentials
 		}
@@ -320,7 +404,7 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 
-	s.resetLockout(canonical)
+	s.resetLockout(kind, canonical)
 	s.resetUserLockout(u.ID)
 	_ = s.userRepo.UpdateLastLogin(ctx, u.ID)
 	if s.auditLogger != nil {
@@ -342,6 +426,8 @@ func (s *Service) resolveLoginUser(ctx context.Context, kind identifier.Kind, ca
 		u, err = s.userRepo.FindByCedula(ctx, canonical)
 	case identifier.KindPhone:
 		u, err = s.userRepo.FindByPhone(ctx, canonical)
+	case identifier.KindUsername:
+		u, err = s.userRepo.FindByUsername(ctx, canonical)
 	case identifier.KindEmail:
 		u, err = s.userRepo.FindByEmail(ctx, canonical)
 		// Un correo sin verificar NO autentica: es opcional y editable, y sin
@@ -377,6 +463,25 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	existing, _ := s.userRepo.FindByCedula(ctx, req.Cedula)
 	if existing != nil {
 		return nil, ErrUserExists
+	}
+
+	// Nombre de usuario. Es opcional: los clientes viejos no lo mandan y sus
+	// registros siguen funcionando, con la cuenta entrando por los otros tres
+	// identificadores. Cuando viene, se valida contra la MISMA regla que usa
+	// el login (identifier.ValidUsername) para que no quede registrado un
+	// nombre que despues no sirva para entrar — el mismo cuidado que
+	// ErrCedulaNoUsableEnLogin tiene con la cedula.
+	usernameCanonico := identifier.CanonicalizarUsername(req.Username)
+	if usernameCanonico != "" {
+		if !identifier.ValidUsername(usernameCanonico) {
+			return nil, ErrUsernameInvalido
+		}
+		// Pre-chequeo para poder dar un error propio. La unicidad real la
+		// sostiene el indice uq_users_username; una carrera entre dos registros
+		// cae en el 23505 de mas abajo.
+		if tomado, _ := s.userRepo.FindByUsername(ctx, usernameCanonico); tomado != nil {
+			return nil, ErrUsernameTomado
+		}
 	}
 
 	// Codigo de invitacion: se resuelve AQUI, antes de consumir el token de
@@ -456,6 +561,7 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 	// ReferralCode se deja vacio: lo genera userRepo.Create.
 	newUser := &user.UserRecord{
 		ID:            newUserID,
+		Username:      usernameCanonico,
 		Cedula:        req.Cedula,
 		Phone:         req.Phone,
 		PhoneVerified: phoneVerified,
@@ -520,6 +626,11 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("user not found")
+	}
+	// Una cuenta que entra sin contrasena no puede fijarse una: seria quedarse
+	// con ella. Ver ErrCuentaDeDemostracion en internal/user.
+	if u.DemoLogin {
+		return ErrCuentaDeDemostracion
 	}
 	valid, err := hash.VerifyPin(req.OldPassword, u.PasswordHash)
 	if err != nil || !valid {
@@ -836,18 +947,18 @@ func (s *Service) persistTokenRollout(
 	return s.authRepo.CreateSession(ctx, sess)
 }
 
-func (s *Service) incrementLockout(canonical string) {
+func (s *Service) incrementLockout(kind identifier.Kind, canonical string) {
 	if s.lockoutStore == nil || canonical == "" {
 		return
 	}
-	s.lockoutStore.IncrLockout(identifier.LockoutKey(canonical))
+	s.lockoutStore.IncrLockout(identifier.LockoutKey(kind, canonical))
 }
 
-func (s *Service) resetLockout(canonical string) {
+func (s *Service) resetLockout(kind identifier.Kind, canonical string) {
 	if s.lockoutStore == nil || canonical == "" {
 		return
 	}
-	s.lockoutStore.ResetLockout(identifier.LockoutKey(canonical))
+	s.lockoutStore.ResetLockout(identifier.LockoutKey(kind, canonical))
 }
 
 // Contador por cuenta (ademas del contador por identificador): la clave usa el

@@ -307,6 +307,15 @@ func main() {
 	loyaltyService := loyalty.NewService(loyaltyRepo, &loyalty.Options{
 		ReferralBonusPoints: cfg.Loyalty.ReferralBonusPoints,
 	})
+	// Aviso ruidoso: la entrada sin contrasena es una puerta abierta mientras
+	// este encendida. Que quede en el log de arranque es lo unico que separa
+	// "la encendi para una demostracion" de "quedo encendida y nadie se dio
+	// cuenta".
+	if cfg.Server.DemoLoginEnabled {
+		log.Println("ATENCION: DEMO_LOGIN_ENABLED esta encendida. Las cuentas marcadas con " +
+			"demo_login entran SIN CONTRASENA desde cualquier parte de internet. " +
+			"Apagarla al terminar la demostracion.")
+	}
 	authService := auth.NewService(authRepo, userRepo, walletRepo, jwtManager, &auth.Options{
 		LockoutStore:             lockoutStore,
 		AuditLogger:              auditLogger,
@@ -316,6 +325,7 @@ func main() {
 		IdleTimeout:              cfg.JWT.IdleTimeout,
 		AbsoluteTimeout:          cfg.JWT.RefreshDuration,
 		RequirePhoneVerification: cfg.Server.RequirePhoneVerification,
+		DemoLoginEnabled:         cfg.Server.DemoLoginEnabled,
 		SMSSender:                smsSender,
 		EmailSender:              emailSender,
 		PublicAppURL:             msgCfg.PublicAppURL,

@@ -68,6 +68,13 @@ describe('LoginView', () => {
     localStorage.clear();
     localStorage.setItem('kiramopay_language', 'es');
     mockLogin.mockReset();
+    // El servidor responde PASSWORD_REQUIRED al sondeo con la contrasena vacia
+    // que la pantalla hace para saber si esta cuenta entra sin ella. Sin este
+    // comportamiento en el mock, el sondeo "entraria" y el campo de contrasena
+    // no se renderizaria nunca: la suite estaria probando otra cosa.
+    mockLogin.mockImplementation(async (_id: string, password: string) =>
+      password ? { success: true } : { success: false, code: 'PASSWORD_REQUIRED' },
+    );
     mockClearLogoutReason.mockReset();
     mockUser = null;
     mockLogoutReason = null;
@@ -75,7 +82,7 @@ describe('LoginView', () => {
 
   it('should render the login form with the identifier input', () => {
     renderLoginView();
-    expect(screen.getByPlaceholderText('Cédula, correo o teléfono')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Usuario, cédula, correo o teléfono')).toBeInTheDocument();
     expect(screen.getByText('Bienvenido')).toBeInTheDocument();
   });
 
@@ -83,11 +90,13 @@ describe('LoginView', () => {
     const user = userEvent.setup();
     renderLoginView();
 
-    const input = screen.getByPlaceholderText('Cédula, correo o teléfono');
+    const input = screen.getByPlaceholderText('Usuario, cédula, correo o teléfono');
     const continueBtn = screen.getByText('Continuar').closest('button');
 
-    // Basura: no clasifica, Continuar queda deshabilitado
-    await user.type(input, 'hola');
+    // Basura: no clasifica en ninguna de las CUATRO formas y Continuar queda
+    // deshabilitado. Ojo: 'hola' ya no sirve de ejemplo — desde que existe el
+    // nombre de usuario, es un identificador valido.
+    await user.type(input, 'no clasifica');
     expect(continueBtn).toBeDisabled();
 
     // Correo válido: habilita y muestra el tipo detectado
@@ -107,7 +116,7 @@ describe('LoginView', () => {
     const user = userEvent.setup();
     renderLoginView();
 
-    const input = screen.getByPlaceholderText('Cédula, correo o teléfono');
+    const input = screen.getByPlaceholderText('Usuario, cédula, correo o teléfono');
     await user.type(input, '702650930');
 
     const continueBtn = screen.getByText('Continuar');
@@ -120,7 +129,8 @@ describe('LoginView', () => {
 
   it('should call auth store login on submit', async () => {
     // After login succeeds, getState returns user
-    mockLogin.mockImplementation(async () => {
+    mockLogin.mockImplementation(async (_id: string, password: string) => {
+      if (!password) return { success: false, code: 'PASSWORD_REQUIRED' };
       mockUser = { firstName: 'Keilor', lastName: 'Martinez', cedula: '702650930' };
       return { success: true };
     });
@@ -129,7 +139,7 @@ describe('LoginView', () => {
     const { onLogin } = renderLoginView();
 
     // Enter cédula
-    const cedulaInput = screen.getByPlaceholderText('Cédula, correo o teléfono');
+    const cedulaInput = screen.getByPlaceholderText('Usuario, cédula, correo o teléfono');
     await user.type(cedulaInput, '702650930');
     await user.click(screen.getByText('Continuar'));
 
@@ -151,8 +161,10 @@ describe('LoginView', () => {
 
   it('should show test users info', () => {
     renderLoginView();
-    expect(screen.getByText(/702650930/)).toBeInTheDocument();
-    expect(screen.getByText(/700000000/)).toBeInTheDocument();
+    // El recuadro lista por NOMBRE DE USUARIO, que es lo que se dicta en una
+    // demostracion; la cedula sigue sirviendo pero ya nadie la teclea.
+    expect(screen.getByText(/keilor/)).toBeInTheDocument();
+    expect(screen.getByText(/demo/)).toBeInTheDocument();
   });
 
   describe('cuenta bloqueada por un administrador', () => {
@@ -183,7 +195,7 @@ describe('LoginView', () => {
       const user = userEvent.setup();
       const { onLogin } = renderLoginView();
 
-      await user.type(screen.getByPlaceholderText('Cédula, correo o teléfono'), '702650930');
+      await user.type(screen.getByPlaceholderText('Usuario, cédula, correo o teléfono'), '702650930');
       await user.click(screen.getByText('Continuar'));
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
@@ -194,7 +206,7 @@ describe('LoginView', () => {
       await waitFor(() => {
         expect(screen.getByText('Esta cuenta está bloqueada. Escribe a soporte.')).toBeInTheDocument();
       });
-      expect(screen.queryByText('Cédula o contraseña incorrecta')).not.toBeInTheDocument();
+      expect(screen.queryByText('Usuario o contraseña incorrecta')).not.toBeInTheDocument();
       expect(onLogin).not.toHaveBeenCalled();
     });
   });
