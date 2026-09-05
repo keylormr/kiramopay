@@ -535,6 +535,7 @@ const zhCn: TranslationKeys = {
   login_detected_cedula: '您将使用身份证号登录',
   login_detected_correo: '您将使用邮箱登录',
   login_detected_telefono: '您将使用手机号登录',
+  login_no_soy_yo: '不是我，换一个账户',
   login_last_access: '上次登录：',
   login_change_cedula: '更改',
   login_password_title: '请输入您的密码',

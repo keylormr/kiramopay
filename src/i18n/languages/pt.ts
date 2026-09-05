@@ -535,6 +535,7 @@ const pt: TranslationKeys = {
   login_detected_cedula: 'Você vai entrar com seu documento',
   login_detected_correo: 'Você vai entrar com seu e-mail',
   login_detected_telefono: 'Você vai entrar com seu telefone',
+  login_no_soy_yo: 'Nao sou eu, usar outra conta',
   login_last_access: 'Último acesso:',
   login_change_cedula: 'Alterar',
   login_password_title: 'Digite sua senha',

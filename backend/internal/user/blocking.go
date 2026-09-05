@@ -14,6 +14,11 @@ type AdminUserView struct {
 	ID            string     `json:"id"`
 	FirstName     string     `json:"first_name"`
 	LastName      string     `json:"last_name"`
+	// Username va SIN enmascarar, a diferencia de la cedula, el telefono y el
+	// correo: no es un dato de identidad civil sino un identificador elegido, y
+	// enmascararlo lo volveria inutil justo para lo que sirve — que soporte se
+	// lo pueda dictar a quien no recuerda con que entra.
+	Username      string     `json:"username"`
 	CedulaMasked  string     `json:"cedula_masked"`
 	PhoneMasked   string     `json:"phone_masked"`
 	EmailMasked   string     `json:"email_masked"`
@@ -56,6 +61,7 @@ func clampAdminLimit(limit, fallback int) int {
 // misma posicion alla, o compila y falla en tiempo de ejecucion.
 const adminViewSelect = `
 	SELECT u.id::text, u.first_name, u.last_name,
+	       COALESCE(u.username, ''),
 	       COALESCE(CASE WHEN fn_pii_decrypt(u.cedula_enc) IS NULL THEN NULL
 	                ELSE repeat('•', GREATEST(length(fn_pii_decrypt(u.cedula_enc)) - 3, 0))
 	                     || right(fn_pii_decrypt(u.cedula_enc), 3)
@@ -81,6 +87,7 @@ func scanAdminView(row interface{ Scan(...any) error }) (*AdminUserView, error) 
 	v := &AdminUserView{}
 	err := row.Scan(
 		&v.ID, &v.FirstName, &v.LastName,
+		&v.Username,
 		&v.CedulaMasked, &v.PhoneMasked, &v.EmailMasked,
 		&v.Status, &v.Role, &v.KYCLevel,
 		&v.CreatedAt, &v.LastLoginAt,

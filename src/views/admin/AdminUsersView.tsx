@@ -100,6 +100,16 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
       </div>
 
       <ul className="mt-3 space-y-1.5 text-sm">
+        {/* El nombre de usuario va PRIMERO y sin enmascarar: es con lo que esa
+            persona entra, y el resto de la ficha va enmascarado justamente
+            porque son datos de identidad. Este no lo es, y soporte necesita
+            poder dictarlo a quien no recuerda con que entra. */}
+        {user.username && (
+          <li className="flex items-center gap-2 min-w-0">
+            <Icons.User size={14} className="uv-text-muted shrink-0" aria-hidden="true" />
+            <span className="uv-text-primary font-semibold truncate">{user.username}</span>
+          </li>
+        )}
         <li className="flex items-center gap-2 min-w-0">
           <Icons.Hash size={14} className="uv-text-muted shrink-0" aria-hidden="true" />
           <span className="uv-text-secondary tabular-nums truncate">{user.cedulaMasked}</span>

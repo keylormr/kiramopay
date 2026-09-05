@@ -534,6 +534,7 @@ const ja: TranslationKeys = {
   login_detected_cedula: '身分証番号でログインします',
   login_detected_correo: 'メールアドレスでログインします',
   login_detected_telefono: '電話番号でログインします',
+  login_no_soy_yo: '別のアカウントを使う',
   login_last_access: '前回のアクセス：',
   login_change_cedula: '変更',
   login_password_title: 'パスワードを入力',

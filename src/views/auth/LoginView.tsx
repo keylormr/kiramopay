@@ -5,6 +5,7 @@ import { Button, Card } from '../../components/ui';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { clasificarIdentificador } from '@/utils/identificador';
+import { olvidarUltimoAcceso } from '@/stores/olvidarUltimoAcceso';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
@@ -68,7 +69,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   const [error, setError] = useState('');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
-  const [lastUser] = useState<{ cedula: string; name: string } | null>(() => {
+  const [lastUser, setLastUser] = useState<{ cedula: string; name: string } | null>(() => {
     const savedCedula = localStorage.getItem('kiramopay_last_cedula');
     const savedName = localStorage.getItem('kiramopay_last_name');
     return savedCedula && savedName ? { cedula: savedCedula, name: savedName } : null;
@@ -290,6 +291,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                     </p>
                   </div>
                   <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
+                </button>
+
+                {/* Sin esto no habia forma de quitar el nombre de la pantalla.
+                    En un telefono compartido, el siguiente en abrir la
+                    aplicacion veia el nombre de quien entro antes, y nada
+                    —ni cerrar sesion— lo borraba nunca. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    olvidarUltimoAcceso();
+                    setLastUser(null);
+                    setIdentificador('');
+                  }}
+                  className="mt-2 w-full text-center text-xs font-semibold text-[var(--color-text-muted-dark)] hover:text-white transition-colors py-1"
+                >
+                  {t('login_no_soy_yo')}
                 </button>
 
                 {biometricAvailable && (
