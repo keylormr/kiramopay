@@ -93,7 +93,14 @@ func (s *Service) Search(ctx context.Context, term string, limit int, actorID st
 		err   error
 		kind  string
 	)
-	if k, canonical, cerr := identifier.Classify(term); cerr == nil {
+	// Esta bifurcacion se apoyaba en que Classify FALLARA para decidir que el
+	// termino es un nombre de persona. Eso dejo de ser cierto al existir el
+	// nombre de usuario: "martinez" o "keil" ahora clasifican, y sin la guarda
+	// de hashColumnFor irian a buscarse como HMAC de cedula — cero resultados,
+	// en silencio, con la busqueda por nombre del panel muerta. Por eso el
+	// criterio ya no es "clasifico o no" sino "hay una columna PII donde
+	// buscarlo exacto"; lo que no la tiene sigue el camino del nombre.
+	if k, canonical, cerr := identifier.Classify(term); cerr == nil && hashColumnFor(k) != "" {
 		kind = string(k)
 		views, err = s.users.FindAdminViewByHash(ctx, hashColumnFor(k), canonical)
 	} else {
@@ -422,15 +429,24 @@ func (s *Service) audit(actorID, action, resourceType, resourceID, risk string, 
 
 // hashColumnFor traduce el tipo clasificado a la columna HMAC. El repositorio
 // valida la columna contra su propia lista blanca; aqui solo se elige.
+// hashColumnFor devuelve la columna de token HMAC donde buscar un
+// identificador exacto, o "" si ese tipo no vive en una columna PII.
+//
+// SIN rama default a proposito: la que habia devolvia "cedula_hash" para
+// cualquier tipo desconocido, asi que al aparecer un tipo nuevo la busqueda
+// del panel se iba a consultar el HMAC de la cedula con un valor que no es una
+// cedula. No fallaba: devolvia cero filas, en silencio. Un tipo nuevo tiene
+// que aparecer aqui explicitamente o quedarse en "".
 func hashColumnFor(k identifier.Kind) string {
 	switch k {
+	case identifier.KindCedula:
+		return "cedula_hash"
 	case identifier.KindPhone:
 		return "phone_hash"
 	case identifier.KindEmail:
 		return "email_hash"
-	default:
-		return "cedula_hash"
 	}
+	return ""
 }
 
 func clampLimit(limit, def, max int) int {

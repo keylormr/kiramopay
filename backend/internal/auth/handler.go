@@ -72,6 +72,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusForbidden, "ACCOUNT_BLOCKED", "account blocked")
 			return
 		}
+		// La cuenta si pide contrasena. Codigo propio para que la pantalla la
+		// pida, en vez de mostrar "credenciales incorrectas" antes de que el
+		// usuario haya escrito nada. No revela mas de lo que ya revela intentar:
+		// con la bandera de demostracion apagada, TODA cuenta responde esto.
+		if errors.Is(err, ErrPasswordRequired) {
+			noStore(w)
+			response.Error(w, http.StatusUnauthorized, "PASSWORD_REQUIRED", "password required")
+			return
+		}
 		// Log the real cause for ops; the client always sees a constant
 		// "invalid credentials" message (constant-time anti-enumeration).
 		if !errors.Is(err, ErrInvalidCredentials) {
@@ -160,6 +169,14 @@ func registerErrorResponse(err error) (status int, code, message string) {
 		return http.StatusBadRequest, "CEDULA_INVALID", "cedula no utilizable para iniciar sesion"
 	case errors.Is(err, ErrReferralCodeInvalid):
 		return http.StatusBadRequest, "REFERRAL_CODE_INVALID", "codigo de invitacion invalido"
+	case errors.Is(err, ErrUsernameInvalido):
+		return http.StatusBadRequest, "USERNAME_INVALID", "nombre de usuario no valido"
+	// A diferencia del choque de cedula o telefono —que se colapsan en un
+	// USER_EXISTS generico para no confirmar que ese dato esta registrado—, un
+	// nombre de usuario tomado SI se dice: es publico por naturaleza y quien
+	// se registra necesita saber que elegir otro.
+	case errors.Is(err, ErrUsernameTomado):
+		return http.StatusConflict, "USERNAME_TAKEN", "ese nombre de usuario ya esta en uso"
 	default:
 		return http.StatusInternalServerError, "REGISTER_FAILED", registerFailedMessage
 	}
@@ -352,6 +369,11 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ChangePassword(r.Context(), userID, &req, loginContext(r)); err != nil {
+		if errors.Is(err, ErrCuentaDeDemostracion) {
+			response.Error(w, http.StatusForbidden, "DEMO_ACCOUNT",
+				"una cuenta de demostracion no puede cambiar su contrasena")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CHANGE_PASSWORD_FAILED", err.Error())
 		return
 	}

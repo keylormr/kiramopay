@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/kiramopay/backend/pkg/identifier"
 )
 
 // mockRedisLockout simulates Redis for lockout tests.
@@ -43,7 +45,7 @@ func TestLockout_AllowsFirstFourAttempts(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		// Simulate failed attempt by incrementing counter
-		IncrementLockout(store, "702650930")
+		IncrementLockout(store, identifier.KindCedula, "702650930")
 		handler.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
@@ -62,7 +64,7 @@ func TestLockout_BlocksAfterFiveAttempts(t *testing.T) {
 
 	// Simulate 5 failed attempts
 	for i := 0; i < 5; i++ {
-		IncrementLockout(store, "702650930")
+		IncrementLockout(store, identifier.KindCedula, "702650930")
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"cedula":"702650930"}`))
@@ -80,11 +82,11 @@ func TestLockout_ResetsOnSuccessfulLogin(t *testing.T) {
 
 	// Simulate 3 failed attempts
 	for i := 0; i < 3; i++ {
-		IncrementLockout(store, "702650930")
+		IncrementLockout(store, identifier.KindCedula, "702650930")
 	}
 
 	// Simulate successful login (reset)
-	ResetLockoutCounter(store, "702650930")
+	ResetLockoutCounter(store, identifier.KindCedula, "702650930")
 
 	handler := AccountLockoutCheck(store, 5)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +116,7 @@ func TestLockout_IdentifierYFormatosCaenEnLaMismaCuenta(t *testing.T) {
 	)
 
 	for i := 0; i < 5; i++ {
-		IncrementLockout(store, "702650930")
+		IncrementLockout(store, identifier.KindCedula, "702650930")
 	}
 
 	cuerpos := []string{

@@ -22,6 +22,7 @@ export class HttpAuthRepository implements IAuthRepository {
       user: {
         id: string;
         cedula: string;
+        username?: string;
         phone: string;
         first_name: string;
         last_name: string;
@@ -45,6 +46,7 @@ export class HttpAuthRepository implements IAuthRepository {
     const user: User = {
       id: u.id,
       cedula: u.cedula,
+      username: u.username || '',
       firstName: u.first_name,
       lastName: u.last_name,
       phone: u.phone,
@@ -77,6 +79,7 @@ export class HttpAuthRepository implements IAuthRepository {
       user: {
         id: string;
         cedula: string;
+        username?: string;
         phone: string;
         first_name: string;
         last_name: string;
@@ -111,6 +114,7 @@ export class HttpAuthRepository implements IAuthRepository {
     const user: User = {
       id: u.id,
       cedula: u.cedula,
+      username: u.username || '',
       firstName: u.first_name,
       lastName: u.last_name,
       phone: u.phone,
@@ -246,6 +250,7 @@ export class HttpAuthRepository implements IAuthRepository {
     const res = await this.client.get<{
       id: string;
       cedula: string;
+      username?: string;
       phone: string;
       first_name: string;
       last_name: string;
@@ -264,6 +269,7 @@ export class HttpAuthRepository implements IAuthRepository {
     const user: User = {
       id: u.id,
       cedula: u.cedula,
+      username: u.username || '',
       firstName: u.first_name,
       lastName: u.last_name,
       phone: u.phone,

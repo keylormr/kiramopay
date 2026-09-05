@@ -1,6 +1,8 @@
 export interface User {
   id: string;
   cedula?: string;
+  /** Nombre de usuario con el que se entra. Vacio en cuentas anteriores a el. */
+  username?: string;
   phone: string;
   firstName: string;
   lastName: string;

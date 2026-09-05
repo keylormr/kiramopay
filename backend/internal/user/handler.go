@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"encoding/json"
 	"net/http"
 
@@ -47,6 +48,11 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := h.service.UpdateProfile(r.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, ErrCuentaDeDemostracion) {
+			response.Error(w, http.StatusForbidden, "DEMO_ACCOUNT",
+				"una cuenta de demostracion no puede cambiar sus datos")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
 		return
 	}

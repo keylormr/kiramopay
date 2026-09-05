@@ -24,10 +24,14 @@ const SHOW_APK_DOWNLOAD = !Capacitor.isNativePlatform();
 // (backend/internal/database/seeder.go). Fuera de ese entorno el sembrador exige
 // SEED_PASSWORD_<CEDULA> y estas contrasenas no valen, por eso el recuadro solo
 // aparece cuando la aplicacion habla con un backend local o con el modo simulado.
+// Se listan por NOMBRE DE USUARIO, que es el identificador que la pantalla
+// ofrece ahora y el que se dicta en una demostracion. La cedula sigue
+// funcionando, pero nadie la teclea si tiene un nombre mas corto.
 const CUENTAS_LOCALES = [
-  { identificador: '702650930', password: 'Kiramopay2024!', nota: '' },
-  { identificador: '700000000', password: 'Admin2024!', nota: 'admin' },
-  { identificador: '701234567', password: 'DemoLocal2026!', nota: 'demo' },
+  { identificador: 'keilor', password: 'Kiramopay2024!', nota: '' },
+  { identificador: 'admin.kp', password: 'Admin2024!', nota: 'admin' },
+  { identificador: 'demo', password: 'DemoLocal2026!', nota: 'demo' },
+  { identificador: 'victor', password: 'VictorLocal2026!', nota: '' },
 ];
 
 const apiLocal = (() => {
@@ -80,13 +84,74 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
 
   const clasificado = clasificarIdentificador(identificador);
 
-  const handleIdentificadorSubmit = () => {
+  const handleIdentificadorSubmit = async () => {
     if (!clasificado) {
       setError(t('login_identifier_invalid'));
       return;
     }
+    if (isLoading) return;
     setError('');
+
+    // Sondeo: se intenta entrar sin contrasena. Solo las cuentas marcadas como
+    // de demostracion, y solo con la bandera del servidor encendida, entran
+    // asi; cualquier otra responde PASSWORD_REQUIRED y entonces se pide la
+    // contrasena. El sondeo NO gasta intentos del bloqueo — el servidor lo
+    // trata aparte a proposito, porque si contara, cinco pulsaciones de Enter
+    // dejarian la cuenta bloqueada 15 minutos sin haber escrito nada.
+    setIsLoading(true);
+    const res = await useAuthStore.getState().login(clasificado.canonico, '');
+    setIsLoading(false);
+
+    if (res.success) {
+      await finalizarLogin(clasificado.canonico, '');
+      return;
+    }
+    // El limitador si se atiende aqui: el sondeo es una peticion y puede caer
+    // en el, y mandar al usuario al campo de contrasena solo para que falle
+    // otra vez seria hacerle perder el intento.
+    if (res.code === 'RATE_LIMITED') {
+      setError(t('login_rate_limited'));
+      return;
+    }
+    // Una cuenta bloqueada NO se distingue aqui a proposito: el servidor solo
+    // responde ACCOUNT_BLOCKED con la contrasena ya verificada, justamente
+    // para no confirmar que la cuenta existe antes de eso. Delatarlo en el
+    // paso del identificador desharia ese cuidado.
+    //
+    // PASSWORD_REQUIRED es el caso normal: esta cuenta si pide contrasena.
+    // Cualquier otro codigo tambien lleva al campo, para no abrir la pantalla
+    // ya en rojo antes de que el usuario teclee nada.
     setShowPasswordStage(true);
+  };
+
+  // finalizarLogin guarda lo que hace falta para la proxima entrada y avisa.
+  // Lo comparten el camino con contrasena y el de las cuentas que entran sin
+  // ella; dos copias divergirian.
+  const finalizarLogin = async (userIdentificador: string, userPassword: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    // Se guarda el identificador con el que se va a poder volver a entrar. Se
+    // prefiere el nombre de usuario cuando la cuenta tiene uno: es el que la
+    // pantalla ofrece ahora. La cedula queda de respaldo para las cuentas que
+    // todavia no tienen nombre de usuario.
+    const guardado = user.username || user.cedula || userIdentificador;
+    localStorage.setItem('kiramopay_last_cedula', guardado);
+    localStorage.setItem('kiramopay_last_name', `${user.firstName} ${user.lastName}`);
+    // Persist credentials to the OS Keychain/Keystore (native only; a no-op
+    // on web, never localStorage) so the user can log in with fingerprint /
+    // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
+    // cleared when biometrics is disabled (see useApp TOGGLE_BIOMETRIC).
+    // Atado a la PREFERENCIA, no solo al hardware: guardar con la
+    // biometria desactivada deshacia en silencio el borrado de
+    // credenciales que ese apagado acababa de hacer.
+    //
+    // Y solo si HAY contrasena: una cuenta que entra sin ella guardaria la
+    // cadena vacia en el llavero, y la huella devolveria al usuario a un campo
+    // de contrasena que esa cuenta no tiene.
+    if (userPassword && biometricAvailable && useSettingsStore.getState().biometricEnabled) {
+      void biometricService.setCredentials('kiramopay', guardado, userPassword);
+    }
+    onLogin(user);
   };
 
   const handleLogin = async (userIdentificador: string, userPassword: string) => {
@@ -95,27 +160,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
 
     const res = await useAuthStore.getState().login(userIdentificador, userPassword);
     if (res.success) {
-      const user = useAuthStore.getState().user;
-      if (user) {
-        // Se guarda SIEMPRE la cedula del perfil (no lo tecleado): el
-        // quick-login y la biometria releen este valor y la cedula es un
-        // identificador que el backend acepta siempre, sin importar si hoy
-        // se entro con correo o telefono.
-        const cedulaPerfil = user.cedula || userIdentificador;
-        localStorage.setItem('kiramopay_last_cedula', cedulaPerfil);
-        localStorage.setItem('kiramopay_last_name', `${user.firstName} ${user.lastName}`);
-        // Persist credentials to the OS Keychain/Keystore (native only; a no-op
-        // on web, never localStorage) so the user can log in with fingerprint /
-        // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
-        // cleared when biometrics is disabled (see useApp TOGGLE_BIOMETRIC).
-        // Atado a la PREFERENCIA, no solo al hardware: guardar con la
-        // biometria desactivada deshacia en silencio el borrado de
-        // credenciales que ese apagado acababa de hacer.
-        if (biometricAvailable && useSettingsStore.getState().biometricEnabled) {
-          void biometricService.setCredentials('kiramopay', cedulaPerfil, userPassword);
-        }
-        onLogin(user);
-      }
+      await finalizarLogin(userIdentificador, userPassword);
     } else {
       setError(
         res.code === 'ACCOUNT_BLOCKED'
@@ -298,6 +343,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {clasificado && !error && (
                 <p className="text-[var(--color-text-muted-dark)] text-sm mt-2 flex items-center gap-1">
                   <Icons.Check size={14} className="text-[var(--color-success)]" />
+                  {clasificado.tipo === 'usuario' && t('login_detected_usuario')}
                   {clasificado.tipo === 'cedula' && t('login_detected_cedula')}
                   {clasificado.tipo === 'correo' && t('login_detected_correo')}
                   {clasificado.tipo === 'telefono' && t('login_detected_telefono')}
