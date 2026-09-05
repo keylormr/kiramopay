@@ -11,6 +11,10 @@ export const CardsView: React.FC = () => {
   const api = getApiLayer().cards;
 
   const [cards, setCards] = useState<VirtualCard[]>([]);
+  // Distinguir "no pude preguntar" de "no hay tarjetas". Sin esto, un fallo de
+  // red pintaba el estado vacio -"todavia no tienes tarjetas"- a alguien que si
+  // tiene una, invitandolo a crear una segunda.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +35,9 @@ export const CardsView: React.FC = () => {
     const res = await api.getCards();
     if (res.success && res.data) {
       setCards(res.data.filter((c) => c.status !== 'cancelled'));
+      setLoadFailed(false);
+    } else {
+      setLoadFailed(true);
     }
     setLoading(false);
   }, [api]);
@@ -42,7 +49,12 @@ export const CardsView: React.FC = () => {
       if (!api) { if (!cancelled) setLoading(false); return; }
       const res = await api.getCards();
       if (!cancelled) {
-        if (res.success && res.data) setCards(res.data.filter((c) => c.status !== 'cancelled'));
+        if (res.success && res.data) {
+          setCards(res.data.filter((c) => c.status !== 'cancelled'));
+          setLoadFailed(false);
+        } else {
+          setLoadFailed(true);
+        }
         setLoading(false);
       }
     })();
@@ -73,9 +85,11 @@ export const CardsView: React.FC = () => {
   const handleFreeze = async () => {
     if (!api || !card || busy) return;
     setBusy(true);
+    setError('');
     const res = await api.freezeCard(card.id, !frozen);
     setBusy(false);
     if (res.success) await load();
+    else setError(res.error?.message || t('assistant_action_failed'));
   };
 
   const openLimits = () => {
@@ -88,18 +102,22 @@ export const CardsView: React.FC = () => {
   const saveLimits = async () => {
     if (!api || !card || busy) return;
     setBusy(true);
+    setError('');
     const res = await api.updateLimits(card.id, { dailyLimit: tempDaily, atmLimit: tempAtm });
     setBusy(false);
     if (res.success) { await load(); setShowLimits(false); }
+    else setError(res.error?.message || t('assistant_action_failed'));
   };
 
   const confirmCancel = async () => {
     if (!api || !card || busy) return;
     setBusy(true);
+    setError('');
     const res = await api.cancelCard(card.id);
     setBusy(false);
     setShowCancel(false);
     if (res.success) await load();
+    else setError(res.error?.message || t('assistant_action_failed'));
   };
 
   const copyNumber = async () => {
@@ -119,6 +137,19 @@ export const CardsView: React.FC = () => {
     <div className="pt-4 px-4 pb-24 space-y-6">
       {loading ? (
         <div className="h-56 w-full max-w-md mx-auto rounded-3xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] animate-pulse" />
+      ) : !card && loadFailed ? (
+        /* No se pudo consultar. Ofrecer "crear tarjeta" aqui seria empujar a
+           crear una segunda a quien ya tiene la suya. */
+        <div className="uv-surface-1 rounded-3xl p-8 text-center uv-shadow-soft">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-danger-soft,var(--color-surface-muted))] text-[var(--color-danger)] flex items-center justify-center mx-auto mb-4">
+            <Icons.AlertCircle size={32} />
+          </div>
+          <h3 className="text-lg font-bold uv-text-primary mb-1">{t('cards_load_failed_title')}</h3>
+          <p className="uv-text-muted text-sm mb-6">{t('cards_load_failed_desc')}</p>
+          <Button onClick={() => { setLoading(true); void load(); }} size="lg" fullWidth variant="secondary">
+            {t('error_retry')}
+          </Button>
+        </div>
       ) : !card ? (
         /* Empty state — no active card yet */
         <div className="uv-surface-1 rounded-3xl p-8 text-center uv-shadow-soft">

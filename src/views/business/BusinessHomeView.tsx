@@ -17,6 +17,8 @@ import type {
 interface Props {
   merchant: QRMerchant;
   payments: QRPayment[];
+  /** La lista no se pudo traer: sin esto, "vendido hoy" mostraria 0 como hecho. */
+  paymentsFailed?: boolean;
   onReload: () => void;
 }
 
@@ -31,7 +33,7 @@ const isToday = (iso: string) => {
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
-export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload }) => {
+export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, paymentsFailed = false, onReload }) => {
   const { t } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
@@ -91,11 +93,22 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
   }, [showCharge, merchant.id]);
 
   const verified = merchant.verificationStatus === 'verified';
-  const money = (v: number) => `${symbol}${v.toFixed(2)}`;
+  // Cada cobro trae su moneda; rotularlo todo con el simbolo de la moneda base
+  // de la aplicacion convertia un cobro en dolares en uno en colones a la vista.
+  const money = (v: number, moneda?: string) =>
+    `${moneda && moneda !== ccy ? `${moneda} ` : symbol}${v.toFixed(2)}`;
+  const SIN_DATO = '—';
 
-  const todays = payments.filter((p) => isToday(p.createdAt));
+  // Un cobro trae su propia moneda. Sumarlos todos juntos y rotularlos con el
+  // simbolo de la moneda base de la aplicacion mezcla colones con dolares y
+  // ademas los etiqueta mal: el mismo defecto que se corrigio en la analitica.
+  const enMoneda = payments.filter((p) => (p.currency || ccy) === ccy);
+  const otraMoneda = payments.length - enMoneda.length;
+
+  const todays = enMoneda.filter((p) => isToday(p.createdAt));
   const todayGross = todays.reduce((s, p) => s + p.amount, 0);
-  const totalFee = payments.reduce((s, p) => s + p.fee, 0);
+  const totalFee = enMoneda.reduce((s, p) => s + p.fee, 0);
+  const ventana = enMoneda.length;
 
   const cartItems = catalog.filter((c) => (cart[c.id] ?? 0) > 0);
   const cartTotal = cartItems.reduce((s, c) => s + c.price * (cart[c.id] ?? 0), 0);
@@ -195,7 +208,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
               {balance === null ? '—' : money(balance)}
             </div>
             <div className="relative text-white/70 text-sm">
-              {t('business_sales_today')}: {money(todayGross)} · {todays.length}
+              {t('business_sales_today')}: {paymentsFailed ? SIN_DATO : `${money(todayGross)} · ${todays.length}`}
             </div>
             {isOwner && (
               <button
@@ -213,7 +226,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
             <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
               {t('business_sales_today')}
             </span>
-            <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">{money(todayGross)}</div>
+            <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">{paymentsFailed ? SIN_DATO : money(todayGross)}</div>
             <div className="relative text-white/70 text-sm">
               {todays.length} · {t('business_cashier_hint')}
             </div>
@@ -226,42 +239,63 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, onReload
         {t('merchant_generate_qr')}
       </Button>
 
-      {/* Totals */}
+      {/* Totales de la ventana consultada.
+          El servidor entrega los ULTIMOS 50 cobros, no el historico. Llamar
+          "total vendido" a la suma de esa ventana es dar por total un numero
+          truncado: un comercio con mas de 50 ventas veia menos de lo que
+          vendio, sin ninguna senal. Se rotula por lo que es, y el historico
+          completo esta en la pestana de reportes, que si agrega en el
+          servidor. */}
       <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="uv-text-muted">{t('business_sales_total')}</span>
+          <span className="uv-text-muted">{t('business_sales_window').replace('{n}', String(ventana))}</span>
           <span className="font-semibold uv-text-primary tabular-nums">
-            {money(payments.reduce((s, p) => s + p.amount, 0))}
+            {paymentsFailed ? SIN_DATO : money(enMoneda.reduce((s, p) => s + p.amount, 0))}
           </span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="uv-text-muted">{t('business_commission_paid')}</span>
-          <span className="font-semibold uv-text-primary tabular-nums">{money(totalFee)}</span>
+          <span className="font-semibold uv-text-primary tabular-nums">{paymentsFailed ? SIN_DATO : money(totalFee)}</span>
         </div>
         <div className="flex justify-between text-sm border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pt-2">
           <span className="uv-text-muted">{t('merchant_net_received')}</span>
           <span className="font-bold uv-text-primary tabular-nums">
-            {money(payments.reduce((s, p) => s + (p.amount - p.fee), 0))}
+            {paymentsFailed ? SIN_DATO : money(enMoneda.reduce((s, p) => s + (p.amount - p.fee), 0))}
           </span>
         </div>
+        {otraMoneda > 0 && (
+          <p className="pt-1 text-xs uv-text-muted">
+            {t('other_currency_note').replace('{n}', String(otraMoneda))}
+          </p>
+        )}
+        {paymentsFailed && (
+          <button
+            onClick={onReload}
+            className="mt-1 w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] py-2 text-sm font-bold uv-text-primary"
+          >
+            {t('error_retry')}
+          </button>
+        )}
       </div>
 
       {/* Recent movements */}
       <div>
         <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-2">{t('business_movements')}</h3>
-        {payments.length === 0 ? (
+        {paymentsFailed ? (
+          <p className="text-sm uv-text-muted">{t('business_sales_load_failed')}</p>
+        ) : payments.length === 0 ? (
           <p className="text-sm uv-text-muted">{t('merchant_history_empty')}</p>
         ) : (
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
             {payments.slice(0, 5).map((p) => (
               <div key={p.id} className="flex items-center justify-between px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-bold uv-text-primary tabular-nums">{money(p.amount - p.fee)}</p>
+                  <p className="text-sm font-bold uv-text-primary tabular-nums">{money(p.amount - p.fee, p.currency)}</p>
                   <p className="text-[11px] uv-text-muted">
-                    {t('merchant_fee_label')} {money(p.fee)} · {new Date(p.createdAt).toLocaleDateString()}
+                    {t('merchant_fee_label')} {money(p.fee, p.currency)} · {new Date(p.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <p className="text-[11px] uv-text-muted shrink-0">{t('merchant_gross')} {money(p.amount)}</p>
+                <p className="text-[11px] uv-text-muted shrink-0">{t('merchant_gross')} {money(p.amount, p.currency)}</p>
               </div>
             ))}
           </div>

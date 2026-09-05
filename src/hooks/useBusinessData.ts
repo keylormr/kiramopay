@@ -11,6 +11,12 @@ export interface BusinessData {
   payments: QRPayment[];
   loading: boolean;
   error: string;
+  /**
+   * La lista de cobros no se pudo traer. Distinto de "no hay cobros": una
+   * pantalla que muestre 0 vendido sin saber esto le esta diciendo al duenno
+   * que hoy no vendio nada.
+   */
+  paymentsFailed: boolean;
   reload: () => void;
 }
 
@@ -24,6 +30,7 @@ export function useBusinessData(): BusinessData {
   const [payments, setPayments] = useState<QRPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [paymentsFailed, setPaymentsFailed] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -36,11 +43,14 @@ export function useBusinessData(): BusinessData {
         if (!cancelled) setLoading(false);
         return;
       }
+      // Un reintento que sale bien tiene que borrar el error anterior; si no,
+      // la pantalla se queda con el aviso viejo para siempre.
+      setError('');
       const mRes = await api.getMerchants();
       if (cancelled) return;
       const list = mRes.success && mRes.data ? mRes.data : [];
       setMerchants(list);
-      if (!mRes.success) setError(mRes.error?.message || '');
+      if (!mRes.success) setError(mRes.error?.message || 'MERCHANTS_FETCH_FAILED');
 
       if (activeMerchantId) {
         // The MERCHANT-scoped feed: every sale of the shop, no matter which
@@ -50,9 +60,17 @@ export function useBusinessData(): BusinessData {
         if (cancelled) return;
         if (pRes.success && pRes.data) {
           setPayments([...pRes.data].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
+          setPaymentsFailed(false);
+        } else {
+          // Antes esto se tragaba entero: la lista quedaba vacia (o con lo de
+          // la carga anterior) y la pantalla de negocio pintaba las ventas en
+          // cero como si fuera un hecho.
+          setPayments([]);
+          setPaymentsFailed(true);
         }
       } else {
         setPayments([]);
+        setPaymentsFailed(false);
       }
       setLoading(false);
     })();
@@ -63,5 +81,5 @@ export function useBusinessData(): BusinessData {
     ? merchants.find((m) => m.id === activeMerchantId) ?? null
     : null;
 
-  return { merchants, active, payments, loading, error, reload };
+  return { merchants, active, payments, loading, error, paymentsFailed, reload };
 }

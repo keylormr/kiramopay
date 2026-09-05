@@ -42,9 +42,9 @@ func NewService(repo *Repository, tx *transaction.Service, users userLookup) *Se
 	return &Service{repo: repo, tx: tx, users: users}
 }
 
-// defaultCommissionBps is the merchant commission applied to new merchants
+// DefaultCommissionBps is the merchant commission applied to new merchants
 // (50 basis points = 0.50%), mirroring the DB column default.
-const defaultCommissionBps = 50
+const DefaultCommissionBps = 50
 
 // ── Merchants ────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *Regi
 		CedulaType:         cedulaType,
 		LegalName:          req.LegalName,
 		VerificationStatus: "pending",
-		CommissionBps:      defaultCommissionBps,
+		CommissionBps:      DefaultCommissionBps,
 		CreatedAt:          time.Now(),
 	}
 

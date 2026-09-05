@@ -21,6 +21,11 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [cashbackRules, setCashbackRules] = useState<CashbackRule[]>([]);
   const [activeTab, setActiveTab] = useState<'rewards' | 'earn' | 'history'>('rewards');
   const [loading, setLoading] = useState(true);
+  // "No pude preguntar" no es lo mismo que "tienes cero puntos". Sin esta
+  // distincion, un fallo de red mostraba 0 pts y nivel Bronce con la misma
+  // cara que una cuenta recien abierta.
+  const [accountFailed, setAccountFailed] = useState(false);
+  const [redeemError, setRedeemError] = useState('');
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [loadTrigger, setLoadTrigger] = useState(0);
 
@@ -41,6 +46,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       if (cancelled) return;
       if (accRes.status === 'fulfilled' && accRes.value.success && accRes.value.data) {
         setAccount(accRes.value.data);
+        setAccountFailed(false);
+      } else {
+        setAccountFailed(true);
       }
       if (rewRes.status === 'fulfilled' && rewRes.value.success && rewRes.value.data) {
         setRewards(rewRes.value.data);
@@ -61,9 +69,12 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const api = getApiLayer();
     if (!api.loyalty) return;
     setRedeeming(rewardId);
+    setRedeemError('');
     const res = await api.loyalty.redeemReward(rewardId);
     if (res.success) {
       setLoadTrigger(n => n + 1); // Refresh points and rewards
+    } else {
+      setRedeemError(res.error?.message || t('loyalty_redeem_failed'));
     }
     setRedeeming(null);
   };
@@ -72,6 +83,8 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const TierIcon = tierConfig?.icon || Icons.Award;
 
   const formatPoints = (pts: number) => pts.toLocaleString();
+  // Un guion dice "no lo se". Un cero dice "no tienes". No son lo mismo.
+  const SIN_DATO = '—';
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
@@ -103,10 +116,10 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     </div>
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider" style={{ color: tierConfig?.color }}>
-                        {account?.tier || 'Bronze'} {t('loyalty_tier')}
+                        {accountFailed ? t('loyalty_unavailable') : `${account?.tier || 'Bronze'} ${t('loyalty_tier')}`}
                       </p>
                       <p className="text-3xl font-black uv-text-primary">
-                        {formatPoints(account?.availablePoints || 0)}
+                        {accountFailed ? SIN_DATO : formatPoints(account?.availablePoints || 0)}
                       </p>
                     </div>
                   </div>
@@ -114,13 +127,21 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_lifetime')}</p>
-                    <p className="text-sm font-extrabold uv-text-primary">{formatPoints(account?.lifetimePoints || 0)} pts</p>
+                    <p className="text-sm font-extrabold uv-text-primary">{accountFailed ? SIN_DATO : `${formatPoints(account?.lifetimePoints || 0)} pts`}</p>
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_available')}</p>
-                    <p className="text-sm font-extrabold text-green-600">{formatPoints(account?.availablePoints || 0)} pts</p>
+                    <p className="text-sm font-extrabold text-green-600">{accountFailed ? SIN_DATO : `${formatPoints(account?.availablePoints || 0)} pts`}</p>
                   </div>
                 </div>
+                {accountFailed && (
+                  <button
+                    onClick={() => setLoadTrigger((n) => n + 1)}
+                    className="mt-4 w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] py-2 text-sm font-bold uv-text-primary"
+                  >
+                    {t('error_retry')}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -207,6 +228,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             {/* Rewards */}
             {activeTab === 'rewards' && (
               <div className="px-4 py-2 space-y-3">
+                {redeemError && (
+                  <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{redeemError}</p>
+                )}
                 {rewards.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-gray-400">
                     <Icons.Gift size={40} className="mb-3 opacity-40" />
@@ -214,7 +238,10 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   </div>
                 ) : (
                   rewards.map((reward, i) => {
-                    const canAfford = (account?.availablePoints || 0) >= reward.pointsCost;
+                    // Con la cuenta sin cargar no se sabe cuantos puntos hay:
+                    // deshabilitar por un 0 inventado seria decidir por el
+                    // servidor. Se deja intentar y el servidor responde.
+                    const canAfford = accountFailed || (account?.availablePoints || 0) >= reward.pointsCost;
                     return (
                       <div key={reward.id}
                         className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger"
