@@ -31,6 +31,9 @@ function getCategoryStyle(category?: string) {
   return CATEGORY_STYLES[category] || DEFAULT_STYLE;
 }
 
+// Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
+const ccyDe = (tx: Transaction) => tx.ccy || 'CRC';
+
 export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state } = useApp();
   const { t } = useLanguage();
@@ -71,13 +74,37 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     // título resuelto, que depende del idioma activo.
   }, [allTransactions, selectedCategory, search, t]);
 
+  // Las tarjetas de resumen rotulan UNA moneda, asi que suman UNA moneda. Cada
+  // fila de la lista ya se formatea con su propia tx.ccy; los totales sumaban
+  // colones y dolares 1:1 y los rotulaban con la moneda base, que se cambia con
+  // un toque en el home. Se rotula la moneda base; solo si no hay ni un
+  // movimiento en ella se cae a la mas frecuente, para no mostrar ceros.
+  const { resumenCcy, enResumenCcy, otrasMonedas } = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tx of filtered) {
+      const c = ccyDe(tx);
+      counts.set(c, (counts.get(c) || 0) + 1);
+    }
+    const base = state.baseCurrency || 'CRC';
+    let ccy = base;
+    if (!counts.has(base) && counts.size > 0) {
+      ccy = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    }
+    const enCcy = filtered.filter((tx) => ccyDe(tx) === ccy);
+    return {
+      resumenCcy: ccy,
+      enResumenCcy: enCcy,
+      otrasMonedas: filtered.length - enCcy.length,
+    };
+  }, [filtered, state.baseCurrency]);
+
   const totalIncome = useMemo(
-    () => filtered.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0),
-    [filtered],
+    () => enResumenCcy.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0),
+    [enResumenCcy],
   );
   const totalExpenses = useMemo(
-    () => filtered.filter((tx) => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0),
-    [filtered],
+    () => enResumenCcy.filter((tx) => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0),
+    [enResumenCcy],
   );
   const net = totalIncome - totalExpenses;
 
@@ -88,8 +115,6 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
       return `${amount.toFixed(2)} ${ccy || ''}`;
     }
   };
-
-  const baseCcy = state.baseCurrency || 'CRC';
 
   // Export handlers
   const handleExportCSV = () => {
@@ -148,7 +173,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 <span className="text-[10px] font-bold text-[var(--color-success)] uppercase tracking-wider">{t('income')}</span>
               </div>
               <div className="text-base font-extrabold text-[var(--color-success)] truncate tabular-nums">
-                +{formatCurrency(totalIncome, baseCcy)}
+                +{formatCurrency(totalIncome, resumenCcy)}
               </div>
             </div>
 
@@ -161,7 +186,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 <span className="text-[10px] font-bold text-[var(--color-danger)] uppercase tracking-wider">{t('expenses')}</span>
               </div>
               <div className="text-base font-extrabold text-[var(--color-danger)] truncate tabular-nums">
-                -{formatCurrency(totalExpenses, baseCcy)}
+                -{formatCurrency(totalExpenses, resumenCcy)}
               </div>
             </div>
 
@@ -180,10 +205,18 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
               <div className={`text-base font-extrabold truncate tabular-nums ${
                 net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
               }`}>
-                {net >= 0 ? '+' : ''}{formatCurrency(net, baseCcy)}
+                {net >= 0 ? '+' : ''}{formatCurrency(net, resumenCcy)}
               </div>
             </div>
           </div>
+
+          {/* Los movimientos en otra moneda siguen en la lista con su propia
+              moneda, pero quedan fuera de estos totales: se dice. */}
+          {otrasMonedas > 0 && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">
+              {t('other_currency_note').replace('{n}', String(otrasMonedas))}
+            </p>
+          )}
         </div>
 
         {/* Search Bar */}

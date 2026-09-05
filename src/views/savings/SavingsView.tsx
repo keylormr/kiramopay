@@ -54,16 +54,21 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return () => { cancelled = true; };
   }, [setGoals]);
 
+  // Las metas se crean y se rotulan SIEMPRE en colones (el formulario y la hoja
+  // de deposito escriben el simbolo a mano), asi que el saldo, la validacion y
+  // el movimiento espejo salen de la cuenta en colones — no de la cuenta de la
+  // moneda base, que se cambia con un toque en el home.
+  const cuentaCRC = state.accounts.find((a) => a.ccy === 'CRC');
+
   // In mock mode there is no backend ledger, so the view mirrors the wallet
   // movement locally; in http mode the backend moves the money and we refresh.
   const localWalletTx = (amount: number, label: string, credit: boolean) => {
-    const acct = state.accounts.find((a) => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
-    if (!acct) return;
+    if (!cuentaCRC) return;
     const tx: Transaction = {
       id: Date.now().toString(),
       title: label,
       amount: credit ? amount : -amount,
-      ccy: acct.ccy,
+      ccy: cuentaCRC.ccy,
       date: new Date().toLocaleDateString(),
       type: credit ? 'credit' : 'debit',
       category: 'Savings',
@@ -129,8 +134,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     if (amount <= 0) return;
 
     // Check sufficient funds against the displayed wallet balance.
-    const baseAccount = state.accounts.find(a => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
-    if (!baseAccount || amount > baseAccount.balance) return;
+    if (!cuentaCRC || amount > cuentaCRC.balance) return;
 
     const api = getApiLayer();
     if (!api.savings) return;
@@ -418,8 +422,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           title={t('savings_add_money')}
         >
           {(() => {
-            const baseAccount = state.accounts.find(a => a.ccy === (state.baseCurrency || 'CRC')) || state.accounts[0];
-            const currentBalance = baseAccount?.balance ?? 0;
+            const currentBalance = cuentaCRC?.balance ?? 0;
             const numAmount = parseFloat(depositAmount || '0');
             const isInsufficient = numAmount > currentBalance;
             return (

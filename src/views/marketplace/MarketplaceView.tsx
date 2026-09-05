@@ -148,15 +148,37 @@ const MARKETPLACE_PARTNERS = {
   ],
 };
 
-// Restaurantes para demo de Uber Eats
+// Restaurantes para demo de Uber Eats. Sin costo de envio: el que se cobra lo
+// fija el servidor al crear el pedido, y la tabla local decia otro numero.
 const DEMO_RESTAURANTS = [
-  { id: '1', name: 'McDonalds', logo: '🍟', rating: 4.5, time: '15-25 min', deliveryFee: 1500 },
-  { id: '2', name: 'Taco Bell', logo: '🌮', rating: 4.3, time: '20-30 min', deliveryFee: 1200 },
-  { id: '3', name: 'Pizza Hut', logo: '🍕', rating: 4.4, time: '25-35 min', deliveryFee: 1800 },
-  { id: '4', name: 'KFC', logo: '🍗', rating: 4.2, time: '20-30 min', deliveryFee: 1500 },
-  { id: '5', name: 'Subway', logo: '🥪', rating: 4.6, time: '15-20 min', deliveryFee: 1000 },
-  { id: '6', name: 'Sushi Express', logo: '🍱', rating: 4.7, time: '30-40 min', deliveryFee: 2000 },
+  { id: '1', name: 'McDonalds', logo: '🍟', rating: 4.5, time: '15-25 min' },
+  { id: '2', name: 'Taco Bell', logo: '🌮', rating: 4.3, time: '20-30 min' },
+  { id: '3', name: 'Pizza Hut', logo: '🍕', rating: 4.4, time: '25-35 min' },
+  { id: '4', name: 'KFC', logo: '🍗', rating: 4.2, time: '20-30 min' },
+  { id: '5', name: 'Subway', logo: '🥪', rating: 4.6, time: '15-20 min' },
+  { id: '6', name: 'Sushi Express', logo: '🍱', rating: 4.7, time: '30-40 min' },
 ];
+
+// El servidor niega el cobro con este codigo cuando no hay integracion con el
+// socio: no hay a quien entregarle el viaje ni el pedido, asi que no debita.
+const SIN_INTEGRACION = 'SIN_INTEGRACION';
+
+// Aviso al pie de una hoja. 'bloqueo' marca la negativa explicada — no es culpa
+// del usuario ni de su saldo, va en tono neutro; el resto son fallos, van en rojo.
+type Aviso = { texto: string; bloqueo: boolean };
+
+const AvisoHoja: React.FC<{ aviso: Aviso | null }> = ({ aviso }) => {
+  if (!aviso) return null;
+  return aviso.bloqueo ? (
+    <div role="status" className="uv-surface-2 rounded-xl p-4 text-sm uv-text-secondary text-center">
+      {aviso.texto}
+    </div>
+  ) : (
+    <p role="alert" className="text-[var(--color-danger)] text-sm text-center">
+      {aviso.texto}
+    </p>
+  );
+};
 
 export const MarketplaceView: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -180,6 +202,7 @@ export const MarketplaceView: React.FC = () => {
   const [destination, setDestination] = useState('');
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
   const [isConfirmingRide, setIsConfirmingRide] = useState(false);
+  const [rideAviso, setRideAviso] = useState<Aviso | null>(null);
 
   // In http mode the backend moves the money and we refresh; in mock mode the
   // view mirrors the wallet debit locally (there is no backend ledger).
@@ -205,6 +228,7 @@ export const MarketplaceView: React.FC = () => {
   const [orderStep, setOrderStep] = useState<'menu' | 'cart' | 'tracking'>('menu');
   const [activeOrder, setActiveOrder] = useState<FoodOrder | null>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderAviso, setOrderAviso] = useState<Aviso | null>(null);
 
   // While tracking, poll the backend for the live order status. The status is
   // authoritative (server-derived); polling stops on unmount, sheet close, and
@@ -292,30 +316,55 @@ export const MarketplaceView: React.FC = () => {
     }
   };
 
+  // Traduce el fallo del servidor: la negativa por falta de integracion tiene
+  // mensaje propio; cualquier otra cosa se muestra como error.
+  const avisoDeError = (error: { code: string; message: string } | undefined, clave: string): Aviso =>
+    error?.code === SIN_INTEGRACION
+      ? { texto: t(clave), bloqueo: true }
+      : { texto: error?.message || t('assistant_action_failed'), bloqueo: false };
+
   const handleRequestRide = async () => {
-    if (!pickup || !destination || !selectedPartner) return;
-    setRideStep('searching');
+    if (!pickup || !destination || !selectedPartner || rideStep === 'searching') return;
     const api = getApiLayer();
-    if (api.marketplace) {
-      const res = await api.marketplace.createRide({ partnerCode: selectedPartner.id, pickup, destination });
-      if (res.success && res.data) setActiveRide(res.data);
+    if (!api.marketplace) {
+      setRideAviso({ texto: t('assistant_action_failed'), bloqueo: false });
+      return;
     }
+    setRideAviso(null);
+    setRideStep('searching');
+    const res = await api.marketplace.createRide({ partnerCode: selectedPartner.id, pickup, destination });
+    // Sin cotizacion del servidor no hay viaje que mostrar. Antes se pasaba a
+    // 'found' igual y la pantalla rellenaba conductor, calificacion y precio
+    // que no habia dado nadie.
+    if (!res.success || !res.data) {
+      setRideAviso(avisoDeError(res.error, 'ride_no_integration'));
+      setRideStep('location');
+      return;
+    }
+    setActiveRide(res.data);
     setRideStep('found');
   };
 
   const handleConfirmRide = async () => {
-    if (isConfirmingRide) return;
+    if (isConfirmingRide || !activeRide) return;
+    const api = getApiLayer();
+    if (!api.marketplace) {
+      setRideAviso({ texto: t('assistant_action_failed'), bloqueo: false });
+      return;
+    }
     setIsConfirmingRide(true);
+    setRideAviso(null);
     try {
-      const api = getApiLayer();
-      if (api.marketplace && activeRide) {
-        const res = await api.marketplace.confirmRide(activeRide.id);
-        if (res.success && res.data) {
-          setActiveRide(res.data); // status confirmed; the tracker polls from here
-          if (hasBackend) refreshAccounts().catch(() => {});
-          else localDebit(activeRide.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
-        }
+      const res = await api.marketplace.confirmRide(activeRide.id);
+      // Confirmar es el paso que cobra: si el servidor lo niega no hay viaje
+      // que seguir, asi que la pantalla se queda donde estaba y lo explica.
+      if (!res.success || !res.data) {
+        setRideAviso(avisoDeError(res.error, 'ride_no_integration'));
+        return;
       }
+      setActiveRide(res.data); // status confirmed; the tracker polls from here
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else localDebit(res.data.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
       setRideStep('tracking');
     } finally {
       setIsConfirmingRide(false);
@@ -328,27 +377,36 @@ export const MarketplaceView: React.FC = () => {
     setPickup('');
     setDestination('');
     setActiveRide(null);
+    setRideAviso(null);
   };
 
   const handlePlaceOrder = async () => {
     if (isPlacingOrder) return;
     if (!selectedRestaurant || !selectedPartner || cartItems.length === 0) return;
+    const api = getApiLayer();
+    if (!api.marketplace) {
+      setOrderAviso({ texto: t('assistant_action_failed'), bloqueo: false });
+      return;
+    }
     setIsPlacingOrder(true);
+    setOrderAviso(null);
     try {
-      const api = getApiLayer();
-      if (api.marketplace) {
-        const res = await api.marketplace.createFoodOrder({
-          partnerCode: selectedPartner.id,
-          restaurantName: selectedRestaurant.name,
-          items: cartItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
-        });
-        if (res.success && res.data) {
-          setActiveOrder(res.data);
-          // The charge already happened server-side at creation; just refresh.
-          if (hasBackend) refreshAccounts().catch(() => {});
-          else localDebit(cartTotal + deliveryFee, `${selectedRestaurant.name}`);
-        }
+      const res = await api.marketplace.createFoodOrder({
+        partnerCode: selectedPartner.id,
+        restaurantName: selectedRestaurant.name,
+        items: cartItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
+      });
+      // Crear el pedido es el paso que cobra: si el servidor lo niega no existe
+      // el pedido, asi que no hay nada que seguir. Antes se saltaba igual a la
+      // pantalla de seguimiento desde el finally.
+      if (!res.success || !res.data) {
+        setOrderAviso(avisoDeError(res.error, 'order_no_integration'));
+        return;
       }
+      setActiveOrder(res.data);
+      // The charge already happened server-side at creation; just refresh.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else localDebit(res.data.total, `${selectedRestaurant.name}`);
       setOrderStep('tracking');
     } finally {
       setIsPlacingOrder(false);
@@ -367,7 +425,6 @@ export const MarketplaceView: React.FC = () => {
   };
 
   const cartTotal = cartItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
-  const deliveryFee = selectedRestaurant?.deliveryFee || 0;
 
   const allPartners: Array<{
     id: string;
@@ -615,22 +672,16 @@ export const MarketplaceView: React.FC = () => {
                 </button>
               </div>
 
+              {/* Nada de precio ni de tiempo aqui: los da el servidor al pedir
+                  el viaje. Lo que habia era una constante sin relacion con el
+                  origen ni el destino. */}
               {pickup && destination && (
-                <div className="uv-surface-2 rounded-xl p-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm text-gray-500">Precio estimado</p>
-                      <p className="text-2xl font-black uv-text-primary">
-                        {formatCurrency(5500)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Tiempo</p>
-                      <p className="font-bold uv-text-primary">12-18 min</p>
-                    </div>
-                  </div>
-                </div>
+                <p className="uv-text-muted text-sm text-center">
+                  {t('ride_price_after_quote')}
+                </p>
               )}
+
+              <AvisoHoja aviso={rideAviso} />
 
               <button
                 onClick={handleRequestRide}
@@ -655,37 +706,49 @@ export const MarketplaceView: React.FC = () => {
             </div>
           )}
 
-          {rideStep === 'found' && (
+          {/* Solo se llega aqui con un viaje cotizado por el servidor: el
+              conductor y el precio salen de esa respuesta, sin rellenos. */}
+          {rideStep === 'found' && activeRide && (
             <div className="space-y-4">
               <div className="bg-green-100 dark:bg-green-900/30 text-green-600 px-4 py-3 rounded-xl text-center font-bold">
                 ¡Conductor encontrado!
               </div>
 
-              <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-                <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
-                  👨
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold uv-text-primary">{activeRide?.driver?.name ?? 'Conductor asignado'}</p>
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
-                    <Icons.Star size={14} className="text-yellow-500 fill-yellow-500" />
-                    <span>{(activeRide?.driver?.rating ?? 5).toFixed(2)}</span>
+              {activeRide.driver && (
+                <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
+                  <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
+                    👨
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold uv-text-primary">{activeRide.driver.name}</p>
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <Icons.Star size={14} className="text-yellow-500 fill-yellow-500" />
+                      <span>{activeRide.driver.rating.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold uv-text-primary">{activeRide.driver.car}</p>
+                    <p className="text-sm text-gray-500">{activeRide.driver.plate}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold uv-text-primary">{activeRide?.driver?.car ?? 'Vehículo'}</p>
-                  <p className="text-sm text-gray-500">{activeRide?.driver?.plate ?? ''}</p>
-                </div>
-              </div>
+              )}
 
-              <div className="uv-surface-2 rounded-xl p-4">
+              <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="uv-text-muted">Total a pagar</span>
                   <span className="font-black text-xl uv-text-primary">
-                    {formatCurrency(activeRide?.estimatedPrice ?? 5250)}
+                    {formatCurrency(activeRide.estimatedPrice)}
                   </span>
                 </div>
+                {activeRide.estimatedTime && (
+                  <div className="flex justify-between text-sm">
+                    <span className="uv-text-muted">Tiempo estimado</span>
+                    <span className="font-bold uv-text-primary">{activeRide.estimatedTime}</span>
+                  </div>
+                )}
               </div>
+
+              <AvisoHoja aviso={rideAviso} />
 
               <button
                 onClick={handleConfirmRide}
@@ -787,7 +850,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Food Order Sheet (Uber Eats/PedidosYa) */}
       <BottomSheet
         isOpen={showFoodSheet}
-        onClose={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); }}
+        onClose={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); setOrderAviso(null); }}
         title={selectedPartner?.name || 'Pedir comida'}
       >
         <div className="space-y-4 -mx-2">
@@ -820,8 +883,6 @@ export const MarketplaceView: React.FC = () => {
                         </span>
                         <span>•</span>
                         <span>{rest.time}</span>
-                        <span>•</span>
-                        <span>Envío {formatCurrency(rest.deliveryFee)}</span>
                       </div>
                     </div>
                     <Icons.ChevronRight size={18} className="uv-text-muted" />
@@ -912,20 +973,20 @@ export const MarketplaceView: React.FC = () => {
                 ))}
               </div>
 
+              {/* El envio lo fija el servidor al crear el pedido, asi que aqui
+                  no hay total: el que se mostraba salia de una tabla local y no
+                  coincidia con lo que se debitaba. */}
               <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="uv-text-muted">Subtotal</span>
                   <span className="font-bold uv-text-primary">{formatCurrency(cartTotal)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="uv-text-muted">Envío</span>
-                  <span className="font-bold uv-text-primary">{formatCurrency(deliveryFee)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                  <span className="font-bold uv-text-primary">Total</span>
-                  <span className="font-black text-xl uv-text-primary">{formatCurrency(cartTotal + deliveryFee)}</span>
-                </div>
+                <p className="uv-text-muted text-sm pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                  {t('order_delivery_fee_pending')}
+                </p>
               </div>
+
+              <AvisoHoja aviso={orderAviso} />
 
               <button
                 onClick={handlePlaceOrder}
@@ -987,6 +1048,25 @@ export const MarketplaceView: React.FC = () => {
                 })}
               </div>
 
+              {/* Lo cobrado, con las cifras que devolvio el servidor: el envio
+                  es el suyo, no el de ninguna tabla local. */}
+              {activeOrder && (
+                <div className="uv-surface-2 rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="uv-text-muted">Subtotal</span>
+                    <span className="font-bold uv-text-primary">{formatCurrency(activeOrder.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="uv-text-muted">Envío</span>
+                    <span className="font-bold uv-text-primary">{formatCurrency(activeOrder.deliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+                    <span className="font-bold uv-text-primary">Total cobrado</span>
+                    <span className="font-black text-xl uv-text-primary">{formatCurrency(activeOrder.total)}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Courier card appears once the order is on the way */}
               {activeOrder?.courier && (
                 <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
@@ -1005,7 +1085,7 @@ export const MarketplaceView: React.FC = () => {
               )}
 
               <button
-                onClick={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); }}
+                onClick={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); setOrderAviso(null); }}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
                 {activeOrder?.status === 'delivered' ? 'Listo' : 'Seguir en segundo plano'}

@@ -438,6 +438,7 @@ const ja: TranslationKeys = {
   crypto_prices_updated: '価格が更新されました',
   crypto_prices_unavailable: '価格が更新されませんでした',
   crypto_prices_unavailable_hint: '価格が最新でない場合があります。自動で再試行します。',
+  crypto_price_stale: '価格が最新ではないため、古い価格での取引は行いません。少し時間をおいて再度お試しください。',
   crypto_action_needs_price: '現在の価格がないため取引できません。',
   crypto_value_unavailable: '価値を表示できません',
   crypto_refresh_prices: '価格を更新',
@@ -631,6 +632,7 @@ const ja: TranslationKeys = {
   analytics_no_expenses: '支出記録なし',
   analytics_partial: '{total}件中{shown}件を表示',
   analytics_offline: '期間全体を読み込めませんでした。最近の取引のみ表示しています',
+  other_currency_note: '他通貨の取引: {n}件（この合計には含まれません）',
   boot_connecting: 'KiramoPayに接続中...',
   boot_waking: 'サーバーを起動しています。少々お待ちください...',
   update_title: 'アップデートがあります',
@@ -1158,6 +1160,13 @@ const ja: TranslationKeys = {
   sessions_err_gone: 'そのセッションはすでに閉じられていました。',
   sessions_err_rate: '試行が続きすぎました。少し待ってください。',
   sessions_err_network: '接続がありません。インターネットを確認してもう一度お試しください。',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: 'この会社とはまだ提携していないため、お支払いをお届けできません。請求は発生していません。残高はそのままです。',
+  recharge_no_agreement: 'この通信事業者とはまだ提携していないため、チャージはその番号に届きません。請求は発生していません。残高はそのままです。',
+  ride_no_integration: 'この配車アプリとはまだ連携していないため、乗車料金をお支払いできません。請求は発生していません。残高はそのままです。',
+  order_no_integration: 'この注文サービスとはまだ連携していないため、注文はお店に届きません。請求は発生していません。残高はそのままです。',
+  ride_price_after_quote: '料金と所要時間は、サービスが見積もりを出してから表示されます。',
+  order_delivery_fee_pending: '配送料は注文時にサービス側が確定します。',
 };
 
 export default ja;

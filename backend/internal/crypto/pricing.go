@@ -51,6 +51,13 @@ type RateLookup func(ctx context.Context, from, to string) (float64, error)
 // operar con un numero inventado.
 func (s *Service) precioEn(ctx context.Context, asset, currency string) (decimal.Decimal, error) {
 	usd, err := s.prices.GetPrice(ctx, asset)
+	// Un precio vencido no es "no hay precio": el sistema si tiene un numero,
+	// pero esta muerto. Se propaga tal cual para que el cliente reciba su
+	// propio codigo y el log distinga un proveedor caido de un activo que no
+	// cotiza.
+	if errors.Is(err, ErrPrecioViejo) {
+		return decimal.Zero, err
+	}
 	if err != nil || usd <= 0 {
 		return decimal.Zero, fmt.Errorf("%w: %s", ErrSinPrecio, asset)
 	}

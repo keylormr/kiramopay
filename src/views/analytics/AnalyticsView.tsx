@@ -27,6 +27,9 @@ function getCategoryConfig(cat: string) {
   return CATEGORY_CONFIG[cat] || CATEGORY_CONFIG[FALLBACK_CATEGORY];
 }
 
+// Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
+const ccyDe = (tx: Transaction) => tx.ccy || 'CRC';
+
 // Income (green) and expense (red) — the app-wide cash-flow semantics. In the
 // trend chart these are also separated by POSITION (income up, expense down from
 // a zero baseline), so identity never rests on color alone (colorblind-safe).
@@ -207,7 +210,12 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   // Gastos del periodo ANTERIOR (semana pasada / mes pasado), para poner el
   // periodo actual en contexto: "gastaste 23% menos que el mes pasado" dice
   // algo; una cifra suelta no. En "todo" no hay periodo anterior.
-  const [prevExpense, setPrevExpense] = useState<{ key: string; value: number } | null>(null);
+  // Se guarda separado POR MONEDA: comparar contra un total que mezcla monedas
+  // daria un porcentaje inventado.
+  const [prevExpense, setPrevExpense] = useState<{
+    key: string;
+    byCcy: Record<string, number>;
+  } | null>(null);
 
   // Ventana visible cargando desde el servidor: gobierna los esqueletos de la
   // vista para que la espera se VEA (pedido explicito del dueno: nada de
@@ -283,8 +291,13 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         }
         const prev = await fetchWindow(prevStart, prevEnd);
         if (cancelled) return;
-        const spent = prev.txs.reduce((s, tx) => (tx.amount < 0 ? s + Math.abs(tx.amount) : s), 0);
-        setPrevExpense({ key: windowKey, value: spent });
+        const byCcy: Record<string, number> = {};
+        for (const tx of prev.txs) {
+          if (tx.amount >= 0) continue;
+          const c = ccyDe(tx);
+          byCcy[c] = (byCcy[c] || 0) + Math.abs(tx.amount);
+        }
+        setPrevExpense({ key: windowKey, byCcy });
       } catch {
         if (!cancelled) setPrevExpense(null);
       }
@@ -318,9 +331,34 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const usingFallback =
     fallbackKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
 
+  // Toda esta vista suma UNA sola moneda. Antes sumaba tx.amount en crudo y
+  // rotulaba el total con la moneda base, que se cambia con un toque en las
+  // tarjetas del home: un gasto de 1.196.850 colones se imprimia como
+  // "$1,196,850.00", y ademas colones y dolares se sumaban 1:1.
+  // Se rotula la moneda base; solo si la ventana no tiene ni un movimiento en
+  // ella se cae a la moneda mas frecuente, para no mostrar ceros habiendo datos.
+  const { viewCcy, viewTransactions, otherCcyCount } = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tx of transactions) {
+      const c = ccyDe(tx);
+      counts.set(c, (counts.get(c) || 0) + 1);
+    }
+    const base = state.baseCurrency || 'CRC';
+    let ccy = base;
+    if (!counts.has(base) && counts.size > 0) {
+      ccy = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    }
+    const inCcy = transactions.filter((tx) => ccyDe(tx) === ccy);
+    return {
+      viewCcy: ccy,
+      viewTransactions: inCcy,
+      otherCcyCount: transactions.length - inCcy.length,
+    };
+  }, [transactions, state.baseCurrency]);
+
   // Category breakdown for expenses
   const categoryData = useMemo(() => {
-    const expenses = transactions.filter((tx: Transaction) => tx.amount < 0);
+    const expenses = viewTransactions.filter((tx: Transaction) => tx.amount < 0);
     const totals: Record<string, number> = {};
 
     for (const tx of expenses) {
@@ -338,18 +376,18 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       .sort((a, b) => b.amount - a.amount);
 
     return { items: sorted, total: totalExpenses };
-  }, [transactions]);
+  }, [viewTransactions]);
 
   // Income vs Expenses summary
   const summary = useMemo(() => {
-    const income = transactions
+    const income = viewTransactions
       .filter((tx: Transaction) => tx.amount > 0)
       .reduce((s: number, tx: Transaction) => s + tx.amount, 0);
-    const expenses = transactions
+    const expenses = viewTransactions
       .filter((tx: Transaction) => tx.amount < 0)
       .reduce((s: number, tx: Transaction) => s + Math.abs(tx.amount), 0);
     return { income, expenses, net: income - expenses };
-  }, [transactions]);
+  }, [viewTransactions]);
 
   // Cash-flow buckets over the active period (income up / expense down).
   const cashflowBuckets = useMemo<Bucket[]>(() => {
@@ -367,7 +405,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         days.push({ key: d.toDateString(), b: { label: wd.format(d), income: 0, expense: 0 } });
       }
       const byKey = new Map(days.map((d) => [d.key, d.b]));
-      for (const tx of transactions) {
+      for (const tx of viewTransactions) {
         const time = getTxTime(tx);
         if (time === null) continue;
         const b = byKey.get(new Date(time).toDateString());
@@ -386,7 +424,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         income: 0,
         expense: 0,
       }));
-      for (const tx of transactions) {
+      for (const tx of viewTransactions) {
         const time = getTxTime(tx);
         if (time === null) continue;
         const day = new Date(time).getDate();
@@ -399,7 +437,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     const mo = new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' });
     const map = new Map<string, Bucket>();
     const order: string[] = [];
-    const dated = transactions
+    const dated = viewTransactions
       .map((tx) => ({ tx, time: getTxTime(tx) }))
       .filter((x): x is { tx: Transaction; time: number } => x.time !== null)
       .sort((a, b) => a.time - b.time);
@@ -415,7 +453,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       addTo(b, tx.amount);
     }
     return order.map((k) => map.get(k)!);
-  }, [transactions, period, range, locale]);
+  }, [viewTransactions, period, range, locale]);
 
   const hasCashflow = cashflowBuckets.some((b) => b.income > 0 || b.expense > 0);
 
@@ -423,7 +461,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const { weekdaySpending, hasWeekdayData } = useMemo(() => {
     const days = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
     let counted = 0;
-    for (const tx of transactions) {
+    for (const tx of viewTransactions) {
       if (tx.amount >= 0) continue; // expenses only
       const time = getTxTime(tx);
       if (time === null) continue; // skip unparseable/relative dates
@@ -436,17 +474,17 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       weekdaySpending: dayNames.map((name, i) => ({ name, value: days[i], intensity: days[i] / max })),
       hasWeekdayData: counted > 0,
     };
-  }, [transactions, t]);
+  }, [viewTransactions, t]);
 
   // Movimientos principales del periodo: los montos mas grandes en absoluto,
   // filtrables por direccion. Es lo que el usuario reconoce de un vistazo:
   // nombres y montos, no abstracciones.
   const topMoves = useMemo(() => {
-    const filtered = transactions.filter((tx) =>
+    const filtered = viewTransactions.filter((tx) =>
       direction === 'all' ? true : direction === 'in' ? tx.amount > 0 : tx.amount < 0,
     );
     return [...filtered].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 6);
-  }, [transactions, direction]);
+  }, [viewTransactions, direction]);
 
   // Gasto promedio por dia del periodo activo. Para el mes en curso divide
   // entre los dias transcurridos (no los 30-31 del calendario); para "todo",
@@ -462,14 +500,14 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       const monthEnd = Math.min(range.end, now);
       days = Math.max(1, Math.ceil((monthEnd - start.getTime()) / 86400000));
     } else {
-      const times = transactions
+      const times = viewTransactions
         .map(getTxTime)
         .filter((x): x is number => x !== null);
       if (times.length === 0) return 0;
       days = Math.max(1, Math.ceil((Math.max(...times) - Math.min(...times)) / 86400000) + 1);
     }
     return summary.expenses / days;
-  }, [summary.expenses, period, range, transactions]);
+  }, [summary.expenses, period, range, viewTransactions]);
 
   // Dia de la semana con mas gasto (solo si hay senal).
   const peakDay = hasWeekdayData
@@ -481,19 +519,20 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const comparison = useMemo(() => {
     if (period === 'all') return null;
     if (!prevExpense || prevExpense.key !== windowKey) return null;
-    if (prevExpense.value <= 0 && summary.expenses <= 0) return null;
-    if (prevExpense.value <= 0) return null; // sin base: un % no significa nada
-    const pct = ((summary.expenses - prevExpense.value) / prevExpense.value) * 100;
+    // Solo contra el gasto del periodo anterior EN LA MISMA MONEDA que se rotula.
+    const base = prevExpense.byCcy[viewCcy] || 0;
+    if (base <= 0) return null; // sin base: un % no significa nada
+    const pct = ((summary.expenses - base) / base) * 100;
     return { pct };
-  }, [period, prevExpense, windowKey, summary.expenses]);
+  }, [period, prevExpense, windowKey, summary.expenses, viewCcy]);
 
   const txCounts = useMemo(
     () => ({
-      total: transactions.length,
-      recibidos: transactions.filter((tx) => tx.amount > 0).length,
-      enviados: transactions.filter((tx) => tx.amount < 0).length,
+      total: viewTransactions.length,
+      recibidos: viewTransactions.filter((tx) => tx.amount > 0).length,
+      enviados: viewTransactions.filter((tx) => tx.amount < 0).length,
     }),
-    [transactions],
+    [viewTransactions],
   );
 
   // Esqueletos mientras la ventana viaja desde el servidor: la espera se ve.
@@ -501,7 +540,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     loadingKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
 
   const formatCurrency = (amount: number) => {
-    const ccy = state.baseCurrency || 'CRC';
+    const ccy = viewCcy;
     try {
       return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(amount);
     } catch {
@@ -511,7 +550,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
   // Compact currency for chart readouts (keeps the line short).
   const formatCompact = (amount: number) => {
-    const ccy = state.baseCurrency || 'CRC';
+    const ccy = viewCcy;
     try {
       return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
     } catch {
@@ -565,6 +604,14 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           )}
           {usingFallback && (
             <p className="mt-2 px-1 text-xs uv-text-muted">{t('analytics_offline')}</p>
+          )}
+
+          {/* Los movimientos en otra moneda quedan fuera de los totales: se
+              dicen, no se esconden. */}
+          {otherCcyCount > 0 && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">
+              {t('other_currency_note').replace('{n}', String(otherCcyCount))}
+            </p>
           )}
 
           {/* Month navigator (only for the monthly view) */}

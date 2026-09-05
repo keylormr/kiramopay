@@ -438,6 +438,7 @@ const fr: TranslationKeys = {
   crypto_prices_updated: 'Prix mis à jour',
   crypto_prices_unavailable: 'Prix non mis à jour',
   crypto_prices_unavailable_hint: 'Les valeurs peuvent être obsolètes. Il réessaie automatiquement.',
+  crypto_price_stale: "Le prix n'est plus a jour et nous ne facturons pas sur un prix perime. Reessayez dans un instant.",
   crypto_action_needs_price: "Impossible d'opérer sans le prix actuel.",
   crypto_value_unavailable: 'Valeur indisponible',
   crypto_refresh_prices: 'Actualiser les prix',
@@ -633,6 +634,7 @@ const fr: TranslationKeys = {
   analytics_no_expenses: 'Aucune dépense enregistrée',
   analytics_partial: 'Affichage de {shown} sur {total} opérations',
   analytics_offline: 'Impossible de charger toute la période : seules les opérations récentes sont affichées',
+  other_currency_note: "Opérations dans d'autres devises : {n} (hors de ces totaux)",
   boot_connecting: 'Connexion à KiramoPay...',
   boot_waking: 'Le serveur se réveille, cela peut prendre un moment...',
   update_title: 'Mise à jour disponible',
@@ -1166,6 +1168,13 @@ const fr: TranslationKeys = {
   sessions_err_gone: 'Cette session était déjà fermée.',
   sessions_err_rate: 'Trop de tentatives d\'affilée. Attendez un instant.',
   sessions_err_network: 'Pas de connexion. Vérifiez votre internet et réessayez.',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: "Nous n'avons pas encore d'accord avec cette entreprise, nous ne pouvons donc pas lui remettre votre paiement. Rien n'a été débité : votre solde est inchangé.",
+  recharge_no_agreement: "Nous n'avons pas encore d'accord avec cet opérateur, la recharge n'arriverait donc pas sur le téléphone. Rien n'a été débité : votre solde est inchangé.",
+  ride_no_integration: "Nous ne sommes pas encore intégrés à cette application de transport, nous ne pouvons donc pas payer la course. Rien n'a été débité : votre solde est inchangé.",
+  order_no_integration: "Nous ne sommes pas encore intégrés à ce service de commandes, la commande n'arriverait donc pas au restaurant. Rien n'a été débité : votre solde est inchangé.",
+  ride_price_after_quote: "Le prix et la durée s'affichent une fois que le service les a estimés.",
+  order_delivery_fee_pending: 'Le service confirme les frais de livraison au moment de la commande.',
 };
 
 export default fr;

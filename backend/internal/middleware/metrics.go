@@ -54,8 +54,14 @@ func RecordWebhookDeliveryFailed() {
 	globalMetrics.webhookDeliveriesFailed.Add(1)
 }
 
-// RecordRequest records an HTTP request in metrics.
+// RecordRequest records an HTTP request in metrics. `path` debe ser un PATRON
+// de ruta (ver Logger), no la URL pedida: los mapas de aqui no desalojan nada,
+// asi que una clave por URL es memoria que crece sin techo a pedido de
+// cualquiera. Sin patron no se registra nada.
 func RecordRequest(method, path string, status int, duration time.Duration) {
+	if path == "" {
+		return
+	}
 	m := globalMetrics
 	m.totalRequests.Add(1)
 	if status >= 500 {
@@ -208,7 +214,15 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(durKeys)
 	for _, k := range durKeys {
-		count := m.requestDurationCounts[k].Load()
+		// RecordRequest inserta la clave en las SUMAS y despues en las CUENTAS,
+		// en dos tomas del lock distintas: en esa ventana la clave existe aqui
+		// sin pareja y el `m.requestDurationCounts[k].Load()` de antes
+		// desreferenciaba un puntero nil, tumbando /metrics entero.
+		counter, ok := m.requestDurationCounts[k]
+		if !ok {
+			continue
+		}
+		count := counter.Load()
 		if count > 0 {
 			avg := float64(m.requestDurationSums[k].Load()) / float64(count)
 			parts := strings.SplitN(k, "_", 2)

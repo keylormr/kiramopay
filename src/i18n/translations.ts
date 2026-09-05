@@ -525,6 +525,7 @@ export type TranslationKeys = {
   crypto_prices_updated: string;
   crypto_prices_unavailable: string;
   crypto_prices_unavailable_hint: string;
+  crypto_price_stale: string;
   crypto_action_needs_price: string;
   crypto_value_unavailable: string;
   crypto_refresh_prices: string;
@@ -760,6 +761,7 @@ export type TranslationKeys = {
   analytics_no_expenses: string;
   analytics_partial: string;
   analytics_offline: string;
+  other_currency_note: string;
   boot_connecting: string;
   boot_waking: string;
   update_title: string;
@@ -1218,6 +1220,14 @@ export type TranslationKeys = {
   sessions_err_gone: string;
   sessions_err_rate: string;
   sessions_err_network: string;
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos
+  // (SIN_CONVENIO / SIN_INTEGRACION).
+  bill_no_agreement: string;
+  recharge_no_agreement: string;
+  ride_no_integration: string;
+  order_no_integration: string;
+  ride_price_after_quote: string;
+  order_delivery_fee_pending: string;
 };
 
 import es from './languages/es';

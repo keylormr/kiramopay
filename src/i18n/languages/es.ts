@@ -438,6 +438,7 @@ const es: TranslationKeys = {
   crypto_prices_updated: 'Precios actualizados',
   crypto_prices_unavailable: 'No se pudieron actualizar los precios',
   crypto_prices_unavailable_hint: 'Los valores pueden estar desactualizados. Se vuelve a intentar solo.',
+  crypto_price_stale: 'El precio está desactualizado y no cobramos contra un precio viejo. Intenta de nuevo en un momento.',
   crypto_action_needs_price: 'No se puede operar sin el precio actual.',
   crypto_value_unavailable: 'Valor no disponible',
   crypto_refresh_prices: 'Actualizar precios',
@@ -633,6 +634,7 @@ const es: TranslationKeys = {
   analytics_no_expenses: 'Sin gastos registrados',
   analytics_partial: 'Mostrando {shown} de {total} movimientos',
   analytics_offline: 'No se pudo cargar el periodo completo: se muestran solo los movimientos recientes',
+  other_currency_note: 'Movimientos en otras monedas: {n} (fuera de estos totales)',
   boot_connecting: 'Conectando con KiramoPay...',
   boot_waking: 'El servidor está despertando, esto puede tardar un momento...',
   update_title: 'Actualización disponible',
@@ -1170,6 +1172,13 @@ const es: TranslationKeys = {
   sessions_err_gone: 'Esa sesión ya estaba cerrada.',
   sessions_err_rate: 'Demasiados intentos seguidos. Espera un momento.',
   sessions_err_network: 'Sin conexión. Revisa tu internet e intenta de nuevo.',
+  // Cobros que el servidor rechaza porque no hay a quien entregarlos.
+  bill_no_agreement: 'Todavía no tenemos convenio con esta empresa, así que no podemos entregarle tu pago. No se cobró nada: tu saldo sigue igual.',
+  recharge_no_agreement: 'Todavía no tenemos convenio con este operador, así que la recarga no llegaría al teléfono. No se cobró nada: tu saldo sigue igual.',
+  ride_no_integration: 'Todavía no tenemos integración con esta aplicación de viajes, así que no podemos pagarle el viaje. No se cobró nada: tu saldo sigue igual.',
+  order_no_integration: 'Todavía no tenemos integración con este servicio de pedidos, así que el pedido no llegaría al restaurante. No se cobró nada: tu saldo sigue igual.',
+  ride_price_after_quote: 'El precio y el tiempo aparecen cuando el servicio los cotice.',
+  order_delivery_fee_pending: 'El costo de envío lo confirma el servicio al hacer el pedido.',
 };
 
 export default es;

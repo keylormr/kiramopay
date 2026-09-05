@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -231,9 +232,11 @@ func TestCircuitBreaker_ClosesAfterCooldown(t *testing.T) {
 func TestPriceService_SinglePrice(t *testing.T) {
 	ps := NewPriceService()
 
-	// Pre-populate cache
+	// Pre-populate cache. El sello va junto con el precio: GetPrice se niega a
+	// operar contra un dato sin fecha o vencido (ver ErrPrecioViejo).
 	ps.mu.Lock()
 	ps.cache["ETH"] = &PriceData{Symbol: "ETH", Price: 3500.0}
+	ps.cachedAt["ETH"] = time.Now()
 	ps.lastFetch = time.Now()
 	ps.mu.Unlock()
 
@@ -476,5 +479,134 @@ func TestGetPrices_NoDevuelveElMapaInterno(t *testing.T) {
 				t.Fatalf("el mapa devuelto cambio de %d a %d entradas: es el mapa interno, no una copia", antes, len(devuelto))
 			}
 		})
+	}
+}
+
+// sembrarPrecio deja un precio en cache con la edad pedida y el cache de
+// GetPrices "fresco", para que la prueba no salga a la red: lo que se examina
+// es la edad del dato, no el camino de red.
+func sembrarPrecio(ps *PriceService, symbol string, precio float64, edad time.Duration) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.cache[symbol] = &PriceData{Symbol: symbol, Price: precio}
+	ps.cachedAt[symbol] = time.Now().Add(-edad)
+	ps.lastFetch = time.Now()
+}
+
+// El defecto: GetPrices degrada al cache SIN error cuando el proveedor falla
+// (breaker abierto, 429, clave rechazada), y GetPrice devolvia ese numero tal
+// cual. Como GetPrice es el precio con el que se compra y se vende de verdad,
+// una orden real se ejecutaba contra un precio de hace semanas — que es
+// exactamente lo que paso en produccion.
+func TestGetPrice_NoCobraContraUnPrecioViejo(t *testing.T) {
+	ps := NewPriceService()
+	ps.cacheTTL = time.Minute
+	sembrarPrecio(ps, "BTC", 65000, time.Hour)
+
+	precio, err := ps.GetPrice(context.Background(), "BTC")
+	if err == nil {
+		t.Fatalf("GetPrice devolvio %v de hace una hora sin error: una compra real se ejecuta contra ese numero", precio)
+	}
+	if !errors.Is(err, ErrPrecioViejo) {
+		t.Fatalf("err = %v, se esperaba ErrPrecioViejo", err)
+	}
+	if precio != 0 {
+		t.Fatalf("con error el precio debe ser 0, dio %v", precio)
+	}
+}
+
+// Un precio dentro de la ventana se cobra igual que siempre: el corte no puede
+// dejar la compra inservible cuando el feed responde.
+func TestGetPrice_PrecioFrescoSeSigueCobrando(t *testing.T) {
+	ps := NewPriceService()
+	ps.cacheTTL = time.Minute
+	sembrarPrecio(ps, "BTC", 65000, 10*time.Second)
+
+	precio, err := ps.GetPrice(context.Background(), "BTC")
+	if err != nil {
+		t.Fatalf("GetPrice con un precio de 10s: %v", err)
+	}
+	if precio != 65000 {
+		t.Fatalf("precio = %v, se esperaba 65000", precio)
+	}
+}
+
+// La pantalla es otro caso: mostrar un precio viejo es aceptable, cobrar
+// contra el no. GetPrices debe seguir sirviendo el dato degradado sin error.
+func TestGetPrices_SigueSirviendoElPrecioViejo(t *testing.T) {
+	ps := NewPriceService()
+	ps.cacheTTL = time.Minute
+	sembrarPrecio(ps, "BTC", 65000, time.Hour)
+
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
+	if err != nil {
+		t.Fatalf("GetPrices no puede fallar por un dato viejo: %v", err)
+	}
+	if p, ok := prices["BTC"]; !ok || p.Price != 65000 {
+		t.Fatalf("prices = %+v, se esperaba BTC a 65000 para la pantalla", prices)
+	}
+}
+
+// Un simbolo del que nunca llego precio no tiene con que probar frescura: se
+// trata como vencido en vez de darlo por bueno.
+func TestGetPrice_SinSelloCuentaComoViejo(t *testing.T) {
+	ps := NewPriceService()
+	ps.cacheTTL = time.Minute
+	ps.mu.Lock()
+	ps.cache["BTC"] = &PriceData{Symbol: "BTC", Price: 65000}
+	ps.lastFetch = time.Now()
+	ps.mu.Unlock()
+
+	if _, err := ps.GetPrice(context.Background(), "BTC"); !errors.Is(err, ErrPrecioViejo) {
+		t.Fatalf("err = %v, un precio sin fecha debe rechazarse como viejo", err)
+	}
+}
+
+// La ventana se mide contra el TTL del plan (Demo tolera mas porque refresca
+// menos), con un piso para que un precio recien traido nunca cuente como
+// viejo aunque el cache este apagado.
+func TestEdadMaximaPorPlan(t *testing.T) {
+	casos := []struct {
+		nombre string
+		ttl    time.Duration
+		quiere time.Duration
+	}{
+		{"demo/sin clave (5m)", 5 * time.Minute, 15 * time.Minute},
+		{"pro (30s)", 30 * time.Second, 90 * time.Second},
+		{"cache apagado", 0, edadMaximaMinima},
+	}
+	for _, c := range casos {
+		ps := NewPriceService()
+		ps.cacheTTL = c.ttl
+		if got := ps.edadMaxima(); got != c.quiere {
+			t.Errorf("%s: edadMaxima = %s, se esperaba %s", c.nombre, got, c.quiere)
+		}
+	}
+}
+
+// El corte tiene que llegar hasta el camino de compra/venta/conversion, que es
+// quien cobra: precioEn no puede tragarse el precio viejo y convertirlo en un
+// "no hay precio" generico.
+func TestPrecioEn_PropagaElPrecioViejo(t *testing.T) {
+	ps := NewPriceService()
+	ps.cacheTTL = time.Minute
+	sembrarPrecio(ps, "BTC", 65000, time.Hour)
+
+	s := &Service{prices: ps}
+	if _, err := s.precioEn(context.Background(), "BTC", "USD"); !errors.Is(err, ErrPrecioViejo) {
+		t.Fatalf("err = %v, se esperaba ErrPrecioViejo hasta el camino de compra", err)
+	}
+}
+
+// Y que llegue al cliente con codigo propio: un proveedor caido hace semanas
+// no es lo mismo que un activo que no cotiza, y quien lea el error tiene que
+// poder distinguirlos.
+func TestErrorDePrecio_PrecioViejoTieneCodigoPropio(t *testing.T) {
+	codigo, estado, ok := errorDePrecio(fmt.Errorf("envuelto: %w", ErrPrecioViejo))
+	if !ok || codigo != "PRICE_STALE" || estado != http.StatusServiceUnavailable {
+		t.Fatalf("codigo=%q estado=%d ok=%v, se esperaba PRICE_STALE/503", codigo, estado, ok)
+	}
+	if otro, _, _ := errorDePrecio(ErrSinPrecio); otro == codigo {
+		t.Fatalf("un precio viejo y un activo sin precio no pueden compartir el codigo %q", codigo)
 	}
 }

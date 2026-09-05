@@ -109,7 +109,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('BUY_FAILED', res.error?.message || 'Buy failed');
+      return apiError(res.error?.code || 'BUY_FAILED', res.error?.message || 'Buy failed');
     }
 
     return apiSuccess({
@@ -142,7 +142,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('SELL_FAILED', res.error?.message || 'Sell failed');
+      return apiError(res.error?.code || 'SELL_FAILED', res.error?.message || 'Sell failed');
     }
 
     return apiSuccess({
@@ -175,7 +175,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('CONVERT_FAILED', res.error?.message || 'Convert failed');
+      return apiError(res.error?.code || 'CONVERT_FAILED', res.error?.message || 'Convert failed');
     }
 
     return apiSuccess({
