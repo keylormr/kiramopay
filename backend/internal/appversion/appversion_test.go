@@ -173,3 +173,70 @@ func TestGetLatest_ConTokenLoMandaEnLaCabecera(t *testing.T) {
 		t.Fatalf("Authorization = %q", got)
 	}
 }
+
+// ── Reparto por plataforma ───────────────────────────────────────────────────
+// Android e iOS comparten la version pero no la URL: iOS no puede instalar un
+// binario bajado de un link.
+
+func conCacheYCanal(iosURL string) *Handler {
+	h := NewHandler()
+	h.iosUpdateURL = iosURL
+	h.cache = &infoVersion{Version: "2.3.6", URL: "https://ejemplo/kiramopay.apk"}
+	h.cachedAt = time.Now()
+	return h
+}
+
+func pedirPlataforma(t *testing.T, h *Handler, query string) (int, infoVersion) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version"+query, nil))
+	var sobre struct {
+		Data infoVersion `json:"data"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &sobre)
+	return rec.Code, sobre.Data
+}
+
+// Los APK ya instalados llaman sin ?platform= y tienen que seguir recibiendo la
+// URL del .apk. Romper esto deja sin actualizaciones al parque Android entero.
+func TestPlataforma_SinParametroSigueSiendoAndroid(t *testing.T) {
+	code, info := pedirPlataforma(t, conCacheYCanal(""), "")
+	if code != http.StatusOK || info.URL != "https://ejemplo/kiramopay.apk" {
+		t.Fatalf("code=%d info=%+v, esperaba la URL del apk", code, info)
+	}
+}
+
+func TestPlataforma_IOSDevuelveSuCanalYLaMismaVersion(t *testing.T) {
+	const canal = "https://testflight.apple.com/join/abc123"
+	code, info := pedirPlataforma(t, conCacheYCanal(canal), "?platform=ios")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200", code)
+	}
+	if info.URL != canal {
+		t.Errorf("url=%q, esperaba el canal iOS %q", info.URL, canal)
+	}
+	if info.Version != "2.3.6" {
+		t.Errorf("version=%q, esperaba la misma que Android (2.3.6)", info.Version)
+	}
+}
+
+// Sin canal configurado no hay a donde mandar al usuario: 503 y la app calla,
+// que es mejor que abrir una hoja con un boton que no lleva a ningun lado.
+func TestPlataforma_IOSSinCanalNoOfrece(t *testing.T) {
+	if code, _ := pedirPlataforma(t, conCacheYCanal(""), "?platform=ios"); code != http.StatusServiceUnavailable {
+		t.Fatalf("code=%d, esperaba 503", code)
+	}
+}
+
+func TestPlataforma_InvalidaEs400(t *testing.T) {
+	if code, _ := pedirPlataforma(t, conCacheYCanal("https://x.test"), "?platform=windows"); code != http.StatusBadRequest {
+		t.Fatalf("code=%d, esperaba 400", code)
+	}
+}
+
+func TestPlataforma_ToleraMayusculasYEspacios(t *testing.T) {
+	code, info := pedirPlataforma(t, conCacheYCanal("https://testflight.apple.com/join/abc"), "?platform=%20iOS%20")
+	if code != http.StatusOK || info.URL == "" {
+		t.Fatalf("code=%d info=%+v, esperaba resolver iOS igual", code, info)
+	}
+}

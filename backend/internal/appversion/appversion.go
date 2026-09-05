@@ -16,6 +16,17 @@
 //
 // Se intenta la API primero y se cae al segundo camino; lo que funcione se
 // cachea, para que mil telefonos no golpeen a GitHub.
+//
+// Las dos plataformas comparten la VERSION pero no la URL, porque no se
+// actualizan igual:
+//
+//   - Android baja el .apk del release y el sistema lo instala encima (misma
+//     firma, versionCode creciente). La URL sale del propio release.
+//   - iOS no puede instalar un binario bajado de un link. Actualizar es siempre
+//     mandar al usuario a su canal: TestFlight, App Store, o un manifiesto OTA
+//     itms-services:// si la distribucion es Ad Hoc. Cual de los tres se
+//     configura con IOS_UPDATE_URL; sin esa variable no hay canal y la app iOS
+//     no ofrece nada, que es preferible a un boton que no lleva a ningun lado.
 package appversion
 
 import (
@@ -48,6 +59,9 @@ type Handler struct {
 	cache    *infoVersion
 	cachedAt time.Time
 	client   *http.Client
+	// Canal de actualizacion de iOS (IOS_UPDATE_URL). Vacio mientras no exista
+	// distribucion iOS; ver el comentario del paquete.
+	iosUpdateURL string
 	// Inyectables para las pruebas; en produccion son las constantes de arriba.
 	apiURL      string
 	webURL      string
@@ -69,7 +83,8 @@ func NewHandler() *Handler {
 		descargaFmt: descargaFmt,
 		// Opcional: sube el limite de la API de 60 a 5000 por hora. Sin el, el
 		// camino web hace el trabajo igual.
-		token: os.Getenv("GITHUB_TOKEN"),
+		token:        os.Getenv("GITHUB_TOKEN"),
+		iosUpdateURL: strings.TrimSpace(os.Getenv("IOS_UPDATE_URL")),
 	}
 }
 
@@ -77,11 +92,29 @@ func NewHandler() *Handler {
 // lo consulta ANTES de saber si hay sesion. Si los dos caminos fallan y no hay
 // cache, devuelve 503 y la app simplemente no ofrece actualizar esta vez.
 func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
+	// Sin parametro se asume android: los APK ya instalados llaman a este
+	// endpoint sin plataforma y tienen que seguir recibiendo la URL del .apk.
+	plataforma := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("platform")))
+	if plataforma == "" {
+		plataforma = "android"
+	}
+	if plataforma != "android" && plataforma != "ios" {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "platform must be android or ios")
+		return
+	}
+	// iOS sin canal configurado: no es un fallo del servicio, es que todavia no
+	// hay por donde actualizar. Se responde 503, que es lo que la app ya sabe
+	// tolerar en silencio.
+	if plataforma == "ios" && h.iosUpdateURL == "" {
+		response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "no ios update channel configured")
+		return
+	}
+
 	h.mu.Lock()
 	if h.cache != nil && time.Since(h.cachedAt) < cacheTTL {
 		info := *h.cache
 		h.mu.Unlock()
-		response.JSON(w, http.StatusOK, info)
+		response.JSON(w, http.StatusOK, h.paraPlataforma(info, plataforma))
 		return
 	}
 	h.mu.Unlock()
@@ -101,7 +134,17 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	h.cache = info
 	h.cachedAt = time.Now()
 	h.mu.Unlock()
-	response.JSON(w, http.StatusOK, *info)
+	response.JSON(w, http.StatusOK, h.paraPlataforma(*info, plataforma))
+}
+
+// paraPlataforma adapta la respuesta cacheada (que es la de Android, con la URL
+// del .apk) a la plataforma que pregunta. La version es la misma en las dos:
+// sale del tag del release.
+func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersion {
+	if plataforma == "ios" {
+		return infoVersion{Version: info.Version, URL: h.iosUpdateURL}
+	}
+	return info
 }
 
 // desdeAPI lee el release por la API: es la fuente autoritativa del nombre del

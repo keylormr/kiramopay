@@ -772,7 +772,11 @@ export type TranslationKeys = {
   boot_waking: string;
   update_title: string;
   update_body: string;
+  // iOS no instala un binario bajado de un link: se abre el canal (TestFlight,
+  // App Store o instalador OTA), asi que el cuerpo y la accion son otros.
+  update_body_ios: string;
   update_download: string;
+  update_open: string;
   update_later: string;
   promo_invite_title: string;
   promo_invite_body: string;

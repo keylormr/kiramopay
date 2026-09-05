@@ -159,6 +159,52 @@ backend. Se toma de la misma variable de repo que usa el APK: `APK_API_URL`
    `IOS_EXPORT_METHOD=app-store-connect` y la subida a TestFlight activada, el
    build ademas queda disponible para los testers.
 
+## Actualizaciones de la app instalada
+
+Android se entera solo: la app compara su version contra el ultimo release y, si
+hay una nueva, baja el `.apk` y el sistema lo instala encima. **En iOS eso no
+existe** — no se puede instalar un binario bajado de un link. Actualizar es
+siempre mandar al usuario a su canal.
+
+El endpoint `/api/v1/app/version` acepta `?platform=android|ios`. Sin parametro
+asume android, porque los APK ya instalados llaman sin el y tienen que seguir
+funcionando. La **version** es la misma para las dos (sale del tag del release);
+lo que cambia es la **URL**:
+
+| Plataforma | URL que devuelve | De donde sale |
+|---|---|---|
+| android | el `.apk` del release | del propio release de GitHub |
+| ios | el canal configurado | variable `IOS_UPDATE_URL` del backend |
+
+`IOS_UPDATE_URL` acepta cualquiera de los tres canales:
+
+```
+TestFlight   https://testflight.apple.com/join/<codigo>
+App Store    https://apps.apple.com/app/id<id-numerico>
+Ad Hoc OTA   itms-services://?action=download-manifest&url=https://.../manifest.plist
+```
+
+Los tres son "una URL que el sistema abre": en iOS, `window.open` termina en
+`UIApplication.shared.open(url)`, que es justamente quien sabe abrir
+`itms-apps://`, `itms-beta://` e `itms-services://`. Por eso el mecanismo del
+cliente es el mismo que en Android y lo unico que cambia es el destino.
+
+**Sin `IOS_UPDATE_URL` configurada** el endpoint responde 503 para iOS y la app
+no ofrece nada. Es deliberado: mientras no exista distribucion iOS, una hoja de
+actualizacion con un boton que no lleva a ningun lado es peor que el silencio.
+
+### La version de iOS tiene que subir con la de Android
+
+`MARKETING_VERSION` y `CURRENT_PROJECT_VERSION` de `project.pbxproj` son el
+equivalente de `versionName` y `versionCode`. Si se quedan atras, el `.ipa` que
+publica el tag se identifica con la version vieja y la app entra en un bucle:
+detecta que hay una version nueva, el usuario "actualiza", y al volver a abrir
+sigue detectando lo mismo. Paso con el release v2.3.6, cuyo `.ipa` decia 2.3.1.
+
+`npm run check:version` compara ahora las cinco fuentes (package.json, Android,
+el changelog, el backend y iOS) y CI lo corre en cada push, asi que el desfase
+no puede volver a colarse.
+
 ## Deep links
 
 | Esquema | Como se declara | Estado |

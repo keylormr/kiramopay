@@ -2,13 +2,27 @@ import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { getApiLayer } from '@/api';
+import type { PlataformaApp } from '@/api/repositories/appversion.repository';
 
-// Deteccion de actualizaciones del APK: la app instalada compara su propia
-// version contra la ultima publicada (el backend la sirve desde el release de
-// GitHub) y ofrece bajarla en un toque. Sin tienda: el usuario descarga el
-// APK nuevo y Android lo instala ENCIMA (misma firma, versionCode creciente),
-// conservando datos y sesion. Solo aplica en nativo; en web el deploy llega
-// solo.
+// Deteccion de actualizaciones: la app instalada compara su propia version
+// contra la ultima publicada (el backend la sirve desde el release de GitHub) y
+// ofrece actualizar en un toque, sin tienda. Solo aplica en nativo; en web el
+// deploy llega solo.
+//
+// Las dos plataformas comparten la deteccion pero NO el desenlace:
+//
+//   - Android: se baja el .apk y el sistema lo instala ENCIMA (misma firma,
+//     versionCode creciente), conservando datos y sesion.
+//   - iOS: no se puede instalar un binario bajado de un link. La URL que manda
+//     el backend apunta al canal que corresponda —TestFlight, App Store o un
+//     manifiesto OTA itms-services:// si la distribucion es Ad Hoc— y el
+//     sistema la abre en la app que la maneje. Sin canal el backend responde
+//     503 y aca no se ofrece nada.
+//
+// El mecanismo de apertura es el mismo en las dos: window.open con destino de
+// ventana nueva. En iOS, Capacitor lo resuelve en createWebViewWith llamando a
+// UIApplication.shared.open(url), que es justamente quien sabe abrir
+// itms-apps://, itms-beta:// e itms-services://.
 
 export interface ActualizacionDisponible {
   version: string;
@@ -31,25 +45,42 @@ export function esVersionMasNueva(remota: string, local: string): boolean {
   return false;
 }
 
+/**
+ * Plataforma nativa en la que corre la app, o null en web.
+ *
+ * Se separa de Capacitor.getPlatform() porque ese devuelve tambien 'web' y
+ * cualquier plataforma futura: aca solo interesan las dos que tienen canal de
+ * actualizacion, y todo lo demas se trata como "no ofrecer nada".
+ */
+export function plataformaNativa(): PlataformaApp | null {
+  if (!Capacitor.isNativePlatform()) return null;
+  const p = Capacitor.getPlatform();
+  return p === 'ios' || p === 'android' ? p : null;
+}
+
 export function useActualizacion(): {
   actualizacion: ActualizacionDisponible | null;
+  plataforma: PlataformaApp | null;
   posponer: () => void;
-  descargar: () => void;
+  actualizar: () => void;
 } {
   const [actualizacion, setActualizacion] = useState<ActualizacionDisponible | null>(null);
+  const [plataforma] = useState<PlataformaApp | null>(() => plataformaNativa());
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!plataforma) return;
     let viva = true;
     (async () => {
       try {
         const [info, res] = await Promise.all([
           CapApp.getInfo(),
-          getApiLayer().appVersion?.getLatest() ??
+          getApiLayer().appVersion?.getLatest(plataforma) ??
             Promise.resolve({ success: false as const, data: undefined }),
         ]);
         if (!viva || !res.success || !res.data) return;
         const { version, url } = res.data;
+        // Sin URL no hay nada que abrir: el boton quedaria muerto.
+        if (!url) return;
         if (!esVersionMasNueva(version, info.version)) return;
         // Pospuesta hace menos de un dia para ESTA version: no insistir aun.
         try {
@@ -65,7 +96,7 @@ export function useActualizacion(): {
       }
     })();
     return () => { viva = false; };
-  }, []);
+  }, [plataforma]);
 
   const posponer = () => {
     if (actualizacion) {
@@ -79,12 +110,13 @@ export function useActualizacion(): {
     setActualizacion(null);
   };
 
-  const descargar = () => {
+  const actualizar = () => {
     if (!actualizacion) return;
-    // _system abre el navegador del telefono: descarga el APK y Android
-    // ofrece instalarlo (actualizacion en sitio por la misma firma).
+    // _system deja la URL en manos del sistema operativo: en Android abre el
+    // navegador y baja el APK; en iOS abre TestFlight, App Store o el
+    // instalador OTA, segun el esquema que traiga la URL.
     window.open(actualizacion.url, '_system');
   };
 
-  return { actualizacion, posponer, descargar };
+  return { actualizacion, plataforma, posponer, actualizar };
 }
