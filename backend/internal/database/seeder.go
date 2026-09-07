@@ -572,7 +572,14 @@ func seedLoyalty(ctx context.Context, pool *pgxpool.Pool, userID string) {
 		}
 	}
 
-	// 3. Internal rewards catalog (no external partners)
+	// 3. Catalogo de premios. Se siembran INACTIVOS a proposito: hoy canjear
+	// descuenta los puntos y devuelve un codigo que NADIE lee — no hay abono a
+	// la billetera, ni asiento, ni exoneracion de comision. Ver la migracion
+	// 060, que los desactiva en las bases que ya existen; aqui se cubre la base
+	// recien creada, donde el sembrador corre DESPUES de las migraciones y
+	// volveria a insertarlos activos.
+	//
+	// Para activar uno hay que implementar su entrega primero.
 	rewards := []struct {
 		Name, Description, Category string
 		PointsCost                  int64
@@ -591,7 +598,7 @@ func seedLoyalty(ctx context.Context, pool *pgxpool.Pool, userID string) {
 	for _, r := range rewards {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO loyalty_rewards (id, name, description, category, points_cost, stock, active)
-			 VALUES ($1, $2, $3, $4, $5, $6, true) ON CONFLICT DO NOTHING`,
+			 VALUES ($1, $2, $3, $4, $5, $6, false) ON CONFLICT DO NOTHING`,
 			uuid.New().String(), r.Name, r.Description, r.Category, r.PointsCost, r.Stock)
 		if err != nil {
 			log.Printf("Seed: loyalty reward error: %v", err)

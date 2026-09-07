@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kiramopay/backend/internal/transaction"
 )
 
 type Repository struct {
@@ -17,9 +18,14 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// outgoingTypes are the transaction types that move value out of a wallet and
-// therefore count toward the UIF daily aggregate.
-const outgoingTypesSQL = `('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy')`
+// outgoingTypesSQL son los tipos de movimiento que sacan valor de la billetera y
+// por lo tanto suman al agregado diario de la UIF.
+//
+// NO se escribe a mano: sale de transaction.TiposDeSalida, la misma lista que usa
+// el tope diario de gasto. Estaban duplicadas y se desincronizaron — al agregarse
+// escrow, payouts y marketplace, esta se quedo con la lista vieja y la deteccion
+// de estructuracion dejo de ver ese dinero, sin fallar ni avisar.
+var outgoingTypesSQL = transaction.ListaSQLDeSalidas()
 
 // GetUserDailyOutgoingTotal returns the sum of the user's completed outgoing
 // transactions for `currency` so far TODAY (including any just-posted tx).

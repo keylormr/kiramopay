@@ -1,0 +1,16 @@
+-- No hay reversion automatica, a proposito.
+--
+-- La migracion 060 apago el catalogo entero porque ningun canje tiene quien lo
+-- entregue: el codigo que devuelve el canje no se lee en ninguna parte del
+-- backend. Un "down" que volviera a encenderlo todo restauraria exactamente el
+-- defecto — la persona paga sus puntos y no recibe nada — y ademas no podria
+-- saber cuales estaban activos antes.
+--
+-- Reactivar un premio es una decision de negocio y se hace de a uno, DESPUES de
+-- implementar su entrega (para un cashback, el abono real con su asiento; para
+-- "SINPE gratis", un contador de exoneraciones que el cobro de comision
+-- consulte). El comando, con el id a la vista para no depender de los nombres,
+-- que llevan el simbolo del colon:
+--
+--   SELECT id, name, active, stock FROM loyalty_rewards ORDER BY points_cost;
+--   UPDATE loyalty_rewards SET active = TRUE, stock = -1 WHERE id = '<id>';

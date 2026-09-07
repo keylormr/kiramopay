@@ -894,6 +894,7 @@ export type TranslationKeys = {
   loyalty_earn: string;
   loyalty_earn_desc: string;
   loyalty_no_rewards: string;
+  loyalty_no_rewards_hint: string;
   loyalty_no_history: string;
   loyalty_no_rules: string;
   loyalty_redeem: string;
