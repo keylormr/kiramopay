@@ -181,6 +181,10 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 	}
 
 	var updated *Goal
+	// El error del gancho se guarda aparte: el llamador lo devuelve tal cual al
+	// usuario, y envuelto en "savings ledger post: en la misma tx: ..." le
+	// estariamos mostrando las tripas en vez de "retiras mas de lo que tenes".
+	var errDelObjetivo error
 	if _, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    desc,
 		IdempotencyKey: ledgerKey,
@@ -201,9 +205,13 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 			} else {
 				updated, err = DeductSavedEnTx(ctx, tx, g.ID, userID, amount)
 			}
+			errDelObjetivo = err
 			return err
 		},
 	}); err != nil {
+		if errDelObjetivo != nil {
+			return nil, errDelObjetivo
+		}
 		return nil, fmt.Errorf("savings ledger post: %w", err)
 	}
 
