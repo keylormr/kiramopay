@@ -4,7 +4,9 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { getApiLayer } from '@/api';
-import type { SplitGroup } from '@/api/repositories/splitpay.repository';
+import { formatMoney } from '@/utils/money';
+import type { SplitGroup, SplitShare } from '@/api/repositories/splitpay.repository';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
@@ -18,9 +20,18 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [totalAmount, setTotalAmount] = useState('');
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
   const [participants, setParticipants] = useState([
-    { userName: '', userPhone: '' },
-    { userName: '', userPhone: '' },
+    { userName: '', userPhone: '', amount: '' },
+    { userName: '', userPhone: '', amount: '' },
   ]);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Detalle: es donde se ve quien debe que y donde se paga la propia parte.
+  const yoID = useAuthStore((st) => st.user?.id);
+  const [detalle, setDetalle] = useState<{ group: SplitGroup; shares: SplitShare[] } | null>(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
+  const [pagando, setPagando] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,42 +51,87 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   }, [loadTrigger]);
 
   const handleCreate = async () => {
-    if (!title || !totalAmount) return;
+    if (!title || !totalAmount || creating) return;
     const api = getApiLayer();
     if (!api.splitPay) return;
 
-    const validParticipants = participants.filter(p => p.userName.trim());
-    if (validParticipants.length === 0) return;
+    // El telefono no es opcional: es lo unico que permite saber a que cuenta se
+    // le cobra. Sin el, el servidor rechaza la division entera.
+    const validParticipants = participants.filter(p => p.userName.trim() && p.userPhone.trim());
+    if (validParticipants.length === 0) {
+      setCreateError(t('splitpay_phone_hint'));
+      return;
+    }
 
     const amount = parseFloat(totalAmount);
-    const perPerson = amount / (validParticipants.length + 1); // +1 for creator
+    if (!Number.isFinite(amount) || amount <= 0) return;
 
+    setCreating(true);
+    setCreateError(null);
     const res = await api.splitPay.createSplit({
       title,
       totalAmount: amount,
       currency: 'CRC',
       splitType,
       participants: validParticipants.map(p => ({
-        userName: p.userName,
-        userPhone: p.userPhone || undefined,
-        amount: splitType === 'equal' ? perPerson : undefined,
+        userName: p.userName.trim(),
+        userPhone: p.userPhone.trim(),
+        // En partes iguales reparte el servidor, que es quien sabe que el
+        // creador tambien cuenta. Mandar una cifra ya dividida desde aqui era
+        // lo que hacia que la pantalla y el servidor mostraran numeros
+        // distintos.
+        amount: splitType === 'custom' ? parseFloat(p.amount) || 0 : undefined,
       })),
     });
+    setCreating(false);
 
-    if (res.success) {
-      setShowCreate(false);
-      setTitle('');
-      setTotalAmount('');
-      setParticipants([{ userName: '', userPhone: '' }, { userName: '', userPhone: '' }]);
-      setLoadTrigger(n => n + 1);
+    if (!res.success) {
+      setCreateError(res.error?.message || t('error'));
+      return;
     }
+    setShowCreate(false);
+    setTitle('');
+    setTotalAmount('');
+    setParticipants([{ userName: '', userPhone: '', amount: '' }, { userName: '', userPhone: '', amount: '' }]);
+    setLoadTrigger(n => n + 1);
+  };
+
+  const abrirDetalle = async (groupId: string) => {
+    const api = getApiLayer();
+    if (!api.splitPay) return;
+    setCargandoDetalle(true);
+    setErrorDetalle(null);
+    setDetalle(null);
+    const res = await api.splitPay.getSplit(groupId);
+    setCargandoDetalle(false);
+    if (!res.success || !res.data) {
+      setErrorDetalle(res.error?.message || t('error'));
+      return;
+    }
+    setDetalle(res.data);
+  };
+
+  const pagarMiParte = async () => {
+    if (!detalle || pagando) return;
+    const api = getApiLayer();
+    if (!api.splitPay) return;
+    setPagando(true);
+    setErrorDetalle(null);
+    const res = await api.splitPay.payShare(detalle.group.id);
+    setPagando(false);
+    if (!res.success) {
+      setErrorDetalle(res.error?.message || t('error'));
+      return;
+    }
+    await abrirDetalle(detalle.group.id);
+    setLoadTrigger(n => n + 1);
   };
 
   const addParticipant = () => {
-    setParticipants([...participants, { userName: '', userPhone: '' }]);
+    setParticipants([...participants, { userName: '', userPhone: '', amount: '' }]);
   };
 
-  const updateParticipant = (idx: number, field: 'userName' | 'userPhone', value: string) => {
+  const updateParticipant = (idx: number, field: 'userName' | 'userPhone' | 'amount', value: string) => {
     setParticipants(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
   };
 
@@ -84,13 +140,6 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setParticipants(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const formatCurrency = (amount: number) => {
-    try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
-    } catch {
-      return `₡${amount.toFixed(2)}`;
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -109,7 +158,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('splitpay_title')}</h1>
-        <button onClick={() => setShowCreate(true)} className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]">
+        <button onClick={() => setShowCreate(true)} aria-label={t('splitpay_create')} className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]">
           <Icons.Plus size={20} />
         </button>
       </div>
@@ -133,9 +182,11 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         ) : (
           <div className="px-4 py-4 space-y-3">
             {splits.map((split, i) => (
-              <div
+              <button
                 key={split.id}
-                className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger"
+                type="button"
+                onClick={() => abrirDetalle(split.id)}
+                className="w-full text-left uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger hover:border-[var(--color-primary)]/40 transition-colors"
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex items-start justify-between mb-2">
@@ -149,13 +200,13 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-extrabold uv-text-primary">
-                    {formatCurrency(split.totalAmount)}
+                    {formatMoney(split.totalAmount, split.currency as 'CRC' | 'USD')}
                   </span>
                   <span className="text-xs text-gray-400">
                     {split.splitType === 'equal' ? t('splitpay_equal') : t('splitpay_custom')}
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -202,13 +253,19 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
             <div className="space-y-2">
               {participants.map((p, i) => (
-                <div key={i} className="flex gap-2">
+                <div key={i} className="flex flex-wrap items-center gap-2">
                   <input type="text" value={p.userName} onChange={(e) => updateParticipant(i, 'userName', e.target.value)}
                     placeholder={t('contact_name')}
-                    className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
+                    className="min-w-0 flex-1 basis-32 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
                   <input type="tel" value={p.userPhone} onChange={(e) => updateParticipant(i, 'userPhone', e.target.value)}
                     placeholder={t('phone')}
-                    className="w-32 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
+                    className="min-w-0 w-32 flex-shrink bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
+                  {splitType === 'custom' && (
+                    <input type="number" inputMode="decimal" value={p.amount}
+                      onChange={(e) => updateParticipant(i, 'amount', e.target.value)}
+                      placeholder={t('amount')}
+                      className="min-w-0 w-24 flex-shrink bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
+                  )}
                   {participants.length > 2 && (
                     <button onClick={() => removeParticipant(i)} className="px-2 text-gray-400 hover:text-red-500">
                       <Icons.X size={16} />
@@ -217,23 +274,91 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 </div>
               ))}
             </div>
+            <p className="text-xs text-gray-400 mt-2">{t('splitpay_phone_hint')}</p>
             {totalAmount && participants.filter(p => p.userName).length > 0 && splitType === 'equal' && (
               <p className="text-xs text-[var(--color-primary)] font-medium mt-2">
-                {formatCurrency(parseFloat(totalAmount) / (participants.filter(p => p.userName).length + 1))} {t('splitpay_per_person')}
+                {formatMoney(parseFloat(totalAmount) / (participants.filter(p => p.userName.trim() && p.userPhone.trim()).length + 1))} {t('splitpay_per_person')}
               </p>
             )}
           </div>
+
+          {createError && (
+            <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{createError}</p>
+          )}
 
           <Button
             variant="primary"
             size="lg"
             fullWidth
+            loading={creating}
             onClick={handleCreate}
-            disabled={!title || !totalAmount || participants.filter(p => p.userName).length === 0}
+            disabled={creating || !title || !totalAmount ||
+              participants.filter(p => p.userName.trim() && p.userPhone.trim()).length === 0}
           >
             {t('splitpay_create')}
           </Button>
         </div>
+      </BottomSheet>
+
+      {/* Detalle: quien debe que, y el pago de la propia parte. */}
+      <BottomSheet
+        isOpen={cargandoDetalle || detalle !== null || errorDetalle !== null}
+        onClose={() => { setDetalle(null); setErrorDetalle(null); }}
+        title={t('splitpay_detail')}
+      >
+        {cargandoDetalle ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : detalle ? (
+          <div className="space-y-4 pb-2">
+            <div>
+              <h3 className="font-bold uv-text-primary">{detalle.group.title}</h3>
+              <p className="text-2xl font-extrabold uv-text-primary mt-1">
+                {formatMoney(detalle.group.totalAmount, detalle.group.currency as 'CRC' | 'USD')}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {detalle.shares.map((cuota) => {
+                const esMia = !!yoID && cuota.userId === yoID;
+                return (
+                  <div key={cuota.id}
+                    className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${esMia
+                      ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30'
+                      : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]'}`}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold uv-text-primary truncate">
+                        {esMia ? t('splitpay_your_share') : (cuota.userName || cuota.userPhone)}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {cuota.status === 'paid' ? t('splitpay_share_paid')
+                          : cuota.status === 'declined' ? t('splitpay_share_declined')
+                            : t('splitpay_share_pending')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold uv-text-primary flex-shrink-0 ml-3">
+                      {formatMoney(cuota.amount, detalle.group.currency as 'CRC' | 'USD')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {errorDetalle && (
+              <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{errorDetalle}</p>
+            )}
+
+            {detalle.group.status === 'active' &&
+              detalle.shares.some((c) => c.userId === yoID && c.status === 'pending') && (
+                <Button variant="primary" size="lg" fullWidth loading={pagando} onClick={pagarMiParte}>
+                  {t('splitpay_pay_share')}
+                </Button>
+              )}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-danger)] py-6" aria-live="polite">{errorDetalle}</p>
+        )}
       </BottomSheet>
     </div>
   );

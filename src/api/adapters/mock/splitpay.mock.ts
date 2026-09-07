@@ -40,8 +40,11 @@ export class MockSplitPayRepository implements ISplitPayRepository {
       createdAt: new Date().toISOString(),
     };
 
-    const equalAmount = request.totalAmount / request.participants.length;
-    const shares: SplitShare[] = request.participants.map((p, i) => ({
+    // Mismo reparto que el servidor: el creador cuenta como uno mas y su parte
+    // nace pagada, porque el puso el dinero. Un mock que reparte distinto
+    // esconde justo los errores que deberia destapar.
+    const equalAmount = request.totalAmount / (request.participants.length + 1);
+    const deInvitados: SplitShare[] = request.participants.map((p, i) => ({
       id: `share-${Date.now()}-${i}`,
       groupId,
       userId: p.userId,
@@ -55,6 +58,19 @@ export class MockSplitPayRepository implements ISplitPayRepository {
             : p.amount ?? 0,
       status: 'pending',
     }));
+    const repartido = deInvitados.reduce((t, c) => t + c.amount, 0);
+    const shares: SplitShare[] = [
+      {
+        id: `share-${Date.now()}-creador`,
+        groupId,
+        userId: 'current-user',
+        userName: '',
+        amount: Math.round((request.totalAmount - repartido) * 100) / 100,
+        status: 'paid',
+        paidAt: new Date().toISOString(),
+      },
+      ...deInvitados,
+    ];
 
     const state = getState();
     const groups: SplitGroup[] = state?.splitGroups ?? [];

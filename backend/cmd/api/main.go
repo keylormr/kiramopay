@@ -413,7 +413,7 @@ func main() {
 		CobrosActivos: cfg.Server.Environment != "production",
 	})
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
-	splitService := splitpay.NewService(splitRepo, txService)
+	splitService := splitpay.NewService(splitRepo, txService, userRepo)
 	cardsService := cards.NewService(cardsRepo)
 	fraudService := fraud.NewService(fraudRepo)
 	countryService := country.NewService(countryRepo)

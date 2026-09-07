@@ -883,6 +883,13 @@ export type TranslationKeys = {
   splitpay_custom: string;
   splitpay_participants: string;
   splitpay_per_person: string;
+  splitpay_phone_hint: string;
+  splitpay_pay_share: string;
+  splitpay_your_share: string;
+  splitpay_share_paid: string;
+  splitpay_share_pending: string;
+  splitpay_share_declined: string;
+  splitpay_detail: string;
 
   // Loyalty
   loyalty_title: string;

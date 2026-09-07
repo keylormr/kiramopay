@@ -79,8 +79,15 @@ func (r *Repository) Delete(ctx context.Context, id, userID string) error {
 
 // AddSaved adjusts saved_minor by delta (positive deposit, negative withdraw) and
 // returns the updated goal.
-func (r *Repository) AddSaved(ctx context.Context, id, userID string, delta int64) (*Goal, error) {
-	g, err := scanGoal(r.db.QueryRow(ctx,
+// Las dos escrituras del saldo guardado existen SOLO en version transaccional:
+// no hay variante por el pool a proposito, para que nadie vuelva a mover el
+// saldo del objetivo por fuera de la transaccion del asiento.
+//
+// AddSavedEnTx y DeductSavedEnTx escriben por la transaccion del asiento en vez
+// de por el pool, para que la fila del objetivo y el movimiento de dinero se
+// confirmen juntos o no se confirme ninguno. Ver ledger.Posting.EnLaMismaTx.
+func AddSavedEnTx(ctx context.Context, tx pgx.Tx, id, userID string, delta int64) (*Goal, error) {
+	g, err := scanGoal(tx.QueryRow(ctx,
 		`UPDATE savings_goals SET saved_minor = saved_minor + $3
 		 WHERE id = $1 AND user_id = $2 RETURNING `+goalCols, id, userID, delta))
 	if err != nil {
@@ -92,13 +99,11 @@ func (r *Repository) AddSaved(ctx context.Context, id, userID string, delta int6
 	return g, nil
 }
 
-// DeductSaved atomically decrements saved_minor by amount, but ONLY if the goal
-// currently holds at least that much. Returns the updated goal, or an error when
-// the amount exceeds what is saved (0 rows). This is the authoritative gate for
-// withdrawals: because the check and the decrement are one atomic UPDATE,
-// concurrent withdrawals cannot both pass and double-spend a goal's balance.
-func (r *Repository) DeductSaved(ctx context.Context, id, userID string, amount int64) (*Goal, error) {
-	g, err := scanGoal(r.db.QueryRow(ctx,
+// El `saved_minor >= $3` es la unica compuerta del retiro: SYSTEM:SAVINGS no
+// tiene piso en el libro, asi que si esta condicion no se cumple dentro de la
+// misma transaccion, el abono a la billetera no puede ocurrir.
+func DeductSavedEnTx(ctx context.Context, tx pgx.Tx, id, userID string, amount int64) (*Goal, error) {
+	g, err := scanGoal(tx.QueryRow(ctx,
 		`UPDATE savings_goals SET saved_minor = saved_minor - $3
 		 WHERE id = $1 AND user_id = $2 AND saved_minor >= $3 RETURNING `+goalCols,
 		id, userID, amount))
@@ -110,6 +115,13 @@ func (r *Repository) DeductSaved(ctx context.Context, id, userID string, amount 
 	}
 	return g, nil
 }
+
+
+// DeductSaved atomically decrements saved_minor by amount, but ONLY if the goal
+// currently holds at least that much. Returns the updated goal, or an error when
+// the amount exceeds what is saved (0 rows). This is the authoritative gate for
+// withdrawals: because the check and the decrement are one atomic UPDATE,
+// concurrent withdrawals cannot both pass and double-spend a goal's balance.
 
 // AcquireUserSavingsLock takes a session-level advisory lock keyed by the user
 // so a deposit/withdraw and its ledger posting form one critical section per
