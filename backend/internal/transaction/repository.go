@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -268,13 +269,40 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error 
 // sqlSalidaDiaria esta en una constante, y no incrustada en la llamada, para
 // que una prueba pueda leer LA MISMA cadena que se ejecuta y comprobar que la
 // lista de tipos no se quede corta.
-const sqlSalidaDiaria = `SELECT COALESCE(SUM(amount), 0)
+// TiposDeSalida es la definicion operativa de "salida de dinero": los tipos de
+// movimiento que sacan valor de la billetera del usuario.
+//
+// Vive aqui y se exporta porque hay DOS consumidores que tienen que estar de
+// acuerdo: el tope diario de gasto y el agregado diario de la UIF (deteccion de
+// estructuracion). Estaban escritos por separado y se desincronizaron: cuando se
+// agregaron escrow, payouts y marketplace, el de la UIF quedo con la lista
+// vieja y dejo de ver ese dinero — sin fallar, simplemente vigilando menos.
+//
+// savings_deposit queda fuera a proposito: mueve el dinero a SYSTEM:SAVINGS, que
+// sigue siendo del usuario y puede retirar cuando quiera. No sale de su control,
+// asi que no es gasto.
+var TiposDeSalida = []string{
+	"sinpe_send", "qr_payment", "bill_payment", "recharge", "withdrawal",
+	"p2p_send", "crypto_buy", "escrow_fund", "payout_sent", "marketplace",
+}
+
+// ListaSQLDeSalidas arma el `('a','b',...)` de un IN a partir de TiposDeSalida,
+// para que los dos consumidores lean la MISMA lista en vez de copiarla.
+func ListaSQLDeSalidas() string {
+	entre := make([]string, len(TiposDeSalida))
+	for i, t := range TiposDeSalida {
+		entre[i] = "'" + t + "'"
+	}
+	return "(" + strings.Join(entre, ",") + ")"
+}
+
+var sqlSalidaDiaria = `SELECT COALESCE(SUM(amount), 0)
 		 FROM transactions
 		 WHERE user_id = $1
 		   AND currency = $2
 		   AND status = 'completed'
 		   AND created_date = CURRENT_DATE
-		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy','escrow_fund','payout_sent','marketplace')`
+		   AND type IN ` + ListaSQLDeSalidas()
 
 func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
 	var total int64

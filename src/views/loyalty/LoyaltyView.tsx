@@ -235,6 +235,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   <div className="flex flex-col items-center py-12 text-gray-400">
                     <Icons.Gift size={40} className="mb-3 opacity-40" />
                     <p className="text-sm font-medium">{t('loyalty_no_rewards')}</p>
+                    <p className="mt-1 max-w-[16rem] text-center text-xs">{t('loyalty_no_rewards_hint')}</p>
                   </div>
                 ) : (
                   rewards.map((reward, i) => {

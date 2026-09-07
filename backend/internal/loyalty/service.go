@@ -175,35 +175,14 @@ func (s *Service) RedeemReward(ctx context.Context, userID string, req *RedeemRe
 		return nil, fmt.Errorf("insufficient points: need %d, have %d", reward.PointsCost, acct.AvailablePoints)
 	}
 
-	// Deduct points
-	if err := s.repo.DeductPoints(ctx, userID, reward.PointsCost); err != nil {
-		return nil, err
-	}
-
-	// Decrement stock if not unlimited
-	if reward.Stock > 0 {
-		if err := s.repo.DecrementRewardStock(ctx, req.RewardID); err != nil {
-			return nil, err
-		}
-	}
-
-	// Generate voucher code
-	code := generateVoucherCode()
-
 	redemption := &Redemption{
 		ID:       uuid.New().String(),
 		UserID:   userID,
 		RewardID: req.RewardID,
 		Points:   reward.PointsCost,
 		Status:   "completed",
-		Code:     code,
+		Code:     generateVoucherCode(),
 	}
-
-	if err := s.repo.CreateRedemption(ctx, redemption); err != nil {
-		return nil, err
-	}
-
-	// Record points deduction
 	ptx := &PointsTransaction{
 		ID:          uuid.New().String(),
 		UserID:      userID,
@@ -213,7 +192,14 @@ func (s *Service) RedeemReward(ctx context.Context, userID string, req *RedeemRe
 		RefType:     "redemption",
 		RefID:       redemption.ID,
 	}
-	_ = s.repo.RecordTransaction(ctx, ptx) // best-effort points ledger record
+
+	// Las cuatro escrituras van en UNA transaccion. Sueltas, un fallo a mitad
+	// dejaba los puntos descontados sin redencion que los explicara, y el
+	// apunte del historial era best-effort: el saldo bajaba y la pantalla no
+	// sabia decir por que.
+	if err := s.repo.CanjearEnTx(ctx, redemption, ptx, reward.Stock > 0); err != nil {
+		return nil, err
+	}
 
 	return redemption, nil
 }

@@ -753,6 +753,7 @@ const hi: TranslationKeys = {
   loyalty_earn: 'कमाएं',
   loyalty_earn_desc: 'पॉइंट्स प्रोग्राम जल्द ही शुरू होगा, जो लेनदेन के वास्तविक मार्जिन से वित्त पोषित होगा',
   loyalty_no_rewards: 'कोई रिवॉर्ड उपलब्ध नहीं',
+  loyalty_no_rewards_hint: 'कैटलॉग फ़िलहाल रुका हुआ है। आपके अर्जित अंक आपके खाते में सुरक्षित रहते हैं।',
   loyalty_no_history: 'कोई पॉइंट इतिहास नहीं',
   loyalty_no_rules: 'कोई कैशबैक नियम नहीं',
   loyalty_redeem: 'रिडीम करें',

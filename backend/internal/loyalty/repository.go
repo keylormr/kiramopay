@@ -1,6 +1,7 @@
 package loyalty
 
 import (
+	"errors"
 	"context"
 	"fmt"
 
@@ -216,6 +217,67 @@ func (r *Repository) DecrementRewardStock(ctx context.Context, rewardID string) 
 	_, err := r.db.Exec(ctx,
 		`UPDATE loyalty_rewards SET stock = stock - 1 WHERE id = $1 AND stock > 0`, rewardID)
 	return err
+}
+
+// ErrSinExistencias: el premio se agoto entre la comprobacion y el descuento.
+var ErrSinExistencias = errors.New("reward is out of stock")
+
+// CanjearEnTx hace en UNA transaccion las cuatro escrituras del canje: descontar
+// los puntos, bajar la existencia, crear la redencion y anotar el movimiento en
+// el historial de puntos.
+//
+// Antes eran cuatro Exec sueltos contra el pool. Si el tercero fallaba, los
+// puntos ya estaban descontados y no quedaba ninguna redencion: la persona
+// perdia los puntos sin recibir ni el codigo. Y el cuarto se ignoraba con `_ =`,
+// asi que el historial podia no mostrar nunca ese descuento — el saldo bajaba y
+// la pantalla no sabia decir por que.
+//
+// La existencia se baja comprobando RowsAffected: sin eso, con una unidad
+// disponible dos peticiones simultaneas se cobraban las dos y solo una podia
+// bajar el contador.
+func (r *Repository) CanjearEnTx(ctx context.Context, rd *Redemption, ptx *PointsTransaction, bajarExistencia bool) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	res, err := tx.Exec(ctx,
+		`UPDATE loyalty_accounts SET available_points = available_points - $2, updated_at = NOW()
+		  WHERE user_id = $1 AND available_points >= $2`, rd.UserID, rd.Points)
+	if err != nil {
+		return fmt.Errorf("deduct points: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("insufficient points or account not found")
+	}
+
+	if bajarExistencia {
+		res, err := tx.Exec(ctx,
+			`UPDATE loyalty_rewards SET stock = stock - 1 WHERE id = $1 AND stock > 0`, rd.RewardID)
+		if err != nil {
+			return fmt.Errorf("decrement stock: %w", err)
+		}
+		if res.RowsAffected() == 0 {
+			return ErrSinExistencias
+		}
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO loyalty_redemptions (id, user_id, reward_id, points, status, code)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		rd.ID, rd.UserID, rd.RewardID, rd.Points, rd.Status, rd.Code); err != nil {
+		return fmt.Errorf("create redemption: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO loyalty_transactions (id, user_id, type, points, description, ref_type, ref_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		ptx.ID, ptx.UserID, ptx.Type, ptx.Points, ptx.Description, ptx.RefType, ptx.RefID); err != nil {
+		return fmt.Errorf("record points transaction: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // ── Redemptions ──────────────────────────────────────────────────────────────

@@ -761,6 +761,7 @@ const en: TranslationKeys = {
   loyalty_earn: 'Earn',
   loyalty_earn_desc: 'The points program will launch soon, funded by the real margin of operations',
   loyalty_no_rewards: 'No rewards available',
+  loyalty_no_rewards_hint: 'The catalog is paused. The points you earn stay saved in your account.',
   loyalty_no_history: 'No points history',
   loyalty_no_rules: 'No cashback rules',
   loyalty_redeem: 'Redeem',

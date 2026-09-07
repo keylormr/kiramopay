@@ -753,6 +753,7 @@ const ja: TranslationKeys = {
   loyalty_earn: '獲得',
   loyalty_earn_desc: 'ポイントプログラムは近日開始予定です。取引の実マージンから還元されます',
   loyalty_no_rewards: '利用可能な特典なし',
+  loyalty_no_rewards_hint: '特典カタログは一時停止中です。獲得したポイントはアカウントに保存されます。',
   loyalty_no_history: 'ポイント履歴なし',
   loyalty_no_rules: 'キャッシュバックルールなし',
   loyalty_redeem: '交換',

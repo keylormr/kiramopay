@@ -754,6 +754,7 @@ const zhCn: TranslationKeys = {
   loyalty_earn: '赚取',
   loyalty_earn_desc: '积分计划即将上线，由交易的真实利润提供资金',
   loyalty_no_rewards: '暂无可用奖励',
+  loyalty_no_rewards_hint: '奖励目录已暂停。您累积的积分仍保存在账户中。',
   loyalty_no_history: '暂无积分记录',
   loyalty_no_rules: '暂无回馈规则',
   loyalty_redeem: '兑换',
