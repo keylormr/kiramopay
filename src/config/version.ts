@@ -40,18 +40,32 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.3.6',
-    buildNumber: 12,
-    releaseDate: '2026-09-04',
+    version: '2.4.0',
+    buildNumber: 13,
+    releaseDate: '2026-09-07',
     changes: [
-      'Los precios de cripto ya no se inventan: si no se pueden obtener, la pantalla lo dice en vez de mostrar valores que no son',
-      'Si dejas la aplicacion abierta y sale una version nueva, te avisa y se actualiza sola',
-      'Los enlaces que abren la aplicacion desde fuera vuelven a funcionar',
-      'La aplicacion ya no se queda en blanco al encontrar datos guardados de una version anterior',
-      'Correcciones de seguridad en el manejo de saldos',
+      'Ahora entras con un nombre de usuario: lo eliges al crear la cuenta, lo ves en tu perfil y te lo recordamos por correo si lo olvidas',
+      'Puedes ver desde que aparatos esta abierta tu cuenta y cerrar el que no reconozcas, sin cerrar el que estas usando',
+      'Cambiar tu correo ahora pide tu contrasena, porque es la direccion a la que llega el enlace para recuperarla',
+      'Cuando una pantalla no logra cargar tus datos te lo dice, en vez de mostrarte un cero como si fuera tu saldo',
+      'Los montos se muestran siempre en la moneda que les corresponde',
+      'Recargas, recibos, viajes y pedidos avisan que todavia no hay convenio en vez de cobrarte por algo que no se puede entregar',
+      'Si usas iPhone, la aplicacion ya te avisa de las versiones nuevas por el canal que le corresponde',
     ],
   },
   history: [
+    {
+      version: '2.3.6',
+      buildNumber: 12,
+      releaseDate: '2026-09-04',
+      changes: [
+        'Los precios de cripto ya no se inventan: si no se pueden obtener, la pantalla lo dice en vez de mostrar valores que no son',
+        'Si dejas la aplicacion abierta y sale una version nueva, te avisa y se actualiza sola',
+        'Los enlaces que abren la aplicacion desde fuera vuelven a funcionar',
+        'La aplicacion ya no se queda en blanco al encontrar datos guardados de una version anterior',
+        'Correcciones de seguridad en el manejo de saldos',
+      ],
+    },
     {
       version: '2.3.5',
       buildNumber: 11,
