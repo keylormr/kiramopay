@@ -26,17 +26,12 @@
 -- Nota sobre "SINPE gratis": hoy promete descuento sobre una comision que NADIE
 -- COBRA — el envio entre cuentas KiramoPay es gratis y el interbancario esta
 -- dormido hasta que exista la licencia. Estaba vacio por partida doble.
+-- Se desactivan TODOS los que esten activos, no una lista de nombres: los
+-- nombres sembrados llevan el simbolo del colon, y un IN que dependa de esos
+-- caracteres puede no calzar y dejar la migracion en un UPDATE de cero filas
+-- sin que nada lo reporte. Ese silencio es justo el defecto que esta migracion
+-- viene a corregir. Ademas la afirmacion es cierta para todos: hoy NINGUN canje
+-- tiene quien lo entregue.
 UPDATE loyalty_rewards
    SET active = FALSE, stock = 0
- WHERE active = TRUE
-   AND name IN (
-       'Cashback ₡500',
-       'Cashback ₡1,000',
-       'Cashback ₡2,500',
-       'Cashback ₡5,000',
-       'SINPE gratis x5',
-       'SINPE gratis x10',
-       'Recarga doble',
-       'Puntos dobles 24h',
-       'Comision crypto 0%'
-   );
+ WHERE active = TRUE;

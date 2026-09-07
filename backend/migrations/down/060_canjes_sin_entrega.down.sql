@@ -1,8 +1,16 @@
--- Reactivar SOLO tiene sentido si ya existe el mecanismo que entrega el premio.
--- El stock ilimitado (-1) es el que traia la semilla para los que no lo tenian
--- acotado; los dos con stock finito se dejan en 0 a proposito: reponerlos es una
--- decision de negocio, no una reversion tecnica.
-UPDATE loyalty_rewards SET active = TRUE, stock = -1
- WHERE name IN ('Cashback ₡500', 'Cashback ₡1,000', 'Cashback ₡2,500', 'Cashback ₡5,000',
-                'SINPE gratis x5', 'SINPE gratis x10', 'Comision crypto 0%');
-UPDATE loyalty_rewards SET active = TRUE WHERE name IN ('Recarga doble', 'Puntos dobles 24h');
+-- No hay reversion automatica, a proposito.
+--
+-- La migracion 060 apago el catalogo entero porque ningun canje tiene quien lo
+-- entregue: el codigo que devuelve el canje no se lee en ninguna parte del
+-- backend. Un "down" que volviera a encenderlo todo restauraria exactamente el
+-- defecto — la persona paga sus puntos y no recibe nada — y ademas no podria
+-- saber cuales estaban activos antes.
+--
+-- Reactivar un premio es una decision de negocio y se hace de a uno, DESPUES de
+-- implementar su entrega (para un cashback, el abono real con su asiento; para
+-- "SINPE gratis", un contador de exoneraciones que el cobro de comision
+-- consulte). El comando, con el id a la vista para no depender de los nombres,
+-- que llevan el simbolo del colon:
+--
+--   SELECT id, name, active, stock FROM loyalty_rewards ORDER BY points_cost;
+--   UPDATE loyalty_rewards SET active = TRUE, stock = -1 WHERE id = '<id>';
