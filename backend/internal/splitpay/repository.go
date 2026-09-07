@@ -17,13 +17,37 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 // ── Split Groups ─────────────────────────────────────────────────────────────
 
-func (r *Repository) CreateGroup(ctx context.Context, group *SplitGroup) error {
-	_, err := r.db.Exec(ctx,
+// CrearGrupoConCuotas escribe el grupo y TODAS sus cuotas en una sola
+// transaccion. Iban por separado: si la insercion de una cuota fallaba a mitad,
+// quedaba un grupo cuyas cuotas no sumaban su total y que por lo tanto nadie
+// podia liquidar nunca.
+func (r *Repository) CrearGrupoConCuotas(ctx context.Context, group *SplitGroup, shares []SplitShare) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx,
 		`INSERT INTO split_groups (id, creator_id, title, description, total_amount, currency, split_type, status)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		group.ID, group.CreatorID, group.Title, group.Description,
-		group.TotalAmount, group.Currency, group.SplitType, group.Status)
-	return err
+		group.TotalAmount, group.Currency, group.SplitType, group.Status); err != nil {
+		return err
+	}
+
+	for i := range shares {
+		sh := &shares[i]
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO split_shares (id, group_id, user_id, user_phone, user_name, amount, status, paid_at)
+			 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, CASE WHEN $7 = 'paid' THEN NOW() END)`,
+			sh.ID, sh.GroupID, sh.UserID, sh.UserPhone,
+			sh.UserName, sh.Amount, sh.Status); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) GetGroup(ctx context.Context, groupID string) (*SplitGroup, error) {
@@ -82,15 +106,6 @@ func (r *Repository) ListUserGroups(ctx context.Context, userID string) ([]Split
 }
 
 // ── Split Shares ─────────────────────────────────────────────────────────────
-
-func (r *Repository) CreateShare(ctx context.Context, share *SplitShare) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO split_shares (id, group_id, user_id, user_phone, user_name, amount, status)
-		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7)`,
-		share.ID, share.GroupID, share.UserID, share.UserPhone,
-		share.UserName, share.Amount, share.Status)
-	return err
-}
 
 func (r *Repository) GetGroupShares(ctx context.Context, groupID string) ([]SplitShare, error) {
 	rows, err := r.db.Query(ctx,

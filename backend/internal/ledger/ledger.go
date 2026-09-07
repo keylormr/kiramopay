@@ -77,6 +77,25 @@ type Posting struct {
 	TxID           string // optional FK to transactions.id
 	CreatedBy      string // user_id originating the request
 	Entries        []Entry
+
+	// EnLaMismaTx corre DENTRO de la transaccion del asiento, justo antes del
+	// COMMIT, con todas las invariantes del libro ya establecidas.
+	//
+	// Existe porque los modulos que mueven dinero guardan ademas una fila
+	// propia — el objetivo de ahorro, el escrow, el pedido — y hacerlo DESPUES
+	// de Post deja una ventana en la que el dinero ya se movio y la fila no lo
+	// refleja. Ninguna compensacion cierra esa ventana del todo: la
+	// compensacion tambien puede fallar.
+	//
+	// Reglas para quien la use:
+	//   - Solo escribir por el `tx` que se recibe. Usar el pool por fuera queda
+	//     fuera de la transaccion y reabre el agujero que esto viene a cerrar.
+	//   - Ningun efecto irreversible (correos, cobros a terceros, notificaciones):
+	//     un reintento por conflicto de serializacion la ejecuta otra vez, y un
+	//     fallo posterior revierte la transaccion pero no lo que se mando afuera.
+	//   - Devolver error aborta el asiento entero. Es el punto: si la fila del
+	//     modulo no se puede escribir, el dinero no se mueve.
+	EnLaMismaTx func(ctx context.Context, tx pgx.Tx) error
 }
 
 // Engine writes Postings atomically. It also maintains the wallets balance
@@ -372,6 +391,14 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 		}
 		if bal < 0 {
 			return "", fmt.Errorf("%w: merchant account balance would be %d", ErrInsufficientFunds, bal)
+		}
+	}
+
+	// El gancho del modulo que pidio el asiento, con el libro ya cuadrado y
+	// antes de confirmar: si falla, no se mueve el dinero.
+	if p.EnLaMismaTx != nil {
+		if err := p.EnLaMismaTx(ctx, tx); err != nil {
+			return "", fmt.Errorf("en la misma tx: %w", err)
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
 )
@@ -127,12 +128,25 @@ func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64,
 // move posts the balanced ledger transfer between the wallet and SYSTEM:SAVINGS
 // and updates the goal. deposit=true: wallet -> savings; false: savings -> wallet.
 //
-// Ordering is deliberate so no path can fabricate money:
-//   - Withdraw: the guarded saved_minor decrement runs BEFORE the (irreversible)
-//     wallet credit. SYSTEM:SAVINGS has no floor, so saved_minor is the only gate;
-//     claiming it first means two concurrent withdrawals can't double-credit.
-//   - Deposit: the wallet debit (gated by the ledger's non-negative floor) runs
-//     first, so an overdraft is impossible; saved_minor is then incremented.
+// El asiento y la fila del objetivo se escriben EN LA MISMA TRANSACCION. Antes
+// iban por separado, con un orden elegido para que ninguna ventana pudiera
+// fabricar dinero, y aun asi quedaban dos agujeros que ningun orden cierra:
+//
+//   - Deposito: el asiento confirmaba y `AddSaved` fallaba despues. La plata
+//     salia de la billetera hacia SYSTEM:SAVINGS y el objetivo no la mostraba:
+//     desaparecia de la vista de su dueno, sin error que lo explicara.
+//   - Retiro: al fallar el asiento se compensaba el descuento con un
+//     `_, _ = AddSaved(...)` cuyo error se descartaba. Si esa compensacion
+//     fallaba, el ahorro quedaba descontado y la billetera nunca se abonaba.
+//
+// Una compensacion nunca cierra el agujero del todo, porque la compensacion
+// tambien puede fallar. Con las dos escrituras en una transaccion, o se
+// confirman las dos o no se confirma ninguna.
+//
+// Las compuertas siguen siendo las mismas y ahora corren dentro de esa
+// transaccion: el piso de no-negatividad del libro impide sobregirar la
+// billetera al depositar, y el `saved_minor >= amount` del descuento impide
+// retirar mas de lo guardado (SYSTEM:SAVINGS no tiene piso propio).
 //
 // Callers hold AcquireUserSavingsLock, so the whole sequence is serialized per user.
 func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool, idemKey string) (*Goal, error) {
@@ -167,14 +181,6 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 	}
 
 	var updated *Goal
-	if !deposit {
-		// Claim the held funds atomically before any irreversible money movement.
-		var err error
-		if updated, err = s.repo.DeductSaved(ctx, g.ID, userID, amount); err != nil {
-			return nil, err
-		}
-	}
-
 	if _, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    desc,
 		IdempotencyKey: ledgerKey,
@@ -184,19 +190,21 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 			{Account: debit, Side: ledger.Debit, AmountMinor: amount, Currency: g.Currency},
 			{Account: credit, Side: ledger.Credit, AmountMinor: amount, Currency: g.Currency},
 		},
+		// Un reintento por conflicto de serializacion vuelve a ejecutar esto
+		// sobre una transaccion nueva: la anterior se revirtio entera, asi que
+		// el UPDATE parte del mismo estado. `updated` se reasigna y gana el
+		// intento que confirma.
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			if deposit {
+				updated, err = AddSavedEnTx(ctx, tx, g.ID, userID, amount)
+			} else {
+				updated, err = DeductSavedEnTx(ctx, tx, g.ID, userID, amount)
+			}
+			return err
+		},
 	}); err != nil {
-		if !deposit {
-			// Compensate the decrement: the wallet credit never happened.
-			_, _ = s.repo.AddSaved(ctx, g.ID, userID, amount)
-		}
 		return nil, fmt.Errorf("savings ledger post: %w", err)
-	}
-
-	if deposit {
-		var err error
-		if updated, err = s.repo.AddSaved(ctx, g.ID, userID, amount); err != nil {
-			return nil, err
-		}
 	}
 
 	if s.history != nil {

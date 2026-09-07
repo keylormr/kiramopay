@@ -25,14 +25,17 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
     }>('/api/v1/splits', {
       title: request.title,
       description: request.description,
-      total_amount: request.totalAmount * 100,
+      // Math.round: el backend recibe centimos en un entero de 64 bits. Un
+      // decimal suelto (33.33 * 100 = 3332.9999...) no decodifica y tumba la
+      // peticion entera con un error que no dice nada.
+      total_amount: Math.round(request.totalAmount * 100),
       currency: request.currency,
       split_type: request.splitType,
       participants: request.participants.map((p) => ({
         user_id: p.userId,
         user_phone: p.userPhone,
         user_name: p.userName,
-        amount: p.amount ? p.amount * 100 : 0,
+        amount: p.amount ? Math.round(p.amount * 100) : 0,
         percentage: p.percentage,
       })),
     });
