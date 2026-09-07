@@ -761,7 +761,7 @@ const es: TranslationKeys = {
   loyalty_earn: 'Ganar',
   loyalty_earn_desc: 'El programa de puntos se activará próximamente, financiado por el margen real de las operaciones',
   loyalty_no_rewards: 'Sin recompensas disponibles',
-  loyalty_no_rewards_hint: 'El catalogo esta en pausa. Los puntos que acumules siguen guardados en tu cuenta.',
+  loyalty_no_rewards_hint: 'El catálogo está en pausa. Los puntos que acumules siguen guardados en tu cuenta.',
   loyalty_no_history: 'Sin historial de puntos',
   loyalty_no_rules: 'Sin reglas de cashback',
   loyalty_redeem: 'Canjear',
