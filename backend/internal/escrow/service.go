@@ -364,11 +364,36 @@ func (s *Service) moveAndTransition(
 	})
 	switch {
 	case errors.Is(err, ledger.ErrIdempotent):
-		// El asiento ya existia: la transicion viajo con el. Se relee el acuerdo
-		// porque el gancho no corre en este camino.
+		// El asiento ya existia, asi que este movimiento ya ocurrio. Se responde
+		// con el acuerdo tal como quedo, sin volver a moverlo: repetir la misma
+		// accion es exito, que es para lo que existe la llave determinista.
+		//
+		// (Cambia el contrato: antes una segunda liberacion devolvia 409 porque
+		// el reclamo del estado corria primero y fallaba. Devolver el estado
+		// alcanzado es mejor para quien toca dos veces el boton o para un
+		// reintento de red: la operacion SI se hizo.)
 		hecho, gerr := s.repo.Get(ctx, a.ID)
 		if gerr != nil {
 			return nil, gerr
+		}
+		if hecho.Status == from {
+			// El asiento aterrizo y el estado se quedo en el de partida. Es justo
+			// la averia que dejaba la ventana vieja —postear y que la
+			// compensacion revirtiera el estado— y el dinero YA se movio, asi
+			// que la verdad es el estado de destino. Se completa la transicion
+			// en vez de devolver un estado que contradice al libro.
+			alineado, terr := s.repo.Transition(ctx, a.ID, from, to, "")
+			if terr != nil {
+				return nil, unwrapEscrow(terr)
+			}
+			s.audit(a.BuyerID, alineado, "escrow_estado_alineado_con_el_libro", "high",
+				map[string]interface{}{"action": action, "estado_previo": string(hecho.Status)})
+			hecho = alineado
+		} else if hecho.Status != to {
+			// Ni el estado de partida ni el de destino: el acuerdo se fue por
+			// otro camino (por ejemplo, ya reembolsado) y este asiento no lo
+			// explica. No se toca nada; que lo mire una persona.
+			return nil, ErrBadTransition
 		}
 		claimed = hecho
 	case err != nil:

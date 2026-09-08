@@ -103,13 +103,18 @@ func TestNoTocaUnFondeoLegitimo(t *testing.T) {
 	}
 }
 
-// Una transicion imposible no puede dejar asiento: son la misma transaccion.
+// Liberar dos veces mueve el dinero UNA vez, y reembolsar despues no paga.
 //
-// Antes el asiento se posteaba DESPUES de reclamar el estado, y si el reclamo
-// fallaba no se posteaba nada — hasta ahi bien. Lo que no cerraba era el orden
-// inverso: asiento confirmado y estado revertido por la compensacion. Esta
-// prueba fija la propiedad por el lado comprobable: liberar dos veces mueve el
-// dinero UNA vez, y el segundo intento no deja rastro nuevo en el libro.
+// Son dos propiedades distintas y las dos importan:
+//
+//   - Repetir la MISMA accion es idempotente y responde exito. La llave del
+//     asiento es determinista, asi que el segundo intento no postea nada.
+//     (Esto cambio: antes devolvia 409, porque el reclamo del estado corria
+//     primero y fallaba. Devolver el estado alcanzado es mejor para quien toca
+//     dos veces el boton o para un reintento de red: la operacion si se hizo.)
+//   - Una accion CONTRARIA se rechaza. Reembolsar usa otra llave de
+//     idempotencia, asi que lo unico que lo frena es el estado. Cuando el
+//     estado y el asiento no eran la misma transaccion, aca cobraban los dos.
 func TestLiberarDosVecesMueveElDineroUnaVez(t *testing.T) {
 	pool, svc, buyer, seller := setup(t)
 	ctx := context.Background()
@@ -128,8 +133,12 @@ func TestLiberarDosVecesMueveElDineroUnaVez(t *testing.T) {
 	if _, err := svc.Release(ctx, buyer, a.ID); err != nil {
 		t.Fatalf("release: %v", err)
 	}
-	if _, err := svc.Release(ctx, buyer, a.ID); err == nil {
-		t.Fatal("la segunda liberacion deberia fallar: el acuerdo ya no esta fondeado")
+	segunda, err := svc.Release(ctx, buyer, a.ID)
+	if err != nil {
+		t.Fatalf("repetir la misma liberacion deberia ser idempotente: %v", err)
+	}
+	if segunda.Status != "released" {
+		t.Fatalf("la segunda liberacion devolvio estado %q", segunda.Status)
 	}
 	// Y el vendedor tiene que haber cobrado exactamente una vez.
 	if got := walletCRC(t, pool, seller) - vendedorAntes; got != 120_000 {
