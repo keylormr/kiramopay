@@ -91,13 +91,13 @@ func TestFund_ElGastoPorEscrowCuentaParaElTopeDeLosDemasCaminos(t *testing.T) {
 
 	// Ahora el mismo usuario intenta sacar 200,00 por el camino de las
 	// transferencias. El dia va en 900,00 de 1.000,00: no le alcanza.
-	err := txSvc.CheckDailyLimit(context.Background(), comprador, "CRC", 20_000)
+	err := txSvc.CheckLimits(context.Background(), comprador, "CRC", 20_000)
 	if !errors.Is(err, transaction.ErrDailyLimitExceeded) {
 		t.Fatalf("el acumulado del dia no incluye lo gastado por escrow: %v", err)
 	}
 
 	// Y lo que si cabe en lo que queda, pasa.
-	if err := txSvc.CheckDailyLimit(context.Background(), comprador, "CRC", 5_000); err != nil {
+	if err := txSvc.CheckLimits(context.Background(), comprador, "CRC", 5_000); err != nil {
 		t.Fatalf("un monto que si cabe fue rechazado: %v", err)
 	}
 }

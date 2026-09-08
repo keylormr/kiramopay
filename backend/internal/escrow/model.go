@@ -82,7 +82,11 @@ var (
 	ErrInvalidRequest = errors.New("escrow: invalid request")
 	// ErrDailyLimitExceeded: financiar este acuerdo pasaria el tope diario de
 	// salida de la billetera del comprador. La regla es la MISMA que la de las
-	// transferencias (transaction.CheckDailyLimit); aqui solo se traduce para
+	// transferencias (transaction.CheckLimits); aqui solo se traduce para
 	// que el handler de escrow pueda devolver su propio codigo.
 	ErrDailyLimitExceeded = errors.New("escrow: daily spending limit exceeded")
+	// ErrMonthlyLimitExceeded: lo mismo con el tope del mes. Ese tope existia en
+	// la base y no lo comparaba nadie; ahora que si frena, tiene que llegar a la
+	// pantalla con su propio codigo en vez de caer en el 500 generico.
+	ErrMonthlyLimitExceeded = errors.New("escrow: monthly spending limit exceeded")
 )

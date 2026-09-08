@@ -310,6 +310,29 @@ func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency st
 	return total, err
 }
 
+// El tope MENSUAL existia en la base (wallets.monthly_limit), lo calculaba el
+// modulo de KYC por nivel, lo escribia al aprobar una verificacion y el perfil
+// se lo mostraba a la persona como una promesa. No lo comparaba nadie: se podia
+// gastar el tope diario todos los dias del mes sin que ese numero frenara nunca
+// nada.
+//
+// Se filtra por created_date, que es la llave de particion: usar created_at
+// obligaria a recorrer todas las particiones del rango en vez de podarlas.
+var sqlSalidaMensual = `SELECT COALESCE(SUM(amount), 0)
+		 FROM transactions
+		 WHERE user_id = $1
+		   AND currency = $2
+		   AND status = 'completed'
+		   AND created_date >= date_trunc('month', CURRENT_DATE)::date
+		   AND created_date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+		   AND type IN ` + ListaSQLDeSalidas()
+
+func (r *Repository) MonthlyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
+	var total int64
+	err := r.db.QueryRow(ctx, sqlSalidaMensual, userID, currency).Scan(&total)
+	return total, err
+}
+
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,
