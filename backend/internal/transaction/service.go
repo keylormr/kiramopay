@@ -1,10 +1,10 @@
 package transaction
 
 import (
-	"strings"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/audit"
@@ -472,6 +472,12 @@ var ErrMFARequired = errors.New("mfa challenge required")
 // mensaje a nadie.
 var ErrDailyLimitExceeded = errors.New("daily spending limit exceeded")
 
+// ErrMonthlyLimitExceeded: la salida del mes superaria el tope mensual de la
+// billetera. Ese tope existia en la base, lo calculaba KYC por nivel y el perfil
+// se lo mostraba a la persona como una promesa — y no lo comparaba nadie. Se
+// podia gastar el tope diario todos los dias del mes sin tocarlo.
+var ErrMonthlyLimitExceeded = errors.New("monthly spending limit exceeded")
+
 // ErrMonedaSinTope: se intento sacar dinero en una moneda para la que no hay
 // tope diario definido. Dejarla pasar "sin tope" seria el mismo agujero que el
 // tope por moneda vino a cerrar, con otro nombre.
@@ -510,13 +516,19 @@ func (s *Service) ListTransactions(ctx context.Context, userID string, req *List
 	return s.repo.ListByUser(ctx, userID, req)
 }
 
-// CheckDailyLimit comprueba que sacar amountMinor hoy no pase el tope diario de
-// la billetera. La expone escrow, que mueve dinero fuera de la billetera por su
-// propio camino y hasta ahora no consultaba ningun tope: se podia vaciar la
-// cuenta creando escrows en tramos por debajo del umbral que pide segundo
-// factor. La regla vive AQUI y en ningun otro lado; duplicarla es como se
-// llega a dos topes distintos.
-func (s *Service) CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error {
+// CheckLimits comprueba que sacar amountMinor no pase NI el tope diario NI el
+// mensual de la billetera.
+//
+// La exponen escrow, marketplace y payouts, que mueven dinero fuera de la
+// billetera por su propio camino. La regla vive AQUI y en ningun otro lado;
+// duplicarla es como se llega a dos topes distintos.
+//
+// Se llamaba CheckDailyLimit y comprobaba solo el diario. El mensual existia en
+// la base, lo calculaba KYC por nivel, se escribia al aprobar una verificacion y
+// el perfil se lo mostraba a la persona — sin que nada lo comparara jamas. El
+// nombre nuevo es parte del arreglo: el viejo describia lo que hacia y por eso
+// no delataba lo que faltaba.
+func (s *Service) CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error {
 	w, err := s.walletRepo.FindByUserID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("wallet not found")
@@ -545,6 +557,18 @@ func topeDiarioDe(w *wallet.WalletRecord, currency string) (int64, bool) {
 	return 0, false
 }
 
+// topeMensualDe: mismo criterio por moneda que topeDiarioDe, y por la misma
+// razon. No hay conversion.
+func topeMensualDe(w *wallet.WalletRecord, currency string) (int64, bool) {
+	switch strings.ToUpper(currency) {
+	case "CRC":
+		return w.MonthlyLimit, true
+	case "USD":
+		return w.MonthlyLimitUSD, true
+	}
+	return 0, false
+}
+
 // checkDailyLimit es la version interna, para los llamantes que ya cargaron la
 // billetera y no tienen por que volver a consultarla.
 func (s *Service) checkDailyLimit(ctx context.Context, userID, currency string, amountMinor int64, w *wallet.WalletRecord) error {
@@ -563,6 +587,26 @@ func (s *Service) checkDailyLimit(ctx context.Context, userID, currency string, 
 	}
 	if spentToday+amountMinor > dailyLimit {
 		return ErrDailyLimitExceeded
+	}
+	return s.checkMonthlyLimit(ctx, userID, currency, amountMinor, w)
+}
+
+// checkMonthlyLimit espeja al diario: mismo criterio de moneda, misma lista de
+// tipos de salida, misma decision de negarse cuando la moneda no tiene tope.
+func (s *Service) checkMonthlyLimit(ctx context.Context, userID, currency string, amountMinor int64, w *wallet.WalletRecord) error {
+	monthlyLimit, conocida := topeMensualDe(w, currency)
+	if !conocida {
+		return fmt.Errorf("%w: %s", ErrMonedaSinTope, currency)
+	}
+	if monthlyLimit <= 0 {
+		return nil // sin tope configurado
+	}
+	spentThisMonth, err := s.repo.MonthlyOutgoingMinor(ctx, userID, currency)
+	if err != nil {
+		return fmt.Errorf("monthly spend check: %w", err)
+	}
+	if spentThisMonth+amountMinor > monthlyLimit {
+		return ErrMonthlyLimitExceeded
 	}
 	return nil
 }

@@ -235,6 +235,26 @@ func main() {
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 
+	// La cola de cumplimiento puede ser estructuralmente incapaz de recibir un
+	// caso: los umbrales de reporte siguen la Ley 8204 (~USD 10.000) y los topes
+	// de KYC de esta aplicacion son mucho mas bajos, asi que el agregado del dia
+	// no llega nunca. No es necesariamente un error —es la consecuencia de tener
+	// topes bajos— pero un control que no puede dispararse y no lo dice se lee
+	// como un control que funciona y no encuentra nada.
+	{
+		maxKYC := kyc.LevelLimits[kyc.LevelComplete]
+		for _, a := range uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
+			"CRC": maxKYC.DailyMinor,
+			"USD": maxKYC.DailyMinorUSD,
+		}) {
+			if !a.Alcanzable {
+				log.Printf("AVISO UIF: %s. Ningun movimiento puede alcanzar el umbral de reporte "+
+					"porque el tope diario de KYC lo corta antes: la cola de cumplimiento no "+
+					"puede llenarse. Revisar con el area de cumplimiento.", a)
+			}
+		}
+	}
+
 	marketplaceRepo := marketplace.NewRepository(pool)
 	loyaltyRepo := loyalty.NewRepository(pool)
 	qrRepo := qrpayment.NewRepository(pool)

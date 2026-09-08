@@ -39,7 +39,7 @@ type EventSink interface {
 // deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
-	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
+	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // Service drives the escrow state machine and its ledger postings.
@@ -163,7 +163,10 @@ func (s *Service) Fund(ctx context.Context, callerID, id string) (*Agreement, er
 	// de una billetera, asi que volver a cobrar el tope ahi lo cobraria dos
 	// veces por el mismo dinero.
 	if s.history != nil {
-		if err := s.history.CheckDailyLimit(ctx, a.BuyerID, a.Currency, a.AmountMinor); err != nil {
+		if err := s.history.CheckLimits(ctx, a.BuyerID, a.Currency, a.AmountMinor); err != nil {
+			if errors.Is(err, transaction.ErrMonthlyLimitExceeded) {
+				return nil, ErrMonthlyLimitExceeded
+			}
 			if errors.Is(err, transaction.ErrDailyLimitExceeded) {
 				return nil, ErrDailyLimitExceeded
 			}

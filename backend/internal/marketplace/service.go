@@ -21,7 +21,7 @@ import (
 // ese mismo tope, o el tope deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
-	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
+	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // ErrSinIntegracion se devuelve al intentar COBRAR un viaje o un pedido sin
@@ -86,7 +86,7 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 	// Mismo tope diario que las transferencias y el escrow: esto saca dinero de
 	// la billetera contra una contraparte externa igual que ellos.
 	if s.history != nil {
-		if err := s.history.CheckDailyLimit(ctx, userID, "CRC", amountMinor); err != nil {
+		if err := s.history.CheckLimits(ctx, userID, "CRC", amountMinor); err != nil {
 			return err
 		}
 	}

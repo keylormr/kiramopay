@@ -38,7 +38,7 @@ type EventSink interface {
 // ese mismo tope, o el tope deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
-	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
+	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // Logger is the minimal logging surface (slog-compatible) the poller/service
@@ -132,7 +132,7 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateRequest)
 	// billetera contra SYSTEM:EXTERNAL igual que ellos. Va ANTES del MFA y de
 	// reclamar la fila, para no dejar nada a medias cuando el tope frena.
 	if s.history != nil {
-		if err := s.history.CheckDailyLimit(ctx, userID, p.Currency, p.AmountMinor); err != nil {
+		if err := s.history.CheckLimits(ctx, userID, p.Currency, p.AmountMinor); err != nil {
 			return nil, err
 		}
 	}
