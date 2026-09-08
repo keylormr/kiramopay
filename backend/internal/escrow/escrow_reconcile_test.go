@@ -28,10 +28,27 @@ func TestEscrowReconcileStuck(t *testing.T) {
 		t.Fatalf("escrow account after fund = %d, want 200000", got)
 	}
 
-	// Force the stuck state: status='released' but no release posting and
-	// settled_at NULL (what a Post-fails-then-revert-fails window leaves behind).
+	// Antes de tocar nada: fondear NO puede haber dejado settled_at puesto.
+	//
+	// Esta prueba ponia `settled_at=NULL` a mano al forzar el estado atascado, y
+	// por eso pasaba mientras el barrido real no podia encontrar nada: fondear
+	// estampaba settled_at, y ListUnsettledTerminal filtra por settled_at IS
+	// NULL. La prueba fabricaba la unica condicion que en produccion nunca se
+	// daba. Ahora se comprueba, en vez de fabricarse.
+	var settledTrasFondear *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT settled_at FROM escrow_agreements WHERE id=$1::uuid`, a.ID).Scan(&settledTrasFondear); err != nil {
+		t.Fatalf("leer settled_at tras fondear: %v", err)
+	}
+	if settledTrasFondear != nil {
+		t.Fatal("fondear dejo settled_at puesto: con eso el barrido no puede ver JAMAS " +
+			"un release o un refund atascado, porque filtra por settled_at IS NULL")
+	}
+
+	// Estado atascado: 'released' sin asiento de liberacion. Es lo que dejaba la
+	// ventana de postear-y-compensar. settled_at no se toca a proposito.
 	if _, err := pool.Exec(ctx,
-		`UPDATE escrow_agreements SET status='released', released_at=NOW(), settled_at=NULL WHERE id=$1::uuid`,
+		`UPDATE escrow_agreements SET status='released', released_at=NOW() WHERE id=$1::uuid`,
 		a.ID); err != nil {
 		t.Fatalf("force stuck: %v", err)
 	}
