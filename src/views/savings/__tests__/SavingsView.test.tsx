@@ -97,3 +97,82 @@ describe('SavingsView — la hoja de deposito habla en colones', () => {
     });
   });
 });
+
+// El defecto que estas pruebas cierran: `if (res.success && res.data)` sin rama
+// de fallo. La consulta se caia y la pantalla afirmaba "Total ahorrado 0" y
+// "Sin metas de ahorro" — o sea, le decia al usuario que no tiene ahorros
+// cuando lo unico cierto era que no se habian podido consultar.
+describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
+  it('cuando la consulta de metas falla, lo dice en vez de afirmar que no hay ahorros', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED' } });
+
+    setup();
+
+    expect(await screen.findByText('No pudimos cargar tus metas de ahorro.')).toBeInTheDocument();
+    expect(screen.queryByText('Sin metas de ahorro')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total ahorrado')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+  });
+
+  it('cuando la consulta se cae con excepcion tampoco pinta una lista vacia', async () => {
+    mocks.api.savings.getGoals.mockRejectedValue(new Error('sin red'));
+
+    setup();
+
+    expect(await screen.findByText('No pudimos cargar tus metas de ahorro.')).toBeInTheDocument();
+  });
+
+  // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara: un
+  // deposito RECHAZADO se veia exactamente igual que uno exitoso.
+  it('un deposito rechazado deja la hoja abierta, el monto escrito y el motivo a la vista', async () => {
+    mocks.api.savings.deposit.mockResolvedValue({ success: false, error: { code: 'SAVINGS_FAILED' } });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar fondos' }));
+    const monto = await screen.findByPlaceholderText('0');
+    await user.type(monto, '10000');
+    await user.click(screen.getByRole('button', { name: 'Depositar' }));
+
+    expect(await screen.findByText('No se pudo depositar. Tu dinero sigue en la billetera.')).toBeInTheDocument();
+    expect(monto).toHaveValue(10000);
+  });
+
+  // Borrar una meta con plata adentro era un toque sin pregunta.
+  it('la X pide confirmacion y avisa que la plata guardada vuelve a la billetera', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 25000 }] });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar' }));
+
+    expect(await screen.findByText(/Vas a eliminar/)).toBeInTheDocument();
+    expect(screen.getByText(/vuelven a tu billetera/)).toBeInTheDocument();
+    expect(mocks.api.savings.deleteGoal).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => {
+      expect(mocks.api.savings.deleteGoal).not.toHaveBeenCalled();
+    });
+  });
+
+  it('confirmando el borrado si se elimina', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 25000 }] });
+    mocks.api.savings.deleteGoal.mockResolvedValue({ success: true, data: { status: 'deleted' } });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar' }));
+    const hoja = await screen.findByText(/Vas a eliminar/);
+    expect(hoja).toBeInTheDocument();
+    const botones = screen.getAllByRole('button', { name: 'Eliminar' });
+    await user.click(botones[botones.length - 1]);
+
+    await waitFor(() => {
+      expect(mocks.api.savings.deleteGoal).toHaveBeenCalledWith('g1');
+    });
+  });
+});

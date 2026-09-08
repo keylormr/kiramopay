@@ -719,6 +719,15 @@ const es: TranslationKeys = {
   savings_create_goal: 'Crear meta',
   savings_add_money: 'Agregar fondos',
   savings_deposit: 'Depositar',
+  savings_err_load: 'No pudimos cargar tus metas de ahorro.',
+  savings_err_create: 'No se pudo crear la meta. Intenta de nuevo.',
+  savings_err_deposit: 'No se pudo depositar. Tu dinero sigue en la billetera.',
+  savings_err_delete: 'No se pudo eliminar la meta. Intenta de nuevo.',
+  savings_delete_title: 'Eliminar meta',
+  savings_delete_warning: 'Vas a eliminar “{name}”. Esta acción no se puede deshacer.',
+  savings_delete_returns: 'Los {amount} guardados vuelven a tu billetera.',
+  savings_deleted_returned: 'Se devolvieron {amount} a tu billetera.',
+  splitpay_err_load: 'No pudimos cargar tus cuentas divididas.',
 
   // Home insights
   home_spending: 'Gastos',
