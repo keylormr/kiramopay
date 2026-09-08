@@ -2,7 +2,6 @@ package transaction
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,9 +20,22 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// Create ya NO crea movimientos de dinero.
+//
+// Aceptaba una lista blanca de siete tipos "salientes" con el argumento de que
+// sacar dinero del propio monedero pasa por saldo, limite y MFA. El argumento
+// era cierto y la puerta quemaba plata igual: CreateTransaction arma para estos
+// tipos un asiento de UNA SOLA PATA contra SYSTEM:EXTERNAL —debita la billetera
+// y acredita "el exterior"— sin que exista un exterior que entregue nada. De
+// paso se saltaba el candado de convenios que deja recibos y recargas apagados,
+// las guardas del modulo sinpe, la comision del comercio y la tenencia de
+// cripto. Ver rutaPropiaDe en model.go.
+//
+// Los modulos legitimos nunca pasaron por aca: ponen Internal=true y llaman al
+// servicio directamente. Ninguna pantalla usaba esta ruta. Se responde con la
+// ruta que si entrega, que es mas util que un "no permitido" a secas.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
-	if userID == "" {
+	if userID := middleware.GetUserID(r.Context()); userID == "" {
 		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
 		return
 	}
@@ -34,39 +46,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Amount <= 0 {
-		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "amount must be positive")
+	if ruta, hay := RutaPropiaDe(req.Type); hay {
+		response.Error(w, http.StatusBadRequest, "USE_DEDICATED_ROUTE",
+			"este movimiento se hace por "+ruta+", que es el que de verdad lo entrega")
 		return
 	}
-	if req.Type == "" {
-		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "type is required")
-		return
-	}
-	// Lista blanca: esta ruta solo sirve para que una persona mueva SU dinero
-	// hacia afuera. Lo que entra al monedero lo origina el servicio que sabe por
-	// que entra, nunca el cliente.
-	if !IsUserInitiable(req.Type) {
-		response.Error(w, http.StatusBadRequest, "TYPE_NOT_ALLOWED",
-			"this transaction type cannot be created from this endpoint")
-		return
-	}
-
-	tx, err := h.service.CreateTransaction(r.Context(), userID, &req)
-	if err != nil {
-		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
-		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
-		// codigo generico y mostraba el mensaje en ingles del servidor, sin
-		// ofrecer nunca el desafio: la operacion moria ahi.
-		if errors.Is(err, ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"verified MFA challenge required for this amount")
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "TRANSACTION_FAILED", err.Error())
-		return
-	}
-
-	response.JSON(w, http.StatusCreated, tx)
+	response.Error(w, http.StatusBadRequest, "TYPE_NOT_ALLOWED",
+		"this endpoint no longer creates transactions")
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {

@@ -75,27 +75,46 @@ type CreateTransactionRequest struct {
 	Internal bool `json:"-"`
 }
 
-// userInitiableTypes es lo UNICO que se admite por POST /transactions. Son
-// todos salientes: sacan dinero del monedero de quien lo pide y por eso pasan
-// por saldo, limite diario y MFA.
+// rutaPropiaDe: para cada tipo que POST /transactions llego a aceptar, cual es
+// el camino que de verdad lo entrega.
 //
-// Es una lista blanca cerrada y no una lista negra a proposito: la version
-// anterior aceptaba cualquier cadena y decidia por descarte, asi que un tipo no
-// contemplado -"deposit", por ejemplo- caia en la rama de credito y acreditaba
-// dinero real sin pasar por ningun control. Agregar un tipo nuevo al sistema no
-// puede volver a abrir esa puerta por olvido.
-var userInitiableTypes = map[string]bool{
-	TypeSinpeSend:   true,
-	TypeQRPayment:   true,
-	TypeBillPayment: true,
-	TypeRecharge:    true,
-	TypeWithdrawal:  true,
-	TypeP2PSend:     true,
-	TypeCryptoBuy:   true,
+// Esta puerta era una lista blanca de siete tipos "salientes", con el argumento
+// de que sacar dinero del propio monedero pasa por saldo, limite y MFA. El
+// argumento es cierto y aun asi la puerta quemaba plata: CreateTransaction arma
+// un asiento de UNA SOLA PATA contra SYSTEM:EXTERNAL, o sea que debita la
+// billetera y acredita "el exterior" sin que exista un exterior. Ninguno de los
+// siete llega a su destino por aca:
+//
+//   - sinpe_send  no comprueba que el destinatario exista (esa guarda vive en
+//     el modulo sinpe, y se puso justamente porque enviar a un no-usuario
+//     perdia la plata);
+//   - qr_payment  no acredita al comercio ni cobra la comision de 0,5%;
+//   - p2p_send    tiene que ser un asiento de DOS patas, no uno solo;
+//   - bill_payment y recharge estan deliberadamente APAGADOS mientras no haya
+//     convenio (payment.ErrSinConvenio, 503 SIN_CONVENIO) — por aca entraban
+//     igual, saltandose ese candado por completo;
+//   - crypto_buy  no acredita tenencia de cripto;
+//   - withdrawal  no tiene ninguna integracion bancaria detras.
+//
+// Los modulos legitimos no pasan por esta puerta: ponen Internal=true y llaman
+// al servicio directamente. Ninguna pantalla de la aplicacion usaba esta ruta
+// para crear nada. Asi que no se recorta la lista: se cierra, y el error dice
+// adonde ir, que es mas util que un "no permitido" a secas.
+var rutaPropiaDe = map[string]string{
+	TypeSinpeSend:   "POST /api/v1/sinpe/send",
+	TypeP2PSend:     "POST /api/v1/sinpe/send",
+	TypeQRPayment:   "POST /api/v1/qr/pay",
+	TypeBillPayment: "POST /api/v1/services/pay-bill",
+	TypeRecharge:    "POST /api/v1/services/recharge",
+	TypeCryptoBuy:   "POST /api/v1/crypto/buy",
+	TypeWithdrawal:  "", // no existe: retirar exige una integracion bancaria que no hay
 }
 
-// IsUserInitiable responde si una persona puede pedir este tipo por HTTP.
-func IsUserInitiable(txType string) bool { return userInitiableTypes[txType] }
+// RutaPropiaDe devuelve la ruta que atiende ese tipo de movimiento, y si la hay.
+func RutaPropiaDe(txType string) (string, bool) {
+	r, conocido := rutaPropiaDe[txType]
+	return r, conocido && r != ""
+}
 
 type ListTransactionsRequest struct {
 	Limit    int    `json:"limit"`

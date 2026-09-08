@@ -436,7 +436,18 @@ paths:
   /api/v1/transactions:
     post:
       tags: [Transactions]
-      summary: Create a transaction
+      deprecated: true
+      summary: Retired — always returns 400
+      description: >-
+        This endpoint no longer creates transactions. It used to accept a
+        whitelist of seven "outgoing" types and post a SINGLE-SIDED ledger entry
+        against SYSTEM:EXTERNAL — debiting the wallet while nothing on the other
+        side delivered anything — bypassing the agreement lock that keeps bill
+        payments and top-ups switched off, the recipient checks in the SINPE
+        module, the merchant credit and commission on QR payments, and the
+        crypto holdings credit. Every one of those movements has its own route
+        that actually delivers; the error body names it
+        (`USE_DEDICATED_ROUTE`).
       security:
         - bearerAuth: []
       requestBody:
@@ -446,8 +457,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateTransactionRequest'
       responses:
-        '201':
-          description: Transaction created
+        '400':
+          description: >-
+            Always. `USE_DEDICATED_ROUTE` when the type has a route that
+            delivers it, `TYPE_NOT_ALLOWED` otherwise.
           content:
             application/json:
               schema:
@@ -2686,7 +2699,7 @@ components:
       # cualquier cuerpo que no contradijera un tipo, asi que un campo que el
       # handler dejara de emitir (o uno nuevo sin documentar) pasaba en verde.
       additionalProperties: false
-      required: [status, version, environment, services, websocket_clients, last_drift_crc, crypto_prices]
+      required: [status, version, environment, services, websocket_clients, last_drift_crc, dias_de_particiones, crypto_prices]
       properties:
         status:
           type: string
@@ -2714,6 +2727,14 @@ components:
         last_drift_crc:
           type: integer
           description: Residual cache-vs-journal drift (minor units) from the last reconcile.
+        dias_de_particiones:
+          type: integer
+          description: >-
+            Days of remaining coverage in the `transactions` range partitions.
+            The table has no DEFAULT partition, so once coverage runs out every
+            money movement fails on insert — this is the runway before that.
+            A value of -1 means the runway could not be read yet.
+          example: 420
         crypto_prices:
           type: object
           description: >-
