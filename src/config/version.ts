@@ -40,20 +40,30 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.4.0',
-    buildNumber: 13,
+    version: '2.4.1',
+    buildNumber: 14,
     releaseDate: '2026-09-07',
     changes: [
-      'Ahora entras con un nombre de usuario: lo eliges al crear la cuenta, lo ves en tu perfil y te lo recordamos por correo si lo olvidas',
-      'Puedes ver desde que aparatos esta abierta tu cuenta y cerrar el que no reconozcas, sin cerrar el que estas usando',
-      'Cambiar tu correo ahora pide tu contrasena, porque es la direccion a la que llega el enlace para recuperarla',
-      'Cuando una pantalla no logra cargar tus datos te lo dice, en vez de mostrarte un cero como si fuera tu saldo',
-      'Los montos se muestran siempre en la moneda que les corresponde',
-      'Recargas, recibos, viajes y pedidos avisan que todavia no hay convenio en vez de cobrarte por algo que no se puede entregar',
-      'Si usas iPhone, la aplicacion ya te avisa de las versiones nuevas por el canal que le corresponde',
+      'Dividir una cuenta con amigos ya se puede cobrar: eliges a quien participa por su numero, ves cuanto le toca a cada quien y pagas tu parte desde la aplicacion',
+      'Al guardar o sacar dinero de una meta de ahorro, el movimiento y tu meta se actualizan juntos: ya no puede pasar que el dinero se mueva y la meta no lo muestre',
+      'El catalogo de premios queda en pausa mientras no haya como entregarlos; los puntos que acumulas siguen guardados en tu cuenta',
     ],
   },
   history: [
+    {
+      version: '2.4.0',
+      buildNumber: 13,
+      releaseDate: '2026-09-07',
+      changes: [
+        'Ahora entras con un nombre de usuario: lo eliges al crear la cuenta, lo ves en tu perfil y te lo recordamos por correo si lo olvidas',
+        'Puedes ver desde que aparatos esta abierta tu cuenta y cerrar el que no reconozcas, sin cerrar el que estas usando',
+        'Cambiar tu correo ahora pide tu contrasena, porque es la direccion a la que llega el enlace para recuperarla',
+        'Cuando una pantalla no logra cargar tus datos te lo dice, en vez de mostrarte un cero como si fuera tu saldo',
+        'Los montos se muestran siempre en la moneda que les corresponde',
+        'Recargas, recibos, viajes y pedidos avisan que todavia no hay convenio en vez de cobrarte por algo que no se puede entregar',
+        'Si usas iPhone, la aplicacion ya te avisa de las versiones nuevas por el canal que le corresponde',
+      ],
+    },
     {
       version: '2.3.6',
       buildNumber: 12,
