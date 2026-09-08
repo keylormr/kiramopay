@@ -74,23 +74,6 @@ export class HttpTransactionRepository implements ITransactionRepository {
     return apiSuccess(res.data.transactions);
   }
 
-  async addTransaction(transaction: Transaction): Promise<ApiResponse<Transaction>> {
-    const res = await this.client.post<{
-      id: string;
-      status: string;
-    }>('/api/v1/transactions', {
-      type: transaction.type,
-      amount: Math.round(transaction.amount * 100), // colones → centimos
-      currency: transaction.ccy || 'CRC',
-      description: transaction.description,
-    });
-
-    if (!res.success) {
-      return apiError('CREATE_FAILED', res.error?.message || 'Failed to create transaction');
-    }
-
-    return apiSuccess(transaction);
-  }
 }
 
 // Transaction types where money ENTERS the user's wallet (credit / positive amount).

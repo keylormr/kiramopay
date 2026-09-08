@@ -20,16 +20,6 @@ function getTransactions(): Transaction[] {
   }
 }
 
-function saveTransactions(transactions: Transaction[]) {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    const state = data ? JSON.parse(data) : {};
-    state.transactions = transactions;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // noop
-  }
-}
 
 // Machine timestamp of a mock transaction, or null when nothing parses.
 function txTime(tx: Transaction): number | null {
@@ -65,10 +55,4 @@ export class MockTransactionRepository implements ITransactionRepository {
     return apiSuccess({ transactions: txs.slice(offset, offset + limit), total });
   }
 
-  async addTransaction(transaction: Transaction): Promise<ApiResponse<Transaction>> {
-    const txs = getTransactions();
-    txs.unshift(transaction);
-    saveTransactions(txs);
-    return apiSuccess(transaction);
-  }
 }

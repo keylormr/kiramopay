@@ -42,6 +42,7 @@ import (
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/observability"
+	"github.com/kiramopay/backend/internal/particiones"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/payout"
 	"github.com/kiramopay/backend/internal/plans"
@@ -232,6 +233,14 @@ func main() {
 			log.Printf("CoinGecko plan=%s status=%d", plan, st)
 		}
 	}()
+	// Las particiones de `transactions` se agotan solas: la tabla no tiene
+	// particion DEFAULT, asi que cuando se acaban, TODO movimiento de dinero
+	// falla al insertar su fila. Las funciones de base existen desde las
+	// migraciones 014 y 023 —la segunda dice "Call this from CronJob"— y ese
+	// CronJob nunca existio. Este es.
+	particionesSvc := particiones.NewServicio(pool, slog.Default())
+	particionesSvc.Iniciar(context.Background())
+
 	kycRepo := kyc.NewRepository(pool)
 	uifRepo := uif.NewRepository(pool)
 
@@ -633,8 +642,12 @@ func main() {
 		// version: la del repositorio de la que salio este binario, no un "1.0.0"
 		// fijo. Es lo que permite confirmar un despliegue sin inventar marcadores
 		// de comportamiento.
-		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"crypto_prices":%s}`,
-			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), cripto)
+		// dias_de_particiones: cuantos dias faltan para que un INSERT en
+		// transactions empiece a fallar por falta de particion. -1 = todavia no
+		// se pudo consultar. Se publica porque el fallo, cuando llega, detiene
+		// la aplicacion entera y tiene fecha conocida con meses de aviso.
+		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"dias_de_particiones":%d,"crypto_prices":%s}`,
+			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), particionesSvc.DiasDeMargen(time.Now()), cripto)
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 

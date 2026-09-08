@@ -20,5 +20,4 @@ export interface TransactionPage {
 export interface ITransactionRepository {
   getTransactions(limit?: number): Promise<ApiResponse<Transaction[]>>;
   listTransactions(params: TransactionListParams): Promise<ApiResponse<TransactionPage>>;
-  addTransaction(transaction: Transaction): Promise<ApiResponse<Transaction>>;
 }
