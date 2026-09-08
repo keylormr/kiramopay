@@ -243,6 +243,19 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error 
 	return r.UpdateStatusTx(ctx, r.db, id, status)
 }
 
+// MarcarFallida rotula la fila como fallida SOLO si no llego a completarse.
+//
+// El filtro por estado no es cosmetico. 'completed' lo escribe el gancho DENTRO
+// de la transaccion del asiento, asi que equivale a "el dinero se movio";
+// pisarlo desde fuera afirmaria lo contrario de lo que el libro tiene escrito, y
+// esa fila deja de contar para el tope de gasto y para la vigilancia.
+func (r *Repository) MarcarFallida(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE transactions SET status = $2 WHERE id = $1 AND status <> $3`,
+		id, StatusFailed, StatusCompleted)
+	return err
+}
+
 // DailyOutgoingMinor sums today's completed outgoing transactions (minor units)
 // for the user in the given currency. The per-wallet daily limit is enforced
 // against this computed value because wallets.daily_spent is no longer
