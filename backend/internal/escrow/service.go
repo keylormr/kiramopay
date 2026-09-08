@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -311,29 +313,38 @@ func (s *Service) Resolve(ctx context.Context, adminID, id string, outcome Statu
 	}
 }
 
-// moveAndTransition is the money-moving core. Order matters:
+// moveAndTransition es el nucleo que mueve dinero: cambia el estado del acuerdo
+// y postea el asiento de doble partida, EN LA MISMA TRANSACCION.
 //
-//  1. CLAIM the state transition (UPDATE ... WHERE status = from). This is the
-//     mutex — of two concurrent money-moving actions (e.g. buyer Release vs
-//     seller Refund) exactly one wins; the loser gets ErrBadTransition and no
-//     second posting can happen.
-//  2. POST the double-entry. The posting carries a deterministic idempotency
-//     key ("escrow:<action>:<id>"), so a retry after a crash can never move
-//     money twice.
-//  3. On posting failure, COMPENSATE by reverting the claim. If even the
-//     revert fails we log+audit at high severity for manual reconciliation —
-//     status-without-money is detectable and fixable; money-without-status
-//     (double movement) would not be, which is why the claim goes first.
+// Antes iban por separado —reclamar el estado, postear, y compensar el reclamo
+// si el asiento fallaba— con un orden razonado: el estado sin dinero es
+// detectable y arreglable, el dinero sin estado no. El razonamiento era bueno y
+// dejaba dos agujeros que ningun orden cierra:
+//
+//   - Un acuerdo quedaba 'funded' sin que el asiento de fondeo existiera (el
+//     proceso muere, o el contexto se cancela y la compensacion muere con el
+//     mismo contexto). Nadie lo reparaba: el barrido solo mira estados
+//     terminales. Liberarlo despues SI postea, y ese asiento debita
+//     SYSTEM:ESCROW —que no tiene piso— y acredita al vendedor: dinero que
+//     nadie pago, sin una sola alarma.
+//   - Reclamar liberar, que el asiento aterrice pero el cliente reciba error, y
+//     que la compensacion devuelva el estado a 'funded'. Reembolsar despues usa
+//     OTRA llave de idempotencia, asi que pasa: las dos partes cobran y
+//     SYSTEM:ESCROW queda en rojo.
+//
+// Con las dos escrituras en una transaccion, o se confirman las dos o ninguna.
+// El reclamo sigue siendo el mutex entre dos acciones simultaneas (liberar del
+// comprador contra reembolsar del vendedor): el UPDATE ... WHERE status = from
+// solo lo gana uno, y ahora el perdedor tampoco puede postear.
+//
+// ErrIdempotent significa que este asiento ya se confirmo antes, y con el la
+// transicion: se devuelve el acuerdo tal como quedo, sin volver a moverlo.
 func (s *Service) moveAndTransition(
 	ctx context.Context, a *Agreement, from, to Status, action string,
 	debit, credit ledger.Account, onSuccess func(*Agreement),
 ) (*Agreement, error) {
-	claimed, err := s.repo.Transition(ctx, a.ID, from, to, "")
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = s.ledger.Post(ctx, &ledger.Posting{
+	var claimed *Agreement
+	_, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    fmt.Sprintf("escrow %s: %s", action, a.ID),
 		IdempotencyKey: fmt.Sprintf("escrow:%s:%s", action, a.ID),
 		CreatedBy:      a.BuyerID,
@@ -345,19 +356,38 @@ func (s *Service) moveAndTransition(
 			{Account: debit, Side: ledger.Debit, AmountMinor: a.AmountMinor, Currency: a.Currency},
 			{Account: credit, Side: ledger.Credit, AmountMinor: a.AmountMinor, Currency: a.Currency},
 		},
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
+			var terr error
+			claimed, terr = s.repo.TransitionEnTx(ctx, tx, a.ID, from, to, "")
+			return terr
+		},
 	})
-	if err != nil && !errors.Is(err, ledger.ErrIdempotent) {
-		if _, rerr := s.repo.Transition(ctx, a.ID, to, from, ""); rerr != nil {
-			s.audit(a.BuyerID, claimed, "escrow_compensation_failed", "high",
-				map[string]interface{}{"action": action, "post_error": err.Error(), "revert_error": rerr.Error()})
+	switch {
+	case errors.Is(err, ledger.ErrIdempotent):
+		// El asiento ya existia: la transicion viajo con el. Se relee el acuerdo
+		// porque el gancho no corre en este camino.
+		hecho, gerr := s.repo.Get(ctx, a.ID)
+		if gerr != nil {
+			return nil, gerr
+		}
+		claimed = hecho
+	case err != nil:
+		// El error de la transicion se devuelve sin envolver: el manejador lo
+		// traduce a 409/404 por errors.Is, y "escrow release posting: ..."
+		// delante lo dejaria fuera de esa traduccion.
+		if errors.Is(err, ErrBadTransition) || errors.Is(err, ErrNotFound) {
+			return nil, unwrapEscrow(err)
 		}
 		return nil, fmt.Errorf("escrow %s posting: %w", action, err)
 	}
 
-	// Money moved (or was already posted): mark settled so the reconcile poller
-	// won't re-drive it. Best-effort — if this fails the poller re-posts
-	// idempotently (a no-op) and marks it then.
-	_ = s.repo.MarkSettled(ctx, claimed.ID)
+	// settled_at es la marca que usa el barrido de legado. Solo tiene sentido en
+	// los estados terminales: estamparla al fondear dejaba a ListUnsettledTerminal
+	// —que filtra por settled_at IS NULL— sin poder ver JAMAS un release o un
+	// refund atascado. El barrido existia y no podia encontrar nada.
+	if to == StatusReleased || to == StatusRefunded {
+		_ = s.repo.MarkSettled(ctx, claimed.ID)
+	}
 	s.audit(a.BuyerID, claimed, "escrow_"+string(to), "medium", nil)
 	s.emit(ctx, claimed, "escrow."+string(to))
 	s.recordHistory(ctx, claimed, action)
@@ -365,6 +395,18 @@ func (s *Service) moveAndTransition(
 		onSuccess(claimed)
 	}
 	return claimed, nil
+}
+
+// unwrapEscrow saca el error del modulo de las capas que le pone el motor del
+// libro al propagar un fallo del gancho.
+func unwrapEscrow(err error) error {
+	switch {
+	case errors.Is(err, ErrBadTransition):
+		return ErrBadTransition
+	case errors.Is(err, ErrNotFound):
+		return ErrNotFound
+	}
+	return err
 }
 
 // ReconcileStuck re-drives terminal agreements whose settlement was never
@@ -411,7 +453,47 @@ func (s *Service) ReconcileStuck(ctx context.Context, limit int) (int, error) {
 		}
 		healed++
 	}
-	return healed, nil
+
+	return healed + s.repararFundeosSinAsiento(ctx, limit), nil
+}
+
+// EdadMinimaParaReparar es cuanto tiene que llevar un acuerdo en 'funded' antes
+// de que el barrido se atreva a tocarlo.
+const EdadMinimaParaReparar = 10 * time.Minute
+
+// repararFundeosSinAsiento devuelve a 'pending' los acuerdos que quedaron
+// 'funded' sin que el dinero saliera nunca de la billetera del comprador.
+//
+// Desde que la transicion y el asiento se confirman juntos esto no puede volver
+// a ocurrir, pero las filas que quedaron asi antes siguen ahi, y son peligrosas:
+// liberar una debita SYSTEM:ESCROW —que no tiene piso— y acredita al vendedor
+// dinero que nadie pago. Nadie las miraba: el barrido solo veia estados
+// terminales.
+//
+// Se devuelven a 'pending', que es la verdad —el acuerdo existe y no esta
+// fondeado— y deja que el comprador vuelva a fondearlo o lo cancele. Cada
+// reparacion queda auditada en alto, porque significa que hubo un fondeo que la
+// persona pudo haber creido hecho.
+func (s *Service) repararFundeosSinAsiento(ctx context.Context, limit int) int {
+	candidatos, err := s.repo.ListFundedAntiguos(ctx, EdadMinimaParaReparar, limit)
+	if err != nil {
+		return 0
+	}
+	reparados := 0
+	for i := range candidatos {
+		a := &candidatos[i]
+		hay, err := s.ledger.PostingExists(ctx, fmt.Sprintf("escrow:fund:%s", a.ID))
+		if err != nil || hay {
+			continue
+		}
+		if _, terr := s.repo.Transition(ctx, a.ID, StatusFunded, StatusPending, ""); terr != nil {
+			continue
+		}
+		s.audit(a.BuyerID, a, "escrow_fondeo_sin_asiento_reparado", "high",
+			map[string]interface{}{"amount_minor": a.AmountMinor, "currency": a.Currency})
+		reparados++
+	}
+	return reparados
 }
 
 // recordHistory mirrors the movement into the affected user's transaction

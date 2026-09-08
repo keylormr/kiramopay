@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -117,10 +118,63 @@ func (r *Repository) ListUnsettledTerminal(ctx context.Context, limit int) ([]Ag
 	return out, rows.Err()
 }
 
+// ListFundedAntiguos devuelve acuerdos que llevan `edad` o mas en 'funded'.
+//
+// Son los candidatos a la averia que este modulo podia dejar antes de que el
+// cambio de estado y el asiento se confirmaran juntos: 'funded' sin que el
+// asiento de fondeo exista. El barrido no los veia porque solo miraba estados
+// terminales, y liberar uno de esos acuña dinero contra SYSTEM:ESCROW, que no
+// tiene piso.
+//
+// La edad minima existe para no pisar un fondeo que esta ocurriendo ahora
+// mismo: entre el COMMIT del asiento y el momento en que el barrido lo lea no
+// puede haber una ventana, pero un margen de minutos cuesta nada y elimina toda
+// discusion sobre relojes.
+func (r *Repository) ListFundedAntiguos(ctx context.Context, edad time.Duration, limit int) ([]Agreement, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT `+agreementCols+` FROM escrow_agreements
+		  WHERE status = 'funded' AND funded_at < NOW() - $1::interval
+		  ORDER BY funded_at ASC LIMIT $2`,
+		fmt.Sprintf("%d seconds", int(edad.Seconds())), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Agreement, 0, limit)
+	for rows.Next() {
+		a, err := scanAgreement(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *a)
+	}
+	return out, rows.Err()
+}
+
 // Transition atomically moves an agreement from → to, stamping the matching
 // timestamp column. Returns ErrBadTransition if the row was not in `from`
 // (someone else transitioned it first) — this is the concurrency guard.
 func (r *Repository) Transition(ctx context.Context, id string, from, to Status, disputeReason string) (*Agreement, error) {
+	return transicion(ctx, r.db, r, id, from, to, disputeReason)
+}
+
+// TransitionEnTx hace la misma transicion pero por la transaccion del asiento,
+// para que el cambio de estado y el movimiento de dinero se confirmen juntos.
+// Ver ledger.Posting.EnLaMismaTx y el comentario de moveAndTransition.
+func (r *Repository) TransitionEnTx(ctx context.Context, tx pgx.Tx, id string, from, to Status, disputeReason string) (*Agreement, error) {
+	return transicion(ctx, tx, r, id, from, to, disputeReason)
+}
+
+// consultador es lo que Transition necesita de su origen: el pool o una
+// transaccion abierta.
+type consultador interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func transicion(ctx context.Context, q consultador, r *Repository, id string, from, to Status, disputeReason string) (*Agreement, error) {
 	var stamp string
 	switch to {
 	case StatusFunded:
@@ -140,7 +194,7 @@ func (r *Repository) Transition(ctx context.Context, id string, from, to Status,
 	default:
 		return nil, fmt.Errorf("escrow: unknown status %q", to)
 	}
-	row := r.db.QueryRow(ctx, `
+	row := q.QueryRow(ctx, `
 		UPDATE escrow_agreements
 		   SET status = $3, `+stamp+` updated_at = NOW(),
 		       dispute_reason = COALESCE(NULLIF($4, ''), dispute_reason)
