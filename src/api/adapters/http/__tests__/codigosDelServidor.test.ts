@@ -1,5 +1,6 @@
 import { HttpMarketplaceRepository } from '../marketplace.http';
 import { HttpCryptoRepository } from '../crypto.http';
+import { HttpCountryRepository } from '../country.http';
 import type { HttpClient } from '../client';
 
 // Estos adaptadores REEMPLAZABAN el codigo de error del servidor por uno
@@ -58,6 +59,30 @@ describe('los adaptadores conservan el codigo de error del servidor', () => {
       const repo = new HttpCryptoRepository(clienteQueFalla('MFA_REQUIRED'));
       const res = await llamar(repo);
       expect(res.error?.code).toBe('MFA_REQUIRED');
+    });
+  });
+
+  // Misma politica en la remesa a otro pais: sin corresponsal que la entregue,
+  // el servidor la rechaza con SIN_CORRESPONSAL y ese codigo tiene que llegar
+  // entero a la pantalla.
+  describe('remesa a otro pais', () => {
+    it('sendCrossBorder deja pasar SIN_CORRESPONSAL', async () => {
+      const repo = new HttpCountryRepository(clienteQueFalla('SIN_CORRESPONSAL'));
+      const res = await repo.sendCrossBorder({
+        receiverPhone: '88887777', toCountry: 'PA', amount: 5000, currency: 'CRC',
+      } as never);
+      expect(res.error?.code).toBe('SIN_CORRESPONSAL');
+    });
+
+    it('sendCrossBorder cae a su codigo propio cuando el servidor no manda ninguno', async () => {
+      const sinCodigo = async () => ({ success: false, error: { message: 'boom' } });
+      const repo = new HttpCountryRepository(
+        { get: sinCodigo, post: sinCodigo, put: sinCodigo, patch: sinCodigo, del: sinCodigo } as unknown as HttpClient,
+      );
+      const res = await repo.sendCrossBorder({
+        receiverPhone: '88887777', toCountry: 'PA', amount: 5000, currency: 'CRC',
+      } as never);
+      expect(res.error?.code).toBe('TRANSFER_FAILED');
     });
   });
 });

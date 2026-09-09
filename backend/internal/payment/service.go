@@ -44,6 +44,15 @@ func NewService(repo *Repository, txService *transaction.Service, opts *Options)
 	return s
 }
 
+// ConveniosActivos dice si el cobro de recibos y recargas se puede entregar.
+//
+// Lo expone para que el asistente NO ofrezca esas dos acciones cuando no hay
+// convenio: cada oferta imposible termina en ErrSinConvenio y quema una de las
+// dos preguntas diarias del plan gratuito. Sale de aqui, y no de una segunda
+// bandera en el asistente, para que las dos no puedan quedar diciendo cosas
+// distintas.
+func (s *Service) ConveniosActivos() bool { return s.convenios }
+
 func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillRequest) (*PayBillResponse, error) {
 	if !s.convenios {
 		return nil, ErrSinConvenio

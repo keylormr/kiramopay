@@ -45,7 +45,9 @@ func (f *fakeWallet) GetBalance(_ context.Context, _ string) (*wallet.BalanceRes
 	return &wallet.BalanceResponse{CRC: 1_500_000, USD: 5_000}, nil
 }
 
-type fakeTx struct{ records []transaction.TransactionRecord }
+type fakeTx struct {
+	records []transaction.TransactionRecord
+}
 
 func (f *fakeTx) ListTransactions(_ context.Context, _ string, _ *transaction.ListTransactionsRequest) (*transaction.TransactionListResponse, error) {
 	return &transaction.TransactionListResponse{Transactions: f.records, Total: len(f.records)}, nil
@@ -59,7 +61,7 @@ func (f *fakeBudget) List(_ context.Context, _ string) ([]budget.BudgetRecord, e
 	}, nil
 }
 
-type fakeSaved struct{}
+type fakeSaved struct{ sinConvenio bool }
 
 func (f *fakeSaved) GetSavedServices(_ context.Context, _ string) ([]payment.SavedServiceRecord, error) {
 	return []payment.SavedServiceRecord{
@@ -67,8 +69,59 @@ func (f *fakeSaved) GetSavedServices(_ context.Context, _ string) ([]payment.Sav
 	}, nil
 }
 
+func (f *fakeSaved) ConveniosActivos() bool { return !f.sinConvenio }
+
 func newTestTools(w *fakeWallet, tx *fakeTx) *Tools {
 	return NewTools(w, tx, &fakeBudget{}, &fakeSaved{})
+}
+
+// Pagar un recibo y recargar terminan en payment.ErrSinConvenio mientras no
+// exista convenio. Ofrecerlas igual hacia que el modelo las propusiera, el
+// usuario aceptara y el servidor dijera que no — y cada ida y vuelta gasta una
+// de las dos preguntas diarias del plan gratuito.
+func TestSinConvenioNoSeOfrecenRecibosNiRecargas(t *testing.T) {
+	tools := NewTools(&fakeWallet{}, &fakeTx{}, &fakeBudget{}, &fakeSaved{sinConvenio: true})
+
+	for _, d := range tools.Declarations() {
+		if d.Name == "propose_bill_payment" || d.Name == "propose_recharge" {
+			t.Errorf("se anuncia %s sin convenio", d.Name)
+		}
+	}
+	// La transferencia SINPE si se entrega, asi que se sigue ofreciendo.
+	var haySinpe bool
+	for _, d := range tools.Declarations() {
+		if d.Name == "propose_sinpe_transfer" {
+			haySinpe = true
+		}
+	}
+	if !haySinpe {
+		t.Error("propose_sinpe_transfer deberia seguir disponible")
+	}
+	// Y si el modelo la pide igual —un hilo viejo, o inventandosela— tampoco
+	// existe.
+	for _, nombre := range []string{"propose_bill_payment", "propose_recharge"} {
+		if _, _, err := tools.Invoke(context.Background(), "u1", nombre,
+			map[string]any{"provider_code": "ICE", "client_id": "1", "amount": 5000.0,
+				"operator": "kolbi", "phone": "88887777"}); !errors.Is(err, ErrUnknownTool) {
+			t.Errorf("%s: se esperaba ErrUnknownTool, llego %v", nombre, err)
+		}
+	}
+}
+
+// Con convenio se ofrecen las tres.
+func TestConConvenioSeOfrecenLasTres(t *testing.T) {
+	tools := newTestTools(&fakeWallet{}, &fakeTx{})
+	quedan := map[string]bool{"propose_sinpe_transfer": false, "propose_bill_payment": false, "propose_recharge": false}
+	for _, d := range tools.Declarations() {
+		if _, esPropose := quedan[d.Name]; esPropose {
+			quedan[d.Name] = true
+		}
+	}
+	for nombre, anunciada := range quedan {
+		if !anunciada {
+			t.Errorf("falta %s con convenio activo", nombre)
+		}
+	}
 }
 
 // ── service gating & validation ───────────────────────────────────────────────
@@ -118,7 +171,7 @@ func TestChatRunsToolThenAnswers(t *testing.T) {
 	w := &fakeWallet{}
 	llm := &fakeLLM{results: []*LLMResult{
 		{ToolCalls: []ToolCall{{Name: "get_balance"}}}, // round 1: ask for balance
-		{Text: "You have ₡15,000."},                     // round 2: final answer
+		{Text: "You have ₡15,000."},                    // round 2: final answer
 	}}
 	svc := NewService(llm, newTestTools(w, &fakeTx{}), nil, nil)
 

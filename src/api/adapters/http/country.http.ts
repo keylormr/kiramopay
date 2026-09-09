@@ -124,7 +124,12 @@ export class HttpCountryRepository implements ICountryRepository {
       currency: request.currency,
     });
 
-    if (!res.success || !res.data) return apiError('TRANSFER_FAILED', res.error?.message || 'Failed');
+    // El codigo del servidor se conserva. Reescribirlo a TRANSFER_FAILED
+    // borraba SIN_CORRESPONSAL, que es el unico que distingue "no hay quien
+    // entregue la remesa" de un fallo del usuario o de su saldo.
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'TRANSFER_FAILED', res.error?.message || 'Failed');
+    }
 
     return apiSuccess(mapTransfer(res.data));
   }

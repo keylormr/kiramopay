@@ -299,18 +299,31 @@ func (s *Service) GetRideRequest(ctx context.Context, rideID, userID string) (*R
 	return ride, nil
 }
 
+// UpdateRideStatus mueve el estado de un viaje que YA paso por el cobro.
+//
+// 'confirmed' salio de la lista: confirmar es el paso que cobra, y su unico
+// camino es POST /marketplace/rides/{id}/confirm. Mientras estuvo aqui, un
+// PATCH dejaba el viaje confirmado GRATIS, y ConfirmRide despues lo rechazaba
+// con "ride already confirmed" — o sea que ese viaje ya no se podia cobrar
+// nunca mas. Los demas destinos existen pero no pueden aplicarse a un viaje que
+// sigue en 'searching', porque llevarlo a 'in_progress' o 'completed' por esta
+// via es el mismo agujero con otro nombre.
+//
+// 'searching' tampoco es destino valido: devolver un viaje confirmado a ese
+// estado lo dejaria listo para confirmarse otra vez.
 func (s *Service) UpdateRideStatus(ctx context.Context, rideID, status string) error {
-	// 'searching' is the pre-payment initial state and is NOT a valid update
-	// target: resetting a confirmed ride back to searching would let it be
-	// re-confirmed and charged again.
 	validStatuses := map[string]bool{
-		"confirmed": true, "arriving": true,
-		"in_progress": true, "completed": true, "cancelled": true,
+		"arriving": true, "in_progress": true, "completed": true, "cancelled": true,
 	}
 	if !validStatuses[status] {
 		return fmt.Errorf("invalid ride status: %s", status)
 	}
-	return s.repo.UpdateRideStatus(ctx, rideID, status)
+	// Cancelar un viaje que todavia busca chofer es legitimo: no se cobro nada
+	// y no hay nada que entregar.
+	if status == "cancelled" {
+		return s.repo.UpdateRideStatus(ctx, rideID, status)
+	}
+	return s.repo.UpdateRideStatusPagado(ctx, rideID, status)
 }
 
 func (s *Service) ListUserRides(ctx context.Context, userID string) ([]RideRequestRecord, error) {
