@@ -195,6 +195,38 @@ func (e *Engine) PostingExists(ctx context.Context, idempotencyKey string) (bool
 	return exists, nil
 }
 
+// PostingTxID devuelve el tx_id del asiento guardado bajo esta llave de
+// idempotencia, y si existe alguno.
+//
+// Existe para que quien recibe ErrIdempotent pueda comprobar que el asiento que
+// ya esta escrito es el de SU movimiento antes de darlo por bueno. La llave de
+// `transactions` incluye la fecha y la del libro no, asi que en principio una
+// misma llave puede quedar apuntando a un asiento de otro movimiento: darlo por
+// hecho seria afirmar que se movio un dinero que no se movio.
+//
+// Devuelve ok=false cuando no hay asiento con esa llave. El tx_id puede venir
+// vacio: es una columna opcional y hay asientos que no cuelgan de ninguna fila
+// de `transactions`.
+func (e *Engine) PostingTxID(ctx context.Context, idempotencyKey string) (string, bool, error) {
+	if idempotencyKey == "" {
+		return "", false, nil
+	}
+	var txID *string
+	err := e.pool.QueryRow(ctx,
+		`SELECT tx_id::text FROM journal_postings WHERE idempotency_key = $1`,
+		idempotencyKey).Scan(&txID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("posting tx id: %w", err)
+	}
+	if txID == nil {
+		return "", true, nil
+	}
+	return *txID, true, nil
+}
+
 // ErrIdempotent indicates the IdempotencyKey collided with an existing posting.
 var ErrIdempotent = errors.New("idempotent: posting already recorded")
 
