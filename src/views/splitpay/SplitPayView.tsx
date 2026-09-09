@@ -12,6 +12,10 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const { t } = useLanguage();
   const [splits, setSplits] = useState<SplitGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  // Una consulta que falla no es "no tenes divisiones". Sin esta bandera la
+  // pantalla mostraba el estado vacio y su invitacion a crear una, como si la
+  // respuesta del servidor hubiera llegado y viniera sin nada.
+  const [errorCarga, setErrorCarga] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [loadTrigger, setLoadTrigger] = useState(0);
 
@@ -37,14 +41,25 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setErrorCarga(false);
       const api = getApiLayer();
-      if (api.splitPay) {
-        const res = await api.splitPay.listSplits();
-        if (!cancelled && res.success && res.data) {
-          setSplits(res.data);
+      if (!api.splitPay) {
+        if (!cancelled) {
+          setErrorCarga(true);
+          setLoading(false);
         }
+        return;
       }
-      if (!cancelled) setLoading(false);
+      try {
+        const res = await api.splitPay.listSplits();
+        if (cancelled) return;
+        if (res.success && res.data) setSplits(res.data);
+        else setErrorCarga(true);
+      } catch {
+        if (!cancelled) setErrorCarga(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     load();
     return () => { cancelled = true; };
@@ -167,6 +182,18 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : errorCarga ? (
+          <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
+            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] mb-3" aria-hidden="true" />
+            <p className="font-semibold uv-text-primary" role="alert">{t('splitpay_err_load')}</p>
+            <button
+              type="button"
+              onClick={() => setLoadTrigger((n) => n + 1)}
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
+            >
+              {t('error_retry')}
+            </button>
           </div>
         ) : splits.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-gray-400">

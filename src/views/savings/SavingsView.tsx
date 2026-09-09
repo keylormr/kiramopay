@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -43,16 +43,44 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state, dispatch } = useApp();
   const { goals, addGoal, removeGoal, setGoals, updateGoal } = useSavingsStore();
 
-  // Load goals from the backend (real) or the local mock adapter on open.
-  useEffect(() => {
+  // Una consulta que falla NO es una lista vacia. Sin estas dos banderas la
+  // pantalla afirmaba "Total ahorrado 0" y "Sin metas de ahorro" cuando lo
+  // unico cierto era que no se habian podido consultar: al usuario se le decia
+  // que no tiene ahorros teniendolos.
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(false);
+
+  // Una respuesta que llega despues de cerrar la pantalla no debe tocar estado.
+  const vivo = React.useRef(true);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(false);
     const api = getApiLayer();
-    if (!api.savings) return;
-    let cancelled = false;
-    api.savings.getGoals().then((res) => {
-      if (!cancelled && res.success && res.data) setGoals(res.data);
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    if (!api.savings) {
+      if (vivo.current) {
+        setErrorCarga(true);
+        setCargando(false);
+      }
+      return;
+    }
+    try {
+      const res = await api.savings.getGoals();
+      if (!vivo.current) return;
+      if (res.success && res.data) setGoals(res.data);
+      else setErrorCarga(true);
+    } catch {
+      if (vivo.current) setErrorCarga(true);
+    } finally {
+      if (vivo.current) setCargando(false);
+    }
   }, [setGoals]);
+
+  useEffect(() => {
+    vivo.current = true;
+    void cargar();
+    return () => { vivo.current = false; };
+  }, [cargar]);
 
   // Las metas se crean y se rotulan SIEMPRE en colones (el formulario y la hoja
   // de deposito escriben el simbolo a mano), asi que el saldo, la validacion y
@@ -84,6 +112,12 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [isDepositing, setIsDepositing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // El error de cada hoja se muestra DENTRO de la hoja y la deja abierta: si se
+  // cierra igual que cuando sale bien, un deposito rechazado se ve exactamente
+  // como uno exitoso.
+  const [errorHoja, setErrorHoja] = useState<string | null>(null);
+  const [metaAEliminar, setMetaAEliminar] = useState<SavingsGoal | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   // New goal form
   const [goalName, setGoalName] = useState('');
@@ -109,6 +143,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const api = getApiLayer();
     if (!api.savings) return;
     setIsCreating(true);
+    setErrorHoja(null);
     try {
       const res = await api.savings.createGoal({
         name: goalName,
@@ -116,12 +151,18 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         icon: goalIcon,
         color: goalColor,
       });
-      if (res.success && res.data) addGoal(res.data);
+      if (!res.success || !res.data) {
+        setErrorHoja(t('savings_err_create'));
+        return;
+      }
+      addGoal(res.data);
       setGoalName('');
       setGoalTarget('');
       setGoalIcon('piggy-bank');
       setGoalColor(GOAL_COLORS[0]);
       setShowAddSheet(false);
+    } catch {
+      setErrorHoja(t('savings_err_create'));
     } finally {
       setIsCreating(false);
     }
@@ -139,37 +180,59 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const api = getApiLayer();
     if (!api.savings) return;
     setIsDepositing(true);
+    setErrorHoja(null);
     try {
       const res = await api.savings.deposit(selectedGoal.id, amount);
-      if (res.success && res.data) {
-        updateGoal(selectedGoal.id, { saved: res.data.saved });
-        // http: the backend moved the money; sync the real balance.
-        // mock: mirror the wallet debit locally.
-        if (hasBackend) refreshAccounts().catch(() => {});
-        else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara,
+      // asi que un deposito RECHAZADO se veia igual que uno exitoso. Ahora un
+      // fallo deja la hoja abierta, el monto escrito y el motivo a la vista.
+      if (!res.success || !res.data) {
+        setErrorHoja(t('savings_err_deposit'));
+        return;
       }
+      updateGoal(selectedGoal.id, { saved: res.data.saved });
+      // http: the backend moved the money; sync the real balance.
+      // mock: mirror the wallet debit locally.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
 
       setDepositAmount('');
       setShowDepositSheet(false);
       setSelectedGoal(null);
+    } catch {
+      setErrorHoja(t('savings_err_deposit'));
     } finally {
       setIsDepositing(false);
     }
   };
 
-  const handleDelete = async (goal: SavingsGoal) => {
-    if (deletingId) return;
+  // Borrar una meta con plata adentro no puede ser un toque sin pregunta. El
+  // dinero no se pierde —el servidor lo devuelve a la billetera— pero eso no se
+  // veia por ningun lado: desaparecia la meta y el saldo aparecia cambiado sin
+  // explicacion.
+  const confirmarBorrado = async () => {
+    const goal = metaAEliminar;
+    if (!goal || deletingId) return;
     const api = getApiLayer();
     if (!api.savings) return;
     setDeletingId(goal.id);
+    setErrorHoja(null);
     try {
       const res = await api.savings.deleteGoal(goal.id);
-      if (res.success) {
-        removeGoal(goal.id);
-        // Deleting returns any held savings to the wallet.
-        if (hasBackend) refreshAccounts().catch(() => {});
-        else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
+      if (!res.success) {
+        setErrorHoja(t('savings_err_delete'));
+        return;
       }
+      removeGoal(goal.id);
+      // Deleting returns any held savings to the wallet.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
+      setMetaAEliminar(null);
+      if (goal.saved > 0) {
+        setAviso(t('savings_deleted_returned').replace('{amount}', formatCurrency(goal.saved)));
+      }
+    } catch {
+      setErrorHoja(t('savings_err_delete'));
     } finally {
       setDeletingId(null);
     }
@@ -203,6 +266,35 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
+        {cargando ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : errorCarga ? (
+          <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
+            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] mb-3" aria-hidden="true" />
+            <p className="font-semibold uv-text-primary" role="alert">{t('savings_err_load')}</p>
+            <button
+              type="button"
+              onClick={() => void cargar()}
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
+            >
+              {t('error_retry')}
+            </button>
+          </div>
+        ) : (
+          <>
+        {aviso && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-4 mt-4 flex items-start gap-2.5 rounded-xl px-3 py-2.5 uv-chip-success"
+          >
+            <Icons.Check size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm font-medium">{aviso}</p>
+          </div>
+        )}
+
         {/* Overall Progress Card */}
         <div className="px-4 pt-4 pb-2">
           <div className="bg-gradient-to-br from-primary/10 to-blue-500/5 dark:from-primary/20 dark:to-blue-900/10 rounded-3xl border border-primary/20 dark:border-primary/30 p-6">
@@ -318,8 +410,9 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                       {t('savings_add_money')}
                     </button>
                     <button
-                      onClick={() => handleDelete(goal)}
+                      onClick={() => { setErrorHoja(null); setMetaAEliminar(goal); }}
                       disabled={deletingId !== null}
+                      aria-label={t('delete')}
                       className={`px-4 py-2.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-500 text-sm font-bold active:scale-95 transition-all disabled:opacity-50 ${deletingId === goal.id ? 'opacity-50' : ''}`}
                     >
                       <Icons.X size={16} />
@@ -329,6 +422,8 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               );
             })}
           </div>
+        )}
+          </>
         )}
       </div>
 
@@ -400,6 +495,10 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </div>
           </div>
 
+          {errorHoja && !showDepositSheet && (
+            <p className="text-sm text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+          )}
+
           {/* Create button */}
           <Button
             variant="primary"
@@ -464,6 +563,10 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   ))}
                 </div>
 
+                {errorHoja && (
+                  <p className="text-sm text-center text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+                )}
+
                 <Button
                   variant="primary"
                   size="lg"
@@ -479,6 +582,51 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           })()}
         </BottomSheet>
       )}
+
+      {/* Confirmacion de borrado */}
+      <BottomSheet
+        isOpen={metaAEliminar !== null}
+        onClose={() => { if (!deletingId) setMetaAEliminar(null); }}
+        title={t('savings_delete_title')}
+        dismissable={!deletingId}
+      >
+        {metaAEliminar && (
+          <div className="space-y-4 pb-2">
+            <div className="flex gap-3 rounded-xl bg-[var(--color-danger-soft)] p-3">
+              <Icons.AlertTriangle size={18} className="shrink-0 mt-0.5 text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
+              <p className="text-sm text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
+                {t('savings_delete_warning').replace('{name}', metaAEliminar.name)}
+              </p>
+            </div>
+            {metaAEliminar.saved > 0 && (
+              <p className="text-sm uv-text-secondary">
+                {t('savings_delete_returns').replace('{amount}', formatCurrency(metaAEliminar.saved))}
+              </p>
+            )}
+            {errorHoja && (
+              <p className="text-sm text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setMetaAEliminar(null)}
+                disabled={deletingId !== null}
+                className="flex-1 py-3.5 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] font-bold disabled:opacity-50"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmarBorrado()}
+                disabled={deletingId !== null}
+                className="flex-1 bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              >
+                {deletingId ? t('loading') : t('delete')}
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
     </div>
   );
 };
