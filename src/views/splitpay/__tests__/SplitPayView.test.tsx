@@ -51,6 +51,19 @@ describe('SplitPayView', () => {
     mocks.listSplits.mockResolvedValue({ success: true, data: [grupo] });
   });
 
+  // Mismo defecto que en ahorros: `if (res.success && res.data)` sin rama de
+  // fallo. La consulta se caia y la pantalla mostraba el estado vacio con su
+  // invitacion a crear una, como si el servidor hubiera contestado que no hay
+  // ninguna.
+  it('cuando la consulta falla lo dice, en vez de mostrar el estado vacio', async () => {
+    mocks.listSplits.mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED' } });
+
+    pintar();
+
+    expect(await screen.findByText('No pudimos cargar tus cuentas divididas.')).toBeInTheDocument();
+    expect(screen.queryByText('Sin cuentas divididas')).not.toBeInTheDocument();
+  });
+
   it('muestra el error del servidor en vez de cerrarse en silencio', async () => {
     mocks.createSplit.mockResolvedValue({
       success: false,

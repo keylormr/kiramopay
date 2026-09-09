@@ -719,6 +719,15 @@ const en: TranslationKeys = {
   savings_create_goal: 'Create Goal',
   savings_add_money: 'Add Funds',
   savings_deposit: 'Deposit',
+  savings_err_load: 'We could not load your savings goals.',
+  savings_err_create: 'The goal could not be created. Try again.',
+  savings_err_deposit: 'The deposit did not go through. Your money is still in your wallet.',
+  savings_err_delete: 'The goal could not be deleted. Try again.',
+  savings_delete_title: 'Delete goal',
+  savings_delete_warning: 'You are about to delete “{name}”. This cannot be undone.',
+  savings_delete_returns: 'The {amount} you saved goes back to your wallet.',
+  savings_deleted_returned: '{amount} went back to your wallet.',
+  splitpay_err_load: 'We could not load your split bills.',
 
   // Home insights
   home_spending: 'Spending',

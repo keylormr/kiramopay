@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/wallet"
@@ -57,23 +58,135 @@ func NewService(repo *Repository, walletRepo *wallet.Repository, l *ledger.Engin
 	}
 }
 
+// completarEnLaMismaTx devuelve el gancho que marca COMPLETADAS las filas de
+// `transactions` DENTRO de la transaccion que escribe el asiento.
+//
+// Es la regla de la que dependen las demas: una fila esta 'completed' si y solo
+// si su asiento confirmo. Antes el UPDATE corria despues de Post, por fuera, y
+// de las dos formas se perdia plata:
+//
+//   - con el error descartado (`_ =` en CreateTransfer), una caida entre el
+//     asiento y el UPDATE dejaba la fila en 'pending' para siempre con el
+//     dinero ya movido: no aparece en la lista, no cuenta para el tope y la
+//     conciliacion la marca como sobrante;
+//   - con el error devuelto (CreateTransaction), se le contestaba "fallo" al
+//     llamante DESPUES de que el asiento confirmo. Cripto lo leia como "el
+//     debito no ocurrio" y no acreditaba el activo: al usuario le salia el
+//     dinero de la billetera y no le entraba nada a cambio.
+//
+// Ver ledger.Posting.EnLaMismaTx. Un reintento por conflicto ejecuta esto otra
+// vez sobre una transaccion nueva; el UPDATE es idempotente, asi que no importa.
+func (s *Service) completarEnLaMismaTx(ids ...string) func(context.Context, pgx.Tx) error {
+	return func(ctx context.Context, tx pgx.Tx) error {
+		for _, id := range ids {
+			if id == "" {
+				continue
+			}
+			if err := s.repo.UpdateStatusTx(ctx, tx, id, StatusCompleted); err != nil {
+				return fmt.Errorf("marcar completada %s: %w", id, err)
+			}
+		}
+		return nil
+	}
+}
+
+// marcarFallidaSinAsiento rotula la fila cuando el asiento NO confirmo.
+//
+// El error se descarta a proposito, y aqui si es correcto: no se movio dinero,
+// asi que el rotulo es lo unico en juego. Si tambien se pierde, la fila queda
+// en 'pending' y el proximo intento con la misma llave la reintenta igual, que
+// es lo que hace la relectura de idempotencia de mas arriba.
+func (s *Service) marcarFallidaSinAsiento(ctx context.Context, ids ...string) {
+	for _, id := range ids {
+		if id != "" {
+			_ = s.repo.MarcarFallida(ctx, id)
+		}
+	}
+}
+
+// ErrLlaveDeOtroMovimiento: la llave de idempotencia ya tiene un asiento
+// escrito, pero de OTRO movimiento. No se puede dar por hecho el actual.
+var ErrLlaveDeOtroMovimiento = errors.New("idempotency key already belongs to another movement")
+
+// ErrLlaveReutilizada: se pidio reintentar bajo una llave que existe, pero
+// describiendo un movimiento distinto (otro monto, otra moneda u otro tipo).
+var ErrLlaveReutilizada = errors.New("idempotency key reused for a different movement")
+
+// completarAsientoRepetido cierra el caso en que el libro responde
+// ErrIdempotent: ya hay un asiento con esta llave, o sea que el dinero se movio
+// en un intento anterior. El gancho que marca la fila corrio en AQUELLA
+// transaccion, no en esta, asi que aqui solo queda ponerla al dia.
+//
+// Antes comprueba que el asiento existente sea el de estas filas. Sin esa
+// comprobacion, marcar 'completed' seria afirmar un movimiento de dinero que
+// esta llamada no hizo y no puede ver.
+func (s *Service) completarAsientoRepetido(ctx context.Context, llave, esperado string, ids ...string) error {
+	hecho, err := s.repararFilaConAsiento(ctx, llave, esperado, ids...)
+	if err != nil {
+		return err
+	}
+	// Sin asiento no hay nada que dar por hecho: el libro dijo repetido y ya no
+	// esta. Es un estado que no deberia ocurrir, y callarlo seria inventar.
+	if !hecho {
+		return fmt.Errorf("%w: %s", ErrLlaveDeOtroMovimiento, llave)
+	}
+	return nil
+}
+
+// repararFilaConAsiento cierra el caso de la fila que quedo SIN MARCAR aunque su
+// asiento si confirmo — la herencia de cuando el UPDATE corria por fuera.
+//
+// Se comprueba ANTES de volver a evaluar saldo, tope y segundo factor, y esa
+// posicion es parte del arreglo: ese dinero ya se movio, asi que volver a
+// pedirle un segundo factor —que ya se consumio— o compararlo contra el tope
+// del dia dejaria la fila rota para siempre y le diria al llamante que su pago
+// no paso. En el retiro del saldo de un negocio es todavia mas claro: el saldo
+// ya salio, asi que la comprobacion de fondos diria "insuficiente" sobre un
+// retiro que ya ocurrio.
+//
+// Devuelve hecho=false cuando no hay asiento: ahi si es un movimiento por hacer.
+func (s *Service) repararFilaConAsiento(ctx context.Context, llave, esperado string, ids ...string) (bool, error) {
+	if llave == "" {
+		return false, nil
+	}
+	txID, existe, err := s.ledger.PostingTxID(ctx, llave)
+	if err != nil {
+		return false, fmt.Errorf("leer asiento previo: %w", err)
+	}
+	if !existe {
+		return false, nil
+	}
+	if txID != "" && txID != esperado {
+		return false, fmt.Errorf("%w: %s", ErrLlaveDeOtroMovimiento, llave)
+	}
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if err := s.repo.UpdateStatus(ctx, id, StatusCompleted); err != nil {
+			return false, fmt.Errorf("marcar completada %s: %w", id, err)
+		}
+	}
+	return true, nil
+}
+
+// mismoMovimiento comprueba que una fila que ya existe bajo la llave describa
+// la MISMA operacion que se esta pidiendo. Una llave repetida con otro monto no
+// es un reintento: es otra operacion pidiendo prestada una llave usada, y
+// seguirla escribiria un asiento por un importe que la fila no dice.
+func mismoMovimiento(previa *TransactionRecord, req *CreateTransactionRequest) bool {
+	return previa.Amount == req.Amount &&
+		previa.Currency == req.Currency &&
+		previa.Type == req.Type
+}
+
 // CreateTransaction is the public entry point used by HTTP handlers for
 // simple user-initiated transactions. Internal callers (sinpe, qr, splitpay)
 // should prefer CreateTransfer which expresses BOTH legs of a transfer.
 func (s *Service) CreateTransaction(ctx context.Context, userID string, req *CreateTransactionRequest) (*TransactionRecord, error) {
-	// Idempotency short-circuit BEFORE locking anything.
-	if req.IdempotencyKey != "" {
-		existing, err := s.repo.FindByIdempotencyKey(ctx, userID, req.IdempotencyKey)
-		if err == nil && existing != nil {
-			return existing, nil
-		}
-	}
-
-	w, err := s.walletRepo.FindByUserID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("wallet not found")
-	}
-
+	// La moneda y el monto se normalizan ANTES de la relectura de idempotencia
+	// porque esa relectura compara la fila existente contra estos campos: sin
+	// normalizar, un pedido sin moneda no coincidiria con su propia fila.
 	if req.Currency == "" {
 		req.Currency = "CRC"
 	}
@@ -88,6 +201,43 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	// todos dentro del `if` de abajo.
 	if !isOutgoing(req.Type) && !req.Internal {
 		return nil, ErrCreditNotAllowed
+	}
+
+	// Relectura de idempotencia, antes de tocar nada mas. Solo un movimiento
+	// COMPLETADO es una repeticion; una fila 'failed' o 'pending' significa que
+	// el asiento NO confirmo, y devolverla como exito —que es lo que se hacia—
+	// le decia al llamante que su plata se movio cuando no se movio, y dejaba
+	// el reintento sin ocurrir jamas. Lo que se hace con esa fila es
+	// reintentarla SOBRE ELLA MISMA: la llave del libro es la que decide si el
+	// dinero se mueve o no, no esta lectura.
+	var previa *TransactionRecord
+	if req.IdempotencyKey != "" {
+		existing, err := s.repo.FindByIdempotencyKey(ctx, userID, req.IdempotencyKey)
+		if err == nil && existing != nil {
+			// La comprobacion va ANTES de dar la repeticion por buena: devolver
+			// el movimiento viejo ante un monto nuevo es lo que hacia que
+			// cripto acreditara activo por una cifra que el libro no debito.
+			if !mismoMovimiento(existing, req) {
+				return nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+			}
+			if existing.Status == StatusCompleted {
+				return existing, nil
+			}
+			hecho, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, existing.ID, existing.ID)
+			if err != nil {
+				return nil, err
+			}
+			if hecho {
+				existing.Status = StatusCompleted
+				return existing, nil
+			}
+			previa = existing
+		}
+	}
+
+	w, err := s.walletRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("wallet not found")
 	}
 
 	if isOutgoing(req.Type) {
@@ -113,29 +263,44 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		}
 	}
 
-	// Insert tx in pending with idempotency_key persisted.
-	tx, err := s.repo.Create(ctx, userID, w.ID, req)
-	if err != nil {
-		if errors.Is(err, ErrDuplicate) {
-			return tx, nil
+	// Insert tx in pending with idempotency_key persisted. Un reintento sobre
+	// una fila que ya existe la reusa: insertar otra chocaria con la llave, y
+	// abandonar dejaria el movimiento sin hacerse para siempre.
+	tx := previa
+	if tx == nil {
+		creada, err := s.repo.Create(ctx, userID, w.ID, req)
+		if err != nil {
+			// Un intento simultaneo gano la insercion. Su fila es la de este
+			// mismo movimiento, asi que se sigue sobre ella: la llave del
+			// asiento es la que decide cual de los dos mueve el dinero.
+			if !errors.Is(err, ErrDuplicate) || creada == nil {
+				return nil, fmt.Errorf("create transaction: %w", err)
+			}
+			if creada.Status == StatusCompleted {
+				return creada, nil
+			}
 		}
-		return nil, fmt.Errorf("create transaction: %w", err)
+		tx = creada
 	}
 
 	// Build the ledger posting for outgoing/incoming legs against the
 	// SYSTEM:EXTERNAL counterparty for now (callers that know the peer should
 	// use CreateTransfer instead).
 	posting := s.buildSingleSidedPosting(tx, req)
-	postingID, err := s.ledger.Post(ctx, posting)
-	if err != nil && !errors.Is(err, ledger.ErrIdempotent) {
-		_ = s.repo.UpdateStatus(ctx, tx.ID, StatusFailed)
-		return nil, fmt.Errorf("post ledger: %w", err)
+	posting.EnLaMismaTx = s.completarEnLaMismaTx(tx.ID)
+	if _, err := s.ledger.Post(ctx, posting); err != nil {
+		if !errors.Is(err, ledger.ErrIdempotent) {
+			s.marcarFallidaSinAsiento(ctx, tx.ID)
+			return nil, fmt.Errorf("post ledger: %w", err)
+		}
+		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, tx.ID, tx.ID); err != nil {
+			return nil, err
+		}
 	}
-	_ = postingID
-
-	if err := s.repo.UpdateStatus(ctx, tx.ID, StatusCompleted); err != nil {
-		return nil, fmt.Errorf("mark completed: %w", err)
-	}
+	// El estado tambien se refleja en lo que se devuelve: la fila que arma el
+	// repositorio nace 'pending' y el llamante —y el JSON que sale al cliente—
+	// se quedaba con ese rotulo aunque el dinero ya se hubiera movido.
+	tx.Status = StatusCompleted
 
 	if isOutgoing(req.Type) {
 		if s.auditLogger != nil {
@@ -182,8 +347,32 @@ func (s *Service) WithdrawMerchantToUser(
 	if idempotencyKey == "" {
 		idempotencyKey = "mwithdraw:" + uuid.New().String()
 	}
+	// Misma regla que en CreateTransaction: solo un retiro COMPLETADO es una
+	// repeticion. Este era el tercer sitio del mismo defecto —el que la lista
+	// de hallazgos no nombraba— y aqui pesa mas que en ningun otro: un retiro
+	// que fallo devuelto como exito deja el saldo del negocio adentro y al
+	// dueño convencido de que ya lo saco.
+	var previa *TransactionRecord
 	if existing, _ := s.repo.FindByIdempotencyKey(ctx, userID, idempotencyKey); existing != nil {
-		return existing, nil
+		if existing.Amount != amount || existing.Currency != currency || existing.Type != TypeMerchantWithdrawal {
+			return nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, idempotencyKey)
+		}
+		if existing.Status == StatusCompleted {
+			return existing, nil
+		}
+		// La reparacion va antes de leer el saldo del negocio, y por la razon
+		// que ya explicaba el comentario de arriba: un retiro que ya salio
+		// dejaria el saldo corto y la comprobacion diria "insuficiente" sobre
+		// algo que ya ocurrio.
+		hecho, err := s.repararFilaConAsiento(ctx, idempotencyKey, existing.ID, existing.ID)
+		if err != nil {
+			return nil, err
+		}
+		if hecho {
+			existing.Status = StatusCompleted
+			return existing, nil
+		}
+		previa = existing
 	}
 	bal, err := s.ledger.MerchantBalance(ctx, merchantID, currency)
 	if err != nil {
@@ -193,21 +382,29 @@ func (s *Service) WithdrawMerchantToUser(
 		return nil, ErrInsufficientMerchantBalance
 	}
 
-	rec, err := s.repo.Create(ctx, userID, w.ID, &CreateTransactionRequest{
-		Type:             TypeMerchantWithdrawal,
-		Amount:           amount,
-		Currency:         currency,
-		CounterpartyType: "merchant",
-		CounterpartyName: merchantName,
-		Description:      "Retiro del saldo del negocio",
-		IdempotencyKey:   idempotencyKey,
-	})
-	if err != nil {
-		if errors.Is(err, ErrDuplicate) {
-			// A concurrent retry won the insert; it owns the posting.
-			return rec, nil
+	rec := previa
+	if rec == nil {
+		creada, err := s.repo.Create(ctx, userID, w.ID, &CreateTransactionRequest{
+			Type:             TypeMerchantWithdrawal,
+			Amount:           amount,
+			Currency:         currency,
+			CounterpartyType: "merchant",
+			CounterpartyName: merchantName,
+			Description:      "Retiro del saldo del negocio",
+			IdempotencyKey:   idempotencyKey,
+		})
+		if err != nil {
+			// A concurrent retry won the insert; it owns the posting. Se sigue
+			// sobre su fila en vez de devolverla: si ese intento se cayo antes
+			// de postear, abandonar aqui dejaria el retiro sin hacerse.
+			if !errors.Is(err, ErrDuplicate) || creada == nil {
+				return nil, fmt.Errorf("create withdrawal tx: %w", err)
+			}
+			if creada.Status == StatusCompleted {
+				return creada, nil
+			}
 		}
-		return nil, fmt.Errorf("create withdrawal tx: %w", err)
+		rec = creada
 	}
 
 	_, err = s.ledger.Post(ctx, &ledger.Posting{
@@ -219,18 +416,22 @@ func (s *Service) WithdrawMerchantToUser(
 			{Account: ledger.Account{MerchantID: merchantID}, Side: ledger.Debit, AmountMinor: amount, Currency: currency},
 			{Account: ledger.Account{UserID: userID}, Side: ledger.Credit, AmountMinor: amount, Currency: currency},
 		},
-		Metadata: map[string]any{"merchant_id": merchantID, "to_user": userID},
+		Metadata:    map[string]any{"merchant_id": merchantID, "to_user": userID},
+		EnLaMismaTx: s.completarEnLaMismaTx(rec.ID),
 	})
-	if err != nil && !errors.Is(err, ledger.ErrIdempotent) {
-		_ = s.repo.UpdateStatus(ctx, rec.ID, StatusFailed)
-		if errors.Is(err, ledger.ErrInsufficientFunds) {
-			return nil, ErrInsufficientMerchantBalance
+	if err != nil {
+		if !errors.Is(err, ledger.ErrIdempotent) {
+			s.marcarFallidaSinAsiento(ctx, rec.ID)
+			if errors.Is(err, ledger.ErrInsufficientFunds) {
+				return nil, ErrInsufficientMerchantBalance
+			}
+			return nil, fmt.Errorf("post withdrawal: %w", err)
 		}
-		return nil, fmt.Errorf("post withdrawal: %w", err)
+		if err := s.completarAsientoRepetido(ctx, idempotencyKey, rec.ID, rec.ID); err != nil {
+			return nil, err
+		}
 	}
-	if err := s.repo.UpdateStatus(ctx, rec.ID, StatusCompleted); err != nil {
-		return nil, fmt.Errorf("mark completed: %w", err)
-	}
+	rec.Status = StatusCompleted
 	return rec, nil
 }
 
@@ -258,6 +459,17 @@ type CreateTransferRequest struct {
 	// contact, QR knows the shop) and never fail a transfer over a name.
 	SenderCounterpartyName   string
 	ReceiverCounterpartyName string
+
+	// EnLaMismaTx, si viene, corre DENTRO de la transaccion que escribe el
+	// asiento, junto con el cambio de estado de las dos filas: si devuelve
+	// error, el dinero no se mueve.
+	//
+	// Existe para el modulo que necesita reclamar algo en exclusiva al cobrar
+	// —el codigo QR de un solo uso, que hoy se comprueba antes y se marca
+	// despues, y por eso dos personas pueden pagarlo a la vez—. Rigen las
+	// mismas reglas que ledger.Posting.EnLaMismaTx: escribir solo por el `tx`
+	// que se recibe, y ningun efecto irreversible adentro.
+	EnLaMismaTx func(ctx context.Context, tx pgx.Tx) error
 
 	// FeeFromReceiver selects who absorbs Fee. Default (false) is the historical
 	// payer-absorbed model: the payer pays Amount + Fee, the receiver is credited
@@ -299,6 +511,12 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	// Idempotency: if already done, return BOTH existing rows. The receiver leg
 	// was stored under the derived "recv" key, so look it up too — callers that
 	// record a follow-on row keyed off the receiver can then detect the replay.
+	//
+	// Y solo un movimiento COMPLETADO es una repeticion: devolver una fila
+	// 'failed' como exito le decia al que cobra que ya le pagaron. Una fila que
+	// no completo significa que el asiento no confirmo, asi que se reintenta
+	// sobre esas mismas filas.
+	var previaEmisor, previaReceptor *TransactionRecord
 	if req.IdempotencyKey != "" {
 		if existing, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey); existing != nil {
 			// A merchant collection has no receiver row to replay.
@@ -306,7 +524,28 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 			if !toMerchant {
 				recv, _ = s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
 			}
-			return existing, recv, nil
+			if existing.Amount != req.Amount || existing.Currency != req.Currency || existing.Type != req.TxType {
+				return nil, nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+			}
+			if existing.Status == StatusCompleted {
+				return existing, recv, nil
+			}
+			var idRecv string
+			if recv != nil {
+				idRecv = recv.ID
+			}
+			hecho, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, existing.ID, existing.ID, idRecv)
+			if err != nil {
+				return nil, nil, err
+			}
+			if hecho {
+				existing.Status = StatusCompleted
+				if recv != nil {
+					recv.Status = StatusCompleted
+				}
+				return existing, recv, nil
+			}
+			previaEmisor, previaReceptor = existing, recv
 		}
 	}
 
@@ -377,16 +616,31 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		IdempotencyKey: pairKey(req.IdempotencyKey, "recv"),
 	}
 
-	sender, err = s.repo.Create(ctx, req.FromUserID, senderWallet.ID, senderReq)
-	if err != nil && !errors.Is(err, ErrDuplicate) {
-		return nil, nil, fmt.Errorf("create sender tx: %w", err)
+	sender = previaEmisor
+	if sender == nil {
+		sender, err = s.repo.Create(ctx, req.FromUserID, senderWallet.ID, senderReq)
+		if err != nil && !errors.Is(err, ErrDuplicate) {
+			return nil, nil, fmt.Errorf("create sender tx: %w", err)
+		}
+	}
+	// Sin fila del emisor no hay a que colgar el asiento: `sender.ID` es el
+	// TxID del posteo. Puede venir nil cuando la insercion choco por llave
+	// duplicada y la relectura de esa fila tambien fallo.
+	if sender == nil {
+		return nil, nil, fmt.Errorf("create sender tx: fila no disponible")
 	}
 	// A shop is not a user: its side of the collection is the qr_payments row
 	// plus the journal entry, so there is no receiver `transactions` row.
 	if !toMerchant {
-		receiver, err = s.repo.Create(ctx, req.ToUserID, receiverWallet.ID, receiveReq)
-		if err != nil && !errors.Is(err, ErrDuplicate) {
-			return nil, nil, fmt.Errorf("create receiver tx: %w", err)
+		receiver = previaReceptor
+		if receiver == nil {
+			receiver, err = s.repo.Create(ctx, req.ToUserID, receiverWallet.ID, receiveReq)
+			if err != nil && !errors.Is(err, ErrDuplicate) {
+				return nil, nil, fmt.Errorf("create receiver tx: %w", err)
+			}
+		}
+		if receiver == nil {
+			return nil, nil, fmt.Errorf("create receiver tx: fila no disponible")
 		}
 	}
 
@@ -437,17 +691,33 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	}
 	// A merchant collection has no receiver row (`receiver` is nil): the shop's
 	// record is qr_payments + the journal entry.
-	if _, err := s.ledger.Post(ctx, p); err != nil && !errors.Is(err, ledger.ErrIdempotent) {
-		_ = s.repo.UpdateStatus(ctx, sender.ID, StatusFailed)
-		if receiver != nil {
-			_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusFailed)
-		}
-		return nil, nil, fmt.Errorf("post ledger: %w", err)
-	}
-
-	_ = s.repo.UpdateStatus(ctx, sender.ID, StatusCompleted)
+	var idReceptor string
 	if receiver != nil {
-		_ = s.repo.UpdateStatus(ctx, receiver.ID, StatusCompleted)
+		idReceptor = receiver.ID
+	}
+	// El gancho del llamante corre PRIMERO: si lo que quiere reclamar ya no
+	// esta disponible, el asiento se aborta antes de escribir nada mas.
+	completar := s.completarEnLaMismaTx(sender.ID, idReceptor)
+	p.EnLaMismaTx = func(ctx context.Context, tx pgx.Tx) error {
+		if req.EnLaMismaTx != nil {
+			if err := req.EnLaMismaTx(ctx, tx); err != nil {
+				return err
+			}
+		}
+		return completar(ctx, tx)
+	}
+	if _, err := s.ledger.Post(ctx, p); err != nil {
+		if !errors.Is(err, ledger.ErrIdempotent) {
+			s.marcarFallidaSinAsiento(ctx, sender.ID, idReceptor)
+			return nil, nil, fmt.Errorf("post ledger: %w", err)
+		}
+		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, sender.ID, sender.ID, idReceptor); err != nil {
+			return nil, nil, err
+		}
+	}
+	sender.Status = StatusCompleted
+	if receiver != nil {
+		receiver.Status = StatusCompleted
 	}
 
 	if s.auditLogger != nil {
@@ -498,14 +768,27 @@ func (s *Service) RecordHistory(ctx context.Context, userID string, req *CreateT
 	if err != nil {
 		return fmt.Errorf("find wallet: %w", err)
 	}
-	tx, err := s.repo.Create(ctx, userID, w.ID, req)
+	// La fila y su estado se escriben en una sola transaccion. Eran dos
+	// escrituras sueltas: si la segunda se perdia, quedaba en la lista del
+	// usuario un movimiento 'pending' de un dinero que ya se habia movido y que
+	// nadie iba a completar nunca, porque el reintento choca con la llave.
+	dbtx, err := s.repo.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("record history: %w", err)
+	}
+	defer dbtx.Rollback(ctx) //nolint:errcheck
+
+	tx, err := s.repo.CreateTx(ctx, dbtx, userID, w.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrDuplicate) {
 			return nil
 		}
 		return fmt.Errorf("record history: %w", err)
 	}
-	return s.repo.UpdateStatus(ctx, tx.ID, StatusCompleted)
+	if err := s.repo.UpdateStatusTx(ctx, dbtx, tx.ID, StatusCompleted); err != nil {
+		return fmt.Errorf("record history: %w", err)
+	}
+	return dbtx.Commit(ctx)
 }
 
 func (s *Service) GetTransaction(ctx context.Context, id string) (*TransactionRecord, error) {
