@@ -848,6 +848,15 @@ export type TranslationKeys = {
   savings_create_goal: string;
   savings_add_money: string;
   savings_deposit: string;
+  savings_err_load: string;
+  savings_err_create: string;
+  savings_err_deposit: string;
+  savings_err_delete: string;
+  savings_delete_title: string;
+  savings_delete_warning: string;
+  savings_delete_returns: string;
+  savings_deleted_returned: string;
+  splitpay_err_load: string;
 
   // Home insights
   home_spending: string;

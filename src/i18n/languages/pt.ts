@@ -719,6 +719,15 @@ const pt: TranslationKeys = {
   savings_create_goal: 'Criar meta',
   savings_add_money: 'Adicionar fundos',
   savings_deposit: 'Depositar',
+  savings_err_load: 'Não foi possível carregar suas metas de poupança.',
+  savings_err_create: 'Não foi possível criar a meta. Tente de novo.',
+  savings_err_deposit: 'O depósito não foi feito. Seu dinheiro continua na carteira.',
+  savings_err_delete: 'Não foi possível excluir a meta. Tente de novo.',
+  savings_delete_title: 'Excluir meta',
+  savings_delete_warning: 'Você vai excluir “{name}”. Essa ação não pode ser desfeita.',
+  savings_delete_returns: 'Os {amount} guardados voltam para a sua carteira.',
+  savings_deleted_returned: '{amount} voltaram para a sua carteira.',
+  splitpay_err_load: 'Não foi possível carregar suas contas divididas.',
 
   // Home insights
   home_spending: 'Gastos',

@@ -719,6 +719,15 @@ const fr: TranslationKeys = {
   savings_create_goal: 'Créer un objectif',
   savings_add_money: 'Ajouter des fonds',
   savings_deposit: 'Déposer',
+  savings_err_load: 'Impossible de charger vos objectifs d’épargne.',
+  savings_err_create: 'L’objectif n’a pas pu être créé. Réessayez.',
+  savings_err_deposit: 'Le dépôt n’a pas abouti. Votre argent est toujours dans votre portefeuille.',
+  savings_err_delete: 'L’objectif n’a pas pu être supprimé. Réessayez.',
+  savings_delete_title: 'Supprimer l’objectif',
+  savings_delete_warning: 'Vous allez supprimer « {name} ». Cette action est irréversible.',
+  savings_delete_returns: 'Les {amount} épargnés reviennent dans votre portefeuille.',
+  savings_deleted_returned: '{amount} sont revenus dans votre portefeuille.',
+  splitpay_err_load: 'Impossible de charger vos additions partagées.',
 
   // Home insights
   home_spending: 'Dépenses',
