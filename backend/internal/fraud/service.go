@@ -15,6 +15,46 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
+// EvaluarSalida es el punto por donde el motor de riesgo entra al camino del
+// dinero. Hasta ahora AssessTransaction solo era alcanzable por
+// POST /fraud/assess —el propio usuario preguntando por su transaccion— y
+// ningun servicio de dinero lo llamaba: el motor existia y no frenaba nada. La
+// consecuencia mas fea era que POST /admin/fraud/restrict/{userId} le decia al
+// administrador que habia frenado una cuenta, y la cuenta seguia moviendo plata.
+//
+// La politica de fallos esta partida a proposito, porque las dos mitades no
+// merecen el mismo trato:
+//
+//   - La RESTRICCION es una decision explicita de una persona. Se lee primero y
+//     por separado, y si no se puede leer se BLOQUEA: no puede quedar sin
+//     efecto porque el motor de puntaje tenga un mal dia.
+//   - El PUNTAJE es una heuristica. Si no se puede calcular o anotar, se deja
+//     pasar y quien llama lo registra: un pago legitimo no se vuelve riesgoso
+//     porque no se pudo archivar el papeleo.
+func (s *Service) EvaluarSalida(
+	ctx context.Context, userID, txType, txID string, amountMinor int64, currency string,
+) (string, error) {
+	perfil, err := s.repo.GetOrCreateProfile(ctx, userID)
+	if err != nil {
+		return ActionBlock, fmt.Errorf("perfil de riesgo: %w", err)
+	}
+	if perfil.IsRestricted {
+		return ActionBlock, nil
+	}
+
+	ev, err := s.AssessTransaction(ctx, &AssessRequest{
+		UserID:   userID,
+		TxType:   txType,
+		TxID:     txID,
+		Amount:   amountMinor,
+		Currency: currency,
+	})
+	if err != nil {
+		return ActionAllow, fmt.Errorf("evaluacion de riesgo: %w", err)
+	}
+	return ev.Action, nil
+}
+
 // AssessTransaction performs real-time risk assessment on a transaction.
 func (s *Service) AssessTransaction(ctx context.Context, req *AssessRequest) (*RiskAssessment, error) {
 	profile, err := s.repo.GetOrCreateProfile(ctx, req.UserID)

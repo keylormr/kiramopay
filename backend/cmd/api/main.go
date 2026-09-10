@@ -361,10 +361,17 @@ func main() {
 	})
 	userService := user.NewService(userRepo)
 	walletService := wallet.NewService(walletRepo)
+	// El motor de riesgo se construye ANTES que el servicio de transacciones
+	// porque este ultimo lo consulta en el camino de salida. Hasta ahora solo
+	// era alcanzable por POST /fraud/assess y no frenaba nada: la restriccion
+	// que ponia el administrador dejaba a la cuenta moviendo plata igual.
+	fraudService := fraud.NewService(fraudRepo)
 	txService := transaction.NewService(txRepo, walletRepo, ledgerEngine, &transaction.Options{
 		AuditLogger: auditLogger,
 		MFA:         mfaSvc,
 		UIF:         uifService,
+		Risk:        fraudService,
+		Logger:      logger,
 	})
 	// Notification service is created early so domains (e.g. SINPE) can notify
 	// users on real events. Web push is gated on VAPID config; history is always
@@ -449,7 +456,6 @@ func main() {
 	})
 	splitService := splitpay.NewService(splitRepo, txService, userRepo)
 	cardsService := cards.NewService(cardsRepo)
-	fraudService := fraud.NewService(fraudRepo)
 	// Remesa a otro pais: sin corresponsal que la entregue, marcarla completada
 	// le dice al remitente que su plata cruzo la frontera sin que haya salido
 	// nada. Misma politica que los convenios de recibos y los cobros del
