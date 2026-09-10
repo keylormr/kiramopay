@@ -473,6 +473,40 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - name: type
+          in: query
+          schema: { type: string }
+          description: Exact transaction type, e.g. `sinpe_send`.
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Exact status, e.g. `completed`.
+        - name: currency
+          in: query
+          schema: { type: string }
+          description: Exact ISO currency code.
+        - name: from
+          in: query
+          schema: { type: string }
+          description: >-
+            Inclusive lower bound on `created_at`. RFC3339 or `YYYY-MM-DD`. A
+            malformed value is rejected with 400 rather than ignored: dropping
+            it silently would return the whole history as if it matched.
+        - name: to
+          in: query
+          schema: { type: string }
+          description: >-
+            Exclusive upper bound on `created_at`, same formats as `from`, so a
+            calendar month is exactly [first, first-of-next).
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 100 }
+          description: >-
+            Free text, matched case-insensitively against the counterparty
+            name, the description stored in `metadata`, the external reference
+            and the transaction type. LIKE wildcards in the value are escaped:
+            searching `50%` looks for that text, not for a wildcard. `total`
+            in the response counts the matches, not the page.
       responses:
         '200':
           description: Transaction list

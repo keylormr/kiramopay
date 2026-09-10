@@ -126,6 +126,13 @@ type ListTransactionsRequest struct {
 	// month is exactly [first, first-of-next). Zero values mean unbounded.
 	From time.Time `json:"from,omitempty"`
 	To   time.Time `json:"to,omitempty"`
+	// Search es texto libre. Sin el, el buscador de la pantalla de movimientos
+	// solo podia filtrar las filas que el cliente ya tenia en memoria —las
+	// ultimas 50—, asi que un movimiento del mes pasado simplemente no
+	// aparecia y el usuario concluia que no existia. Se busca contra el
+	// nombre de la contraparte, la descripcion guardada en metadata, la
+	// referencia externa y el tipo de movimiento.
+	Search string `json:"search,omitempty"`
 }
 
 type TransactionListResponse struct {

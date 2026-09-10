@@ -739,6 +739,18 @@ export interface paths {
                 query?: {
                     limit?: components["parameters"]["Limit"];
                     offset?: components["parameters"]["Offset"];
+                    /** @description Exact transaction type, e.g. `sinpe_send`. */
+                    type?: string;
+                    /** @description Exact status, e.g. `completed`. */
+                    status?: string;
+                    /** @description Exact ISO currency code. */
+                    currency?: string;
+                    /** @description Inclusive lower bound on `created_at`. RFC3339 or `YYYY-MM-DD`. A malformed value is rejected with 400 rather than ignored: dropping it silently would return the whole history as if it matched. */
+                    from?: string;
+                    /** @description Exclusive upper bound on `created_at`, same formats as `from`, so a calendar month is exactly [first, first-of-next). */
+                    to?: string;
+                    /** @description Free text, matched case-insensitively against the counterparty name, the description stored in `metadata`, the external reference and the transaction type. LIKE wildcards in the value are escaped: searching `50%` looks for that text, not for a wildcard. `total` in the response counts the matches, not the page. */
+                    search?: string;
                 };
                 header?: never;
                 path?: never;
@@ -758,7 +770,11 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a transaction */
+        /**
+         * Retired — always returns 400
+         * @deprecated
+         * @description This endpoint no longer creates transactions. It used to accept a whitelist of seven "outgoing" types and post a SINGLE-SIDED ledger entry against SYSTEM:EXTERNAL — debiting the wallet while nothing on the other side delivered anything — bypassing the agreement lock that keeps bill payments and top-ups switched off, the recipient checks in the SINPE module, the merchant credit and commission on QR payments, and the crypto holdings credit. Every one of those movements has its own route that actually delivers; the error body names it (`USE_DEDICATED_ROUTE`).
+         */
         post: {
             parameters: {
                 query?: never;
@@ -772,8 +788,8 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Transaction created */
-                201: {
+                /** @description Always. `USE_DEDICATED_ROUTE` when the type has a route that delivers it, `TYPE_NOT_ALLOWED` otherwise. */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5617,6 +5633,11 @@ export interface components {
             websocket_clients: number;
             /** @description Residual cache-vs-journal drift (minor units) from the last reconcile. */
             last_drift_crc: number;
+            /**
+             * @description Days of remaining coverage in the `transactions` range partitions. The table has no DEFAULT partition, so once coverage runs out every money movement fails on insert — this is the runway before that. A value of -1 means the runway could not be read yet.
+             * @example 420
+             */
+            dias_de_particiones: number;
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
                 /** @enum {string} */

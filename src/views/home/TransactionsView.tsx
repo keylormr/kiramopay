@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/hooks/useApp';
+import { getApiLayer } from '@/api';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
 import { Icons } from '@/components/Icons';
@@ -34,6 +35,27 @@ function getCategoryStyle(category?: string) {
 // Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
 const ccyDe = (tx: Transaction) => tx.ccy || 'CRC';
 
+// El tope del servidor por pagina.
+const TAMANO_PAGINA = 100;
+
+// Las tres tarjetas de resumen comparten el ancho de la pantalla, asi que el
+// monto tenia `truncate` y salia "+₡8,075…". Mientras los totales cubrian 50
+// filas eso rara vez pasaba; cubriendo el historial completo es lo normal, y un
+// total a medias no es un total. Se achica la letra en vez de cortar el numero.
+//
+// La escalera solo aplica en pantalla angosta: apretadas contra los 390px del
+// telefono las tres tarjetas dejan unos 85px al numero. De `sm` en adelante hay
+// ancho de sobra y el monto vuelve a su tamano normal.
+function claseDeMonto(texto: string): string {
+  const escalera =
+    texto.length > 13 ? 'text-[10px]' : texto.length > 11 ? 'text-xs' : texto.length > 9 ? 'text-sm' : 'text-base';
+  return `${escalera} sm:text-base`;
+}
+
+// Cuanto se espera antes de preguntarle al servidor. Sin esta espera, cada
+// tecla seria una consulta.
+const ESPERA_BUSQUEDA_MS = 350;
+
 export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state } = useApp();
   const { t } = useLanguage();
@@ -47,8 +69,89 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     setTimeout(() => setToast(null), 2500);
   };
 
+  // La busqueda la resuelve el SERVIDOR, sobre TODO el historial.
+  //
+  // Antes esta pantalla filtraba `state.transactions`, que son las ultimas 50
+  // filas que sincronizo la aplicacion: un movimiento del mes pasado no
+  // aparecia por mas que se escribiera su nombre exacto, y —peor— las tarjetas
+  // de arriba sumaban esas mismas 50 filas y presentaban el resultado como si
+  // fuera el total del periodo.
+  //
+  // `consulta` es el texto ya asentado; `search` es lo que se esta tecleando.
+  const [consulta, setConsulta] = useState('');
+  const [pagina, setPagina] = useState<{ clave: string; txs: Transaction[]; total: number } | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [modoLocal, setModoLocal] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => setConsulta(search.trim()), ESPERA_BUSQUEDA_MS);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      setCargando(true);
+      try {
+        const res = await getApiLayer().transactions.listTransactions({
+          limit: TAMANO_PAGINA,
+          offset: 0,
+          search: consulta || undefined,
+        });
+        if (cancelado) return;
+        if (!res.success || !res.data) throw new Error('sin datos');
+        setModoLocal(false);
+        setPagina({ clave: consulta, txs: res.data.transactions, total: res.data.total });
+      } catch {
+        // Sin servidor no hay forma de buscar sobre el historial completo. Se
+        // cae a lo que este dispositivo tiene guardado Y SE DICE: un resultado
+        // parcial presentado como completo es peor que no tener buscador.
+        if (cancelado) return;
+        setModoLocal(true);
+        setPagina(null);
+      } finally {
+        if (!cancelado) setCargando(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [consulta]);
+
+  const cargarMas = useCallback(async () => {
+    if (!pagina || cargando) return;
+    const clave = pagina.clave;
+    const desde = pagina.txs.length;
+    setCargando(true);
+    try {
+      const res = await getApiLayer().transactions.listTransactions({
+        limit: TAMANO_PAGINA,
+        offset: desde,
+        search: clave || undefined,
+      });
+      if (!res.success || !res.data) return;
+      const datos = res.data;
+      setPagina((prev) => {
+        // Si mientras tanto cambio la busqueda, esta respuesta ya no es de esta
+        // pantalla.
+        if (!prev || prev.clave !== clave) return prev;
+        // Se acumula POR ID: OFFSET no es estable frente a escrituras. Un
+        // movimiento que entra entre dos paginas corre a todos los demas, asi
+        // que una fila ya traida volveria a llegar y se contaria dos veces en
+        // los totales de arriba.
+        const porId = new Map(prev.txs.map((tx) => [tx.id, tx]));
+        for (const tx of datos.transactions) porId.set(tx.id, tx);
+        return { clave, txs: [...porId.values()], total: datos.total };
+      });
+    } catch {
+      // Se queda con lo que ya se habia traido.
+    } finally {
+      setCargando(false);
+    }
+  }, [pagina, cargando]);
+
   // Derived data
-  const allTransactions = state.transactions;
+  const allTransactions = pagina ? pagina.txs : state.transactions;
   const categories = useMemo(() => {
     const cats = new Set<string>();
     allTransactions.forEach((tx) => { if (tx.category) cats.add(tx.category); });
@@ -60,8 +163,12 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     if (selectedCategory) {
       txs = txs.filter((tx) => tx.category === selectedCategory);
     }
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    // El texto lo filtra el servidor. Aca solo se vuelve a filtrar cuando NO
+    // hubo servidor y se esta mostrando lo guardado en el dispositivo: filtrar
+    // dos veces descartaria filas que el servidor encontro por campos que el
+    // cliente no tiene (el telefono de la contraparte, la referencia externa).
+    if (modoLocal && consulta) {
+      const q = consulta.toLowerCase();
       txs = txs.filter(
         (tx) =>
           txTitle(tx, t).toLowerCase().includes(q) ||
@@ -70,9 +177,9 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
       );
     }
     return txs;
-    // `t` entra en las dependencias porque la búsqueda ahora compara contra el
-    // título resuelto, que depende del idioma activo.
-  }, [allTransactions, selectedCategory, search, t]);
+    // `t` entra en las dependencias porque la búsqueda del respaldo local
+    // compara contra el título resuelto, que depende del idioma activo.
+  }, [allTransactions, selectedCategory, modoLocal, consulta, t]);
 
   // Las tarjetas de resumen rotulan UNA moneda, asi que suman UNA moneda. Cada
   // fila de la lista ya se formatea con su propia tx.ccy; los totales sumaban
@@ -165,33 +272,41 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
         <div className="px-4 pt-4 pb-2">
           <div className="grid grid-cols-3 gap-3">
             {/* Income */}
-            <div className="uv-surface-1 rounded-2xl p-3.5 uv-shadow-soft">
+            <div className="uv-surface-1 rounded-2xl p-2.5 uv-shadow-soft overflow-hidden">
               <div className="flex items-center gap-1.5 mb-2">
                 <div className="w-6 h-6 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
                   <Icons.ArrowDownLeft size={12} className="text-[var(--color-success)]" />
                 </div>
                 <span className="text-[10px] font-bold text-[var(--color-success)] uppercase tracking-wider">{t('income')}</span>
               </div>
-              <div className="text-base font-extrabold text-[var(--color-success)] truncate tabular-nums">
+              <div
+                className={`font-extrabold text-[var(--color-success)] whitespace-nowrap tabular-nums ${claseDeMonto(
+                  `+${formatCurrency(totalIncome, resumenCcy)}`,
+                )}`}
+              >
                 +{formatCurrency(totalIncome, resumenCcy)}
               </div>
             </div>
 
             {/* Expenses */}
-            <div className="uv-surface-1 rounded-2xl p-3.5 uv-shadow-soft">
+            <div className="uv-surface-1 rounded-2xl p-2.5 uv-shadow-soft overflow-hidden">
               <div className="flex items-center gap-1.5 mb-2">
                 <div className="w-6 h-6 rounded-full bg-[var(--color-danger-soft)] flex items-center justify-center">
                   <Icons.ArrowUpRight size={12} className="text-[var(--color-danger)]" />
                 </div>
                 <span className="text-[10px] font-bold text-[var(--color-danger)] uppercase tracking-wider">{t('expenses')}</span>
               </div>
-              <div className="text-base font-extrabold text-[var(--color-danger)] truncate tabular-nums">
+              <div
+                className={`font-extrabold text-[var(--color-danger)] whitespace-nowrap tabular-nums ${claseDeMonto(
+                  `-${formatCurrency(totalExpenses, resumenCcy)}`,
+                )}`}
+              >
                 -{formatCurrency(totalExpenses, resumenCcy)}
               </div>
             </div>
 
             {/* Net */}
-            <div className="uv-surface-1 rounded-2xl p-3.5 uv-shadow-soft">
+            <div className="uv-surface-1 rounded-2xl p-2.5 uv-shadow-soft overflow-hidden">
               <div className="flex items-center gap-1.5 mb-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                   net >= 0 ? 'bg-[var(--color-primary-soft)]' : 'bg-[var(--color-warning-soft)]'
@@ -202,9 +317,11 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                   net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
                 }`}>{t('net_balance')}</span>
               </div>
-              <div className={`text-base font-extrabold truncate tabular-nums ${
-                net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
-              }`}>
+              <div
+                className={`font-extrabold whitespace-nowrap tabular-nums ${
+                  net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
+                } ${claseDeMonto(`${net >= 0 ? '+' : ''}${formatCurrency(net, resumenCcy)}`)}`}
+              >
                 {net >= 0 ? '+' : ''}{formatCurrency(net, resumenCcy)}
               </div>
             </div>
@@ -216,6 +333,29 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
             <p className="mt-2 px-1 text-xs uv-text-muted">
               {t('other_currency_note').replace('{n}', String(otrasMonedas))}
             </p>
+          )}
+
+          {/* Que tanto del historial cubren estos totales. Un subtotal de la
+              primera pagina presentado como el total del periodo es un numero
+              falso, y es lo que esta pantalla hacia. */}
+          {pagina && filtered.length < pagina.total && (
+            <p className="mt-2 px-1 text-xs uv-text-muted">
+              {t('tx_totals_scope')
+                .replace('{shown}', String(filtered.length))
+                .replace('{total}', String(pagina.total))}
+            </p>
+          )}
+          {pagina && pagina.txs.length < pagina.total && (
+            <button
+              onClick={cargarMas}
+              disabled={cargando}
+              className="mt-2 px-3 py-1.5 rounded-lg bg-[var(--color-primary-soft)] text-[var(--color-primary)] text-xs font-bold disabled:opacity-60"
+            >
+              {cargando ? t('loading') : t('tx_load_more')}
+            </button>
+          )}
+          {modoLocal && (
+            <p className="mt-2 px-1 text-xs text-[var(--color-warning)]">{t('tx_local_only')}</p>
           )}
         </div>
 

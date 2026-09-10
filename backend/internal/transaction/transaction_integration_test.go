@@ -326,3 +326,110 @@ func TestListTransactions_FilterByType(t *testing.T) {
 		t.Fatalf("expected 1 deposit, got %d", resp.Total)
 	}
 }
+
+// El buscador de la pantalla de movimientos filtraba lo que el cliente ya tenia
+// en memoria —las ultimas 50 filas—, asi que un movimiento del mes pasado no
+// aparecia y el usuario concluia que no existia. Ahora busca el SERVIDOR, sobre
+// todo el historial, y el Total que devuelve es el de la busqueda: es lo que
+// permite decir cuantos movimientos hay de verdad y no cuantos se alcanzaron a
+// bajar.
+func TestListTransactions_BusquedaPorTexto(t *testing.T) {
+	svc, userID := setupTxService(t)
+	ctx := context.Background()
+
+	crear := func(tipo, nombre, descripcion string) {
+		t.Helper()
+		if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+			Type: tipo, Amount: 100000, Currency: "CRC", Internal: true,
+			CounterpartyName: nombre, Description: descripcion,
+		}); err != nil {
+			t.Fatalf("crear %s/%s: %v", tipo, nombre, err)
+		}
+	}
+	crear("deposit", "Panaderia La Espiga", "pan del domingo")
+	crear("deposit", "Ferreteria El Clavo", "tornillos")
+	crear("refund", "", "reembolso de la panaderia")
+
+	buscar := func(q string) *transaction.TransactionListResponse {
+		t.Helper()
+		resp, err := svc.ListTransactions(ctx, userID, &transaction.ListTransactionsRequest{
+			Search: q, Limit: 20,
+		})
+		if err != nil {
+			t.Fatalf("buscar %q: %v", q, err)
+		}
+		return resp
+	}
+
+	// Por nombre de contraparte, sin importar mayusculas.
+	if r := buscar("espiga"); r.Total != 1 || len(r.Transactions) != 1 {
+		t.Fatalf("buscar espiga: total=%d len=%d, se esperaba 1/1", r.Total, len(r.Transactions))
+	}
+	// Por descripcion: la fila del reembolso no tiene contraparte.
+	if r := buscar("reembolso"); r.Total != 1 || len(r.Transactions) != 1 {
+		t.Fatalf("buscar reembolso: total=%d len=%d, se esperaba 1/1", r.Total, len(r.Transactions))
+	}
+	// "panaderia" aparece en el nombre de una fila y en la descripcion de otra.
+	if r := buscar("panaderia"); r.Total != 2 {
+		t.Fatalf("buscar panaderia: total=%d, se esperaba 2", r.Total)
+	}
+	// Por tipo de movimiento, que es lo que la pantalla rotula traducido.
+	if r := buscar("refund"); r.Total != 1 {
+		t.Fatalf("buscar refund: total=%d, se esperaba 1", r.Total)
+	}
+	// Lo que no existe, no aparece.
+	if r := buscar("bicicleta"); r.Total != 0 || len(r.Transactions) != 0 {
+		t.Fatalf("buscar bicicleta: total=%d len=%d, se esperaba 0/0", r.Total, len(r.Transactions))
+	}
+	// Espacios alrededor no cambian la busqueda.
+	if r := buscar("  espiga  "); r.Total != 1 {
+		t.Fatalf("buscar con espacios: total=%d, se esperaba 1", r.Total)
+	}
+	// Un texto vacio NO es un filtro: devuelve el historial completo.
+	if r := buscar("   "); r.Total != 3 {
+		t.Fatalf("buscar vacio: total=%d, se esperaba 3 (sin filtrar)", r.Total)
+	}
+}
+
+// Los comodines de LIKE se escapan. Sin esto, quien busca "%" recibe TODO el
+// historial como si fuera el resultado de su busqueda.
+func TestListTransactions_BusquedaEscapaComodines(t *testing.T) {
+	svc, userID := setupTxService(t)
+	ctx := context.Background()
+
+	for _, nombre := range []string{"Descuento 50% martes", "Tienda normal"} {
+		if _, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+			Type: "deposit", Amount: 100000, Currency: "CRC", Internal: true,
+			CounterpartyName: nombre,
+		}); err != nil {
+			t.Fatalf("crear %s: %v", nombre, err)
+		}
+	}
+
+	buscar := func(q string) int {
+		t.Helper()
+		resp, err := svc.ListTransactions(ctx, userID, &transaction.ListTransactionsRequest{
+			Search: q, Limit: 20,
+		})
+		if err != nil {
+			t.Fatalf("buscar %q: %v", q, err)
+		}
+		return resp.Total
+	}
+
+	// "%" es un caracter que la persona escribio, no un comodin.
+	if n := buscar("%"); n != 1 {
+		t.Fatalf("buscar %%: total=%d, se esperaba 1 (solo la fila que lo contiene)", n)
+	}
+	if n := buscar("50%"); n != 1 {
+		t.Fatalf("buscar 50%%: total=%d, se esperaba 1", n)
+	}
+	// "_" tampoco comodinea: ninguna fila lo contiene.
+	if n := buscar("_"); n != 0 {
+		t.Fatalf("buscar _: total=%d, se esperaba 0", n)
+	}
+	// Y la barra invertida no rompe el patron.
+	if n := buscar(`\`); n != 0 {
+		t.Fatalf(`buscar \: total=%d, se esperaba 0`, n)
+	}
+}

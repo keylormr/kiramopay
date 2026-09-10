@@ -49,6 +49,16 @@ export class MockTransactionRepository implements ITransactionRepository {
         return true;
       });
     }
+    // La misma busqueda que hace el servidor: nombre/titulo, descripcion y
+    // tipo de movimiento, sin distinguir mayusculas.
+    const q = (params.search ?? '').trim().toLowerCase();
+    if (q) {
+      txs = txs.filter((tx) =>
+        [tx.title, tx.description, tx.kind, tx.category].some((campo) =>
+          (campo || '').toLowerCase().includes(q),
+        ),
+      );
+    }
     const total = txs.length;
     const offset = params.offset ?? 0;
     const limit = params.limit ?? total;

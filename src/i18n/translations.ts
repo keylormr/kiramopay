@@ -777,6 +777,11 @@ export type TranslationKeys = {
   analytics_partial: string;
   analytics_offline: string;
   other_currency_note: string;
+  // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
+  // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
+  tx_totals_scope: string;
+  tx_load_more: string;
+  tx_local_only: string;
   boot_connecting: string;
   boot_waking: string;
   update_title: string;

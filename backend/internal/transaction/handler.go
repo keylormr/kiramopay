@@ -87,6 +87,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		Currency: q.Get("currency"),
 		From:     from,
 		To:       to,
+		Search:   q.Get("search"),
 	}
 
 	result, err := h.service.ListTransactions(r.Context(), userID, req)
