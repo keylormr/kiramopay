@@ -11,7 +11,26 @@ import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
-import type { QRPaymentCode } from '@/api/repositories/qrpayment.repository';
+import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
+import { mensajeDeCobro } from '@/utils/erroresQr';
+
+/**
+ * Viste un cobro con la forma que la pantalla ya sabe pintar. Un pedido de
+ * plata ES un cobro: monto, nota, vencimiento y su propio QR.
+ */
+function cobroComoCodigo(c: QRCharge): QRPaymentCode {
+  return {
+    id: c.id,
+    type: 'p2p_request',
+    amount: c.amount,
+    currency: c.currency,
+    note: c.note,
+    qrData: c.qrData,
+    singleUse: true,
+    used: c.status === 'paid',
+    expiresAt: c.expiresAt,
+  };
+}
 
 // Bancos de Costa Rica para selección
 const BANKS = [
@@ -58,6 +77,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [lastTransaction, setLastTransaction] = useState<SinpeTransaction | null>(null);
   // QR de solicitud de dinero generado (riel real de cobro por QR).
   const [requestQr, setRequestQr] = useState<QRPaymentCode | null>(null);
+  // Los pedidos vivos. Hasta ahora un pedido de plata era un texto que se iba
+  // por WhatsApp y no se podia consultar: no habia forma de saber si te
+  // pagaron ni de cancelarlo.
+  const [pedidos, setPedidos] = useState<QRCharge[]>([]);
   const [requestQrError, setRequestQrError] = useState('');
 
   // Add contact form states
@@ -197,6 +220,13 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
   // Solicitar dinero genera un QR de cobro REAL (mismo riel que "Cobrar con
   // QR" del Inicio): el que paga solo lo escanea. Antes esto armaba apenas un
+  const cargarPedidos = async () => {
+    const api = getApiLayer();
+    if (!api.qrPayments) return;
+    const res = await api.qrPayments.listCharges('pending');
+    if (res.success && res.data) setPedidos(res.data);
+  };
+
   // texto para compartir — a pedido del cliente, ahora el QR es lo primero.
   const handleRequestMoney = async () => {
     if (!amount) return;
@@ -211,20 +241,46 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
     setIsProcessing(true);
     setRequestQrError('');
-    const res = await api.qrPayments.createQRCode({
-      type: 'p2p_request',
+    // Un pedido de plata es un COBRO contra el codigo permanente, no un codigo
+    // nuevo: el codigo de siempre queda libre y se pueden tener varios pedidos
+    // vivos a la vez, cada uno con su propio QR y su monto.
+    const codigo = await api.qrPayments.getMyCode('CRC');
+    if (!codigo.success || !codigo.data) {
+      setIsProcessing(false);
+      setRequestQrError(codigo.error?.message || t('qr_gen_error'));
+      return;
+    }
+    const res = await api.qrPayments.createCharge({
+      qrCodeId: codigo.data.id,
       amount: numAmount,
-      currency: 'CRC',
       note: reference || undefined,
-      singleUse: true,
+      channel: 'link',
     });
     setIsProcessing(false);
 
     if (res.success && res.data) {
-      setRequestQr(res.data);
+      setRequestQr(cobroComoCodigo(res.data));
+      void cargarPedidos();
     } else {
-      setRequestQrError(res.error?.message || t('qr_gen_error'));
+      setRequestQrError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
     }
+  };
+
+  // Los pedidos vivos se traen al abrir la hoja: es la unica forma de saber si
+  // ya te pagaron uno, y de poder cancelarlo.
+  useEffect(() => {
+    if (!showReceiveSheet) return;
+    void cargarPedidos();
+  }, [showReceiveSheet]);
+
+  const cancelarPedido = async (id: string) => {
+    const api = getApiLayer();
+    if (!api.qrPayments) return;
+    const res = await api.qrPayments.cancelCharge(id);
+    if (!res.success && res.error?.code !== 'COBRO_CANCELADO') {
+      setRequestQrError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+    }
+    void cargarPedidos();
   };
 
   // Compartir la solicitud por cualquier canal (el texto lleva monto y numero
@@ -996,10 +1052,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 {copiedText === 'request' ? t('copied') : t('share')}
               </button>
               <button
-                onClick={() => { setRequestQr(null); setAmount(''); setReference(''); }}
+                onClick={() => { setRequestQr(null); setAmount(''); setReference(''); void cargarPedidos(); }}
                 className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
               >
-                {t('new_qr')}
+                {t('request_money')}
               </button>
             </div>
           </div>
@@ -1053,6 +1109,45 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               </>
             )}
           </button>
+
+          {/* Pedidos vivos. Antes un pedido de plata era un texto que se iba
+              por WhatsApp: no habia forma de saber si te pagaron ni de
+              cancelarlo. Ahora cada uno es una fila con estado propio. */}
+          <div>
+            <p className="text-xs text-gray-500 font-bold uppercase mb-2">{t('qr_solicitudes_activas')}</p>
+            {pedidos.length === 0 ? (
+              <p className="text-sm uv-text-muted">{t('qr_sin_solicitudes')}</p>
+            ) : (
+              <ul className="space-y-2">
+                {pedidos.map((pd) => (
+                  <li
+                    key={pd.id}
+                    className="flex items-center justify-between gap-3 uv-surface-2 rounded-xl px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold uv-text-primary tabular-nums">{formatCurrency(pd.amount)}</p>
+                      {pd.note && <p className="text-xs uv-text-muted truncate">{pd.note}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setRequestQr(cobroComoCodigo(pd))}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]"
+                      >
+                        {t('view_all')}
+                      </button>
+                      <button
+                        onClick={() => void cancelarPedido(pd.id)}
+                        aria-label={t('cancel')}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--color-danger)]"
+                      >
+                        {t('cancel')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
         )}
       </BottomSheet>

@@ -14,7 +14,8 @@ import { txTitle } from '../../utils/txTitle';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
-import type { QRPaymentCode, QRPayment } from '@/api/repositories/qrpayment.repository';
+import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
+import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
 import { getTxTime } from '@/utils/fechasTx';
@@ -85,6 +86,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // China/Pix: cobrar por QR, sin datafono.
   const [cobrarAmount, setCobrarAmount] = useState('');
   const [cobrarCode, setCobrarCode] = useState<QRPaymentCode | null>(null);
+  // El cobro con monto es una fila aparte del codigo permanente: el rotulo se
+  // queda intacto debajo y el monto viaja en su propio QR.
+  const [cobrarCharge, setCobrarCharge] = useState<QRCharge | null>(null);
+  // Lo que el servidor dice del codigo escaneado: sobre todo, A QUIEN se le
+  // paga. La hoja de pago no lo mostraba nunca, y con un codigo pegado en un
+  // mostrador el fraude es tapar el de uno con el de otro.
+  const [resuelto, setResuelto] = useState<ResolvedQR | null>(null);
+  const [resolviendo, setResolviendo] = useState(false);
+  // Nonce del pago de MONTO ABIERTO. Vive en un ref y NO se acuna dentro del
+  // adaptador: el cliente reintenta la peticion entera tras un refresh
+  // silencioso de 401, y ese reintento tiene que llevar el mismo nonce.
+  const idemPagoRef = useRef('');
   const [cobrarLoading, setCobrarLoading] = useState(false);
   const [cobrarError, setCobrarError] = useState('');
 
@@ -235,10 +248,49 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     }
   };
 
+  // Antes de ofrecer un boton de pagar, preguntar A QUIEN se le paga. El monto
+  // se pinta al instante desde la cadena (parsearQrKiramo se conserva justo
+  // para eso); el nombre llega cuando contesta el servidor, y si el servidor no
+  // contesta el pago sigue siendo posible.
+  useEffect(() => {
+    if (!scannedQrData) {
+      setResuelto(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      setResolviendo(true);
+      try {
+        const api = getApiLayer();
+        if (!api.qrPayments) return;
+        const res = await api.qrPayments.resolveQr(scannedQrData);
+        if (cancelado) return;
+        if (res.success && res.data) setResuelto(res.data);
+        else setPayError(mensajeDeCobro(t, res.error?.code) || '');
+      } catch {
+        /* degradado: se paga igual, sin el nombre */
+      } finally {
+        if (!cancelado) setResolviendo(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [scannedQrData, t]);
+
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
   // el ledger). Generar el código no movía dinero; esto sí.
   const handleScannedPayment = async () => {
     if (!scannedQrData) return;
+    const amt = parseFloat(paymentAmount);
+    const montoAbierto = !resuelto?.chargeId;
+    // El nonce se acuna al TOCAR PAGAR, no antes, y solo para el monto abierto:
+    // un cobro es de un solo uso y no lo necesita. Sin guiones porque la llave
+    // completa tiene que caber en la columna del libro.
+    if (montoAbierto && !idemPagoRef.current) {
+      idemPagoRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID().replace(/-/g, '')
+          : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+    }
     setPayLoading(true);
     setPayError('');
     try {
@@ -247,50 +299,114 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         setPayError(t('qr_pay_error'));
         return;
       }
-      const amt = parseFloat(paymentAmount);
       const res = await api.qrPayments.scanAndPay({
         qrData: scannedQrData,
         amount: Number.isFinite(amt) && amt > 0 ? amt : undefined,
         currency: baseAccount?.ccy ?? 'CRC',
+        chargeId: resuelto?.chargeId,
+        idempotencyKey: montoAbierto ? idemPagoRef.current : undefined,
       });
       if (res.success && res.data) {
+        idemPagoRef.current = '';
         setPayResult(res.data);
         refreshAccounts().catch(() => {});
-      } else {
-        setPayError(res.error?.message || t('qr_pay_error'));
+        return;
       }
+      // El nonce se suelta cuando el servidor RECHAZO el pago: el reintento
+      // corregido es un pago nuevo. NO se suelta cuando la respuesta nunca
+      // llego (red, timeout, 5xx), porque ahi el pago pudo haberse hecho y
+      // soltarlo convierte un reintento en un doble cobro.
+      const codigo = res.error?.code ?? '';
+      const sinRespuesta = codigo === 'NETWORK_ERROR' || codigo === 'TIMEOUT' || codigo === 'SERVER_ERROR';
+      if (!sinRespuesta) idemPagoRef.current = '';
+      setPayError(mensajeDeCobro(t, codigo) || res.error?.message || t('qr_pay_error'));
     } catch {
+      // Excepcion sin respuesta del servidor: el nonce se CONSERVA.
       setPayError(t('qr_pay_error'));
     } finally {
       setPayLoading(false);
     }
   };
 
-  // Genera un QR de cobro real contra el riel QR del backend.
-  const handleGenerateCobrar = async () => {
+  // El codigo permanente ya esta cuando se abre la hoja: no hay paso previo de
+  // "Generar QR". Antes cada toque de ese boton creaba una fila nueva,
+  // permanente y pagable para siempre.
+  useEffect(() => {
+    if (activeSheet !== 'cobrar' || cobrarCode) return;
+    let cancelado = false;
+    (async () => {
+      setCobrarLoading(true);
+      setCobrarError('');
+      try {
+        const api = getApiLayer();
+        if (!api.qrPayments) {
+          if (!cancelado) setCobrarError(t('qr_gen_error'));
+          return;
+        }
+        const res = await api.qrPayments.getMyCode(baseAccount?.ccy ?? 'CRC');
+        if (cancelado) return;
+        if (res.success && res.data) setCobrarCode(res.data);
+        else setCobrarError(res.error?.message || t('qr_gen_error'));
+      } catch {
+        if (!cancelado) setCobrarError(t('qr_gen_error'));
+      } finally {
+        if (!cancelado) setCobrarLoading(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [activeSheet, cobrarCode, baseAccount?.ccy, t]);
+
+  // Cobrar un monto NO genera un codigo nuevo: emite un cobro contra el codigo
+  // de siempre. Cambiarlo tampoco edita la fila — la reemplaza, y queda el
+  // rastro de que se pidio 5.000 y luego 7.500.
+  const handleCobrarMonto = async () => {
+    const monto = parseFloat(cobrarAmount);
+    if (!cobrarCode || !Number.isFinite(monto) || monto <= 0) return;
     setCobrarLoading(true);
     setCobrarError('');
-    setCobrarCode(null);
     try {
       const api = getApiLayer();
       if (!api.qrPayments) {
         setCobrarError(t('qr_gen_error'));
         return;
       }
-      const amt = parseFloat(cobrarAmount);
-      const res = await api.qrPayments.createQRCode({
-        type: 'p2p_receive',
-        amount: Number.isFinite(amt) && amt > 0 ? amt : undefined,
-        currency: baseAccount?.ccy ?? 'CRC',
-        singleUse: false,
+      const res = await api.qrPayments.createCharge({
+        qrCodeId: cobrarCode.id,
+        amount: monto,
+        channel: 'link',
+        replaces: cobrarCharge?.id,
       });
       if (res.success && res.data) {
-        setCobrarCode(res.data);
+        setCobrarCharge(res.data);
+        setCobrarAmount('');
       } else {
-        setCobrarError(res.error?.message || t('qr_gen_error'));
+        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        // Si el cobro viejo ya se pago, el estado en pantalla esta atrasado.
+        if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
       }
     } catch {
       setCobrarError(t('qr_gen_error'));
+    } finally {
+      setCobrarLoading(false);
+    }
+  };
+
+  // Quitar el monto vuelve al codigo abierto. Sobre un cobro ya pagado NO dice
+  // "cancelado": eso es como se llega a pedir el pago dos veces.
+  const handleQuitarMonto = async () => {
+    if (!cobrarCharge) return;
+    setCobrarLoading(true);
+    setCobrarError('');
+    try {
+      const api = getApiLayer();
+      if (!api.qrPayments) return;
+      const res = await api.qrPayments.cancelCharge(cobrarCharge.id);
+      if (res.success || res.error?.code === 'COBRO_CANCELADO') {
+        setCobrarCharge(null);
+      } else {
+        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
+      }
     } finally {
       setCobrarLoading(false);
     }
@@ -639,68 +755,85 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
       {/* --- Bottom Sheets --- */}
 
-      {/* Cobrar con QR — genera un QR de cobro real (modelo China/Pix: sin datafono) */}
+      {/* Cobrar con QR. El codigo permanente esta SIEMPRE: cobrar un monto no
+          genera otro, emite un cobro con su propio QR y el rotulo se queda
+          intacto debajo. */}
       <BottomSheet
         isOpen={activeSheet === 'cobrar'}
-        onClose={() => { setActiveSheet('none'); setCobrarAmount(''); setCobrarCode(null); setCobrarError(''); }}
+        onClose={() => { setActiveSheet('none'); setCobrarAmount(''); setCobrarError(''); }}
         title={t('charge_qr')}
       >
-        <div className="p-2 space-y-6">
+        <div className="p-2 space-y-5">
+          {cobrarError && (
+            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{cobrarError}</p>
+          )}
+
           {!cobrarCode ? (
-            <>
-              <div className="text-center">
-                <label className="text-sm text-gray-500">{t('charge_amount_optional')}</label>
-                <div className="flex items-center justify-center gap-2 mt-2">
-                  <span className="text-4xl font-bold uv-text-primary">{baseAccount?.symbol ?? '₡'}</span>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center space-y-4">
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
+                <QRCodeSVG value={(cobrarCharge ?? cobrarCode).qrData} size={200} />
+              </div>
+
+              {cobrarCharge ? (
+                <div className="text-center">
+                  <p className="text-3xl font-black uv-text-primary tabular-nums">
+                    {formatCurrency(cobrarCharge.amount, cobrarCharge.currency as QRCurrency)}
+                  </p>
+                  <p className="text-xs uv-text-muted mt-1">
+                    {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobrarCharge.expiresAt)))}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+              )}
+
+              {/* El campo de monto es una accion OPCIONAL sobre el codigo que ya
+                  esta en pantalla, no un paso previo para tenerlo. */}
+              <div className="w-full">
+                <label className="text-xs text-gray-500 font-medium mb-1 block">
+                  {t('charge_amount_optional')}
+                </label>
+                <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
+                  <span className="text-xl font-bold text-gray-400 mr-2">{baseAccount?.symbol ?? '₡'}</span>
                   <input
                     type="number"
                     value={cobrarAmount}
                     onChange={(e) => setCobrarAmount(e.target.value)}
                     placeholder="0.00"
-                    className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
-                    autoFocus
+                    className="flex-1 bg-transparent text-xl font-bold outline-none uv-text-primary"
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-2">{t('charge_amount_hint')}</p>
               </div>
 
-              {cobrarError && (
-                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{cobrarError}</p>
-              )}
-
-              <button
-                onClick={handleGenerateCobrar}
-                disabled={cobrarLoading}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {cobrarLoading ? t('generating') : t('generate_qr')}
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center space-y-4">
-              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
-                <QRCodeSVG value={cobrarCode.qrData} size={200} />
-              </div>
-              {cobrarCode.amount > 0 && (
-                <p className="text-3xl font-black uv-text-primary tabular-nums">
-                  {baseAccount?.symbol ?? '₡'}{cobrarCode.amount}
-                </p>
-              )}
-              <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('charge_qr_help')}</p>
               <div className="flex gap-3 w-full">
                 <button
-                  onClick={() => { navigator.clipboard?.writeText(cobrarCode.qrData); }}
+                  onClick={() => { navigator.clipboard?.writeText((cobrarCharge ?? cobrarCode).qrData); }}
                   className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
                 >
                   <Icons.Copy size={18} /> {t('copy')}
                 </button>
                 <button
-                  onClick={() => { setCobrarCode(null); setCobrarAmount(''); }}
-                  className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
+                  onClick={handleCobrarMonto}
+                  disabled={cobrarLoading || !(parseFloat(cobrarAmount) > 0)}
+                  className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold disabled:opacity-50"
                 >
-                  {t('new_qr')}
+                  {cobrarLoading ? t('loading') : cobrarCharge ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
                 </button>
               </div>
+
+              {cobrarCharge && (
+                <button
+                  onClick={handleQuitarMonto}
+                  disabled={cobrarLoading}
+                  className="w-full py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-secondary font-bold disabled:opacity-50"
+                >
+                  {t('qr_quitar_monto')}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -834,10 +967,33 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             // El QR de KiramoPay trae el monto adentro (en centimos): si es
             // fijo, se MUESTRA grande y pagar es UN toque — nada de payload
             // tecnico en pantalla ni de teclear lo que el codigo ya dice.
+            // El monto sale de la cadena al instante, para que no haya
+            // pantalla en blanco entre escanear y ver cuanto se debe; el
+            // nombre de quien cobra llega cuando contesta /qr/resolve.
             const qr = parsearQrKiramo(scannedQrData || '');
-            const montoFijo = qr && qr.monto > 0 ? qr.monto : null;
+            const montoFijo = resuelto?.amount
+              ? resuelto.amount
+              : (qr && qr.monto > 0 ? qr.monto : null);
+            const cobrador = resuelto?.merchantName || resuelto?.payeeName || '';
             return (
               <div className="space-y-6">
+                {/* A quien se le paga va PRIMERO. Un codigo pegado en un
+                    mostrador se puede tapar con el de otro, y hasta ahora la
+                    hoja de pago no mostraba nunca quien recibe. */}
+                <div className="text-center pt-2">
+                  <p className="text-xs uv-text-muted uppercase tracking-wider">{t('qr_le_pagas_a')}</p>
+                  {cobrador ? (
+                    <>
+                      <p className="text-lg font-bold uv-text-primary">{cobrador}</p>
+                      {resuelto?.locationName && (
+                        <p className="text-xs uv-text-muted">{resuelto.locationName}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm uv-text-muted">{resolviendo ? t('qr_verificando') : '—'}</p>
+                  )}
+                </div>
+
                 <div className="text-center py-2">
                   {montoFijo !== null ? (
                     <>

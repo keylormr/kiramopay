@@ -49,8 +49,16 @@ export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFaile
                   {t('merchant_gross')} {money(p.amount, p.currency)} · {t('merchant_fee_label')} {money(p.fee, p.currency)}
                 </p>
               </div>
-              <p className="text-[11px] uv-text-muted shrink-0">
-                {new Date(p.createdAt).toLocaleDateString()}
+              {/* Con la HORA, no solo la fecha: dos ventas de 2.500 el mismo
+                  dia eran dos filas identicas y el cajero no podia reconciliar
+                  a mano cual era cual. */}
+              <p className="text-[11px] uv-text-muted shrink-0 tabular-nums">
+                {new Date(p.createdAt).toLocaleString(undefined, {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </p>
             </div>
           ))}

@@ -14,6 +14,10 @@ import type {
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
+  QRCharge,
+  QRChargeStatus,
+  CreateChargeRequest,
+  ResolvedQR,
 } from '../../repositories/qrpayment.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -161,6 +165,47 @@ interface QRCodeDTO {
   expires_at: string;
   merchant_id?: string;
   location_id?: string;
+  status?: string;
+}
+
+interface ChargeDTO {
+  id: string;
+  qr_code_id: string;
+  merchant_id?: string;
+  location_id?: string;
+  created_by: string;
+  amount: number;
+  currency: string;
+  note?: string;
+  channel: string;
+  status: string;
+  qr_data: string;
+  expires_at: string;
+  paid_by?: string;
+  paid_at?: string;
+  superseded_by?: string;
+  created_at: string;
+}
+
+function mapCharge(d: ChargeDTO): QRCharge {
+  return {
+    id: d.id,
+    qrCodeId: d.qr_code_id,
+    merchantId: d.merchant_id || undefined,
+    locationId: d.location_id || undefined,
+    createdBy: d.created_by,
+    amount: (d.amount || 0) / 100,
+    currency: d.currency,
+    note: d.note || undefined,
+    channel: (d.channel as QRCharge['channel']) || 'counter',
+    status: d.status as QRCharge['status'],
+    qrData: d.qr_data,
+    expiresAt: d.expires_at,
+    paidBy: d.paid_by || undefined,
+    paidAt: d.paid_at || undefined,
+    supersededBy: d.superseded_by || undefined,
+    createdAt: d.created_at,
+  };
 }
 
 function mapCode(d: QRCodeDTO): QRPaymentCode {
@@ -176,6 +221,7 @@ function mapCode(d: QRCodeDTO): QRPaymentCode {
     expiresAt: d.expires_at || undefined,
     merchantId: d.merchant_id || undefined,
     locationId: d.location_id || undefined,
+    status: (d.status as QRPaymentCode['status']) || undefined,
   };
 }
 
@@ -265,10 +311,109 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       qr_data: request.qrData,
       amount: request.amount ? request.amount * 100 : 0,
       currency: request.currency,
+      charge_id: request.chargeId,
+      idempotency_key: request.idempotencyKey,
     });
 
-    if (!res.success || !res.data) return apiError('PAYMENT_FAILED', res.error?.message || 'Failed');
+    // El codigo del servidor se conserva. Reescribirlo a PAYMENT_FAILED borraba
+    // COBRO_REEMPLAZADO, COBRO_YA_PAGADO, QR_REVOCADO y los demas: la pantalla
+    // decia "no se pudo pagar" sin poder explicar por que.
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'PAYMENT_FAILED', res.error?.message || 'Failed');
+    }
     return apiSuccess(mapPayment(res.data));
+  }
+
+  // ── El QR reciclable ──────────────────────────────────────────────────────
+
+  async getMyCode(currency = 'CRC'): Promise<ApiResponse<QRPaymentCode>> {
+    const res = await this.client.get<QRCodeDTO>(`/api/v1/qr/codes/me?currency=${encodeURIComponent(currency)}`);
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+    }
+    return apiSuccess(mapCode(res.data));
+  }
+
+  async getMerchantCode(
+    merchantId: string,
+    opts: { locationId?: string; currency?: string } = {},
+  ): Promise<ApiResponse<QRPaymentCode>> {
+    const q = new URLSearchParams({ currency: opts.currency || 'CRC' });
+    if (opts.locationId) q.set('location_id', opts.locationId);
+    const res = await this.client.get<QRCodeDTO>(`/api/v1/qr/merchants/${merchantId}/code?${q.toString()}`);
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+    }
+    return apiSuccess(mapCode(res.data));
+  }
+
+  async revokeCode(codeId: string): Promise<ApiResponse<void>> {
+    const res = await this.client.post<void>(`/api/v1/qr/codes/${codeId}/revoke`, {});
+    if (!res.success) return apiError(res.error?.code || 'REVOKE_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(undefined as void);
+  }
+
+  async resolveQr(qrData: string): Promise<ApiResponse<ResolvedQR>> {
+    interface ResolveDTO {
+      kind: string; payee_name?: string; merchant_name?: string; location_name?: string;
+      currency: string; amount: number; note?: string; status?: string;
+      expires_at?: string; charge_id?: string; qr_code_id: string;
+    }
+    const res = await this.client.post<ResolveDTO>('/api/v1/qr/resolve', { qr_data: qrData });
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'RESOLVE_FAILED', res.error?.message || 'Failed');
+    }
+    const d = res.data;
+    return apiSuccess({
+      kind: d.kind as ResolvedQR['kind'],
+      payeeName: d.payee_name || undefined,
+      merchantName: d.merchant_name || undefined,
+      locationName: d.location_name || undefined,
+      currency: d.currency,
+      amount: (d.amount || 0) / 100,
+      note: d.note || undefined,
+      status: d.status || undefined,
+      expiresAt: d.expires_at || undefined,
+      chargeId: d.charge_id || undefined,
+      qrCodeId: d.qr_code_id,
+    });
+  }
+
+  async createCharge(request: CreateChargeRequest): Promise<ApiResponse<QRCharge>> {
+    const res = await this.client.post<ChargeDTO>('/api/v1/qr/charges', {
+      qr_code_id: request.qrCodeId,
+      amount: Math.round(request.amount * 100),
+      note: request.note,
+      channel: request.channel,
+      replaces: request.replaces,
+    });
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'CHARGE_FAILED', res.error?.message || 'Failed');
+    }
+    return apiSuccess(mapCharge(res.data));
+  }
+
+  async getCharge(chargeId: string): Promise<ApiResponse<QRCharge>> {
+    const res = await this.client.get<ChargeDTO>(`/api/v1/qr/charges/${chargeId}`);
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+    }
+    return apiSuccess(mapCharge(res.data));
+  }
+
+  async cancelCharge(chargeId: string): Promise<ApiResponse<void>> {
+    const res = await this.client.del<void>(`/api/v1/qr/charges/${chargeId}`);
+    if (!res.success) return apiError(res.error?.code || 'CANCEL_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(undefined as void);
+  }
+
+  async listCharges(status?: QRChargeStatus): Promise<ApiResponse<QRCharge[]>> {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await this.client.get<ChargeDTO[]>(`/api/v1/qr/charges${q}`);
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+    }
+    return apiSuccess(res.data.map(mapCharge));
   }
 
   async getPaymentHistory(): Promise<ApiResponse<QRPayment[]>> {
