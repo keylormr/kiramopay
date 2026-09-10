@@ -2,6 +2,7 @@ package country
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -89,6 +90,14 @@ func (h *Handler) SendCrossBorder(w http.ResponseWriter, r *http.Request) {
 
 	transfer, err := h.service.SendCrossBorder(r.Context(), userID, &req)
 	if err != nil {
+		// Sin corresponsal en el destino: 503 con codigo propio, igual que
+		// SIN_CONVENIO y SIN_INTEGRACION, para que la pantalla lo explique en
+		// vez de mostrar un error generico. No es un fallo del usuario.
+		if errors.Is(err, ErrSinCorresponsal) {
+			response.Error(w, http.StatusServiceUnavailable, "SIN_CORRESPONSAL",
+				"la remesa no se puede entregar todavia")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "TRANSFER_FAILED", err.Error())
 		return
 	}

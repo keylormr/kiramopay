@@ -123,6 +123,27 @@ func (r *Repository) GetRideRequest(ctx context.Context, rideID, userID string) 
 	return &ride, nil
 }
 
+// UpdateRideStatusPagado mueve el estado de un viaje que ya salio de
+// 'searching'. La condicion no es cosmetica: 'searching' es el estado anterior
+// al cobro, y sacar un viaje de ahi por esta via lo dejaba avanzado sin haber
+// pagado — y sin posibilidad de cobrarlo despues, porque ConfirmRide solo
+// acepta viajes que sigan en 'searching'.
+func (r *Repository) UpdateRideStatusPagado(ctx context.Context, rideID, status string) error {
+	query := `UPDATE ride_requests SET status = $2 WHERE id = $1 AND status <> 'searching'`
+	if status == "completed" {
+		query = `UPDATE ride_requests SET status = $2, completed_at = NOW()
+		          WHERE id = $1 AND status <> 'searching'`
+	}
+	result, err := r.db.Exec(ctx, query, rideID, status)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("ride is not in a payable state")
+	}
+	return nil
+}
+
 func (r *Repository) UpdateRideStatus(ctx context.Context, rideID, status string) error {
 	query := `UPDATE ride_requests SET status = $2 WHERE id = $1`
 	if status == "completed" || status == "cancelled" {

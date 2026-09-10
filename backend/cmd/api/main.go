@@ -445,7 +445,13 @@ func main() {
 	splitService := splitpay.NewService(splitRepo, txService, userRepo)
 	cardsService := cards.NewService(cardsRepo)
 	fraudService := fraud.NewService(fraudRepo)
-	countryService := country.NewService(countryRepo)
+	// Remesa a otro pais: sin corresponsal que la entregue, marcarla completada
+	// le dice al remitente que su plata cruzo la frontera sin que haya salido
+	// nada. Misma politica que los convenios de recibos y los cobros del
+	// marketplace: fuera de produccion se permite para las demos.
+	countryService := country.NewService(countryRepo, &country.Options{
+		CorresponsalActivo: cfg.Server.Environment != "production",
+	})
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 	savingsService := savings.NewService(savingsRepo, ledgerEngine, txService)

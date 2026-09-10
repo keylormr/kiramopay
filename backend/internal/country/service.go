@@ -2,18 +2,46 @@ package country
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
 	"github.com/google/uuid"
 )
 
+// ErrSinCorresponsal se devuelve al intentar mandar una remesa a otro pais sin
+// corresponsal que la entregue del otro lado.
+//
+// La transferencia se creaba con estado 'processing' y cumplimiento 'approved',
+// y tres renglones despues se marcaba 'completed'. No tocaba el libro, no
+// debitaba y no habia nadie recibiendo: al remitente se le decia que su plata
+// cruzo la frontera y no salio nada. Es la misma politica que este repositorio
+// ya aplica en payment.ErrSinConvenio (recibos y recargas),
+// marketplace.ErrSinIntegracion (viajes y pedidos) y sinpe.Send (no se envia a
+// quien no es usuario): si no hay quien entregue, se dice que no.
+var ErrSinCorresponsal = errors.New("sin corresponsal en el pais de destino: la remesa no se puede entregar")
+
 type Service struct {
 	repo *Repository
+	// corresponsal habilita la remesa. Falso mientras no exista un socio que
+	// la entregue; se enciende por entorno igual que los convenios de recibos y
+	// los cobros del marketplace, para que las demos fuera de produccion sigan
+	// funcionando.
+	corresponsal bool
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+// Options configura el servicio. CorresponsalActivo solo debe ser verdadero
+// donde exista un socio que de verdad entregue el dinero al destinatario.
+type Options struct {
+	CorresponsalActivo bool
+}
+
+func NewService(repo *Repository, opts *Options) *Service {
+	s := &Service{repo: repo}
+	if opts != nil {
+		s.corresponsal = opts.CorresponsalActivo
+	}
+	return s
 }
 
 func (s *Service) GetCountries(ctx context.Context) ([]Country, error) {
@@ -52,6 +80,11 @@ func (s *Service) CreateWallet(ctx context.Context, userID, countryCode string) 
 
 // SendCrossBorder initiates a cross-border transfer between countries.
 func (s *Service) SendCrossBorder(ctx context.Context, senderID string, req *CrossBorderRequest) (*CrossBorderTransfer, error) {
+	// Antes de leer nada: sin corresponsal no hay entrega, y esta funcion
+	// termina afirmando que la hubo.
+	if !s.corresponsal {
+		return nil, ErrSinCorresponsal
+	}
 	if req.ReceiverPhone == "" {
 		return nil, fmt.Errorf("receiver phone is required")
 	}

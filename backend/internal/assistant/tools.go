@@ -28,8 +28,13 @@ type (
 	}
 	// SavedServicesReader is read-only — it lets the model reference a user's
 	// saved bill provider when *proposing* a payment, but cannot pay anything.
+	//
+	// ConveniosActivos no es una lectura mas: es lo que decide si el asistente
+	// puede OFRECER pagar un recibo o recargar un telefono. La respuesta la da
+	// el servicio de pagos, que es quien la sabe.
 	SavedServicesReader interface {
 		GetSavedServices(ctx context.Context, userID string) ([]payment.SavedServiceRecord, error)
+		ConveniosActivos() bool
 	}
 )
 
@@ -102,6 +107,14 @@ func (t *Tools) Declarations() []FunctionDecl {
 	}
 	// Phase 3b: write-INTENT tools. They PREPARE an action and return a proposal
 	// the user must confirm; they never move money themselves.
+	// Pagar un recibo y recargar un telefono terminan en payment.ErrSinConvenio
+	// mientras no exista convenio con la empresa o el operador. Anunciarlas
+	// igual hacia que el modelo las propusiera, que el usuario aceptara y que
+	// el servidor dijera que no — y cada una de esas idas y vueltas gasta una
+	// de las dos preguntas diarias del plan gratuito. Lo que no se puede
+	// entregar no se ofrece.
+	conConvenio := t.saved != nil && t.saved.ConveniosActivos()
+
 	decls = append(decls,
 		FunctionDecl{
 			Name:        "propose_sinpe_transfer",
@@ -116,6 +129,11 @@ func (t *Tools) Declarations() []FunctionDecl {
 				},
 			},
 		},
+	)
+	if !conConvenio {
+		return decls
+	}
+	decls = append(decls,
 		FunctionDecl{
 			Name:        "propose_bill_payment",
 			Description: "Prepare a bill payment for the user to confirm. Does NOT pay — the user confirms it. Use a provider from list_saved_services.",
@@ -168,7 +186,14 @@ func (t *Tools) Invoke(ctx context.Context, userID, name string, args map[string
 	case "list_saved_services":
 		r, err := t.listSavedServices(ctx, userID)
 		return r, nil, err
-	case "propose_sinpe_transfer", "propose_bill_payment", "propose_recharge":
+	case "propose_bill_payment", "propose_recharge":
+		// Aunque no se declaren, un hilo viejo o un modelo que se las invente
+		// pueden pedirlas igual. Sin convenio no existen.
+		if !t.allowAct || t.saved == nil || !t.saved.ConveniosActivos() {
+			return nil, nil, ErrUnknownTool
+		}
+		return t.propose(name, args)
+	case "propose_sinpe_transfer":
 		if !t.allowAct {
 			return nil, nil, ErrUnknownTool
 		}
