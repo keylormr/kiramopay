@@ -2079,6 +2079,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/EscrowAgreement'
 
+  /api/v1/admin/escrow:
+    get:
+      tags: [Admin]
+      summary: The escrow dispute queue (admin)
+      description: >-
+        Without `status` this returns ONLY disputed agreements — the queue that
+        has to be worked — and the applied status travels back in the response
+        so a short list is never mistaken for "there are only three agreements
+        in the whole system". `status=all` returns the full history; any
+        concrete status narrows to it, and an unknown value is rejected with
+        400 rather than answering with an empty list. Ordered oldest dispute
+        first, because that is what measures how long someone's money has been
+        frozen. The parties are identified by id; `GET /api/v1/admin/users/{id}`
+        puts names on them.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, funded, released, refunded, disputed, cancelled, all]
+          description: Defaults to `disputed`.
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: One page of the queue, plus the size of the whole queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agreements:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EscrowAgreement'
+                  total: { type: integer }
+                  status: { type: string }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /api/v1/admin/escrow/{id}:
+    get:
+      tags: [Admin]
+      summary: Read any agreement (admin, no party check)
+      description: >-
+        The user-facing `GET /api/v1/escrow/{id}` is scoped to the parties of
+        the agreement, so whoever has to arbitrate a dispute got a 403 on the
+        very case they are meant to resolve.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The agreement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
+
   /api/v1/admin/escrow/{id}/resolve:
     post:
       tags: [Admin]

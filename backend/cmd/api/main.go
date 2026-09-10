@@ -1060,8 +1060,16 @@ func main() {
 				r.Get("/admin/uif/reports", uifHandler.ListReports)
 				r.Post("/admin/uif/reports/{id}/review", uifHandler.Review)
 
-				// Fraud
+				// La cola de disputas del escrow. Hasta ahora la UNICA ruta
+				// admin era la de resolver, y las dos de lectura estan
+				// acotadas a las partes del acuerdo: quien tenia que arbitrar
+				// no podia listar el caso ni leerlo, asi que la plata quedaba
+				// congelada en SYSTEM:ESCROW sin que nadie pudiera ubicarla.
+				r.Get("/admin/escrow", escrowHandler.ListarAdmin)
+				r.Get("/admin/escrow/{id}", escrowHandler.ObtenerAdmin)
 				r.Post("/admin/escrow/{id}/resolve", escrowHandler.Resolve)
+
+				// Fraud
 
 				r.Get("/admin/fraud/alerts", fraudHandler.GetOpenAlerts)
 				r.Patch("/admin/fraud/alerts/{id}", fraudHandler.ResolveAlert)
