@@ -143,19 +143,25 @@ func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateCh
 		return nil, ErrQRInvalido
 	}
 
-	// Reemplazo: cerrar el viejo y abrir el nuevo en una transaccion. Si el
-	// viejo ya se pago, NO se crea el nuevo — decirle "cancelado" al cajero
-	// sobre una venta que acaba de entrar es como se llega a cobrar dos veces.
+	// Reemplazo, en una transaccion. Si el viejo ya se pago, NO queda cobro
+	// nuevo — decirle "cancelado" al cajero sobre una venta que acaba de entrar
+	// es como se llega a cobrar dos veces.
+	//
+	// El orden es INSERT y despues UPDATE, y no al reves: `superseded_by`
+	// apunta al cobro nuevo con una clave foranea, asi que cerrarlo primero
+	// referencia una fila que todavia no existe. Lo que garantiza que el nuevo
+	// no sobreviva a un rechazo no es el orden sino la transaccion: si el UPDATE
+	// guardado no matchea, el rollback se lleva el INSERT.
 	tx, err := s.repo.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
+	if err := s.repo.CrearCobro(ctx, tx, cobro); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CrearCobro(ctx, tx, cobro); err != nil {
+	if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
