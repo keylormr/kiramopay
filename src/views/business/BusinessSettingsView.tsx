@@ -35,7 +35,7 @@ interface Props {
 export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfile, onBackToPersonal, onUpdated }) => {
   const { t } = useLanguage();
   const { state } = useApp();
-  const symbol = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.symbol ?? '₡';
+  const ccy = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.ccy ?? 'CRC';
   const cat = t(`merchant_cat_${merchant.category}` as Parameters<typeof t>[0]);
   // What this screen offers depends on the caller's role: the owner manages
   // everything; a manager runs locations/catalog; a cashier only reads.
@@ -151,7 +151,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
 
       <BusinessTeamSheet isOpen={showTeam} onClose={() => setShowTeam(false)} merchantId={merchant.id} />
       <BusinessLocationsSheet isOpen={showLocations} onClose={() => setShowLocations(false)} merchantId={merchant.id} />
-      <BusinessCatalogSheet isOpen={showCatalog} onClose={() => setShowCatalog(false)} merchantId={merchant.id} currencySymbol={symbol} />
+      <BusinessCatalogSheet isOpen={showCatalog} onClose={() => setShowCatalog(false)} merchantId={merchant.id} currencyCode={ccy} />
 
       {/* Edit sheet */}
       <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title={t('business_edit')}>

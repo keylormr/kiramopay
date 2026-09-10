@@ -15,6 +15,7 @@ import type {
   MerchantLocation,
 } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
 
 interface Props {
   merchant: QRMerchant;
@@ -138,8 +139,13 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   const verified = merchant.verificationStatus === 'verified';
   // Cada cobro trae su moneda; rotularlo todo con el simbolo de la moneda base
   // de la aplicacion convertia un cobro en dolares en uno en colones a la vista.
+  //
+  // El formateo sale de utils/money y no de un `symbol + toFixed(2)` local: ese
+  // atajo perdia el separador de miles, asi que el panel mostraba ₡125000.00
+  // donde el resto de la aplicacion muestra ₡125,000.00. La regla de los miles
+  // con coma la pidio el dueno para TODOS los montos.
   const money = (v: number, moneda?: string) =>
-    `${moneda && moneda !== ccy ? `${moneda} ` : symbol}${v.toFixed(2)}`;
+    formatMoney(v, (moneda || ccy) as CurrencyCode, { decimals: 2 });
   const SIN_DATO = '—';
 
   // Un cobro trae su propia moneda. Sumarlos todos juntos y rotularlos con el

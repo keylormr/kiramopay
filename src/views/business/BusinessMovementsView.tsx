@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import type { QRPayment } from '@/api/repositories/qrpayment.repository';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
 
 interface Props {
   payments: QRPayment[];
@@ -14,13 +15,11 @@ export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFaile
   const { t } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
-  const symbol = base?.symbol ?? '₡';
   // Cada cobro trae su moneda: rotular todo con el simbolo de la moneda base
   // de la aplicacion convertia un cobro en dolares en uno en colones a la vista.
-  const money = (v: number, ccy?: string) => {
-    const s = ccy && ccy !== (base?.ccy ?? 'CRC') ? `${ccy} ` : symbol;
-    return `${s}${v.toFixed(2)}`;
-  };
+  // El formateo sale de utils/money, que es lo que conserva los miles con coma.
+  const money = (v: number, ccy?: string) =>
+    formatMoney(v, (ccy || base?.ccy || 'CRC') as CurrencyCode, { decimals: 2 });
 
   return (
     <div className="pb-24 pt-4 px-4 space-y-4">

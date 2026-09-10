@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
 import type { QRMerchant, BusinessReport, BusinessReportBucket } from '@/api/repositories/qrpayment.repository';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
 
 interface Props {
   merchant: QRMerchant;
@@ -24,8 +25,9 @@ const localKey = (d: Date) =>
 export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   const { t } = useLanguage();
   const { state } = useApp();
-  const symbol = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.symbol ?? '₡';
-  const money = (v: number) => `${symbol}${v.toFixed(2)}`;
+  const ccy = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.ccy ?? 'CRC';
+  // utils/money y no `symbol + toFixed(2)`: el atajo perdia los miles con coma.
+  const money = (v: number) => formatMoney(v, ccy as CurrencyCode, { decimals: 2 });
 
   const [days, setDays] = useState<(typeof RANGES)[number]>(30);
   const [report, setReport] = useState<BusinessReport | null>(null);

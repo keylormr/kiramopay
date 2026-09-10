@@ -73,10 +73,21 @@ describe('BusinessHomeView', () => {
   it('los cobros en otra moneda no se suman con los colones', async () => {
     pintar([cobro('1', 1000, 'CRC'), cobro('2', 500, 'USD')]);
     // El total rotulado en colones incluye solo el cobro en colones.
-    await waitFor(() => expect(screen.getByText('₡1000.00')).toBeTruthy());
+    //
+    // La asercion decia '₡1000.00' y esa cadena CONGELABA el defecto: la
+    // pantalla formateaba con un `simbolo + toFixed(2)` propio, sin separador
+    // de miles, contra la regla que el dueno pidio para todos los montos. La
+    // prueba que deberia haberlo cazado lo estaba protegiendo.
+    await waitFor(() => expect(screen.getByText('₡1,000.00')).toBeTruthy());
     // Y los de la otra moneda se declaran en vez de esconderse.
     expect(screen.getByText(/(otras monedas|other currencies)/i)).toBeTruthy();
     // El cobro en dolares se rotula en dolares, no con el simbolo de colones.
-    expect(screen.getByText(/USD\s*500\.00/)).toBeTruthy();
+    expect(screen.getByText(/\$500\.00/)).toBeTruthy();
+  });
+
+  it('los miles llevan coma, como en el resto de la aplicacion', async () => {
+    pintar([cobro('1', 125000, 'CRC')]);
+    await waitFor(() => expect(screen.getByText('₡125,000.00')).toBeTruthy());
+    expect(screen.queryByText('₡125000.00')).toBeNull();
   });
 });

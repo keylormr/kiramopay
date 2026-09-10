@@ -5,12 +5,14 @@ import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { CatalogItem } from '@/api/repositories/qrpayment.repository';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   merchantId: string;
-  currencySymbol: string;
+  /** Codigo de moneda, no simbolo: utils/money necesita el codigo. */
+  currencyCode: string;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * from these items in the charge sheet; history only stores totals + a note,
  * so items can be freely renamed or deleted.
  */
-export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchantId, currencySymbol }) => {
+export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchantId, currencyCode }) => {
   const { t } = useLanguage();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,7 +108,8 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
     }
   };
 
-  const money = (v: number) => `${currencySymbol}${v.toFixed(2)}`;
+  // utils/money y no `symbol + toFixed(2)`: el atajo perdia los miles con coma.
+  const money = (v: number) => formatMoney(v, currencyCode as CurrencyCode, { decimals: 2 });
   const field = 'w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]';
 
   return (

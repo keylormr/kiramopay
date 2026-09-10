@@ -42,17 +42,29 @@ export function formatMoney(
   opts: FormatOpts = {},
 ): string {
   const amount = toAmount(value);
-  const nf = new Intl.NumberFormat(MONEY_LOCALE, {
-    style: 'currency',
-    currencyDisplay: 'narrowSymbol',
-    currency,
+  const signo = opts.signed ? (amount < 0 ? '-' : '+') : '';
+  const n = opts.signed ? Math.abs(amount) : amount;
+  const decimales = {
     minimumFractionDigits: opts.decimals ?? 0,
     maximumFractionDigits: opts.decimals ?? 2,
-  });
-  if (opts.signed) {
-    return `${amount < 0 ? '-' : '+'}${nf.format(Math.abs(amount))}`;
+  };
+  try {
+    return (
+      signo +
+      new Intl.NumberFormat(MONEY_LOCALE, {
+        style: 'currency',
+        currencyDisplay: 'narrowSymbol',
+        currency,
+        ...decimales,
+      }).format(n)
+    );
+  } catch {
+    // Intl lanza ante un codigo de moneda que no conoce, y este formateador lo
+    // usa toda la aplicacion: sin esta red, un codigo raro que venga del
+    // servidor tumba la pantalla entera. El respaldo conserva la agrupacion de
+    // miles —que es la razon de ser de este archivo— y rotula con el codigo.
+    return `${signo}${currency} ${new Intl.NumberFormat(MONEY_LOCALE, decimales).format(n)}`;
   }
-  return nf.format(amount);
 }
 
 /** Costa Rica colones — the app default. */
