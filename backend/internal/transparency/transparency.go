@@ -34,9 +34,26 @@ func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
 func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
 		WITH liabilities AS (
+			-- El pasivo es TODA la plata que es de los usuarios, no solo la que
+			-- esta en su billetera:
+			--
+			--   * merchant_wallet (migracion 045) es el saldo del comercio, que
+			--     el dueno puede retirar cuando quiera;
+			--   * SYSTEM:SAVINGS (migracion 040) es plata apartada en una meta,
+			--     que sigue siendo del usuario y puede sacar cuando quiera;
+			--   * SYSTEM:ESCROW (migracion 029) es plata retenida de una parte o
+			--     de la otra, pero de un usuario en cualquier caso.
+			--
+			-- Contando solo 'user_wallet', el ratio publicado SOBRESTIMA la
+			-- cobertura: divide la reserva entre un pasivo mas chico que el real.
+			-- Hoy las tres cuentan cero, asi que el numero publicado no cambia;
+			-- el dia que alguien guarde en una meta o abra un escrow, empezaria
+			-- a mentir.
 			SELECT currency, COALESCE(SUM(balance_minor), 0) AS amt
 			FROM ledger_account_balances
-			WHERE type = 'user_wallet'
+			WHERE type IN ('user_wallet', 'merchant_wallet')
+			   OR code LIKE 'SYSTEM:SAVINGS:%'
+			   OR code LIKE 'SYSTEM:ESCROW:%'
 			GROUP BY currency
 		),
 		reserves AS (
