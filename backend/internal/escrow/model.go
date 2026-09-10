@@ -64,7 +64,14 @@ type Agreement struct {
 
 // CreateRequest is the payload to open an agreement.
 type CreateRequest struct {
-	SellerID    string `json:"seller_id"`
+	// SellerID identifica al vendedor por su id interno. Se mantiene para los
+	// clientes B2B que ya integraron contra esta ruta; la aplicacion manda
+	// SellerPhone, porque ninguna pantalla muestra el UUID de nadie.
+	SellerID string `json:"seller_id"`
+	// SellerPhone es el telefono del vendedor. El servidor lo resuelve a una
+	// cuenta real; si no hay cuenta, el acuerdo se rechaza en vez de nacer
+	// apuntando a nadie. Ver resolverVendedor.
+	SellerPhone string `json:"seller_phone,omitempty"`
 	AmountMinor int64  `json:"amount_minor"`
 	Currency    string `json:"currency"`
 	Description string `json:"description"`
@@ -80,6 +87,11 @@ var (
 	ErrInsufficient   = errors.New("escrow: insufficient balance")
 	ErrMFARequired    = errors.New("escrow: verified MFA challenge required for this amount")
 	ErrInvalidRequest = errors.New("escrow: invalid request")
+	// ErrVendedorSinCuenta: el telefono (o el id) del vendedor no corresponde a
+	// ninguna cuenta. Un acuerdo hacia una cuenta que no existe se puede
+	// fondear —la plata sale de la billetera del comprador— y no se puede
+	// liberar a nadie.
+	ErrVendedorSinCuenta = errors.New("escrow: seller has no KiramoPay account")
 	// ErrDailyLimitExceeded: financiar este acuerdo pasaria el tope diario de
 	// salida de la billetera del comprador. La regla es la MISMA que la de las
 	// transferencias (transaction.CheckLimits); aqui solo se traduce para

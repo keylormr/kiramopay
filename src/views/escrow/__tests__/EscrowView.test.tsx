@@ -32,6 +32,14 @@ vi.mock('@/stores/auth.store', () => ({
 const mockDataSync = vi.hoisted(() => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
 vi.mock('@/services/dataSync', () => mockDataSync);
 
+// La pantalla ofrece los contactos guardados para no teclear el numero.
+const appState = vi.hoisted(() => ({
+  sinpeContacts: [] as Array<{ id: string; name: string; phone: string; isFavorite?: boolean }>,
+}));
+vi.mock('@/hooks/useApp', () => ({
+  useApp: () => ({ state: { sinpeContacts: appState.sinpeContacts }, dispatch: vi.fn() }),
+}));
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -57,8 +65,10 @@ beforeEach(() => {
   localStorage.setItem('kiramopay_language', 'es');
   mockApi.escrow.list.mockResolvedValue({ success: true, data: [pendingAgreement] });
   mockApi.escrow.fund.mockReset();
+  mockApi.escrow.create.mockReset();
   mockApi.mfa.totpVerify.mockReset();
   mockDataSync.refreshAccounts.mockClear();
+  appState.sinpeContacts = [];
 });
 
 describe('EscrowView', () => {
@@ -103,5 +113,71 @@ describe('EscrowView', () => {
 
     await waitFor(() => expect(mockApi.escrow.fund).toHaveBeenCalledTimes(1));
     expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
+  });
+});
+
+// El acuerdo se abria pidiendo el UUID del vendedor, con marcador
+// "00000000-0000-0000-0000-000000000000". Ninguna pantalla de la aplicacion
+// muestra el UUID de nadie: no habia forma de crear un acuerdo con una persona
+// real, asi que el producto entero era inalcanzable desde la app.
+describe('EscrowView — abrir un acuerdo con una persona real', () => {
+  const abrirHoja = async (user: ReturnType<typeof userEvent.setup>) => {
+    setup();
+    await screen.findByText('Laptop');
+    await user.click(screen.getByRole('button', { name: 'Nuevo acuerdo' }));
+  };
+
+  it('manda el TELEFONO del vendedor, no un identificador interno', async () => {
+    mockApi.escrow.create.mockResolvedValue({
+      success: true,
+      data: { ...pendingAgreement, id: 'a2', description: 'Bicicleta' },
+    });
+    const user = userEvent.setup();
+    await abrirHoja(user);
+
+    await user.type(screen.getByPlaceholderText('8888-1234'), '88885678');
+    await user.type(screen.getByPlaceholderText('0.00'), '1500');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Bicicleta');
+    await user.click(screen.getByText('Crear acuerdo', { selector: 'button' }));
+
+    await waitFor(() =>
+      expect(mockApi.escrow.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sellerPhone: '88885678', amountMinor: 150000 }),
+      ),
+    );
+    // Y NO manda el campo que la persona no podia conseguir.
+    expect(mockApi.escrow.create.mock.calls[0][0]).not.toHaveProperty('sellerId');
+  });
+
+  it('un contacto guardado llena el numero de un toque', async () => {
+    appState.sinpeContacts = [
+      { id: 'c1', name: 'Victor', phone: '+50688885678', isFavorite: true },
+      { id: 'c2', name: 'Ana', phone: '+50688881111' },
+    ];
+    const user = userEvent.setup();
+    await abrirHoja(user);
+
+    await user.click(screen.getByText('Victor'));
+
+    expect(screen.getByPlaceholderText('8888-1234')).toHaveValue('+50688885678');
+  });
+
+  it('si el numero no tiene cuenta lo dice, en vez del error generico', async () => {
+    mockApi.escrow.create.mockResolvedValue({
+      success: false,
+      error: { code: 'ESCROW_SELLER_NOT_FOUND', message: 'that number does not have a KiramoPay account' },
+    });
+    const user = userEvent.setup();
+    await abrirHoja(user);
+
+    await user.type(screen.getByPlaceholderText('8888-1234'), '11112222');
+    await user.type(screen.getByPlaceholderText('0.00'), '1500');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Humo');
+    await user.click(screen.getByText('Crear acuerdo', { selector: 'button' }));
+
+    // La vista pinta el mismo error en la lista y en la hoja; basta con que
+    // aparezca, y con que NO sea el generico.
+    expect((await screen.findAllByText(/no tiene cuenta de KiramoPay/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/that number does not have/i)).not.toBeInTheDocument();
   });
 });

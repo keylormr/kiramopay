@@ -1094,6 +1094,10 @@ export type TranslationKeys = {
   escrow_create_title: string;
   escrow_seller: string;
   escrow_seller_hint: string;
+  // El servidor comprueba que el numero tenga cuenta antes de escribir el
+  // acuerdo: un escrow hacia una cuenta que no existe se puede fondear y no se
+  // le puede liberar a nadie.
+  escrow_seller_not_found: string;
   escrow_amount: string;
   escrow_desc_label: string;
   escrow_desc_hint: string;

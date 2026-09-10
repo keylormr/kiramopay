@@ -179,6 +179,9 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrMonthlyLimitExceeded):
 		response.Error(w, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
 			"monthly spending limit exceeded")
+	case errors.Is(err, ErrVendedorSinCuenta):
+		response.Error(w, http.StatusUnprocessableEntity, "ESCROW_SELLER_NOT_FOUND",
+			"that number does not have a KiramoPay account")
 	case errors.Is(err, ErrInvalidRequest):
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
 	default:

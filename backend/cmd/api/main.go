@@ -391,6 +391,7 @@ func main() {
 	b2bService := b2b.NewService(b2bRepo, b2bCipher, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
 	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
+		Cuentas: userRepo, // resuelve al vendedor por telefono; ver escrow/contraparte.go
 		MFA:         mfaSvc,
 		UIF:         uifService,
 		Events:      b2bService, // escrow lifecycle → merchant webhooks

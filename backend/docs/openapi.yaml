@@ -2664,8 +2664,20 @@ components:
 
     EscrowCreateRequest:
       type: object
-      required: [seller_id, amount_minor, description]
+      required: [amount_minor, description]
+      description: >-
+        The seller is identified by `seller_phone` OR `seller_id` — exactly one
+        is needed. The app sends the phone, because no screen in the app shows
+        anyone's UUID; `seller_id` stays for the B2B clients that already
+        integrated against this route. Either way the account must EXIST: an
+        agreement pointing at nobody can still be funded (the money leaves the
+        buyer's wallet into SYSTEM:ESCROW) and can never be released to anyone.
+        A number with no account is rejected with 422 `ESCROW_SELLER_NOT_FOUND`.
       properties:
+        seller_phone:
+          type: string
+          description: Seller's phone; the server resolves it to a real account.
+          example: '+50688885678'
         seller_id: { type: string, format: uuid }
         amount_minor: { type: integer, format: int64, description: amount in centimos/cents }
         currency: { type: string, enum: [CRC, USD], default: CRC }

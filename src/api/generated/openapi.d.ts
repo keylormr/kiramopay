@@ -5579,9 +5579,15 @@ export interface components {
             /** @example 3 */
             revoked?: number;
         };
+        /** @description The seller is identified by `seller_phone` OR `seller_id` — exactly one is needed. The app sends the phone, because no screen in the app shows anyone's UUID; `seller_id` stays for the B2B clients that already integrated against this route. Either way the account must EXIST: an agreement pointing at nobody can still be funded (the money leaves the buyer's wallet into SYSTEM:ESCROW) and can never be released to anyone. A number with no account is rejected with 422 `ESCROW_SELLER_NOT_FOUND`. */
         EscrowCreateRequest: {
+            /**
+             * @description Seller's phone; the server resolves it to a real account.
+             * @example +50688885678
+             */
+            seller_phone?: string;
             /** Format: uuid */
-            seller_id: string;
+            seller_id?: string;
             /**
              * Format: int64
              * @description amount in centimos/cents

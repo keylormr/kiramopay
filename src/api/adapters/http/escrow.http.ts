@@ -57,13 +57,20 @@ export class HttpEscrowRepository implements IEscrowRepository {
 
   async create(req: CreateEscrowRequest): Promise<ApiResponse<EscrowAgreement>> {
     const res = await this.client.post<RawAgreement>('/api/v1/escrow', {
+      seller_phone: req.sellerPhone,
       seller_id: req.sellerId,
       amount_minor: req.amountMinor,
       currency: req.currency,
       description: req.description,
     });
     if (!res.success || !res.data) {
-      return apiError('ESCROW_CREATE_FAILED', res.error?.message || 'Could not create agreement');
+      // Se conserva el codigo del servidor —ESCROW_SELLER_NOT_FOUND es el que
+      // importa aca— igual que en `action`. Pisarlo con uno generico deja a la
+      // pantalla sin forma de decir QUE paso.
+      return apiError(
+        res.error?.code || 'ESCROW_CREATE_FAILED',
+        res.error?.message || 'Could not create agreement',
+      );
     }
     return apiSuccess(mapAgreement(res.data));
   }
