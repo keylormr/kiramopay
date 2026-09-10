@@ -780,17 +780,41 @@ func (s *Service) RecordHistory(ctx context.Context, userID string, req *CreateT
 	}
 	defer dbtx.Rollback(ctx) //nolint:errcheck
 
-	tx, err := s.repo.CreateTx(ctx, dbtx, userID, w.ID, req)
+	if err := s.RecordHistoryEnTx(ctx, dbtx, userID, w.ID, req); err != nil {
+		return err
+	}
+	return dbtx.Commit(ctx)
+}
+
+// RecordHistoryEnTx escribe la fila de historial por una transaccion que abrio
+// OTRO modulo — tipicamente la del asiento, via ledger.Posting.EnLaMismaTx.
+//
+// Existe porque un modulo que mueve dinero por su cuenta (escrow, payouts) tenia
+// que elegir entre anotar el movimiento fuera de su transaccion —y quedarse sin
+// fila si esa escritura se caia, con el dinero ya movido— o no anotarlo. Con
+// esto, la fila del historial y el asiento se confirman juntos.
+//
+// walletID lo pasa quien llama porque normalmente ya cargo la billetera; si va
+// vacio, se busca.
+func (s *Service) RecordHistoryEnTx(
+	ctx context.Context, tx pgx.Tx, userID, walletID string, req *CreateTransactionRequest,
+) error {
+	if walletID == "" {
+		w, err := s.walletRepo.FindByUserID(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("find wallet: %w", err)
+		}
+		walletID = w.ID
+	}
+	fila, err := s.repo.CreateTx(ctx, tx, userID, walletID, req)
 	if err != nil {
+		// Una llave repetida quiere decir que el movimiento ya quedo anotado.
 		if errors.Is(err, ErrDuplicate) {
 			return nil
 		}
 		return fmt.Errorf("record history: %w", err)
 	}
-	if err := s.repo.UpdateStatusTx(ctx, dbtx, tx.ID, StatusCompleted); err != nil {
-		return fmt.Errorf("record history: %w", err)
-	}
-	return dbtx.Commit(ctx)
+	return s.repo.UpdateStatusTx(ctx, tx, fila.ID, StatusCompleted)
 }
 
 func (s *Service) GetTransaction(ctx context.Context, id string) (*TransactionRecord, error) {

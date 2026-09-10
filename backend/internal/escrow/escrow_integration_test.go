@@ -56,7 +56,31 @@ func escrowAccountBalance(t *testing.T, pool *pgxpool.Pool) int64 {
 	return bal
 }
 
+// mfaDePrueba es la reja de segundo factor de las pruebas.
+//
+// El setup pasaba `nil` en Options, asi que TODAS las pruebas de escrow corrian
+// con la reja APAGADA: se podia reescribir la liquidacion entera sin que nada
+// avisara de que ese camino no se estaba ejercitando. Ahora la reja esta puesta
+// y `verificado` decide si deja pasar.
+type mfaDePrueba struct {
+	desde      int64
+	verificado bool
+}
+
+func (m mfaDePrueba) IsMFARequired(amountMinor int64, _ string) bool {
+	return m.desde > 0 && amountMinor >= m.desde
+}
+
+func (m mfaDePrueba) HasVerifiedMFA(context.Context, string, string) (bool, error) {
+	return m.verificado, nil
+}
+
 func setup(t *testing.T) (*pgxpool.Pool, *escrow.Service, string, string) {
+	t.Helper()
+	return setupConMFA(t, mfaDePrueba{desde: 100_000, verificado: true})
+}
+
+func setupConMFA(t *testing.T, reja escrow.MFAEnforcer) (*pgxpool.Pool, *escrow.Service, string, string) {
 	t.Helper()
 	pool := testutil.TestDB(t)
 	buyer := testutil.SeedTestUser(t, pool, "702650930", "dummy")
@@ -64,10 +88,32 @@ func setup(t *testing.T) (*pgxpool.Pool, *escrow.Service, string, string) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	eng := ledger.NewEngine(pool, logger)
-	svc := escrow.NewService(escrow.NewRepository(pool), eng, nil)
+	svc := escrow.NewService(escrow.NewRepository(pool), eng, &escrow.Options{MFA: reja})
 
 	fundWallet(t, eng, buyer, 1_000_000) // 10,000.00 CRC
 	return pool, svc, buyer, seller
+}
+
+// La reja de segundo factor de verdad frena el fondeo. Sin esta prueba —y con el
+// setup pasando nil— el camino de MFA del escrow no lo ejercitaba nadie.
+func TestFondearExigeSegundoFactor(t *testing.T) {
+	pool, svc, buyer, seller := setupConMFA(t, mfaDePrueba{desde: 100_000, verificado: false})
+	ctx := context.Background()
+
+	a, err := svc.Create(ctx, buyer, &escrow.CreateRequest{
+		SellerID: seller, AmountMinor: 250_000, Currency: "CRC", Description: "laptop",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	saldo0 := walletCRC(t, pool, buyer)
+
+	if _, err := svc.Fund(ctx, buyer, a.ID); !errors.Is(err, escrow.ErrMFARequired) {
+		t.Fatalf("error = %v, se esperaba ErrMFARequired", err)
+	}
+	if got := walletCRC(t, pool, buyer); got != saldo0 {
+		t.Fatalf("saldo = %d, se esperaba %d: se movio plata sin segundo factor", got, saldo0)
+	}
 }
 
 func TestEscrowFundAndRelease(t *testing.T) {

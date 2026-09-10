@@ -7,8 +7,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// pgxQuerier lo satisfacen *pgxpool.Pool y pgx.Tx: el mismo SQL corre suelto o
+// dentro de la transaccion del asiento.
+type pgxQuerier interface {
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
 
 // Repository persists escrow agreements.
 type Repository struct {
@@ -86,7 +94,18 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, limit int) (
 // MarkSettled records that an agreement's money movement completed, so the
 // reconcile poller stops re-driving it. Idempotent (only sets it once).
 func (r *Repository) MarkSettled(ctx context.Context, id string) error {
-	_, err := r.db.Exec(ctx,
+	return MarkSettledEnTx(ctx, r.db, id)
+}
+
+// MarkSettledEnTx estampa la marca DENTRO de la transaccion del asiento, junto
+// con la transicion de estado.
+//
+// Sueltas, el acuerdo podia quedar 'released' con settled_at en NULL: el estado
+// decia una cosa y la marca de liquidacion otra, y eso es justo lo que sale por
+// el webhook del comercio. El barrido de legado lo recogia despues, pero
+// mientras tanto la contradiccion era visible.
+func MarkSettledEnTx(ctx context.Context, q pgxQuerier, id string) error {
+	_, err := q.Exec(ctx,
 		`UPDATE escrow_agreements SET settled_at = NOW()
 		 WHERE id = $1::uuid AND settled_at IS NULL`, id)
 	return err
