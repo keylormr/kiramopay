@@ -31,7 +31,10 @@ func TestGetWallet_Success(t *testing.T) {
 		t.Fatalf("GetWallet() error: %v", err)
 	}
 	if w == nil {
+		// El return es para el analizador: sin el, staticcheck no da por
+		// terminado el flujo en t.Fatal y marca SA5011 en cada uso de abajo.
 		t.Fatal("GetWallet() returned nil")
+		return
 	}
 	if w.UserID != userID {
 		t.Fatalf("expected user_id %s, got %s", userID, w.UserID)
