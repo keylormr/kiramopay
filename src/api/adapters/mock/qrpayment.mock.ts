@@ -11,6 +11,10 @@ import type {
   RegisterMerchantRequest,
   CreateQRCodeRequest,
   ScanQRPayRequest,
+  QRCharge,
+  QRChargeStatus,
+  CreateChargeRequest,
+  ResolvedQR,
 } from '../../repositories/qrpayment.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -44,6 +48,71 @@ function readMerchants(): QRMerchant[] {
 function readList<T>(field: string): T[] {
   const state = getState();
   return Array.isArray(state?.[field]) ? state[field] : [];
+}
+
+/**
+ * codigoPermanente es el get-or-create del mock: la MISMA fila en llamadas
+ * sucesivas, que es justo lo que el backend garantiza con su indice unico
+ * parcial por (persona, moneda) y por (comercio, sucursal, moneda).
+ */
+function codigoPermanente(spec: {
+  currency: string;
+  type: QRPaymentCode['type'];
+  merchantId?: string;
+  locationId?: string;
+}): QRPaymentCode {
+  const codes: QRPaymentCode[] = getState()?.qrCodes ?? [];
+  const vivo = codes.find(
+    (c) =>
+      c.status !== 'revoked' &&
+      c.currency === spec.currency &&
+      (c.merchantId || '') === (spec.merchantId || '') &&
+      (c.locationId || '') === (spec.locationId || ''),
+  );
+  if (vivo) return vivo;
+
+  const id = `qr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const code: QRPaymentCode = {
+    id,
+    type: spec.type,
+    amount: 0,
+    currency: spec.currency,
+    qrData: JSON.stringify({
+      id,
+      type: spec.type,
+      amount: 0,
+      currency: spec.currency,
+      merchantId: spec.merchantId,
+      locationId: spec.locationId,
+    }),
+    singleUse: false,
+    used: false,
+    merchantId: spec.merchantId,
+    locationId: spec.locationId,
+    status: 'active',
+  };
+  codes.unshift(code);
+  saveField('qrCodes', codes);
+  return code;
+}
+
+/** Viste un cobro con la forma vieja, igual que hace el servidor con las apps
+ * que todavia llaman a POST /qr/codes con monto. */
+function chargeComoCodigo(c: QRCharge): QRPaymentCode {
+  return {
+    id: c.id,
+    type: c.merchantId ? 'merchant_fixed' : 'p2p_request',
+    amount: c.amount,
+    currency: c.currency,
+    note: c.note,
+    qrData: c.qrData,
+    singleUse: true,
+    used: c.status === 'paid',
+    expiresAt: c.expiresAt,
+    merchantId: c.merchantId,
+    locationId: c.locationId,
+    status: 'active',
+  };
 }
 
 export class MockQRPaymentRepository implements IQRPaymentRepository {
@@ -119,33 +188,142 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(merchants[idx]);
   }
 
+  // Enruta por MONTO, igual que el servidor: con monto emite un cobro, sin
+  // monto devuelve el codigo permanente. Si el mock siguiera creando un codigo
+  // nuevo en cada llamada, las pruebas de vista pasarian en verde sobre un
+  // contrato que el backend ya no tiene — este repositorio ya se quemo con un
+  // stub que respondia exito a todo.
   async createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>> {
-    const id = `qr-${Date.now()}`;
-    const code: QRPaymentCode = {
-      id,
-      type: request.type as QRPaymentCode['type'],
-      amount: request.amount ?? 0,
-      currency: request.currency,
+    const code = request.merchantId
+      ? await this.getMerchantCode(request.merchantId, { locationId: request.locationId, currency: request.currency })
+      : await this.getMyCode(request.currency);
+    if (!code.success || !code.data) return code;
+    if (!request.amount || request.amount <= 0) return code;
+
+    const cobro = await this.createCharge({
+      qrCodeId: code.data.id,
+      amount: request.amount,
       note: request.note,
-      qrData: JSON.stringify({
-        id,
-        type: request.type,
-        amount: request.amount,
-        currency: request.currency,
-        merchantId: request.merchantId,
-        locationId: request.locationId,
-      }),
-      singleUse: request.singleUse,
-      used: false,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      merchantId: request.merchantId,
-      locationId: request.locationId,
-    };
-    const state = getState();
-    const codes: QRPaymentCode[] = state?.qrCodes ?? [];
-    codes.unshift(code);
+      channel: request.merchantId ? 'counter' : 'link',
+    });
+    if (!cobro.success || !cobro.data) return apiError(cobro.error?.code || 'CREATE_FAILED', cobro.error?.message || 'Failed');
+    return apiSuccess(chargeComoCodigo(cobro.data));
+  }
+
+  // ── El QR reciclable ──────────────────────────────────────────────────────
+
+  async getMyCode(currency = 'CRC'): Promise<ApiResponse<QRPaymentCode>> {
+    return apiSuccess(codigoPermanente({ currency, type: 'p2p_receive' }));
+  }
+
+  async getMerchantCode(
+    merchantId: string,
+    opts: { locationId?: string; currency?: string } = {},
+  ): Promise<ApiResponse<QRPaymentCode>> {
+    return apiSuccess(codigoPermanente({
+      currency: opts.currency || 'CRC',
+      type: 'merchant_dynamic',
+      merchantId,
+      locationId: opts.locationId,
+    }));
+  }
+
+  async revokeCode(codeId: string): Promise<ApiResponse<void>> {
+    const codes: QRPaymentCode[] = getState()?.qrCodes ?? [];
+    const idx = codes.findIndex((c) => c.id === codeId);
+    if (idx === -1) return apiError('QR_INVALIDO', 'codigo no encontrado');
+    codes[idx] = { ...codes[idx], status: 'revoked' };
     saveField('qrCodes', codes);
-    return apiSuccess(code);
+    return apiSuccess(undefined as void);
+  }
+
+  async resolveQr(qrData: string): Promise<ApiResponse<ResolvedQR>> {
+    let info: { id?: string; chargeId?: string };
+    try {
+      info = JSON.parse(qrData);
+    } catch {
+      return apiError('QR_INVALIDO', 'Codigo QR invalido');
+    }
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    const cobro = info.chargeId ? cobros.find((c) => c.id === info.chargeId) : undefined;
+    const codes: QRPaymentCode[] = getState()?.qrCodes ?? [];
+    const code = codes.find((c) => c.id === (cobro ? cobro.qrCodeId : info.id));
+    if (!code) return apiError('QR_INVALIDO', 'Codigo QR invalido');
+    if (code.status === 'revoked') return apiError('QR_REVOCADO', 'codigo retirado');
+    return apiSuccess({
+      kind: cobro ? 'charge' : 'code',
+      payeeName: code.merchantId ? undefined : 'Cuenta demo',
+      merchantName: code.merchantId ? 'Comercio demo' : undefined,
+      currency: code.currency,
+      amount: cobro ? cobro.amount : 0,
+      note: cobro?.note,
+      status: cobro?.status,
+      expiresAt: cobro?.expiresAt,
+      chargeId: cobro?.id,
+      qrCodeId: code.id,
+    });
+  }
+
+  async createCharge(request: CreateChargeRequest): Promise<ApiResponse<QRCharge>> {
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    if (request.replaces) {
+      const idx = cobros.findIndex((c) => c.id === request.replaces);
+      if (idx === -1) return apiError('QR_INVALIDO', 'cobro no encontrado');
+      // La rama del doble cobro: sobre un cobro ya pagado NO se emite el nuevo.
+      if (cobros[idx].status === 'paid') return apiError('COBRO_YA_PAGADO', 'ese cobro ya fue pagado');
+      if (cobros[idx].status !== 'pending') return apiError('COBRO_CANCELADO', 'ese cobro ya no esta activo');
+    }
+    const codes: QRPaymentCode[] = getState()?.qrCodes ?? [];
+    const code = codes.find((c) => c.id === request.qrCodeId);
+    if (!code) return apiError('QR_INVALIDO', 'codigo no encontrado');
+
+    const id = `charge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const canal = request.channel || 'counter';
+    const cobro: QRCharge = {
+      id,
+      qrCodeId: code.id,
+      merchantId: code.merchantId,
+      locationId: code.locationId,
+      createdBy: 'current-user',
+      amount: request.amount,
+      currency: code.currency,
+      note: request.note,
+      channel: canal,
+      status: 'pending',
+      qrData: JSON.stringify({ id: code.id, chargeId: id, amount: request.amount, type: code.type, merchantId: code.merchantId }),
+      expiresAt: new Date(Date.now() + (canal === 'link' ? 24 * 60 * 60 * 1000 : 30 * 60 * 1000)).toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    if (request.replaces) {
+      const idx = cobros.findIndex((c) => c.id === request.replaces);
+      cobros[idx] = { ...cobros[idx], status: 'superseded', supersededBy: id };
+    }
+    cobros.unshift(cobro);
+    saveField('qrCharges', cobros);
+    return apiSuccess(cobro);
+  }
+
+  async getCharge(chargeId: string): Promise<ApiResponse<QRCharge>> {
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    const c = cobros.find((x) => x.id === chargeId);
+    if (!c) return apiError('QR_INVALIDO', 'cobro no encontrado');
+    return apiSuccess(c);
+  }
+
+  async cancelCharge(chargeId: string): Promise<ApiResponse<void>> {
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    const idx = cobros.findIndex((c) => c.id === chargeId);
+    if (idx === -1) return apiError('QR_INVALIDO', 'cobro no encontrado');
+    if (cobros[idx].status === 'paid') return apiError('COBRO_YA_PAGADO', 'ese cobro ya fue pagado');
+    if (cobros[idx].status !== 'pending') return apiError('COBRO_CANCELADO', 'ese cobro ya no esta activo');
+    cobros[idx] = { ...cobros[idx], status: 'cancelled' };
+    saveField('qrCharges', cobros);
+    return apiSuccess(undefined as void);
+  }
+
+  async listCharges(status?: QRChargeStatus): Promise<ApiResponse<QRCharge[]>> {
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    return apiSuccess(status ? cobros.filter((c) => c.status === status) : cobros);
   }
 
   async getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>> {

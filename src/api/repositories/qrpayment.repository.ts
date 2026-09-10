@@ -80,6 +80,14 @@ export interface BusinessReport {
   byCollector: BusinessReportBucket[];
 }
 
+/**
+ * QRPaymentCode es ahora la IDENTIDAD de cobro: una por persona-y-moneda y una
+ * por comercio-sucursal-y-moneda. Se imprime, se pega y no cambia jamas.
+ *
+ * `amount`, `note`, `singleUse`, `used` y `expiresAt` quedan CONGELADOS en un
+ * codigo activo: el monto y el vencimiento viven en QRCharge. Siguen aqui
+ * porque el historico y las filas viejas los usan.
+ */
 export interface QRPaymentCode {
   id: string;
   type: 'merchant_fixed' | 'merchant_dynamic' | 'p2p_request' | 'p2p_receive';
@@ -92,11 +100,61 @@ export interface QRPaymentCode {
   expiresAt?: string;
   merchantId?: string;
   locationId?: string;
+  status?: 'active' | 'historic' | 'revoked';
+}
+
+export type QRChargeStatus = 'pending' | 'paid' | 'cancelled' | 'expired' | 'superseded';
+
+/**
+ * QRCharge es UNA VENTA: monto, nota, vencimiento y estado, con su PROPIO
+ * payload. Es el QR que aparece en la pantalla del cajero, no el que esta
+ * pegado en la pared.
+ */
+export interface QRCharge {
+  id: string;
+  qrCodeId: string;
+  merchantId?: string;
+  locationId?: string;
+  createdBy: string;
+  /** MAJOR units (el adaptador convierte desde centimos). */
+  amount: number;
+  currency: string;
+  note?: string;
+  channel: 'counter' | 'link';
+  status: QRChargeStatus;
+  qrData: string;
+  expiresAt: string;
+  paidBy?: string;
+  paidAt?: string;
+  supersededBy?: string;
+  createdAt: string;
+}
+
+/**
+ * ResolvedQR es lo que la hoja de pago pinta ANTES del boton de pagar: a quien
+ * se le esta por pagar. Un codigo pegado en un mostrador se puede tapar con el
+ * de otro, y hasta ahora la hoja no mostraba nunca quien recibe.
+ */
+export interface ResolvedQR {
+  kind: 'code' | 'charge' | 'legacy';
+  payeeName?: string;
+  merchantName?: string;
+  locationName?: string;
+  currency: string;
+  /** MAJOR units. 0 = monto abierto, lo escribe el pagador. */
+  amount: number;
+  note?: string;
+  status?: string;
+  expiresAt?: string;
+  chargeId?: string;
+  qrCodeId: string;
 }
 
 export interface QRPayment {
   id: string;
   qrCodeId: string;
+  /** El cobro que se reclamo; vacio si fue un pago de monto abierto. */
+  chargeId?: string;
   payerId: string;
   receiverId: string;
   merchantId?: string;
@@ -135,6 +193,26 @@ export interface ScanQRPayRequest {
   qrData: string;
   amount?: number;
   currency: string;
+  /** El cobro que el pagador VIO. Si el cajero lo cambio, el servidor rechaza. */
+  chargeId?: string;
+  /**
+   * Nonce del pagador, solo para el camino de MONTO ABIERTO. Se acuna al tocar
+   * Pagar y sobrevive a un reintento de red: sin el, el servidor no puede
+   * distinguir "el telefono reintento" de "quiso pagar otra vez".
+   *
+   * UUID sin guiones (32 caracteres).
+   */
+  idempotencyKey?: string;
+}
+
+export interface CreateChargeRequest {
+  qrCodeId: string;
+  /** MAJOR units. */
+  amount: number;
+  note?: string;
+  channel?: 'counter' | 'link';
+  /** Id del cobro que se reemplaza cuando cambia el monto. */
+  replaces?: string;
 }
 
 export interface IQRPaymentRepository {
@@ -156,6 +234,18 @@ export interface IQRPaymentRepository {
   ): Promise<ApiResponse<void>>;
   createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>>;
   getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>>;
+  /** El codigo permanente propio; se crea la primera vez que se pide. */
+  getMyCode(currency?: string): Promise<ApiResponse<QRPaymentCode>>;
+  /** El codigo permanente del mostrador (comercio + sucursal + moneda). */
+  getMerchantCode(merchantId: string, opts?: { locationId?: string; currency?: string }): Promise<ApiResponse<QRPaymentCode>>;
+  /** Retira un codigo permanente propio y deja emitir otro. */
+  revokeCode(codeId: string): Promise<ApiResponse<void>>;
+  /** Quien cobra, cuanto y en que estado esta, para la hoja de pago. */
+  resolveQr(qrData: string): Promise<ApiResponse<ResolvedQR>>;
+  createCharge(request: CreateChargeRequest): Promise<ApiResponse<QRCharge>>;
+  getCharge(chargeId: string): Promise<ApiResponse<QRCharge>>;
+  cancelCharge(chargeId: string): Promise<ApiResponse<void>>;
+  listCharges(status?: QRChargeStatus): Promise<ApiResponse<QRCharge[]>>;
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;
   getPaymentHistory(): Promise<ApiResponse<QRPayment[]>>;
   /** The shop's sales feed — every charge of the business, visible to the whole team. */

@@ -10,9 +10,11 @@ import type {
   QRMerchant,
   QRPayment,
   QRPaymentCode,
+  QRCharge,
   CatalogItem,
   MerchantLocation,
 } from '@/api/repositories/qrpayment.repository';
+import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
 
 interface Props {
   merchant: QRMerchant;
@@ -48,7 +50,12 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   const [showCharge, setShowCharge] = useState(false);
   const [amount, setAmount] = useState('');
   const [generating, setGenerating] = useState(false);
+  // El rotulo del mostrador: una sola fila por (comercio, sucursal, moneda),
+  // que no cambia jamas. Antes cada toque de "Generar QR" creaba una identidad
+  // nueva, permanente y pagable para siempre.
   const [code, setCode] = useState<QRPaymentCode | null>(null);
+  // El cobro de la venta en curso, con su propio QR.
+  const [cobro, setCobro] = useState<QRCharge | null>(null);
   const [error, setError] = useState('');
 
   // Charge composition: catalog items and the location the charge is for.
@@ -92,6 +99,42 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     return () => { cancelled = true; };
   }, [showCharge, merchant.id]);
 
+  // El rotulo del mostrador se carga una vez y se muestra siempre: la pantalla
+  // abre con el QR ya puesto, sin paso previo.
+  useEffect(() => {
+    if (!showCharge) return;
+    let cancelled = false;
+    void (async () => {
+      const api = getApiLayer().qrPayments;
+      if (!api) return;
+      const res = await api.getMerchantCode(merchant.id, { locationId: locationId || undefined, currency: ccy });
+      if (cancelled) return;
+      if (res.success && res.data) setCode(res.data);
+      else setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+    })();
+    return () => { cancelled = true; };
+  }, [showCharge, merchant.id, locationId, ccy, t]);
+
+  // "Ya entro": con la pantalla del cobro abierta se pregunta por su estado
+  // cada pocos segundos. El aviso por WebSocket llega igual y es mas rapido;
+  // esto es el respaldo por si el socket esta caido, que es cuando un mostrador
+  // mas lo necesita.
+  useEffect(() => {
+    if (!showCharge || !cobro || cobro.status !== 'pending') return;
+    const api = getApiLayer().qrPayments;
+    if (!api) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        const res = await api.getCharge(cobro.id);
+        if (res.success && res.data && res.data.status !== cobro.status) {
+          setCobro(res.data);
+          if (res.data.status === 'paid') onReload();
+        }
+      })();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [showCharge, cobro, onReload]);
+
   const verified = merchant.verificationStatus === 'verified';
   // Cada cobro trae su moneda; rotularlo todo con el simbolo de la moneda base
   // de la aplicacion convertia un cobro en dolares en uno en colones a la vista.
@@ -118,36 +161,73 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       return { ...prev, [id]: next };
     });
 
+  // Cobrar un monto ya no crea una identidad: emite un COBRO contra el rotulo.
+  // Si ya hay uno en curso, lo reemplaza — y si ese ya se pago, el servidor lo
+  // dice y no se emite ninguno, que es lo que impide pedir el pago dos veces.
   const charge = async () => {
     const api = getApiLayer().qrPayments;
-    if (!api || generating) return;
-    setGenerating(true);
-    setError('');
-    setCode(null);
-    // A composed cart wins over the manual amount; its note describes the items.
+    if (!api || generating || !code) return;
     const fromCart = cartTotal > 0;
     const amt = fromCart ? cartTotal : parseFloat(amount);
-    const fixed = fromCart || (Number.isFinite(amt) && amt > 0);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    setGenerating(true);
+    setError('');
     const note = fromCart
       ? cartItems.map((c) => `${cart[c.id]}x ${c.name}`).join(', ')
       : undefined;
-    const res = await api.createQRCode({
-      type: fixed ? 'merchant_fixed' : 'merchant_dynamic',
-      amount: fixed ? amt : undefined,
-      currency: ccy,
+    const res = await api.createCharge({
+      qrCodeId: code.id,
+      amount: amt,
       note,
-      singleUse: false,
-      merchantId: merchant.id,
-      locationId: locationId || undefined,
+      channel: 'counter',
+      replaces: cobro?.status === 'pending' ? cobro.id : undefined,
     });
     setGenerating(false);
-    if (res.success && res.data) setCode(res.data);
-    else setError(res.error?.message || t('merchant_qr_error'));
+    if (res.success && res.data) {
+      setCobro(res.data);
+      setAmount('');
+      setCart({});
+      return;
+    }
+    setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+    if (res.error?.code === 'COBRO_YA_PAGADO') {
+      // La pantalla estaba atrasada: la venta ya entro.
+      const actual = await api.getCharge(cobro?.id ?? '');
+      if (actual.success && actual.data) setCobro(actual.data);
+      onReload();
+    }
+  };
+
+  // Cancelar el cobro en curso. Sobre uno ya pagado NO dice "cancelado".
+  const cancelarCobro = async () => {
+    const api = getApiLayer().qrPayments;
+    if (!api || !cobro) return;
+    setError('');
+    const res = await api.cancelCharge(cobro.id);
+    if (res.success) {
+      setCobro(null);
+      return;
+    }
+    setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+    if (res.error?.code === 'COBRO_YA_PAGADO') {
+      const actual = await api.getCharge(cobro.id);
+      if (actual.success && actual.data) setCobro(actual.data);
+      onReload();
+    }
+  };
+
+  // Siguiente cliente: limpia la venta y deja el mostrador listo, con el rotulo
+  // intacto. El codigo del mostrador NO se descarta nunca.
+  const siguienteCliente = () => {
+    setCobro(null);
+    setAmount('');
+    setCart({});
+    setError('');
+    onReload();
   };
 
   const closeCharge = () => {
     setShowCharge(false);
-    setCode(null);
     setAmount('');
     setCart({});
     setError('');
@@ -338,103 +418,141 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
         </div>
       </BottomSheet>
 
-      {/* Charge sheet */}
+      {/* Hoja de cobro. El QR del mostrador esta SIEMPRE arriba; cobrar un
+          monto no lo reemplaza, emite un cobro con su propio codigo. */}
       <BottomSheet isOpen={showCharge} onClose={closeCharge} title={t('merchant_generate_qr')}>
-        {!code ? (
-          <div className="space-y-4">
-            {/* Compose from the catalog when the shop keeps one; the manual
-                amount below still works when the cart is empty. */}
-            {catalog.length > 0 && (
-              <div>
-                <label className="text-sm font-medium uv-text-secondary block mb-2">{t('business_catalog')}</label>
-                <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden max-h-52 overflow-y-auto">
-                  {catalog.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold uv-text-primary truncate">{c.name}</p>
-                        <p className="text-[11px] uv-text-muted tabular-nums">{money(c.price)}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => setQty(c.id, -1)}
-                          disabled={!(cart[c.id] ?? 0)}
-                          aria-label={`- ${c.name}`}
-                          className="w-8 h-8 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex items-center justify-center disabled:opacity-40"
-                        >
-                          <Icons.Minus size={14} />
-                        </button>
-                        <span className="w-5 text-center text-sm font-bold uv-text-primary tabular-nums">{cart[c.id] ?? 0}</span>
-                        <button
-                          onClick={() => setQty(c.id, 1)}
-                          aria-label={`+ ${c.name}`}
-                          className="w-8 h-8 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex items-center justify-center"
-                        >
-                          <Icons.Plus size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {cartTotal > 0 && (
-                  <div className="flex justify-between text-sm mt-2 px-1">
-                    <span className="uv-text-muted">{t('business_charge_total')}</span>
-                    <span className="font-bold uv-text-primary tabular-nums">{money(cartTotal)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {cartTotal === 0 && (
-              <>
-                <label className="text-sm font-medium uv-text-secondary block">{t('merchant_qr_amount')}</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-3xl font-bold uv-text-primary">{symbol}</span>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="flex-1 text-3xl font-bold bg-transparent outline-none uv-text-primary placeholder-gray-300"
-                  />
-                </div>
-                <p className="text-xs uv-text-muted">{t('merchant_qr_amount_hint')}</p>
-              </>
-            )}
-
-            {locations.length > 0 && (
-              <div>
-                <label className="text-sm font-medium uv-text-secondary block mb-1.5">{t('business_charge_location')}</label>
-                <select
-                  value={locationId}
-                  onChange={(e) => setLocationId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
-                >
-                  <option value="">—</option>
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
-            <Button onClick={charge} loading={generating} size="lg" fullWidth>
-              {generating ? t('loading') : t('merchant_generate_qr')}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center space-y-3">
+        <div className="space-y-4">
+          {/* ── El rotulo ─────────────────────────────────────────────── */}
+          <div className="flex flex-col items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)]">
-              {code.type === 'merchant_fixed' ? t('merchant_qr_fixed') : t('merchant_qr_dynamic')}
+              {cobro ? t('qr_cobrando').replace('{amount}', money(cobro.amount, cobro.currency)) : t('qr_rotulo_mostrador')}
             </span>
             <div className="bg-white p-4 rounded-2xl border border-gray-200">
-              <QRCodeSVG value={code.qrData} size={200} />
+              {code || cobro ? (
+                <QRCodeSVG value={(cobro ?? code)!.qrData} size={200} />
+              ) : (
+                <div className="w-[200px] h-[200px] flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
             </div>
-            {code.amount > 0 && <p className="text-2xl font-black uv-text-primary tabular-nums">{money(code.amount)}</p>}
-            <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('merchant_qr_help')}</p>
-            <Button onClick={closeCharge} size="lg" fullWidth>{t('close')}</Button>
+
+            {cobro?.status === 'paid' ? (
+              <div className="flex items-center gap-2 uv-chip-success px-3 py-1.5 rounded-full" role="status">
+                <Icons.Check size={16} />
+                <span className="text-sm font-bold">{t('qr_pagado')}</span>
+              </div>
+            ) : cobro ? (
+              <p className="text-xs uv-text-muted">
+                {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobro.expiresAt)))}
+              </p>
+            ) : (
+              <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+            )}
           </div>
-        )}
+
+          {cobro?.status === 'paid' ? (
+            <Button onClick={siguienteCliente} size="lg" fullWidth>{t('qr_siguiente_cliente')}</Button>
+          ) : (
+            <>
+              {/* Compose from the catalog when the shop keeps one; the manual
+                  amount below still works when the cart is empty. */}
+              {catalog.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium uv-text-secondary block mb-2">{t('business_catalog')}</label>
+                  <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden max-h-52 overflow-y-auto">
+                    {catalog.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold uv-text-primary truncate">{c.name}</p>
+                          <p className="text-[11px] uv-text-muted tabular-nums">{money(c.price)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setQty(c.id, -1)}
+                            disabled={!(cart[c.id] ?? 0)}
+                            aria-label={`- ${c.name}`}
+                            className="w-8 h-8 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex items-center justify-center disabled:opacity-40"
+                          >
+                            <Icons.Minus size={14} />
+                          </button>
+                          <span className="w-5 text-center text-sm font-bold uv-text-primary tabular-nums">{cart[c.id] ?? 0}</span>
+                          <button
+                            onClick={() => setQty(c.id, 1)}
+                            aria-label={`+ ${c.name}`}
+                            className="w-8 h-8 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex items-center justify-center"
+                          >
+                            <Icons.Plus size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {cartTotal > 0 && (
+                    <div className="flex justify-between text-sm mt-2 px-1">
+                      <span className="uv-text-muted">{t('business_charge_total')}</span>
+                      <span className="font-bold uv-text-primary tabular-nums">{money(cartTotal)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {cartTotal === 0 && (
+                <>
+                  <label className="text-sm font-medium uv-text-secondary block">{t('merchant_qr_amount')}</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl font-bold uv-text-primary">{symbol}</span>
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="flex-1 text-3xl font-bold bg-transparent outline-none uv-text-primary placeholder-gray-300"
+                    />
+                  </div>
+                  <p className="text-xs uv-text-muted">{t('merchant_qr_amount_hint')}</p>
+                </>
+              )}
+
+              {locations.length > 0 && !cobro && (
+                <div>
+                  <label className="text-sm font-medium uv-text-secondary block mb-1.5">{t('business_charge_location')}</label>
+                  <select
+                    value={locationId}
+                    onChange={(e) => setLocationId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
+                  >
+                    <option value="">—</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+
+              <Button
+                onClick={charge}
+                loading={generating}
+                disabled={generating || !code || !(cartTotal > 0 || parseFloat(amount) > 0)}
+                size="lg"
+                fullWidth
+              >
+                {generating ? t('loading') : cobro ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
+              </Button>
+
+              {cobro && (
+                <button
+                  onClick={cancelarCobro}
+                  className="w-full py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-secondary font-bold"
+                >
+                  {t('qr_cancelar_cobro')}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </BottomSheet>
     </div>
   );
