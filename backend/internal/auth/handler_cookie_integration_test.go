@@ -51,7 +51,10 @@ func TestLoginSetsRefreshCookie(t *testing.T) {
 	}
 	c := findCookie(rec, "__Host-kp_refresh")
 	if c == nil {
+		// El return es para el analizador: sin el, staticcheck no da por
+		// terminado el flujo en t.Fatal y marca SA5011 en cada uso de abajo.
 		t.Fatal("login did not set the refresh cookie")
+		return
 	}
 	if c.Value == "" {
 		t.Error("refresh cookie is empty")

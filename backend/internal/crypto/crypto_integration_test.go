@@ -407,7 +407,10 @@ func TestBuy_DecimalPrecision_Exact(t *testing.T) {
 		}
 	}
 	if btc == nil {
+		// El return es para el analizador: sin el, staticcheck no da por
+		// terminado el flujo en t.Fatal y marca SA5011 en cada uso de abajo.
 		t.Fatal("BTC asset not found")
+		return
 	}
 	want := decimal.RequireFromString("0.3")
 	if !btc.Balance.Equal(want) {
