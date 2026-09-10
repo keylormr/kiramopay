@@ -137,6 +137,33 @@ func (r *Repository) FindByID(ctx context.Context, id string) (*TransactionRecor
 	return tx, nil
 }
 
+// patronDeBusqueda arma el patron ILIKE del texto que escribio la persona.
+// Devuelve "" cuando no hay nada que buscar.
+//
+// Los comodines se ESCAPAN: sin esto, alguien que busca "50%" no esta pidiendo
+// "las filas que empiezan con 50", esta pidiendo un comodin en medio del
+// patron, y la pantalla devuelve cosas que no tienen nada que ver con lo que
+// escribio. El caracter de escape es la barra invertida, que es el que LIKE usa
+// por omision en Postgres.
+//
+// El largo se acota en RUNAS y no en bytes: cortar a la mitad un caracter
+// multibyte produce texto invalido.
+func patronDeBusqueda(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if runas := []rune(s); len(runas) > maxLargoBusqueda {
+		s = string(runas[:maxLargoBusqueda])
+	}
+	s = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return "%" + s + "%"
+}
+
+// maxLargoBusqueda acota el texto de busqueda. Un patron ILIKE gigante no
+// encuentra nada util y si cuesta recorrerlo.
+const maxLargoBusqueda = 100
+
 func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTransactionsRequest) (*TransactionListResponse, error) {
 	limit := req.Limit
 	if limit <= 0 || limit > 100 {
@@ -169,6 +196,22 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 	}
 	if !req.To.IsZero() {
 		addFilter("created_at < $%d", req.To)
+	}
+	if patron := patronDeBusqueda(req.Search); patron != "" {
+		// El mismo parametro en las cuatro columnas: por eso el verbo va
+		// indexado ($%[1]d) y no posicional, addFilter pasa un solo argumento.
+		//
+		// counterparty_name y la descripcion son lo que la pantalla muestra
+		// como titulo del movimiento; type entra para que "sinpe" encuentre
+		// los envios y los recibos aunque el titulo no diga la palabra.
+		//
+		// ILIKE con comodin a ambos lados no puede usar indice, pero la
+		// consulta ya viene acotada a UN usuario por el filtro de arriba: lo
+		// que se recorre son las filas de esa persona, no la tabla.
+		addFilter(`(COALESCE(counterparty_name, '') ILIKE $%[1]d
+		         OR COALESCE(metadata->>'description', '') ILIKE $%[1]d
+		         OR COALESCE(external_reference, '') ILIKE $%[1]d
+		         OR type ILIKE $%[1]d)`, patron)
 	}
 
 	var total int

@@ -50,6 +50,7 @@ export class HttpTransactionRepository implements ITransactionRepository {
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.from) qs.set('from', params.from);
     if (params.to) qs.set('to', params.to);
+    if (params.search) qs.set('search', params.search);
 
     const res = await this.client.get<{
       transactions: BackendTransactionRow[];

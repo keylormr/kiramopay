@@ -8,6 +8,14 @@ export interface TransactionListParams {
   from?: string;
   /** ISO timestamp; exclusive upper bound on the transaction date. */
   to?: string;
+  /**
+   * Texto libre. Lo resuelve el SERVIDOR contra todo el historial.
+   *
+   * El buscador de la pantalla de movimientos filtraba el arreglo que el
+   * cliente ya tenia en memoria —las ultimas 50 filas—, asi que un movimiento
+   * del mes pasado no aparecia y el usuario concluia que no existia.
+   */
+  search?: string;
 }
 
 /** One page of transactions plus the total match count, so callers can page
