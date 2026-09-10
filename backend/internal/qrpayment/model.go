@@ -35,20 +35,83 @@ type Merchant struct {
 
 // ── QR Payment Code ──────────────────────────────────────────────────────────
 
+// Estados de un codigo. Un codigo 'active' es la IDENTIDAD de cobro: monto 0,
+// no vence, no se consume, se imprime y se pega. 'historic' es una fila vieja
+// que sigue siendo pagable por el camino de compatibilidad. 'revoked' no cobra
+// mas.
+const (
+	EstadoCodigoActivo    = "active"
+	EstadoCodigoRevocado  = "revoked"
+	EstadoCodigoHistorico = "historic"
+)
+
 type QRPaymentCode struct {
-	ID         string     `json:"id"`
-	CreatorID  string     `json:"creator_id"`
-	Type       string     `json:"type"`             // merchant_fixed, merchant_dynamic, p2p_request, p2p_receive
-	Amount     int64      `json:"amount,omitempty"` // centimos, 0 = payer enters amount
-	Currency   string     `json:"currency"`
-	MerchantID string     `json:"merchant_id,omitempty"`
-	LocationID string     `json:"location_id,omitempty"` // which shop location charges with it
-	Note       string     `json:"note,omitempty"`
-	QRData     string     `json:"qr_data"` // encoded payload
-	SingleUse  bool       `json:"single_use"`
-	Used       bool       `json:"used"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID         string `json:"id"`
+	CreatorID  string `json:"creator_id"`
+	Type       string `json:"type"` // merchant_fixed, merchant_dynamic, p2p_request, p2p_receive
+	Currency   string `json:"currency"`
+	MerchantID string `json:"merchant_id,omitempty"`
+	LocationID string `json:"location_id,omitempty"` // which shop location charges with it
+	QRData     string `json:"qr_data"`               // encoded payload
+	Status     string `json:"status"`                // active, historic, revoked
+
+	// ── Columnas CONGELADAS en una fila 'active' ─────────────────────────────
+	//
+	// Leen bien y tienen datos, pero estan MUERTAS para un codigo activo: el
+	// monto, la nota y el vencimiento viven ahora en QRCharge, y un codigo
+	// permanente no se consume. Siguen aqui para que el historico se lea, y el
+	// CHECK chk_qr_code_activo_sin_monto (migracion 062) impide que alguien las
+	// reviva por accidente.
+	//
+	// Si estas por ramificar sobre SingleUse o Used en el camino nuevo, no lo
+	// hagas: ese es exactamente el defecto que la 062 cerro.
+	Amount    int64      `json:"amount,omitempty"`
+	Note      string     `json:"note,omitempty"`
+	SingleUse bool       `json:"single_use"`
+	Used      bool       `json:"used"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// ── Cobro ────────────────────────────────────────────────────────────────────
+
+// Estados y canales de un cobro.
+const (
+	EstadoCobroPendiente   = "pending"
+	EstadoCobroPagado      = "paid"
+	EstadoCobroCancelado   = "cancelled"
+	EstadoCobroVencido     = "expired"
+	EstadoCobroReemplazado = "superseded"
+
+	CanalMostrador = "counter"
+	CanalEnlace    = "link"
+)
+
+// QRCharge es UNA VENTA: monto, nota, quien la genero, vencimiento y estado.
+// Tiene su PROPIO payload, que es el que se muestra en la pantalla del cajero o
+// se comparte por enlace — nunca va montado sobre el rotulo permanente, que es
+// lo que impide que el cliente de atras en la fila reclame el cobro del de
+// adelante.
+type QRCharge struct {
+	ID           string     `json:"id"`
+	QRCodeID     string     `json:"qr_code_id"`
+	MerchantID   string     `json:"merchant_id,omitempty"`
+	LocationID   string     `json:"location_id,omitempty"`
+	CreatedBy    string     `json:"created_by"`
+	Amount       int64      `json:"amount"` // centimos, siempre > 0
+	Currency     string     `json:"currency"`
+	Note         string     `json:"note,omitempty"`
+	Channel      string     `json:"channel"` // counter, link
+	Status       string     `json:"status"`
+	QRData       string     `json:"qr_data"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	PaidBy       string     `json:"paid_by,omitempty"`
+	PaidTxID     string     `json:"paid_tx_id,omitempty"`
+	PaidAt       *time.Time `json:"paid_at,omitempty"`
+	SupersededBy string     `json:"superseded_by,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // ── QR Payment Transaction ───────────────────────────────────────────────────
@@ -56,6 +119,7 @@ type QRPaymentCode struct {
 type QRPaymentRecord struct {
 	ID          string     `json:"id"`
 	QRCodeID    string     `json:"qr_code_id"`
+	ChargeID    string     `json:"charge_id,omitempty"` // el cobro que se reclamo, vacio si fue monto abierto
 	PayerID     string     `json:"payer_id"`
 	ReceiverID  string     `json:"receiver_id"`
 	MerchantID  string     `json:"merchant_id,omitempty"`
@@ -209,7 +273,59 @@ type SetCommissionRequest struct {
 }
 
 type ScanQRPaymentRequest struct {
-	QRData   string `json:"qr_data"`
+	QRData string `json:"qr_data"`
+
+	// ChargeID es el cobro que el pagador VIO en pantalla. Cuando viene, el
+	// servidor exige que coincida con el que resuelve el payload: si el cajero
+	// cambio el monto mientras el cliente miraba, el pago se rechaza en vez de
+	// cobrar un numero que nadie vio.
+	ChargeID string `json:"charge_id,omitempty"`
+
+	// IdempotencyKey es el nonce del PAGADOR, y solo hace falta en el camino de
+	// MONTO ABIERTO: ahi el servidor no puede distinguir "el telefono reintento"
+	// de "el usuario quiso pagar otra vez". Para un cobro no se usa, porque el
+	// cobro es de un solo uso por naturaleza y se reclama atomicamente — aceptar
+	// un nonce ahi dejaria que un cliente hostil convierta un cobro en dos.
+	//
+	// 1..32 caracteres de [A-Za-z0-9._-]. El tope de 32 no es arbitrario: la
+	// llave completa mide 3+1+36+1+36+1+32 = 110, y la pata del receptor le
+	// agrega ":recv" para llegar a 115, contra el VARCHAR(120) de transactions.
+	// El cliente manda un UUID sin guiones.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+
 	Amount   int64  `json:"amount,omitempty"` // centimos, required if QR has no fixed amount
 	Currency string `json:"currency"`
+}
+
+// CreateChargeRequest crea un cobro sobre un codigo permanente. `Replaces`
+// reemplaza un cobro pendiente: no se edita el monto, se supersede, para que
+// quede el rastro de que se pidio 5.000 y luego 7.500.
+type CreateChargeRequest struct {
+	QRCodeID string `json:"qr_code_id"`
+	Amount   int64  `json:"amount"` // centimos, > 0
+	Currency string `json:"currency,omitempty"`
+	Note     string `json:"note,omitempty"`
+	Channel  string `json:"channel,omitempty"` // counter (default) | link
+	Replaces string `json:"replaces,omitempty"`
+}
+
+// ResolvedQR es lo que la hoja de pago necesita ANTES de mostrar un boton de
+// pagar: a quien se le paga. Un codigo permanente esta pegado a la vista de toda
+// la fila, y el fraude que habilita es tapar el rotulo de uno con el de otro.
+type ResolvedQR struct {
+	Kind         string     `json:"kind"` // code | charge | legacy
+	PayeeName    string     `json:"payee_name,omitempty"`
+	MerchantName string     `json:"merchant_name,omitempty"`
+	LocationName string     `json:"location_name,omitempty"`
+	Currency     string     `json:"currency"`
+	Amount       int64      `json:"amount"` // 0 = monto abierto
+	Note         string     `json:"note,omitempty"`
+	Status       string     `json:"status,omitempty"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	ChargeID     string     `json:"charge_id,omitempty"`
+	QRCodeID     string     `json:"qr_code_id"`
+}
+
+type ResolveQRRequest struct {
+	QRData string `json:"qr_data"`
 }

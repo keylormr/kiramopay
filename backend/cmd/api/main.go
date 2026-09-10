@@ -441,7 +441,12 @@ func main() {
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService, &marketplace.Options{
 		CobrosActivos: cfg.Server.Environment != "production",
 	})
-	qrService := qrpayment.NewService(qrRepo, txService, userRepo)
+	// El cobro por QR avisa al cobrador: un mostrador vive de saber "ya entro",
+	// y con un rotulo pegado no hay hoja que cerrar. Es el mismo riel que ya usa
+	// SINPE.
+	qrService := qrpayment.NewService(qrRepo, txService, userRepo, &qrpayment.Options{
+		Notifier: notifService,
+	})
 	splitService := splitpay.NewService(splitRepo, txService, userRepo)
 	cardsService := cards.NewService(cardsRepo)
 	fraudService := fraud.NewService(fraudRepo)
@@ -605,6 +610,14 @@ func main() {
 	expiryPollerCtx, expiryPollerCancel := context.WithCancel(context.Background())
 	defer expiryPollerCancel()
 	go expiryPoller.Run(expiryPollerCtx)
+
+	// Cobros QR vencidos. Cosmetico para la correctitud —el reclamo ya filtra
+	// por vencimiento dentro del asiento—, pero sin el la pantalla del cajero
+	// muestra como "esperando pago" algo que ya no se puede pagar.
+	qrChargePoller := qrpayment.NewPoller(qrService, pool, 60*time.Second, logger)
+	qrChargePollerCtx, qrChargePollerCancel := context.WithCancel(context.Background())
+	defer qrChargePollerCancel()
+	go qrChargePoller.Run(qrChargePollerCtx)
 
 	// Router
 	r := chi.NewRouter()
@@ -931,10 +944,24 @@ func main() {
 			r.Post("/qr/merchants/{id}/catalog", qrHandler.CreateCatalogItem)
 			r.Put("/qr/merchants/{id}/catalog/{itemID}", qrHandler.UpdateCatalogItem)
 			r.Delete("/qr/merchants/{id}/catalog/{itemID}", qrHandler.DeleteCatalogItem)
+			// POST /qr/codes se CONSERVA como ruta de compatibilidad: enruta
+			// por monto para que una aplicacion vieja siga cobrando. Ver
+			// qrpayment.CreateQRCode.
 			r.Post("/qr/codes", qrHandler.CreateQRCode)
 			r.Get("/qr/codes", qrHandler.GetUserQRCodes)
 			r.Post("/qr/pay", qrHandler.ScanAndPay)
 			r.Get("/qr/history", qrHandler.GetPaymentHistory)
+
+			// El QR reciclable: identidad permanente por un lado, cobros por
+			// el otro.
+			r.Get("/qr/codes/me", qrHandler.GetMyCode)
+			r.Post("/qr/codes/{id}/revoke", qrHandler.RevokeCode)
+			r.Get("/qr/merchants/{id}/code", qrHandler.GetMerchantCode)
+			r.Post("/qr/resolve", qrHandler.ResolveQR)
+			r.Post("/qr/charges", qrHandler.CreateCharge)
+			r.Get("/qr/charges", qrHandler.ListCharges)
+			r.Get("/qr/charges/{id}", qrHandler.GetChargeStatus)
+			r.Delete("/qr/charges/{id}", qrHandler.CancelCharge)
 
 			// Splits
 			r.Post("/splits", splitHandler.CreateSplit)

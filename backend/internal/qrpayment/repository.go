@@ -62,11 +62,6 @@ func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([
 	return collectMerchants(rows)
 }
 
-func (r *Repository) GetMerchantByQRCode(ctx context.Context, qrCode string) (*Merchant, error) {
-	return scanMerchant(r.db.QueryRow(ctx,
-		`SELECT `+merchantCols+` FROM qr_merchants WHERE qr_code = $1 AND active = TRUE`, qrCode))
-}
-
 // ListPendingMerchants returns merchants awaiting admin review (oldest first).
 func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {
 	rows, err := r.db.Query(ctx,
@@ -160,40 +155,69 @@ func collectMerchants(rows pgx.Rows) ([]Merchant, error) {
 
 // ── QR Codes ─────────────────────────────────────────────────────────────────
 
-func (r *Repository) CreateQRCode(ctx context.Context, qr *QRPaymentCode) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO qr_payment_codes (id, creator_id, type, amount, currency, merchant_id, location_id, note, qr_data, single_use, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9, $10, $11)`,
-		qr.ID, qr.CreatorID, qr.Type, qr.Amount, qr.Currency, qr.MerchantID, qr.LocationID,
-		qr.Note, qr.QRData, qr.SingleUse, qr.ExpiresAt)
-	return err
-}
+// codeCols estaba repetida en dos consultas y se desincronizo al agregar
+// columnas. Vive aqui para que una columna nueva entre en las dos de una vez.
+const codeCols = `id, creator_id, type, amount, currency, COALESCE(merchant_id::text, ''),
+	COALESCE(location_id::text, ''), COALESCE(note, ''), qr_data, single_use, used,
+	expires_at, COALESCE(status, 'active'), revoked_at, created_at`
 
-func (r *Repository) GetQRCodeByData(ctx context.Context, qrData string) (*QRPaymentCode, error) {
+func scanCode(row pgx.Row) (*QRPaymentCode, error) {
 	var qr QRPaymentCode
-	err := r.db.QueryRow(ctx,
-		`SELECT id, creator_id, type, amount, currency, COALESCE(merchant_id::text, ''),
-		 COALESCE(location_id::text, ''), COALESCE(note, ''), qr_data, single_use, used, expires_at, created_at
-		 FROM qr_payment_codes WHERE qr_data = $1`, qrData).Scan(
-		&qr.ID, &qr.CreatorID, &qr.Type, &qr.Amount, &qr.Currency, &qr.MerchantID,
-		&qr.LocationID, &qr.Note, &qr.QRData, &qr.SingleUse, &qr.Used, &qr.ExpiresAt, &qr.CreatedAt)
-	if err != nil {
+	if err := row.Scan(&qr.ID, &qr.CreatorID, &qr.Type, &qr.Amount, &qr.Currency,
+		&qr.MerchantID, &qr.LocationID, &qr.Note, &qr.QRData, &qr.SingleUse, &qr.Used,
+		&qr.ExpiresAt, &qr.Status, &qr.RevokedAt, &qr.CreatedAt); err != nil {
 		return nil, err
 	}
 	return &qr, nil
 }
 
-func (r *Repository) MarkQRUsed(ctx context.Context, qrID string) error {
-	_, err := r.db.Exec(ctx, `UPDATE qr_payment_codes SET used = TRUE WHERE id = $1`, qrID)
+func (r *Repository) CreateQRCode(ctx context.Context, qr *QRPaymentCode) error {
+	if qr.Status == "" {
+		qr.Status = EstadoCodigoActivo
+	}
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO qr_payment_codes (id, creator_id, type, amount, currency, merchant_id, location_id, note, qr_data, single_use, expires_at, status)
+		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9, $10, $11, $12)`,
+		qr.ID, qr.CreatorID, qr.Type, qr.Amount, qr.Currency, qr.MerchantID, qr.LocationID,
+		qr.Note, qr.QRData, qr.SingleUse, qr.ExpiresAt, qr.Status)
 	return err
+}
+
+func (r *Repository) GetQRCodeByData(ctx context.Context, qrData string) (*QRPaymentCode, error) {
+	return scanCode(r.db.QueryRow(ctx,
+		`SELECT `+codeCols+` FROM qr_payment_codes WHERE qr_data = $1`, qrData))
+}
+
+func (r *Repository) GetQRCodeByID(ctx context.Context, id string) (*QRPaymentCode, error) {
+	return scanCode(r.db.QueryRow(ctx,
+		`SELECT `+codeCols+` FROM qr_payment_codes WHERE id = $1`, id))
+}
+
+// ReclamarLegacyEnTx marca usado un codigo VIEJO de un solo uso, con guarda y
+// dentro de la transaccion del asiento.
+//
+// El UPDATE sin guarda que habia antes era un check-then-act: se comprobaba
+// `qr.Used && qr.SingleUse` arriba, se movia el dinero, y se marcaba usado
+// despues en modo best-effort. Dos personas podian pagar el mismo codigo a la
+// vez. Con la condicion adentro del UPDATE, el bloqueo de fila las serializa: la
+// segunda no matchea, el gancho falla y su asiento se aborta.
+func ReclamarLegacyEnTx(ctx context.Context, q pgxQuerier, qrID string) error {
+	ct, err := q.Exec(ctx,
+		`UPDATE qr_payment_codes SET used = TRUE
+		  WHERE id = $1 AND single_use AND NOT used`, qrID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() != 1 {
+		return ErrCobroYaPagado
+	}
+	return nil
 }
 
 func (r *Repository) GetUserQRCodes(ctx context.Context, userID string) ([]QRPaymentCode, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, creator_id, type, amount, currency, COALESCE(merchant_id::text, ''),
-		 COALESCE(location_id::text, ''), COALESCE(note, ''), qr_data, single_use, used, expires_at, created_at
-		 FROM qr_payment_codes WHERE creator_id = $1 ORDER BY created_at DESC LIMIT 50`,
-		userID)
+		`SELECT `+codeCols+` FROM qr_payment_codes
+		 WHERE creator_id = $1 ORDER BY created_at DESC LIMIT 50`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,13 +225,11 @@ func (r *Repository) GetUserQRCodes(ctx context.Context, userID string) ([]QRPay
 
 	var codes []QRPaymentCode
 	for rows.Next() {
-		var qr QRPaymentCode
-		if err := rows.Scan(&qr.ID, &qr.CreatorID, &qr.Type, &qr.Amount, &qr.Currency,
-			&qr.MerchantID, &qr.LocationID, &qr.Note, &qr.QRData, &qr.SingleUse, &qr.Used,
-			&qr.ExpiresAt, &qr.CreatedAt); err != nil {
+		qr, err := scanCode(rows)
+		if err != nil {
 			return nil, err
 		}
-		codes = append(codes, qr)
+		codes = append(codes, *qr)
 	}
 	return codes, rows.Err()
 }
@@ -216,14 +238,15 @@ func (r *Repository) GetUserQRCodes(ctx context.Context, userID string) ([]QRPay
 
 // paymentCols is the canonical column list (and order) for reading a
 // QRPaymentRecord, shared by every payment query so the scan stays in sync.
-const paymentCols = `id, qr_code_id, payer_id, receiver_id, COALESCE(merchant_id::text, ''),
+const paymentCols = `id, qr_code_id, COALESCE(charge_id::text, ''), payer_id, receiver_id,
+	COALESCE(merchant_id::text, ''),
 	COALESCE(location_id::text, ''), COALESCE(collected_by::text, ''),
 	amount, fee, currency, status, COALESCE(note, ''), COALESCE(tx_id, ''),
 	created_at, completed_at`
 
 func scanPayment(row pgx.Row) (*QRPaymentRecord, error) {
 	var p QRPaymentRecord
-	if err := row.Scan(&p.ID, &p.QRCodeID, &p.PayerID, &p.ReceiverID, &p.MerchantID,
+	if err := row.Scan(&p.ID, &p.QRCodeID, &p.ChargeID, &p.PayerID, &p.ReceiverID, &p.MerchantID,
 		&p.LocationID, &p.CollectedBy,
 		&p.Amount, &p.Fee, &p.Currency, &p.Status, &p.Note, &p.TxID,
 		&p.CreatedAt, &p.CompletedAt); err != nil {
@@ -244,11 +267,18 @@ func collectPayments(rows pgx.Rows) ([]QRPaymentRecord, error) {
 	return out, rows.Err()
 }
 
+// CreatePayment escribe la venta por el pool. El camino de pago NO la usa: usa
+// crearPagoEn con la transaccion del asiento, para que la venta y el dinero se
+// confirmen juntos.
 func (r *Repository) CreatePayment(ctx context.Context, p *QRPaymentRecord) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO qr_payments (id, qr_code_id, payer_id, receiver_id, merchant_id, location_id, collected_by, amount, fee, currency, status, note, tx_id)
-		 VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9, $10, $11, $12, NULLIF($13, ''))`,
-		p.ID, p.QRCodeID, p.PayerID, p.ReceiverID, p.MerchantID, p.LocationID, p.CollectedBy,
+	return crearPagoEn(ctx, r.db, p)
+}
+
+func crearPagoEn(ctx context.Context, q pgxQuerier, p *QRPaymentRecord) error {
+	_, err := q.Exec(ctx,
+		`INSERT INTO qr_payments (id, qr_code_id, charge_id, payer_id, receiver_id, merchant_id, location_id, collected_by, amount, fee, currency, status, note, tx_id)
+		 VALUES ($1, $2, NULLIF($3, '')::uuid, $4, $5, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, NULLIF($8, '')::uuid, $9, $10, $11, $12, $13, NULLIF($14, ''))`,
+		p.ID, p.QRCodeID, p.ChargeID, p.PayerID, p.ReceiverID, p.MerchantID, p.LocationID, p.CollectedBy,
 		p.Amount, p.Fee, p.Currency, p.Status, p.Note, p.TxID)
 	return err
 }

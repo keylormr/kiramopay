@@ -9,7 +9,7 @@ func TestCommissionFee(t *testing.T) {
 		bps    int
 		want   int64
 	}{
-		{"half percent on 100 colones", 10000, 50, 50},   // 0.50% of ₡100.00 = ₡0.50
+		{"half percent on 100 colones", 10000, 50, 50},    // 0.50% of ₡100.00 = ₡0.50
 		{"half percent on 1000 colones", 100000, 50, 500}, // ₡1000.00 -> ₡5.00
 		{"floors sub-centimo to zero", 199, 50, 0},        // 199*50/10000 = 0.995 -> 0
 		{"exactly one centimo", 200, 50, 1},               // 200*50/10000 = 1
