@@ -46,8 +46,14 @@ func TestElArbitroPuedeListarLaColaDeDisputas(t *testing.T) {
 	}
 
 	// Un tercero que no es parte NO puede verlos por la ruta normal: ese es el
-	// agujero que esto tapa.
-	if _, err := svc.Get(ctx, "00000000-0000-0000-0000-000000000001", disputada.ID); !errors.Is(err, escrow.ErrNotParty) {
+	// agujero que esto tapa. El id va lejos de los que siembra testutil
+	// (…0001 es el comprador y …0002 el vendedor); con uno de ellos esta
+	// comprobacion afirmaria algo falso y pasaria por casualidad.
+	const tercero = "99999999-9999-9999-9999-999999999999"
+	if tercero == comprador || tercero == vendedor {
+		t.Fatal("el tercero de la prueba es una de las partes")
+	}
+	if _, err := svc.Get(ctx, tercero, disputada.ID); !errors.Is(err, escrow.ErrNotParty) {
 		t.Fatalf("Get de un tercero = %v, se esperaba ErrNotParty", err)
 	}
 
