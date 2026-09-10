@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,6 +25,9 @@ type Logger struct {
 	repo   *Repository
 	events chan Event
 	done   chan struct{}
+
+	// descartados cuenta los eventos que no entraron al buffer. Ver Log.
+	descartados atomic.Int64
 
 	// mu protege el cierre del canal contra los productores. Stop se llama al
 	// apagar el proceso, pero los barridos de fondo (vencimiento de cuentas,
@@ -100,8 +104,26 @@ func (l *Logger) Log(evt Event) {
 	select {
 	case l.events <- evt:
 	default:
-		slog.Warn("audit log buffer full, dropping event", "action", evt.Action)
+		// Un evento de auditoria que se pierde no es una advertencia: es un
+		// agujero en el rastro que SUGEF 13-19 espera que exista, y hasta ahora
+		// desaparecia con un Warn y nada mas. No se bloquea al llamante —el
+		// productor es un camino de dinero— pero si se CUENTA, para que
+		// alguien pueda ver que el rastro se esta perdiendo en vez de
+		// enterarse por casualidad leyendo logs.
+		l.descartados.Add(1)
+		slog.Error("audit log buffer lleno, evento DESCARTADO",
+			"action", evt.Action, "descartados_totales", l.descartados.Load())
 	}
+}
+
+// Descartados devuelve cuantos eventos se perdieron por buffer lleno desde que
+// arranco el proceso. Se expone en /health: un numero distinto de cero dice que
+// el rastro tiene huecos.
+func (l *Logger) Descartados() int64 {
+	if l == nil {
+		return 0
+	}
+	return l.descartados.Load()
 }
 
 // LogLogin logs a login attempt. identifierType dice CON QUE tipo de

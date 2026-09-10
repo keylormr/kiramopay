@@ -175,6 +175,7 @@ func main() {
 	auditRepo := audit.NewRepository(pool)
 	auditLogger := audit.NewLogger(auditRepo, 1000)
 	defer auditLogger.Stop()
+	auditHandler := audit.NewHandler(auditRepo, auditLogger)
 
 	// ── Lockout store ────────────────────────────────────────────────────
 	lockoutStore := middleware.NewRedisLockoutStore(redisClient, 15*time.Minute)
@@ -691,8 +692,11 @@ func main() {
 		// transactions empiece a fallar por falta de particion. -1 = todavia no
 		// se pudo consultar. Se publica porque el fallo, cuando llega, detiene
 		// la aplicacion entera y tiene fecha conocida con meses de aviso.
-		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"dias_de_particiones":%d,"crypto_prices":%s}`,
-			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), particionesSvc.DiasDeMargen(time.Now()), cripto)
+		// auditoria_descartada distinto de cero quiere decir que el rastro tiene
+		// huecos: eventos que no entraron al buffer y se perdieron. Se publica
+		// porque antes se iban con un log y nadie se enteraba.
+		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"dias_de_particiones":%d,"auditoria_descartada":%d,"crypto_prices":%s}`,
+			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), particionesSvc.DiasDeMargen(time.Now()), auditLogger.Descartados(), cripto)
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 
@@ -1046,6 +1050,11 @@ func main() {
 				r.Post("/admin/merchants/{id}/approve", qrHandler.ApproveMerchant)
 				r.Post("/admin/merchants/{id}/reject", qrHandler.RejectMerchant)
 				r.Patch("/admin/merchants/{id}/commission", qrHandler.SetCommission)
+
+				// El rastro de auditoria. Se escribia desde el arranque del
+				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
+				// 13-19 eso es como no tenerlo.
+				r.Get("/admin/audit", auditHandler.Listar)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)
