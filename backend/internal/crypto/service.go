@@ -221,15 +221,6 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		return nil, fmt.Errorf("from_amount too small to convert into %s", req.ToAsset)
 	}
 
-	// Deduct from, add to
-	toName := getAssetName(req.ToAsset)
-	if err := s.repo.UpsertAsset(ctx, userID, req.FromAsset, fromAsset.Name, req.FromAmount.Neg(), decimal.Zero); err != nil {
-		return nil, err
-	}
-	if err := s.repo.UpsertAsset(ctx, userID, req.ToAsset, toName, cantidadDestino, precioDestino); err != nil {
-		return nil, err
-	}
-
 	tx := &TransactionRecord{
 		ID:       uuid.New().String(),
 		UserID:   userID,
@@ -241,7 +232,15 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		Currency: req.ToAsset,
 		Status:   "completed",
 	}
-	_ = s.repo.AddTransaction(ctx, tx)
+	// Los dos activos y el movimiento, en una sola transaccion. Antes eran tres
+	// escrituras sueltas: si fallaba la del activo de destino, el de origen ya
+	// estaba descontado y no llegaba nada a cambio.
+	toName := getAssetName(req.ToAsset)
+	if err := s.repo.ConvertirEnUnaTx(ctx, userID,
+		req.FromAsset, req.ToAsset, toName,
+		req.FromAmount, cantidadDestino, precioDestino, tx); err != nil {
+		return nil, err
+	}
 
 	return tx, nil
 }
@@ -271,11 +270,6 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		return nil, fmt.Errorf("insufficient %s balance for staking", req.Asset)
 	}
 
-	// Deduct from balance (locked in staking)
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount.Neg(), decimal.Zero); err != nil {
-		return nil, err
-	}
-
 	record := &StakingRecord{
 		UserID:    userID,
 		Asset:     req.Asset,
@@ -287,7 +281,9 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		Earned:    decimal.Zero,
 		Status:    "active",
 	}
-	if err := s.repo.AddStaking(ctx, record); err != nil {
+	// El descuento del activo y la posicion, juntos: sueltos, un fallo al
+	// escribir la posicion dejaba el saldo apartado sin nada que lo respalde.
+	if err := s.repo.ApartarParaStakingEnUnaTx(ctx, record); err != nil {
 		return nil, err
 	}
 

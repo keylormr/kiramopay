@@ -2,10 +2,13 @@ package crypto
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
@@ -58,6 +61,127 @@ func (r *Repository) GetAsset(ctx context.Context, userID, symbol string) (*Asse
 	return a, nil
 }
 
+// pgxQuerier lo satisfacen *pgxpool.Pool y pgx.Tx, para que el mismo SQL corra
+// suelto o dentro de una transaccion del llamante.
+type pgxQuerier interface {
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
+
+// abonarActivo suma saldo, creando la fila si es el primer abono de ese activo.
+func abonarActivo(ctx context.Context, q pgxQuerier, userID, symbol, name string, cantidad, precio decimal.Decimal) error {
+	_, err := q.Exec(ctx,
+		`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		 ON CONFLICT (user_id, symbol) DO UPDATE SET
+		   balance = crypto_assets.balance + $5,
+		   avg_cost = CASE WHEN $5 > 0 THEN
+		     (crypto_assets.balance * crypto_assets.avg_cost + $5 * $6) / (crypto_assets.balance + $5)
+		   ELSE crypto_assets.avg_cost END,
+		   updated_at = NOW()`,
+		uuid.New().String(), userID, symbol, name, cantidad, precio,
+	)
+	return err
+}
+
+// ErrSaldoDeActivoInsuficiente: el descuento no se pudo aplicar porque el saldo
+// del activo no alcanza. El texto llega al cliente, asi que se mantiene estable.
+var ErrSaldoDeActivoInsuficiente = errors.New("insufficient asset balance")
+
+// descontarActivo resta saldo CON GUARDA. La condicion `balance >= $3` es la
+// unica compuerta real: la comprobacion que hace el servicio antes lee fuera de
+// la transaccion, asi que dos operaciones simultaneas sobre el mismo activo la
+// pasaban las dos y el saldo quedaba en negativo.
+func descontarActivo(ctx context.Context, q pgxQuerier, userID, symbol string, cantidad decimal.Decimal) error {
+	ct, err := q.Exec(ctx,
+		`UPDATE crypto_assets SET balance = balance - $3, updated_at = NOW()
+		 WHERE user_id = $1 AND symbol = $2 AND balance >= $3`,
+		userID, symbol, cantidad)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("%w: %s", ErrSaldoDeActivoInsuficiente, symbol)
+	}
+	return nil
+}
+
+// ConvertirEnUnaTx mueve los dos activos de una conversion, y anota el
+// movimiento, DENTRO de una sola transaccion.
+//
+// Eran tres escrituras sueltas. Si la segunda fallaba, al usuario le
+// desaparecia el activo de origen y no le llegaba el de destino: una perdida
+// directa. Y no hay red que la recoja — los activos de cripto NO pasan por el
+// motor de doble partida, viven en esta tabla, asi que no existe conciliacion
+// que levante el faltante ni asiento que lo explique. Por eso el arreglo es una
+// transaccion propia y no el gancho del libro.
+func (r *Repository) ConvertirEnUnaTx(
+	ctx context.Context, userID, origen, destino, nombreDestino string,
+	cantidadOrigen, cantidadDestino, precioDestino decimal.Decimal,
+	mov *TransactionRecord,
+) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := descontarActivo(ctx, tx, userID, origen, cantidadOrigen); err != nil {
+		return err
+	}
+	if err := abonarActivo(ctx, tx, userID, destino, nombreDestino, cantidadDestino, precioDestino); err != nil {
+		return err
+	}
+	// El movimiento se anota aqui adentro a proposito: se descartaba con `_ =`,
+	// asi que una conversion podia ocurrir sin quedar registrada en ninguna
+	// parte. Si no se puede anotar, no se convierte.
+	if err := insertarMovimiento(ctx, tx, mov); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// ApartarParaStakingEnUnaTx descuenta el activo y escribe la posicion juntos.
+// Sueltos, un fallo al escribir la posicion dejaba el saldo descontado sin nada
+// que lo respalde: el usuario perdia el activo y no tenia posicion en staking.
+func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRecord) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := descontarActivo(ctx, tx, s.UserID, s.Asset, s.Amount); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO crypto_staking (id, user_id, asset, amount, apy, start_date, locked, lock_days, earned, status, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+		s.ID, s.UserID, s.Asset, s.Amount, s.APY, s.StartDate, s.Locked, s.LockDays, s.Earned, s.Status,
+	); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func insertarMovimiento(ctx context.Context, q pgxQuerier, tx *TransactionRecord) error {
+	if tx.ID == "" {
+		tx.ID = uuid.New().String()
+	}
+	if tx.CreatedAt.IsZero() {
+		tx.CreatedAt = time.Now()
+	}
+	_, err := q.Exec(ctx,
+		`INSERT INTO crypto_transactions (id, user_id, type, asset, amount, price, total, currency, fee, status, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		tx.ID, tx.UserID, tx.Type, tx.Asset, tx.Amount, tx.Price, tx.Total, tx.Currency, tx.Fee, tx.Status, tx.CreatedAt,
+	)
+	return err
+}
+
 func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name string, balanceDelta, price decimal.Decimal) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
@@ -76,19 +200,7 @@ func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name strin
 // Transactions
 
 func (r *Repository) AddTransaction(ctx context.Context, tx *TransactionRecord) error {
-	if tx.ID == "" {
-		tx.ID = uuid.New().String()
-	}
-	if tx.CreatedAt.IsZero() {
-		tx.CreatedAt = time.Now()
-	}
-
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO crypto_transactions (id, user_id, type, asset, amount, price, total, currency, fee, status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		tx.ID, tx.UserID, tx.Type, tx.Asset, tx.Amount, tx.Price, tx.Total, tx.Currency, tx.Fee, tx.Status, tx.CreatedAt,
-	)
-	return err
+	return insertarMovimiento(ctx, r.db, tx)
 }
 
 func (r *Repository) GetTransactions(ctx context.Context, userID string, limit int) ([]TransactionRecord, error) {
@@ -145,19 +257,6 @@ func (r *Repository) GetStakingPositions(ctx context.Context, userID string) ([]
 		positions = []StakingRecord{}
 	}
 	return positions, nil
-}
-
-func (r *Repository) AddStaking(ctx context.Context, s *StakingRecord) error {
-	if s.ID == "" {
-		s.ID = uuid.New().String()
-	}
-
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO crypto_staking (id, user_id, asset, amount, apy, start_date, locked, lock_days, earned, status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
-		s.ID, s.UserID, s.Asset, s.Amount, s.APY, s.StartDate, s.Locked, s.LockDays, s.Earned, s.Status,
-	)
-	return err
 }
 
 func (r *Repository) GetStakingByID(ctx context.Context, id, userID string) (*StakingRecord, error) {
