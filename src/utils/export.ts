@@ -1,5 +1,40 @@
 import type { Transaction } from '@/types';
 
+/**
+ * Resumen POR MONEDA.
+ *
+ * El resumen sumaba todas las filas con un `reduce` sin mirar `tx.ccy`: colones
+ * y dolares uno junto a otro, y el total escrito sin simbolo. El usuario tomaba
+ * decisiones sobre un numero que no significaba nada — no era el total en
+ * colones ni el total en dolares, era la suma de dos cosas distintas.
+ *
+ * No se convierte a una moneda comun a proposito: el tipo de cambio de la
+ * aplicacion no es una cotizacion de mercado, y convertir aqui seria inventar
+ * una cifra con aspecto de dato.
+ */
+export interface ResumenPorMoneda {
+  moneda: string;
+  ingresos: number;
+  egresos: number;
+  neto: number;
+}
+
+export function resumirPorMoneda(transactions: Transaction[]): ResumenPorMoneda[] {
+  const porMoneda = new Map<string, ResumenPorMoneda>();
+  for (const tx of transactions) {
+    const moneda = tx.ccy || 'CRC';
+    let r = porMoneda.get(moneda);
+    if (!r) {
+      r = { moneda, ingresos: 0, egresos: 0, neto: 0 };
+      porMoneda.set(moneda, r);
+    }
+    if (tx.amount > 0) r.ingresos += tx.amount;
+    else r.egresos += tx.amount;
+    r.neto += tx.amount;
+  }
+  return [...porMoneda.values()].sort((a, b) => a.moneda.localeCompare(b.moneda));
+}
+
 // --- Excel-compatible CSV ---
 export function exportTransactionsCSV(transactions: Transaction[], filename?: string): void {
   // Excel separator hint + BOM for UTF-8
@@ -17,20 +52,15 @@ export function exportTransactionsCSV(transactions: Transaction[], filename?: st
     tx.status === 'completed' ? 'Completado' : 'Pendiente',
   ]);
 
-  // Summary rows at the bottom
-  const totalIncome = transactions
-    .filter((tx) => tx.amount > 0)
-    .reduce((s, tx) => s + tx.amount, 0);
-  const totalExpenses = transactions
-    .filter((tx) => tx.amount < 0)
-    .reduce((s, tx) => s + tx.amount, 0);
-  const net = totalIncome + totalExpenses;
-
+  // Summary rows at the bottom, UNA TANDA POR MONEDA. La moneda viaja en su
+  // propia columna para que la hoja de calculo pueda agrupar por ella.
   rows.push([]);
   rows.push(['', '', '"RESUMEN"', '', '', '', '', '']);
-  rows.push(['', '', '"Total Ingresos"', totalIncome.toFixed(2), '', '', '', '']);
-  rows.push(['', '', '"Total Egresos"', totalExpenses.toFixed(2), '', '', '', '']);
-  rows.push(['', '', '"Balance Neto"', net.toFixed(2), '', '', '', '']);
+  for (const r of resumirPorMoneda(transactions)) {
+    rows.push(['', '', '"Total Ingresos"', r.ingresos.toFixed(2), r.moneda, '', '', '']);
+    rows.push(['', '', '"Total Egresos"', r.egresos.toFixed(2), r.moneda, '', '', '']);
+    rows.push(['', '', '"Balance Neto"', r.neto.toFixed(2), r.moneda, '', '', '']);
+  }
   rows.push(['', '', `"Generado: ${new Date().toLocaleString()}"`, '', '', '', '', '']);
 
   const csvContent = sep + [headers.join(','), ...rows.map((r) => (r as string[]).join(','))].join('\n');
@@ -44,11 +74,14 @@ export function exportTransactionsJSON(transactions: Transaction[], filename?: s
     app: 'KiramoPay',
     exportDate: new Date().toISOString(),
     count: transactions.length,
-    summary: {
-      totalIncome: transactions.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0),
-      totalExpenses: transactions.filter((tx) => tx.amount < 0).reduce((s, tx) => s + tx.amount, 0),
-      net: transactions.reduce((s, tx) => s + tx.amount, 0),
-    },
+    // Por moneda, por la misma razon que el CSV: un total que mezcla colones y
+    // dolares no es un total de nada.
+    summaryByCurrency: resumirPorMoneda(transactions).map((r) => ({
+      currency: r.moneda,
+      totalIncome: r.ingresos,
+      totalExpenses: r.egresos,
+      net: r.neto,
+    })),
     transactions: transactions.map((tx) => ({
       id: tx.id,
       date: tx.date,
