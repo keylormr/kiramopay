@@ -395,7 +395,7 @@ func (h *Handler) ScanAndPay(w http.ResponseWriter, r *http.Request) {
 
 	payment, err := h.service.ScanAndPay(r.Context(), userID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+		responderError(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, payment)

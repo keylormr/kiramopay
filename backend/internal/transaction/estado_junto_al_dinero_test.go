@@ -391,8 +391,11 @@ func TestGanchoDelLlamanteAbortaElDinero(t *testing.T) {
 		FromUserID: emisor, ToUserID: receptor, Amount: 35000, Currency: "CRC",
 		IdempotencyKey: "transfer:gancho-aborta",
 		TxType:         transaction.TypeQRPayment, ReceiveType: transaction.TypeQRReceive,
-		EnLaMismaTx: func(context.Context, pgx.Tx) error {
+		EnLaMismaTx: func(_ context.Context, _ pgx.Tx, txID string) error {
 			seLlamo = true
+			if txID == "" {
+				t.Error("el gancho no recibio el id de la fila del emisor")
+			}
 			return errors.New("ese codigo ya se cobro")
 		},
 	})

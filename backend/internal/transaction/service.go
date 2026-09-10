@@ -462,14 +462,16 @@ type CreateTransferRequest struct {
 
 	// EnLaMismaTx, si viene, corre DENTRO de la transaccion que escribe el
 	// asiento, junto con el cambio de estado de las dos filas: si devuelve
-	// error, el dinero no se mueve.
+	// error, el dinero no se mueve. Recibe el id de la fila del EMISOR, que es
+	// a lo que cuelga el asiento: un modulo que escribe su propia fila —la
+	// venta del QR, el movimiento del escrow— necesita apuntar a ella.
 	//
 	// Existe para el modulo que necesita reclamar algo en exclusiva al cobrar
 	// —el codigo QR de un solo uso, que hoy se comprueba antes y se marca
 	// despues, y por eso dos personas pueden pagarlo a la vez—. Rigen las
 	// mismas reglas que ledger.Posting.EnLaMismaTx: escribir solo por el `tx`
 	// que se recibe, y ningun efecto irreversible adentro.
-	EnLaMismaTx func(ctx context.Context, tx pgx.Tx) error
+	EnLaMismaTx func(ctx context.Context, tx pgx.Tx, txID string) error
 
 	// FeeFromReceiver selects who absorbs Fee. Default (false) is the historical
 	// payer-absorbed model: the payer pays Amount + Fee, the receiver is credited
@@ -700,7 +702,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	completar := s.completarEnLaMismaTx(sender.ID, idReceptor)
 	p.EnLaMismaTx = func(ctx context.Context, tx pgx.Tx) error {
 		if req.EnLaMismaTx != nil {
-			if err := req.EnLaMismaTx(ctx, tx); err != nil {
+			if err := req.EnLaMismaTx(ctx, tx, sender.ID); err != nil {
 				return err
 			}
 		}

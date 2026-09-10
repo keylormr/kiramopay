@@ -37,6 +37,7 @@ var (
 	KeyPayoutPoller = lockKey("worker:payout-poller")
 	KeyEscrowPoller = lockKey("worker:escrow-poller")
 	KeyDemoExpiry   = lockKey("worker:demo-expiry")
+	KeyQRCharges    = lockKey("worker:qr-charges")
 )
 
 // lockKey derives a stable int64 advisory-lock key from a namespace string.

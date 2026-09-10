@@ -475,7 +475,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		posted_at TIMESTAMPTZ DEFAULT NOW(),
 		description TEXT NOT NULL,
 		metadata JSONB DEFAULT '{}',
-		idempotency_key VARCHAR(80) UNIQUE,
+		idempotency_key VARCHAR(160) UNIQUE,
 		created_by UUID
 	);
 
@@ -836,8 +836,55 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		used BOOLEAN DEFAULT FALSE,
 		expires_at TIMESTAMP,
 		location_id UUID REFERENCES merchant_locations(id) ON DELETE SET NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'active',
+		revoked_at TIMESTAMPTZ,
 		created_at TIMESTAMP DEFAULT NOW()
 	);
+
+	-- Los dos unicos parciales de la 062: UN codigo vivo por persona-y-moneda y
+	-- UNO por comercio-sucursal-y-moneda. El COALESCE es necesario porque en un
+	-- indice unico los NULL son distintos entre si.
+	CREATE UNIQUE INDEX IF NOT EXISTS ux_qr_code_persona
+		ON qr_payment_codes (creator_id, currency)
+		WHERE merchant_id IS NULL AND status = 'active';
+	CREATE UNIQUE INDEX IF NOT EXISTS ux_qr_code_comercio
+		ON qr_payment_codes (merchant_id,
+		                     COALESCE(location_id, '00000000-0000-0000-0000-000000000000'::uuid),
+		                     currency)
+		WHERE merchant_id IS NOT NULL AND status = 'active';
+
+	ALTER TABLE qr_payment_codes DROP CONSTRAINT IF EXISTS chk_qr_code_activo_sin_monto;
+	ALTER TABLE qr_payment_codes ADD  CONSTRAINT chk_qr_code_activo_sin_monto CHECK (
+		status <> 'active'
+		OR (COALESCE(amount,0) = 0 AND COALESCE(single_use,FALSE) = FALSE
+		    AND COALESCE(used,FALSE) = FALSE AND expires_at IS NULL)
+	);
+
+	CREATE TABLE IF NOT EXISTS qr_charges (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		qr_code_id UUID NOT NULL REFERENCES qr_payment_codes(id),
+		merchant_id UUID REFERENCES qr_merchants(id),
+		location_id UUID REFERENCES merchant_locations(id) ON DELETE SET NULL,
+		created_by UUID NOT NULL REFERENCES users(id),
+		amount BIGINT NOT NULL CHECK (amount > 0),
+		currency VARCHAR(10) NOT NULL,
+		note TEXT NOT NULL DEFAULT '',
+		channel VARCHAR(20) NOT NULL DEFAULT 'counter',
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		qr_data TEXT NOT NULL UNIQUE,
+		expires_at TIMESTAMPTZ NOT NULL,
+		paid_by UUID REFERENCES users(id),
+		paid_tx_id VARCHAR(100),
+		paid_at TIMESTAMPTZ,
+		superseded_by UUID REFERENCES qr_charges(id),
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_qr_charge_status  CHECK (status IN ('pending','paid','cancelled','expired','superseded')),
+		CONSTRAINT chk_qr_charge_channel CHECK (channel IN ('counter','link'))
+	);
+	CREATE INDEX IF NOT EXISTS idx_qr_charges_code_pend
+		ON qr_charges (qr_code_id, created_at DESC) WHERE status = 'pending';
+	CREATE INDEX IF NOT EXISTS idx_qr_charges_vencidos
+		ON qr_charges (expires_at) WHERE status = 'pending';
 
 	CREATE TABLE IF NOT EXISTS qr_payments (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -853,9 +900,15 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		tx_id VARCHAR(100),
 		location_id UUID REFERENCES merchant_locations(id) ON DELETE SET NULL,
 		collected_by UUID REFERENCES users(id) ON DELETE SET NULL,
+		charge_id UUID REFERENCES qr_charges(id),
 		created_at TIMESTAMP DEFAULT NOW(),
 		completed_at TIMESTAMP
 	);
+
+	-- Guarda contra la venta fantasma: dos escaneos concurrentes identicos no
+	-- pueden dejar dos filas para un solo asiento.
+	CREATE UNIQUE INDEX IF NOT EXISTS ux_qr_payments_txid
+		ON qr_payments (tx_id) WHERE tx_id IS NOT NULL;
 
 	-- Minimal service_providers (migration 001) — just the columns PayBill reads.
 	CREATE TABLE IF NOT EXISTS service_providers (
@@ -1034,7 +1087,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"escrow_agreements",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
-		"qr_payments", "qr_payment_codes", "qr_merchants",
+		"qr_payments", "qr_charges", "qr_payment_codes", "qr_merchants",
 		"service_providers",
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
@@ -1141,6 +1194,65 @@ func SeedTestUser(t *testing.T, pool *pgxpool.Pool, cedula, passwordHash string)
 }
 
 // SeedTestUser2 creates a second test user for transfer tests.
+// SeedTestUser3 es un SEGUNDO PAGADOR. Hace falta para las pruebas de carrera:
+// dos personas compitiendo por el mismo cobro no se pueden simular con un solo
+// usuario, porque la llave de idempotencia lleva el pagador adentro.
+func SeedTestUser3(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+
+	userID := "00000000-0000-0000-0000-000000000003"
+	walletID := "00000000-0000-0000-0000-000000000103"
+
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, role)
+		 VALUES ($1, fn_pii_encrypt('700000003'), fn_pii_hmac('700000003'), fn_pii_encrypt('+50688885003'), fn_pii_hmac('+50688885003'), 'Segunda', 'Pagadora', 'dummy_hash', 'active', 1, 'user')
+		 ON CONFLICT (id) DO NOTHING`,
+		userID,
+	); err != nil {
+		t.Fatalf("Failed to seed test user 3: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO wallets (id, user_id, balance_crc, balance_usd)
+		 VALUES ($1, $2, 100000000, 20000)
+		 ON CONFLICT (user_id) DO NOTHING`,
+		walletID, userID,
+	); err != nil {
+		t.Fatalf("Failed to seed test wallet 3: %v", err)
+	}
+
+	_, _ = pool.Exec(ctx,
+		`INSERT INTO ledger_accounts (code, type, user_id, currency, normal_balance)
+		 VALUES ('USER:'||$1||':CRC','user_wallet',$1::uuid,'CRC','credit'),
+		        ('USER:'||$1||':USD','user_wallet',$1::uuid,'USD','credit')
+		 ON CONFLICT (code) DO NOTHING`,
+		userID,
+	)
+
+	postID := "00000000-0000-0000-0000-000000000fed"
+	_, _ = pool.Exec(ctx,
+		`INSERT INTO journal_postings (id, description) VALUES ($1::uuid,'SEED_OPENING_U3')
+		 ON CONFLICT DO NOTHING`,
+		postID,
+	)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO journal_entries (posting_id, account_id, direction, amount_minor, currency)
+		SELECT $1::uuid, la.id, 'credit', 100000000, 'CRC'
+		FROM ledger_accounts la WHERE la.user_id = $2::uuid AND la.currency='CRC'`,
+		postID, userID,
+	)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO journal_entries (posting_id, account_id, direction, amount_minor, currency)
+		SELECT $1::uuid, la.id, 'debit', 100000000, 'CRC'
+		FROM ledger_accounts la WHERE la.code='SYSTEM:RESERVE:CRC'`,
+		postID,
+	)
+
+	return userID
+}
+
 func SeedTestUser2(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 

@@ -22,7 +22,7 @@ func setupQR(t *testing.T) (*qrpayment.Service, *pgxpool.Pool, string, string) {
 	pool := testutil.TestDB(t)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
-	svc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool))
+	svc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool), nil)
 	pinHash, _ := hash.HashPin("Kiramopay2024!")
 	payer := testutil.SeedTestUser(t, pool, "702650930", pinHash)
 	owner := testutil.SeedTestUser2(t, pool)

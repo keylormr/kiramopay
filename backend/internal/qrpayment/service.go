@@ -32,14 +32,31 @@ func (s *Service) displayName(ctx context.Context, userID string) string {
 	return strings.TrimSpace(u.FirstName + " " + u.LastName)
 }
 
-type Service struct {
-	repo  *Repository
-	tx    *transaction.Service
-	users userLookup
+// Notifier avisa al cobrador que le pagaron. Lo satisface
+// *notification.Service, el mismo que ya usa sinpe.
+type Notifier interface {
+	NotifyUser(ctx context.Context, userID, title, body, tag string) error
 }
 
-func NewService(repo *Repository, tx *transaction.Service, users userLookup) *Service {
-	return &Service{repo: repo, tx: tx, users: users}
+// Options lleva los colaboradores opcionales.
+type Options struct {
+	// Notifier puede ser nil: sin el, el pago funciona igual y nadie se entera.
+	Notifier Notifier
+}
+
+type Service struct {
+	repo     *Repository
+	tx       *transaction.Service
+	users    userLookup
+	notifier Notifier
+}
+
+func NewService(repo *Repository, tx *transaction.Service, users userLookup, opts *Options) *Service {
+	s := &Service{repo: repo, tx: tx, users: users}
+	if opts != nil {
+		s.notifier = opts.Notifier
+	}
+	return s
 }
 
 // DefaultCommissionBps is the merchant commission applied to new merchants
@@ -128,6 +145,25 @@ func (s *Service) roleFor(ctx context.Context, merchantID, userID string) (strin
 
 // ── QR Codes ─────────────────────────────────────────────────────────────────
 
+// CreateQRCode es ahora la RUTA DE COMPATIBILIDAD para las aplicaciones que ya
+// estan instaladas.
+//
+// Hay APK sideloadeadas circulando y no se puede asumir que todo el mundo
+// actualizo. Un cliente viejo manda `type` y `amount`; el servidor nuevo enruta
+// por el MONTO, no por el tipo:
+//
+//	amount > 0  → emite un COBRO sobre el codigo permanente de quien llama, y lo
+//	              devuelve con la forma vieja (monto lleno, single_use, vence).
+//	              La pantalla vieja lo pinta igual que siempre.
+//	amount == 0 → devuelve el CODIGO PERMANENTE. Es lo que el cliente viejo ya
+//	              esperaba de un merchant_dynamic.
+//
+// Enrutar por monto y no por tipo es lo que evita que la pantalla de cobro de
+// una aplicacion vieja muera con "invalid QR type". Los cuatro tipos historicos
+// siguen siendo entradas validas.
+//
+// Lo que ya NO hace, y era el problema: crear una fila permanente y pagable por
+// cada toque del boton.
 func (s *Service) CreateQRCode(ctx context.Context, userID string, req *CreateQRCodeRequest) (*QRPaymentCode, error) {
 	validTypes := map[string]bool{
 		"merchant_fixed": true, "merchant_dynamic": true,
@@ -136,69 +172,73 @@ func (s *Service) CreateQRCode(ctx context.Context, userID string, req *CreateQR
 	if !validTypes[req.Type] {
 		return nil, fmt.Errorf("invalid QR type: %s", req.Type)
 	}
-
 	if req.Currency == "" {
 		req.Currency = "CRC"
 	}
 
-	var merchantID, locationID string
-	if req.Type == "merchant_fixed" || req.Type == "merchant_dynamic" {
+	esComercio := req.Type == "merchant_fixed" || req.Type == "merchant_dynamic"
+	var code *QRPaymentCode
+	var err error
+	if esComercio {
 		if req.MerchantID == "" {
 			return nil, fmt.Errorf("merchant_id is required for merchant QR codes")
 		}
-		// Any team member can charge for the shop: the money lands in the
-		// MERCHANT wallet either way, so a cashier generating a QR moves
-		// nothing into their own pocket.
-		role, merchant, err := s.roleFor(ctx, req.MerchantID, userID)
-		if err != nil {
-			return nil, fmt.Errorf("merchant profile not found")
-		}
-		if role == "" {
-			return nil, fmt.Errorf("merchant does not belong to user")
-		}
-		if merchant.VerificationStatus != "verified" {
-			return nil, fmt.Errorf("merchant is pending verification")
-		}
-		merchantID = merchant.ID
-		if req.LocationID != "" {
-			loc, err := s.repo.GetLocation(ctx, merchantID, req.LocationID)
-			if err != nil || !loc.Active {
-				return nil, fmt.Errorf("location not found")
-			}
-			locationID = loc.ID
-		}
+		code, err = s.GetOrCreateMerchantCode(ctx, userID, req.MerchantID, req.LocationID, req.Currency)
+	} else {
+		code, err = s.GetOrCreateMyCode(ctx, userID, req.Currency)
 	}
-
-	// QR data encodes: type|creatorID|amount|currency|uniqueToken
-	qrData := fmt.Sprintf("KP:%s:%s:%d:%s:%s", req.Type, userID[:8], req.Amount, req.Currency, generateQRToken())
-
-	// Single-use P2P requests expire in 24h, merchant codes don't expire
-	var expiresAt *time.Time
-	if req.SingleUse {
-		t := time.Now().Add(24 * time.Hour)
-		expiresAt = &t
-	}
-
-	qr := &QRPaymentCode{
-		ID:         uuid.New().String(),
-		CreatorID:  userID,
-		Type:       req.Type,
-		Amount:     req.Amount,
-		Currency:   req.Currency,
-		MerchantID: merchantID,
-		LocationID: locationID,
-		Note:       req.Note,
-		QRData:     qrData,
-		SingleUse:  req.SingleUse,
-		ExpiresAt:  expiresAt,
-		CreatedAt:  time.Now(),
-	}
-
-	if err := s.repo.CreateQRCode(ctx, qr); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
-	return qr, nil
+	if req.Amount <= 0 {
+		return code, nil
+	}
+
+	// Con monto, lo que el cliente viejo quiere es cobrar: eso ahora es un cobro.
+	canal := CanalMostrador
+	if !esComercio {
+		// Una solicitud personal se comparte por fuera (WhatsApp), asi que
+		// conserva las 24 horas que ya tenia p2p_request.
+		canal = CanalEnlace
+	}
+	cobro, err := s.CreateCharge(ctx, userID, &CreateChargeRequest{
+		QRCodeID: code.ID,
+		Amount:   req.Amount,
+		Note:     req.Note,
+		Channel:  canal,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cobroConFormaVieja(cobro, code), nil
+}
+
+// cobroConFormaVieja viste un cobro con el DTO que la aplicacion vieja espera.
+// No inventa nada: el monto, la nota y el vencimiento son los del cobro, y
+// single_use es cierto —un cobro se reclama exactamente una vez—.
+func cobroConFormaVieja(c *QRCharge, code *QRPaymentCode) *QRPaymentCode {
+	exp := c.ExpiresAt
+	tipo := "p2p_request"
+	if c.MerchantID != "" {
+		tipo = "merchant_fixed"
+	}
+	return &QRPaymentCode{
+		ID:         c.ID,
+		CreatorID:  c.CreatedBy,
+		Type:       tipo,
+		Currency:   c.Currency,
+		MerchantID: c.MerchantID,
+		LocationID: c.LocationID,
+		QRData:     c.QRData,
+		Status:     code.Status,
+		Amount:     c.Amount,
+		Note:       c.Note,
+		SingleUse:  true,
+		Used:       false,
+		ExpiresAt:  &exp,
+		CreatedAt:  c.CreatedAt,
+	}
 }
 
 func (s *Service) GetUserQRCodes(ctx context.Context, userID string) ([]QRPaymentCode, error) {
@@ -208,35 +248,78 @@ func (s *Service) GetUserQRCodes(ctx context.Context, userID string) ([]QRPaymen
 // ── Scan & Pay ───────────────────────────────────────────────────────────────
 
 func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPaymentRequest) (*QRPaymentRecord, error) {
-	qr, err := s.repo.GetQRCodeByData(ctx, req.QRData)
+	obj, err := s.resolverQR(ctx, req.QRData)
 	if err != nil {
-		return nil, fmt.Errorf("invalid QR code")
+		return nil, err
+	}
+	if obj.code.Status == EstadoCodigoRevocado {
+		return nil, ErrQRRevocado
 	}
 
-	if qr.Used && qr.SingleUse {
-		return nil, fmt.Errorf("QR code has already been used")
+	// El pagador dice que cobro VIO en pantalla. Si el cajero lo reemplazo
+	// mientras el miraba, se rechaza en vez de cobrarle un numero que no vio.
+	if req.ChargeID != "" {
+		if obj.charge == nil || obj.charge.ID != req.ChargeID {
+			return nil, ErrCobroReemplazado
+		}
 	}
 
-	if qr.ExpiresAt != nil && time.Now().After(*qr.ExpiresAt) {
-		return nil, fmt.Errorf("QR code has expired")
+	if obj.charge != nil {
+		// Un cobro que YA pago ESTA MISMA persona no es un error: es el
+		// reintento honesto de un POST cuya respuesta no llego (el timeout del
+		// cliente son 20 s contra un servidor que puede tardar en despertar).
+		// Se deja pasar y la llave de idempotencia reproduce la transferencia
+		// original en vez de duplicarla. Pagado por OTRO si es un rechazo.
+		yaLoPagueYo := obj.charge.Status == EstadoCobroPagado && obj.charge.PaidBy == payerID
+		if obj.charge.Status != EstadoCobroPendiente && !yaLoPagueYo {
+			return nil, s.errorDeCobro(obj.charge)
+		}
+		if !yaLoPagueYo && time.Now().After(obj.charge.ExpiresAt) {
+			return nil, ErrCobroVencido
+		}
+	} else {
+		// Camino de codigo permanente o fila vieja.
+		if obj.code.Used && obj.code.SingleUse {
+			return nil, ErrCobroYaPagado
+		}
+		if obj.code.ExpiresAt != nil && time.Now().After(*obj.code.ExpiresAt) {
+			return nil, ErrCobroVencido
+		}
 	}
 
-	if qr.CreatorID == payerID {
-		return nil, fmt.Errorf("cannot pay your own QR code")
+	if obj.code.CreatorID == payerID {
+		return nil, ErrNoPodesPagarte
 	}
 
-	// Determine payment amount
-	amount := qr.Amount
-	if amount == 0 {
+	// El monto sale del cobro cuando hay cobro; del codigo cuando es una fila
+	// vieja con monto adentro; y del pagador cuando el codigo es de monto
+	// abierto, que es lo que hace un rotulo permanente.
+	amount := int64(0)
+	nota := ""
+	switch {
+	case obj.charge != nil:
+		amount, nota = obj.charge.Amount, obj.charge.Note
+	case obj.code.Amount > 0:
+		amount, nota = obj.code.Amount, obj.code.Note
+	default:
 		amount = req.Amount
 		if amount <= 0 {
-			return nil, fmt.Errorf("amount is required for this QR code")
+			return nil, ErrMontoRequerido
 		}
+	}
+
+	// El nonce solo se pide —y solo se acepta— en el camino de monto abierto.
+	nonce := ""
+	if obj.charge == nil && req.IdempotencyKey != "" {
+		if !nonceValido(req.IdempotencyKey) {
+			return nil, ErrNonceInvalido
+		}
+		nonce = req.IdempotencyKey
 	}
 
 	// The currency is defined by the QR creator and must NOT be overridable by
 	// the payer (that would let a payer settle a USD invoice in CRC).
-	currency := qr.Currency
+	currency := obj.code.Currency
 
 	// Merchant commission (absorbed by the merchant): when the QR belongs to a
 	// merchant, carve commission_bps of the amount and route it to SYSTEM:FEES.
@@ -244,11 +327,10 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	// P2P codes carry no merchant, so they stay 1:1.
 	var fee int64
 	feeFromReceiver := false
-	// The payer's history row names who was paid: the shop for a merchant QR,
-	// the QR creator for a personal one.
 	payeeName := ""
-	if qr.MerchantID != "" {
-		merchant, err := s.repo.GetMerchant(ctx, qr.MerchantID)
+	var merchant *Merchant
+	if obj.code.MerchantID != "" {
+		merchant, err = s.repo.GetMerchant(ctx, obj.code.MerchantID)
 		if err != nil {
 			return nil, fmt.Errorf("merchant not found")
 		}
@@ -259,17 +341,12 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		feeFromReceiver = fee > 0
 		payeeName = merchant.Name
 	} else {
-		payeeName = s.displayName(ctx, qr.CreatorID)
+		payeeName = s.displayName(ctx, obj.code.CreatorID)
 	}
 
-	// Move the money THROUGH THE LEDGER: debit the payer, credit the QR creator
-	// atomically. Idempotency keyed by (qr, payer) prevents a double charge on
-	// a retried scan.
-	// A merchant QR credits the SHOP's own balance; a personal QR still credits
-	// the creator's wallet. Either way the payer side is identical.
-	toUserID, toMerchantID := qr.CreatorID, ""
-	if qr.MerchantID != "" {
-		toUserID, toMerchantID = "", qr.MerchantID
+	toUserID, toMerchantID := obj.code.CreatorID, ""
+	if obj.code.MerchantID != "" {
+		toUserID, toMerchantID = "", obj.code.MerchantID
 	}
 
 	// The receiver row only exists for personal QRs, so only resolve the payer's
@@ -279,7 +356,58 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		payerName = s.displayName(ctx, payerID)
 	}
 
-	idem := fmt.Sprintf("qr:%s:%s", qr.ID, payerID)
+	// ── Atribucion ──────────────────────────────────────────────────────────
+	//
+	// collected_by era qr.CreatorID, que con un rotulo permanente seria "quien
+	// imprimio el rotulo hace seis meses": el reporte por cajero le atribuiria
+	// todas las ventas de la sucursal a esa persona para siempre. Con cobro, es
+	// quien lo genero; con monto abierto queda VACIO, que es la verdad — ahi no
+	// cobro ningun cajero, y el reporte ya tiene un balde "sin atribuir".
+	collectedBy := ""
+	if obj.charge != nil {
+		collectedBy = obj.charge.CreatedBy
+	}
+	// receiver_id era tambien qr.CreatorID, asi que el empleado que genero el QR
+	// veia la venta en su historial PERSONAL. El que recibe es el dueno.
+	receiverID := obj.code.CreatorID
+	if merchant != nil {
+		receiverID = merchant.UserID
+	}
+	locationID := obj.code.LocationID
+	chargeID := ""
+	if obj.charge != nil {
+		chargeID = obj.charge.ID
+		if obj.charge.LocationID != "" {
+			locationID = obj.charge.LocationID
+		}
+	}
+
+	// El id de la venta y el TxID se fijan ANTES del gancho: Post reintenta
+	// hasta ocho veces y el closure vuelve a correr sobre una transaccion nueva.
+	payment := &QRPaymentRecord{
+		ID:          uuid.New().String(),
+		QRCodeID:    obj.code.ID,
+		ChargeID:    chargeID,
+		PayerID:     payerID,
+		ReceiverID:  receiverID,
+		MerchantID:  obj.code.MerchantID,
+		LocationID:  locationID,
+		CollectedBy: collectedBy,
+		Amount:      amount,
+		Fee:         fee,
+		Currency:    currency,
+		Status:      "completed",
+		Note:        nota,
+		CreatedAt:   time.Now(),
+	}
+
+	idem := llaveDePago(obj, payerID, nonce)
+	var ganchoCorrio bool
+	var errDelModulo error
+
+	// El TxID de la venta tiene que ser el de la transferencia, y esa la asigna
+	// CreateTransfer. Se resuelve con un puntero: el gancho corre DENTRO de
+	// Post, que a su vez corre despues de que la fila del emisor ya existe.
 	sender, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
 		FromUserID:               payerID,
 		ToUserID:                 toUserID,
@@ -288,58 +416,85 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		Currency:                 currency,
 		Fee:                      fee,
 		FeeFromReceiver:          feeFromReceiver,
-		Description:              qr.Note,
+		Description:              nota,
 		IdempotencyKey:           idem,
 		TxType:                   transaction.TypeQRPayment,
 		ReceiveType:              transaction.TypeQRReceive,
 		SenderCounterpartyName:   payeeName,
 		ReceiverCounterpartyName: payerName,
+		// El reclamo del cobro y la venta se escriben DENTRO de la transaccion
+		// del asiento. Antes el reclamo corria DESPUES de mover el dinero y en
+		// modo best-effort: perder la carrera costaba plata.
+		EnLaMismaTx: s.ganchoEnLaMismaTx(obj, payment, payerID, &ganchoCorrio, &errDelModulo),
 	})
 	if err != nil {
+		// El motivo del modulo se devuelve tal cual: envuelto en "qr payment
+		// transfer: en la misma tx: ..." el usuario veria las tripas en vez de
+		// "ese cobro ya lo pagaron".
+		if errDelModulo != nil {
+			if obj.charge != nil {
+				return nil, s.traducirReclamo(ctx, obj.charge.ID, errDelModulo)
+			}
+			return nil, errDelModulo
+		}
 		return nil, fmt.Errorf("qr payment transfer: %w", err)
 	}
 
-	// Idempotent on the history row too: the transfer above is idempotent, so a
-	// retried scan returns the same sender tx. Guard on its ID to avoid inserting
-	// a duplicate qr_payments row.
-	if existing, _ := s.repo.GetPaymentByTxID(ctx, sender.ID); existing != nil {
-		return existing, nil
+	if ganchoCorrio {
+		s.avisarCobro(ctx, s.destinatariosDelAviso(obj, merchant), payment)
+		return payment, nil
 	}
 
-	// Attribution: a merchant charge remembers which location it was for and
-	// which team member (QR creator) generated it — that is what per-location
-	// and per-cashier sales reporting hang off.
-	collectedBy := ""
-	if qr.MerchantID != "" {
-		collectedBy = qr.CreatorID
+	// El gancho NO corrio: el libro dijo que este pago ya existe. Se devuelve la
+	// venta que ya esta escrita, pero solo despues de comprobar que es la misma
+	// —el nonce lo controla quien recibe la mercaderia, asi que devolver el pago
+	// viejo sin comparar seria regalarle una venta—.
+	existente, _ := s.repo.GetPaymentByTxID(ctx, sender.ID)
+	if existente == nil {
+		// Inalcanzable con la llave nueva. Se defiende igual: la alternativa
+		// seria fabricar una venta que nadie hizo.
+		return nil, ErrPagoNoRegistrado
 	}
-	payment := &QRPaymentRecord{
-		ID:          uuid.New().String(),
-		QRCodeID:    qr.ID,
-		PayerID:     payerID,
-		ReceiverID:  qr.CreatorID,
-		MerchantID:  qr.MerchantID,
-		LocationID:  qr.LocationID,
-		CollectedBy: collectedBy,
-		Amount:      amount,
-		Fee:         fee,
-		Currency:    currency,
-		Status:      "completed",
-		Note:        qr.Note,
-		TxID:        sender.ID,
-		CreatedAt:   time.Now(),
+	if existente.Amount != amount || existente.Currency != currency ||
+		existente.QRCodeID != obj.code.ID || existente.ChargeID != chargeID {
+		return nil, ErrLlaveReutilizada
 	}
+	// Aplicacion vieja sin nonce: su llave es fija, asi que este "replay" puede
+	// ser un reintento de red o una segunda venta que se esta perdiendo. Dentro
+	// de la ventana es casi con certeza lo primero; fuera, se dice en voz alta
+	// en vez de devolver un exito falso.
+	if obj.charge == nil && nonce == "" && time.Since(existente.CreatedAt) > VentanaReplayLegacy {
+		return nil, ErrCobroDuplicadoAppVieja
+	}
+	return existente, nil
+}
 
-	if err := s.repo.CreatePayment(ctx, payment); err != nil {
-		return nil, err
+// errorDeCobro traduce el estado de un cobro que ya no acepta pagos.
+func (s *Service) errorDeCobro(c *QRCharge) error {
+	switch c.Status {
+	case EstadoCobroPagado:
+		return ErrCobroYaPagado
+	case EstadoCobroCancelado:
+		return ErrCobroCancelado
+	case EstadoCobroVencido:
+		return ErrCobroVencido
+	case EstadoCobroReemplazado:
+		return ErrCobroReemplazado
 	}
+	return ErrQRInvalido
+}
 
-	// Mark single-use QR as used
-	if qr.SingleUse {
-		_ = s.repo.MarkQRUsed(ctx, qr.ID) // best-effort; double-spend guarded by ledger
+// destinatariosDelAviso: al dueno del local y al cajero que cobro. Un local de
+// una persona recibe un solo aviso porque la lista se deduplica.
+func (s *Service) destinatariosDelAviso(obj *objetivo, merchant *Merchant) []string {
+	if merchant != nil {
+		destinos := []string{merchant.UserID}
+		if obj.charge != nil {
+			destinos = append(destinos, obj.charge.CreatedBy)
+		}
+		return destinos
 	}
-
-	return payment, nil
+	return []string{obj.code.CreatorID}
 }
 
 func (s *Service) GetPaymentHistory(ctx context.Context, userID string) ([]QRPaymentRecord, error) {
