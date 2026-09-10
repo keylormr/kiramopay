@@ -318,8 +318,21 @@ var sqlSalidaDiaria = `SELECT COALESCE(SUM(amount), 0)
 		   AND type IN ` + ListaSQLDeSalidas()
 
 func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
+	return r.DailyOutgoingMinorTx(ctx, r.db, userID, currency)
+}
+
+// DailyOutgoingMinorTx corre la MISMA suma por la transaccion del asiento.
+//
+// Existe porque sumar por el pool y decidir afuera no frena nada bajo
+// concurrencia: dos salidas simultaneas leen la misma suma y las dos pasan.
+// Adentro del asiento si frena, y no por arte de magia: el libro toma
+// `SELECT ... FOR UPDATE` sobre la billetera del pagador ANTES de correr el
+// gancho, asi que la segunda salida espera a que la primera confirme y recien
+// entonces suma. Y ve la fila de la primera porque su estado 'completed' se
+// escribe dentro de esa misma transaccion (eso lo dejo T1).
+func (r *Repository) DailyOutgoingMinorTx(ctx context.Context, q pgxQuerier, userID, currency string) (int64, error) {
 	var total int64
-	err := r.db.QueryRow(ctx, sqlSalidaDiaria, userID, currency).Scan(&total)
+	err := q.QueryRow(ctx, sqlSalidaDiaria, userID, currency).Scan(&total)
 	return total, err
 }
 
@@ -341,8 +354,12 @@ var sqlSalidaMensual = `SELECT COALESCE(SUM(amount), 0)
 		   AND type IN ` + ListaSQLDeSalidas()
 
 func (r *Repository) MonthlyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
+	return r.MonthlyOutgoingMinorTx(ctx, r.db, userID, currency)
+}
+
+func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, userID, currency string) (int64, error) {
 	var total int64
-	err := r.db.QueryRow(ctx, sqlSalidaMensual, userID, currency).Scan(&total)
+	err := q.QueryRow(ctx, sqlSalidaMensual, userID, currency).Scan(&total)
 	return total, err
 }
 

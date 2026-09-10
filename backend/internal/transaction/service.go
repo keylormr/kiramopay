@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -28,6 +29,24 @@ type UIFReporter interface {
 	Report(ctx context.Context, userID, txID, currency string, amountMinor int64)
 }
 
+// RiskAssessor (optional) evalua una salida de dinero ANTES de moverla y
+// devuelve la accion: "allow", "review" o "block".
+//
+// El motor de riesgo existia y no lo llamaba ningun servicio de dinero: solo
+// era alcanzable por POST /fraud/assess, que es el propio usuario preguntando
+// por su transaccion. Mientras tanto, la restriccion que pone el administrador
+// no restringia nada.
+//
+// Corre FUERA de la transaccion del asiento a proposito: escribe filas propias
+// (evaluacion, alerta, perfil) y un reintento del asiento las duplicaria. Es una
+// reja de politica, no una garantia de saldo — para eso estan el tope y el libro.
+type RiskAssessor interface {
+	EvaluarSalida(ctx context.Context, userID, txType, txID string, amountMinor int64, currency string) (string, error)
+}
+
+// AccionBloquear es la respuesta del motor de riesgo que frena la salida.
+const AccionBloquear = "block"
+
 type Service struct {
 	repo        *Repository
 	walletRepo  *wallet.Repository
@@ -35,6 +54,8 @@ type Service struct {
 	auditLogger *audit.Logger
 	mfa         MFAEnforcer
 	uif         UIFReporter
+	riesgo      RiskAssessor
+	logger      *slog.Logger
 }
 
 // Options carries optional collaborators.
@@ -42,6 +63,9 @@ type Options struct {
 	AuditLogger *audit.Logger
 	MFA         MFAEnforcer
 	UIF         UIFReporter
+	// Risk puede ser nil: sin el, la salida no pasa por el motor de riesgo.
+	Risk   RiskAssessor
+	Logger *slog.Logger
 }
 
 func NewService(repo *Repository, walletRepo *wallet.Repository, l *ledger.Engine, opts *Options) *Service {
@@ -55,6 +79,76 @@ func NewService(repo *Repository, walletRepo *wallet.Repository, l *ledger.Engin
 		auditLogger: opts.AuditLogger,
 		mfa:         opts.MFA,
 		uif:         opts.UIF,
+		riesgo:      opts.Risk,
+		logger:      opts.Logger,
+	}
+}
+
+// ErrBloqueadoPorRiesgo: el motor de riesgo freno la salida. El texto llega al
+// cliente, asi que se mantiene estable.
+var ErrBloqueadoPorRiesgo = errors.New("this transaction was blocked by the risk engine")
+
+// evaluarRiesgo corre la reja de riesgo sobre una salida de dinero.
+//
+// Un error del motor no frena el pago por si solo: EvaluarSalida ya devuelve
+// "block" cuando lo que fallo es la lectura de la restriccion administrativa
+// —que es la mitad que no puede quedar sin efecto— y "allow" cuando lo que fallo
+// es el puntaje, que es una heuristica. Aqui solo se registra y se obedece.
+func (s *Service) evaluarRiesgo(ctx context.Context, userID, txType, txID, currency string, amountMinor int64) error {
+	if s.riesgo == nil {
+		return nil
+	}
+	accion, err := s.riesgo.EvaluarSalida(ctx, userID, txType, txID, amountMinor, currency)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("motor de riesgo", "error", err.Error(), "accion", accion, "user", userID)
+	}
+	if accion == AccionBloquear {
+		return ErrBloqueadoPorRiesgo
+	}
+	return nil
+}
+
+// topesEnLaMismaTx devuelve el gancho que suma lo gastado y DECIDE dentro de la
+// transaccion del asiento.
+//
+// checkDailyLimit sumaba con un SELECT suelto y decidia fuera de la transaccion
+// que despues consumia esa decision: dos salidas simultaneas leian la misma suma
+// y las dos pasaban, asi que el tope valia el doble. La comprobacion de mas
+// arriba se conserva como cortesia —rechaza rapido sin abrir un asiento—, pero
+// la que de verdad frena es esta.
+//
+// Corre ANTES de marcar la fila como completada: si corriera despues, la suma
+// incluiria el propio movimiento y se contaria dos veces.
+func (s *Service) topesEnLaMismaTx(userID, currency string, amountMinor int64, w *wallet.WalletRecord) func(context.Context, pgx.Tx) error {
+	return func(ctx context.Context, tx pgx.Tx) error {
+		diario, conocida := topeDiarioDe(w, currency)
+		if !conocida {
+			return fmt.Errorf("%w: %s", ErrMonedaSinTope, currency)
+		}
+		if diario > 0 {
+			gastadoHoy, err := s.repo.DailyOutgoingMinorTx(ctx, tx, userID, currency)
+			if err != nil {
+				return fmt.Errorf("daily spend check: %w", err)
+			}
+			if gastadoHoy+amountMinor > diario {
+				return ErrDailyLimitExceeded
+			}
+		}
+
+		mensual, conocida := topeMensualDe(w, currency)
+		if !conocida {
+			return fmt.Errorf("%w: %s", ErrMonedaSinTope, currency)
+		}
+		if mensual > 0 {
+			gastadoMes, err := s.repo.MonthlyOutgoingMinorTx(ctx, tx, userID, currency)
+			if err != nil {
+				return fmt.Errorf("monthly spend check: %w", err)
+			}
+			if gastadoMes+amountMinor > mensual {
+				return ErrMonthlyLimitExceeded
+			}
+		}
+		return nil
 	}
 }
 
@@ -261,6 +355,12 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 				return nil, ErrMFARequired
 			}
 		}
+
+		// La reja de riesgo va ANTES de escribir la fila: una salida bloqueada
+		// no deja rastro de un movimiento que nunca se intento mover.
+		if err := s.evaluarRiesgo(ctx, userID, req.Type, req.IdempotencyKey, req.Currency, req.Amount); err != nil {
+			return nil, err
+		}
 	}
 
 	// Insert tx in pending with idempotency_key persisted. Un reintento sobre
@@ -287,7 +387,20 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	// SYSTEM:EXTERNAL counterparty for now (callers that know the peer should
 	// use CreateTransfer instead).
 	posting := s.buildSingleSidedPosting(tx, req)
-	posting.EnLaMismaTx = s.completarEnLaMismaTx(tx.ID)
+	completar := s.completarEnLaMismaTx(tx.ID)
+	posting.EnLaMismaTx = completar
+	if isOutgoing(req.Type) {
+		// El tope suma y decide DENTRO del asiento. La comprobacion de mas
+		// arriba se queda como cortesia: rechaza rapido y sin abrir un asiento,
+		// pero la que frena bajo concurrencia es esta.
+		topes := s.topesEnLaMismaTx(userID, req.Currency, req.Amount, w)
+		posting.EnLaMismaTx = func(ctx context.Context, dbtx pgx.Tx) error {
+			if err := topes(ctx, dbtx); err != nil {
+				return err
+			}
+			return completar(ctx, dbtx)
+		}
+	}
 	if _, err := s.ledger.Post(ctx, posting); err != nil {
 		if !errors.Is(err, ledger.ErrIdempotent) {
 			s.marcarFallidaSinAsiento(ctx, tx.ID)
@@ -589,6 +702,11 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		}
 	}
 
+	// La reja de riesgo, antes de escribir las filas.
+	if err := s.evaluarRiesgo(ctx, req.FromUserID, req.TxType, req.IdempotencyKey, req.Currency, req.Amount); err != nil {
+		return nil, nil, err
+	}
+
 	// The fee shows on whichever party absorbs it: the payer's row in the classic
 	// model, the receiver's row (a deduction from what they collect) in the
 	// merchant model.
@@ -697,10 +815,18 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if receiver != nil {
 		idReceptor = receiver.ID
 	}
-	// El gancho del llamante corre PRIMERO: si lo que quiere reclamar ya no
-	// esta disponible, el asiento se aborta antes de escribir nada mas.
+	// El orden adentro del gancho: primero el tope, despues lo que reclama el
+	// llamante, y al final el cambio de estado.
+	//
+	// El tope va primero para que quien se pasa del limite reciba ESE motivo y
+	// no el del modulo. Y el estado va al final porque la suma del tope no puede
+	// incluir el movimiento que se esta haciendo: contaria dos veces.
 	completar := s.completarEnLaMismaTx(sender.ID, idReceptor)
+	topes := s.topesEnLaMismaTx(req.FromUserID, req.Currency, req.Amount, senderWallet)
 	p.EnLaMismaTx = func(ctx context.Context, tx pgx.Tx) error {
+		if err := topes(ctx, tx); err != nil {
+			return err
+		}
 		if req.EnLaMismaTx != nil {
 			if err := req.EnLaMismaTx(ctx, tx, sender.ID); err != nil {
 				return err
