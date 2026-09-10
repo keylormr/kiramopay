@@ -41,6 +41,9 @@ type EventSink interface {
 // deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
+	// RecordHistoryEnTx es la version que corre dentro de la transaccion del
+	// asiento. Ver HistoryRecorderEnTx para por que hace falta.
+	RecordHistoryEnTx(ctx context.Context, tx pgx.Tx, userID, walletID string, req *transaction.CreateTransactionRequest) error
 	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
@@ -359,10 +362,28 @@ func (s *Service) moveAndTransition(
 			{Account: debit, Side: ledger.Debit, AmountMinor: a.AmountMinor, Currency: a.Currency},
 			{Account: credit, Side: ledger.Credit, AmountMinor: a.AmountMinor, Currency: a.Currency},
 		},
+		// La transicion, la marca de liquidacion y la fila del historial, las
+		// tres dentro de la transaccion del asiento. Antes la transicion ya
+		// estaba adentro (eso lo arreglo el #168) pero las otras dos corrian
+		// despues del COMMIT y con el error descartado: el acuerdo podia quedar
+		// 'released' con settled_at en NULL —el estado diciendo una cosa y la
+		// marca otra, que es lo que sale por el webhook del comercio— y el
+		// movimiento podia no aparecer nunca en la lista del usuario.
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
 			var terr error
 			claimed, terr = s.repo.TransitionEnTx(ctx, tx, a.ID, from, to, "")
-			return terr
+			if terr != nil {
+				return terr
+			}
+			// settled_at solo tiene sentido en los estados terminales:
+			// estamparla al fondear dejaba al barrido de legado sin poder ver
+			// jamas un release o un refund atascado.
+			if to == StatusReleased || to == StatusRefunded {
+				if serr := MarkSettledEnTx(ctx, tx, a.ID); serr != nil {
+					return serr
+				}
+			}
+			return s.recordHistoryEnTx(ctx, tx, claimed, action)
 		},
 	})
 	switch {
@@ -399,6 +420,13 @@ func (s *Service) moveAndTransition(
 			return nil, ErrBadTransition
 		}
 		claimed = hecho
+		// El gancho NO corrio en esta rama, asi que la marca y el historial
+		// pueden faltar: son las filas que dejo pendientes el codigo viejo. Se
+		// reponen best-effort — el dinero ya se movio y negarse no lo devuelve.
+		if to == StatusReleased || to == StatusRefunded {
+			_ = s.repo.MarkSettled(ctx, claimed.ID)
+		}
+		s.recordHistory(ctx, claimed, action)
 	case err != nil:
 		// El error de la transicion se devuelve sin envolver: el manejador lo
 		// traduce a 409/404 por errors.Is, y "escrow release posting: ..."
@@ -409,16 +437,8 @@ func (s *Service) moveAndTransition(
 		return nil, fmt.Errorf("escrow %s posting: %w", action, err)
 	}
 
-	// settled_at es la marca que usa el barrido de legado. Solo tiene sentido en
-	// los estados terminales: estamparla al fondear dejaba a ListUnsettledTerminal
-	// —que filtra por settled_at IS NULL— sin poder ver JAMAS un release o un
-	// refund atascado. El barrido existia y no podia encontrar nada.
-	if to == StatusReleased || to == StatusRefunded {
-		_ = s.repo.MarkSettled(ctx, claimed.ID)
-	}
 	s.audit(a.BuyerID, claimed, "escrow_"+string(to), "medium", nil)
 	s.emit(ctx, claimed, "escrow."+string(to))
-	s.recordHistory(ctx, claimed, action)
 	if onSuccess != nil {
 		onSuccess(claimed)
 	}
@@ -526,10 +546,9 @@ func (s *Service) repararFundeosSinAsiento(ctx context.Context, limit int) int {
 
 // recordHistory mirrors the movement into the affected user's transaction
 // list, best-effort. Deterministic idempotency keys make retries no-ops.
-func (s *Service) recordHistory(ctx context.Context, a *Agreement, action string) {
-	if s.history == nil {
-		return
-	}
+// movimientoDeHistorial arma la fila que el usuario ve en su lista. Devuelve
+// nil cuando la accion no genera movimiento visible.
+func movimientoDeHistorial(a *Agreement, action string) (string, *transaction.CreateTransactionRequest) {
 	var userID, txType string
 	switch action {
 	case "fund":
@@ -539,9 +558,9 @@ func (s *Service) recordHistory(ctx context.Context, a *Agreement, action string
 	case "refund":
 		userID, txType = a.BuyerID, "escrow_refund"
 	default:
-		return
+		return "", nil
 	}
-	_ = s.history.RecordHistory(ctx, userID, &transaction.CreateTransactionRequest{
+	return userID, &transaction.CreateTransactionRequest{
 		Type:             txType,
 		Amount:           a.AmountMinor,
 		Currency:         a.Currency,
@@ -549,7 +568,38 @@ func (s *Service) recordHistory(ctx context.Context, a *Agreement, action string
 		CounterpartyName: a.Description,
 		Description:      "Escrow: " + a.Description,
 		IdempotencyKey:   "escrow:" + action + ":" + a.ID,
-	})
+	}
+}
+
+// recordHistoryEnTx anota el movimiento DENTRO de la transaccion del asiento.
+//
+// Se escribia despues del COMMIT y con el error descartado: si esa escritura se
+// caia, el dinero ya se habia movido y en la lista del usuario no aparecia nada,
+// sin que nadie lo reintentara. Ahora, si no se puede anotar, el dinero no se
+// mueve.
+func (s *Service) recordHistoryEnTx(ctx context.Context, tx pgx.Tx, a *Agreement, action string) error {
+	if s.history == nil {
+		return nil
+	}
+	userID, req := movimientoDeHistorial(a, action)
+	if req == nil {
+		return nil
+	}
+	return s.history.RecordHistoryEnTx(ctx, tx, userID, "", req)
+}
+
+// recordHistory es el camino de REPARACION: solo lo usa la rama en que el libro
+// responde que el asiento ya existia, donde el gancho no llego a correr. Sigue
+// siendo best-effort porque ahi el dinero ya se movio y negarse no lo devuelve.
+func (s *Service) recordHistory(ctx context.Context, a *Agreement, action string) {
+	if s.history == nil {
+		return
+	}
+	userID, req := movimientoDeHistorial(a, action)
+	if req == nil {
+		return
+	}
+	_ = s.history.RecordHistory(ctx, userID, req)
 }
 
 func escrowAccount(currency string) ledger.Account {
