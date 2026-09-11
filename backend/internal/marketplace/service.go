@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
 )
@@ -22,6 +23,11 @@ import (
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
 	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
+	// Las versiones que corren dentro de la transaccion del asiento. Ver
+	// chargeWallet: el cobro, la fila del pedido o del viaje y el historial se
+	// confirman juntos o no se confirman.
+	RecordHistoryEnTx(ctx context.Context, tx pgx.Tx, userID, walletID string, req *transaction.CreateTransactionRequest) error
+	CheckLimitsEnTx(ctx context.Context, tx pgx.Tx, userID, currency string, amountMinor int64) error
 }
 
 // ErrSinIntegracion se devuelve al intentar COBRAR un viaje o un pedido sin
@@ -59,16 +65,22 @@ func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder, o
 	return s
 }
 
-// chargeWallet debits the user's wallet for a marketplace order, crediting
-// SYSTEM:EXTERNAL (the partner counterparty). The actual settlement to the
-// partner requires a partner integration and is out of scope; this records the
-// real spend so the wallet and ledger stay correct.
+// chargeWallet debita la billetera por un pedido o un viaje, contra
+// SYSTEM:EXTERNAL (la contraparte del socio). La liquidacion al socio necesita
+// una integracion y no existe; esto deja el gasto real registrado.
 //
-// idemKey is the ledger idempotency key: a STABLE key (e.g. per-ride) makes the
-// charge safe against retries, concurrent calls and status manipulation — a
-// repeat charge collides on the ledger UNIQUE constraint and is a no-op instead
-// of a second debit.
-func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor int64, label, idemKey string) error {
+// idemKey es la llave de idempotencia del asiento: una llave ESTABLE (por
+// viaje) hace que un cobro repetido choque en el libro y no debite dos veces.
+//
+// enTx es la escritura del modulo —confirmar el viaje, insertar el pedido— y
+// corre DENTRO de la transaccion del asiento, junto con el tope y la fila del
+// historial. Antes el cobro se confirmaba primero y lo demas iba despues, por
+// fuera: si el pedido no se podia insertar, la persona quedaba cobrada sin
+// pedido, y el historial se escribia con el error descartado.
+func (s *Service) chargeWallet(
+	ctx context.Context, userID string, amountMinor int64, label, idemKey string,
+	enTx func(ctx context.Context, tx pgx.Tx) error,
+) error {
 	// Una sola guarda cubre viaje y pedido: los dos cobros pasan por aqui.
 	if !s.cobros {
 		return ErrSinIntegracion
@@ -83,8 +95,9 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 	if bal < amountMinor {
 		return fmt.Errorf("insufficient balance")
 	}
-	// Mismo tope diario que las transferencias y el escrow: esto saca dinero de
-	// la billetera contra una contraparte externa igual que ellos.
+	// Mismo tope que las transferencias y el escrow. Esta es la comprobacion
+	// rapida; la que decide corre dentro del asiento, donde dos cobros
+	// simultaneos ya no pueden leer la misma suma.
 	if s.history != nil {
 		if err := s.history.CheckLimits(ctx, userID, "CRC", amountMinor); err != nil {
 			return err
@@ -99,21 +112,48 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 			{Account: ledger.Account{UserID: userID}, Side: ledger.Debit, AmountMinor: amountMinor, Currency: "CRC"},
 			{Account: ledger.Account{SystemCode: ledger.SystemExternalCRC}, Side: ledger.Credit, AmountMinor: amountMinor, Currency: "CRC"},
 		},
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
+			// El tope antes de anotar el propio cobro, o la suma lo contaria
+			// dos veces.
+			if s.history != nil {
+				if err := s.history.CheckLimitsEnTx(ctx, tx, userID, "CRC", amountMinor); err != nil {
+					return err
+				}
+			}
+			if enTx != nil {
+				if err := enTx(ctx, tx); err != nil {
+					return err
+				}
+			}
+			if s.history != nil {
+				return s.history.RecordHistoryEnTx(ctx, tx, userID, "", &transaction.CreateTransactionRequest{
+					Type:             "marketplace",
+					Amount:           amountMinor,
+					Currency:         "CRC",
+					CounterpartyType: "marketplace",
+					CounterpartyName: label,
+					Description:      label,
+					IdempotencyKey:   idemKey,
+				})
+			}
+			return nil
+		},
 	}); err != nil {
 		if errors.Is(err, ledger.ErrIdempotent) {
-			return nil // already charged for this key; no second debit, no dup history
+			// Ya se cobro con esta llave, y con el cobro —en la misma
+			// transaccion— se escribio lo demas.
+			return nil
+		}
+		if errors.Is(err, transaction.ErrDailyLimitExceeded) {
+			return transaction.ErrDailyLimitExceeded
+		}
+		if errors.Is(err, transaction.ErrMonthlyLimitExceeded) {
+			return transaction.ErrMonthlyLimitExceeded
+		}
+		if errors.Is(err, errViajeNoConfirmable) {
+			return errViajeNoConfirmable
 		}
 		return fmt.Errorf("marketplace charge: %w", err)
-	}
-	if s.history != nil {
-		_ = s.history.RecordHistory(ctx, userID, &transaction.CreateTransactionRequest{
-			Type:             "marketplace",
-			Amount:           amountMinor,
-			Currency:         "CRC",
-			CounterpartyType: "marketplace",
-			CounterpartyName: label,
-			Description:      label,
-		})
 	}
 	return nil
 }
@@ -132,14 +172,17 @@ func (s *Service) ConfirmRide(ctx context.Context, userID, rideID string) (*Ride
 	if ride.Status != "searching" {
 		return nil, fmt.Errorf("ride already confirmed")
 	}
-	// Stable idempotency key so a repeated confirm (status reset, retry, or a
-	// concurrent call) collides on the ledger and never produces a second debit.
-	if err := s.chargeWallet(ctx, userID, ride.EstimatedPrice, "Viaje "+ride.PartnerCode, "marketplace:ride:"+rideID); err != nil {
-		return nil, err
-	}
-	// Conditional flip (only from searching) that also re-anchors the trip clock
-	// at confirmation, so the searching dwell time never leaks into the trip.
-	if err := s.repo.ConfirmRideRow(ctx, rideID); err != nil {
+	// Llave estable por viaje: una confirmacion repetida (reintento, llamada
+	// concurrente) choca en el libro y no debita dos veces.
+	//
+	// La confirmacion del viaje va DENTRO del asiento. Antes se cobraba primero
+	// y se confirmaba despues, por fuera: si ese UPDATE fallaba, el viaje
+	// quedaba cobrado y sin confirmar. Ahora un viaje que ya no se puede
+	// confirmar (otra confirmacion gano) revierte el cobro.
+	if err := s.chargeWallet(ctx, userID, ride.EstimatedPrice, "Viaje "+ride.PartnerCode, "marketplace:ride:"+rideID,
+		func(ctx context.Context, tx pgx.Tx) error {
+			return s.repo.ConfirmRideRowEnTx(ctx, tx, rideID)
+		}); err != nil {
 		return nil, err
 	}
 	// Return the live status (the trip clock just started, so 'arriving' with the
@@ -365,12 +408,6 @@ func (s *Service) CreateFoodOrder(ctx context.Context, userID string, req *Creat
 	deliveryFee := int64(150000) // 1500 CRC in centimos
 	total := subtotal + deliveryFee
 
-	// Charge the wallet up front (balance-checked); no order if it fails. Each
-	// food order is a distinct charge, so a unique key per call is correct.
-	if err := s.chargeWallet(ctx, userID, total, "Pedido "+req.RestaurantName, "marketplace:"+uuid.NewString()); err != nil {
-		return nil, err
-	}
-
 	estimatedMins := 25 + rand.Intn(20)
 
 	order := &FoodOrderRecord{
@@ -387,7 +424,15 @@ func (s *Service) CreateFoodOrder(ctx context.Context, userID string, req *Creat
 		CreatedAt:         time.Now(),
 	}
 
-	if err := s.repo.CreateFoodOrder(ctx, order, items); err != nil {
+	// El pedido se inserta DENTRO del asiento del cobro. Antes se cobraba
+	// primero y el pedido se insertaba despues, en otra transaccion: si el
+	// insert fallaba, la persona quedaba cobrada SIN pedido. La llave del cobro
+	// es la del pedido, asi que ademas un mismo pedido no se puede cobrar dos
+	// veces.
+	if err := s.chargeWallet(ctx, userID, total, "Pedido "+req.RestaurantName, "marketplace:pedido:"+order.ID,
+		func(ctx context.Context, tx pgx.Tx) error {
+			return insertarPedido(ctx, tx, order, items)
+		}); err != nil {
 		return nil, err
 	}
 
