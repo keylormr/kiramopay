@@ -26,13 +26,15 @@ func correr063(t *testing.T, pool *pgxpool.Pool) {
 
 func insertarTarjeta(t *testing.T, pool *pgxpool.Pool, userID, marca, estado, last4 string) string {
 	t.Helper()
+	// Los ::text no son decoracion: $3 y $4 aparecen dos veces cada uno, y sin
+	// el tipo explicito Postgres deduce uno distinto en cada lugar (42P08).
 	var id string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO virtual_cards (user_id, card_number, last4, expiry_month, expiry_year,
 		                           cardholder_name, brand, status, daily_limit,
 		                           frozen_at)
-		VALUES ($1::uuid, '•••• •••• •••• ' || $4, $4, 1, 2028, 'TEST USER', $2, $3, 77700,
-		        CASE WHEN $3 = 'frozen' THEN NOW() END)
+		VALUES ($1::uuid, '•••• •••• •••• ' || $4::text, $4::text, 1, 2028, 'TEST USER', $2::text, $3::text, 77700,
+		        CASE WHEN $3::text = 'frozen' THEN NOW() END)
 		RETURNING id::text`, userID, marca, estado, last4).Scan(&id); err != nil {
 		t.Fatalf("insertar tarjeta: %v", err)
 	}
