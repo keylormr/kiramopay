@@ -23,11 +23,13 @@ interface ProfileViewProps {
   onOpenBusiness?: () => void;
   onOpenAdminMerchants?: () => void;
   onOpenAdminUsers?: () => void;
+  /** La cola de disputas del escrow (solo administradores). */
+  onOpenAdminDisputas?: () => void;
   onOpenPlans?: () => void;
   onOpenSessions?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenPlans, onOpenSessions }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenPlans, onOpenSessions }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -684,6 +686,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 <div className="flex-1 text-left">
                   <p className="font-semibold uv-text-primary text-sm">{t('admin_users_menu')}</p>
                   <p className="text-xs uv-text-muted mt-0.5">{t('admin_users_menu_desc')}</p>
+                </div>
+                <Icons.ChevronRight size={18} className="uv-text-muted" />
+              </button>
+
+              <button
+                onClick={() => onOpenAdminDisputas?.()}
+                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+              >
+                <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center mr-3">
+                  <Icons.Shield size={18} className="text-violet-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold uv-text-primary text-sm">{t('admin_disputes_menu')}</p>
+                  <p className="text-xs uv-text-muted mt-0.5">{t('admin_disputes_menu_desc')}</p>
                 </div>
                 <Icons.ChevronRight size={18} className="uv-text-muted" />
               </button>
