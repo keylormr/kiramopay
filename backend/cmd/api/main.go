@@ -379,6 +379,14 @@ func main() {
 	// persisted.
 	notifRepo := notification.NewRepository(pool)
 	notifService := notification.NewService(notifRepo, cfg.VAPID.PublicKey, cfg.VAPID.PrivateKey)
+	// Avisos de la app instalada. Una cuenta de servicio ilegible no tumba el
+	// arranque: los avisos nativos quedan apagados y el log lo dice.
+	if enviadorFCM, err := notification.NuevoEnviadorFCM(cfg.FCM.CuentaDeServicio); err != nil {
+		slog.Error("FCM_SERVICE_ACCOUNT_JSON invalida: avisos nativos apagados", "error", err)
+	} else if enviadorFCM != nil {
+		notifService.SetEnviadorFCM(enviadorFCM)
+		slog.Info("avisos nativos (FCM) habilitados")
+	}
 	sinpeService := sinpe.NewService(sinpeRepo, txService, walletRepo, userRepo, &sinpe.Options{
 		AuditLogger: auditLogger,
 		Notifier:    notifService,
@@ -1013,6 +1021,10 @@ func main() {
 			// La misma baja por POST: el cliente HTTP de la app no manda cuerpo
 			// en un DELETE, y la baja necesita el endpoint.
 			r.Post("/push/unsubscribe", notifHandler.Unsubscribe)
+			// Avisos de la app instalada (FCM): la WebView no tiene Push API.
+			r.Get("/push/nativo", notifHandler.EstadoNativo)
+			r.Post("/push/dispositivos", notifHandler.RegistrarDispositivo)
+			r.Post("/push/dispositivos/baja", notifHandler.OlvidarDispositivo)
 			r.Get("/notifications", notifHandler.ListNotifications)
 			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
 			r.Post("/notifications/read-all", notifHandler.MarkAllRead)

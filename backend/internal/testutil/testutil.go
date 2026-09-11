@@ -414,6 +414,15 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		updated_at TIMESTAMP DEFAULT NOW()
 	);
 
+	CREATE TABLE IF NOT EXISTS push_dispositivos (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		token TEXT NOT NULL UNIQUE,
+		plataforma VARCHAR(16) NOT NULL CHECK (plataforma IN ('android')),
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1094,7 +1103,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
-		"push_subscriptions",
+		"push_subscriptions", "push_dispositivos",
 		"escrow_agreements",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",

@@ -140,6 +140,13 @@ func (r *Repository) blockAndRevoke(ctx context.Context, userID, reason, updateS
 	); err != nil {
 		return false, 0, fmt.Errorf("drop push subscriptions: %w", err)
 	}
+	// Lo mismo con los telefonos de la app instalada (FCM, migracion 067).
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM push_dispositivos WHERE user_id = $1::uuid`,
+		userID,
+	); err != nil {
+		return false, 0, fmt.Errorf("drop push devices: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, 0, fmt.Errorf("commit: %w", err)
 	}

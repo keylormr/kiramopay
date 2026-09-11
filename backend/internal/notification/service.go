@@ -28,6 +28,9 @@ type Service struct {
 	vapidPublicKey  string
 	vapidPrivateKey string
 	broadcaster     Broadcaster
+	// fcm entrega a la app instalada (ver fcm.go). nil = avisos nativos
+	// apagados.
+	fcm *EnviadorFCM
 }
 
 // NewService creates a new notification service.
@@ -79,7 +82,8 @@ func (s *Service) Unsubscribe(ctx context.Context, userID, endpoint string) erro
 }
 
 // SendToUser persists a notification, pushes it live over any open WebSocket
-// connections, and delivers web push to the user's registered subscriptions.
+// connections, and delivers web push to the user's registered subscriptions
+// and native push (FCM) to the user's registered phones.
 func (s *Service) SendToUser(ctx context.Context, userID string, payload *NotificationPayload) error {
 	// Persist to history first; the id generated here is reused for the live WS
 	// push so the client can reconcile it against the record it later syncs.
@@ -99,6 +103,11 @@ func (s *Service) SendToUser(ctx context.Context, userID string, payload *Notifi
 	// web-push subscriptions, so a foregrounded app gets it instantly even
 	// without a registered push endpoint.
 	s.broadcast(userID, record)
+
+	// Los telefonos no dependen de que el navegador tenga suscripciones: se
+	// reparten antes, y un fallo leyendo las del navegador no los deja sin
+	// aviso.
+	s.enviarANativos(ctx, userID, payload)
 
 	// Best-effort web push to registered browser subscriptions.
 	subs, err := s.repo.GetSubscriptionsByUser(ctx, userID)

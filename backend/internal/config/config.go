@@ -15,6 +15,7 @@ type Config struct {
 	JWT       JWTConfig
 	CORS      CORSConfig
 	VAPID     VAPIDConfig
+	FCM       FCMConfig
 	Telemetry TelemetryConfig
 	Gemini    GeminiConfig
 	Anthropic AnthropicConfig
@@ -72,6 +73,13 @@ type TelemetryConfig struct {
 type VAPIDConfig struct {
 	PublicKey  string
 	PrivateKey string
+}
+
+// FCMConfig: la cuenta de servicio de Firebase para los avisos de la app
+// instalada, el JSON que descarga la consola, crudo o en base64. Vacio = sin
+// avisos nativos.
+type FCMConfig struct {
+	CuentaDeServicio string // FCM_SERVICE_ACCOUNT_JSON
 }
 
 type ServerConfig struct {
@@ -198,6 +206,9 @@ func Load() *Config {
 		VAPID: VAPIDConfig{
 			PublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 			PrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
+		},
+		FCM: FCMConfig{
+			CuentaDeServicio: getEnv("FCM_SERVICE_ACCOUNT_JSON", ""),
 		},
 		Telemetry: TelemetryConfig{
 			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

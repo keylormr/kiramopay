@@ -1,4 +1,12 @@
+import { Capacitor } from '@capacitor/core';
 import { getApiLayer } from '@/api';
+import {
+  activarNativo,
+  desactivarNativo,
+  leerEstadoNativo,
+  sincronizarNativo,
+  soltarNativoAlSalir,
+} from './avisosNativos';
 
 /**
  * Avisos del sistema (web push) para ESTE dispositivo.
@@ -9,8 +17,10 @@ import { getApiLayer } from '@/api';
  * de una variable del build que nunca se configuro. Ahora la clave la da el
  * servidor, la suscripcion viaja autenticada y Perfil ofrece el interruptor.
  *
- * La WebView de Android no tiene Push API: en el APK estos avisos no existen
- * y la pantalla lo dice en vez de ofrecer un interruptor que no hace nada.
+ * La WebView de Android no tiene Push API: en el APK los avisos van por FCM
+ * (avisosNativos.ts), y solo si el APK se compilo con el archivo de Firebase.
+ * Sin eso la pantalla lo dice en vez de ofrecer un interruptor que no hace
+ * nada. Este modulo es la unica puerta: decide cual de los dos caminos usar.
  */
 
 export type EstadoAvisos =
@@ -39,7 +49,7 @@ const ESPERA_SW_MS = 10_000;
 // borre el token.
 let endpointActual: string | null = null;
 
-export function avisosSoportados(): boolean {
+function webPushDisponible(): boolean {
   return (
     typeof window !== 'undefined' &&
     'Notification' in window &&
@@ -47,6 +57,24 @@ export function avisosSoportados(): boolean {
     typeof navigator !== 'undefined' &&
     'serviceWorker' in navigator
   );
+}
+
+/**
+ * Por donde llegan los avisos en esta instalacion. En la app nativa solo hay
+ * avisos si el APK trae Firebase: se lee en cada llamada (no al cargar el
+ * modulo) para que las pruebas puedan alternarlo.
+ */
+export function modoDeAvisos(): 'web' | 'nativo' | 'ninguno' {
+  if (Capacitor.isNativePlatform()) {
+    return Capacitor.getPlatform() === 'android' && import.meta.env.VITE_PUSH_NATIVO === '1'
+      ? 'nativo'
+      : 'ninguno';
+  }
+  return webPushDisponible() ? 'web' : 'ninguno';
+}
+
+export function avisosSoportados(): boolean {
+  return modoDeAvisos() !== 'ninguno';
 }
 
 function leerMarca(): string | null {
@@ -134,7 +162,9 @@ async function claveDelServidor(): Promise<{ clave: string; habilitado: boolean 
  * al servidor en el momento del toque.
  */
 export async function leerEstadoAvisos(userId: string): Promise<{ estado: EstadoAvisos; clave: string }> {
-  if (!avisosSoportados()) return { estado: 'no_soportado', clave: '' };
+  const modo = modoDeAvisos();
+  if (modo === 'ninguno') return { estado: 'no_soportado', clave: '' };
+  if (modo === 'nativo') return { estado: await leerEstadoNativo(userId), clave: '' };
   const datos = await claveDelServidor();
   // Si la consulta fallo no se sabe si esta configurado: se ofrece, y activar
   // vuelve a pedir la clave.
@@ -157,7 +187,9 @@ export async function leerEstadoAvisos(userId: string): Promise<{ estado: Estado
  * otra espera, porque Safari y Firefox solo lo conceden dentro del gesto.
  */
 export async function activarAvisos(clave: string, userId: string): Promise<ResultadoAvisos> {
-  if (!avisosSoportados()) return 'no_soportado';
+  const modo = modoDeAvisos();
+  if (modo === 'ninguno') return 'no_soportado';
+  if (modo === 'nativo') return activarNativo(userId);
   try {
     const permiso =
       Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
@@ -192,9 +224,11 @@ export async function activarAvisos(clave: string, userId: string): Promise<Resu
 
 /** Apaga los avisos en este dispositivo. */
 export async function desactivarAvisos(): Promise<ResultadoAvisos> {
+  const modo = modoDeAvisos();
+  if (modo === 'nativo') return desactivarNativo();
   borrarMarca();
   endpointActual = null;
-  if (!avisosSoportados()) return 'no_soportado';
+  if (modo === 'ninguno') return 'no_soportado';
   try {
     const reg = await registro();
     const sub = reg ? await reg.pushManager.getSubscription() : null;
@@ -218,7 +252,9 @@ export async function desactivarAvisos(): Promise<ResultadoAvisos> {
  * rotada en el servidor. No pide permiso ni suscribe a quien no lo pidio.
  */
 export async function sincronizarAvisos(userId: string): Promise<void> {
-  if (!avisosSoportados() || Notification.permission !== 'granted') return;
+  const modo = modoDeAvisos();
+  if (modo === 'nativo') return sincronizarNativo(userId);
+  if (modo === 'ninguno' || Notification.permission !== 'granted') return;
   if (leerMarca() !== userId) return;
   try {
     const datos = await claveDelServidor();
@@ -244,6 +280,10 @@ export async function sincronizarAvisos(userId: string): Promise<void> {
  * servidor ya borro las filas y la peticion solo volveria con 401.
  */
 export function soltarAvisosAlSalir(avisarAlServidor = true): void {
+  if (modoDeAvisos() === 'nativo') {
+    soltarNativoAlSalir(avisarAlServidor);
+    return;
+  }
   borrarMarca();
   const endpoint = endpointActual;
   endpointActual = null;
@@ -252,7 +292,7 @@ export function soltarAvisosAlSalir(avisarAlServidor = true): void {
       .notifications.unsubscribePush(endpoint)
       .catch(() => undefined);
   }
-  if (!avisosSoportados()) return;
+  if (!webPushDisponible()) return;
   void (async () => {
     try {
       const reg = await navigator.serviceWorker.getRegistration();

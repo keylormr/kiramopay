@@ -1857,6 +1857,85 @@ paths:
         '401':
           description: Unauthorized
 
+  /api/v1/push/nativo:
+    get:
+      tags: [Notifications]
+      summary: Whether native push (FCM) is enabled
+      description: >-
+        habilitado is false when the server has no FCM service account
+        (FCM_SERVICE_ACCOUNT_JSON); the installed app then does not offer
+        system alerts.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Native push availability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [habilitado]
+                    properties:
+                      habilitado: { type: boolean }
+        '401':
+          description: Unauthorized
+
+  /api/v1/push/dispositivos:
+    post:
+      tags: [Notifications]
+      summary: Register this phone for native push
+      description: >-
+        Stores the FCM registration token of the installed app for the caller.
+        A token already registered by another account moves to the caller.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 4096 }
+                plataforma: { type: string, enum: [android], default: android }
+      responses:
+        '201':
+          description: Device registered
+        '400':
+          description: INVALID_BODY, INVALID_TOKEN or INVALID_PLATFORM
+        '401':
+          description: Unauthorized
+        '409':
+          description: NATIVE_PUSH_DISABLED (the server has no FCM service account)
+
+  /api/v1/push/dispositivos/baja:
+    post:
+      tags: [Notifications]
+      summary: Unregister this phone from native push
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '204':
+          description: Device removed
+        '400':
+          description: INVALID_TOKEN
+        '401':
+          description: Unauthorized
+
   /api/v1/notifications:
     get:
       tags: [Notifications]
