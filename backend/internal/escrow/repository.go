@@ -31,7 +31,8 @@ const agreementCols = `
 	id::text, buyer_id::text, seller_id::text, amount_minor, currency, status,
 	description, COALESCE(dispute_reason, ''),
 	funded_at, released_at, refunded_at, disputed_at, cancelled_at,
-	created_at, updated_at`
+	created_at, updated_at,
+	delivered_at, entregar_antes, revisar_antes, COALESCE(cerrado_por_vencimiento, '')`
 
 func scanAgreement(row pgx.Row) (*Agreement, error) {
 	var a Agreement
@@ -40,6 +41,7 @@ func scanAgreement(row pgx.Row) (*Agreement, error) {
 		&a.Description, &a.DisputeReason,
 		&a.FundedAt, &a.ReleasedAt, &a.RefundedAt, &a.DisputedAt, &a.CancelledAt,
 		&a.CreatedAt, &a.UpdatedAt,
+		&a.DeliveredAt, &a.DeliverBy, &a.ReviewBy, &a.ClosedByExpiry,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

@@ -397,6 +397,14 @@ func main() {
 		Events:      b2bService, // escrow lifecycle → merchant webhooks
 		History:     txService,  // fund/release/refund visible in tx history
 		AuditLogger: auditLogger,
+		// Un acuerdo fondeado vence: el vendedor tiene un plazo para marcar
+		// la entrega y, desde ahi, el comprador otro para liberar o reclamar.
+		// Ver migrations/064_escrow_con_plazos.sql.
+		Plazos: &escrow.Plazos{
+			DiasParaEntregar: cfg.Escrow.DiasParaEntregar,
+			DiasParaRevisar:  cfg.Escrow.DiasParaRevisar,
+		},
+		Notifier: notifService,
 	})
 	// Payouts — ledger-backed outbound payments over pluggable rails. Only the
 	// deterministic mock rail is registered today; real rails (SINPE
@@ -861,6 +869,7 @@ func main() {
 			r.Get("/escrow", escrowHandler.List)
 			r.Get("/escrow/{id}", escrowHandler.Get)
 			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/deliver", escrowHandler.Deliver)
 			r.Post("/escrow/{id}/release", escrowHandler.Release)
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
@@ -1135,6 +1144,7 @@ func main() {
 			r.Use(b2b.RequireScope(b2b.ScopeEscrowWrite))
 			r.Post("/escrow", escrowHandler.Create)
 			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/deliver", escrowHandler.Deliver)
 			r.Post("/escrow/{id}/release", escrowHandler.Release)
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)

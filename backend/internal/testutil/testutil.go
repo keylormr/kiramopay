@@ -446,6 +446,13 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		settled_at TIMESTAMPTZ,
+		-- migracion 064: plazos de entrega y de revision
+		delivered_at TIMESTAMPTZ,
+		entregar_antes TIMESTAMPTZ,
+		revisar_antes TIMESTAMPTZ,
+		aviso_vencimiento_at TIMESTAMPTZ,
+		cerrado_por_vencimiento VARCHAR(16)
+			CHECK (cerrado_por_vencimiento IS NULL OR cerrado_por_vencimiento IN ('entrega','revision')),
 		CHECK (buyer_id <> seller_id)
 	);
 
