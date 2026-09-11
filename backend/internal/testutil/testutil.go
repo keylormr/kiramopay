@@ -526,6 +526,48 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	END;
 	$$ LANGUAGE plpgsql;
 
+	-- exchange_rates: migraciones 011 + 019 + 021, en la forma que tiene hoy la
+	-- base. Es una tabla HISTORIZADA: una sola fila vigente por par
+	-- (effective_to IS NULL, indice unico parcial) y un disparador que cierra
+	-- la vigente al insertar una nueva. Sin ella aca, la actualizacion del
+	-- tipo de cambio no tenia contra que probarse — y su ON CONFLICT roto
+	-- (la restriccion que nombraba dejo de existir en la 021) nunca se vio.
+	CREATE TABLE IF NOT EXISTS exchange_rates (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		from_currency VARCHAR(10) NOT NULL,
+		to_currency VARCHAR(10) NOT NULL,
+		rate NUMERIC(20, 10) NOT NULL CHECK (rate > 0),
+		source VARCHAR(30) DEFAULT 'manual',
+		updated_at TIMESTAMP DEFAULT NOW(),
+		effective_from TIMESTAMP NOT NULL DEFAULT NOW(),
+		effective_to TIMESTAMP,
+		spread_bps INTEGER NOT NULL DEFAULT 0 CHECK (spread_bps BETWEEN 0 AND 1000),
+		source_rate NUMERIC(20, 10),
+		CONSTRAINT chk_fx_period_valid CHECK (effective_to IS NULL OR effective_to > effective_from)
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_fx_active_pair
+		ON exchange_rates (from_currency, to_currency) WHERE effective_to IS NULL;
+
+	CREATE OR REPLACE FUNCTION fn_fx_close_active()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		IF NEW.effective_to IS NULL THEN
+			UPDATE exchange_rates
+				SET effective_to = NEW.effective_from
+			WHERE from_currency = NEW.from_currency
+			  AND to_currency   = NEW.to_currency
+			  AND effective_to IS NULL
+			  AND id <> NEW.id;
+		END IF;
+		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trg_fx_close_active ON exchange_rates;
+	CREATE TRIGGER trg_fx_close_active
+		BEFORE INSERT ON exchange_rates
+		FOR EACH ROW EXECUTE FUNCTION fn_fx_close_active();
+
 	DROP TRIGGER IF EXISTS trg_journal_entries_immutable ON journal_entries;
 	CREATE TRIGGER trg_journal_entries_immutable
 		BEFORE UPDATE OR DELETE ON journal_entries
@@ -1101,6 +1143,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"user_sessions", "wallets",
 		"ledger_accounts",
 		"audit_logs",
+		"exchange_rates",
 		"users",
 	}
 	for _, tbl := range tables {
