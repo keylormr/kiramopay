@@ -13,6 +13,9 @@ const mockApi = vi.hoisted(() => ({
     refund: vi.fn(),
     dispute: vi.fn(),
     cancel: vi.fn(),
+    deliver: vi.fn(),
+    adminList: vi.fn(),
+    adminResolve: vi.fn(),
   },
   mfa: { totpVerify: vi.fn() },
 }));
@@ -66,6 +69,8 @@ beforeEach(() => {
   mockApi.escrow.list.mockResolvedValue({ success: true, data: [pendingAgreement] });
   mockApi.escrow.fund.mockReset();
   mockApi.escrow.create.mockReset();
+  mockApi.escrow.deliver.mockReset();
+  mockApi.escrow.release.mockReset();
   mockApi.mfa.totpVerify.mockReset();
   mockDataSync.refreshAccounts.mockClear();
   appState.sinpeContacts = [];
@@ -179,5 +184,89 @@ describe('EscrowView — abrir un acuerdo con una persona real', () => {
     // aparezca, y con que NO sea el generico.
     expect((await screen.findAllByText(/no tiene cuenta de KiramoPay/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/that number does not have/i)).not.toBeInTheDocument();
+  });
+});
+
+// Un escrow fondeado no vencia nunca, y ninguna parte sabia que tenia un plazo.
+// Ahora cada parte ve el plazo que le corre y que pasa si lo pierde.
+describe('EscrowView — los plazos', () => {
+  const fondeado = {
+    ...pendingAgreement,
+    id: 'a9',
+    status: 'funded',
+    description: 'Bicicleta',
+    deliverBy: '2099-09-25T18:00:00.000Z',
+  };
+
+  it('el vendedor ve su plazo y el boton de marcar la entrega', async () => {
+    // El usuario del mock es 'buyer-1': aca actua como VENDEDOR del acuerdo.
+    const comoVendedor = { ...fondeado, buyerId: 'otra-persona', sellerId: 'buyer-1' };
+    mockApi.escrow.list.mockResolvedValue({ success: true, data: [comoVendedor] });
+    mockApi.escrow.deliver.mockResolvedValue({
+      success: true,
+      data: { ...comoVendedor, deliveredAt: '2099-09-12T10:00:00.000Z', reviewBy: '2099-09-19T10:00:00.000Z' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByText('Bicicleta'));
+    expect(screen.getByText(/tienes hasta el .* para marcar la entrega/i)).toBeInTheDocument();
+
+    await user.click(screen.getByText('Marcar como entregado'));
+    await waitFor(() => expect(mockApi.escrow.deliver).toHaveBeenCalledWith('a9'));
+    // Y ya entregado, el vendedor ve el plazo del comprador.
+    expect(await screen.findByText(/si el comprador no reclama antes del/i)).toBeInTheDocument();
+  });
+
+  it('el comprador ve el plazo del vendedor y que pasa si vence', async () => {
+    mockApi.escrow.list.mockResolvedValue({ success: true, data: [fondeado] });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByText('Bicicleta'));
+    expect(screen.getByText(/el vendedor tiene hasta el .* se te devuelve el pago/i)).toBeInTheDocument();
+    // El comprador no marca entregas.
+    expect(screen.queryByText('Marcar como entregado')).not.toBeInTheDocument();
+  });
+
+  it('en una disputa el comprador puede ceder liberando', async () => {
+    const disputado = { ...fondeado, status: 'disputed', disputeReason: 'no llego' };
+    mockApi.escrow.list.mockResolvedValue({ success: true, data: [disputado] });
+    mockApi.escrow.release.mockResolvedValue({ success: true, data: { ...disputado, status: 'released' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByText('Bicicleta'));
+    expect(screen.getByText(/cualquiera de las dos partes puede ceder/i)).toBeInTheDocument();
+    await user.click(screen.getByText('Liberar al vendedor'));
+    await waitFor(() => expect(mockApi.escrow.release).toHaveBeenCalledWith('a9'));
+  });
+
+  it('un plazo vencido tiene su propio mensaje, una sola vez', async () => {
+    const comoVendedor = { ...fondeado, buyerId: 'otra-persona', sellerId: 'buyer-1' };
+    mockApi.escrow.list.mockResolvedValue({ success: true, data: [comoVendedor] });
+    mockApi.escrow.deliver.mockResolvedValue({
+      success: false,
+      error: { code: 'ESCROW_DEADLINE_PASSED', message: 'the deadline for this step has passed' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByText('Bicicleta'));
+    await user.click(screen.getByText('Marcar como entregado'));
+
+    // El error se pintaba en la lista Y en la hoja: ahora solo donde ocurrio.
+    await waitFor(() => expect(screen.getAllByText(/ese plazo ya venció/i)).toHaveLength(1));
+  });
+});
+
+describe('EscrowView — si la lista no carga', () => {
+  it('no dice que no hay acuerdos: dice que no se pudo consultar', async () => {
+    mockApi.escrow.list.mockResolvedValue({ success: false, error: { code: 'X', message: 'sin red' } });
+    setup();
+
+    expect(await screen.findByText('sin red')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes acuerdos/i)).not.toBeInTheDocument();
   });
 });
