@@ -252,15 +252,27 @@ func main() {
 	// topes bajos— pero un control que no puede dispararse y no lo dice se lee
 	// como un control que funciona y no encuentra nada.
 	{
+		// Desde la migracion 065 hay una tercera regla —el acumulado de 30
+		// dias— que SI es alcanzable con el tope mensual del nivel mas alto.
+		// El aviso solo se da si ninguna de las reglas de una moneda puede
+		// dispararse: antes gritaba siempre, y un aviso que no cambia deja de
+		// leerse.
 		maxKYC := kyc.LevelLimits[kyc.LevelComplete]
+		mensual := map[string]bool{}
+		for _, a := range uif.DiagnosticoAcumulado(uif.DefaultThresholds(), map[string]int64{
+			"CRC": maxKYC.MonthlyMinor,
+			"USD": maxKYC.MonthlyMinorUSD,
+		}) {
+			mensual[a.Moneda] = a.Alcanzable
+		}
 		for _, a := range uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
 			"CRC": maxKYC.DailyMinor,
 			"USD": maxKYC.DailyMinorUSD,
 		}) {
-			if !a.Alcanzable {
-				log.Printf("AVISO UIF: %s. Ningun movimiento puede alcanzar el umbral de reporte "+
-					"porque el tope diario de KYC lo corta antes: la cola de cumplimiento no "+
-					"puede llenarse. Revisar con el area de cumplimiento.", a)
+			if !a.Alcanzable && !mensual[a.Moneda] {
+				log.Printf("AVISO UIF: %s, y el acumulado de 30 dias tampoco llega con el tope "+
+					"mensual de KYC: la cola de cumplimiento no puede recibir un caso en %s. "+
+					"Revisar con el area de cumplimiento.", a, a.Moneda)
 			}
 		}
 	}

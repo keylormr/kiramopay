@@ -41,6 +41,21 @@ func (r *Repository) GetUserDailyOutgoingTotal(ctx context.Context, userID, curr
 	return total, err
 }
 
+// GetUserOutgoingTotal30Dias suma las salidas completadas de los ultimos 30
+// dias, incluido el movimiento recien confirmado. Misma lista de tipos que el
+// agregado diario (transaction.TiposDeSalida), por la misma razon.
+func (r *Repository) GetUserOutgoingTotal30Dias(ctx context.Context, userID, currency string) (int64, error) {
+	var total int64
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(amount), 0) FROM transactions
+		 WHERE user_id = $1::uuid AND currency = $2 AND status = 'completed'
+		   AND created_at >= NOW() - INTERVAL '30 days'
+		   AND type IN `+outgoingTypesSQL,
+		userID, currency,
+	).Scan(&total)
+	return total, err
+}
+
 // CreateReport inserts a report. A single_threshold/structuring report for the
 // same tx is deduplicated by the partial unique index (ON CONFLICT DO NOTHING).
 func (r *Repository) CreateReport(ctx context.Context, rep *Report) error {
@@ -52,18 +67,20 @@ func (r *Repository) CreateReport(ctx context.Context, rep *Report) error {
 	}
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO uif_reports
-		   (id, user_id, tx_id, report_type, amount_minor, currency, daily_total_minor, reason, status)
-		 VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4, $5, $6, $7, $8, $9)
+		   (id, user_id, tx_id, report_type, amount_minor, currency, daily_total_minor, reason, status,
+		    acumulado_30d_minor)
+		 VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4, $5, $6, $7, $8, $9, NULLIF($10, 0))
 		 ON CONFLICT (tx_id, report_type) WHERE tx_id IS NOT NULL DO NOTHING`,
 		rep.ID, rep.UserID, rep.TxID, rep.ReportType, rep.AmountMinor,
-		rep.Currency, rep.DailyTotalMinor, rep.Reason, rep.Status,
+		rep.Currency, rep.DailyTotalMinor, rep.Reason, rep.Status, rep.Acumulado30Minor,
 	)
 	return err
 }
 
 const reportCols = `id::text, user_id::text, COALESCE(tx_id::text,''), report_type,
 	amount_minor, currency, daily_total_minor, reason, status,
-	COALESCE(reviewer_id::text,''), COALESCE(reviewer_notes,''), created_at, reviewed_at`
+	COALESCE(reviewer_id::text,''), COALESCE(reviewer_notes,''), created_at, reviewed_at,
+	COALESCE(acumulado_30d_minor, 0)`
 
 func scanReport(row pgx.Row) (*Report, error) {
 	rep := &Report{}
@@ -71,6 +88,7 @@ func scanReport(row pgx.Row) (*Report, error) {
 		&rep.ID, &rep.UserID, &rep.TxID, &rep.ReportType, &rep.AmountMinor,
 		&rep.Currency, &rep.DailyTotalMinor, &rep.Reason, &rep.Status,
 		&rep.ReviewerID, &rep.ReviewerNotes, &rep.CreatedAt, &rep.ReviewedAt,
+		&rep.Acumulado30Minor,
 	); err != nil {
 		return nil, err
 	}
