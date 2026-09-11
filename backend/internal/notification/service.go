@@ -190,7 +190,7 @@ func (s *Service) sendWebPush(sub *PushSubscription, payload []byte) (vencida bo
 		Endpoint: sub.Endpoint,
 		Keys:     webpush.Keys{Auth: sub.Auth, P256dh: sub.P256dh},
 	}, &webpush.Options{
-		Subscriber:      "mailto:noreply@kiramopay.com",
+		Subscriber:      suscriptorVAPID,
 		VAPIDPublicKey:  s.vapidPublicKey,
 		VAPIDPrivateKey: s.vapidPrivateKey,
 		TTL:             86400,
@@ -207,6 +207,12 @@ func (s *Service) sendWebPush(sub *PushSubscription, payload []byte) (vencida bo
 	}
 	return false, nil
 }
+
+// suscriptorVAPID va SIN "mailto:": webpush-go lo antepone por su cuenta a todo
+// lo que no empiece con "https:". Con el prefijo puesto aqui, el token salia
+// firmado con sub="mailto:mailto:...", que Chrome y Firefox toleran y el
+// servicio de push de Apple rechaza: en Safari no llegaba ningun aviso.
+const suscriptorVAPID = "noreply@kiramopay.com"
 
 // suscripcionVencida: 404 y 410 son la forma en que los servicios de push
 // (FCM, Mozilla, Apple) dicen que la suscripcion ya no existe. Cualquier otro

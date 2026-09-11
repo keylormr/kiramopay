@@ -3,6 +3,7 @@ package notification
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +77,17 @@ func TestLaClavePublicaDiceSiHayPush(t *testing.T) {
 	}
 	if clave, ok := NewService(nil, "publica", "privada").ClavePublica(); !ok || clave != "publica" {
 		t.Fatalf("con las dos: %q %v", clave, ok)
+	}
+}
+
+// webpush-go antepone "mailto:" a todo suscriptor que no sea una URL https.
+// Pasarlo ya con el prefijo producia sub="mailto:mailto:...", y el servicio de
+// push de Apple rechaza ese token.
+func TestSuscriptorVAPIDSinPrefijo(t *testing.T) {
+	if strings.HasPrefix(suscriptorVAPID, "mailto:") || strings.HasPrefix(suscriptorVAPID, "https:") {
+		t.Fatalf("suscriptorVAPID = %q: la libreria agrega el prefijo, aqui va solo el correo", suscriptorVAPID)
+	}
+	if !strings.Contains(suscriptorVAPID, "@") {
+		t.Fatalf("suscriptorVAPID = %q: tiene que ser un correo", suscriptorVAPID)
 	}
 }
