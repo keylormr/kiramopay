@@ -55,6 +55,16 @@ func (p *Poller) tick(ctx context.Context) {
 		if n > 0 && p.logger != nil {
 			p.logger.Info("escrow reconcile re-drove stuck settlements", "count", n)
 		}
+		// Los plazos: avisar lo que esta por vencer y cerrar lo vencido. Va en
+		// el mismo tick y bajo el mismo candado, asi que con varias instancias
+		// una sola barre.
+		avisados, cerrados, verr := p.svc.VencerAcuerdos(c, p.batch)
+		if verr != nil {
+			return verr
+		}
+		if (avisados > 0 || cerrados > 0) && p.logger != nil {
+			p.logger.Info("escrow: plazos", "avisados", avisados, "cerrados_por_vencimiento", cerrados)
+		}
 		return nil
 	})
 	if err != nil {

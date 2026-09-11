@@ -60,7 +60,38 @@ type Agreement struct {
 	CancelledAt   *time.Time `json:"cancelled_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
+
+	// Los plazos (migracion 064). DeliveredAt lo marca el vendedor;
+	// DeliverBy vence si no lo hace, ReviewBy si despues el comprador no
+	// libera ni reclama.
+	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	DeliverBy   *time.Time `json:"deliver_by,omitempty"`
+	ReviewBy    *time.Time `json:"review_by,omitempty"`
+	// ClosedByExpiry dice si el acuerdo lo cerro un vencimiento y cual:
+	// "entrega" (el vendedor no marco la entrega) o "revision" (el comprador
+	// no libero ni reclamo).
+	ClosedByExpiry string `json:"closed_by_expiry,omitempty"`
 }
+
+// Plazos son los dias que tiene cada parte para actuar. Ver EscrowConfig.
+type Plazos struct {
+	DiasParaEntregar int
+	DiasParaRevisar  int
+	// AvisoAntes: cuanto antes de que venza un plazo se les avisa a las dos
+	// partes.
+	AvisoAntes time.Duration
+}
+
+// PlazosPorDefecto son los que rigen si quien arma el servicio no dice otros.
+func PlazosPorDefecto() Plazos {
+	return Plazos{DiasParaEntregar: 14, DiasParaRevisar: 7, AvisoAntes: 48 * time.Hour}
+}
+
+// Motivos de cierre por vencimiento.
+const (
+	VencioEntrega  = "entrega"
+	VencioRevision = "revision"
+)
 
 // CreateRequest is the payload to open an agreement.
 type CreateRequest struct {
@@ -92,6 +123,10 @@ var (
 	// fondear —la plata sale de la billetera del comprador— y no se puede
 	// liberar a nadie.
 	ErrVendedorSinCuenta = errors.New("escrow: seller has no KiramoPay account")
+	// ErrPlazoVencido: el plazo vigente ya paso, y con el el resultado quedo
+	// decidido. El barrido corre cada minuto; sin esta guarda, en ese minuto
+	// se podia marcar una entrega tardia o abrir una disputa tardia.
+	ErrPlazoVencido = errors.New("escrow: the deadline for this step has passed")
 	// ErrDailyLimitExceeded: financiar este acuerdo pasaria el tope diario de
 	// salida de la billetera del comprador. La regla es la MISMA que la de las
 	// transferencias (transaction.CheckLimits); aqui solo se traduce para

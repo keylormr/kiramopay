@@ -57,6 +57,8 @@ type Service struct {
 	history     HistoryRecorder
 	auditLogger *audit.Logger
 	cuentas     BuscadorDeCuentas
+	plazos      Plazos
+	notifier    Notifier
 }
 
 // Options carries the optional collaborators.
@@ -68,6 +70,11 @@ type Options struct {
 	AuditLogger *audit.Logger
 	// Cuentas resuelve la contraparte del acuerdo. Ver contraparte.go.
 	Cuentas BuscadorDeCuentas
+	// Plazos para entregar y para revisar. Nil usa PlazosPorDefecto.
+	Plazos *Plazos
+	// Notifier avisa a las partes de la entrega y de los vencimientos. Nil
+	// deja todo funcionando sin avisos.
+	Notifier Notifier
 }
 
 func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
@@ -83,7 +90,28 @@ func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
 		history:     opts.History,
 		auditLogger: opts.AuditLogger,
 		cuentas:     opts.Cuentas,
+		plazos:      plazosDe(opts.Plazos),
+		notifier:    opts.Notifier,
 	}
+}
+
+// plazosDe completa lo que falte con los valores por defecto: un plazo en cero
+// venceria el acuerdo en el mismo barrido que lo ve fondeado.
+func plazosDe(p *Plazos) Plazos {
+	d := PlazosPorDefecto()
+	if p == nil {
+		return d
+	}
+	if p.DiasParaEntregar > 0 {
+		d.DiasParaEntregar = p.DiasParaEntregar
+	}
+	if p.DiasParaRevisar > 0 {
+		d.DiasParaRevisar = p.DiasParaRevisar
+	}
+	if p.AvisoAntes > 0 {
+		d.AvisoAntes = p.AvisoAntes
+	}
+	return d
 }
 
 // emit notifies both parties' webhook endpoints about a lifecycle event.
@@ -197,8 +225,13 @@ func (s *Service) Fund(ctx context.Context, callerID, id string) (*Agreement, er
 		}
 	}
 
-	return s.moveAndTransition(ctx, a, StatusPending, StatusFunded, "fund",
+	// El plazo del vendedor se fija DENTRO del asiento: un acuerdo fondeado sin
+	// plazo es justo el que no vence nunca.
+	return s.moverYTransicionar(ctx, a, StatusPending, StatusFunded, "fund",
 		ledger.Account{UserID: a.BuyerID}, escrowAccount(a.Currency),
+		func(ctx context.Context, tx pgx.Tx, _ *Agreement) (*Agreement, error) {
+			return fijarPlazoEntregaEnTx(ctx, tx, a.ID, s.plazos.DiasParaEntregar)
+		},
 		func(done *Agreement) {
 			if s.uif != nil {
 				s.uif.Report(ctx, a.BuyerID, a.ID, a.Currency, a.AmountMinor)
@@ -229,8 +262,27 @@ func (s *Service) Release(ctx context.Context, callerID, id string) (*Agreement,
 			return nil, ErrMFARequired
 		}
 	}
-	return s.moveAndTransition(ctx, a, StatusFunded, StatusReleased, "release",
+	// Tambien desde una disputa: el comprador puede CEDER en cualquier momento
+	// sin esperar al arbitro. Liberar le da la razon al vendedor, que es la
+	// otra parte de la disputa, asi que no hay nadie a quien perjudique.
+	from, err := desdeFondeadoODisputado(a)
+	if err != nil {
+		return nil, err
+	}
+	return s.moveAndTransition(ctx, a, from, StatusReleased, "release",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.SellerID}, nil)
+}
+
+// desdeFondeadoODisputado: liberar y reembolsar valen desde 'funded' y, como
+// concesion de una parte, desde 'disputed'. La disputa tenia UNA sola salida,
+// Resolve, y es del administrador: si las partes se ponian de acuerdo, igual
+// tenian que esperar a un arbitro para mover su propia plata.
+func desdeFondeadoODisputado(a *Agreement) (Status, error) {
+	switch a.Status {
+	case StatusFunded, StatusDisputed:
+		return a.Status, nil
+	}
+	return "", ErrBadTransition
 }
 
 // Refund returns the held funds to the buyer (funded → refunded, seller only —
@@ -257,7 +309,12 @@ func (s *Service) Refund(ctx context.Context, callerID, id string) (*Agreement, 
 			return nil, ErrMFARequired
 		}
 	}
-	return s.moveAndTransition(ctx, a, StatusFunded, StatusRefunded, "refund",
+	// Tambien desde una disputa: el vendedor puede ceder y devolver.
+	from, err := desdeFondeadoODisputado(a)
+	if err != nil {
+		return nil, err
+	}
+	return s.moveAndTransition(ctx, a, from, StatusRefunded, "refund",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.BuyerID}, nil)
 }
 
@@ -272,6 +329,13 @@ func (s *Service) Dispute(ctx context.Context, callerID, id, reason string) (*Ag
 	}
 	if strings.TrimSpace(reason) == "" {
 		return nil, ErrInvalidRequest
+	}
+	// Con el plazo vigente vencido el resultado ya esta decidido —la plata va a
+	// quien no le tocaba actuar— y el barrido lo ejecuta en menos de un
+	// minuto. Una disputa en ese minuto no reclama nada: frena un resultado
+	// que la regla ya dio.
+	if a.Status == StatusFunded && plazoVencido(plazoVigente(a)) {
+		return nil, ErrPlazoVencido
 	}
 	out, err := s.repo.Transition(ctx, id, StatusFunded, StatusDisputed, reason)
 	if err != nil {
@@ -357,6 +421,18 @@ func (s *Service) moveAndTransition(
 	ctx context.Context, a *Agreement, from, to Status, action string,
 	debit, credit ledger.Account, onSuccess func(*Agreement),
 ) (*Agreement, error) {
+	return s.moverYTransicionar(ctx, a, from, to, action, debit, credit, nil, onSuccess)
+}
+
+// moverYTransicionar es moveAndTransition con una escritura mas dentro de la
+// transaccion del asiento: el plazo al fondear, el motivo al vencer. Corre
+// despues de la transicion y devuelve el acuerdo actualizado.
+func (s *Service) moverYTransicionar(
+	ctx context.Context, a *Agreement, from, to Status, action string,
+	debit, credit ledger.Account,
+	enTx func(ctx context.Context, tx pgx.Tx, claimed *Agreement) (*Agreement, error),
+	onSuccess func(*Agreement),
+) (*Agreement, error) {
 	var claimed *Agreement
 	_, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    fmt.Sprintf("escrow %s: %s", action, a.ID),
@@ -382,6 +458,11 @@ func (s *Service) moveAndTransition(
 			claimed, terr = s.repo.TransitionEnTx(ctx, tx, a.ID, from, to, "")
 			if terr != nil {
 				return terr
+			}
+			if enTx != nil {
+				if claimed, terr = enTx(ctx, tx, claimed); terr != nil {
+					return terr
+				}
 			}
 			// settled_at solo tiene sentido en los estados terminales:
 			// estamparla al fondear dejaba al barrido de legado sin poder ver
