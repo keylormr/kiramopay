@@ -158,8 +158,12 @@ func NewActualizador(repo *Repository, fuente FuenteTipoDeCambio, cada time.Dura
 // Run actualiza de inmediato y despues cada `cada`, hasta que ctx se cancele.
 // Corre de inmediato porque al arrancar la semilla vieja ya esta vencida: sin
 // esta primera pasada, cripto en colones quedaria fuera de servicio una hora.
+//
+// El error de cada pasada no se propaga: ActualizarUnaVez ya lo deja en el
+// diagnostico de /health y en el log con nivel Error, y la siguiente pasada lo
+// vuelve a intentar.
 func (a *Actualizador) Run(ctx context.Context) {
-	a.ActualizarUnaVez(ctx)
+	_ = a.ActualizarUnaVez(ctx)
 	t := time.NewTicker(a.cada)
 	defer t.Stop()
 	for {
@@ -167,7 +171,7 @@ func (a *Actualizador) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			a.ActualizarUnaVez(ctx)
+			_ = a.ActualizarUnaVez(ctx)
 		}
 	}
 }
