@@ -532,22 +532,31 @@ func TestBlock_BorraLasSuscripcionesDeAvisos(t *testing.T) {
 			fila.user, fila.endpoint); err != nil {
 			t.Fatalf("sembrar suscripcion: %v", err)
 		}
+		// Y el telefono de la app instalada, con el endpoint como token.
+		if _, err := env.pool.Exec(ctx,
+			`INSERT INTO push_dispositivos (user_id, token, plataforma)
+			 VALUES ($1::uuid, $2, 'android')`,
+			fila.user, "fcm-"+fila.endpoint); err != nil {
+			t.Fatalf("sembrar telefono: %v", err)
+		}
 	}
 	bloquear(t, env, resp.User.ID, "")
 
+	// Suscripciones del navegador mas telefonos de la app instalada.
 	contar := func(userID string) int {
 		var n int
 		if err := env.pool.QueryRow(ctx,
-			`SELECT COUNT(*) FROM push_subscriptions WHERE user_id = $1::uuid`, userID).Scan(&n); err != nil {
+			`SELECT (SELECT COUNT(*) FROM push_subscriptions WHERE user_id = $1::uuid)
+			      + (SELECT COUNT(*) FROM push_dispositivos WHERE user_id = $1::uuid)`, userID).Scan(&n); err != nil {
 			t.Fatalf("contar suscripciones: %v", err)
 		}
 		return n
 	}
 	if n := contar(resp.User.ID); n != 0 {
-		t.Fatalf("suscripciones del bloqueado tras el bloqueo: %d, esperaba 0", n)
+		t.Fatalf("suscripciones y telefonos del bloqueado tras el bloqueo: %d, esperaba 0", n)
 	}
-	if n := contar(otro.User.ID); n != 1 {
-		t.Fatalf("el bloqueo toco las suscripciones de otra cuenta: quedan %d, esperaba 1", n)
+	if n := contar(otro.User.ID); n != 2 {
+		t.Fatalf("el bloqueo toco los avisos de otra cuenta: quedan %d, esperaba 2", n)
 	}
 	desbloquear(t, env, resp.User.ID)
 	if n := contar(resp.User.ID); n != 0 {

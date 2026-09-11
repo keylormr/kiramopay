@@ -84,6 +84,32 @@ export class HttpNotificationRepository implements INotificationRepository {
     return apiSuccess(undefined as unknown as void);
   }
 
+  async pushNativo(): Promise<ApiResponse<{ habilitado: boolean }>> {
+    const res = await this.client.get<{ habilitado?: boolean }>('/api/v1/push/nativo');
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to read native push');
+    }
+    return apiSuccess({ habilitado: res.data.habilitado === true });
+  }
+
+  async registrarDispositivo(d: { token: string; plataforma: 'android' }): Promise<ApiResponse<void>> {
+    const res = await this.client.post<void>('/api/v1/push/dispositivos', d);
+    if (!res.success) {
+      // Se conserva el codigo: NATIVE_PUSH_DISABLED se muestra distinto de un
+      // fallo de red.
+      return apiError(res.error?.code || 'REGISTER_FAILED', res.error?.message || 'Failed to register the device');
+    }
+    return apiSuccess(undefined as unknown as void);
+  }
+
+  async olvidarDispositivo(token: string): Promise<ApiResponse<void>> {
+    const res = await this.client.post<void>('/api/v1/push/dispositivos/baja', { token });
+    if (!res.success) {
+      return apiError(res.error?.code || 'UNREGISTER_FAILED', res.error?.message || 'Failed to remove the device');
+    }
+    return apiSuccess(undefined as unknown as void);
+  }
+
   async unsubscribePush(endpoint: string): Promise<ApiResponse<void>> {
     // POST y no DELETE: la baja necesita el endpoint en el cuerpo y el cliente
     // no manda cuerpo en un DELETE.

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El azul de la marca (theme-color de index.html), para el acento de los
+         avisos en la barra de estado. -->
+    <color name="kiramo_aviso">#2D7BFF</color>
+</resources>
