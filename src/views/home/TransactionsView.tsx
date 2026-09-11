@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -117,6 +117,46 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
       cancelado = true;
     };
   }, [consulta]);
+
+  // Movimientos que llegan con la pantalla abierta.
+  //
+  // Desde que la lista la trae el servidor (#182), la pantalla dejo de mirar
+  // el estado local: un SINPE que entraba mientras estaba abierta no aparecia
+  // hasta cerrarla y volver a abrirla. El estado local si se entera (lo
+  // refresca la sincronizacion al llegar el aviso por WebSocket), asi que
+  // cuando cambia su movimiento mas reciente se vuelve a pedir la primera
+  // pagina y se FUNDE con lo que hay: los nuevos arriba, los que ya estaban
+  // con sus datos al dia, y las paginas que la persona ya cargo no se pierden.
+  const masRecienteLocal = state.transactions[0]?.id;
+  const recienteVisto = useRef(masRecienteLocal);
+  useEffect(() => {
+    if (!masRecienteLocal || masRecienteLocal === recienteVisto.current) return;
+    recienteVisto.current = masRecienteLocal;
+    let cancelado = false;
+    (async () => {
+      const res = await getApiLayer().transactions.listTransactions({
+        limit: TAMANO_PAGINA,
+        offset: 0,
+        search: consulta || undefined,
+      });
+      if (cancelado || !res.success || !res.data) return;
+      const datos = res.data;
+      setPagina((prev) => {
+        if (!prev || prev.clave !== consulta) return prev;
+        const frescos = new Map(datos.transactions.map((tx) => [tx.id, tx]));
+        const previos = new Set(prev.txs.map((tx) => tx.id));
+        const nuevos = datos.transactions.filter((tx) => !previos.has(tx.id));
+        return {
+          clave: prev.clave,
+          txs: [...nuevos, ...prev.txs.map((tx) => frescos.get(tx.id) ?? tx)],
+          total: datos.total,
+        };
+      });
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [masRecienteLocal, consulta]);
 
   const cargarMas = useCallback(async () => {
     if (!pagina || cargando) return;
