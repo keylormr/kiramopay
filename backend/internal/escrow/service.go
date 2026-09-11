@@ -265,11 +265,7 @@ func (s *Service) Release(ctx context.Context, callerID, id string) (*Agreement,
 	// Tambien desde una disputa: el comprador puede CEDER en cualquier momento
 	// sin esperar al arbitro. Liberar le da la razon al vendedor, que es la
 	// otra parte de la disputa, asi que no hay nadie a quien perjudique.
-	from, err := desdeFondeadoODisputado(a)
-	if err != nil {
-		return nil, err
-	}
-	return s.moveAndTransition(ctx, a, from, StatusReleased, "release",
+	return s.moveAndTransition(ctx, a, desdeFondeadoODisputado(a), StatusReleased, "release",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.SellerID}, nil)
 }
 
@@ -277,12 +273,18 @@ func (s *Service) Release(ctx context.Context, callerID, id string) (*Agreement,
 // concesion de una parte, desde 'disputed'. La disputa tenia UNA sola salida,
 // Resolve, y es del administrador: si las partes se ponian de acuerdo, igual
 // tenian que esperar a un arbitro para mover su propia plata.
-func desdeFondeadoODisputado(a *Agreement) (Status, error) {
-	switch a.Status {
-	case StatusFunded, StatusDisputed:
-		return a.Status, nil
+//
+// Para cualquier otro estado devuelve 'funded' y deja que moveAndTransition
+// decida, NO rechaza aca: un acuerdo ya liberado que se vuelve a liberar tiene
+// que llegar al camino de ErrIdempotent, que lo devuelve tal como quedo (tocar
+// dos veces el boton es exito, no error). Y uno reembolsado que se intenta
+// liberar falla igual adentro, en la transicion guardada, sin mover plata.
+// Rechazar antes rompia la primera de esas dos cosas.
+func desdeFondeadoODisputado(a *Agreement) Status {
+	if a.Status == StatusDisputed {
+		return StatusDisputed
 	}
-	return "", ErrBadTransition
+	return StatusFunded
 }
 
 // Refund returns the held funds to the buyer (funded → refunded, seller only —
@@ -310,11 +312,7 @@ func (s *Service) Refund(ctx context.Context, callerID, id string) (*Agreement, 
 		}
 	}
 	// Tambien desde una disputa: el vendedor puede ceder y devolver.
-	from, err := desdeFondeadoODisputado(a)
-	if err != nil {
-		return nil, err
-	}
-	return s.moveAndTransition(ctx, a, from, StatusRefunded, "refund",
+	return s.moveAndTransition(ctx, a, desdeFondeadoODisputado(a), StatusRefunded, "refund",
 		escrowAccount(a.Currency), ledger.Account{UserID: a.BuyerID}, nil)
 }
 
