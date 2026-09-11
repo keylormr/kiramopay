@@ -22,22 +22,22 @@ const (
 
 // Report is one entry in the UIF review queue.
 type Report struct {
-	ID              string     `json:"id"`
-	UserID          string     `json:"user_id"`
-	TxID            string     `json:"tx_id,omitempty"`
-	ReportType      string     `json:"report_type"`
-	AmountMinor     int64      `json:"amount_minor"`
-	Currency        string     `json:"currency"`
-	DailyTotalMinor int64      `json:"daily_total_minor"`
+	ID              string `json:"id"`
+	UserID          string `json:"user_id"`
+	TxID            string `json:"tx_id,omitempty"`
+	ReportType      string `json:"report_type"`
+	AmountMinor     int64  `json:"amount_minor"`
+	Currency        string `json:"currency"`
+	DailyTotalMinor int64  `json:"daily_total_minor"`
 	// Acumulado30Minor es el total de salidas de 30 dias que disparo un caso
 	// acumulado_30d. Cero en los demas tipos.
-	Acumulado30Minor int64 `json:"rolling_30d_total_minor,omitempty"`
-	Reason          string     `json:"reason"`
-	Status          string     `json:"status"`
-	ReviewerID      string     `json:"reviewer_id,omitempty"`
-	ReviewerNotes   string     `json:"reviewer_notes,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	ReviewedAt      *time.Time `json:"reviewed_at,omitempty"`
+	Acumulado30Minor int64      `json:"rolling_30d_total_minor,omitempty"`
+	Reason           string     `json:"reason"`
+	Status           string     `json:"status"`
+	ReviewerID       string     `json:"reviewer_id,omitempty"`
+	ReviewerNotes    string     `json:"reviewer_notes,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
 }
 
 // ReviewRequest is a compliance officer's decision on a pending report.
