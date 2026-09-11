@@ -28,6 +28,11 @@ export interface Reward {
   imageUrl: string;
   partnerCode?: string;
   stock: number;
+  /**
+   * Lo que el premio acredita en la billetera, en centimos. Sin esto el
+   * premio no tiene como entregarse y el servidor no lo canjea.
+   */
+  cashbackMinor?: number;
 }
 
 export interface Redemption {
@@ -37,6 +42,8 @@ export interface Redemption {
   status: 'pending' | 'completed' | 'cancelled';
   code?: string;
   createdAt: string;
+  /** Lo que llego a la billetera con este canje, en centimos. */
+  cashbackMinor?: number;
 }
 
 export interface CashbackRule {

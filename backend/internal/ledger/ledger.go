@@ -49,6 +49,9 @@ const (
 	SystemEscrowUSD   SystemAccountCode = "SYSTEM:ESCROW:USD"
 	SystemSavingsCRC  SystemAccountCode = "SYSTEM:SAVINGS:CRC"
 	SystemSavingsUSD  SystemAccountCode = "SYSTEM:SAVINGS:USD"
+	// SystemPromotionsCRC es el fondo de promociones (migracion 066): la
+	// empresa lo fondea desde la reserva y los canjes de cashback salen de ahi.
+	SystemPromotionsCRC SystemAccountCode = "SYSTEM:PROMOTIONS:CRC"
 )
 
 // Account is a polymorphic reference to a user wallet, a merchant wallet or a

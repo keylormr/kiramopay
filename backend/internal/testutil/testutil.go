@@ -387,7 +387,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
 		('SYSTEM:SAVINGS:CRC', 'savings', 'CRC', 'credit'),
-		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit')
+		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit'),
+		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -1003,6 +1004,33 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
 	CREATE INDEX IF NOT EXISTS idx_loyalty_tx_user ON loyalty_transactions(user_id, created_at DESC);
+
+	-- Catalogo y canjes (migraciones 006 y 066). Faltaban aca: el canje nunca
+	-- se habia probado contra la base, y fue justo el que pagaba con un codigo
+	-- que nadie leia.
+	CREATE TABLE IF NOT EXISTS loyalty_rewards (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		name VARCHAR(200) NOT NULL,
+		description TEXT DEFAULT '',
+		category VARCHAR(30) NOT NULL,
+		points_cost BIGINT NOT NULL,
+		image_url VARCHAR(500) DEFAULT '',
+		partner_code VARCHAR(50),
+		active BOOLEAN DEFAULT TRUE,
+		stock INTEGER DEFAULT -1,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW(),
+		cashback_minor BIGINT CHECK (cashback_minor IS NULL OR cashback_minor > 0)
+	);
+	CREATE TABLE IF NOT EXISTS loyalty_redemptions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		reward_id UUID NOT NULL REFERENCES loyalty_rewards(id),
+		points BIGINT NOT NULL,
+		status VARCHAR(20) DEFAULT 'pending',
+		code VARCHAR(50),
+		created_at TIMESTAMP DEFAULT NOW()
+	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_loyalty_tx_referral
 		ON loyalty_transactions (ref_id) WHERE ref_type = 'referral';
 
@@ -1093,6 +1121,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
 		"plan_interest",
+		"loyalty_redemptions", "loyalty_rewards",
 		"loyalty_transactions", "loyalty_accounts",
 		"journal_entries", "journal_postings",
 		"transactions",
@@ -1124,7 +1153,8 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 			('SYSTEM:SAVINGS:CRC',   'savings',    'CRC', 'credit'),
 			('SYSTEM:SAVINGS:USD',   'savings',    'USD', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
-			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
+			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
+			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
 		ON CONFLICT (code) DO NOTHING
 	`); err != nil {
 		return fmt.Errorf("re-seed system ledger accounts: %w", err)

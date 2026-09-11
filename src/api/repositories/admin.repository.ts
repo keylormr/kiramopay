@@ -47,4 +47,13 @@ export interface IAdminRepository {
    * the moment passes, through the same path as a manual block.
    */
   setUserExpiry(id: string, expiresAt: string | null): Promise<ApiResponse<AdminUser>>;
+
+  // ── Fondo de promociones (cashback de puntos) ──
+  /** Lo que queda en el fondo del que salen los canjes de cashback. */
+  saldoPromociones(): Promise<ApiResponse<{ saldoMinor: number }>>;
+  /**
+   * Registra un deposito de la empresa al fondo. SUBE LA RESERVA PUBLICADA:
+   * tiene que corresponder a un deposito real, por eso lleva referencia.
+   */
+  fondearPromociones(amountMinor: number, referencia: string, idempotencyKey: string): Promise<ApiResponse<{ saldoMinor: number }>>;
 }
