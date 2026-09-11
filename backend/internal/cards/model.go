@@ -5,16 +5,18 @@ import "time"
 // ── Virtual Card ─────────────────────────────────────────────────────────────
 
 type VirtualCard struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	CardNumber     string     `json:"card_number"` // full PAN returned ONCE at creation; never persisted (DB stores masked + last4 only)
-	Last4          string     `json:"last4"`
-	ExpiryMonth    int        `json:"expiry_month"`
-	ExpiryYear     int        `json:"expiry_year"`
-	CVV            string     `json:"cvv,omitempty"` // returned ONCE at creation; never persisted (PCI)
-	CardholderName string     `json:"cardholder_name"`
-	Brand          string     `json:"brand"` // visa, mastercard
-	Type           string     `json:"type"`  // virtual, physical
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	CardNumber     string `json:"card_number"` // full PAN returned ONCE at creation; never persisted (DB stores masked + last4 only)
+	Last4          string `json:"last4"`
+	ExpiryMonth    int    `json:"expiry_month"`
+	ExpiryYear     int    `json:"expiry_year"`
+	CVV            string `json:"cvv,omitempty"` // returned ONCE at creation; never persisted (PCI)
+	CardholderName string `json:"cardholder_name"`
+	// Brand es "kiramopay" en toda tarjeta emitida desde el 2026-09-11. Las
+	// "visa" anteriores quedaron reemplazadas por la migracion 063.
+	Brand          string     `json:"brand"`
+	Type           string     `json:"type"` // virtual, physical
 	Currency       string     `json:"currency"`
 	Status         string     `json:"status"`                     // active, frozen, cancelled, expired
 	DailyLimit     int64      `json:"daily_limit"`                // centimos
@@ -48,6 +50,8 @@ const (
 	DefaultMonthlyLimit = 200000000 // 2,000,000 CRC
 	DefaultATMLimit     = 10000000  // 100,000 CRC
 	MaxCardsPerUser     = 5
+	// MarcaKiramoPay: la tarjeta no pertenece a ninguna red de pago.
+	MarcaKiramoPay = "kiramopay"
 )
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────

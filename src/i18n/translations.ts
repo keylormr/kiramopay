@@ -376,6 +376,9 @@ export type TranslationKeys = {
   card_atm_limit: string;
   card_created_title: string;
   card_created_desc: string;
+  // La tarjeta no pertenece a ninguna red de pago: se rotula y se avisa.
+  card_only_in_app: string;
+  card_decorative_note: string;
   card_number_label: string;
   card_expiry_label: string;
   card_cvv_label: string;

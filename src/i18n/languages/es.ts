@@ -290,6 +290,8 @@ const es: TranslationKeys = {
   card_atm_limit: 'Límite en ATM',
   card_created_title: 'Tarjeta creada',
   card_created_desc: 'Guarda estos datos: por seguridad no volveremos a mostrar el número completo ni el CVV.',
+  card_only_in_app: 'Solo en KiramoPay',
+  card_decorative_note: 'Esta tarjeta identifica tu cuenta dentro de KiramoPay. Su número no pertenece a ninguna red de pago y no sirve en comercios ni en otras apps.',
   card_number_label: 'Número',
   card_expiry_label: 'Vence',
   card_cvv_label: 'CVV',
