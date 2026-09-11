@@ -56,6 +56,7 @@ type Service struct {
 	events      EventSink
 	history     HistoryRecorder
 	auditLogger *audit.Logger
+	cuentas     BuscadorDeCuentas
 }
 
 // Options carries the optional collaborators.
@@ -65,6 +66,8 @@ type Options struct {
 	Events      EventSink
 	History     HistoryRecorder
 	AuditLogger *audit.Logger
+	// Cuentas resuelve la contraparte del acuerdo. Ver contraparte.go.
+	Cuentas BuscadorDeCuentas
 }
 
 func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
@@ -79,6 +82,7 @@ func NewService(repo *Repository, eng *ledger.Engine, opts *Options) *Service {
 		events:      opts.Events,
 		history:     opts.History,
 		auditLogger: opts.AuditLogger,
+		cuentas:     opts.Cuentas,
 	}
 }
 
@@ -93,8 +97,7 @@ func (s *Service) emit(ctx context.Context, a *Agreement, eventType string) {
 
 // Create opens a pending agreement with the caller as buyer. No money moves.
 func (s *Service) Create(ctx context.Context, buyerID string, req *CreateRequest) (*Agreement, error) {
-	if req == nil || req.SellerID == "" || req.AmountMinor <= 0 ||
-		strings.TrimSpace(req.Description) == "" {
+	if req == nil || req.AmountMinor <= 0 || strings.TrimSpace(req.Description) == "" {
 		return nil, ErrInvalidRequest
 	}
 	req.Currency = strings.ToUpper(strings.TrimSpace(req.Currency))
@@ -103,6 +106,11 @@ func (s *Service) Create(ctx context.Context, buyerID string, req *CreateRequest
 	}
 	if req.Currency != "CRC" && req.Currency != "USD" {
 		return nil, ErrInvalidRequest
+	}
+	// La contraparte se resuelve ANTES de escribir nada: un acuerdo hacia una
+	// cuenta que no existe se puede fondear y no se puede liberar a nadie.
+	if err := s.resolverVendedor(ctx, req); err != nil {
+		return nil, err
 	}
 	if req.SellerID == buyerID {
 		return nil, ErrInvalidRequest

@@ -4655,6 +4655,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/escrow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The escrow dispute queue (admin)
+         * @description Without `status` this returns ONLY disputed agreements — the queue that has to be worked — and the applied status travels back in the response so a short list is never mistaken for "there are only three agreements in the whole system". `status=all` returns the full history; any concrete status narrows to it, and an unknown value is rejected with 400 rather than answering with an empty list. Ordered oldest dispute first, because that is what measures how long someone's money has been frozen. The parties are identified by id; `GET /api/v1/admin/users/{id}` puts names on them.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Defaults to `disputed`. */
+                    status?: "pending" | "funded" | "released" | "refunded" | "disputed" | "cancelled" | "all";
+                    limit?: components["parameters"]["Limit"];
+                    offset?: components["parameters"]["Offset"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of the queue, plus the size of the whole queue. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            agreements?: components["schemas"]["EscrowAgreement"][];
+                            total?: number;
+                            status?: string;
+                            limit?: number;
+                            offset?: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/escrow/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read any agreement (admin, no party check)
+         * @description The user-facing `GET /api/v1/escrow/{id}` is scoped to the parties of the agreement, so whoever has to arbitrate a dispute got a 403 on the very case they are meant to resolve.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The agreement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EscrowAgreement"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/escrow/{id}/resolve": {
         parameters: {
             query?: never;
@@ -5488,9 +5579,15 @@ export interface components {
             /** @example 3 */
             revoked?: number;
         };
+        /** @description The seller is identified by `seller_phone` OR `seller_id` — exactly one is needed. The app sends the phone, because no screen in the app shows anyone's UUID; `seller_id` stays for the B2B clients that already integrated against this route. Either way the account must EXIST: an agreement pointing at nobody can still be funded (the money leaves the buyer's wallet into SYSTEM:ESCROW) and can never be released to anyone. A number with no account is rejected with 422 `ESCROW_SELLER_NOT_FOUND`. */
         EscrowCreateRequest: {
+            /**
+             * @description Seller's phone; the server resolves it to a real account.
+             * @example +50688885678
+             */
+            seller_phone?: string;
             /** Format: uuid */
-            seller_id: string;
+            seller_id?: string;
             /**
              * Format: int64
              * @description amount in centimos/cents

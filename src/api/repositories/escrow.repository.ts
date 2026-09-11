@@ -23,7 +23,17 @@ export interface EscrowAgreement {
 }
 
 export interface CreateEscrowRequest {
-  sellerId: string;
+  /**
+   * Telefono del vendedor. El servidor lo resuelve a una cuenta real y
+   * rechaza el acuerdo si no hay ninguna.
+   *
+   * La pantalla pedia el UUID del vendedor, y ninguna pantalla de la
+   * aplicacion muestra el UUID de nadie: no habia forma de crear un acuerdo
+   * con una persona real.
+   */
+  sellerPhone?: string;
+  /** Id interno del vendedor. Se mantiene para los clientes B2B. */
+  sellerId?: string;
   amountMinor: number;
   currency?: string;
   description: string;

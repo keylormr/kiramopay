@@ -5,6 +5,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
+import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
 import type { EscrowAgreement, EscrowStatus } from '@/api';
 
@@ -30,6 +31,7 @@ function money(amountMinor: number, currency: string): string {
 
 export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
+  const { state } = useApp();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [agreements, setAgreements] = useState<EscrowAgreement[]>([]);
@@ -38,7 +40,11 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [error, setError] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
-  const [sellerId, setSellerId] = useState('');
+  // El vendedor se identifica por TELEFONO. Antes esta pantalla pedia su UUID
+  // —con marcador "00000000-0000-0000-0000-000000000000"— y ninguna pantalla
+  // de la aplicacion muestra el UUID de nadie: no habia forma de crear un
+  // acuerdo con una persona real, asi que el producto entero era inalcanzable.
+  const [sellerPhone, setSellerPhone] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [creating, setCreating] = useState(false);
@@ -72,26 +78,40 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const create = async () => {
     const value = parseFloat(amount);
-    if (!sellerId.trim() || !description.trim() || !Number.isFinite(value) || value <= 0) return;
+    if (!sellerPhone.trim() || !description.trim() || !Number.isFinite(value) || value <= 0) return;
     setCreating(true);
     setError('');
     const res = await getApiLayer().escrow.create({
-      sellerId: sellerId.trim(),
+      sellerPhone: sellerPhone.trim(),
       amountMinor: Math.round(value * 100),
       currency: 'CRC',
       description: description.trim(),
     });
     setCreating(false);
     if (!res.success) {
-      setError(res.error?.message || t('escrow_action_failed'));
+      // El servidor comprueba que el numero tenga cuenta antes de escribir
+      // nada; ese caso tiene su propio mensaje porque es el que la persona
+      // puede corregir.
+      setError(
+        res.error?.code === 'ESCROW_SELLER_NOT_FOUND'
+          ? t('escrow_seller_not_found')
+          : res.error?.message || t('escrow_action_failed'),
+      );
       return;
     }
     setShowCreate(false);
-    setSellerId('');
+    setSellerPhone('');
     setAmount('');
     setDescription('');
     refresh();
   };
+
+  // Los contactos que la persona ya tiene guardados, para no teclear el numero.
+  // Primero los favoritos, y sin repetir.
+  const contactosSugeridos = [
+    ...state.sinpeContacts.filter((c) => c.isFavorite),
+    ...state.sinpeContacts.filter((c) => !c.isFavorite),
+  ].slice(0, 8);
 
   // run a money-moving action against the selected agreement.
   const runAction = async (fn: (id: string) => Promise<EscrowActionResult>) => {
@@ -226,11 +246,32 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('escrow_seller')}</label>
+            {contactosSugeridos.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">
+                {contactosSugeridos.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSellerPhone(c.phone)}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                      sellerPhone === c.phone
+                        ? 'bg-[var(--color-primary)] text-white uv-shadow-primary'
+                        : 'uv-surface-2 uv-text-secondary'
+                    }`}
+                  >
+                    {c.isFavorite && <Icons.Star size={11} />}
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
-              value={sellerId}
-              onChange={(e) => setSellerId(e.target.value)}
-              placeholder="00000000-0000-0000-0000-000000000000"
-              className="w-full font-mono text-sm bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
+              value={sellerPhone}
+              onChange={(e) => setSellerPhone(e.target.value)}
+              type="tel"
+              inputMode="tel"
+              placeholder="8888-1234"
+              className="w-full text-sm bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
             />
             <p className="text-xs uv-text-muted mt-1">{t('escrow_seller_hint')}</p>
           </div>
@@ -256,7 +297,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button
             onClick={create}
-            disabled={creating || !sellerId.trim() || !description.trim() || !amount}
+            disabled={creating || !sellerPhone.trim() || !description.trim() || !amount}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
           >
             {creating ? t('loading') : t('escrow_create_btn')}
