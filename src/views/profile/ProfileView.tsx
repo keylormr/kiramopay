@@ -12,6 +12,7 @@ import { LanguageSheet } from '../../components/LanguageSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
 import { ApiKeysSheet } from './ApiKeysSheet';
 import { WebhooksSheet } from './WebhooksSheet';
+import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -726,29 +727,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
           </button>
 
-          <button
-            onClick={() => dispatch({ type: 'TOGGLE_NOTIFICATIONS' })}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Bell size={18} className="text-pink-600" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold uv-text-primary text-sm">{t('notifications_setting')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{state.settings.notificationsEnabled ? t('activated') : t('deactivated')}</p>
-            </div>
-            <div
-              role="switch"
-              aria-checked={state.settings.notificationsEnabled}
-              aria-label={t('notifications_setting')}
-              className={`w-12 h-7 rounded-full p-1 transition-colors ${
-              state.settings.notificationsEnabled ? 'bg-pink-500' : 'bg-gray-300'
-            }`}>
-              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                state.settings.notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
-              }`} />
-            </div>
-          </button>
+          <AvisosDelDispositivo />
 
           <button
             onClick={() => setShowLanguageSheet(true)}

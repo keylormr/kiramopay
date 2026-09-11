@@ -1736,11 +1736,44 @@ paths:
           description: FETCH_FAILED
 
   # ── Push Notifications (Phase 9) ──────────────────────────────────
+  /api/v1/push/public-key:
+    get:
+      tags: [Notifications]
+      summary: VAPID public key for Web Push
+      description: >-
+        The key the browser needs to subscribe. habilitado is false when the
+        server has no VAPID key pair configured; the app then does not offer
+        system alerts.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The public key and whether Web Push is enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [public_key, habilitado]
+                    properties:
+                      public_key: { type: string, description: 'Base64url, empty when not configured' }
+                      habilitado: { type: boolean }
+        '401':
+          description: Unauthorized
+
   /api/v1/push/subscribe:
     post:
       tags: [Notifications]
       summary: Register push subscription
-      description: Register a Web Push subscription endpoint for the authenticated user.
+      description: >-
+        Register a Web Push subscription for the authenticated user. Accepts the
+        browser shape (PushSubscription.toJSON(), keys nested under `keys`) and
+        the flat shape (`auth` and `p256dh` at the top level). The endpoint must
+        be a public https push service. Re-registering an endpoint binds it to
+        the caller.
       security:
         - bearerAuth: []
       requestBody:
@@ -1749,7 +1782,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [endpoint, keys]
+              required: [endpoint]
               properties:
                 endpoint:
                   type: string
@@ -1761,15 +1794,45 @@ paths:
                       type: string
                     auth:
                       type: string
+                p256dh:
+                  type: string
+                auth:
+                  type: string
       responses:
         '201':
           description: Subscription registered
         '400':
-          description: Invalid request body
+          description: >-
+            INVALID_BODY, MISSING_KEYS (endpoint, auth or p256dh missing) or
+            INVALID_ENDPOINT (not a public https push service)
         '401':
           description: Unauthorized
 
   /api/v1/push/unsubscribe:
+    post:
+      tags: [Notifications]
+      summary: Remove push subscription
+      description: Same as the DELETE form, for clients that cannot send a body with DELETE.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+      responses:
+        '204':
+          description: Subscription removed
+        '400':
+          description: MISSING_ENDPOINT
+        '401':
+          description: Unauthorized
     delete:
       tags: [Notifications]
       summary: Remove push subscription
@@ -1789,6 +1852,8 @@ paths:
       responses:
         '204':
           description: Subscription removed
+        '400':
+          description: MISSING_ENDPOINT
         '401':
           description: Unauthorized
 

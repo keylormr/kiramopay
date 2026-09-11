@@ -3895,6 +3895,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/push/public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * VAPID public key for Web Push
+         * @description The key the browser needs to subscribe. habilitado is false when the server has no VAPID key pair configured; the app then does not offer system alerts.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The public key and whether Web Push is enabled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                /** @description Base64url, empty when not configured */
+                                public_key: string;
+                                habilitado: boolean;
+                            };
+                        };
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/push/subscribe": {
         parameters: {
             query?: never;
@@ -3906,7 +3959,7 @@ export interface paths {
         put?: never;
         /**
          * Register push subscription
-         * @description Register a Web Push subscription endpoint for the authenticated user.
+         * @description Register a Web Push subscription for the authenticated user. Accepts the browser shape (PushSubscription.toJSON(), keys nested under `keys`) and the flat shape (`auth` and `p256dh` at the top level). The endpoint must be a public https push service. Re-registering an endpoint binds it to the caller.
          */
         post: {
             parameters: {
@@ -3920,10 +3973,12 @@ export interface paths {
                     "application/json": {
                         /** Format: uri */
                         endpoint: string;
-                        keys: {
+                        keys?: {
                             p256dh?: string;
                             auth?: string;
                         };
+                        p256dh?: string;
+                        auth?: string;
                     };
                 };
             };
@@ -3935,7 +3990,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Invalid request body */
+                /** @description INVALID_BODY, MISSING_KEYS (endpoint, auth or p256dh missing) or INVALID_ENDPOINT (not a public https push service) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3966,7 +4021,49 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Remove push subscription
+         * @description Same as the DELETE form, for clients that cannot send a body with DELETE.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        endpoint: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Subscription removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MISSING_ENDPOINT */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         /** Remove push subscription */
         delete: {
             parameters: {
@@ -3986,6 +4083,13 @@ export interface paths {
             responses: {
                 /** @description Subscription removed */
                 204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MISSING_ENDPOINT */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };

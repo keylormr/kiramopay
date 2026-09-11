@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
+import { sincronizarAvisos } from './utils/avisosPush';
 import { useActualizacion } from './hooks/useActualizacion';
 import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
@@ -277,6 +278,14 @@ const Layout = () => {
   const [showLanguage, setShowLanguage] = useState(false);
   const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
+
+  // Avisos del sistema: si esta cuenta los habia activado en este dispositivo,
+  // se rehace la suscripcion al entrar. La recarga de emergencia de version
+  // desregistra el service worker y con el se iba la suscripcion, en silencio.
+  const idUsuario = state.user?.id;
+  useEffect(() => {
+    if (idUsuario) void sincronizarAvisos(idUsuario);
+  }, [idUsuario]);
 
   // Actualizacion disponible y campana promocional vigente. La campana espera a
   // que no haya otra hoja encima (ni oferta biometrica ni actualizacion): un

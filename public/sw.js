@@ -95,12 +95,15 @@ self.addEventListener('push', (event) => {
     };
   }
 
+  // El servidor manda la ruta en `url`, al primer nivel del aviso; el clic la
+  // buscaba dentro de `data` y siempre abria la portada.
+  const extra = data.data && typeof data.data === 'object' ? data.data : {};
   const options = {
     body: data.body || '',
     icon: data.icon || '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: data.tag || 'kiramopay-notification',
-    data: data.data || {},
+    data: { ...extra, url: data.url || extra.url || '/' },
     actions: data.actions || [],
     vibrate: [100, 50, 100],
   };
@@ -114,13 +117,20 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || '/';
+  // Solo rutas de este mismo sitio: un aviso no abre direcciones de terceros.
+  let urlToOpen = '/';
+  try {
+    const destino = new URL(event.notification.data?.url || '/', self.location.origin);
+    if (destino.origin === self.location.origin) urlToOpen = destino.href;
+  } catch {
+    // ruta invalida: la portada
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       // Focus existing window if open
       for (const client of clients) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
           return client.focus();
         }
       }
