@@ -55,14 +55,14 @@ func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string,
 		CardholderName: cardholderName,
 		// No es VISA ni ninguna otra red: es una tarjeta de KiramoPay que no
 		// sirve fuera de la app. Rotularla VISA prometia lo que no es.
-		Brand:          MarcaKiramoPay,
-		Type:           cardType,
-		Currency:       req.Currency,
-		Status:         "active",
-		DailyLimit:     DefaultDailyLimit,
-		MonthlyLimit:   DefaultMonthlyLimit,
-		AtmLimit:       DefaultATMLimit,
-		CreatedAt:      time.Now(),
+		Brand:        MarcaKiramoPay,
+		Type:         cardType,
+		Currency:     req.Currency,
+		Status:       "active",
+		DailyLimit:   DefaultDailyLimit,
+		MonthlyLimit: DefaultMonthlyLimit,
+		AtmLimit:     DefaultATMLimit,
+		CreatedAt:    time.Now(),
 	}
 
 	if err := s.repo.CreateCard(ctx, card); err != nil {

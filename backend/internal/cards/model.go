@@ -5,18 +5,18 @@ import "time"
 // ── Virtual Card ─────────────────────────────────────────────────────────────
 
 type VirtualCard struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	CardNumber     string     `json:"card_number"` // full PAN returned ONCE at creation; never persisted (DB stores masked + last4 only)
-	Last4          string     `json:"last4"`
-	ExpiryMonth    int        `json:"expiry_month"`
-	ExpiryYear     int        `json:"expiry_year"`
-	CVV            string     `json:"cvv,omitempty"` // returned ONCE at creation; never persisted (PCI)
-	CardholderName string     `json:"cardholder_name"`
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	CardNumber     string `json:"card_number"` // full PAN returned ONCE at creation; never persisted (DB stores masked + last4 only)
+	Last4          string `json:"last4"`
+	ExpiryMonth    int    `json:"expiry_month"`
+	ExpiryYear     int    `json:"expiry_year"`
+	CVV            string `json:"cvv,omitempty"` // returned ONCE at creation; never persisted (PCI)
+	CardholderName string `json:"cardholder_name"`
 	// Brand es "kiramopay" en toda tarjeta emitida desde el 2026-09-11. Las
 	// "visa" anteriores quedaron reemplazadas por la migracion 063.
 	Brand          string     `json:"brand"`
-	Type           string     `json:"type"`  // virtual, physical
+	Type           string     `json:"type"` // virtual, physical
 	Currency       string     `json:"currency"`
 	Status         string     `json:"status"`                     // active, frozen, cancelled, expired
 	DailyLimit     int64      `json:"daily_limit"`                // centimos
