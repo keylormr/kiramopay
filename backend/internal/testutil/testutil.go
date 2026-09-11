@@ -699,7 +699,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		reviewer_id UUID REFERENCES users(id),
 		reviewer_notes TEXT,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		reviewed_at TIMESTAMPTZ
+		reviewed_at TIMESTAMPTZ,
+		-- migracion 065: el acumulado de 30 dias que disparo el caso
+		acumulado_30d_minor BIGINT
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;

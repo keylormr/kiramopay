@@ -47,19 +47,39 @@ func (s *Service) Report(ctx context.Context, userID, txID, currency string, amo
 	}
 
 	res := s.thresholds.Evaluate(currency, amountMinor, prior)
+
+	// Si ni el movimiento ni el dia cruzan el umbral, se mira el MES. Con los
+	// topes diarios de KYC las dos primeras reglas no pueden dispararse; esta
+	// si. Va despues porque un caso por movimiento alcanza: si el dia ya
+	// disparo, ese caso es mas especifico que el del mes.
+	var acumulado int64
+	if !res.Reportable {
+		total30, err := s.repo.GetUserOutgoingTotal30Dias(ctx, userID, currency)
+		if err != nil {
+			slog.Warn("uif: acumulado de 30 dias fallo", "user", userID, "err", err.Error())
+			return
+		}
+		prior30 := total30 - amountMinor
+		if prior30 < 0 {
+			prior30 = 0
+		}
+		res = s.thresholds.EvaluateAcumulado(currency, amountMinor, prior30)
+		acumulado = total30
+	}
 	if !res.Reportable {
 		return
 	}
 
 	rep := &Report{
-		UserID:          userID,
-		TxID:            txID,
-		ReportType:      res.Type,
-		AmountMinor:     amountMinor,
-		Currency:        currency,
-		DailyTotalMinor: dailyTotal,
-		Reason:          res.Reason,
-		Status:          StatusPending,
+		UserID:           userID,
+		TxID:             txID,
+		ReportType:       res.Type,
+		AmountMinor:      amountMinor,
+		Currency:         currency,
+		DailyTotalMinor:  dailyTotal,
+		Acumulado30Minor: acumulado,
+		Reason:           res.Reason,
+		Status:           StatusPending,
 	}
 	if err := s.repo.CreateReport(ctx, rep); err != nil {
 		slog.Warn("uif: create report failed", "user", userID, "tx", txID, "err", err.Error())

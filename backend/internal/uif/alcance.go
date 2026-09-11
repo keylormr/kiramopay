@@ -31,6 +31,22 @@ func (a Alcance) String() string {
 		a.Moneda, a.UmbralMinor, a.MaxDiarioMinor, estado)
 }
 
+// DiagnosticoAcumulado compara el umbral de 30 dias contra el maximo que un
+// usuario puede sacar en un MES. A diferencia del diario, con el nivel de KYC
+// mas alto este si es alcanzable: es la regla que hace que la cola pueda
+// recibir un caso.
+func DiagnosticoAcumulado(t Thresholds, maximosMensuales map[string]int64) []Alcance {
+	out := make([]Alcance, 0, len(t.Acumulado30))
+	for moneda, umbral := range t.Acumulado30 {
+		max, hay := maximosMensuales[moneda]
+		if !hay {
+			continue
+		}
+		out = append(out, Alcance{Moneda: moneda, UmbralMinor: umbral, MaxDiarioMinor: max, Alcanzable: max >= umbral})
+	}
+	return out
+}
+
 // Diagnostico compara cada umbral contra el maximo que un usuario puede sacar en
 // un dia. maximosDiarios viene del nivel de KYC mas alto, por moneda.
 //
