@@ -46,3 +46,27 @@ describe('HttpLoyaltyRepository.getReferrals', () => {
     expect(res.success).toBe(false);
   });
 });
+
+// Canjear devolvia siempre REDEEM_FAILED, pisando el codigo del servidor: la
+// pantalla no podia distinguir "no hay fondo de promociones" de un fallo
+// cualquiera.
+describe('HttpLoyaltyRepository.redeemReward', () => {
+  it('conserva el codigo del servidor en un rechazo', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: false,
+      error: { code: 'LOYALTY_SIN_FONDOS', message: 'the promotions fund cannot cover this reward' },
+    });
+    const res = await new HttpLoyaltyRepository(fakeClient({ post })).redeemReward('r1');
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('LOYALTY_SIN_FONDOS');
+  });
+
+  it('trae lo que llego a la billetera', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { id: 'rd1', reward_id: 'r1', points: 500, status: 'completed', code: '', created_at: '', cashback_minor: 50000 },
+    });
+    const res = await new HttpLoyaltyRepository(fakeClient({ post })).redeemReward('r1');
+    expect(res.data?.cashbackMinor).toBe(50000);
+  });
+});

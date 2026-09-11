@@ -2,28 +2,41 @@ package loyalty
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/ledger"
 )
 
 type Service struct {
 	repo          *Repository
 	referralBonus int
+	// ledger paga el cashback desde la cuenta de promociones. Sin el, ningun
+	// premio se puede entregar y ninguno se canjea.
+	ledger      *ledger.Engine
+	history     HistoryRecorder
+	auditLogger *audit.Logger
 }
 
 // Options tunes the points program. nil is tolerated (referrals off).
 type Options struct {
 	// ReferralBonusPoints por invitado registrado; 0 = no acreditar.
 	ReferralBonusPoints int
+	// Ledger paga el cashback. Ver cashback.go.
+	Ledger *ledger.Engine
+	// AuditLogger deja rastro de cada fondeo de la cuenta de promociones.
+	AuditLogger *audit.Logger
 }
 
 func NewService(repo *Repository, opts *Options) *Service {
 	s := &Service{repo: repo}
-	if opts != nil && opts.ReferralBonusPoints > 0 {
-		s.referralBonus = opts.ReferralBonusPoints
+	if opts != nil {
+		if opts.ReferralBonusPoints > 0 {
+			s.referralBonus = opts.ReferralBonusPoints
+		}
+		s.ledger = opts.Ledger
+		s.auditLogger = opts.AuditLogger
 	}
 	return s
 }
@@ -162,6 +175,12 @@ func (s *Service) RedeemReward(ctx context.Context, userID string, req *RedeemRe
 		return nil, fmt.Errorf("reward is no longer available")
 	}
 
+	// Un premio sin entrega no se canjea aunque este activo: descontar puntos
+	// a cambio de un codigo que nadie lee es lo que corrigio la migracion 060.
+	if reward.CashbackMinor <= 0 {
+		return nil, ErrPremioSinEntrega
+	}
+
 	if reward.Stock == 0 {
 		return nil, fmt.Errorf("reward is out of stock")
 	}
@@ -175,32 +194,15 @@ func (s *Service) RedeemReward(ctx context.Context, userID string, req *RedeemRe
 		return nil, fmt.Errorf("insufficient points: need %d, have %d", reward.PointsCost, acct.AvailablePoints)
 	}
 
-	redemption := &Redemption{
-		ID:       uuid.New().String(),
-		UserID:   userID,
-		RewardID: req.RewardID,
-		Points:   reward.PointsCost,
-		Status:   "completed",
-		Code:     generateVoucherCode(),
-	}
-	ptx := &PointsTransaction{
-		ID:          uuid.New().String(),
-		UserID:      userID,
-		Type:        "redeem",
-		Points:      -reward.PointsCost,
-		Description: fmt.Sprintf("Canje: %s", reward.Name),
-		RefType:     "redemption",
-		RefID:       redemption.ID,
-	}
-
-	// Las cuatro escrituras van en UNA transaccion. Sueltas, un fallo a mitad
-	// dejaba los puntos descontados sin redencion que los explicara, y el
-	// apunte del historial era best-effort: el saldo bajaba y la pantalla no
-	// sabia decir por que.
-	if err := s.repo.CanjearEnTx(ctx, redemption, ptx, reward.Stock > 0); err != nil {
+	// El canje ES el asiento: sale de la cuenta de promociones y entra a la
+	// billetera, y en la misma transaccion se descuentan los puntos, se
+	// escribe la redencion y se anota el movimiento. Si la cuenta de
+	// promociones no alcanza, no pasa nada de eso.
+	redemption, ptx := nuevaRedencion(userID, reward)
+	if err := s.canjearCashback(ctx, reward, redemption, ptx); err != nil {
 		return nil, err
 	}
-
+	redemption.CashbackMinor = reward.CashbackMinor
 	return redemption, nil
 }
 
@@ -245,10 +247,4 @@ func (s *Service) checkTierUpgrade(ctx context.Context, userID string) {
 	if newTier != acct.Tier {
 		_ = s.repo.UpdateTier(ctx, userID, newTier) // best-effort tier upgrade
 	}
-}
-
-func generateVoucherCode() string {
-	b := make([]byte, 6)
-	_, _ = rand.Read(b) // crypto/rand.Read does not fail in practice
-	return "KP-" + hex.EncodeToString(b)
 }

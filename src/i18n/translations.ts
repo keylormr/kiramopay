@@ -777,6 +777,24 @@ export type TranslationKeys = {
   analytics_partial: string;
   analytics_offline: string;
   other_currency_note: string;
+  // Cashback de puntos y fondo de promociones (migracion 066).
+  loyalty_cashback_done: string;
+  loyalty_sin_fondos: string;
+  tx_title_loyalty_cashback: string;
+  admin_promo_menu: string;
+  admin_promo_menu_desc: string;
+  admin_promo_title: string;
+  admin_promo_balance: string;
+  admin_promo_explain: string;
+  admin_promo_fund_title: string;
+  admin_promo_amount: string;
+  admin_promo_reference: string;
+  admin_promo_reference_hint: string;
+  admin_promo_fund_btn: string;
+  admin_promo_confirm: string;
+  admin_promo_warning: string;
+  admin_promo_done: string;
+  admin_promo_failed: string;
   // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
   // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
   tx_totals_scope: string;

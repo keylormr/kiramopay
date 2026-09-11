@@ -955,11 +955,31 @@ paths:
     post:
       tags: [Loyalty]
       summary: Redeem a reward
+      description: >-
+        Only rewards with a way to be delivered can be redeemed — today, the
+        cashback ones (`cashback_minor`). The cashback is a real ledger posting
+        from SYSTEM:PROMOTIONS:CRC to the wallet, in the same transaction that
+        deducts the points; if the promotions fund cannot cover it, nothing
+        happens.
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reward_id]
+              properties:
+                reward_id: { type: string, format: uuid }
       responses:
-        '200':
-          description: Reward redeemed
+        '201':
+          description: Reward redeemed; `cashback_minor` is what reached the wallet.
+        '409':
+          description: >-
+            `LOYALTY_SIN_FONDOS` (the promotions fund cannot cover it),
+            `LOYALTY_SIN_ENTREGA` (the reward has no way to be delivered) or
+            `LOYALTY_SIN_EXISTENCIAS` (out of stock).
 
   /api/v1/loyalty/redemptions:
     get:
@@ -2078,6 +2098,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EscrowAgreement'
+
+  /api/v1/admin/promociones:
+    get:
+      tags: [Admin]
+      summary: Balance of the promotions fund that pays point cashback
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The fund balance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saldo_minor: { type: integer, format: int64 }
+                  moneda: { type: string, example: CRC }
+
+  /api/v1/admin/promociones/fondos:
+    post:
+      tags: [Admin]
+      summary: Record a company deposit into the promotions fund
+      description: >-
+        Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This
+        RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match
+        a real deposit: a reference (transfer or receipt number) is mandatory
+        and the funding is audited with high risk. The idempotency key makes a
+        double tap fund once.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor, referencia, idempotency_key]
+              properties:
+                amount_minor: { type: integer, format: int64, minimum: 1 }
+                referencia: { type: string, minLength: 3 }
+                idempotency_key: { type: string }
+      responses:
+        '200':
+          description: The fund balance after the deposit.
+        '400':
+          description: Missing amount, reference or idempotency key.
 
   /api/v1/admin/escrow:
     get:

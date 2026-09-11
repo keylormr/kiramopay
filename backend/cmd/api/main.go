@@ -336,6 +336,9 @@ func main() {
 	// despues, Referrals quedaria nil y nadie cobraria sin que nada fallara.
 	loyaltyService := loyalty.NewService(loyaltyRepo, &loyalty.Options{
 		ReferralBonusPoints: cfg.Loyalty.ReferralBonusPoints,
+		// El cashback se paga desde la cuenta de promociones (migracion 066).
+		Ledger:      ledgerEngine,
+		AuditLogger: auditLogger,
 	})
 	// Aviso ruidoso: la entrada sin contrasena es una puerta abierta mientras
 	// este encendida. Que quede en el log de arranque es lo unico que separa
@@ -374,6 +377,10 @@ func main() {
 		Risk:        fraudService,
 		Logger:      logger,
 	})
+	// El cashback de puntos anota su movimiento en el historial, y el servicio de
+	// puntos se construye antes que este (la autenticacion lo necesita para los
+	// referidos): se conecta aca.
+	loyaltyService.UsarHistorial(txService)
 	// Notification service is created early so domains (e.g. SINPE) can notify
 	// users on real events. Web push is gated on VAPID config; history is always
 	// persisted.
@@ -1056,6 +1063,12 @@ func main() {
 				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
 				// 13-19 eso es como no tenerlo.
 				r.Get("/admin/audit", auditHandler.Listar)
+
+				// El fondo de promociones del que sale el cashback de puntos
+				// (migracion 066). Fondearlo SUBE LA RESERVA PUBLICADA: tiene
+				// que corresponder a un deposito real.
+				r.Get("/admin/promociones", loyaltyHandler.Promociones)
+				r.Post("/admin/promociones/fondos", loyaltyHandler.FondearPromociones)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)

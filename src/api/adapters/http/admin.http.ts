@@ -84,6 +84,26 @@ export class HttpAdminRepository implements IAdminRepository {
     return apiSuccess(mapList(res.data));
   }
 
+  async saldoPromociones(): Promise<ApiResponse<{ saldoMinor: number }>> {
+    const res = await this.client.get<{ saldo_minor: number }>('/api/v1/admin/promociones');
+    if (!res.success || !res.data) return fail(res);
+    return apiSuccess({ saldoMinor: res.data.saldo_minor });
+  }
+
+  async fondearPromociones(
+    amountMinor: number,
+    referencia: string,
+    idempotencyKey: string,
+  ): Promise<ApiResponse<{ saldoMinor: number }>> {
+    const res = await this.client.post<{ saldo_minor: number }>('/api/v1/admin/promociones/fondos', {
+      amount_minor: amountMinor,
+      referencia,
+      idempotency_key: idempotencyKey,
+    });
+    if (!res.success || !res.data) return fail(res);
+    return apiSuccess({ saldoMinor: res.data.saldo_minor });
+  }
+
   async getUser(id: string): Promise<ApiResponse<AdminUser>> {
     const res = await this.client.get<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}`);
     if (!res.success || !isUserDTO(res.data)) return fail(res);

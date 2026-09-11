@@ -1968,7 +1968,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Redeem a reward */
+        /**
+         * Redeem a reward
+         * @description Only rewards with a way to be delivered can be redeemed — today, the cashback ones (`cashback_minor`). The cashback is a real ledger posting from SYSTEM:PROMOTIONS:CRC to the wallet, in the same transaction that deducts the points; if the promotions fund cannot cover it, nothing happens.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1976,10 +1979,24 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        reward_id: string;
+                    };
+                };
+            };
             responses: {
-                /** @description Reward redeemed */
-                200: {
+                /** @description Reward redeemed; `cashback_minor` is what reached the wallet. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description `LOYALTY_SIN_FONDOS` (the promotions fund cannot cover it), `LOYALTY_SIN_ENTREGA` (the reward has no way to be delivered) or `LOYALTY_SIN_EXISTENCIAS` (out of stock). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4646,6 +4663,100 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["EscrowAgreement"];
                     };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Balance of the promotions fund that pays point cashback */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The fund balance. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: int64 */
+                            saldo_minor?: number;
+                            /** @example CRC */
+                            moneda?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones/fondos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a company deposit into the promotions fund
+         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        amount_minor: number;
+                        referencia: string;
+                        idempotency_key: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The fund balance after the deposit. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing amount, reference or idempotency key. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };

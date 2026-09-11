@@ -23,11 +23,13 @@ interface ProfileViewProps {
   onOpenBusiness?: () => void;
   onOpenAdminMerchants?: () => void;
   onOpenAdminUsers?: () => void;
+  /** El fondo de promociones que paga el cashback de puntos (solo administradores). */
+  onOpenAdminPromociones?: () => void;
   onOpenPlans?: () => void;
   onOpenSessions?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenPlans, onOpenSessions }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenAdminPromociones, onOpenPlans, onOpenSessions }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -684,6 +686,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 <div className="flex-1 text-left">
                   <p className="font-semibold uv-text-primary text-sm">{t('admin_users_menu')}</p>
                   <p className="text-xs uv-text-muted mt-0.5">{t('admin_users_menu_desc')}</p>
+                </div>
+                <Icons.ChevronRight size={18} className="uv-text-muted" />
+              </button>
+
+              <button
+                onClick={() => onOpenAdminPromociones?.()}
+                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+              >
+                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mr-3">
+                  <Icons.Gift size={18} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold uv-text-primary text-sm">{t('admin_promo_menu')}</p>
+                  <p className="text-xs uv-text-muted mt-0.5">{t('admin_promo_menu_desc')}</p>
                 </div>
                 <Icons.ChevronRight size={18} className="uv-text-muted" />
               </button>

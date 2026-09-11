@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -177,7 +178,8 @@ func (r *Repository) GetCashbackRules(ctx context.Context) ([]CashbackRule, erro
 func (r *Repository) GetAvailableRewards(ctx context.Context) ([]Reward, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, description, category, points_cost, image_url,
-		 COALESCE(partner_code, ''), active, stock, expires_at, created_at
+		 COALESCE(partner_code, ''), active, stock, expires_at, created_at,
+		 COALESCE(cashback_minor, 0)
 		 FROM loyalty_rewards
 		 WHERE active = TRUE AND (stock = -1 OR stock > 0)
 		   AND (expires_at IS NULL OR expires_at > NOW())
@@ -191,7 +193,8 @@ func (r *Repository) GetAvailableRewards(ctx context.Context) ([]Reward, error) 
 	for rows.Next() {
 		var rw Reward
 		if err := rows.Scan(&rw.ID, &rw.Name, &rw.Description, &rw.Category, &rw.PointsCost,
-			&rw.ImageURL, &rw.PartnerCode, &rw.Active, &rw.Stock, &rw.ExpiresAt, &rw.CreatedAt); err != nil {
+			&rw.ImageURL, &rw.PartnerCode, &rw.Active, &rw.Stock, &rw.ExpiresAt, &rw.CreatedAt,
+			&rw.CashbackMinor); err != nil {
 			return nil, err
 		}
 		rewards = append(rewards, rw)
@@ -203,10 +206,12 @@ func (r *Repository) GetReward(ctx context.Context, rewardID string) (*Reward, e
 	var rw Reward
 	err := r.db.QueryRow(ctx,
 		`SELECT id, name, description, category, points_cost, image_url,
-		 COALESCE(partner_code, ''), active, stock, expires_at, created_at
+		 COALESCE(partner_code, ''), active, stock, expires_at, created_at,
+		 COALESCE(cashback_minor, 0)
 		 FROM loyalty_rewards WHERE id = $1`, rewardID).Scan(
 		&rw.ID, &rw.Name, &rw.Description, &rw.Category, &rw.PointsCost,
-		&rw.ImageURL, &rw.PartnerCode, &rw.Active, &rw.Stock, &rw.ExpiresAt, &rw.CreatedAt)
+		&rw.ImageURL, &rw.PartnerCode, &rw.Active, &rw.Stock, &rw.ExpiresAt, &rw.CreatedAt,
+		&rw.CashbackMinor)
 	if err != nil {
 		return nil, err
 	}
@@ -235,13 +240,10 @@ var ErrSinExistencias = errors.New("reward is out of stock")
 // La existencia se baja comprobando RowsAffected: sin eso, con una unidad
 // disponible dos peticiones simultaneas se cobraban las dos y solo una podia
 // bajar el contador.
-func (r *Repository) CanjearEnTx(ctx context.Context, rd *Redemption, ptx *PointsTransaction, bajarExistencia bool) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-
+// canjearCon descuenta los puntos, baja la existencia, escribe la redencion y el
+// apunte de puntos por la transaccion recibida. La usa el canje de cashback
+// DENTRO del asiento que paga el premio (cashback.go).
+func (r *Repository) canjearCon(ctx context.Context, tx pgx.Tx, rd *Redemption, ptx *PointsTransaction, bajarExistencia bool) error {
 	res, err := tx.Exec(ctx,
 		`UPDATE loyalty_accounts SET available_points = available_points - $2, updated_at = NOW()
 		  WHERE user_id = $1 AND available_points >= $2`, rd.UserID, rd.Points)
@@ -276,8 +278,7 @@ func (r *Repository) CanjearEnTx(ctx context.Context, rd *Redemption, ptx *Point
 		ptx.ID, ptx.UserID, ptx.Type, ptx.Points, ptx.Description, ptx.RefType, ptx.RefID); err != nil {
 		return fmt.Errorf("record points transaction: %w", err)
 	}
-
-	return tx.Commit(ctx)
+	return nil
 }
 
 // ── Redemptions ──────────────────────────────────────────────────────────────
@@ -339,29 +340,3 @@ func (r *Repository) SeedCashbackRules(ctx context.Context) error {
 	return nil
 }
 
-func (r *Repository) SeedRewards(ctx context.Context) error {
-	rewards := []struct {
-		Name, Description, Category, ImageURL, PartnerCode string
-		PointsCost                                          int64
-		Stock                                               int
-	}{
-		{"₡500 descuento Uber", "Cupón de descuento para tu próximo viaje", "discount", "uber_discount.png", "uber", 1000, -1},
-		{"₡1000 descuento Uber Eats", "Descuento en pedidos de comida", "voucher", "ubereats_voucher.png", "ubereats", 2000, -1},
-		{"Cinemark 2x1", "Entradas al cine 2 por 1", "experience", "cinemark_2x1.png", "cinemark", 3000, 100},
-		{"₡5000 en Auto Mercado", "Gift card digital para Auto Mercado", "gift_card", "automercado_gc.png", "automercado", 10000, 50},
-		{"₡2500 recarga Kolbi", "Recarga telefónica gratis", "voucher", "kolbi_recharge.png", "", 5000, -1},
-		{"Cash back ₡10,000", "Crédito directo a tu wallet", "discount", "cashback_10k.png", "", 20000, -1},
-	}
-
-	for _, rw := range rewards {
-		_, err := r.db.Exec(ctx,
-			`INSERT INTO loyalty_rewards (name, description, category, points_cost, image_url, partner_code, stock)
-			 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7)
-			 ON CONFLICT DO NOTHING`,
-			rw.Name, rw.Description, rw.Category, rw.PointsCost, rw.ImageURL, rw.PartnerCode, rw.Stock)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}

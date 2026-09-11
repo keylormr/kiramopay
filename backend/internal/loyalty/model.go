@@ -73,6 +73,9 @@ type Reward struct {
 	Stock       int       `json:"stock"` // -1 = unlimited
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+	// CashbackMinor es lo que el premio acredita en la billetera. Cero quiere
+	// decir que no tiene como entregarse, y no se canjea.
+	CashbackMinor int64 `json:"cashback_minor,omitempty"`
 }
 
 // ── Redemption ───────────────────────────────────────────────────────────────
@@ -85,6 +88,8 @@ type Redemption struct {
 	Status    string    `json:"status"` // pending, completed, cancelled
 	Code      string    `json:"code,omitempty"` // voucher/discount code
 	CreatedAt time.Time `json:"created_at"`
+	// CashbackMinor es lo que se acredito en la billetera con este canje.
+	CashbackMinor int64 `json:"cashback_minor,omitempty"`
 }
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────
