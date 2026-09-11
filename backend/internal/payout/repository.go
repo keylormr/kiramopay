@@ -157,11 +157,21 @@ func (r *Repository) ListStuckProcessing(ctx context.Context, olderThanSecs, lim
 // else moved it first) — this guarded UPDATE is the concurrency mutex that
 // guarantees a money-moving action runs at most once.
 func (r *Repository) transition(ctx context.Context, id string, from, to Status, set string, args ...any) (*Payout, error) {
+	return r.transitionCon(ctx, r.db, id, from, to, set, args...)
+}
+
+// consultador lo satisfacen el pool y una pgx.Tx: la misma transicion corre
+// suelta o dentro de la transaccion del asiento.
+type consultador interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (r *Repository) transitionCon(ctx context.Context, q consultador, id string, from, to Status, set string, args ...any) (*Payout, error) {
 	// $1=id, $2=from, $3=to are fixed; extra args start at $4.
-	q := `UPDATE payouts SET status = $3, updated_at = NOW()` + set +
+	sql := `UPDATE payouts SET status = $3, updated_at = NOW()` + set +
 		` WHERE id = $1::uuid AND status = $2 RETURNING ` + payoutCols
 	full := append([]any{id, from, to}, args...)
-	row := r.db.QueryRow(ctx, q, full...)
+	row := q.QueryRow(ctx, sql, full...)
 	p, err := scanPayout(row)
 	if errors.Is(err, ErrNotFound) {
 		// Disambiguate: row exists but not in `from`, vs row absent.
@@ -173,16 +183,13 @@ func (r *Repository) transition(ctx context.Context, id string, from, to Status,
 	return p, err
 }
 
-// Claim moves pending → processing, stamping processing_at. The mutex before
-// any money posts.
-func (r *Repository) Claim(ctx context.Context, id string) (*Payout, error) {
-	return r.transition(ctx, id, StatusPending, StatusProcessing, `, processing_at = NOW()`)
-}
-
-// RevertToPending moves processing → pending and clears processing_at — the
-// compensation when the debit posting failed (the payout never really left).
-func (r *Repository) RevertToPending(ctx context.Context, id string) (*Payout, error) {
-	return r.transition(ctx, id, StatusProcessing, StatusPending, `, processing_at = NULL`)
+// ClaimEnTx mueve pending -> processing DENTRO de la transaccion del asiento del
+// debito. Es el mutex entre dos submit simultaneos: el UPDATE guardado lo gana
+// uno. Antes corria suelto, antes del asiento, y si el asiento fallaba habia
+// que devolverlo con RevertToPending — una compensacion que tambien podia
+// fallar. Ver Service.submit.
+func (r *Repository) ClaimEnTx(ctx context.Context, tx pgx.Tx, id string) (*Payout, error) {
+	return r.transitionCon(ctx, tx, id, StatusPending, StatusProcessing, `, processing_at = NOW()`)
 }
 
 // MarkCompleted moves processing → completed and records the rail's id.
@@ -191,26 +198,18 @@ func (r *Repository) MarkCompleted(ctx context.Context, id, externalID string) (
 		`, completed_at = NOW(), external_id = COALESCE(NULLIF($4, ''), external_id)`, externalID)
 }
 
-// MarkFailed moves processing → failed and records the rejection reason. This
-// is the CLAIM for a rejection: it runs before the refund posting so that, of
-// two workers reacting to the rail, only the one that wins this guarded UPDATE
-// performs the refund (a concurrent worker that saw "completed" wins
-// MarkCompleted instead and this returns ErrBadTransition).
-func (r *Repository) MarkFailed(ctx context.Context, id, externalID, reason string) (*Payout, error) {
-	return r.transition(ctx, id, StatusProcessing, StatusFailed,
+// MarkFailedEnTx mueve processing -> failed DENTRO de la transaccion del
+// asiento de reembolso. Es el reclamo del rechazo: de dos trabajadores que
+// reaccionan al riel, solo el que gana este UPDATE reembolsa (uno que vio
+// "completed" gana MarkCompleted y este devuelve ErrBadTransition, lo que
+// revierte el asiento). Antes corria suelto y si el reembolso fallaba habia que
+// desmarcar con UnclaimFailed, que tambien podia fallar. Ver
+// Service.refundAndFail.
+func (r *Repository) MarkFailedEnTx(ctx context.Context, tx pgx.Tx, id, externalID, reason string) (*Payout, error) {
+	return r.transitionCon(ctx, tx, id, StatusProcessing, StatusFailed,
 		`, failed_at = NOW(),
 		   external_id = COALESCE(NULLIF($4, ''), external_id),
 		   failure_reason = NULLIF($5, '')`, externalID, reason)
-}
-
-// UnclaimFailed reverts failed → processing (clearing the failure stamps) when
-// the refund posting that should have followed MarkFailed did not succeed. This
-// keeps the money-owed payout in `processing`, where the poller will retry the
-// refund, instead of stranding it in a terminal `failed` state with funds still
-// held in SYSTEM:EXTERNAL.
-func (r *Repository) UnclaimFailed(ctx context.Context, id string) (*Payout, error) {
-	return r.transition(ctx, id, StatusFailed, StatusProcessing,
-		`, failed_at = NULL, failure_reason = NULL`)
 }
 
 // SetExternalID records the rail's id without changing status (a payout the
