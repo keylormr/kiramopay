@@ -290,6 +290,8 @@ const ja: TranslationKeys = {
   card_atm_limit: 'ATM 限度額',
   card_created_title: 'カードを作成しました',
   card_created_desc: 'この情報を保存してください。セキュリティ上、完全な番号と CVV は再表示されません。',
+  card_only_in_app: 'KiramoPay専用',
+  card_decorative_note: 'このカードはKiramoPay内でアカウントを識別するためのものです。番号はどの決済ネットワークにも属さず、店舗や他のアプリでは使えません。',
   card_number_label: '番号',
   card_expiry_label: '有効期限',
   card_cvv_label: 'CVV',

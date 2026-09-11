@@ -13,7 +13,9 @@ type VirtualCard struct {
 	ExpiryYear     int        `json:"expiry_year"`
 	CVV            string     `json:"cvv,omitempty"` // returned ONCE at creation; never persisted (PCI)
 	CardholderName string     `json:"cardholder_name"`
-	Brand          string     `json:"brand"` // visa, mastercard
+	// Brand es "kiramopay" en toda tarjeta emitida desde el 2026-09-11. Las
+	// "visa" anteriores quedaron reemplazadas por la migracion 063.
+	Brand          string     `json:"brand"`
 	Type           string     `json:"type"`  // virtual, physical
 	Currency       string     `json:"currency"`
 	Status         string     `json:"status"`                     // active, frozen, cancelled, expired
@@ -48,6 +50,8 @@ const (
 	DefaultMonthlyLimit = 200000000 // 2,000,000 CRC
 	DefaultATMLimit     = 10000000  // 100,000 CRC
 	MaxCardsPerUser     = 5
+	// MarcaKiramoPay: la tarjeta no pertenece a ninguna red de pago.
+	MarcaKiramoPay = "kiramopay"
 )
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────

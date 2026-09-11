@@ -190,6 +190,30 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
+
+	-- virtual_cards: migracion 009. La 063 reemplaza las tarjetas VISA viejas y
+	-- se prueba ejecutando su propio archivo contra esta tabla.
+	CREATE TABLE IF NOT EXISTS virtual_cards (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		card_number VARCHAR(20) NOT NULL,
+		last4 VARCHAR(4) NOT NULL,
+		expiry_month INTEGER NOT NULL,
+		expiry_year INTEGER NOT NULL,
+		cardholder_name VARCHAR(200) NOT NULL,
+		brand VARCHAR(20) DEFAULT 'visa',
+		type VARCHAR(20) DEFAULT 'virtual',
+		currency VARCHAR(10) DEFAULT 'CRC',
+		status VARCHAR(20) DEFAULT 'active',
+		daily_limit BIGINT DEFAULT 50000000,
+		monthly_limit BIGINT DEFAULT 200000000,
+		atm_limit BIGINT DEFAULT 10000000,
+		daily_spent BIGINT DEFAULT 0,
+		monthly_spent BIGINT DEFAULT 0,
+		provider_card_id VARCHAR(100),
+		created_at TIMESTAMP DEFAULT NOW(),
+		frozen_at TIMESTAMP
+	);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
 	-- Same fallback for the two CHECKs: ADD COLUMN never adds constraints and
 	-- Postgres has no ADD CONSTRAINT IF NOT EXISTS, so a duplicate is swallowed.
@@ -1092,6 +1116,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
+		"virtual_cards",
 		"plan_interest",
 		"loyalty_transactions", "loyalty_accounts",
 		"journal_entries", "journal_postings",

@@ -25,34 +25,36 @@ function saveField(field: string, value: unknown) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+// Igual que el servidor (cards/service.go, numeroDecorativo): empieza en 8,
+// que no es el prefijo de ninguna red de pago, y el digito verificador de Luhn
+// es INCORRECTO a proposito. El mock generaba numeros VISA validos.
 function generateCardNumber(): string {
-  // Luhn-valid Visa test card
-  const prefix = '4';
-  let num = prefix;
+  let num = '8';
   for (let i = 0; i < 14; i++) num += Math.floor(Math.random() * 10);
-  // Luhn checksum
   let sum = 0;
+  let duplicar = true;
   for (let i = num.length - 1; i >= 0; i--) {
     let d = parseInt(num[i], 10);
-    if ((num.length - i) % 2 === 0) {
+    if (duplicar) {
       d *= 2;
       if (d > 9) d -= 9;
     }
     sum += d;
+    duplicar = !duplicar;
   }
-  const check = (10 - (sum % 10)) % 10;
-  return num + check;
+  const correcto = (10 - (sum % 10)) % 10;
+  return num + String((correcto + 1) % 10);
 }
 
 const initialCards: VirtualCard[] = [
   {
     id: 'card-1',
-    cardNumber: '4111111111111111',
-    last4: '1111',
+    cardNumber: '8111111111111113',
+    last4: '1113',
     expiryMonth: 12,
     expiryYear: 2027,
     cardholderName: 'KEILOR MARTINEZ',
-    brand: 'visa',
+    brand: 'kiramopay',
     type: 'virtual',
     currency: 'CRC',
     status: 'active',
@@ -76,7 +78,7 @@ export class MockCardsRepository implements ICardsRepository {
       expiryMonth: new Date().getMonth() + 1,
       expiryYear: new Date().getFullYear() + 3,
       cardholderName: 'KIRAMOPAY USER',
-      brand: 'visa',
+      brand: 'kiramopay',
       type: request.type,
       currency: request.currency,
       status: 'active',
