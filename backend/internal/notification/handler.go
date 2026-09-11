@@ -2,8 +2,10 @@ package notification
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
@@ -20,6 +22,13 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// ClavePublica responde GET /api/v1/push/public-key. Sin claves VAPID
+// configuradas, habilitado = false y la pantalla no ofrece activar avisos.
+func (h *Handler) ClavePublica(w http.ResponseWriter, _ *http.Request) {
+	clave, habilitado := h.service.ClavePublica()
+	response.JSON(w, http.StatusOK, map[string]interface{}{"public_key": clave, "habilitado": habilitado})
+}
+
 // Subscribe registers a push subscription.
 func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
@@ -30,13 +39,15 @@ func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Endpoint == "" {
-		response.Error(w, http.StatusBadRequest, "MISSING_ENDPOINT", "endpoint is required")
-		return
-	}
-
 	if err := h.service.Subscribe(r.Context(), userID, &req); err != nil {
-		response.Error(w, http.StatusInternalServerError, "SUBSCRIBE_FAILED", err.Error())
+		switch {
+		case errors.Is(err, ErrSuscripcionIncompleta):
+			response.Error(w, http.StatusBadRequest, "MISSING_KEYS", err.Error())
+		case strings.HasPrefix(err.Error(), "notification: push endpoint"):
+			response.Error(w, http.StatusBadRequest, "INVALID_ENDPOINT", err.Error())
+		default:
+			response.Error(w, http.StatusInternalServerError, "SUBSCRIBE_FAILED", "could not save the subscription")
+		}
 		return
 	}
 
@@ -55,8 +66,15 @@ func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sin endpoint el DELETE no borraba nada y respondia 204: la pantalla creia
+	// haber dado de baja un dispositivo que seguia recibiendo avisos.
+	if strings.TrimSpace(req.Endpoint) == "" {
+		response.Error(w, http.StatusBadRequest, "MISSING_ENDPOINT", "endpoint is required")
+		return
+	}
+
 	if err := h.service.Unsubscribe(r.Context(), userID, req.Endpoint); err != nil {
-		response.Error(w, http.StatusInternalServerError, "UNSUBSCRIBE_FAILED", err.Error())
+		response.Error(w, http.StatusInternalServerError, "UNSUBSCRIBE_FAILED", "could not remove the subscription")
 		return
 	}
 

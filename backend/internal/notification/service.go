@@ -45,8 +45,24 @@ func (s *Service) SetBroadcaster(b Broadcaster) {
 	s.broadcaster = b
 }
 
+// ClavePublica devuelve la clave VAPID publica y si el web push esta habilitado
+// (las dos claves configuradas). La pantalla la pide al servidor en vez de
+// tenerla fija en el build: asi hay una sola fuente, y sin claves la opcion
+// directamente no se ofrece.
+func (s *Service) ClavePublica() (string, bool) {
+	return s.vapidPublicKey, s.vapidPublicKey != "" && s.vapidPrivateKey != ""
+}
+
 // Subscribe saves or updates a push subscription.
 func (s *Service) Subscribe(ctx context.Context, userID string, req *SubscribeRequest) error {
+	if err := req.normalizar(); err != nil {
+		return err
+	}
+	// Se valida al suscribir, no solo al enviar: un endpoint que apunta a la
+	// red interna no tiene por que quedar guardado (SSRF).
+	if err := validatePushEndpoint(req.Endpoint); err != nil {
+		return err
+	}
 	sub := &PushSubscription{
 		ID:       uuid.New().String(),
 		UserID:   userID,
@@ -93,7 +109,17 @@ func (s *Service) SendToUser(ctx context.Context, userID string, payload *Notifi
 	payloadBytes, _ := json.Marshal(payload)
 
 	for _, sub := range subs {
-		if err := s.sendWebPush(sub, payloadBytes); err != nil {
+		vencida, err := s.sendWebPush(sub, payloadBytes)
+		if vencida {
+			// El servicio de push dijo que esta suscripcion ya no existe (el
+			// navegador la revoco o se desinstalo). Antes se reintentaba en
+			// cada aviso, para siempre. Es una credencial muerta: se borra.
+			if derr := s.repo.DeleteSubscription(ctx, sub.UserID, sub.Endpoint); derr != nil {
+				slog.Error("no se pudo borrar una suscripcion vencida", "error", derr)
+			}
+			continue
+		}
+		if err != nil {
 			slog.Error("push notification failed",
 				"endpoint", sub.Endpoint,
 				"error", err,
@@ -148,14 +174,17 @@ func (s *Service) broadcast(userID string, record *NotificationRecord) {
 // sendWebPush delivers a web push notification to a single subscription using
 // VAPID. Push is disabled (no-op) when VAPID keys are not configured — the
 // notification is still persisted to history, which the app reads on sync.
-func (s *Service) sendWebPush(sub *PushSubscription, payload []byte) error {
+//
+// Devuelve vencida = true cuando el servicio de push responde que la
+// suscripcion ya no existe (404 o 410): el que llama la borra.
+func (s *Service) sendWebPush(sub *PushSubscription, payload []byte) (vencida bool, err error) {
 	if s.vapidPublicKey == "" || s.vapidPrivateKey == "" {
-		return nil
+		return false, nil
 	}
 	// The endpoint is client-supplied; only deliver to a public https push
 	// service so a forged subscription can't point us at internal infra (SSRF).
 	if err := validatePushEndpoint(sub.Endpoint); err != nil {
-		return err
+		return false, err
 	}
 	resp, err := webpush.SendNotification(payload, &webpush.Subscription{
 		Endpoint: sub.Endpoint,
@@ -167,13 +196,23 @@ func (s *Service) sendWebPush(sub *PushSubscription, payload []byte) error {
 		TTL:             86400,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close() //nolint:errcheck
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("push endpoint returned %d", resp.StatusCode)
+	if suscripcionVencida(resp.StatusCode) {
+		return true, fmt.Errorf("push endpoint returned %d", resp.StatusCode)
 	}
-	return nil
+	if resp.StatusCode >= 400 {
+		return false, fmt.Errorf("push endpoint returned %d", resp.StatusCode)
+	}
+	return false, nil
+}
+
+// suscripcionVencida: 404 y 410 son la forma en que los servicios de push
+// (FCM, Mozilla, Apple) dicen que la suscripcion ya no existe. Cualquier otro
+// error puede ser pasajero y no justifica borrarla.
+func suscripcionVencida(status int) bool {
+	return status == 404 || status == 410
 }
 
 // validatePushEndpoint rejects non-public push endpoints (SSRF guard, mirroring

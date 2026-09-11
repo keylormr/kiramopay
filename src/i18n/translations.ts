@@ -234,6 +234,13 @@ export type TranslationKeys = {
   twofa_disable_btn: string;
   twofa_invalid_code: string;
   notifications_setting: string;
+  // Avisos del sistema en este dispositivo (web push).
+  push_on: string;
+  push_off: string;
+  push_blocked: string;
+  push_unsupported: string;
+  push_unavailable: string;
+  push_failed: string;
   dark_mode: string;
   language: string;
   support: string;

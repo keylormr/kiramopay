@@ -391,7 +391,7 @@ func main() {
 	b2bService := b2b.NewService(b2bRepo, b2bCipher, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
 	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
-		Cuentas: userRepo, // resuelve al vendedor por telefono; ver escrow/contraparte.go
+		Cuentas:     userRepo, // resuelve al vendedor por telefono; ver escrow/contraparte.go
 		MFA:         mfaSvc,
 		UIF:         uifService,
 		Events:      b2bService, // escrow lifecycle → merchant webhooks
@@ -1005,8 +1005,14 @@ func main() {
 			r.Get("/country/transfers/{id}", countryHandler.GetTransfer)
 
 			// Push
+			// La clave publica la da el servidor: una sola fuente, y sin
+			// claves VAPID la pantalla no ofrece activar avisos.
+			r.Get("/push/public-key", notifHandler.ClavePublica)
 			r.Post("/push/subscribe", notifHandler.Subscribe)
 			r.Delete("/push/unsubscribe", notifHandler.Unsubscribe)
+			// La misma baja por POST: el cliente HTTP de la app no manda cuerpo
+			// en un DELETE, y la baja necesita el endpoint.
+			r.Post("/push/unsubscribe", notifHandler.Unsubscribe)
 			r.Get("/notifications", notifHandler.ListNotifications)
 			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
 			r.Post("/notifications/read-all", notifHandler.MarkAllRead)

@@ -404,6 +404,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		expires_at TIMESTAMPTZ
 	);
 
+	CREATE TABLE IF NOT EXISTS push_subscriptions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		endpoint TEXT NOT NULL UNIQUE,
+		auth_key TEXT NOT NULL,
+		p256dh_key TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW(),
+		updated_at TIMESTAMP DEFAULT NOW()
+	);
+
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1084,6 +1094,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
+		"push_subscriptions",
 		"escrow_agreements",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
