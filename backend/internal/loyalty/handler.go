@@ -1,8 +1,8 @@
 package loyalty
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/kiramopay/backend/internal/middleware"

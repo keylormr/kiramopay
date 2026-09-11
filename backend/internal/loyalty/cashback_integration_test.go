@@ -214,7 +214,7 @@ func TestFondearExigeReferenciaYEsIdempotente(t *testing.T) {
 	ctx := context.Background()
 
 	for _, c := range []struct {
-		monto       int64
+		monto      int64
 		ref, llave string
 	}{
 		{0, "TRF-1", "k1"}, {1_000, "", "k2"}, {1_000, "ab", "k3"}, {1_000, "TRF-1", ""},
