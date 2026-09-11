@@ -69,11 +69,11 @@ func TestValidarCotizacionAtajaLaBasura(t *testing.T) {
 	}
 
 	malas := map[string]*Cotizacion{
-		"cero":                  {Compra: 0, Venta: 0, Fecha: fecha},
-		"separador decimal":     {Compra: 44422, Venta: 45006, Fecha: fecha},
-		"invertida":             {Compra: 450.06, Venta: 444.22, Fecha: fecha},
-		"diferencia anormal":    {Compra: 300, Venta: 450, Fecha: fecha},
-		"fuente muerta":         {Compra: 444.22, Venta: 450.06, Fecha: hoy.AddDate(0, 0, -8)},
+		"cero":                   {Compra: 0, Venta: 0, Fecha: fecha},
+		"separador decimal":      {Compra: 44422, Venta: 45006, Fecha: fecha},
+		"invertida":              {Compra: 450.06, Venta: 444.22, Fecha: fecha},
+		"diferencia anormal":     {Compra: 300, Venta: 450, Fecha: fecha},
+		"fuente muerta":          {Compra: 444.22, Venta: 450.06, Fecha: hoy.AddDate(0, 0, -8)},
 		"cotizacion inexistente": nil,
 	}
 	for nombre, c := range malas {
