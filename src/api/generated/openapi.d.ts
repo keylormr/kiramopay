@@ -4497,6 +4497,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/escrow/{id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark the goods or service as delivered (seller only)
+         * @description Starts the buyer's review period (`review_by`). Until the seller marks delivery, a funded agreement runs against `deliver_by`, and if that passes the money goes back to the buyer. After it, if `review_by` passes without the buyer releasing or disputing, the money goes to the seller. Whoever had to act and did not, loses. Only once per agreement, and only while it is funded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Delivery recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EscrowAgreement"];
+                    };
+                };
+                /** @description Not funded, or delivery already marked. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/escrow/{id}/release": {
         parameters: {
             query?: never;
@@ -4506,7 +4554,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Release held funds to the seller (buyer only) */
+        /**
+         * Release held funds to the seller (buyer only)
+         * @description Works from `funded` and, as a concession, from `disputed`: the buyer can settle a dispute in the seller's favour without waiting for the arbiter.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4544,7 +4595,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Return held funds to the buyer (seller only) */
+        /**
+         * Return held funds to the buyer (seller only)
+         * @description Works from `funded` and, as a concession, from `disputed`: the seller can settle a dispute in the buyer's favour without waiting for the arbiter.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5618,6 +5672,26 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * Format: date-time
+             * @description When the seller marked the delivery.
+             */
+            delivered_at?: string;
+            /**
+             * Format: date-time
+             * @description Deadline for the seller to mark delivery. If it passes, the money goes back to the buyer.
+             */
+            deliver_by?: string;
+            /**
+             * Format: date-time
+             * @description Deadline for the buyer to release or dispute once delivery is marked. If it passes, the money goes to the seller.
+             */
+            review_by?: string;
+            /**
+             * @description Set when a deadline closed the agreement: `entrega` (the seller never marked delivery) or `revision` (the buyer neither released nor disputed).
+             * @enum {string}
+             */
+            closed_by_expiry?: "entrega" | "revision";
         };
         /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
         PayoutDestination: {

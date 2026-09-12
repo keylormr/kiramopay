@@ -2007,10 +2007,39 @@ paths:
         '422':
           description: Insufficient balance
 
+  /api/v1/escrow/{id}/deliver:
+    post:
+      tags: [Escrow]
+      summary: Mark the goods or service as delivered (seller only)
+      description: >-
+        Starts the buyer's review period (`review_by`). Until the seller marks
+        delivery, a funded agreement runs against `deliver_by`, and if that
+        passes the money goes back to the buyer. After it, if `review_by`
+        passes without the buyer releasing or disputing, the money goes to
+        the seller. Whoever had to act and did not, loses. Only once per
+        agreement, and only while it is funded.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Delivery recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
+        '409':
+          description: Not funded, or delivery already marked.
+
   /api/v1/escrow/{id}/release:
     post:
       tags: [Escrow]
       summary: Release held funds to the seller (buyer only)
+      description: >-
+        Works from `funded` and, as a concession, from `disputed`: the buyer
+        can settle a dispute in the seller's favour without waiting for the
+        arbiter.
       security:
         - bearerAuth: []
       parameters:
@@ -2027,6 +2056,10 @@ paths:
     post:
       tags: [Escrow]
       summary: Return held funds to the buyer (seller only)
+      description: >-
+        Works from `funded` and, as a concession, from `disputed`: the seller
+        can settle a dispute in the buyer's favour without waiting for the
+        arbiter.
       security:
         - bearerAuth: []
       parameters:
@@ -2696,6 +2729,29 @@ components:
         dispute_reason: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        delivered_at:
+          type: string
+          format: date-time
+          description: When the seller marked the delivery.
+        deliver_by:
+          type: string
+          format: date-time
+          description: >-
+            Deadline for the seller to mark delivery. If it passes, the money
+            goes back to the buyer.
+        review_by:
+          type: string
+          format: date-time
+          description: >-
+            Deadline for the buyer to release or dispute once delivery is
+            marked. If it passes, the money goes to the seller.
+        closed_by_expiry:
+          type: string
+          enum: [entrega, revision]
+          description: >-
+            Set when a deadline closed the agreement: `entrega` (the seller
+            never marked delivery) or `revision` (the buyer neither released
+            nor disputed).
 
     PayoutDestination:
       type: object
