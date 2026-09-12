@@ -190,24 +190,31 @@ export const CardsView: React.FC = () => {
                 </div>
               )}
 
-              <div className="relative flex justify-between items-start mb-8 z-10">
+              {/* Los margenes eran mb-8 y mb-8: el contenido sumaba unos 204px
+                  en una tarjeta que deja 176 por dentro, y la fila de abajo
+                  (titular y marca) quedaba cortada por el borde. */}
+              <div className="relative flex justify-between items-start mb-4 z-10">
                 <span className="font-bold text-lg tracking-wide opacity-90">KiramoPay</span>
                 <Icons.SignalHigh size={24} className="opacity-70" />
               </div>
 
-              <div className="relative mb-8 z-10">
+              <div className="relative mb-4 z-10">
                 <div className="w-12 h-8 rounded-md mb-2 bg-gradient-to-br from-amber-200 to-yellow-400 uv-shadow-soft" />
                 <div className="font-mono text-2xl tracking-widest drop-shadow-md tabular-nums">
                   •••• •••• •••• {card.last4}
                 </div>
               </div>
 
-              <div className="relative flex justify-between items-end z-10">
-                <div>
+              <div className="relative flex justify-between items-end gap-3 z-10">
+                <div className="min-w-0">
                   <div className="text-[10px] opacity-70 uppercase tracking-widest mb-1">{t('card_holder')}</div>
-                  <div className="font-medium tracking-wide uppercase">{card.cardholderName}</div>
+                  <div className="font-medium tracking-wide uppercase truncate">{card.cardholderName}</div>
                 </div>
-                <div className="text-2xl font-bold italic opacity-85">{card.brand === 'mastercard' ? 'MC' : 'VISA'}</div>
+                {/* Decia VISA: prometia una red de pago a la que la tarjeta no
+                    pertenece. Es una tarjeta de KiramoPay y se dice. */}
+                <div className="shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                  {t('card_only_in_app')}
+                </div>
               </div>
             </div>
           </div>
@@ -335,6 +342,12 @@ export const CardsView: React.FC = () => {
       <BottomSheet isOpen={showReveal} onClose={() => { setShowReveal(false); setRevealed(null); }} title={t('card_created_title')}>
         <div className="space-y-4 py-2">
           <p className="uv-text-muted text-sm">{t('card_created_desc')}</p>
+          {/* El numero no es de ninguna red de pago y falla a proposito la
+              verificacion que usan todas las tarjetas: se avisa, para que
+              nadie intente usarlo en un comercio. */}
+          <p className="text-sm rounded-xl px-3 py-2 bg-[var(--color-warning-soft)] text-[var(--color-warning)]">
+            {t('card_decorative_note')}
+          </p>
           {revealed && (
             <div className="uv-surface-2 rounded-2xl p-4 space-y-3">
               <div>

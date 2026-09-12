@@ -55,7 +55,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
     const res = await this.client.get<Array<{
       id: string; name: string; description: string; category: string;
       points_cost: number; image_url: string; partner_code: string;
-      stock: number;
+      stock: number; cashback_minor?: number;
     }>>('/api/v1/loyalty/rewards');
 
     if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rewards');
@@ -69,16 +69,22 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       imageUrl: r.image_url,
       partnerCode: r.partner_code || undefined,
       stock: r.stock,
+      cashbackMinor: r.cashback_minor || undefined,
     })));
   }
 
   async redeemReward(rewardId: string): Promise<ApiResponse<Redemption>> {
     const res = await this.client.post<{
       id: string; reward_id: string; points: number; status: string;
-      code: string; created_at: string;
+      code: string; created_at: string; cashback_minor?: number;
     }>('/api/v1/loyalty/redeem', { reward_id: rewardId });
 
-    if (!res.success || !res.data) return apiError('REDEEM_FAILED', res.error?.message || 'Failed');
+    // Se conserva el codigo del servidor: LOYALTY_SIN_FONDOS tiene que llegar a
+    // la pantalla para que diga que no hay fondo de promociones, y no un fallo
+    // cualquiera.
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'REDEEM_FAILED', res.error?.message || 'Failed');
+    }
 
     return apiSuccess({
       id: res.data.id,
@@ -87,6 +93,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       status: res.data.status as Redemption['status'],
       code: res.data.code || undefined,
       createdAt: res.data.created_at,
+      cashbackMinor: res.data.cashback_minor || undefined,
     });
   }
 

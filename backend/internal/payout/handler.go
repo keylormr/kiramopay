@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -112,6 +113,12 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED", "verified MFA challenge required for this amount")
 	case errors.Is(err, ErrInvalidRequest):
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
+	// Los topes no tenian traduccion: un payout frenado por el tope diario
+	// salia como 500 "operation failed", y la pantalla no podia decir por que.
+	case errors.Is(err, transaction.ErrDailyLimitExceeded):
+		response.Error(w, http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED", "daily spending limit exceeded")
+	case errors.Is(err, transaction.ErrMonthlyLimitExceeded):
+		response.Error(w, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED", "monthly spending limit exceeded")
 	default:
 		response.Error(w, http.StatusInternalServerError, "PAYOUT_FAILED", "operation failed")
 	}

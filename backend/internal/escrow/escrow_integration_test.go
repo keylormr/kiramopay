@@ -212,12 +212,15 @@ func TestEscrowDisputeAndResolve(t *testing.T) {
 		t.Fatalf("dispute: %v", err)
 	}
 
-	// Parties cannot move a disputed agreement themselves.
-	if _, err := svc.Release(ctx, buyer, a.ID); !errors.Is(err, escrow.ErrBadTransition) {
-		t.Errorf("release while disputed: expected ErrBadTransition, got %v", err)
+	// En una disputa cada parte puede CEDER (el comprador libera, el vendedor
+	// devuelve: ver plazos_integration_test.go), pero NINGUNA puede darse la
+	// razon a si misma: el vendedor no libera y el comprador no se reembolsa.
+	// Eso sigue siendo del arbitro.
+	if _, err := svc.Release(ctx, seller, a.ID); !errors.Is(err, escrow.ErrNotBuyer) {
+		t.Errorf("el vendedor libero en disputa: expected ErrNotBuyer, got %v", err)
 	}
-	if _, err := svc.Refund(ctx, seller, a.ID); !errors.Is(err, escrow.ErrBadTransition) {
-		t.Errorf("refund while disputed: expected ErrBadTransition, got %v", err)
+	if _, err := svc.Refund(ctx, buyer, a.ID); !errors.Is(err, escrow.ErrNotSeller) {
+		t.Errorf("el comprador se reembolso en disputa: expected ErrNotSeller, got %v", err)
 	}
 
 	buyerBefore := walletCRC(t, pool, buyer)

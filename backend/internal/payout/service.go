@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -39,6 +40,11 @@ type EventSink interface {
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
 	CheckLimits(ctx context.Context, userID, currency string, amountMinor int64) error
+	// Las versiones que corren dentro de la transaccion del asiento. Ver submit
+	// y refundAndFail: la fila del payout, la del historial y el tope se
+	// confirman con el dinero o no se confirman.
+	RecordHistoryEnTx(ctx context.Context, tx pgx.Tx, userID, walletID string, req *transaction.CreateTransactionRequest) error
+	CheckLimitsEnTx(ctx context.Context, tx pgx.Tx, userID, currency string, amountMinor int64) error
 }
 
 // Logger is the minimal logging surface (slog-compatible) the poller/service
@@ -129,8 +135,10 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateRequest)
 	}
 
 	// Mismo tope diario que las transferencias y el escrow: un payout debita la
-	// billetera contra SYSTEM:EXTERNAL igual que ellos. Va ANTES del MFA y de
-	// reclamar la fila, para no dejar nada a medias cuando el tope frena.
+	// billetera contra SYSTEM:EXTERNAL igual que ellos. Esta es la comprobacion
+	// RAPIDA, para no pedir el segundo factor a quien de todos modos no puede;
+	// la que decide corre dentro del asiento (submit), donde dos payouts
+	// simultaneos ya no pueden leer la misma suma.
 	if s.history != nil {
 		if err := s.history.CheckLimits(ctx, userID, p.Currency, p.AmountMinor); err != nil {
 			return nil, err
@@ -189,44 +197,75 @@ func (s *Service) normalizeAndValidate(req *CreateRequest) error {
 	return nil
 }
 
-// submit is the money-moving core. Order matters and mirrors escrow:
+// submit es el nucleo que mueve dinero: reclama el payout, lo debita y lo anota
+// en el historial, TODO en la transaccion del asiento.
 //
-//  1. CLAIM pending → processing (a guarded UPDATE). This is the mutex: two
-//     concurrent submits of the same payout — exactly one wins.
-//  2. POST the debit (user → SYSTEM:EXTERNAL:<RAIL>) with a deterministic
-//     idempotency key, so a crash-retry can never debit twice.
-//  3. If the debit fails, COMPENSATE by reverting the claim (the money never
-//     left — safe to retry). If even the revert fails, audit HIGH.
-//  4. Only after the money is held do we hand the payout to the rail.
+// Antes eran tres pasos sueltos —reclamar (pending -> processing), postear, y
+// si el asiento fallaba, compensar devolviendo el reclamo— con el mismo defecto
+// que el escrow tenia antes del #179: la compensacion tambien puede fallar, y
+// entonces quedaba un payout 'processing' SIN debito. El poller lo despachaba
+// despues y el riel mandaba plata que nunca salio de la billetera. La fila del
+// historial iba al final con el error descartado.
+//
+// Ahora el tope, el reclamo y el historial corren dentro del gancho: si el
+// asiento no confirma, nada de eso ocurrio y no hay nada que compensar. El
+// reclamo sigue siendo el mutex entre dos submit simultaneos del mismo payout:
+// el UPDATE ... WHERE status = 'pending' lo gana uno, y el otro no postea.
 func (s *Service) submit(ctx context.Context, p *Payout) (*Payout, error) {
-	claimed, err := s.repo.Claim(ctx, p.ID)
-	if err != nil {
-		if errors.Is(err, ErrBadTransition) {
-			// Concurrently claimed/submitted — return the current state.
-			return s.repo.Get(ctx, p.ID)
-		}
-		return nil, err
-	}
-
+	var claimed *Payout
 	_, perr := s.ledger.Post(ctx, &ledger.Posting{
-		Description:    fmt.Sprintf("payout submit: %s", claimed.ID),
-		IdempotencyKey: "payout:debit:" + claimed.ID,
-		CreatedBy:      claimed.UserID,
+		Description:    fmt.Sprintf("payout submit: %s", p.ID),
+		IdempotencyKey: "payout:debit:" + p.ID,
+		CreatedBy:      p.UserID,
 		Metadata: map[string]any{
-			"payout_id": claimed.ID,
-			"rail":      claimed.Rail,
+			"payout_id": p.ID,
+			"rail":      p.Rail,
 			"action":    "submit",
 		},
 		Entries: []ledger.Entry{
-			{Account: ledger.Account{UserID: claimed.UserID}, Side: ledger.Debit, AmountMinor: claimed.AmountMinor, Currency: claimed.Currency},
-			{Account: railSystemAccount(claimed.Rail, claimed.Currency), Side: ledger.Credit, AmountMinor: claimed.AmountMinor, Currency: claimed.Currency},
+			{Account: ledger.Account{UserID: p.UserID}, Side: ledger.Debit, AmountMinor: p.AmountMinor, Currency: p.Currency},
+			{Account: railSystemAccount(p.Rail, p.Currency), Side: ledger.Credit, AmountMinor: p.AmountMinor, Currency: p.Currency},
+		},
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
+			// El tope primero: antes de anotar el propio movimiento, o la suma
+			// lo contaria dos veces.
+			if s.history != nil {
+				if err := s.history.CheckLimitsEnTx(ctx, tx, p.UserID, p.Currency, p.AmountMinor); err != nil {
+					return err
+				}
+			}
+			var err error
+			if claimed, err = s.repo.ClaimEnTx(ctx, tx, p.ID); err != nil {
+				return err
+			}
+			if s.history != nil {
+				return s.history.RecordHistoryEnTx(ctx, tx, p.UserID, "", historialDeEnvio(claimed))
+			}
+			return nil
 		},
 	})
-	if perr != nil && !errors.Is(perr, ledger.ErrIdempotent) {
-		// The debit failed — money never left. Revert so the payout can retry.
-		if _, rerr := s.repo.RevertToPending(ctx, claimed.ID); rerr != nil {
-			s.audit(claimed.UserID, claimed, "payout_compensation_failed", "high",
-				map[string]any{"post_error": perr.Error(), "revert_error": rerr.Error()})
+	switch {
+	case errors.Is(perr, ledger.ErrIdempotent):
+		// El debito ya estaba confirmado — y con el, en la misma transaccion,
+		// el reclamo y el historial. Es un reintento de un submit que se corto
+		// despues del COMMIT: se sigue con lo que quedo.
+		actual, err := s.repo.Get(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		if actual.Status != StatusProcessing {
+			return actual, nil
+		}
+		claimed = actual
+	case perr != nil:
+		switch {
+		case errors.Is(perr, ErrBadTransition):
+			// Otro submit del mismo payout gano el reclamo; este no posteo.
+			return s.repo.Get(ctx, p.ID)
+		case errors.Is(perr, transaction.ErrDailyLimitExceeded):
+			return nil, transaction.ErrDailyLimitExceeded
+		case errors.Is(perr, transaction.ErrMonthlyLimitExceeded):
+			return nil, transaction.ErrMonthlyLimitExceeded
 		}
 		return nil, fmt.Errorf("payout debit posting: %w", perr)
 	}
@@ -237,7 +276,6 @@ func (s *Service) submit(ctx context.Context, p *Payout) (*Payout, error) {
 	}
 	s.audit(claimed.UserID, claimed, "payout_processing", "medium", nil)
 	s.emit(ctx, claimed, "payout.processing")
-	s.recordSendHistory(ctx, claimed)
 
 	// Hand off to the rail.
 	return s.dispatch(ctx, claimed)
@@ -304,29 +342,21 @@ func (s *Service) settle(ctx context.Context, p *Payout, res PayoutResult) (*Pay
 	}
 }
 
-// refundAndFail handles a definitive rail rejection. Order mirrors escrow's
-// claim-then-post discipline, which is what makes it safe under a rail that
-// returns contradictory answers to two workers:
+// refundAndFail aplica un rechazo definitivo del riel: marca el payout como
+// fallido, le devuelve la plata y lo anota en el historial, TODO en la
+// transaccion del asiento de reembolso.
 //
-//  1. CLAIM the rejection (processing → failed, a guarded UPDATE). Of two
-//     workers reacting to the rail, exactly one wins this; a worker that
-//     instead saw "completed" wins MarkCompleted and this returns
-//     ErrBadTransition — so the money is moved consistently with the one
-//     terminal state that won.
-//  2. REFUND the held funds (reverse posting, idempotent).
-//  3. If the refund posting fails, UN-CLAIM (failed → processing) so the payout
-//     keeps owing money in a state the poller retries, rather than stranding it
-//     in a terminal `failed` with funds still held. Audit HIGH either way.
+// Antes eran tres pasos: reclamar el rechazo (processing -> failed), postear el
+// reembolso, y si el asiento fallaba, desmarcar (failed -> processing). Si el
+// desmarcar tambien fallaba, quedaba un payout 'failed' —terminal— con la
+// plata todavia retenida en SYSTEM:EXTERNAL y nadie que la fuera a devolver.
+//
+// El reclamo sigue siendo el mutex entre dos trabajadores que reaccionan al
+// riel: si otro ya lo marco 'completed', el UPDATE ... WHERE status =
+// 'processing' falla, el asiento se revierte y no se reembolsa algo que el
+// riel si pago.
 func (s *Service) refundAndFail(ctx context.Context, p *Payout, res PayoutResult) (*Payout, error) {
-	claimed, err := s.repo.MarkFailed(ctx, p.ID, res.ExternalID, res.Message)
-	if err != nil {
-		if errors.Is(err, ErrBadTransition) {
-			// Another worker already drove this payout to a terminal state.
-			return s.repo.Get(ctx, p.ID)
-		}
-		return nil, err
-	}
-
+	var claimed *Payout
 	_, perr := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    fmt.Sprintf("payout refund: %s", p.ID),
 		IdempotencyKey: "payout:refund:" + p.ID,
@@ -340,21 +370,34 @@ func (s *Service) refundAndFail(ctx context.Context, p *Payout, res PayoutResult
 			{Account: railSystemAccount(p.Rail, p.Currency), Side: ledger.Debit, AmountMinor: p.AmountMinor, Currency: p.Currency},
 			{Account: ledger.Account{UserID: p.UserID}, Side: ledger.Credit, AmountMinor: p.AmountMinor, Currency: p.Currency},
 		},
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			if claimed, err = s.repo.MarkFailedEnTx(ctx, tx, p.ID, res.ExternalID, res.Message); err != nil {
+				return err
+			}
+			if s.history != nil {
+				return s.history.RecordHistoryEnTx(ctx, tx, p.UserID, "", historialDeReembolso(claimed))
+			}
+			return nil
+		},
 	})
-	if perr != nil && !errors.Is(perr, ledger.ErrIdempotent) {
-		// Refund failed — un-claim so the money-owed payout stays in `processing`
-		// for the poller to retry, instead of a terminal state that hides held funds.
-		if _, rerr := s.repo.UnclaimFailed(ctx, claimed.ID); rerr != nil {
-			s.audit(p.UserID, claimed, "payout_refund_revert_failed", "high",
-				map[string]any{"post_error": perr.Error(), "revert_error": rerr.Error()})
-		} else {
-			s.audit(p.UserID, claimed, "payout_refund_failed", "high",
-				map[string]any{"rail": p.Rail, "post_error": perr.Error()})
+	switch {
+	case errors.Is(perr, ledger.ErrIdempotent):
+		// El reembolso ya se habia confirmado, y con el el estado 'failed'.
+		return s.repo.Get(ctx, p.ID)
+	case perr != nil:
+		if errors.Is(perr, ErrBadTransition) {
+			// Otro trabajador ya lo llevo a un estado terminal (por ejemplo,
+			// completado): no se reembolsa.
+			return s.repo.Get(ctx, p.ID)
 		}
+		// El reembolso no confirmo y el payout sigue 'processing', que es
+		// donde el poller lo vuelve a intentar. Nada quedo a medias.
+		s.audit(p.UserID, p, "payout_refund_failed", "high",
+			map[string]any{"rail": p.Rail, "post_error": perr.Error()})
 		return s.repo.Get(ctx, p.ID)
 	}
 
-	s.recordRefundHistory(ctx, claimed)
 	s.audit(claimed.UserID, claimed, "payout_failed", "medium", map[string]any{"reason": res.Message})
 	s.emit(ctx, claimed, "payout.failed")
 	return claimed, nil
@@ -448,11 +491,11 @@ func railSystemAccount(rail, currency string) ledger.Account {
 	return ledger.Account{SystemCode: ledger.SystemAccountCode(code)}
 }
 
-func (s *Service) recordSendHistory(ctx context.Context, p *Payout) {
-	if s.history == nil {
-		return
-	}
-	_ = s.history.RecordHistory(ctx, p.UserID, &transaction.CreateTransactionRequest{
+// historialDeEnvio arma la fila del historial del debito. La escribe el gancho
+// del asiento; antes se escribia despues, por fuera y con el error descartado,
+// asi que un payout podia debitar la billetera sin aparecer nunca en la lista.
+func historialDeEnvio(p *Payout) *transaction.CreateTransactionRequest {
+	return &transaction.CreateTransactionRequest{
 		Type:             "payout_sent",
 		Amount:           p.AmountMinor,
 		Currency:         p.Currency,
@@ -460,14 +503,12 @@ func (s *Service) recordSendHistory(ctx context.Context, p *Payout) {
 		CounterpartyName: p.Destination.Name,
 		Description:      "Payout via " + p.Rail + " to " + p.Destination.MaskedAccount(),
 		IdempotencyKey:   "payout:sent:" + p.ID,
-	})
+	}
 }
 
-func (s *Service) recordRefundHistory(ctx context.Context, p *Payout) {
-	if s.history == nil {
-		return
-	}
-	_ = s.history.RecordHistory(ctx, p.UserID, &transaction.CreateTransactionRequest{
+// historialDeReembolso arma la fila del historial del reembolso.
+func historialDeReembolso(p *Payout) *transaction.CreateTransactionRequest {
+	return &transaction.CreateTransactionRequest{
 		Type:             "payout_refund",
 		Amount:           p.AmountMinor,
 		Currency:         p.Currency,
@@ -475,7 +516,7 @@ func (s *Service) recordRefundHistory(ctx context.Context, p *Payout) {
 		CounterpartyName: p.Destination.Name,
 		Description:      "Payout refund (" + p.Rail + ")",
 		IdempotencyKey:   "payout:refund:" + p.ID,
-	})
+	}
 }
 
 func (s *Service) emit(ctx context.Context, p *Payout, eventType string) {

@@ -1968,7 +1968,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Redeem a reward */
+        /**
+         * Redeem a reward
+         * @description Only rewards with a way to be delivered can be redeemed — today, the cashback ones (`cashback_minor`). The cashback is a real ledger posting from SYSTEM:PROMOTIONS:CRC to the wallet, in the same transaction that deducts the points; if the promotions fund cannot cover it, nothing happens.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1976,10 +1979,24 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        reward_id: string;
+                    };
+                };
+            };
             responses: {
-                /** @description Reward redeemed */
-                200: {
+                /** @description Reward redeemed; `cashback_minor` is what reached the wallet. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description `LOYALTY_SIN_FONDOS` (the promotions fund cannot cover it), `LOYALTY_SIN_ENTREGA` (the reward has no way to be delivered) or `LOYALTY_SIN_EXISTENCIAS` (out of stock). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4775,6 +4792,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/escrow/{id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark the goods or service as delivered (seller only)
+         * @description Starts the buyer's review period (`review_by`). Until the seller marks delivery, a funded agreement runs against `deliver_by`, and if that passes the money goes back to the buyer. After it, if `review_by` passes without the buyer releasing or disputing, the money goes to the seller. Whoever had to act and did not, loses. Only once per agreement, and only while it is funded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Delivery recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EscrowAgreement"];
+                    };
+                };
+                /** @description Not funded, or delivery already marked. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/escrow/{id}/release": {
         parameters: {
             query?: never;
@@ -4784,7 +4849,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Release held funds to the seller (buyer only) */
+        /**
+         * Release held funds to the seller (buyer only)
+         * @description Works from `funded` and, as a concession, from `disputed`: the buyer can settle a dispute in the seller's favour without waiting for the arbiter.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4822,7 +4890,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Return held funds to the buyer (seller only) */
+        /**
+         * Return held funds to the buyer (seller only)
+         * @description Works from `funded` and, as a concession, from `disputed`: the seller can settle a dispute in the buyer's favour without waiting for the arbiter.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4924,6 +4995,100 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["EscrowAgreement"];
                     };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Balance of the promotions fund that pays point cashback */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The fund balance. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: int64 */
+                            saldo_minor?: number;
+                            /** @example CRC */
+                            moneda?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones/fondos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a company deposit into the promotions fund
+         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        amount_minor: number;
+                        referencia: string;
+                        idempotency_key: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The fund balance after the deposit. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing amount, reference or idempotency key. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5896,6 +6061,26 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * Format: date-time
+             * @description When the seller marked the delivery.
+             */
+            delivered_at?: string;
+            /**
+             * Format: date-time
+             * @description Deadline for the seller to mark delivery. If it passes, the money goes back to the buyer.
+             */
+            deliver_by?: string;
+            /**
+             * Format: date-time
+             * @description Deadline for the buyer to release or dispute once delivery is marked. If it passes, the money goes to the seller.
+             */
+            review_by?: string;
+            /**
+             * @description Set when a deadline closed the agreement: `entrega` (the seller never marked delivery) or `revision` (the buyer neither released nor disputed).
+             * @enum {string}
+             */
+            closed_by_expiry?: "entrega" | "revision";
         };
         /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
         PayoutDestination: {
@@ -6013,6 +6198,25 @@ export interface components {
              * @example 420
              */
             dias_de_particiones: number;
+            /**
+             * @description Audit events dropped because the buffer was full since the process started. Non-zero means the audit trail has gaps.
+             * @example 0
+             */
+            auditoria_descartada: number;
+            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            tipo_de_cambio: {
+                /** @example hacienda */
+                fuente: string;
+                /** @example 450.06 */
+                usd_crc: number;
+                /** @example 444.22 */
+                compra: number;
+                /** @example 2026-09-11 */
+                fecha_fuente?: string;
+                /** Format: date-time */
+                ultima_confirmacion?: string;
+                ultimo_error?: string;
+            };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
                 /** @enum {string} */

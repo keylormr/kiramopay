@@ -37,8 +37,8 @@ func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string,
 		cardType = "virtual"
 	}
 
-	// Generate card number (simulated — real implementation uses Stripe/Marqeta)
-	cardNumber := generateCardNumber()
+	// El numero es DECORATIVO y no puede ser el de nadie. Ver numeroDecorativo.
+	cardNumber := numeroDecorativo()
 	last4 := cardNumber[len(cardNumber)-4:]
 	cvv := generateCVV()
 	expiryMonth := int(time.Now().Month())
@@ -53,14 +53,16 @@ func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string,
 		ExpiryYear:     expiryYear,
 		CVV:            cvv,
 		CardholderName: cardholderName,
-		Brand:          "visa",
-		Type:           cardType,
-		Currency:       req.Currency,
-		Status:         "active",
-		DailyLimit:     DefaultDailyLimit,
-		MonthlyLimit:   DefaultMonthlyLimit,
-		AtmLimit:       DefaultATMLimit,
-		CreatedAt:      time.Now(),
+		// No es VISA ni ninguna otra red: es una tarjeta de KiramoPay que no
+		// sirve fuera de la app. Rotularla VISA prometia lo que no es.
+		Brand:        MarcaKiramoPay,
+		Type:         cardType,
+		Currency:     req.Currency,
+		Status:       "active",
+		DailyLimit:   DefaultDailyLimit,
+		MonthlyLimit: DefaultMonthlyLimit,
+		AtmLimit:     DefaultATMLimit,
+		CreatedAt:    time.Now(),
 	}
 
 	if err := s.repo.CreateCard(ctx, card); err != nil {
@@ -147,17 +149,47 @@ func (s *Service) GetCardTransactions(ctx context.Context, cardID, userID string
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-func generateCardNumber() string {
-	// Simulated VISA: starts with 4, 16 digits, passes Luhn check
-	prefix := "4"
-	num := prefix
+// La tarjeta imprimia el numero de otra persona.
+//
+// La funcion anterior armaba 16 digitos que empezaban en 4 y les calculaba el
+// digito verificador de Luhn: eso no es "un numero de ejemplo", es un numero de
+// tarjeta VISA sintacticamente valido, que puede coincidir con el de alguien
+// real que no es usuario de la aplicacion y no tiene forma de enterarse. Quien
+// lo copiara de la pantalla tenia en la mano, potencialmente, la tarjeta de un
+// tercero.
+//
+// numeroDecorativo lo hace imposible por dos lados a la vez:
+//   - empieza en 8, que no es el prefijo de ninguna red de tarjetas de pago
+//     (4 es VISA, 5 y 2 Mastercard, 3 American Express y Diners, 6 Discover);
+//   - y su digito verificador es INCORRECTO a proposito. Todas las tarjetas
+//     del mundo pasan la verificacion de Luhn y todo procesador la comprueba
+//     antes de cualquier otra cosa: un numero que la falla no puede ser una
+//     tarjeta, y ningun comercio lo acepta.
+//
+// Con uno solo de los dos bastaria; van los dos para que ninguno dependa del
+// otro.
+func numeroDecorativo() string {
+	num := prefijoDecorativo
 	for len(num) < 15 {
 		n, _ := rand.Int(rand.Reader, big.NewInt(10))
 		num += fmt.Sprintf("%d", n.Int64())
 	}
-	// Calculate Luhn check digit
-	checkDigit := luhnCheckDigit(num)
-	return num + fmt.Sprintf("%d", checkDigit)
+	// Cualquier digito distinto del correcto hace fallar Luhn; se usa el
+	// siguiente para que sea determinista dado el cuerpo.
+	return num + fmt.Sprintf("%d", (luhnCheckDigit(num)+1)%10)
+}
+
+// prefijoDecorativo no es el de ninguna red de pago.
+const prefijoDecorativo = "8"
+
+// pasaLuhn dice si un numero pasa la verificacion de Luhn, que es lo primero
+// que comprueba cualquier procesador de tarjetas.
+func pasaLuhn(numero string) bool {
+	if len(numero) < 2 {
+		return false
+	}
+	cuerpo, verificador := numero[:len(numero)-1], int(numero[len(numero)-1]-'0')
+	return luhnCheckDigit(cuerpo) == verificador
 }
 
 func generateCVV() string {
@@ -169,19 +201,29 @@ func generateCVV() string {
 	return cvv
 }
 
-func luhnCheckDigit(number string) int {
-	sum := 0
-	nDigits := len(number)
-	parity := nDigits % 2
-	for i := 0; i < nDigits; i++ {
-		digit := int(number[i] - '0')
-		if i%2 == parity {
-			digit *= 2
-			if digit > 9 {
-				digit -= 9
+// luhnCheckDigit devuelve el digito verificador de Luhn para `cuerpo`, el
+// numero SIN su ultimo digito.
+//
+// La version anterior duplicaba con la paridad invertida: usaba la regla de
+// VALIDAR un numero completo (donde el ultimo digito no se duplica) para
+// CALCULAR el digito que falta (donde el ultimo digito del cuerpo si se
+// duplica). El resultado solo coincidia con el correcto por casualidad, mas o
+// menos una vez de cada diez. Lo delato una prueba contra numeros de tarjeta
+// publicos: la anterior comparaba esta funcion contra si misma y no podia
+// verlo.
+func luhnCheckDigit(cuerpo string) int {
+	suma := 0
+	duplicar := true // el digito de mas a la derecha del cuerpo se duplica
+	for i := len(cuerpo) - 1; i >= 0; i-- {
+		d := int(cuerpo[i] - '0')
+		if duplicar {
+			d *= 2
+			if d > 9 {
+				d -= 9
 			}
 		}
-		sum += digit
+		suma += d
+		duplicar = !duplicar
 	}
-	return (10 - (sum % 10)) % 10
+	return (10 - suma%10) % 10
 }

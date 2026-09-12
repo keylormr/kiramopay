@@ -971,6 +971,26 @@ func (s *Service) CheckLimits(ctx context.Context, userID, currency string, amou
 	return s.checkDailyLimit(ctx, userID, currency, amountMinor, w)
 }
 
+// CheckLimitsEnTx es CheckLimits DENTRO de la transaccion del asiento. Es la que
+// frena de verdad.
+//
+// CheckLimits por fuera suma lo gastado con un SELECT suelto y decide antes de
+// la transaccion que despues lo consume: dos salidas simultaneas leen la misma
+// suma y las dos pasan. Adentro del gancho, postOnce ya bloqueo la billetera
+// del pagador (FOR UPDATE), asi que la segunda salida espera a que la primera
+// confirme y su suma ya la incluye. Es la misma regla que usan las
+// transferencias (topesEnLaMismaTx); se exporta para payouts y marketplace.
+//
+// Tiene que correr ANTES de escribir la fila del historial del propio
+// movimiento: si no, la suma lo contaria dos veces.
+func (s *Service) CheckLimitsEnTx(ctx context.Context, tx pgx.Tx, userID, currency string, amountMinor int64) error {
+	w, err := s.walletRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("wallet not found")
+	}
+	return s.topesEnLaMismaTx(userID, currency, amountMinor, w)(ctx, tx)
+}
+
 // topeDiarioDe elige el tope de la MONEDA del movimiento.
 //
 // Antes se pasaba siempre w.DailyLimit, que esta en centimos de COLON, y se
