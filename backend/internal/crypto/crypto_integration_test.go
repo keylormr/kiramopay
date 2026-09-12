@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -76,6 +77,14 @@ func setupCryptoServiceSinPrecios(t *testing.T) (*crypto.Service, string) {
 
 func montarCripto(t *testing.T, urlPrecios string) (*crypto.Service, string) {
 	t.Helper()
+	// Tipo de cambio fijo: las pruebas cotizan en colones y necesitan el mismo
+	// numero siempre para poder afirmar cantidades exactas.
+	return montarCriptoConTipoDeCambio(t, urlPrecios,
+		func(context.Context, string, string) (float64, error) { return 500, nil })
+}
+
+func montarCriptoConTipoDeCambio(t *testing.T, urlPrecios string, tipo crypto.RateLookup) (*crypto.Service, string) {
+	t.Helper()
 	pool := testutil.TestDB(t)
 
 	repo := crypto.NewRepository(pool)
@@ -85,10 +94,7 @@ func montarCripto(t *testing.T, urlPrecios string) (*crypto.Service, string) {
 	walletRepo := wallet.NewRepository(pool)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txService := transaction.NewService(txRepo, walletRepo, l, nil)
-	// Tipo de cambio fijo: las pruebas cotizan en colones y necesitan el mismo
-	// numero siempre para poder afirmar cantidades exactas.
-	svc := crypto.NewService(repo, priceService, txService,
-		func(context.Context, string, string) (float64, error) { return 500, nil })
+	svc := crypto.NewService(repo, priceService, txService, tipo)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
@@ -437,5 +443,24 @@ func TestGetTransactions_AfterBuySell(t *testing.T) {
 	}
 	if len(txs) < 2 {
 		t.Fatalf("expected at least 2 crypto transactions, got %d", len(txs))
+	}
+}
+
+// El tipo de cambio estuvo congelado en 515 mientras el oficial bajaba a 450.
+// Ahora uno que la fuente no confirmo llega como precio viejo: en colones no se
+// opera, y la pantalla recibe el mismo codigo que con un precio de cripto
+// vencido. En dolares no hace falta tipo de cambio y sigue operando.
+func TestUnTipoDeCambioViejoFrenaSoloLoQueCotizaEnColones(t *testing.T) {
+	viejo := func(context.Context, string, string) (float64, error) {
+		return 0, fmt.Errorf("%w: USD/CRC sin confirmar hace 120h", crypto.ErrPrecioViejo)
+	}
+	svc, userID := montarCriptoConTipoDeCambio(t, startPriceStub(t).URL, viejo)
+	ctx := context.Background()
+
+	_, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+		Asset: "BTC", FromCurrency: "CRC", FromAmount: d(50000),
+	})
+	if !errors.Is(err, crypto.ErrPrecioViejo) {
+		t.Fatalf("Buy en colones = %v, se esperaba ErrPrecioViejo", err)
 	}
 }

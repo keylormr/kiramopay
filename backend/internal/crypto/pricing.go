@@ -71,6 +71,12 @@ func (s *Service) precioEn(ctx context.Context, asset, currency string) (decimal
 			return decimal.Zero, fmt.Errorf("%w: %s", ErrSinPrecio, currency)
 		}
 		tipo, err := s.rates(ctx, "USD", "CRC")
+		// Un tipo de cambio sin confirmar es un precio viejo, no la falta de
+		// uno: se propaga con su propio codigo para que la pantalla y el log
+		// distingan una fuente caida de un par que no existe.
+		if errors.Is(err, ErrPrecioViejo) {
+			return decimal.Zero, err
+		}
 		if err != nil || tipo <= 0 {
 			return decimal.Zero, fmt.Errorf("%w: USD/CRC", ErrSinPrecio)
 		}

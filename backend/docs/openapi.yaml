@@ -2807,7 +2807,7 @@ components:
       # cualquier cuerpo que no contradijera un tipo, asi que un campo que el
       # handler dejara de emitir (o uno nuevo sin documentar) pasaba en verde.
       additionalProperties: false
-      required: [status, version, environment, services, websocket_clients, last_drift_crc, dias_de_particiones, crypto_prices]
+      required: [status, version, environment, services, websocket_clients, last_drift_crc, dias_de_particiones, auditoria_descartada, crypto_prices, tipo_de_cambio]
       properties:
         status:
           type: string
@@ -2843,6 +2843,29 @@ components:
             money movement fails on insert — this is the runway before that.
             A value of -1 means the runway could not be read yet.
           example: 420
+        auditoria_descartada:
+          type: integer
+          description: >-
+            Audit events dropped because the buffer was full since the process
+            started. Non-zero means the audit trail has gaps.
+          example: 0
+        tipo_de_cambio:
+          type: object
+          additionalProperties: false
+          required: [fuente, usd_crc, compra]
+          description: >-
+            Official USD/CRC reference rate (BCCR, as republished by Hacienda),
+            refreshed hourly. `usd_crc` is the rate the app charges with, in
+            both directions. If the source cannot confirm it for 96 hours,
+            crypto quoted in colones stops trading rather than using a stale
+            number; `ultimo_error` says why.
+          properties:
+            fuente: { type: string, example: hacienda }
+            usd_crc: { type: number, example: 450.06 }
+            compra: { type: number, example: 444.22 }
+            fecha_fuente: { type: string, example: '2026-09-11' }
+            ultima_confirmacion: { type: string, format: date-time }
+            ultimo_error: { type: string }
         crypto_prices:
           type: object
           description: >-

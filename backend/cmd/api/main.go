@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -48,6 +49,7 @@ import (
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
+	"github.com/kiramopay/backend/internal/salud"
 	"github.com/kiramopay/backend/internal/recurring"
 	"github.com/kiramopay/backend/internal/savings"
 	"github.com/kiramopay/backend/internal/sinpe"
@@ -435,14 +437,27 @@ func main() {
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
 	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
 	// se opera: es preferible a operar con un numero inventado.
+	//
+	// Y ese tipo de cambio tiene que estar CONFIRMADO: estuvo congelado en 515
+	// mientras el oficial bajaba a 450, y cada operacion en colones se cotizaba
+	// con un 14 % de desvio. Un tipo de cambio que la fuente no confirmo dentro
+	// de country.EdadMaximaTipoDeCambio llega como precio viejo, igual que un
+	// precio de cripto vencido, y la pantalla ya sabe mostrar ese caso.
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
 		func(ctx context.Context, from, to string) (float64, error) {
-			r, err := countryRepo.GetExchangeRate(ctx, from, to)
-			if err != nil {
-				return 0, err
+			tasa, err := countryRepo.TipoDeCambioParaCobrar(ctx, from, to)
+			if errors.Is(err, country.ErrTipoDeCambioViejo) {
+				return 0, fmt.Errorf("%w: %v", crypto.ErrPrecioViejo, err)
 			}
-			return r.Rate, nil
+			return tasa, err
 		})
+
+	// El tipo de cambio oficial, traido de Hacienda cada hora. Sin esto la
+	// tasa de arriba nunca se confirma y cripto en colones no opera.
+	tipoDeCambio := country.NewActualizador(countryRepo, country.NewFuenteHacienda(), time.Hour, logger)
+	tipoDeCambioCtx, tipoDeCambioCancel := context.WithCancel(context.Background())
+	defer tipoDeCambioCancel()
+	go tipoDeCambio.Run(tipoDeCambioCtx)
 
 	// Viajes y pedidos: el precio lo inventa el servicio (rand) y el socio es
 	// una lista fija, asi que cobrar debitaria la billetera real contra un monto
@@ -682,22 +697,25 @@ func main() {
 			httpStatus = http.StatusServiceUnavailable
 		}
 		w.WriteHeader(httpStatus)
-		// crypto_prices: plan de CoinGecko, huella de la clave y ultimo estado
-		// del proveedor. Es lo que permite ver desde afuera por que cripto no
-		// tiene precios sin abrir los logs de Render.
-		cripto, _ := json.Marshal(priceService.Diagnostics())
-		// version: la del repositorio de la que salio este binario, no un "1.0.0"
-		// fijo. Es lo que permite confirmar un despliegue sin inventar marcadores
-		// de comportamiento.
-		// dias_de_particiones: cuantos dias faltan para que un INSERT en
-		// transactions empiece a fallar por falta de particion. -1 = todavia no
-		// se pudo consultar. Se publica porque el fallo, cuando llega, detiene
-		// la aplicacion entera y tiene fecha conocida con meses de aviso.
-		// auditoria_descartada distinto de cero quiere decir que el rastro tiene
-		// huecos: eventos que no entraron al buffer y se perdieron. Se publica
-		// porque antes se iban con un log y nadie se enteraba.
-		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"dias_de_particiones":%d,"auditoria_descartada":%d,"crypto_prices":%s}`,
-			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), particionesSvc.DiasDeMargen(time.Now()), auditLogger.Descartados(), cripto)
+		// El cuerpo lo arma internal/salud, que es lo MISMO que valida la
+		// prueba de contrato: un campo nuevo no puede salir sin pasar por el
+		// esquema. Ver el paquete para por que.
+		//
+		// version: la del repositorio de la que salio este binario, no un
+		// "1.0.0" fijo. Es lo que permite confirmar un despliegue sin inventar
+		// marcadores de comportamiento.
+		_, _ = w.Write(salud.Cuerpo{
+			Status:              status,
+			Version:             buildinfo.Version,
+			Environment:         cfg.Server.Environment,
+			Services:            salud.Servicios{Database: dbOk, Redis: redisOk},
+			WebsocketClients:    wsHub.ClientCount(),
+			LastDriftCRC:        reconcileSvc.LastDriftCRC(),
+			DiasDeParticiones:   particionesSvc.DiasDeMargen(time.Now()),
+			AuditoriaDescartada: auditLogger.Descartados(),
+			CryptoPrices:        priceService.Diagnostics(),
+			TipoDeCambio:        tipoDeCambio.Diagnostico(),
+		}.JSON())
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 

@@ -5735,6 +5735,25 @@ export interface components {
              * @example 420
              */
             dias_de_particiones: number;
+            /**
+             * @description Audit events dropped because the buffer was full since the process started. Non-zero means the audit trail has gaps.
+             * @example 0
+             */
+            auditoria_descartada: number;
+            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            tipo_de_cambio: {
+                /** @example hacienda */
+                fuente: string;
+                /** @example 450.06 */
+                usd_crc: number;
+                /** @example 444.22 */
+                compra: number;
+                /** @example 2026-09-11 */
+                fecha_fuente?: string;
+                /** Format: date-time */
+                ultima_confirmacion?: string;
+                ultimo_error?: string;
+            };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
                 /** @enum {string} */
