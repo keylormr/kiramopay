@@ -57,6 +57,7 @@ const EscrowView = lazyConRecarga(() => import('./views/escrow/EscrowView').then
 const PayoutView = lazyConRecarga(() => import('./views/payout/PayoutView').then(m => ({ default: m.PayoutView })));
 const AdminMerchantsView = lazyConRecarga(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
 const AdminUsersView = lazyConRecarga(() => import('./views/admin/AdminUsersView').then(m => ({ default: m.AdminUsersView })));
+const AdminDisputasView = lazyConRecarga(() => import('./views/admin/AdminDisputasView').then(m => ({ default: m.AdminDisputasView })));
 const AdminPromocionesView = lazyConRecarga(() => import('./views/admin/AdminPromocionesView').then(m => ({ default: m.AdminPromocionesView })));
 const PlansView = lazyConRecarga(() => import('./views/plans/PlansView').then(m => ({ default: m.PlansView })));
 const SessionsView = lazyConRecarga(() => import('./views/sessions/SessionsView').then(m => ({ default: m.SessionsView })));
@@ -258,7 +259,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'adminPromociones' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'adminDisputas' | 'adminPromociones' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
 
 // Keyed by TabId on purpose: adding a tab without deciding whether deep links
 // may reach it becomes a compile error instead of a silently dead route.
@@ -478,7 +479,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -625,6 +626,9 @@ const Layout = () => {
         )}
         {overlayView === 'adminUsers' && (
           <AdminUsersView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'adminDisputas' && (
+          <AdminDisputasView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'adminPromociones' && (
           <AdminPromocionesView onClose={() => setOverlayView(null)} />

@@ -150,6 +150,7 @@ export type { IRecurringRepository } from './repositories/recurring.repository';
 export type {
   IEscrowRepository,
   EscrowAgreement,
+  EscrowAdminPage,
   EscrowStatus,
   CreateEscrowRequest,
 } from './repositories/escrow.repository';

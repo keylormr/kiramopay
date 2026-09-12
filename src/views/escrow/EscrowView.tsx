@@ -7,6 +7,7 @@ import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
+import { fechaYHora, plazoVencido } from '@/utils/fechaPlazo';
 import type { EscrowAgreement, EscrowStatus } from '@/api';
 
 type EscrowActionResult = { success: boolean; data?: EscrowAgreement; error?: { code?: string; message: string } };
@@ -30,14 +31,19 @@ function money(amountMinor: number, currency: string): string {
 }
 
 export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { state } = useApp();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [agreements, setAgreements] = useState<EscrowAgreement[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadTrigger, setLoadTrigger] = useState(0);
-  const [error, setError] = useState('');
+  // Un error por lugar. Habia UNO solo compartido y la pantalla lo pintaba en
+  // la lista, en la hoja de crear y en la del detalle: el mismo mensaje dos o
+  // tres veces, y a veces debajo de algo que no lo habia causado.
+  const [errorLista, setErrorLista] = useState('');
+  const [errorCrear, setErrorCrear] = useState('');
+  const [errorAccion, setErrorAccion] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
   // El vendedor se identifica por TELEFONO. Antes esta pantalla pedia su UUID
@@ -63,8 +69,12 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       setLoading(true);
       const res = await getApiLayer().escrow.list(100);
       if (!cancelled) {
-        if (res.success && res.data) setAgreements(res.data);
-        else setError(res.error?.message || '');
+        if (res.success && res.data) {
+          setAgreements(res.data);
+          setErrorLista('');
+        } else {
+          setErrorLista(res.error?.message || 'ERROR');
+        }
         setLoading(false);
       }
     };
@@ -80,7 +90,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const value = parseFloat(amount);
     if (!sellerPhone.trim() || !description.trim() || !Number.isFinite(value) || value <= 0) return;
     setCreating(true);
-    setError('');
+    setErrorCrear('');
     const res = await getApiLayer().escrow.create({
       sellerPhone: sellerPhone.trim(),
       amountMinor: Math.round(value * 100),
@@ -92,7 +102,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       // El servidor comprueba que el numero tenga cuenta antes de escribir
       // nada; ese caso tiene su propio mensaje porque es el que la persona
       // puede corregir.
-      setError(
+      setErrorCrear(
         res.error?.code === 'ESCROW_SELLER_NOT_FOUND'
           ? t('escrow_seller_not_found')
           : res.error?.message || t('escrow_action_failed'),
@@ -117,7 +127,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const runAction = async (fn: (id: string) => Promise<EscrowActionResult>) => {
     if (!selected) return;
     setActing(true);
-    setError('');
+    setErrorAccion('');
     const res = await fn(selected.id);
     setActing(false);
     if (!res.success || !res.data) {
@@ -127,7 +137,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         setShowMfa(true);
         return;
       }
-      setError(res.error?.message || t('escrow_action_failed'));
+      setErrorAccion(mensajeDeAccion(res.error));
       return;
     }
     setSelected(res.data);
@@ -142,11 +152,11 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const submitDispute = async () => {
     if (!selected || !disputeReason.trim()) return;
     setActing(true);
-    setError('');
+    setErrorAccion('');
     const res = await api.escrow.dispute(selected.id, disputeReason.trim());
     setActing(false);
     if (!res.success || !res.data) {
-      setError(res.error?.message || t('escrow_action_failed'));
+      setErrorAccion(mensajeDeAccion(res.error));
       return;
     }
     setSelected(res.data);
@@ -160,6 +170,37 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const isBuyer = selected && currentUserId === selected.buyerId;
   const isSeller = selected && currentUserId === selected.sellerId;
+
+  // El plazo ya vencido tiene su propio mensaje: el servidor rechaza con
+  // ESCROW_DEADLINE_PASSED y el resultado lo aplica el barrido en un minuto.
+  function mensajeDeAccion(err?: { code?: string; message: string }): string {
+    if (err?.code === 'ESCROW_DEADLINE_PASSED') return t('escrow_deadline_passed');
+    return err?.message || t('escrow_action_failed');
+  }
+
+  const fecha = (iso?: string) => fechaYHora(iso, language);
+
+  // Que plazo corre y que pasa si vence, dicho a CADA parte con sus palabras.
+  // Sin esto la persona no sabia que tenia un plazo, ni que perderlo le daba
+  // la plata a la otra parte.
+  function textoDelPlazo(a: EscrowAgreement): string | null {
+    if (a.status === 'funded' && !a.deliveredAt && a.deliverBy) {
+      if (isSeller) return t('escrow_deliver_by_seller').replace('{fecha}', fecha(a.deliverBy));
+      if (isBuyer) return t('escrow_deliver_by_buyer').replace('{fecha}', fecha(a.deliverBy));
+    }
+    if (a.status === 'funded' && a.deliveredAt && a.reviewBy) {
+      if (isBuyer) return t('escrow_review_by_buyer').replace('{fecha}', fecha(a.reviewBy));
+      if (isSeller) return t('escrow_review_by_seller').replace('{fecha}', fecha(a.reviewBy));
+    }
+    if (a.status === 'disputed') return t('escrow_dispute_note');
+    if (a.closedByExpiry === 'entrega') return t('escrow_closed_delivery');
+    if (a.closedByExpiry === 'revision') return t('escrow_closed_review');
+    return null;
+  }
+
+  // El plazo que corre ahora. Vencido, ya no se ofrece reclamar: el servidor
+  // lo rechazaria y el resultado ya esta decidido.
+  const plazoActual = (a: EscrowAgreement) => (a.deliveredAt ? a.reviewBy : a.deliverBy);
 
   const statusBadge = (s: EscrowStatus) => (
     <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full ${STATUS_COLOR[s]}`}>
@@ -190,11 +231,24 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
       <div className="flex-1 overflow-y-auto pb-8">
         <p className="px-4 pt-3 text-xs uv-text-muted">{t('escrow_subtitle')}</p>
-        {error && <p className="px-4 pt-2 text-red-500 text-sm">{error}</p>}
-
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : errorLista ? (
+          // Si la lista no cargo, NO se muestra "aun no tienes acuerdos" con
+          // el boton de crear: a quien si tiene acuerdos se le decia que no
+          // los tenia. Se dice que no se pudo consultar, y se ofrece reintentar.
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <p className="text-sm text-[var(--color-danger)] mb-4" aria-live="polite">
+              {errorLista === 'ERROR' ? t('escrow_action_failed') : errorLista}
+            </p>
+            <button
+              onClick={refresh}
+              className="px-6 py-3 uv-surface-2 uv-text-primary rounded-xl font-bold text-sm"
+            >
+              {t('error_retry')}
+            </button>
           </div>
         ) : agreements.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-gray-400">
@@ -218,14 +272,21 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 onClick={() => {
                   setSelected(a);
                   setDisputing(false);
-                  setError('');
+                  setErrorAccion('');
                 }}
                 className="w-full text-left uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger"
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <h3 className="font-bold uv-text-primary text-sm min-w-0 truncate">{a.description}</h3>
-                  {statusBadge(a.status)}
+                  <div className="flex gap-1 shrink-0">
+                    {a.status === 'funded' && a.deliveredAt && (
+                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
+                        {t('escrow_delivered_badge')}
+                      </span>
+                    )}
+                    {statusBadge(a.status)}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-extrabold uv-text-primary">
@@ -294,7 +355,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
             />
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {errorCrear && <p className="text-red-500 text-sm">{errorCrear}</p>}
           <button
             onClick={create}
             disabled={creating || !sellerPhone.trim() || !description.trim() || !amount}
@@ -333,7 +394,13 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             )}
 
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {textoDelPlazo(selected) && (
+              <p className="text-sm rounded-xl px-3 py-2 uv-surface-2 uv-text-secondary">
+                {textoDelPlazo(selected)}
+              </p>
+            )}
+
+            {errorAccion && <p className="text-red-500 text-sm text-center">{errorAccion}</p>}
 
             {disputing ? (
               <div className="space-y-3">
@@ -370,7 +437,16 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     {acting ? t('loading') : t('escrow_fund')}
                   </button>
                 )}
-                {selected.status === 'funded' && isBuyer && (
+                {selected.status === 'funded' && isSeller && !selected.deliveredAt && (
+                  <button
+                    onClick={() => runAction((id) => api.escrow.deliver(id))}
+                    disabled={acting}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                  >
+                    {acting ? t('loading') : t('escrow_deliver')}
+                  </button>
+                )}
+                {(selected.status === 'funded' || selected.status === 'disputed') && isBuyer && (
                   <button
                     onClick={() => runAction((id) => api.escrow.release(id))}
                     disabled={acting}
@@ -379,7 +455,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     {acting ? t('loading') : t('escrow_release')}
                   </button>
                 )}
-                {selected.status === 'funded' && isSeller && (
+                {(selected.status === 'funded' || selected.status === 'disputed') && isSeller && (
                   <button
                     onClick={() => runAction((id) => api.escrow.refund(id))}
                     disabled={acting}
@@ -388,11 +464,11 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     {acting ? t('loading') : t('escrow_refund')}
                   </button>
                 )}
-                {selected.status === 'funded' && (isBuyer || isSeller) && (
+                {selected.status === 'funded' && (isBuyer || isSeller) && !plazoVencido(plazoActual(selected)) && (
                   <button
                     onClick={() => {
                       setDisputing(true);
-                      setError('');
+                      setErrorAccion('');
                     }}
                     className="w-full uv-surface-2 text-red-500 py-3 rounded-xl font-semibold"
                   >
