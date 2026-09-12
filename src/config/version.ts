@@ -40,16 +40,32 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.4.1',
-    buildNumber: 14,
-    releaseDate: '2026-09-07',
+    version: '2.5.0',
+    buildNumber: 15,
+    releaseDate: '2026-09-11',
     changes: [
-      'Dividir una cuenta con amigos ya se puede cobrar: eliges a quien participa por su numero, ves cuanto le toca a cada quien y pagas tu parte desde la aplicacion',
-      'Al guardar o sacar dinero de una meta de ahorro, el movimiento y tu meta se actualizan juntos: ya no puede pasar que el dinero se mueva y la meta no lo muestre',
-      'El catalogo de premios queda en pausa mientras no haya como entregarlos; los puntos que acumulas siguen guardados en tu cuenta',
+      'Tu codigo QR para cobrar ya no cambia cada vez: es uno solo, lo puedes imprimir, y cada cobro con monto vence solo',
+      'Los pagos con escrow tienen plazos claros: quien vende tiene 14 dias para entregar y quien compra 7 para revisar. Ves cuanto te queda, puedes empezar un acuerdo con el numero de la otra persona y ceder en una disputa',
+      'En el navegador, los avisos pueden llegarte con la aplicacion cerrada: activalos en Perfil, en Notificaciones',
+      'Buscar en tus movimientos busca en todo tu historial, y lo que te llega aparece sin cerrar la pantalla',
+      'Los precios de cripto en colones usan el tipo de cambio oficial de Hacienda del dia',
+      'Los premios de cashback vuelven al catalogo: el dinero sale de un fondo de promociones, y si no alcanza te lo decimos sin descontar tus puntos',
+      'La tarjeta virtual muestra un numero propio de KiramoPay, que no puede coincidir con una tarjeta real de otra persona',
+      'Cada movimiento, su estado y tu historial se guardan juntos: un reintento ya no puede cobrarte dos veces',
+      'El archivo CSV de movimientos ya no suma colones con dolares',
     ],
   },
   history: [
+    {
+      version: '2.4.1',
+      buildNumber: 14,
+      releaseDate: '2026-09-07',
+      changes: [
+        'Dividir una cuenta con amigos ya se puede cobrar: eliges a quien participa por su numero, ves cuanto le toca a cada quien y pagas tu parte desde la aplicacion',
+        'Al guardar o sacar dinero de una meta de ahorro, el movimiento y tu meta se actualizan juntos: ya no puede pasar que el dinero se mueva y la meta no lo muestre',
+        'El catalogo de premios queda en pausa mientras no haya como entregarlos; los puntos que acumulas siguen guardados en tu cuenta',
+      ],
+    },
     {
       version: '2.4.0',
       buildNumber: 13,
