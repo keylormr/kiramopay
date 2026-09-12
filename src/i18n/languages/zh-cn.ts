@@ -291,6 +291,8 @@ const zhCn: TranslationKeys = {
   card_atm_limit: 'ATM 限额',
   card_created_title: '卡片已创建',
   card_created_desc: '请保存这些信息：出于安全考虑，我们不会再显示完整卡号和 CVV。',
+  card_only_in_app: '仅限 KiramoPay',
+  card_decorative_note: '此卡仅用于在 KiramoPay 内识别你的账户。卡号不属于任何支付网络，无法在商户或其他应用中使用。',
   card_number_label: '卡号',
   card_expiry_label: '有效期',
   card_cvv_label: 'CVV',
