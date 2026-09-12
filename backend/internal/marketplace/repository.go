@@ -2,9 +2,12 @@ package marketplace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -165,14 +168,35 @@ func (r *Repository) UpdateRideStatus(ctx context.Context, rideID, status string
 // transition atomic: under a concurrent double-confirm exactly one call flips
 // the row; the loser gets 0 rows and an error.
 func (r *Repository) ConfirmRideRow(ctx context.Context, rideID string) error {
-	res, err := r.db.Exec(ctx,
+	return confirmarViaje(ctx, r.db, rideID)
+}
+
+// ConfirmRideRowEnTx confirma el viaje dentro de la transaccion del asiento del
+// cobro. Ver Service.ConfirmRide.
+func (r *Repository) ConfirmRideRowEnTx(ctx context.Context, tx pgx.Tx, rideID string) error {
+	return confirmarViaje(ctx, tx, rideID)
+}
+
+// errViajeNoConfirmable: el viaje ya no esta 'searching' (otra confirmacion
+// gano). Dentro del asiento revierte el cobro.
+var errViajeNoConfirmable = errors.New("ride is not in a confirmable state")
+
+type ejecutor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func confirmarViaje(ctx context.Context, q ejecutor, rideID string) error {
+	// Conditional flip (only from searching) that also re-anchors the trip
+	// clock at confirmation, so the searching dwell time never leaks into the
+	// trip.
+	res, err := q.Exec(ctx,
 		`UPDATE ride_requests SET status = 'confirmed', created_at = NOW()
 		 WHERE id = $1 AND status = 'searching'`, rideID)
 	if err != nil {
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		return fmt.Errorf("ride is not in a confirmable state")
+		return errViajeNoConfirmable
 	}
 	return nil
 }
@@ -229,8 +253,16 @@ func (r *Repository) CreateFoodOrder(ctx context.Context, order *FoodOrderRecord
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := insertarPedido(ctx, tx, order, items); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
-	_, err = tx.Exec(ctx,
+// insertarPedido escribe el pedido y sus lineas por la transaccion recibida.
+// Service.CreateFoodOrder la usa dentro del asiento del cobro.
+func insertarPedido(ctx context.Context, tx pgx.Tx, order *FoodOrderRecord, items []FoodOrderItemRecord) error {
+	_, err := tx.Exec(ctx,
 		`INSERT INTO food_orders (id, user_id, partner_code, restaurant_name,
 		 subtotal, delivery_fee, total, status, estimated_delivery)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -239,18 +271,15 @@ func (r *Repository) CreateFoodOrder(ctx context.Context, order *FoodOrderRecord
 	if err != nil {
 		return err
 	}
-
 	for _, item := range items {
-		_, err = tx.Exec(ctx,
+		if _, err := tx.Exec(ctx,
 			`INSERT INTO food_order_items (id, order_id, name, quantity, price)
 			 VALUES ($1, $2, $3, $4, $5)`,
-			item.ID, order.ID, item.Name, item.Quantity, item.Price)
-		if err != nil {
+			item.ID, order.ID, item.Name, item.Quantity, item.Price); err != nil {
 			return err
 		}
 	}
-
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *Repository) GetFoodOrder(ctx context.Context, orderID, userID string) (*FoodOrderRecord, []FoodOrderItemRecord, error) {
