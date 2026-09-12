@@ -84,6 +84,12 @@ func (h *Handler) Refund(w http.ResponseWriter, r *http.Request) {
 	h.action(w, r, h.service.Refund)
 }
 
+// Deliver handles POST /escrow/{id}/deliver: el vendedor marca que entrego, y
+// arranca el plazo del comprador para liberar o reclamar.
+func (h *Handler) Deliver(w http.ResponseWriter, r *http.Request) {
+	h.action(w, r, h.service.MarcarEntregado)
+}
+
 // Cancel handles POST /escrow/{id}/cancel.
 func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	h.action(w, r, h.service.Cancel)
@@ -179,6 +185,9 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrMonthlyLimitExceeded):
 		response.Error(w, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
 			"monthly spending limit exceeded")
+	case errors.Is(err, ErrPlazoVencido):
+		response.Error(w, http.StatusConflict, "ESCROW_DEADLINE_PASSED",
+			"the deadline for this step has passed")
 	case errors.Is(err, ErrVendedorSinCuenta):
 		response.Error(w, http.StatusUnprocessableEntity, "ESCROW_SELLER_NOT_FOUND",
 			"that number does not have a KiramoPay account")

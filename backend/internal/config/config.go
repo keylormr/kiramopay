@@ -19,6 +19,20 @@ type Config struct {
 	Gemini    GeminiConfig
 	Anthropic AnthropicConfig
 	Loyalty   LoyaltyConfig
+	Escrow    EscrowConfig
+}
+
+// EscrowConfig fija los plazos de un acuerdo fondeado. Ver
+// migrations/064_escrow_con_plazos.sql para la regla.
+type EscrowConfig struct {
+	// DiasParaEntregar: cuanto tiene el vendedor para marcar la entrega desde
+	// que el comprador fondea. Si no la marca, se le devuelve la plata al
+	// comprador.
+	DiasParaEntregar int // ESCROW_DIAS_PARA_ENTREGAR
+	// DiasParaRevisar: cuanto tiene el comprador para liberar o reclamar desde
+	// que el vendedor marca la entrega. Si no hace nada, se le paga al
+	// vendedor.
+	DiasParaRevisar int // ESCROW_DIAS_PARA_REVISAR
 }
 
 // LoyaltyConfig controls the points program (referrals for now).
@@ -228,6 +242,12 @@ func Load() *Config {
 			// Negative values are clamped to 0 (program off) rather than debiting
 			// the referrer.
 			ReferralBonusPoints: max(getEnvInt("REFERRAL_BONUS_POINTS", 500), 0),
+		},
+		// Minimo un dia: un plazo de cero dias venceria el acuerdo en el
+		// mismo barrido que lo ve fondeado.
+		Escrow: EscrowConfig{
+			DiasParaEntregar: max(getEnvInt("ESCROW_DIAS_PARA_ENTREGAR", 14), 1),
+			DiasParaRevisar:  max(getEnvInt("ESCROW_DIAS_PARA_REVISAR", 7), 1),
 		},
 	}
 }

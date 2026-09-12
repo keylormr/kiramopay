@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -48,6 +49,7 @@ import (
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
+	"github.com/kiramopay/backend/internal/salud"
 	"github.com/kiramopay/backend/internal/recurring"
 	"github.com/kiramopay/backend/internal/savings"
 	"github.com/kiramopay/backend/internal/sinpe"
@@ -252,15 +254,27 @@ func main() {
 	// topes bajos— pero un control que no puede dispararse y no lo dice se lee
 	// como un control que funciona y no encuentra nada.
 	{
+		// Desde la migracion 065 hay una tercera regla —el acumulado de 30
+		// dias— que SI es alcanzable con el tope mensual del nivel mas alto.
+		// El aviso solo se da si ninguna de las reglas de una moneda puede
+		// dispararse: antes gritaba siempre, y un aviso que no cambia deja de
+		// leerse.
 		maxKYC := kyc.LevelLimits[kyc.LevelComplete]
+		mensual := map[string]bool{}
+		for _, a := range uif.DiagnosticoAcumulado(uif.DefaultThresholds(), map[string]int64{
+			"CRC": maxKYC.MonthlyMinor,
+			"USD": maxKYC.MonthlyMinorUSD,
+		}) {
+			mensual[a.Moneda] = a.Alcanzable
+		}
 		for _, a := range uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
 			"CRC": maxKYC.DailyMinor,
 			"USD": maxKYC.DailyMinorUSD,
 		}) {
-			if !a.Alcanzable {
-				log.Printf("AVISO UIF: %s. Ningun movimiento puede alcanzar el umbral de reporte "+
-					"porque el tope diario de KYC lo corta antes: la cola de cumplimiento no "+
-					"puede llenarse. Revisar con el area de cumplimiento.", a)
+			if !a.Alcanzable && !mensual[a.Moneda] {
+				log.Printf("AVISO UIF: %s, y el acumulado de 30 dias tampoco llega con el tope "+
+					"mensual de KYC: la cola de cumplimiento no puede recibir un caso en %s. "+
+					"Revisar con el area de cumplimiento.", a, a.Moneda)
 			}
 		}
 	}
@@ -336,6 +350,9 @@ func main() {
 	// despues, Referrals quedaria nil y nadie cobraria sin que nada fallara.
 	loyaltyService := loyalty.NewService(loyaltyRepo, &loyalty.Options{
 		ReferralBonusPoints: cfg.Loyalty.ReferralBonusPoints,
+		// El cashback se paga desde la cuenta de promociones (migracion 066).
+		Ledger:      ledgerEngine,
+		AuditLogger: auditLogger,
 	})
 	// Aviso ruidoso: la entrada sin contrasena es una puerta abierta mientras
 	// este encendida. Que quede en el log de arranque es lo unico que separa
@@ -374,6 +391,10 @@ func main() {
 		Risk:        fraudService,
 		Logger:      logger,
 	})
+	// El cashback de puntos anota su movimiento en el historial, y el servicio de
+	// puntos se construye antes que este (la autenticacion lo necesita para los
+	// referidos): se conecta aca.
+	loyaltyService.UsarHistorial(txService)
 	// Notification service is created early so domains (e.g. SINPE) can notify
 	// users on real events. Web push is gated on VAPID config; history is always
 	// persisted.
@@ -391,12 +412,20 @@ func main() {
 	b2bService := b2b.NewService(b2bRepo, b2bCipher, auditLogger, logger)
 	escrowRepo := escrow.NewRepository(pool)
 	escrowService := escrow.NewService(escrowRepo, ledgerEngine, &escrow.Options{
-		Cuentas: userRepo, // resuelve al vendedor por telefono; ver escrow/contraparte.go
+		Cuentas:     userRepo, // resuelve al vendedor por telefono; ver escrow/contraparte.go
 		MFA:         mfaSvc,
 		UIF:         uifService,
 		Events:      b2bService, // escrow lifecycle → merchant webhooks
 		History:     txService,  // fund/release/refund visible in tx history
 		AuditLogger: auditLogger,
+		// Un acuerdo fondeado vence: el vendedor tiene un plazo para marcar
+		// la entrega y, desde ahi, el comprador otro para liberar o reclamar.
+		// Ver migrations/064_escrow_con_plazos.sql.
+		Plazos: &escrow.Plazos{
+			DiasParaEntregar: cfg.Escrow.DiasParaEntregar,
+			DiasParaRevisar:  cfg.Escrow.DiasParaRevisar,
+		},
+		Notifier: notifService,
 	})
 	// Payouts — ledger-backed outbound payments over pluggable rails. Only the
 	// deterministic mock rail is registered today; real rails (SINPE
@@ -435,14 +464,27 @@ func main() {
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
 	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
 	// se opera: es preferible a operar con un numero inventado.
+	//
+	// Y ese tipo de cambio tiene que estar CONFIRMADO: estuvo congelado en 515
+	// mientras el oficial bajaba a 450, y cada operacion en colones se cotizaba
+	// con un 14 % de desvio. Un tipo de cambio que la fuente no confirmo dentro
+	// de country.EdadMaximaTipoDeCambio llega como precio viejo, igual que un
+	// precio de cripto vencido, y la pantalla ya sabe mostrar ese caso.
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
 		func(ctx context.Context, from, to string) (float64, error) {
-			r, err := countryRepo.GetExchangeRate(ctx, from, to)
-			if err != nil {
-				return 0, err
+			tasa, err := countryRepo.TipoDeCambioParaCobrar(ctx, from, to)
+			if errors.Is(err, country.ErrTipoDeCambioViejo) {
+				return 0, fmt.Errorf("%w: %v", crypto.ErrPrecioViejo, err)
 			}
-			return r.Rate, nil
+			return tasa, err
 		})
+
+	// El tipo de cambio oficial, traido de Hacienda cada hora. Sin esto la
+	// tasa de arriba nunca se confirma y cripto en colones no opera.
+	tipoDeCambio := country.NewActualizador(countryRepo, country.NewFuenteHacienda(), time.Hour, logger)
+	tipoDeCambioCtx, tipoDeCambioCancel := context.WithCancel(context.Background())
+	defer tipoDeCambioCancel()
+	go tipoDeCambio.Run(tipoDeCambioCtx)
 
 	// Viajes y pedidos: el precio lo inventa el servicio (rand) y el socio es
 	// una lista fija, asi que cobrar debitaria la billetera real contra un monto
@@ -682,22 +724,25 @@ func main() {
 			httpStatus = http.StatusServiceUnavailable
 		}
 		w.WriteHeader(httpStatus)
-		// crypto_prices: plan de CoinGecko, huella de la clave y ultimo estado
-		// del proveedor. Es lo que permite ver desde afuera por que cripto no
-		// tiene precios sin abrir los logs de Render.
-		cripto, _ := json.Marshal(priceService.Diagnostics())
-		// version: la del repositorio de la que salio este binario, no un "1.0.0"
-		// fijo. Es lo que permite confirmar un despliegue sin inventar marcadores
-		// de comportamiento.
-		// dias_de_particiones: cuantos dias faltan para que un INSERT en
-		// transactions empiece a fallar por falta de particion. -1 = todavia no
-		// se pudo consultar. Se publica porque el fallo, cuando llega, detiene
-		// la aplicacion entera y tiene fecha conocida con meses de aviso.
-		// auditoria_descartada distinto de cero quiere decir que el rastro tiene
-		// huecos: eventos que no entraron al buffer y se perdieron. Se publica
-		// porque antes se iban con un log y nadie se enteraba.
-		fmt.Fprintf(w, `{"status":%q,"version":%q,"environment":%q,"services":{"database":%q,"redis":%q},"websocket_clients":%d,"last_drift_crc":%d,"dias_de_particiones":%d,"auditoria_descartada":%d,"crypto_prices":%s}`,
-			status, buildinfo.Version, cfg.Server.Environment, dbOk, redisOk, wsHub.ClientCount(), reconcileSvc.LastDriftCRC(), particionesSvc.DiasDeMargen(time.Now()), auditLogger.Descartados(), cripto)
+		// El cuerpo lo arma internal/salud, que es lo MISMO que valida la
+		// prueba de contrato: un campo nuevo no puede salir sin pasar por el
+		// esquema. Ver el paquete para por que.
+		//
+		// version: la del repositorio de la que salio este binario, no un
+		// "1.0.0" fijo. Es lo que permite confirmar un despliegue sin inventar
+		// marcadores de comportamiento.
+		_, _ = w.Write(salud.Cuerpo{
+			Status:              status,
+			Version:             buildinfo.Version,
+			Environment:         cfg.Server.Environment,
+			Services:            salud.Servicios{Database: dbOk, Redis: redisOk},
+			WebsocketClients:    wsHub.ClientCount(),
+			LastDriftCRC:        reconcileSvc.LastDriftCRC(),
+			DiasDeParticiones:   particionesSvc.DiasDeMargen(time.Now()),
+			AuditoriaDescartada: auditLogger.Descartados(),
+			CryptoPrices:        priceService.Diagnostics(),
+			TipoDeCambio:        tipoDeCambio.Diagnostico(),
+		}.JSON())
 	}
 	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
 
@@ -861,6 +906,7 @@ func main() {
 			r.Get("/escrow", escrowHandler.List)
 			r.Get("/escrow/{id}", escrowHandler.Get)
 			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/deliver", escrowHandler.Deliver)
 			r.Post("/escrow/{id}/release", escrowHandler.Release)
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)
@@ -1005,8 +1051,14 @@ func main() {
 			r.Get("/country/transfers/{id}", countryHandler.GetTransfer)
 
 			// Push
+			// La clave publica la da el servidor: una sola fuente, y sin
+			// claves VAPID la pantalla no ofrece activar avisos.
+			r.Get("/push/public-key", notifHandler.ClavePublica)
 			r.Post("/push/subscribe", notifHandler.Subscribe)
 			r.Delete("/push/unsubscribe", notifHandler.Unsubscribe)
+			// La misma baja por POST: el cliente HTTP de la app no manda cuerpo
+			// en un DELETE, y la baja necesita el endpoint.
+			r.Post("/push/unsubscribe", notifHandler.Unsubscribe)
 			r.Get("/notifications", notifHandler.ListNotifications)
 			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
 			r.Post("/notifications/read-all", notifHandler.MarkAllRead)
@@ -1056,6 +1108,12 @@ func main() {
 				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
 				// 13-19 eso es como no tenerlo.
 				r.Get("/admin/audit", auditHandler.Listar)
+
+				// El fondo de promociones del que sale el cashback de puntos
+				// (migracion 066). Fondearlo SUBE LA RESERVA PUBLICADA: tiene
+				// que corresponder a un deposito real.
+				r.Get("/admin/promociones", loyaltyHandler.Promociones)
+				r.Post("/admin/promociones/fondos", loyaltyHandler.FondearPromociones)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)
@@ -1135,6 +1193,7 @@ func main() {
 			r.Use(b2b.RequireScope(b2b.ScopeEscrowWrite))
 			r.Post("/escrow", escrowHandler.Create)
 			r.Post("/escrow/{id}/fund", escrowHandler.Fund)
+			r.Post("/escrow/{id}/deliver", escrowHandler.Deliver)
 			r.Post("/escrow/{id}/release", escrowHandler.Release)
 			r.Post("/escrow/{id}/refund", escrowHandler.Refund)
 			r.Post("/escrow/{id}/dispute", escrowHandler.Dispute)

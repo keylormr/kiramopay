@@ -8,6 +8,11 @@ import "fmt"
 type Thresholds struct {
 	Single map[string]int64 // per-currency single-transaction ceiling
 	Daily  map[string]int64 // per-currency same-day aggregate ceiling (structuring)
+	// Acumulado30 es el umbral del acumulado de salidas de los ultimos 30 dias.
+	// Es el MISMO numero legal que los otros dos: lo que cambia es la ventana.
+	// El tope diario se reinicia cada dia, asi que quien quiere mover mucho sin
+	// que se vea lo reparte en dias; esta regla es la que lo ve.
+	Acumulado30 map[string]int64
 }
 
 // DefaultThresholds: USD 10,000 and an approximate CRC equivalent.
@@ -21,7 +26,34 @@ func DefaultThresholds() Thresholds {
 			"USD": 1_000_000,
 			"CRC": 550_000_000,
 		},
+		Acumulado30: map[string]int64{
+			"USD": 1_000_000,
+			"CRC": 550_000_000,
+		},
 	}
+}
+
+// EvaluateAcumulado decide si el acumulado de 30 dias CRUZA el umbral con este
+// movimiento: antes estaba por debajo y ahora no. Solo en el cruce, igual que la
+// estructuracion diaria: si disparara con cada movimiento posterior, la cola
+// se llenaria de copias del mismo caso y el oficial dejaria de leerla.
+//
+// prior30Minor es el acumulado de 30 dias SIN este movimiento.
+func (t Thresholds) EvaluateAcumulado(currency string, amountMinor, prior30Minor int64) Result {
+	umbral, ok := t.Acumulado30[currency]
+	if !ok {
+		return Result{}
+	}
+	nuevo := prior30Minor + amountMinor
+	if prior30Minor < umbral && nuevo >= umbral {
+		return Result{
+			Reportable: true,
+			Type:       TypeAcumulado30,
+			Reason: fmt.Sprintf("salidas de los ultimos 30 dias: %d %s cruzaron el umbral %d "+
+				"(repartidas en varios dias, ninguna regla diaria las veia)", nuevo, currency, umbral),
+		}
+	}
+	return Result{}
 }
 
 // Result is the outcome of evaluating one transaction.

@@ -4,6 +4,7 @@ import { Icons } from '@/components/Icons';
 import { HelpButton } from '@/components/HelpSheet';
 import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
+import { formatMoney } from '@/utils/money';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
 const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
@@ -26,6 +27,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   // cara que una cuenta recien abierta.
   const [accountFailed, setAccountFailed] = useState(false);
   const [redeemError, setRedeemError] = useState('');
+  // Lo que llego a la cuenta con el ultimo canje. Antes un canje exitoso solo
+  // refrescaba la lista: la persona no sabia que le habian dado.
+  const [redeemOk, setRedeemOk] = useState('');
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [loadTrigger, setLoadTrigger] = useState(0);
 
@@ -70,9 +74,19 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     if (!api.loyalty) return;
     setRedeeming(rewardId);
     setRedeemError('');
+    setRedeemOk('');
     const res = await api.loyalty.redeemReward(rewardId);
     if (res.success) {
+      if (res.data?.cashbackMinor) {
+        setRedeemOk(
+          t('loyalty_cashback_done').replace('{monto}', formatMoney(res.data.cashbackMinor / 100, 'CRC', { decimals: 2 })),
+        );
+      }
       setLoadTrigger(n => n + 1); // Refresh points and rewards
+    } else if (res.error?.code === 'LOYALTY_SIN_FONDOS') {
+      // El fondo de promociones no alcanza: no es un fallo de la persona, y
+      // no se le descontaron puntos. Se dice asi.
+      setRedeemError(t('loyalty_sin_fondos'));
     } else {
       setRedeemError(res.error?.message || t('loyalty_redeem_failed'));
     }
@@ -230,6 +244,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div className="px-4 py-2 space-y-3">
                 {redeemError && (
                   <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{redeemError}</p>
+                )}
+                {redeemOk && (
+                  <p className="text-[var(--color-success)] text-sm font-semibold" aria-live="polite">{redeemOk}</p>
                 )}
                 {rewards.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-gray-400">

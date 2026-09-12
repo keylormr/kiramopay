@@ -955,11 +955,31 @@ paths:
     post:
       tags: [Loyalty]
       summary: Redeem a reward
+      description: >-
+        Only rewards with a way to be delivered can be redeemed — today, the
+        cashback ones (`cashback_minor`). The cashback is a real ledger posting
+        from SYSTEM:PROMOTIONS:CRC to the wallet, in the same transaction that
+        deducts the points; if the promotions fund cannot cover it, nothing
+        happens.
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reward_id]
+              properties:
+                reward_id: { type: string, format: uuid }
       responses:
-        '200':
-          description: Reward redeemed
+        '201':
+          description: Reward redeemed; `cashback_minor` is what reached the wallet.
+        '409':
+          description: >-
+            `LOYALTY_SIN_FONDOS` (the promotions fund cannot cover it),
+            `LOYALTY_SIN_ENTREGA` (the reward has no way to be delivered) or
+            `LOYALTY_SIN_EXISTENCIAS` (out of stock).
 
   /api/v1/loyalty/redemptions:
     get:
@@ -1736,11 +1756,44 @@ paths:
           description: FETCH_FAILED
 
   # ── Push Notifications (Phase 9) ──────────────────────────────────
+  /api/v1/push/public-key:
+    get:
+      tags: [Notifications]
+      summary: VAPID public key for Web Push
+      description: >-
+        The key the browser needs to subscribe. habilitado is false when the
+        server has no VAPID key pair configured; the app then does not offer
+        system alerts.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The public key and whether Web Push is enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [public_key, habilitado]
+                    properties:
+                      public_key: { type: string, description: 'Base64url, empty when not configured' }
+                      habilitado: { type: boolean }
+        '401':
+          description: Unauthorized
+
   /api/v1/push/subscribe:
     post:
       tags: [Notifications]
       summary: Register push subscription
-      description: Register a Web Push subscription endpoint for the authenticated user.
+      description: >-
+        Register a Web Push subscription for the authenticated user. Accepts the
+        browser shape (PushSubscription.toJSON(), keys nested under `keys`) and
+        the flat shape (`auth` and `p256dh` at the top level). The endpoint must
+        be a public https push service. Re-registering an endpoint binds it to
+        the caller.
       security:
         - bearerAuth: []
       requestBody:
@@ -1749,7 +1802,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [endpoint, keys]
+              required: [endpoint]
               properties:
                 endpoint:
                   type: string
@@ -1761,15 +1814,45 @@ paths:
                       type: string
                     auth:
                       type: string
+                p256dh:
+                  type: string
+                auth:
+                  type: string
       responses:
         '201':
           description: Subscription registered
         '400':
-          description: Invalid request body
+          description: >-
+            INVALID_BODY, MISSING_KEYS (endpoint, auth or p256dh missing) or
+            INVALID_ENDPOINT (not a public https push service)
         '401':
           description: Unauthorized
 
   /api/v1/push/unsubscribe:
+    post:
+      tags: [Notifications]
+      summary: Remove push subscription
+      description: Same as the DELETE form, for clients that cannot send a body with DELETE.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+      responses:
+        '204':
+          description: Subscription removed
+        '400':
+          description: MISSING_ENDPOINT
+        '401':
+          description: Unauthorized
     delete:
       tags: [Notifications]
       summary: Remove push subscription
@@ -1789,6 +1872,8 @@ paths:
       responses:
         '204':
           description: Subscription removed
+        '400':
+          description: MISSING_ENDPOINT
         '401':
           description: Unauthorized
 
@@ -2007,10 +2092,39 @@ paths:
         '422':
           description: Insufficient balance
 
+  /api/v1/escrow/{id}/deliver:
+    post:
+      tags: [Escrow]
+      summary: Mark the goods or service as delivered (seller only)
+      description: >-
+        Starts the buyer's review period (`review_by`). Until the seller marks
+        delivery, a funded agreement runs against `deliver_by`, and if that
+        passes the money goes back to the buyer. After it, if `review_by`
+        passes without the buyer releasing or disputing, the money goes to
+        the seller. Whoever had to act and did not, loses. Only once per
+        agreement, and only while it is funded.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Delivery recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAgreement'
+        '409':
+          description: Not funded, or delivery already marked.
+
   /api/v1/escrow/{id}/release:
     post:
       tags: [Escrow]
       summary: Release held funds to the seller (buyer only)
+      description: >-
+        Works from `funded` and, as a concession, from `disputed`: the buyer
+        can settle a dispute in the seller's favour without waiting for the
+        arbiter.
       security:
         - bearerAuth: []
       parameters:
@@ -2027,6 +2141,10 @@ paths:
     post:
       tags: [Escrow]
       summary: Return held funds to the buyer (seller only)
+      description: >-
+        Works from `funded` and, as a concession, from `disputed`: the seller
+        can settle a dispute in the buyer's favour without waiting for the
+        arbiter.
       security:
         - bearerAuth: []
       parameters:
@@ -2078,6 +2196,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EscrowAgreement'
+
+  /api/v1/admin/promociones:
+    get:
+      tags: [Admin]
+      summary: Balance of the promotions fund that pays point cashback
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The fund balance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saldo_minor: { type: integer, format: int64 }
+                  moneda: { type: string, example: CRC }
+
+  /api/v1/admin/promociones/fondos:
+    post:
+      tags: [Admin]
+      summary: Record a company deposit into the promotions fund
+      description: >-
+        Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This
+        RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match
+        a real deposit: a reference (transfer or receipt number) is mandatory
+        and the funding is audited with high risk. The idempotency key makes a
+        double tap fund once.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor, referencia, idempotency_key]
+              properties:
+                amount_minor: { type: integer, format: int64, minimum: 1 }
+                referencia: { type: string, minLength: 3 }
+                idempotency_key: { type: string }
+      responses:
+        '200':
+          description: The fund balance after the deposit.
+        '400':
+          description: Missing amount, reference or idempotency key.
 
   /api/v1/admin/escrow:
     get:
@@ -2696,6 +2860,29 @@ components:
         dispute_reason: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        delivered_at:
+          type: string
+          format: date-time
+          description: When the seller marked the delivery.
+        deliver_by:
+          type: string
+          format: date-time
+          description: >-
+            Deadline for the seller to mark delivery. If it passes, the money
+            goes back to the buyer.
+        review_by:
+          type: string
+          format: date-time
+          description: >-
+            Deadline for the buyer to release or dispute once delivery is
+            marked. If it passes, the money goes to the seller.
+        closed_by_expiry:
+          type: string
+          enum: [entrega, revision]
+          description: >-
+            Set when a deadline closed the agreement: `entrega` (the seller
+            never marked delivery) or `revision` (the buyer neither released
+            nor disputed).
 
     PayoutDestination:
       type: object
@@ -2807,7 +2994,7 @@ components:
       # cualquier cuerpo que no contradijera un tipo, asi que un campo que el
       # handler dejara de emitir (o uno nuevo sin documentar) pasaba en verde.
       additionalProperties: false
-      required: [status, version, environment, services, websocket_clients, last_drift_crc, dias_de_particiones, crypto_prices]
+      required: [status, version, environment, services, websocket_clients, last_drift_crc, dias_de_particiones, auditoria_descartada, crypto_prices, tipo_de_cambio]
       properties:
         status:
           type: string
@@ -2843,6 +3030,29 @@ components:
             money movement fails on insert — this is the runway before that.
             A value of -1 means the runway could not be read yet.
           example: 420
+        auditoria_descartada:
+          type: integer
+          description: >-
+            Audit events dropped because the buffer was full since the process
+            started. Non-zero means the audit trail has gaps.
+          example: 0
+        tipo_de_cambio:
+          type: object
+          additionalProperties: false
+          required: [fuente, usd_crc, compra]
+          description: >-
+            Official USD/CRC reference rate (BCCR, as republished by Hacienda),
+            refreshed hourly. `usd_crc` is the rate the app charges with, in
+            both directions. If the source cannot confirm it for 96 hours,
+            crypto quoted in colones stops trading rather than using a stale
+            number; `ultimo_error` says why.
+          properties:
+            fuente: { type: string, example: hacienda }
+            usd_crc: { type: number, example: 450.06 }
+            compra: { type: number, example: 444.22 }
+            fecha_fuente: { type: string, example: '2026-09-11' }
+            ultima_confirmacion: { type: string, format: date-time }
+            ultimo_error: { type: string }
         crypto_prices:
           type: object
           description: >-
