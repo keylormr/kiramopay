@@ -34,8 +34,8 @@ import (
 func blockedKey(userID string) string { return "auth:blocked:" + userID }
 
 // BlockUserAndRevokeSessions marca la cuenta como bloqueada y revoca todas sus
-// familias de refresh, sesiones y API keys de comercio en una sola tx: o queda
-// todo o no queda nada. Las API keys tambien: el canal B2B autentica por key,
+// familias de refresh, sesiones, API keys de comercio y suscripciones de avisos
+// en una sola tx: o queda todo o no queda nada. Las API keys tambien: el canal B2B autentica por key,
 // no por JWT, y sin revocarlas el bloqueado seguiria moviendo dinero por ahi.
 // Idempotente: repetir sobre una cuenta ya bloqueada refresca el rastro y no
 // falla, que es lo que hace inofensivo el doble clic del administrador.
@@ -128,6 +128,17 @@ func (r *Repository) blockAndRevoke(ctx context.Context, userID, reason, updateS
 		userID,
 	); err != nil {
 		return false, 0, fmt.Errorf("revoke api keys: %w", err)
+	}
+	// Los avisos del sistema tampoco siguen llegando. El caso tipico del
+	// bloqueo remoto es el telefono robado, y los avisos traen montos y
+	// nombres. Una suscripcion es una credencial de entrega (endpoint y
+	// claves), no un registro: se destruye, como el hash de una contrasena.
+	// Al desbloquear no vuelve: la persona reactiva los avisos desde Perfil.
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM push_subscriptions WHERE user_id = $1::uuid`,
+		userID,
+	); err != nil {
+		return false, 0, fmt.Errorf("drop push subscriptions: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, 0, fmt.Errorf("commit: %w", err)
