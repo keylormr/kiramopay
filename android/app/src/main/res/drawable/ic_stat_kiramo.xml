@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono de avisos para la barra de estado: la K de la marca (MarcaKiramo.tsx)
+     en una sola tinta. Android lo tine; el color va en kiramo_aviso. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="340"
+    android:viewportHeight="340">
+    <group
+        android:translateX="-91"
+        android:translateY="-86">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M178.5,256L322.3,112.3L371.7,161.7L277.5,256L371.7,350.3L322.3,399.7Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M220,214.5L236,198.5L236,313.5L220,297.5Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M150,137h70v238h-70Z" />
+    </group>
+</vector>

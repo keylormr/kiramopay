@@ -1,2 +1,4 @@
 /build/*
 !/build/.npmkeep
+# Lo escribe la CI desde el secreto GOOGLE_SERVICES_JSON_BASE64; nunca va al repo.
+google-services.json

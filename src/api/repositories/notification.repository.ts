@@ -24,4 +24,12 @@ export interface INotificationRepository {
   subscribePush(sub: SuscripcionPush): Promise<ApiResponse<void>>;
   /** Olvida la suscripcion de este dispositivo. */
   unsubscribePush(endpoint: string): Promise<ApiResponse<void>>;
+
+  // ── Avisos de la app instalada (FCM) ──
+  /** Si el servidor puede entregar avisos a la app instalada. */
+  pushNativo(): Promise<ApiResponse<{ habilitado: boolean }>>;
+  /** Guarda el token de FCM de este telefono para la cuenta en sesion. */
+  registrarDispositivo(d: { token: string; plataforma: 'android' }): Promise<ApiResponse<void>>;
+  /** Da de baja este telefono. */
+  olvidarDispositivo(token: string): Promise<ApiResponse<void>>;
 }

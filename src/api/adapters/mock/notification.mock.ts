@@ -65,4 +65,16 @@ export class MockNotificationRepository implements INotificationRepository {
   async unsubscribePush(): Promise<ApiResponse<void>> {
     return apiSuccess(undefined as unknown as void);
   }
+
+  async pushNativo(): Promise<ApiResponse<{ habilitado: boolean }>> {
+    return apiSuccess({ habilitado: false });
+  }
+
+  async registrarDispositivo(): Promise<ApiResponse<void>> {
+    return apiError('NATIVE_PUSH_DISABLED', 'Native push needs the server');
+  }
+
+  async olvidarDispositivo(): Promise<ApiResponse<void>> {
+    return apiSuccess(undefined as unknown as void);
+  }
 }

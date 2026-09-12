@@ -21,6 +21,23 @@ jobs:
 
       - run: npm ci
 
+      # Avisos de la app instalada (FCM). Sin google-services.json,
+      # PushNotifications.register() cierra la app en Android; por eso el mismo
+      # secreto decide las dos cosas: si el archivo entra al build y si la app
+      # ofrece activar los avisos (VITE_PUSH_NATIVO). Sin el secreto el APK sale
+      # igual, sin avisos nativos, y Perfil lo dice.
+      - name: Firebase (opcional)
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_B64" ]; then
+            echo "$GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+            echo "VITE_PUSH_NATIVO=1" >> "$GITHUB_ENV"
+            echo "Firebase configurado: el APK trae avisos nativos."
+          else
+            echo "::notice::Sin GOOGLE_SERVICES_JSON_BASE64: el APK sale sin avisos nativos."
+          fi
+
       - name: Build web bundle
         env:
           # El respaldo apuntaba a kiramopay.com — el dominio del FRONTEND. La

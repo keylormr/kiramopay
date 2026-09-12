@@ -40,6 +40,25 @@
 
         </activity>
 
+        <!-- Avisos de FCM: el icono de la barra de estado tiene que ser
+             monocromo (Android pinta solo la silueta; el icono de colores del
+             launcher saldria como un cuadrado blanco), el color de acento, y
+             el canal que crea la app al activar los avisos. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_kiramo" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/kiramo_aviso" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="avisos" />
+        <!-- Sin token de FCM hasta que la persona active los avisos: el
+             plugin lo enciende en register() y lo apaga en unregister(). -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -61,4 +80,7 @@
          excluir dispositivos sin camara en Play. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Android 13 en adelante pide permiso para mostrar avisos; la app lo
+         solicita cuando la persona los activa en Perfil. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
