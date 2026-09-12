@@ -1,142 +1,100 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import { usePushNotifications } from '../usePushNotifications';
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { useAuthStore } from '@/stores/auth.store';
+import type { User } from '@/types';
+
+// El gancho viejo no lo usaba nadie, y su prueba afirmaba cosas del entorno de
+// pruebas en lugar del gancho. Este es el estado del interruptor de Perfil: la
+// logica de la suscripcion se prueba en utils/__tests__/avisosPush.test.ts.
+
+const avisos = vi.hoisted(() => ({
+  soportado: true,
+  leerEstadoAvisos: vi.fn(),
+  activarAvisos: vi.fn(),
+  desactivarAvisos: vi.fn(),
+}));
+
+vi.mock('@/utils/avisosPush', () => ({
+  avisosSoportados: () => avisos.soportado,
+  leerEstadoAvisos: avisos.leerEstadoAvisos,
+  activarAvisos: avisos.activarAvisos,
+  desactivarAvisos: avisos.desactivarAvisos,
+}));
+
+const { usePushNotifications } = await import('../usePushNotifications');
 
 describe('usePushNotifications', () => {
-  const originalNotification = globalThis.Notification;
-
   beforeEach(() => {
-    // Mock Notification API
-    const MockNotification = vi.fn() as unknown as typeof Notification;
-    Object.defineProperty(MockNotification, 'permission', {
-      get: () => 'default',
-      configurable: true,
-    });
-    MockNotification.requestPermission = vi.fn().mockResolvedValue('granted');
-    vi.stubGlobal('Notification', MockNotification);
+    avisos.soportado = true;
+    vi.clearAllMocks();
+    avisos.leerEstadoAvisos.mockResolvedValue({ estado: 'inactivo', clave: 'CLAVE' });
+    useAuthStore.setState({ user: { id: 'u1' } as User });
   });
 
   afterEach(() => {
-    vi.stubGlobal('Notification', originalNotification);
-    vi.restoreAllMocks();
+    useAuthStore.setState({ user: null });
   });
 
-  it('detects support when PushManager exists', () => {
-    // PushManager may or may not exist in jsdom
-    vi.stubGlobal('PushManager', class {});
-
+  it('sin Push API no consulta nada y queda en no_soportado', () => {
+    avisos.soportado = false;
     const { result } = renderHook(() => usePushNotifications());
-    expect(result.current.isSupported).toBe(true);
-
-    // Clean up
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
+    expect(result.current.estado).toBe('no_soportado');
+    expect(avisos.leerEstadoAvisos).not.toHaveBeenCalled();
   });
 
-  it('detects no support when PushManager is missing', () => {
-    // Ensure PushManager is not defined
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
-
-    // Need to re-import to get fresh evaluation
-    // Instead, just check the hook detects missing PushManager
-    const hasPushManager = 'PushManager' in window;
-    expect(hasPushManager).toBe(false);
-  });
-
-  it('requests notification permission', async () => {
-    vi.stubGlobal('PushManager', class {});
-
+  it('lee el estado de la cuenta en sesion', async () => {
     const { result } = renderHook(() => usePushNotifications());
+    expect(result.current.estado).toBe('cargando');
+    await waitFor(() => expect(result.current.estado).toBe('inactivo'));
+    expect(avisos.leerEstadoAvisos).toHaveBeenCalledWith('u1');
+  });
 
-    let granted: boolean | undefined;
+  it('activa con la clave ya leida, sin volver a esperar al servidor', async () => {
+    avisos.activarAvisos.mockResolvedValue('activo');
+    const { result } = renderHook(() => usePushNotifications());
+    await waitFor(() => expect(result.current.estado).toBe('inactivo'));
+
     await act(async () => {
-      granted = await result.current.requestPermission();
+      await result.current.alternar();
     });
-
-    expect(granted).toBe(true);
-    expect(Notification.requestPermission).toHaveBeenCalled();
-
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
+    expect(avisos.activarAvisos).toHaveBeenCalledWith('CLAVE', 'u1');
+    expect(result.current.estado).toBe('activo');
+    expect(result.current.fallo).toBe(false);
   });
 
-  it('returns false for requestPermission when not supported', async () => {
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
-
-    // Remove Notification to simulate no support
-    // @ts-expect-error - removing Notification
-    delete globalThis.Notification;
-
+  it('desactiva cuando esta activo', async () => {
+    avisos.leerEstadoAvisos.mockResolvedValue({ estado: 'activo', clave: 'CLAVE' });
+    avisos.desactivarAvisos.mockResolvedValue('inactivo');
     const { result } = renderHook(() => usePushNotifications());
+    await waitFor(() => expect(result.current.estado).toBe('activo'));
 
-    let granted: boolean | undefined;
     await act(async () => {
-      granted = await result.current.requestPermission();
+      await result.current.alternar();
     });
-
-    expect(granted).toBe(false);
-    expect(result.current.isSupported).toBe(false);
-
-    // Restore
-    vi.stubGlobal('Notification', originalNotification);
+    expect(avisos.desactivarAvisos).toHaveBeenCalledTimes(1);
+    expect(result.current.estado).toBe('inactivo');
   });
 
-  it('subscribe returns null when VAPID key is not set', async () => {
-    vi.stubGlobal('PushManager', class {});
-
-    const mockSubscription = { endpoint: 'https://push.example.com' };
-    const mockPushManager = {
-      getSubscription: vi.fn().mockResolvedValue(null),
-      subscribe: vi.fn().mockResolvedValue(mockSubscription),
-    };
-    const mockRegistration = { pushManager: mockPushManager };
-
-    Object.defineProperty(navigator, 'serviceWorker', {
-      value: { ready: Promise.resolve(mockRegistration) },
-      configurable: true,
-      writable: true,
-    });
-
-    // Ensure VAPID key is not set
-    const original = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-    import.meta.env.VITE_VAPID_PUBLIC_KEY = '';
-
+  it('un fallo se muestra y no cambia el estado', async () => {
+    avisos.activarAvisos.mockResolvedValue('fallo');
     const { result } = renderHook(() => usePushNotifications());
+    await waitFor(() => expect(result.current.estado).toBe('inactivo'));
 
-    let sub: PushSubscription | null | undefined;
     await act(async () => {
-      sub = await result.current.subscribe();
+      await result.current.alternar();
     });
-
-    expect(sub).toBeNull();
-
-    import.meta.env.VITE_VAPID_PUBLIC_KEY = original;
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
+    expect(result.current.fallo).toBe(true);
+    expect(result.current.estado).toBe('inactivo');
   });
 
-  it('sends local notification when permission is granted', () => {
-    vi.stubGlobal('PushManager', class {});
-
-    Object.defineProperty(Notification, 'permission', {
-      get: () => 'granted',
-      configurable: true,
-    });
-
+  it('con el permiso bloqueado el interruptor no hace nada', async () => {
+    avisos.leerEstadoAvisos.mockResolvedValue({ estado: 'bloqueado', clave: 'CLAVE' });
     const { result } = renderHook(() => usePushNotifications());
+    await waitFor(() => expect(result.current.estado).toBe('bloqueado'));
 
-    act(() => {
-      result.current.sendLocalNotification('Test', { body: 'Hello' });
+    await act(async () => {
+      await result.current.alternar();
     });
-
-    expect(Notification).toHaveBeenCalledWith('Test', expect.objectContaining({
-      body: 'Hello',
-      icon: '/icons/icon-192.png',
-    }));
-
-    // @ts-expect-error - cleaning up global
-    delete globalThis.PushManager;
+    expect(avisos.activarAvisos).not.toHaveBeenCalled();
+    expect(avisos.desactivarAvisos).not.toHaveBeenCalled();
   });
 });

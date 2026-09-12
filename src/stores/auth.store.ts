@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
 import { getApiLayer } from '@/api';
+import { soltarAvisosAlSalir } from '@/utils/avisosPush';
 import {
   registerTokenProvider,
   registerRefreshHandler,
@@ -163,6 +164,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Antes que el cierre en el servidor: la baja de los avisos de este
+        // dispositivo sale con el token todavia vivo.
+        soltarAvisosAlSalir();
         // Best-effort backend revocation; never block UX on it.
         const api = getApiLayer();
         api.auth.logout?.().catch(() => {});
@@ -210,7 +214,13 @@ export const useAuthStore = create<AuthState>()(
         // acceso rapido y la credencial de la huella, y habia que teclear la
         // contrasena completa y volver a configurarla. Una sesion que vence no
         // es una cuenta revocada: la credencial guardada sigue sirviendo.
-        if (reason === 'blocked') olvidarUltimoAcceso();
+        if (reason === 'blocked') {
+          olvidarUltimoAcceso();
+          // El servidor ya borro las suscripciones al bloquear; esto corta la
+          // del navegador. Una sesion que solo vencio conserva sus avisos: es
+          // justamente cuando la app esta cerrada que sirven.
+          soltarAvisosAlSalir(false);
+        }
         set({
           isAuthenticated: false,
           sessionHint: false,

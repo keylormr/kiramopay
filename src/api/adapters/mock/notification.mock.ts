@@ -52,4 +52,17 @@ export class MockNotificationRepository implements INotificationRepository {
     saveNotifications(notifications);
     return apiSuccess(undefined as unknown as void);
   }
+
+  // Sin servidor no hay a quien entregar un aviso: la opcion no se ofrece.
+  async pushPublicKey(): Promise<ApiResponse<{ publicKey: string; habilitado: boolean }>> {
+    return apiSuccess({ publicKey: '', habilitado: false });
+  }
+
+  async subscribePush(): Promise<ApiResponse<void>> {
+    return apiError('PUSH_UNAVAILABLE', 'Push notifications need the server');
+  }
+
+  async unsubscribePush(): Promise<ApiResponse<void>> {
+    return apiSuccess(undefined as unknown as void);
+  }
 }

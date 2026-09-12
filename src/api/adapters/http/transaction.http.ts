@@ -90,6 +90,7 @@ const INCOMING_TYPES = new Set([
   'savings_withdraw', // SYSTEM:SAVINGS -> wallet
   'escrow_receive',
   'escrow_refund',
+  'loyalty_cashback', // SYSTEM:PROMOTIONS -> wallet (canje de puntos)
 ]);
 
 function isIncoming(backendType: string): boolean {
@@ -108,6 +109,7 @@ function mapCategory(backendType: string): string {
     recharge: 'services',
     qr_payment: 'shopping',
     deposit: 'income',
+    loyalty_cashback: 'income',
     withdrawal: 'cash',
   };
   return map[backendType] || 'other';

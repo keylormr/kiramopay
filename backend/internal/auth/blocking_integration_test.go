@@ -506,3 +506,51 @@ func TestBlock_RevocaAPIKeysDeComercio(t *testing.T) {
 		t.Fatalf("api key tras desbloquear: status=%q, debia seguir revoked", status)
 	}
 }
+
+// El bloqueo remoto es, sobre todo, el del telefono robado: los avisos traen
+// montos y nombres y no pueden seguir llegando a ese dispositivo. La
+// suscripcion se destruye en la misma tx y desbloquear no la devuelve.
+func TestBlock_BorraLasSuscripcionesDeAvisos(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	ctx := context.Background()
+	resp := registerTestUser(t, env.svc)
+	otro, err := env.svc.Register(ctx, &auth.RegisterRequest{
+		Cedula: "105550222", Phone: "+50687770001",
+		FirstName: "Otra", LastName: "Cuenta", Password: "Kiramopay2024!",
+	}, auth.LoginContext{})
+	if err != nil {
+		t.Fatalf("registrar la otra cuenta: %v", err)
+	}
+
+	for _, fila := range []struct{ user, endpoint string }{
+		{resp.User.ID, "https://push.example.test/bloqueado"},
+		{otro.User.ID, "https://push.example.test/otro"},
+	} {
+		if _, err := env.pool.Exec(ctx,
+			`INSERT INTO push_subscriptions (user_id, endpoint, auth_key, p256dh_key)
+			 VALUES ($1::uuid, $2, 'a', 'p')`,
+			fila.user, fila.endpoint); err != nil {
+			t.Fatalf("sembrar suscripcion: %v", err)
+		}
+	}
+	bloquear(t, env, resp.User.ID, "")
+
+	contar := func(userID string) int {
+		var n int
+		if err := env.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM push_subscriptions WHERE user_id = $1::uuid`, userID).Scan(&n); err != nil {
+			t.Fatalf("contar suscripciones: %v", err)
+		}
+		return n
+	}
+	if n := contar(resp.User.ID); n != 0 {
+		t.Fatalf("suscripciones del bloqueado tras el bloqueo: %d, esperaba 0", n)
+	}
+	if n := contar(otro.User.ID); n != 1 {
+		t.Fatalf("el bloqueo toco las suscripciones de otra cuenta: quedan %d, esperaba 1", n)
+	}
+	desbloquear(t, env, resp.User.ID)
+	if n := contar(resp.User.ID); n != 0 {
+		t.Fatalf("desbloquear devolvio %d suscripciones, esperaba 0", n)
+	}
+}

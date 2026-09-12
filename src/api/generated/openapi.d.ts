@@ -1968,7 +1968,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Redeem a reward */
+        /**
+         * Redeem a reward
+         * @description Only rewards with a way to be delivered can be redeemed — today, the cashback ones (`cashback_minor`). The cashback is a real ledger posting from SYSTEM:PROMOTIONS:CRC to the wallet, in the same transaction that deducts the points; if the promotions fund cannot cover it, nothing happens.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1976,10 +1979,24 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        reward_id: string;
+                    };
+                };
+            };
             responses: {
-                /** @description Reward redeemed */
-                200: {
+                /** @description Reward redeemed; `cashback_minor` is what reached the wallet. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description `LOYALTY_SIN_FONDOS` (the promotions fund cannot cover it), `LOYALTY_SIN_ENTREGA` (the reward has no way to be delivered) or `LOYALTY_SIN_EXISTENCIAS` (out of stock). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3895,6 +3912,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/push/public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * VAPID public key for Web Push
+         * @description The key the browser needs to subscribe. habilitado is false when the server has no VAPID key pair configured; the app then does not offer system alerts.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The public key and whether Web Push is enabled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                /** @description Base64url, empty when not configured */
+                                public_key: string;
+                                habilitado: boolean;
+                            };
+                        };
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/push/subscribe": {
         parameters: {
             query?: never;
@@ -3906,7 +3976,7 @@ export interface paths {
         put?: never;
         /**
          * Register push subscription
-         * @description Register a Web Push subscription endpoint for the authenticated user.
+         * @description Register a Web Push subscription for the authenticated user. Accepts the browser shape (PushSubscription.toJSON(), keys nested under `keys`) and the flat shape (`auth` and `p256dh` at the top level). The endpoint must be a public https push service. Re-registering an endpoint binds it to the caller.
          */
         post: {
             parameters: {
@@ -3920,10 +3990,12 @@ export interface paths {
                     "application/json": {
                         /** Format: uri */
                         endpoint: string;
-                        keys: {
+                        keys?: {
                             p256dh?: string;
                             auth?: string;
                         };
+                        p256dh?: string;
+                        auth?: string;
                     };
                 };
             };
@@ -3935,7 +4007,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Invalid request body */
+                /** @description INVALID_BODY, MISSING_KEYS (endpoint, auth or p256dh missing) or INVALID_ENDPOINT (not a public https push service) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3966,7 +4038,49 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Remove push subscription
+         * @description Same as the DELETE form, for clients that cannot send a body with DELETE.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        endpoint: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Subscription removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MISSING_ENDPOINT */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         /** Remove push subscription */
         delete: {
             parameters: {
@@ -3986,6 +4100,13 @@ export interface paths {
             responses: {
                 /** @description Subscription removed */
                 204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MISSING_ENDPOINT */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4700,6 +4821,100 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["EscrowAgreement"];
                     };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Balance of the promotions fund that pays point cashback */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The fund balance. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: int64 */
+                            saldo_minor?: number;
+                            /** @example CRC */
+                            moneda?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promociones/fondos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a company deposit into the promotions fund
+         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        amount_minor: number;
+                        referencia: string;
+                        idempotency_key: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The fund balance after the deposit. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing amount, reference or idempotency key. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5809,6 +6024,25 @@ export interface components {
              * @example 420
              */
             dias_de_particiones: number;
+            /**
+             * @description Audit events dropped because the buffer was full since the process started. Non-zero means the audit trail has gaps.
+             * @example 0
+             */
+            auditoria_descartada: number;
+            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            tipo_de_cambio: {
+                /** @example hacienda */
+                fuente: string;
+                /** @example 450.06 */
+                usd_crc: number;
+                /** @example 444.22 */
+                compra: number;
+                /** @example 2026-09-11 */
+                fecha_fuente?: string;
+                /** Format: date-time */
+                ultima_confirmacion?: string;
+                ultimo_error?: string;
+            };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
                 /** @enum {string} */

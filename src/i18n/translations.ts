@@ -234,6 +234,13 @@ export type TranslationKeys = {
   twofa_disable_btn: string;
   twofa_invalid_code: string;
   notifications_setting: string;
+  // Avisos del sistema en este dispositivo (web push).
+  push_on: string;
+  push_off: string;
+  push_blocked: string;
+  push_unsupported: string;
+  push_unavailable: string;
+  push_failed: string;
   dark_mode: string;
   language: string;
   support: string;
@@ -376,6 +383,9 @@ export type TranslationKeys = {
   card_atm_limit: string;
   card_created_title: string;
   card_created_desc: string;
+  // La tarjeta no pertenece a ninguna red de pago: se rotula y se avisa.
+  card_only_in_app: string;
+  card_decorative_note: string;
   card_number_label: string;
   card_expiry_label: string;
   card_cvv_label: string;
@@ -777,6 +787,24 @@ export type TranslationKeys = {
   analytics_partial: string;
   analytics_offline: string;
   other_currency_note: string;
+  // Cashback de puntos y fondo de promociones (migracion 066).
+  loyalty_cashback_done: string;
+  loyalty_sin_fondos: string;
+  tx_title_loyalty_cashback: string;
+  admin_promo_menu: string;
+  admin_promo_menu_desc: string;
+  admin_promo_title: string;
+  admin_promo_balance: string;
+  admin_promo_explain: string;
+  admin_promo_fund_title: string;
+  admin_promo_amount: string;
+  admin_promo_reference: string;
+  admin_promo_reference_hint: string;
+  admin_promo_fund_btn: string;
+  admin_promo_confirm: string;
+  admin_promo_warning: string;
+  admin_promo_done: string;
+  admin_promo_failed: string;
   // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
   // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
   tx_totals_scope: string;

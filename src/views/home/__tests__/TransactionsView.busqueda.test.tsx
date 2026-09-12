@@ -152,3 +152,39 @@ describe('TransactionsView — los totales dicen que cubren', () => {
     expect(screen.getByText('Supermercado')).toBeInTheDocument();
   });
 });
+
+// Desde que la lista la trae el servidor, un movimiento que entraba con la
+// pantalla abierta no aparecia hasta cerrarla. El estado local si se entera (lo
+// refresca la sincronizacion por WebSocket), y la pantalla ahora lo escucha.
+describe('TransactionsView — movimientos que llegan con la pantalla abierta', () => {
+  it('aparecen arriba sin perder lo que ya estaba cargado', async () => {
+    const viejo = tx('viejo', -1000, 'Supermercado');
+    appState.transactions = [viejo];
+    mockApi.transactions.listTransactions.mockResolvedValueOnce({
+      success: true,
+      data: { transactions: [viejo], total: 1 },
+    });
+
+    const vista = abrir();
+    await waitFor(() => expect(screen.getByText('Supermercado')).toBeInTheDocument());
+
+    // Llega un SINPE: la sincronizacion actualiza el estado local...
+    const nuevo = tx('nuevo', 5000, 'SINPE de Ana');
+    appState.transactions = [nuevo, viejo];
+    mockApi.transactions.listTransactions.mockResolvedValueOnce({
+      success: true,
+      data: { transactions: [nuevo, viejo], total: 2 },
+    });
+    vista.rerender(
+      <LanguageProvider>
+        <TransactionsView onClose={vi.fn()} />
+      </LanguageProvider>,
+    );
+
+    // ...y la pantalla lo muestra, arriba, y el viejo sigue ahi.
+    expect(await screen.findByText('SINPE de Ana')).toBeInTheDocument();
+    expect(screen.getByText('Supermercado')).toBeInTheDocument();
+    const titulos = screen.getAllByText(/SINPE de Ana|Supermercado/).map((n) => n.textContent);
+    expect(titulos[0]).toBe('SINPE de Ana');
+  });
+});

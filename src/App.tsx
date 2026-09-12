@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
+import { sincronizarAvisos } from './utils/avisosPush';
 import { useActualizacion } from './hooks/useActualizacion';
 import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
@@ -57,6 +58,7 @@ const PayoutView = lazyConRecarga(() => import('./views/payout/PayoutView').then
 const AdminMerchantsView = lazyConRecarga(() => import('./views/merchant/AdminMerchantsView').then(m => ({ default: m.AdminMerchantsView })));
 const AdminUsersView = lazyConRecarga(() => import('./views/admin/AdminUsersView').then(m => ({ default: m.AdminUsersView })));
 const AdminDisputasView = lazyConRecarga(() => import('./views/admin/AdminDisputasView').then(m => ({ default: m.AdminDisputasView })));
+const AdminPromocionesView = lazyConRecarga(() => import('./views/admin/AdminPromocionesView').then(m => ({ default: m.AdminPromocionesView })));
 const PlansView = lazyConRecarga(() => import('./views/plans/PlansView').then(m => ({ default: m.PlansView })));
 const SessionsView = lazyConRecarga(() => import('./views/sessions/SessionsView').then(m => ({ default: m.SessionsView })));
 const AssistantView = lazyConRecarga(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
@@ -257,7 +259,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'adminDisputas' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'adminUsers' | 'adminDisputas' | 'adminPromociones' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
 
 // Keyed by TabId on purpose: adding a tab without deciding whether deep links
 // may reach it becomes a compile error instead of a silently dead route.
@@ -278,6 +280,14 @@ const Layout = () => {
   const [showLanguage, setShowLanguage] = useState(false);
   const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
+
+  // Avisos del sistema: si esta cuenta los habia activado en este dispositivo,
+  // se rehace la suscripcion al entrar. La recarga de emergencia de version
+  // desregistra el service worker y con el se iba la suscripcion, en silencio.
+  const idUsuario = state.user?.id;
+  useEffect(() => {
+    if (idUsuario) void sincronizarAvisos(idUsuario);
+  }, [idUsuario]);
 
   // Actualizacion disponible y campana promocional vigente. La campana espera a
   // que no haya otra hoja encima (ni oferta biometrica ni actualizacion): un
@@ -469,7 +479,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -619,6 +629,9 @@ const Layout = () => {
         )}
         {overlayView === 'adminDisputas' && (
           <AdminDisputasView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'adminPromociones' && (
+          <AdminPromocionesView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'plans' && (
           <PlansView onClose={() => setOverlayView(null)} />

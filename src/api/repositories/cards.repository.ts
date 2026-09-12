@@ -8,10 +8,15 @@ export interface VirtualCard {
   expiryYear: number;
   cvv?: string;
   cardholderName: string;
-  brand: 'visa' | 'mastercard';
+  /**
+   * 'kiramopay' en toda tarjeta emitida desde el 2026-09-11: no pertenece a
+   * ninguna red de pago y su numero no sirve fuera de la app. 'visa' y
+   * 'mastercard' quedan solo por las filas historicas.
+   */
+  brand: 'kiramopay' | 'visa' | 'mastercard';
   type: 'virtual' | 'physical';
   currency: string;
-  status: 'active' | 'frozen' | 'cancelled' | 'expired';
+  status: 'active' | 'frozen' | 'cancelled' | 'expired' | 'replaced';
   dailyLimit: number;
   monthlyLimit: number;
   atmLimit: number;

@@ -23,7 +23,7 @@ import (
 type aviso struct{ usuario, titulo, cuerpo string }
 
 type avisosDePrueba struct {
-	mu   sync.Mutex
+	mu    sync.Mutex
 	lista []aviso
 }
 

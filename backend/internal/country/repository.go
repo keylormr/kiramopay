@@ -2,8 +2,11 @@ package country
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -100,14 +103,103 @@ func (r *Repository) GetAllRates(ctx context.Context) ([]ExchangeRate, error) {
 	return rates, nil
 }
 
+// UpdateExchangeRate queda por compatibilidad; ver RegistrarTipoDeCambio.
 func (r *Repository) UpdateExchangeRate(ctx context.Context, from, to string, rate float64, source string) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO exchange_rates (from_currency, to_currency, rate, source, updated_at)
-		 VALUES ($1, $2, $3, $4, NOW())
-		 ON CONFLICT (from_currency, to_currency)
-		 DO UPDATE SET rate = $3, source = $4, updated_at = NOW()`,
-		from, to, rate, source)
-	return err
+	return r.RegistrarTipoDeCambio(ctx, from, to, rate, source)
+}
+
+// RegistrarTipoDeCambio deja `rate` como el tipo de cambio vigente del par.
+//
+// La version anterior hacia `ON CONFLICT (from_currency, to_currency)`, y esa
+// restriccion NO EXISTE desde la migracion 021, que paso la tabla a historial:
+// el unico indice unico es parcial (solo la fila vigente, effective_to IS
+// NULL) y un ON CONFLICT sin su predicado no lo encuentra. La funcion habria
+// fallado con 42P10 en la primera llamada — nunca se noto porque nadie la
+// llamaba.
+//
+// Ahora respeta el historial:
+//   - si la tasa CAMBIO, inserta una fila nueva y el disparador
+//     trg_fx_close_active cierra la anterior, que queda como historia;
+//   - si NO cambio, solo sella updated_at en la fila vigente. updated_at pasa a
+//     significar "ultima vez que la fuente lo confirmo", que es lo que mide la
+//     antiguedad. Sin esto, un fin de semana sin movimiento del dolar dejaria
+//     el tipo de cambio "viejo" aunque la fuente lo haya confirmado cada hora.
+//
+// Todo en una transaccion con la fila vigente bloqueada: dos actualizadores a
+// la vez no pueden insertar dos filas vigentes.
+func (r *Repository) RegistrarTipoDeCambio(ctx context.Context, from, to string, rate float64, source string) error {
+	if rate <= 0 {
+		return fmt.Errorf("tipo de cambio %s/%s no positivo: %v", from, to, rate)
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var id string
+	var vigente float64
+	err = tx.QueryRow(ctx,
+		`SELECT id::text, rate FROM exchange_rates
+		  WHERE from_currency = $1 AND to_currency = $2 AND effective_to IS NULL
+		  FOR UPDATE`, from, to).Scan(&id, &vigente)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Primera vez para este par: no hay nada que cerrar.
+	case err != nil:
+		return err
+	case !cambioSignificativo(vigente, rate):
+		if _, err := tx.Exec(ctx,
+			`UPDATE exchange_rates SET updated_at = NOW(), source = $2 WHERE id = $1::uuid`,
+			id, source); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO exchange_rates (from_currency, to_currency, rate, source_rate, source, updated_at)
+		 VALUES ($1, $2, $3, $3, $4, NOW())`,
+		from, to, rate, source); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// TipoDeCambioConEdad devuelve la tasa vigente del par y cuanto hace que la
+// fuente la confirmo.
+//
+// La edad se calcula EN LA BASE: updated_at es TIMESTAMP sin zona, y restarlo
+// contra el reloj del proceso mezclaria dos zonas horarias. Contra NOW() de la
+// misma sesion las dos puntas usan la misma.
+func (r *Repository) TipoDeCambioConEdad(ctx context.Context, from, to string) (float64, time.Duration, error) {
+	var tasa float64
+	var segundos float64
+	err := r.db.QueryRow(ctx,
+		`SELECT rate, EXTRACT(EPOCH FROM (NOW()::timestamp - updated_at))
+		   FROM exchange_rates
+		  WHERE from_currency = $1 AND to_currency = $2 AND effective_to IS NULL
+		  ORDER BY effective_from DESC
+		  LIMIT 1`, from, to).Scan(&tasa, &segundos)
+	if err != nil {
+		return 0, 0, err
+	}
+	return tasa, time.Duration(segundos * float64(time.Second)), nil
+}
+
+// TipoDeCambioParaCobrar es la version del camino que mueve dinero: se niega a
+// devolver una tasa que la fuente no confirmo dentro de EdadMaximaTipoDeCambio.
+// Mejor no operar que operar con un numero que dejo de ser cierto.
+func (r *Repository) TipoDeCambioParaCobrar(ctx context.Context, from, to string) (float64, error) {
+	tasa, edad, err := r.TipoDeCambioConEdad(ctx, from, to)
+	if err != nil {
+		return 0, err
+	}
+	if edad > EdadMaximaTipoDeCambio {
+		return 0, fmt.Errorf("%w: %s/%s sin confirmar hace %s", ErrTipoDeCambioViejo,
+			from, to, edad.Round(time.Hour))
+	}
+	return tasa, nil
 }
 
 // ── Regional Wallets ─────────────────────────────────────────────────────────

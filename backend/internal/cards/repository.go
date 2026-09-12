@@ -58,7 +58,7 @@ func (r *Repository) GetUserCards(ctx context.Context, userID string) ([]Virtual
 		 cardholder_name, brand, type, currency, status,
 		 daily_limit, monthly_limit, atm_limit, daily_spent, monthly_spent,
 		 COALESCE(provider_card_id, ''), created_at, frozen_at
-		 FROM virtual_cards WHERE user_id = $1 AND status != 'cancelled'
+		 FROM virtual_cards WHERE user_id = $1 AND status NOT IN ('cancelled', 'replaced')
 		 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,8 @@ func (r *Repository) GetUserCards(ctx context.Context, userID string) ([]Virtual
 func (r *Repository) CountUserCards(ctx context.Context, userID string) (int, error) {
 	var count int
 	err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM virtual_cards WHERE user_id = $1 AND status != 'cancelled'`,
+		// Una tarjeta reemplazada (migracion 063) no ocupa cupo: su reemplazo si.
+		`SELECT COUNT(*) FROM virtual_cards WHERE user_id = $1 AND status NOT IN ('cancelled', 'replaced')`,
 		userID).Scan(&count)
 	return count, err
 }

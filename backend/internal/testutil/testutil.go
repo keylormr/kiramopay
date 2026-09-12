@@ -190,6 +190,30 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
+
+	-- virtual_cards: migracion 009. La 063 reemplaza las tarjetas VISA viejas y
+	-- se prueba ejecutando su propio archivo contra esta tabla.
+	CREATE TABLE IF NOT EXISTS virtual_cards (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		card_number VARCHAR(20) NOT NULL,
+		last4 VARCHAR(4) NOT NULL,
+		expiry_month INTEGER NOT NULL,
+		expiry_year INTEGER NOT NULL,
+		cardholder_name VARCHAR(200) NOT NULL,
+		brand VARCHAR(20) DEFAULT 'visa',
+		type VARCHAR(20) DEFAULT 'virtual',
+		currency VARCHAR(10) DEFAULT 'CRC',
+		status VARCHAR(20) DEFAULT 'active',
+		daily_limit BIGINT DEFAULT 50000000,
+		monthly_limit BIGINT DEFAULT 200000000,
+		atm_limit BIGINT DEFAULT 10000000,
+		daily_spent BIGINT DEFAULT 0,
+		monthly_spent BIGINT DEFAULT 0,
+		provider_card_id VARCHAR(100),
+		created_at TIMESTAMP DEFAULT NOW(),
+		frozen_at TIMESTAMP
+	);
 	CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users (referred_by) WHERE referred_by IS NOT NULL;
 	-- Same fallback for the two CHECKs: ADD COLUMN never adds constraints and
 	-- Postgres has no ADD CONSTRAINT IF NOT EXISTS, so a duplicate is swallowed.
@@ -387,7 +411,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
 		('SYSTEM:SAVINGS:CRC', 'savings', 'CRC', 'credit'),
-		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit')
+		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit'),
+		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -402,6 +427,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		revoked_at TIMESTAMP,
 		expires_at TIMESTAMPTZ
+	);
+
+	CREATE TABLE IF NOT EXISTS push_subscriptions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id),
+		endpoint TEXT NOT NULL UNIQUE,
+		auth_key TEXT NOT NULL,
+		p256dh_key TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW(),
+		updated_at TIMESTAMP DEFAULT NOW()
 	);
 
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
@@ -532,6 +567,48 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			TG_OP, TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
 	END;
 	$$ LANGUAGE plpgsql;
+
+	-- exchange_rates: migraciones 011 + 019 + 021, en la forma que tiene hoy la
+	-- base. Es una tabla HISTORIZADA: una sola fila vigente por par
+	-- (effective_to IS NULL, indice unico parcial) y un disparador que cierra
+	-- la vigente al insertar una nueva. Sin ella aca, la actualizacion del
+	-- tipo de cambio no tenia contra que probarse — y su ON CONFLICT roto
+	-- (la restriccion que nombraba dejo de existir en la 021) nunca se vio.
+	CREATE TABLE IF NOT EXISTS exchange_rates (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		from_currency VARCHAR(10) NOT NULL,
+		to_currency VARCHAR(10) NOT NULL,
+		rate NUMERIC(20, 10) NOT NULL CHECK (rate > 0),
+		source VARCHAR(30) DEFAULT 'manual',
+		updated_at TIMESTAMP DEFAULT NOW(),
+		effective_from TIMESTAMP NOT NULL DEFAULT NOW(),
+		effective_to TIMESTAMP,
+		spread_bps INTEGER NOT NULL DEFAULT 0 CHECK (spread_bps BETWEEN 0 AND 1000),
+		source_rate NUMERIC(20, 10),
+		CONSTRAINT chk_fx_period_valid CHECK (effective_to IS NULL OR effective_to > effective_from)
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_fx_active_pair
+		ON exchange_rates (from_currency, to_currency) WHERE effective_to IS NULL;
+
+	CREATE OR REPLACE FUNCTION fn_fx_close_active()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		IF NEW.effective_to IS NULL THEN
+			UPDATE exchange_rates
+				SET effective_to = NEW.effective_from
+			WHERE from_currency = NEW.from_currency
+			  AND to_currency   = NEW.to_currency
+			  AND effective_to IS NULL
+			  AND id <> NEW.id;
+		END IF;
+		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trg_fx_close_active ON exchange_rates;
+	CREATE TRIGGER trg_fx_close_active
+		BEFORE INSERT ON exchange_rates
+		FOR EACH ROW EXECUTE FUNCTION fn_fx_close_active();
 
 	DROP TRIGGER IF EXISTS trg_journal_entries_immutable ON journal_entries;
 	CREATE TRIGGER trg_journal_entries_immutable
@@ -706,7 +783,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		reviewer_id UUID REFERENCES users(id),
 		reviewer_notes TEXT,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		reviewed_at TIMESTAMPTZ
+		reviewed_at TIMESTAMPTZ,
+		-- migracion 065: el acumulado de 30 dias que disparo el caso
+		acumulado_30d_minor BIGINT
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
@@ -1010,6 +1089,33 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
 	CREATE INDEX IF NOT EXISTS idx_loyalty_tx_user ON loyalty_transactions(user_id, created_at DESC);
+
+	-- Catalogo y canjes (migraciones 006 y 066). Faltaban aca: el canje nunca
+	-- se habia probado contra la base, y fue justo el que pagaba con un codigo
+	-- que nadie leia.
+	CREATE TABLE IF NOT EXISTS loyalty_rewards (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		name VARCHAR(200) NOT NULL,
+		description TEXT DEFAULT '',
+		category VARCHAR(30) NOT NULL,
+		points_cost BIGINT NOT NULL,
+		image_url VARCHAR(500) DEFAULT '',
+		partner_code VARCHAR(50),
+		active BOOLEAN DEFAULT TRUE,
+		stock INTEGER DEFAULT -1,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT NOW(),
+		cashback_minor BIGINT CHECK (cashback_minor IS NULL OR cashback_minor > 0)
+	);
+	CREATE TABLE IF NOT EXISTS loyalty_redemptions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		reward_id UUID NOT NULL REFERENCES loyalty_rewards(id),
+		points BIGINT NOT NULL,
+		status VARCHAR(20) DEFAULT 'pending',
+		code VARCHAR(50),
+		created_at TIMESTAMP DEFAULT NOW()
+	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_loyalty_tx_referral
 		ON loyalty_transactions (ref_id) WHERE ref_type = 'referral';
 
@@ -1091,6 +1197,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
+		"push_subscriptions",
 		"escrow_agreements",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
@@ -1099,7 +1206,9 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",
+		"virtual_cards",
 		"plan_interest",
+		"loyalty_redemptions", "loyalty_rewards",
 		"loyalty_transactions", "loyalty_accounts",
 		"journal_entries", "journal_postings",
 		"transactions",
@@ -1108,6 +1217,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"user_sessions", "wallets",
 		"ledger_accounts",
 		"audit_logs",
+		"exchange_rates",
 		"users",
 	}
 	for _, tbl := range tables {
@@ -1131,7 +1241,8 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 			('SYSTEM:SAVINGS:CRC',   'savings',    'CRC', 'credit'),
 			('SYSTEM:SAVINGS:USD',   'savings',    'USD', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
-			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit')
+			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
+			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
 		ON CONFLICT (code) DO NOTHING
 	`); err != nil {
 		return fmt.Errorf("re-seed system ledger accounts: %w", err)
