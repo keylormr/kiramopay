@@ -122,7 +122,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                 <label className="flex items-center gap-2 mt-3 text-sm">
                   <span className="uv-text-secondary">{t('merchant_commission')}</span>
                   <CampoMonto
-                    decimals={1}
+                    decimals={2}
                     thousands={false}
                     value={commission[m.id] ?? ''}
                     onChange={(v) => setCommission((c) => ({ ...c, [m.id]: v }))}
