@@ -3,6 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { HomeView } from '../home/HomeView';
 
+// Sin esto, el banner de Inicio llama al adaptador mock real (getReferrals)
+// y su resolucion asincrona llega despues de que el test ya afirmo, lo que
+// React reporta como una actualizacion fuera de act(). Ninguna prueba de
+// este archivo depende de loyalty: se apaga entero, como en HomeView.moneda.
+vi.mock('@/api', () => ({
+  getApiLayer: () => ({}),
+  MFA_REQUIRED: 'MFA_REQUIRED',
+}));
+
 // Mock useApp with realistic state data
 const mockDispatch = vi.fn();
 

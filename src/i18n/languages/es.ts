@@ -1289,6 +1289,22 @@ const es: TranslationKeys = {
   order_no_integration: 'Todavía no tenemos integración con este servicio de pedidos, así que el pedido no llegaría al restaurante. No se cobró nada: tu saldo sigue igual.',
   ride_price_after_quote: 'El precio y el tiempo aparecen cuando el servicio los cotice.',
   order_delivery_fee_pending: 'El costo de envío lo confirma el servicio al hacer el pedido.',
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: 'Novedades de KiramoPay',
+  banner_plans_title: 'Más asistente, más metas',
+  banner_plans_body: 'Plus y Pro llegan muy pronto: más consultas al asistente, más metas de ahorro y más tarjetas.',
+  banner_plans_cta: 'Ver planes',
+  banner_referral_title: 'Invita y gana puntos',
+  banner_referral_body: 'Comparte tu enlace y gana {puntos} puntos por cada persona que se registre.',
+  banner_referral_cta: 'Compartir mi enlace',
+  banner_qr_title: 'Cobra con QR sin comisión',
+  banner_qr_body: 'Entre personas, cobrar y pagar con QR es gratis.',
+  banner_qr_cta: 'Cobrar ahora',
+  banner_close_card: 'Cerrar tarjeta',
+  banner_prev: 'Tarjeta anterior',
+  banner_next: 'Tarjeta siguiente',
+  banner_go_to: 'Ir a la tarjeta {n}',
 };
 
 export default es;

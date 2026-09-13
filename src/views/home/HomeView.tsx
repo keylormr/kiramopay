@@ -20,6 +20,7 @@ import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
 import { getTxTime } from '@/utils/fechasTx';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
+import { BannerInicio } from '@/components/home/BannerInicio';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -39,10 +40,11 @@ interface HomeViewProps {
   onOpenAssistant?: () => void;
   onOpenMarketplace?: () => void;
   onOpenCards?: () => void;
+  onOpenPlans?: () => void;
   onNavigateToSinpe?: (tab?: 'send' | 'receive') => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onNavigateToSinpe }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
 
@@ -463,6 +465,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           </button>
         </div>
       </div>
+
+      {/* Banner de novedades: planes, referidos y QR sin comision. Debajo del
+          saldo, nunca encima ni tapandolo. Se auto-oculta si no hay tarjetas
+          que mostrar (todas cerradas por 30 dias, o sin codigo de referidos). */}
+      <BannerInicio onAbrirPlanes={onOpenPlans} onCobrarQR={() => setActiveSheet('cobrar')} />
 
       {/* Acciones rapidas primero: el gesto mas frecuente (enviar, escanear)
           queda bajo el pulgar apenas abre la app. */}

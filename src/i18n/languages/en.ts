@@ -1285,6 +1285,22 @@ const en: TranslationKeys = {
   order_no_integration: 'We are not integrated with this delivery service yet, so the order would not reach the restaurant. Nothing was charged: your balance is unchanged.',
   ride_price_after_quote: 'The price and the time show up once the service quotes them.',
   order_delivery_fee_pending: 'The service confirms the delivery fee when the order is placed.',
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: 'KiramoPay news',
+  banner_plans_title: 'More assistant, more goals',
+  banner_plans_body: 'Plus and Pro are coming soon: more assistant questions, more savings goals, and more cards.',
+  banner_plans_cta: 'View plans',
+  banner_referral_title: 'Invite and earn points',
+  banner_referral_body: 'Share your link and earn {puntos} points for every person who signs up.',
+  banner_referral_cta: 'Share my link',
+  banner_qr_title: 'Charge with QR, no fee',
+  banner_qr_body: 'Between people, charging and paying with QR is free.',
+  banner_qr_cta: 'Charge now',
+  banner_close_card: 'Close card',
+  banner_prev: 'Previous card',
+  banner_next: 'Next card',
+  banner_go_to: 'Go to card {n}',
 };
 
 export default en;

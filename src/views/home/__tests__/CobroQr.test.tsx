@@ -141,7 +141,9 @@ describe('Cobrar con QR — el codigo se recicla', () => {
     const user = userEvent.setup();
     pintar();
 
-    await user.click(screen.getByRole('button', { name: /cobrar/i }));
+    // Nombre exacto: el banner de Inicio agrega su propio boton "Cobrar
+    // ahora", y /cobrar/i ya no basta para distinguirlos.
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
 
     await waitFor(() => expect(mocks.getMyCode).toHaveBeenCalled());
     const qr = await screen.findByTestId('qr-code');
@@ -154,7 +156,7 @@ describe('Cobrar con QR — el codigo se recicla', () => {
     const user = userEvent.setup();
     pintar();
 
-    await user.click(screen.getByRole('button', { name: /cobrar/i }));
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
     await screen.findByTestId('qr-code');
 
     await user.type(screen.getByPlaceholderText('0.00'), '5000');
@@ -175,7 +177,7 @@ describe('Cobrar con QR — el codigo se recicla', () => {
     const user = userEvent.setup();
     pintar();
 
-    await user.click(screen.getByRole('button', { name: /cobrar/i }));
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
     await screen.findByTestId('qr-code');
 
     const monto = screen.getByPlaceholderText('0.00');
