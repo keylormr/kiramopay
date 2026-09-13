@@ -447,6 +447,7 @@ const zhCn: TranslationKeys = {
   crypto_prices_updated: '价格已更新',
   crypto_prices_unavailable: '价格更新失败',
   crypto_prices_unavailable_hint: '数值可能过期，会自动重试。',
+  crypto_sparkline_sin_datos: '暂无价格历史数据',
   crypto_price_stale: '价格已过期，我们不会按过期价格扣款。请稍后重试。',
   crypto_action_needs_price: '没有当前价格，无法交易。',
   crypto_value_unavailable: '数值不可用',

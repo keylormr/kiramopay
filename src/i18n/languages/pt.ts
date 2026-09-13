@@ -446,6 +446,7 @@ const pt: TranslationKeys = {
   crypto_prices_updated: 'Preços atualizados',
   crypto_prices_unavailable: 'Preços não atualizados',
   crypto_prices_unavailable_hint: 'Os valores podem estar desatualizados. Vamos tentar de novo automaticamente.',
+  crypto_sparkline_sin_datos: 'Sem histórico de preços disponível',
   crypto_price_stale: 'O preco esta desatualizado e nao cobramos com base num preco velho. Tente de novo em instantes.',
   crypto_action_needs_price: 'Não é possível operar sem o preço atual.',
   crypto_value_unavailable: 'Valor indisponível',

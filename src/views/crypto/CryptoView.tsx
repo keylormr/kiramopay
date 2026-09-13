@@ -43,17 +43,27 @@ const formatLargeNumber = (value: number | string | undefined | null): string =>
 
 // Mini sparkline: curva suavizada (Catmull-Rom a Bezier) con area
 // degradada, en vez de la polilinea quebrada que se veia de juguete.
-const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean }> = ({ data, positive }) => {
+//
+// Sin historial real (backend sin sparkline para el simbolo, o modo demo
+// recien arrancando) NO se dibuja una linea: una linea punteada gris se ve
+// como un grafico -sugiere una tendencia plana real, o un grafico roto- y
+// ninguna de las dos cosas es cierta. Se usa el mismo "—" que el resto de
+// esta pantalla ya usa para un dato que no llego (ver SIN_DATO), del mismo
+// tamano que el grafico real para que la fila no salte de layout.
+const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean; sinDatosLabel: string }> = ({ data, positive, sinDatosLabel }) => {
   // Need at least 2 valid numbers to draw a line
   const validData = Array.isArray(data) ? data.filter(d => typeof d === 'number' && !isNaN(d)) : [];
   const tono = positive ? '#10B981' : '#EF4444';
 
   if (validData.length < 2) {
-    // Show a flat line instead of loading skeleton when we have some data
     return (
-      <svg width={80} height={40} className="overflow-visible">
-        <line x1="0" y1="20" x2="80" y2="20" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4,4" />
-      </svg>
+      <div
+        role="img"
+        aria-label={sinDatosLabel}
+        className="w-20 h-10 shrink-0 flex items-center justify-center uv-text-muted text-lg font-semibold select-none"
+      >
+        —
+      </div>
     );
   }
 
@@ -78,7 +88,9 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
   const gradId = `spark-${positive ? 'up' : 'down'}`;
 
   return (
-    <svg width={width} height={height} className="overflow-visible">
+    // Decorativo: el cambio de 24h ya se lee en texto junto a la fila: la
+    // curva no le agrega informacion a quien usa lector de pantalla.
+    <svg width={width} height={height} className="overflow-visible shrink-0" aria-hidden="true">
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={tono} stopOpacity="0.25" />
@@ -273,6 +285,9 @@ export const CryptoView: React.FC = () => {
       setMarketData(prev => {
         const siguiente = { ...prev };
         for (const p of entradas) {
+          // El WebSocket ya trae high/low REALES (mismo /coins/markets que el
+          // REST); el estimado desde change_24h queda solo como ultimo
+          // respaldo si ni el socket ni un sondeo REST previo los trajeron.
           const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
           siguiente[p.symbol] = {
             symbol: p.symbol,
@@ -280,9 +295,12 @@ export const CryptoView: React.FC = () => {
             change24h: p.change_24h ?? 0,
             marketCap: p.market_cap ?? prev[p.symbol]?.marketCap ?? 0,
             volume24h: p.volume_24h ?? prev[p.symbol]?.volume24h ?? 0,
-            high24h: prev[p.symbol]?.high24h ?? p.price * (1 + rango / 2),
-            low24h: prev[p.symbol]?.low24h ?? p.price * (1 - rango / 2),
+            high24h: p.high_24h ?? prev[p.symbol]?.high24h ?? p.price * (1 + rango / 2),
+            low24h: p.low_24h ?? prev[p.symbol]?.low24h ?? p.price * (1 - rango / 2),
             lastUpdated: preciosWsMomento ?? new Date().toISOString(),
+            // El sparkline no viaja por WebSocket (ver el comentario de
+            // high_24h/low_24h arriba): se conserva el ultimo que trajo REST.
+            priceHistory: prev[p.symbol]?.priceHistory ?? [],
           };
         }
         return siguiente;
@@ -728,7 +746,7 @@ export const CryptoView: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </button>
                 );
               })}
@@ -820,7 +838,7 @@ export const CryptoView: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </div>
                 </button>
               );

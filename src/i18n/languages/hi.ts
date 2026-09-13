@@ -446,6 +446,7 @@ const hi: TranslationKeys = {
   crypto_prices_updated: 'कीमतें अपडेट हो गईं',
   crypto_prices_unavailable: 'कीमतें अपडेट नहीं हो सकीं',
   crypto_prices_unavailable_hint: 'कीमतें पुरानी हो सकती हैं। यह अपने आप फिर कोशिश करेगा।',
+  crypto_sparkline_sin_datos: 'कीमत का इतिहास उपलब्ध नहीं है',
   crypto_price_stale: 'कीमत पुरानी है और हम पुरानी कीमत पर शुल्क नहीं लेते। थोड़ी देर में फिर कोशिश करें।',
   crypto_action_needs_price: 'मौजूदा कीमत के बिना लेन-देन नहीं हो सकता।',
   crypto_value_unavailable: 'मूल्य उपलब्ध नहीं',
