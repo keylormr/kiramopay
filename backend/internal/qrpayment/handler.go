@@ -1,12 +1,16 @@
 package qrpayment
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -136,6 +140,44 @@ func (h *Handler) GetMerchantReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, report)
+}
+
+// GetMerchantReportCSV — GET /api/v1/qr/merchants/{id}/report.csv?days=30&tz=360.
+// Dueno o gerente, como el reporte, y con el plan analitica. Quien no es del
+// equipo recibe 404 igual que en el reporte; un comercio sin el plan, 403
+// PLAN_REQUIRED con el plan que hace falta, para que la pantalla lo explique.
+func (h *Handler) GetMerchantReportCSV(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
+
+	rep, err := h.service.ReporteExportable(r.Context(), merchantID, userID, days, tz)
+	if err != nil {
+		if errors.Is(err, ErrPlanAnaliticaRequerido) {
+			response.ErrorConDetalle(w, http.StatusForbidden, "PLAN_REQUIRED",
+				"exporting the report requires the analitica plan",
+				map[string]any{"plan_requerido": PlanComercioAnalitica})
+			return
+		}
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// Se arma entero antes de escribir la cabecera: si fallara a mitad, el
+	// cliente recibiria un 200 con medio archivo.
+	var buf bytes.Buffer
+	if err := EscribirReporteCSV(&buf, rep); err != nil {
+		response.Error(w, http.StatusInternalServerError, "EXPORT_FAILED", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	// El nombre solo lleva fechas que arma el servidor: nada del cliente llega
+	// a la cabecera.
+	w.Header().Set("Content-Disposition", `attachment; filename="reporte-`+rep.From+`-a-`+rep.To+`.csv"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (h *Handler) ListStaff(w http.ResponseWriter, r *http.Request) {
@@ -350,6 +392,37 @@ func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 	merchant, err := h.service.SetCommission(r.Context(), id, req.CommissionBps)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, merchant)
+}
+
+// SetMerchantPlan — PATCH /api/v1/admin/merchants/{id}/plan {"plan":"base"|"analitica"} (admin)
+//
+// Misma validacion estricta que el plan de una persona: el cuerpo es
+// exactamente {"plan": "..."}.
+func (h *Handler) SetMerchantPlan(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "id must be a UUID")
+		return
+	}
+	plan, ok := plans.LeerPlanEstricto(w, r)
+	if !ok {
+		return
+	}
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.AsignarPlanComercio(r.Context(), id.String(), adminID, plan, ac)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrPlanComercioInvalido):
+			response.Error(w, http.StatusBadRequest, "PLAN_INVALID", "plan must be base or analitica")
+		case errors.Is(err, ErrComercioNoEncontrado):
+			response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", "merchant not found")
+		default:
+			response.Error(w, http.StatusInternalServerError, "PLAN_UPDATE_FAILED", err.Error())
+		}
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)

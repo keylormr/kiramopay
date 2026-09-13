@@ -24,14 +24,49 @@ type Merchant struct {
 	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
 
 	// CommissionBps is the merchant-absorbed commission in basis points
-	// (50 = 0.50%). Charged on each merchant QR payment in ScanAndPay.
+	// (50 = 0.50%) as the platform set it. What is charged TODAY is
+	// ComisionEfectivaBps, which applies the entry promotion on top of it.
 	CommissionBps int       `json:"commission_bps"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Plan del comercio: 'base' (todo comercio) o 'analitica' (comparacion del
+	// reporte contra el periodo anterior y exportacion). No hay cobro todavia:
+	// solo un administrador lo asigna, para pilotos.
+	Plan string `json:"plan"`
+
+	// ComisionEfectivaBps es la comision que se cobra HOY en cada pago: la menor
+	// entre commission_bps y PromoEntradaBps mientras dure la promocion de
+	// entrada, y commission_bps despues. Se calcula al leer la fila; no se
+	// guarda. Ver ComisionEfectiva.
+	ComisionEfectivaBps int `json:"comision_efectiva_bps"`
+
+	// PromoHasta es el fin de la promocion de entrada. null = el comercio nunca
+	// la tuvo (se aprobo antes de que existiera, o no se ha aprobado).
+	PromoHasta *time.Time `json:"promo_hasta"`
+
+	// PrimeraAprobacionAt es la primera vez que se aprobo la verificacion. La
+	// promocion solo se otorga en esa aprobacion. Interna.
+	PrimeraAprobacionAt *time.Time `json:"-"`
 
 	// Role is how the REQUESTING user relates to this merchant (owner, manager
 	// or cashier). Filled per-caller by the service, never persisted.
 	Role string `json:"role,omitempty"`
 }
+
+// Planes del comercio. Espejan chk_qr_merchants_plan (migracion 068).
+const (
+	PlanComercioBase      = "base"
+	PlanComercioAnalitica = "analitica"
+)
+
+// Promocion de entrada (decision del dueno del 13-09-2026): un comercio nuevo
+// paga 0,25 % durante sus primeros 3 meses desde que su verificacion se
+// aprueba; despues, su comision normal. Si un administrador le fijo una menor,
+// se respeta la menor.
+const (
+	PromoEntradaBps   = 25
+	PromoEntradaMeses = 3
+)
 
 // ── QR Payment Code ──────────────────────────────────────────────────────────
 
@@ -225,12 +260,47 @@ type ReportBucket struct {
 }
 
 type MerchantReport struct {
-	Days        int            `json:"days"`
+	Days int `json:"days"`
+	// From y To son el primer y el ultimo dia de la ventana (YYYY-MM-DD en la
+	// zona del cliente). To es hoy: la ventana llega hasta este momento.
+	From        string         `json:"from"`
+	To          string         `json:"to"`
 	Totals      ReportBucket   `json:"totals"`
 	Daily       []ReportDay    `json:"daily"`
 	ByLocation  []ReportBucket `json:"by_location"`
 	ByCollector []ReportBucket `json:"by_collector"`
+
+	// Plan del comercio al momento del reporte. Con 'analitica' viene
+	// Comparison; con 'base' no.
+	Plan       string            `json:"plan"`
+	Comparison *ReportComparison `json:"comparison,omitempty"`
 }
+
+// ReportComparison compara la ventana del reporte con la ventana anterior de
+// IGUAL longitud: la misma ventana corrida `days` dias hacia atras, hasta la
+// misma hora. Si el reporte llega a hoy a las 9:00, la anterior llega al dia
+// equivalente a las 9:00, para no comparar un dia a medias con uno entero.
+type ReportComparison struct {
+	PreviousFrom   string       `json:"previous_from"`
+	PreviousTo     string       `json:"previous_to"`
+	PreviousTotals ReportBucket `json:"previous_totals"`
+	Delta          ReportDelta  `json:"delta"`
+}
+
+// ReportDelta es actual menos anterior. Los porcentajes son null cuando la
+// ventana anterior es 0: no hay un porcentaje honesto contra cero.
+type ReportDelta struct {
+	Gross    int64    `json:"gross"`
+	Fee      int64    `json:"fee"`
+	Net      int64    `json:"net"`
+	Count    int      `json:"count"`
+	GrossPct *float64 `json:"gross_pct"`
+	NetPct   *float64 `json:"net_pct"`
+	CountPct *float64 `json:"count_pct"`
+}
+
+// ActorContext identifica la peticion de un administrador para la auditoria.
+type ActorContext struct{ IPAddress, UserAgent string }
 
 // AddStaffRequest identifies the employee by cedula: the owner types the same
 // id the person registered with, so there is no free-form user search.

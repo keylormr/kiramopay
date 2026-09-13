@@ -505,9 +505,17 @@ func main() {
 	// SINPE.
 	qrService := qrpayment.NewService(qrRepo, txService, userRepo, &qrpayment.Options{
 		Notifier: notifService,
+		// Cambiar el plan de un comercio es una accion de administrador.
+		AuditLogger: auditLogger,
 	})
 	splitService := splitpay.NewService(splitRepo, txService, userRepo)
+	// Topes por plan personal (decision del dueno del 13-09-2026). Solo frenan
+	// la creacion: quien ya tiene mas que su plan conserva lo que tiene. Los
+	// mismos valores se publican en /transparency/fees.
+	topesMetas := plans.Topes{Free: cfg.Planes.MetasFree, Plus: cfg.Planes.MetasPlus, Pro: cfg.Planes.MetasPro}
+	topesTarjetas := plans.Topes{Free: cfg.Planes.TarjetasFree, Plus: cfg.Planes.TarjetasPlus, Pro: cfg.Planes.TarjetasPro}
 	cardsService := cards.NewService(cardsRepo)
+	cardsService.SetTopes(topesTarjetas)
 	// Remesa a otro pais: sin corresponsal que la entregue, marcarla completada
 	// le dice al remitente que su plata cruzo la frontera sin que haya salido
 	// nada. Misma politica que los convenios de recibos y los cobros del
@@ -518,6 +526,7 @@ func main() {
 	budgetService := budget.NewService(budgetRepo)
 	recurringService := recurring.NewService(recurringRepo)
 	savingsService := savings.NewService(savingsRepo, ledgerEngine, txService)
+	savingsService.SetTopes(topesMetas)
 	// Interes en los planes de pago. Registra la intencion, no cobra: hoy no
 	// hay pasarela ni suscripcion en la aplicacion.
 	plansService := plans.NewService(pool, &plans.Options{AuditLogger: auditLogger})
@@ -546,15 +555,17 @@ func main() {
 	// drained. Per-plan limits; the user's plan is resolved from the DB. Only
 	// wired when the assistant is actually configured.
 	assistantOpts := []assistant.ServiceOption{assistant.WithConversations(assistantConvService)}
+	// cuotaAsistente queda nil sin asistente configurado: en ese caso la cuota
+	// diaria no es un beneficio que se entregue y /fees no la publica.
+	var cuotaAsistente *assistant.RedisQuota
 	if assistantLLM != nil {
 		planLimits := map[string]int{
 			"free": cfg.Anthropic.UserDailyLimit,
 			"plus": cfg.Anthropic.PlusDailyLimit,
 			"pro":  cfg.Anthropic.ProDailyLimit,
 		}
-		assistantOpts = append(assistantOpts, assistant.WithLimiter(
-			assistant.NewRedisQuota(redisClient, planLimits, cfg.Anthropic.GlobalDailyLimit, userRepo.GetPlan),
-		))
+		cuotaAsistente = assistant.NewRedisQuota(redisClient, planLimits, cfg.Anthropic.GlobalDailyLimit, userRepo.GetPlan)
+		assistantOpts = append(assistantOpts, assistant.WithLimiter(cuotaAsistente))
 	}
 	assistantService := assistant.NewService(
 		assistantLLM,
@@ -588,6 +599,16 @@ func main() {
 	uifHandler := uif.NewHandler(uifService)
 	adminUsersHandler := adminusers.NewHandler(adminUsersService)
 	transparencyHandler := transparency.NewHandler(pool)
+	// /fees publica los MISMOS topes que aplican los servicios, no una copia.
+	planesPublicados := transparency.PlanesPublicados{Metas: topesMetas, Tarjetas: topesTarjetas}
+	if cuotaAsistente != nil {
+		planesPublicados.Asistente = &plans.Topes{
+			Free: cuotaAsistente.LimiteDelPlan(plans.PlanFree),
+			Plus: cuotaAsistente.LimiteDelPlan(plans.PlanPlus),
+			Pro:  cuotaAsistente.LimiteDelPlan(plans.PlanPro),
+		}
+	}
+	transparencyHandler.SetPlanes(planesPublicados)
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
 	loyaltyHandler := loyalty.NewHandler(loyaltyService)
@@ -998,6 +1019,8 @@ func main() {
 			r.Post("/qr/merchants/{id}/withdraw", qrHandler.WithdrawMerchant)
 			r.Get("/qr/merchants/{id}/payments", qrHandler.GetMerchantPayments)
 			r.Get("/qr/merchants/{id}/report", qrHandler.GetMerchantReport)
+			// Exportacion del reporte: plan analitica del comercio.
+			r.Get("/qr/merchants/{id}/report.csv", qrHandler.GetMerchantReportCSV)
 			r.Get("/qr/merchants/{id}/staff", qrHandler.ListStaff)
 			r.Post("/qr/merchants/{id}/staff", qrHandler.AddStaff)
 			r.Put("/qr/merchants/{id}/staff/{staffID}", qrHandler.UpdateStaff)
@@ -1115,6 +1138,9 @@ func main() {
 				r.Post("/admin/merchants/{id}/approve", qrHandler.ApproveMerchant)
 				r.Post("/admin/merchants/{id}/reject", qrHandler.RejectMerchant)
 				r.Patch("/admin/merchants/{id}/commission", qrHandler.SetCommission)
+				// Plan del comercio (base|analitica) asignado a mano mientras no
+				// exista cobro. Auditado con riesgo alto.
+				r.Patch("/admin/merchants/{id}/plan", qrHandler.SetMerchantPlan)
 
 				// El rastro de auditoria. Se escribia desde el arranque del
 				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
@@ -1171,6 +1197,9 @@ func main() {
 					r.Post("/admin/users/{id}/block", adminUsersHandler.Block)
 					r.Post("/admin/users/{id}/unblock", adminUsersHandler.Unblock)
 					r.Post("/admin/users/{id}/expiry", adminUsersHandler.SetExpiry)
+					// Plan personal (free|plus|pro) asignado a mano para pilotos
+					// mientras no exista cobro. Auditado con riesgo alto.
+					r.Patch("/admin/users/{id}/plan", plansHandler.AsignarPlan)
 					// Cerrar sesiones sin bloquear la cuenta: cuando se
 					// sospecha de un dispositivo, no de la persona.
 					r.Get("/admin/users/{id}/sessions", adminUsersHandler.Sessions)

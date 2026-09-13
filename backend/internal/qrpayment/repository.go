@@ -21,17 +21,30 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 // merchantCols is the canonical column list (and order) for reading a Merchant,
 // shared by every merchant query so the scan helper stays in sync.
+//
+// POSITIONAL con merchantDest: una columna nueva va en la misma posicion en los
+// dos, y tambien en la lista con prefijo m. de GetMerchantsByStaffUserID.
 const merchantCols = `id, user_id, name, description, category, COALESCE(logo_url, ''),
 	qr_code, active, cedula, cedula_type, legal_name, verification_status,
-	rejection_reason, reviewed_at, commission_bps, created_at`
+	rejection_reason, reviewed_at, commission_bps, created_at,
+	plan, promo_hasta, primera_aprobacion_at`
+
+// merchantDest son los destinos del Scan en el orden de merchantCols. Existe
+// para que las consultas que agregan una columna antes o despues (el plan
+// anterior, el rol del empleado) no copien la lista a mano.
+func merchantDest(m *Merchant) []any {
+	return []any{&m.ID, &m.UserID, &m.Name, &m.Description, &m.Category, &m.LogoURL,
+		&m.QRCode, &m.Active, &m.Cedula, &m.CedulaType, &m.LegalName, &m.VerificationStatus,
+		&m.RejectionReason, &m.ReviewedAt, &m.CommissionBps, &m.CreatedAt,
+		&m.Plan, &m.PromoHasta, &m.PrimeraAprobacionAt}
+}
 
 func scanMerchant(row pgx.Row) (*Merchant, error) {
 	var m Merchant
-	if err := row.Scan(&m.ID, &m.UserID, &m.Name, &m.Description, &m.Category, &m.LogoURL,
-		&m.QRCode, &m.Active, &m.Cedula, &m.CedulaType, &m.LegalName, &m.VerificationStatus,
-		&m.RejectionReason, &m.ReviewedAt, &m.CommissionBps, &m.CreatedAt); err != nil {
+	if err := row.Scan(merchantDest(&m)...); err != nil {
 		return nil, err
 	}
+	m.ComisionEfectivaBps = ComisionEfectiva(m.CommissionBps, m.PromoHasta, time.Now())
 	return &m, nil
 }
 
@@ -76,15 +89,33 @@ func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, erro
 
 // UpdateVerification flips a merchant's verification status (admin action) and
 // returns the updated row.
+//
+// La PRIMERA aprobacion otorga la promocion de entrada: promo_hasta = ahora +
+// PromoEntradaMeses. primera_aprobacion_at la vuelve de una sola vez: un
+// comercio que cambia su cedula vuelve a 'pending' (UpdateMerchant) y al
+// re-aprobarse NO recibe otra promocion ni alarga la que tenia. Los comercios
+// aprobados antes de la migracion 068 ya tienen la marca, asi que tampoco la
+// reciben.
+//
+// En un UPDATE todas las expresiones del SET leen la fila VIEJA: el
+// `primera_aprobacion_at IS NULL` de promo_hasta ve el valor anterior a esta
+// misma sentencia. Los ::text no son decoracion: $2 aparece tres veces y sin
+// el tipo explicito Postgres deduce uno distinto en cada lugar (42P08).
 func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status, reviewedBy, reason string) (*Merchant, error) {
 	m, err := scanMerchant(r.db.QueryRow(ctx,
 		`UPDATE qr_merchants
-		    SET verification_status = $2,
-		        reviewed_by         = NULLIF($3, '')::uuid,
-		        reviewed_at         = NOW(),
-		        rejection_reason    = $4
+		    SET verification_status   = $2::text,
+		        reviewed_by           = NULLIF($3, '')::uuid,
+		        reviewed_at           = NOW(),
+		        rejection_reason      = $4,
+		        promo_hasta           = CASE WHEN $2::text = 'verified' AND primera_aprobacion_at IS NULL
+		                                     THEN NOW() + make_interval(months => $5)
+		                                     ELSE promo_hasta END,
+		        primera_aprobacion_at = CASE WHEN $2::text = 'verified'
+		                                     THEN COALESCE(primera_aprobacion_at, NOW())
+		                                     ELSE primera_aprobacion_at END
 		  WHERE id = $1
-		  RETURNING `+merchantCols, merchantID, status, reviewedBy, reason))
+		  RETURNING `+merchantCols, merchantID, status, reviewedBy, reason, PromoEntradaMeses))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("merchant not found")
@@ -139,6 +170,38 @@ func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bp
 		return nil, err
 	}
 	return m, nil
+}
+
+// UpdateMerchantPlan cambia el plan del comercio (accion de administrador) y
+// devuelve la fila nueva junto con el plan que tenia. El plan anterior se lee
+// con FOR UPDATE en la misma sentencia para que el rastro de auditoria diga la
+// verdad aunque dos administradores lo cambien a la vez. Las columnas del CTE
+// llevan otro nombre para que las de merchantCols no queden ambiguas.
+func (r *Repository) UpdateMerchantPlan(ctx context.Context, merchantID, plan string) (*Merchant, string, error) {
+	var m Merchant
+	var anterior string
+	dest := append([]any{&anterior}, merchantDest(&m)...)
+	err := r.db.QueryRow(ctx,
+		`WITH previo AS (
+		     SELECT id AS previo_id, plan AS plan_anterior
+		       FROM qr_merchants
+		      WHERE id = $1::uuid
+		        FOR UPDATE
+		 )
+		 UPDATE qr_merchants
+		    SET plan = $2
+		   FROM previo
+		  WHERE qr_merchants.id = previo.previo_id
+		 RETURNING previo.plan_anterior, `+merchantCols,
+		merchantID, plan).Scan(dest...)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, "", ErrComercioNoEncontrado
+		}
+		return nil, "", err
+	}
+	m.ComisionEfectivaBps = ComisionEfectiva(m.CommissionBps, m.PromoHasta, time.Now())
+	return &m, anterior, nil
 }
 
 func collectMerchants(rows pgx.Rows) ([]Merchant, error) {
@@ -454,7 +517,8 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 	rows, err := r.db.Query(ctx,
 		`SELECT m.id, m.user_id, m.name, m.description, m.category, COALESCE(m.logo_url, ''),
 		        m.qr_code, m.active, m.cedula, m.cedula_type, m.legal_name, m.verification_status,
-		        m.rejection_reason, m.reviewed_at, m.commission_bps, m.created_at, s.role
+		        m.rejection_reason, m.reviewed_at, m.commission_bps, m.created_at,
+		        m.plan, m.promo_hasta, m.primera_aprobacion_at, s.role
 		   FROM merchant_staff s
 		   JOIN qr_merchants m ON m.id = s.merchant_id
 		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE
@@ -464,13 +528,13 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 	}
 	defer rows.Close()
 	var out []Merchant
+	ahora := time.Now()
 	for rows.Next() {
 		var m Merchant
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Name, &m.Description, &m.Category, &m.LogoURL,
-			&m.QRCode, &m.Active, &m.Cedula, &m.CedulaType, &m.LegalName, &m.VerificationStatus,
-			&m.RejectionReason, &m.ReviewedAt, &m.CommissionBps, &m.CreatedAt, &m.Role); err != nil {
+		if err := rows.Scan(append(merchantDest(&m), &m.Role)...); err != nil {
 			return nil, err
 		}
+		m.ComisionEfectivaBps = ComisionEfectiva(m.CommissionBps, m.PromoHasta, ahora)
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -665,6 +729,20 @@ func (r *Repository) ReportByCollector(ctx context.Context, merchantID string, s
 	}
 	defer rows.Close()
 	return collectBuckets(rows)
+}
+
+// ReportTotals suma las ventas completadas del comercio en [since, until). Es
+// la ventana anterior de la comparacion del plan analitica.
+func (r *Repository) ReportTotals(ctx context.Context, merchantID string, since, until time.Time) (ReportBucket, error) {
+	var b ReportBucket
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
+		   FROM qr_payments p
+		  WHERE p.merchant_id = $1::uuid AND p.status = 'completed'
+		    AND p.created_at >= $2 AND p.created_at < $3`,
+		merchantID, since, until).Scan(&b.Gross, &b.Fee, &b.Count)
+	b.Net = b.Gross - b.Fee
+	return b, err
 }
 
 func collectBuckets(rows pgx.Rows) ([]ReportBucket, error) {
