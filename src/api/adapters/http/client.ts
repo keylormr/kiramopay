@@ -152,7 +152,11 @@ export class HttpClient {
         if (auth && res.status === 403 && code === 'ACCOUNT_BLOCKED' && accountBlockedHandler) {
           accountBlockedHandler();
         }
-        return apiError<T>(code, json.error?.message || `Request failed with status ${res.status}`);
+        return apiError<T>(
+          code,
+          json.error?.message || `Request failed with status ${res.status}`,
+          json.error?.data,
+        );
       }
 
       return {

@@ -46,6 +46,28 @@ func Error(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+// ErrorWithData is Error plus a `data` payload on the SAME envelope — for a
+// rejection the client can act on without a second request (e.g. CONTACT_EXISTS
+// carrying the contact that already exists). Never used for 5xx: same reason
+// Error() blanks the message there, an internal failure must not leak data.
+func ErrorWithData(w http.ResponseWriter, status int, code, message string, data interface{}) {
+	if status >= http.StatusInternalServerError {
+		slog.Error("server error response", "status", status, "code", code, "detail", message)
+		message = "internal server error"
+		data = nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(APIResponse{
+		Success: false,
+		Data:    data,
+		Error: &APIError{
+			Code:    code,
+			Message: message,
+		},
+	})
+}
+
 func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }

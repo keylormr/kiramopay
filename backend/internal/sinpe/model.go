@@ -56,7 +56,25 @@ var (
 	// requires a licence we do not hold; accepting the money and parking it
 	// with no way to give it back is worse than refusing up front.
 	ErrRecipientNotUser = errors.New("recipient is not a KiramoPay user")
+	// ErrContactExists rejects adding a contact whose phone the caller already
+	// has saved. AddContact used to be an ON CONFLICT ... DO UPDATE that
+	// silently overwrote the existing contact's name and bank; now it refuses
+	// and hands back the record as it stands today (see ContactExistsError).
+	ErrContactExists = errors.New("contact already exists")
 )
+
+// ContactExistsError carries the EXISTING contact alongside the rejection, so
+// the handler can return it in the response instead of the client guessing
+// who it already has saved under that number.
+type ContactExistsError struct {
+	Existing *ContactRecord
+}
+
+func (e *ContactExistsError) Error() string { return ErrContactExists.Error() }
+
+// Is lets errors.Is(err, ErrContactExists) match this wrapper, the same way
+// callers already check ErrSelfSend and ErrRecipientNotUser.
+func (e *ContactExistsError) Is(target error) bool { return target == ErrContactExists }
 
 type HistoryRecord struct {
 	ID          string    `json:"id"`

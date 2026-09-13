@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizarTelefonoCR, formatearTelefonoCR } from '../telefono';
+import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '../telefono';
 
 describe('normalizarTelefonoCR', () => {
   it('antepone +506 a los 8 digitos de la entrada manual', () => {
@@ -31,5 +31,22 @@ describe('formatearTelefonoCR', () => {
 
   it('devuelve la entrada intacta cuando no la puede interpretar', () => {
     expect(formatearTelefonoCR('abc')).toBe('abc');
+  });
+});
+
+describe('mismoTelefonoCR', () => {
+  it('reconoce el mismo numero en formas distintas', () => {
+    expect(mismoTelefonoCR('8888-0001', '+506 8888-0001')).toBe(true);
+    expect(mismoTelefonoCR('88880001', '+50688880001')).toBe(true);
+    expect(mismoTelefonoCR('88880001', '50688880001')).toBe(true);
+  });
+
+  it('distingue numeros distintos', () => {
+    expect(mismoTelefonoCR('8888-0001', '8888-0002')).toBe(false);
+  });
+
+  it('nunca da igual cuando alguna entrada no normaliza', () => {
+    expect(mismoTelefonoCR('8888', '8888-0001')).toBe(false);
+    expect(mismoTelefonoCR('', '')).toBe(false);
   });
 });

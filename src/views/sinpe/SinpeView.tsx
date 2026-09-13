@@ -10,7 +10,7 @@ import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
-import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
+import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro } from '@/utils/erroresQr';
 
@@ -94,6 +94,12 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [contactSheetMode, setContactSheetMode] = useState<'form' | 'scan'>('form');
   const [contactScanError, setContactScanError] = useState('');
   const [contactPrefilled, setContactPrefilled] = useState(false);
+  // El dueño pidió que agregar un contacto (escaneando o a mano) avise ANTES
+  // de guardar cuando el número ya está en la lista, en vez de dejar que el
+  // upsert lo pise en silencio. `duplicateContact` reemplaza el contenido de
+  // la hoja (ni escáner ni formulario) mientras se muestra el aviso.
+  const [duplicateContact, setDuplicateContact] = useState<SinpeContact | null>(null);
+  const [contactAddError, setContactAddError] = useState('');
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
@@ -302,6 +308,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     }
   };
 
+  // Contacto ya guardado bajo ese número, si lo hay. El dueño pidió avisar
+  // ANTES de guardar en vez de dejar que el alta lo pise en silencio.
+  const buscarContactoPorTelefono = (telefono: string): SinpeContact | undefined =>
+    state.sinpeContacts.find((c) => mismoTelefonoCR(c.phone, telefono));
+
+  const esMiPropioNumero = (telefono: string): boolean =>
+    !!state.user?.phone && mismoTelefonoCR(telefono, state.user.phone);
+
   // Deja la hoja como recién abierta. Se usa al cerrarla y después de guardar.
   const resetContactForm = () => {
     setNewContactName('');
@@ -311,6 +325,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setContactSheetMode('form');
     setContactScanError('');
     setContactPrefilled(false);
+    setDuplicateContact(null);
+    setContactAddError('');
   };
 
   // Abre la hoja de agregar contacto directamente en el escáner.
@@ -322,15 +338,27 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
   /**
    * Lectura del QR de contacto. Devuelve false cuando el código no es un
-   * contacto de KiramoPay para que el escáner siga encendido: cerrarlo ante un
-   * QR ajeno obligaría a volver a abrirlo por un error que no cometió el
-   * usuario.
+   * contacto de KiramoPay, o cuando es el propio, para que el escáner siga
+   * encendido: cerrarlo ante un QR ajeno o el propio obligaría a volver a
+   * abrirlo por algo que no es un error real del usuario. Un contacto
+   * DUPLICADO sí es una lectura válida y definitiva: apaga la cámara y
+   * muestra el aviso en vez del formulario de alta.
    */
   const handleContactScan = (raw: string): boolean => {
     const contact = tryParseContactQr(raw);
     if (!contact) {
       setContactScanError(t('scan_contact_invalid'));
       return false;
+    }
+    if (esMiPropioNumero(contact.phone)) {
+      setContactScanError(t('contact_own_number'));
+      return false;
+    }
+    const existing = buscarContactoPorTelefono(contact.phone);
+    if (existing) {
+      setContactScanError('');
+      setDuplicateContact(existing);
+      return true;
     }
     const digits = contact.phone.replace(/\D/g, '').slice(-8);
     setNewContactName(contact.name);
@@ -345,6 +373,18 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const handleAddContact = () => {
     if (!newContactName || !newContactPhone) return;
 
+    const telefono = normalizarTelefonoCR(newContactPhone);
+    if (telefono && esMiPropioNumero(telefono)) {
+      setContactAddError(t('contact_own_number'));
+      return;
+    }
+    const existing = telefono ? buscarContactoPorTelefono(telefono) : undefined;
+    if (existing) {
+      setContactAddError('');
+      setDuplicateContact(existing);
+      return;
+    }
+
     const newContact: SinpeContact = {
       id: Date.now().toString(),
       name: newContactName,
@@ -357,6 +397,20 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
     resetContactForm();
     setShowAddContactSheet(false);
+  };
+
+  // Acciones del aviso de duplicado: "enviarle dinero" cierra la hoja de alta
+  // y abre la de envío con ese contacto ya elegido; "cerrar" solo limpia todo.
+  const handleGoToDuplicate = () => {
+    const contact = duplicateContact;
+    setShowAddContactSheet(false);
+    resetContactForm();
+    if (contact) handleSelectContact(contact);
+  };
+
+  const handleCloseDuplicate = () => {
+    setShowAddContactSheet(false);
+    resetContactForm();
   };
 
   const handleCopy = async (text: string, label: string) => {
@@ -708,9 +762,55 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           setShowAddContactSheet(false);
           resetContactForm();
         }}
-        title={contactSheetMode === 'scan' ? t('scan_contact_title') : t('add_sinpe_contact')}
+        title={
+          duplicateContact
+            ? t('add_sinpe_contact')
+            : contactSheetMode === 'scan'
+              ? t('scan_contact_title')
+              : t('add_sinpe_contact')
+        }
       >
-        {contactSheetMode === 'scan' ? (
+        {duplicateContact ? (
+          // Ni escáner ni formulario: el número ya está guardado. Se avisa con
+          // el nombre que YA se tenía (no el que traía el QR o se acababa de
+          // teclear) y se ofrece ir directo a mandarle dinero, en vez de dejar
+          // que guardar de nuevo lo pise en silencio.
+          <div className="text-center py-6" aria-live="polite">
+            <div className="w-20 h-20 bg-[var(--color-primary-soft)] rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-glow">
+              <Icons.Users size={36} className="text-[var(--color-primary)]" />
+            </div>
+            <h2 className="text-xl font-black uv-text-primary mb-4 tracking-tight">
+              {t('contact_already_exists')}
+            </h2>
+            {/* Mismo chip de iniciales que la lista de contactos y el envío
+                seleccionado: es el número guardado el que se reconoce, no la
+                oración que lo explica. */}
+            <div className="flex items-center gap-3 uv-surface-2 rounded-2xl px-4 py-3 mx-auto max-w-[240px] mb-6 text-left">
+              <div className="w-10 h-10 uv-gradient-brand rounded-full flex items-center justify-center text-white font-bold shrink-0">
+                {duplicateContact.name.charAt(0)}
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold uv-text-primary truncate">{duplicateContact.name}</p>
+                <p className="text-sm uv-text-muted tabular-nums">{duplicateContact.phone}</p>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button
+                onClick={handleGoToDuplicate}
+                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              >
+                <Icons.Send size={18} />
+                {t('contact_duplicate_send')}
+              </button>
+              <button
+                onClick={handleCloseDuplicate}
+                className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+              >
+                {t('close')}
+              </button>
+            </div>
+          </div>
+        ) : contactSheetMode === 'scan' ? (
           <div className="space-y-4">
             <QrScannerPanel
               active={showAddContactSheet && contactSheetMode === 'scan'}
@@ -836,6 +936,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               }`} />
             </div>
           </button>
+
+          {contactAddError && (
+            <p className="text-red-500 text-sm text-center" aria-live="polite">{contactAddError}</p>
+          )}
 
           {/* Boton guardar */}
           <button

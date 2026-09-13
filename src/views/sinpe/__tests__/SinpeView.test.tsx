@@ -7,6 +7,14 @@ import { SinpeView } from '../SinpeView';
 const mocks = vi.hoisted(() => ({
   api: { sinpe: { send: vi.fn() }, mfa: { totpVerify: vi.fn() } },
   dispatch: vi.fn(),
+  // Mutable a propósito: algunas pruebas necesitan contactos ya guardados
+  // (para ejercitar la detección de duplicados) sin reescribir el mock entero.
+  state: {
+    accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
+    sinpeContacts: [] as Array<{ id: string; name: string; phone: string; bank?: string; isFavorite?: boolean }>,
+    sinpeHistory: [] as unknown[],
+    user: { phone: '+506 8888-0000' },
+  },
 }));
 
 vi.mock('@/api', () => ({
@@ -16,12 +24,7 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/hooks/useApp', () => ({
   useApp: () => ({
-    state: {
-      accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
-      sinpeContacts: [],
-      sinpeHistory: [],
-      user: { phone: '+506 8888-0000' },
-    },
+    state: mocks.state,
     dispatch: mocks.dispatch,
   }),
 }));
@@ -63,6 +66,8 @@ beforeEach(() => {
   mocks.api.sinpe.send.mockReset();
   mocks.api.mfa.totpVerify.mockReset();
   mocks.dispatch.mockReset();
+  mocks.state.sinpeContacts = [];
+  mocks.state.user = { phone: '+506 8888-0000' };
   // jsdom no tiene cámara. Una promesa que nunca resuelve deja el escáner en su
   // estado inicial sin actualizaciones de estado fuera de act().
   Object.defineProperty(navigator, 'mediaDevices', {
@@ -245,6 +250,99 @@ describe('SinpeView — agregar contacto escaneando', () => {
     expect(dialog.getByPlaceholderText('Ej: Juan Pérez')).toBeInTheDocument();
     // Y desde ahí también se puede pasar a escanear.
     expect(dialog.getByRole('button', { name: /Escanear código QR/ })).toBeInTheDocument();
+  });
+});
+
+// Pedido del dueño: si el número escaneado o tecleado ya está guardado, o es
+// el propio, avisar de inmediato en vez de dejar que el alta lo pise en
+// silencio (el backend hacía un upsert que sobrescribía nombre y banco).
+describe('SinpeView — contacto duplicado o número propio', () => {
+  // El botón "Escanear QR" del encabezado está siempre presente (a diferencia
+  // del CTA "Escanear código QR" del estado vacío, que desaparece en cuanto ya
+  // hay contactos guardados — justo el caso que estas pruebas necesitan).
+  async function abrirEscaner(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Escanear QR' }));
+    return within(await screen.findByRole('dialog'));
+  }
+
+  function leerCodigo(d: ReturnType<typeof within>, raw: string) {
+    fireEvent.change(d.getByPlaceholderText('Código QR'), { target: { value: raw } });
+    fireEvent.click(d.getByRole('button', { name: 'Continuar' }));
+  }
+
+  it('avisa al escanear el QR de un contacto que ya está guardado, sin abrir el formulario de alta', async () => {
+    mocks.state.sinpeContacts = [{ id: 'c1', name: 'Diego Mora', phone: '8888-7777', bank: 'BAC' }];
+    const user = userEvent.setup();
+    setup();
+
+    const d = await abrirEscaner(user);
+    // El QR trae otro nombre/banco a propósito: lo que se muestra es el
+    // contacto YA guardado, no lo que traiga el código.
+    leerCodigo(d, encodeContactQr({ name: 'Diego (alias)', phone: '+506 8888-7777', bank: 'BCR' }));
+
+    expect(await screen.findByText(/Ya tienes este contacto guardado/)).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('Diego Mora')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Ej: Juan Pérez')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('ofrece enviarle dinero desde el aviso de duplicado', async () => {
+    mocks.state.sinpeContacts = [{ id: 'c1', name: 'Diego Mora', phone: '8888-7777', bank: 'BAC' }];
+    const user = userEvent.setup();
+    setup();
+
+    const d = await abrirEscaner(user);
+    leerCodigo(d, encodeContactQr({ name: 'Diego Mora', phone: '+506 8888-7777' }));
+    await screen.findByText(/Ya tienes este contacto guardado/);
+
+    await user.click(screen.getByRole('button', { name: 'Enviarle dinero' }));
+
+    // Se cierra la hoja de alta y se abre la de envío con ese contacto.
+    const sendDialog = within(await screen.findByRole('dialog'));
+    expect(sendDialog.getByText('Diego Mora')).toBeInTheDocument();
+  });
+
+  it('avisa con un mensaje claro al escanear el propio QR y sigue escaneando', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    const d = await abrirEscaner(user);
+    leerCodigo(d, encodeContactQr({ name: 'Yo Mismo', phone: '+506 8888-0000' }));
+
+    expect(await screen.findByText(/no puedes agregarte como contacto/)).toBeInTheDocument();
+    // No es un duplicado guardado ni un alta: el escáner sigue activo.
+    expect(screen.queryByPlaceholderText('Ej: Juan Pérez')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('avisa el mismo duplicado al escribir manualmente un teléfono ya guardado', async () => {
+    mocks.state.sinpeContacts = [{ id: 'c1', name: 'Diego Mora', phone: '8888-7777', bank: 'BAC' }];
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Otro Nombre');
+    await user.type(dialog.getByPlaceholderText('8888-0000'), '88887777');
+    await user.click(dialog.getByRole('button', { name: /Guardar contacto/ }));
+
+    expect(await screen.findByText(/Ya tienes este contacto guardado/)).toBeInTheDocument();
+    expect(dialog.getByText('Diego Mora')).toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('avisa mensaje claro al escribir manualmente el propio número', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Yo');
+    await user.type(dialog.getByPlaceholderText('8888-0000'), '88880000');
+    await user.click(dialog.getByRole('button', { name: /Guardar contacto/ }));
+
+    expect(await screen.findByText(/no puedes agregarte como contacto/)).toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 });
 

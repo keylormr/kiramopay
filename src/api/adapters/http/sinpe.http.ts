@@ -3,6 +3,7 @@ import type { ApiResponse } from '../../types';
 import type { SinpeContact, SinpeTransaction } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
+import { normalizarTelefonoCR } from '@/utils/telefono';
 
 export class HttpSinpeRepository implements ISinpeRepository {
   constructor(private client: HttpClient) {}
@@ -35,19 +36,27 @@ export class HttpSinpeRepository implements ISinpeRepository {
   }
 
   async addContact(contact: SinpeContact): Promise<ApiResponse<SinpeContact>> {
+    // El backend exige +506XXXXXXXX; los contactos locales se guardan como
+    // "8888-1234" (sin prefijo de pais). Mandar eso tal cual era un 400 de
+    // formato garantizado — como manual send() antes de normalizar el numero.
+    const telefono = normalizarTelefonoCR(contact.phone) || contact.phone;
     const res = await this.client.post<{
       id: string;
       phone: string;
       name: string;
       bank: string;
     }>('/api/v1/sinpe/contacts', {
-      phone: contact.phone,
+      phone: telefono,
       name: contact.name,
       bank: contact.bank || '',
     });
 
     if (!res.success || !res.data) {
-      return apiError('ADD_FAILED', res.error?.message || 'Failed to add contact');
+      // Preserva el codigo del servidor (p. ej. CONTACT_EXISTS con el contacto
+      // existente en `data`) en vez de aplanarlo todo a ADD_FAILED, para que
+      // quien llame pueda distinguir un duplicado de cualquier otro fallo.
+      const code = res.error?.code || 'ADD_FAILED';
+      return apiError(code, res.error?.message || 'Failed to add contact', res.error?.data);
     }
 
     return apiSuccess({
