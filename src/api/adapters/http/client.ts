@@ -155,7 +155,10 @@ export class HttpClient {
         return apiError<T>(
           code,
           json.error?.message || `Request failed with status ${res.status}`,
-          json.error?.data,
+          // `data` viaja como HERMANO de `error` en el envelope (ver
+          // ErrorWithData en backend/pkg/response/response.go), nunca anidado
+          // dentro de error — APIError no tiene campo Data.
+          json.data,
         );
       }
 
