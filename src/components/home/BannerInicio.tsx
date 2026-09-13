@@ -139,6 +139,8 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
   }, [cerradas, referidosListos, referidos, enlaceCopiado, t, onAbrirPlanes, onCobrarQR]);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
+  // Destino estable de foco cuando se cierra una tarjeta: ver cerrarTarjeta.
+  const seccionRef = useRef<HTMLElement>(null);
   const [indice, setIndice] = useState(0);
 
   // El índice nunca debe apuntar fuera del arreglo: cerrar una tarjeta, o que
@@ -176,6 +178,12 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
   };
 
   const cerrarTarjeta = (id: TarjetaId) => {
+    // El boton "X" que dispara este cierre tiene el foco y desaparece del DOM
+    // en el siguiente render: sin esto, el navegador deja caer el foco a
+    // <body> y quien navega con teclado pierde el punto donde estaba. Mover
+    // el foco a la seccion (contenedor estable) ANTES de actualizar el
+    // estado evita esa perdida.
+    seccionRef.current?.focus();
     cerrarTarjetaBanner(userId, id);
     setCerradas((prev) => new Set(prev).add(id));
   };
@@ -184,9 +192,12 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
 
   return (
     <section
+      ref={seccionRef}
+      tabIndex={-1}
       aria-label={t('banner_home_label')}
       aria-roledescription="carousel"
       onKeyDown={onKeyDown}
+      className="rounded-2xl uv-focus-ring"
     >
       <div
         ref={scrollerRef}
