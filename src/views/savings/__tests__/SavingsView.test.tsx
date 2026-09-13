@@ -136,7 +136,8 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
     await user.click(screen.getByRole('button', { name: 'Depositar' }));
 
     expect(await screen.findByText('No se pudo depositar. Tu dinero sigue en la billetera.')).toBeInTheDocument();
-    expect(monto).toHaveValue(10000);
+    // CampoMonto muestra el separador de miles; el monto sigue siendo 10000.
+    expect(monto).toHaveValue('10,000');
   });
 
   // Borrar una meta con plata adentro era un toque sin pregunta.

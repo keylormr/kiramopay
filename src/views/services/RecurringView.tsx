@@ -3,6 +3,7 @@ import { useRecurringStore } from '@/stores/recurring.store';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import type { RecurringPayment } from '@/types';
 
 const FREQUENCY_LABELS: Record<RecurringPayment['frequency'], string> = {
@@ -357,10 +358,9 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             </label>
             <div className="flex items-center gap-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3.5 rounded-xl">
               <span className="text-xl font-bold text-gray-400">&#8353;</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={newAmount}
-                onChange={(e) => setNewAmount(e.target.value)}
+                onChange={setNewAmount}
                 placeholder="0"
                 className="flex-1 bg-transparent outline-none text-xl font-bold uv-text-primary"
               />

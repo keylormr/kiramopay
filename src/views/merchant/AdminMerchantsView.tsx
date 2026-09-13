@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer } from '@/api';
 import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
 
@@ -120,10 +121,11 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                 </p>
                 <label className="flex items-center gap-2 mt-3 text-sm">
                   <span className="uv-text-secondary">{t('merchant_commission')}</span>
-                  <input
-                    type="number" step="0.1" min="0"
+                  <CampoMonto
+                    decimals={1}
+                    thousands={false}
                     value={commission[m.id] ?? ''}
-                    onChange={(e) => setCommission((c) => ({ ...c, [m.id]: e.target.value }))}
+                    onChange={(v) => setCommission((c) => ({ ...c, [m.id]: v }))}
                     className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
                     aria-label={t('merchant_commission')}
                   />
