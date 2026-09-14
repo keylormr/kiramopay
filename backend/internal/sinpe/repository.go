@@ -49,14 +49,24 @@ func (r *Repository) AddContact(ctx context.Context, userID string, phone, name,
 	id := uuid.New().String()
 	now := time.Now()
 
-	_, err := r.db.Exec(ctx,
+	// DO NOTHING en vez del viejo DO UPDATE: agregar un contacto que ya existe
+	// ya NO le pisa el nombre y el banco en silencio. RowsAffected() == 0 es la
+	// unica forma de distinguir "ya estaba" de "se inserto" con esta forma.
+	tag, err := r.db.Exec(ctx,
 		`INSERT INTO sinpe_contacts (id, user_id, phone, name, bank, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
-		 ON CONFLICT (user_id, phone) DO UPDATE SET name = $4, bank = $5`,
+		 ON CONFLICT (user_id, phone) DO NOTHING`,
 		id, userID, phone, name, bank, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("add contact: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		existing, ferr := r.FindContactByPhone(ctx, userID, phone)
+		if ferr != nil {
+			return nil, fmt.Errorf("add contact: duplicate but lookup failed: %w", ferr)
+		}
+		return nil, &ContactExistsError{Existing: existing}
 	}
 
 	return &ContactRecord{

@@ -437,6 +437,9 @@ export type TranslationKeys = {
   scan_contact_hint: string;
   scan_contact_invalid: string;
   scan_contact_prefilled: string;
+  contact_already_exists: string;
+  contact_duplicate_send: string;
+  contact_own_number: string;
   or_type_it: string;
   contact_name: string;
   bank_optional: string;

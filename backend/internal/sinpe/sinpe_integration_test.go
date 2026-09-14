@@ -2,13 +2,18 @@ package sinpe_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/sinpe"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -56,20 +61,88 @@ func TestAddContact_Success(t *testing.T) {
 	}
 }
 
+// Agregar un contacto que ya existe se RECHAZA en vez de pisarlo en silencio
+// (el ON CONFLICT ... DO UPDATE de antes). El pedido del dueno: si el telefono
+// ya esta guardado, avisar y devolver el contacto tal como esta, no la version
+// nueva que se intento guardar encima.
 func TestAddContact_Duplicate(t *testing.T) {
 	svc, userID, _ := setupSinpeService(t)
 	ctx := context.Background()
 	if _, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC"); err != nil {
 		t.Fatalf("first AddContact: %v", err)
 	}
-	// ON CONFLICT updates name/bank, so this no longer errors. Instead verify
-	// idempotent upsert behaviour.
-	c2, err := svc.AddContact(ctx, userID, "+50688885678", "Maria L.", "BCR")
-	if err != nil {
-		t.Fatalf("second AddContact (upsert): %v", err)
+
+	_, err := svc.AddContact(ctx, userID, "+50688885678", "Maria L.", "BCR")
+	if err == nil {
+		t.Fatal("se esperaba un rechazo por contacto duplicado")
 	}
-	if c2.Name != "Maria L." {
-		t.Fatalf("expected name to upsert, got %s", c2.Name)
+	if !errors.Is(err, sinpe.ErrContactExists) {
+		t.Fatalf("error = %v, se esperaba ErrContactExists", err)
+	}
+	var exists *sinpe.ContactExistsError
+	if !errors.As(err, &exists) {
+		t.Fatalf("error = %v, se esperaba *sinpe.ContactExistsError", err)
+	}
+	if exists.Existing == nil || exists.Existing.Name != "Maria Lopez" || exists.Existing.Bank != "BAC" {
+		t.Fatalf("contacto existente = %+v, se esperaba el original sin pisar", exists.Existing)
+	}
+
+	// Y en la base el contacto de verdad no cambio.
+	contacts, err := svc.GetContacts(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetContacts: %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].Name != "Maria Lopez" || contacts[0].Bank != "BAC" {
+		t.Fatalf("el contacto guardado cambio: %+v", contacts)
+	}
+}
+
+// El HTTP handler traduce el rechazo a 409 CONTACT_EXISTS con el contacto
+// existente en `data`, para que el cliente lo muestre en vez de adivinar.
+func TestHandlerAddContact_Conflict(t *testing.T) {
+	svc, userID, _ := setupSinpeService(t)
+	h := sinpe.NewHandler(svc)
+
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sinpe/contacts", strings.NewReader(body))
+		req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+		rec := httptest.NewRecorder()
+		h.AddContact(rec, req)
+		return rec
+	}
+
+	first := post(`{"phone":"+50688885678","name":"Maria Lopez","bank":"BAC"}`)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("primera alta = %d, se esperaba 201: %s", first.Code, first.Body.String())
+	}
+
+	second := post(`{"phone":"+50688885678","name":"Maria L.","bank":"BCR"}`)
+	if second.Code != http.StatusConflict {
+		t.Fatalf("segunda alta = %d, se esperaba 409: %s", second.Code, second.Body.String())
+	}
+
+	var env struct {
+		Success bool `json:"success"`
+		Error   struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Data struct {
+			Name string `json:"name"`
+			Bank string `json:"bank"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Success {
+		t.Fatal("se esperaba success:false en el 409")
+	}
+	if env.Error.Code != "CONTACT_EXISTS" {
+		t.Fatalf("codigo = %q, se esperaba CONTACT_EXISTS", env.Error.Code)
+	}
+	if env.Data.Name != "Maria Lopez" || env.Data.Bank != "BAC" {
+		t.Fatalf("data del 409 = %+v, se esperaba el contacto original sin pisar", env.Data)
 	}
 }
 

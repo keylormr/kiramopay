@@ -27,6 +27,17 @@ function makeErrRes(status: number, code: string) {
   } as unknown as Response;
 }
 
+// Respuesta de error CON data, en la forma real del envelope del backend:
+// `data` es HERMANO de `error`, nunca anidado dentro de el (ver
+// backend/pkg/response/response.go, ErrorWithData).
+function makeErrResConData(status: number, code: string, data: unknown) {
+  return {
+    status,
+    ok: false,
+    json: async () => ({ success: false, data, error: { code, message: 'err' } }),
+  } as unknown as Response;
+}
+
 describe('HttpClient refresh-on-401', () => {
   beforeEach(() => {
     registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
@@ -156,5 +167,36 @@ describe('HttpClient cuenta bloqueada (403 ACCOUNT_BLOCKED)', () => {
     expect(r.success).toBe(false);
     expect(r.error?.code).toBe('ACCOUNT_BLOCKED');
     expect(onBlocked).not.toHaveBeenCalled();
+  });
+});
+
+describe('HttpClient error con data (p. ej. 409 CONTACT_EXISTS)', () => {
+  beforeEach(() => {
+    registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
+  });
+
+  // Regresion: el backend manda `data` como HERMANO de `error` en el envelope
+  // (backend/pkg/response/response.go, ErrorWithData), nunca anidado dentro
+  // de el. Leer `json.error?.data` siempre daba undefined contra el backend
+  // real aunque los tests de sinpe.http.test.ts (que mockean client.post()
+  // directamente) no lo detectaran.
+  it('toma data del nivel superior del envelope, no de dentro de error', async () => {
+    const contactoExistente = {
+      id: 'srv-1',
+      phone: '+50688881234',
+      name: 'Diego Mora',
+      bank: 'BAC',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeErrResConData(409, 'CONTACT_EXISTS', contactoExistente)),
+    );
+
+    const client = new HttpClient('http://x');
+    const r = await client.post('/api/v1/sinpe/contacts', { phone: '+50688881234' });
+
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('CONTACT_EXISTS');
+    expect(r.error?.data).toEqual(contactoExistente);
   });
 });

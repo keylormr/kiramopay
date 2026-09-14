@@ -63,6 +63,14 @@ func (h *Handler) AddContact(w http.ResponseWriter, r *http.Request) {
 
 	contact, err := h.service.AddContact(r.Context(), userID, req.Phone, req.Name, req.Bank)
 	if err != nil {
+		var exists *ContactExistsError
+		if errors.As(err, &exists) {
+			// El contacto NO se pisa: se devuelve tal como esta hoy, para que
+			// el cliente pueda mostrarlo (nombre, banco) en vez de adivinar.
+			response.ErrorWithData(w, http.StatusConflict, "CONTACT_EXISTS",
+				"ya tienes este numero guardado como contacto", exists.Existing)
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "ADD_FAILED", err.Error())
 		return
 	}
