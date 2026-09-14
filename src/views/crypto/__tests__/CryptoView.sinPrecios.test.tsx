@@ -13,6 +13,7 @@ import { CryptoView } from '../CryptoView';
 // estado y la respuesta de precios entre casos, y aquel los tiene fijos.
 const mocks = vi.hoisted(() => ({
   getPrices: vi.fn(),
+  dispatch: vi.fn(),
   // La cartera cambia por caso. La vista lee `currentPrice` de aqui, no de la
   // respuesta de precios: son dos cosas distintas y hay casos donde difieren.
   activos: [] as Array<Record<string, unknown>>,
@@ -57,7 +58,7 @@ vi.mock('@/hooks/useApp', () => ({
         favoriteAssets: [],
       },
     },
-    dispatch: vi.fn(),
+    dispatch: mocks.dispatch,
   }),
 }));
 
@@ -79,12 +80,13 @@ const activo = (symbol: string, balance: number, currentPrice: number) => ({
 // backend/internal/crypto/prices.go, sin las estables ancladas al dolar.
 const SIMBOLOS_CON_FEED = ['BTC', 'ETH', 'SOL', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI', 'ATOM'];
 
-const precio = (symbol: string, price: number) => ({
+const precio = (symbol: string, price: number, priceHistory: number[] = []) => ({
   symbol,
   price,
   change24h: 0,
   volume24h: 0,
   marketCap: 0,
+  priceHistory,
 });
 
 // La respuesta sana del feed. `omitidos` simula la respuesta a medias: el
@@ -104,6 +106,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   mocks.getPrices.mockReset();
+  mocks.dispatch.mockReset();
   mocks.activos = [activo('BTC', 0.5, 0)];
   mocks.preciosWs = {};
 });
@@ -245,5 +248,64 @@ describe('CryptoView — sin precios lo dice, no inventa un total', () => {
 
     expect(hoja.getByText('No se puede operar sin el precio actual.')).toBeInTheDocument();
     expect(hoja.getByRole('button', { name: 'Convertir' })).toBeDisabled();
+  });
+
+  // PR #201: el sparkline real de 7 dias (sparkline_7d, dentro de la misma
+  // respuesta de getPrices) se perdia porque el sondeo REST despachaba
+  // UPDATE_CRYPTO_PRICES sin priceHistory; el reductor lo tomaba como "no hay
+  // historial nuevo" y le cortaba el punto mas viejo al real. Estas dos
+  // pruebas fijan que CryptoView de verdad propaga ese campo en cada camino.
+  describe('CryptoView — el sparkline real no se pierde en el camino', () => {
+    it('fetchPrices() incluye el priceHistory que trajo el backend en el dispatch', async () => {
+      mocks.activos = [activo('BTC', 0.5, 40000)];
+      const historialReal = [60000, 60500, 61000, 61234.5];
+      mocks.getPrices.mockResolvedValue(feed().map(p =>
+        p.symbol === 'BTC' ? { ...p, priceHistory: historialReal } : p,
+      ));
+      montar();
+
+      await waitFor(() => {
+        const llamada = mocks.dispatch.mock.calls.find(
+          ([accion]) => accion.type === 'UPDATE_CRYPTO_PRICES',
+        );
+        expect(llamada).toBeDefined();
+        const paraBtc = llamada![0].payload.find((u: { symbol: string }) => u.symbol === 'BTC');
+        expect(paraBtc.priceHistory).toEqual(historialReal);
+      });
+    });
+
+    it('un tick de WebSocket reenvia el ultimo priceHistory real en vez de mandarlo vacio', async () => {
+      mocks.activos = [activo('BTC', 0.5, 40000)];
+      const historialReal = [60000, 60500, 61000, 61234.5];
+      mocks.getPrices.mockResolvedValue(feed().map(p =>
+        p.symbol === 'BTC' ? { ...p, priceHistory: historialReal } : p,
+      ));
+      const { rerender } = montar();
+
+      // Esperar el dispatch del sondeo REST inicial (el que guarda el
+      // historial real en marketData) antes de disparar el tick de socket.
+      await waitFor(() => {
+        expect(mocks.dispatch.mock.calls.some(([a]) => a.type === 'UPDATE_CRYPTO_PRICES')).toBe(true);
+      });
+      mocks.dispatch.mockClear();
+
+      mocks.preciosWs = { BTC: { symbol: 'BTC', price: 61500, change_24h: 1.2, volume_24h: 0, market_cap: 0 } };
+      rerender(
+        <LanguageProvider>
+          <CryptoView />
+        </LanguageProvider>,
+      );
+
+      await waitFor(() => {
+        const llamada = mocks.dispatch.mock.calls.find(
+          ([accion]) => accion.type === 'UPDATE_CRYPTO_PRICES',
+        );
+        expect(llamada).toBeDefined();
+        const paraBtc = llamada![0].payload.find((u: { symbol: string }) => u.symbol === 'BTC');
+        // Ni vacio (lo que el socket no trae) ni omitido: el ultimo real que
+        // guardo el sondeo REST.
+        expect(paraBtc.priceHistory).toEqual(historialReal);
+      });
+    });
   });
 });

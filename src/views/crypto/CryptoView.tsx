@@ -192,6 +192,15 @@ export const CryptoView: React.FC = () => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
 
+  // Ref para leer el ultimo priceHistory real dentro del efecto del
+  // WebSocket sin meter marketData en su arreglo de dependencias: ese efecto
+  // llama setMarketData al final, asi que declarar marketData como
+  // dependencia lo reprogramaria a si mismo en bucle en cada tick.
+  const marketDataRef = useRef(marketData);
+  useEffect(() => {
+    marketDataRef.current = marketData;
+  }, [marketData]);
+
   // Fetch prices from simulated service
   const fetchPrices = useCallback(async () => {
     try {
@@ -209,11 +218,19 @@ export const CryptoView: React.FC = () => {
         prices.forEach(p => { dataMap[p.symbol] = p; });
         setMarketData(dataMap);
 
-        // Update state with new prices
+        // Update state with new prices. priceHistory viaja en la MISMA
+        // respuesta (getPrices ya trae sparkline_7d, ver cryptoPrices.ts): si
+        // se omitiera aca, el reductor updatePrices() de crypto.store.ts lo
+        // toma como "no hay historial nuevo" y le corta el punto mas viejo al
+        // sparkline real para pegarle el precio actual al final -en unos 14 a
+        // 42 minutos de sondeo el historial de 7 dias quedaria irreconocible.
+        // Antes esto no importaba porque priceHistory siempre llegaba vacio;
+        // ahora que trae datos reales hay que propagarlos.
         const updates = prices.map(p => ({
           symbol: p.symbol,
           price: p.price,
-          change24h: p.change24h
+          change24h: p.change24h,
+          priceHistory: p.priceHistory
         }));
         dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
         setLastUpdated(new Date());
@@ -225,47 +242,26 @@ export const CryptoView: React.FC = () => {
     }
   }, []);
 
-  // Fetch price history for sparklines
-  const fetchPriceHistories = useCallback(async () => {
-    try {
-      const histories = await cryptoPriceService.getAllPriceHistories(CRYPTO_SYMBOLS);
-
-      // Update assets with price history
-      const updates = Object.entries(histories).map(([symbol, history]) => ({
-        symbol,
-        price: 0,
-        change24h: 0,
-        priceHistory: history
-      })).filter(u => u.priceHistory.length > 0);
-
-      if (updates.length > 0) {
-        dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
-      }
-    } catch {
-      // Price history fetch failed — sparklines will show flat line
-    }
-  }, []);
-
   // Initial fetch and periodic updates — runs only once on mount
   useEffect(() => {
     // Schedule initial fetch asynchronously to avoid synchronous setState in effect
     const initialTimer = setTimeout(() => {
       fetchPrices();
-      fetchPriceHistories();
     }, 0);
 
-    // Update prices every 5 minutes (stable display, manual refresh available)
+    // Update prices (y su sparkline, propagada en fetchPrices de arriba) cada
+    // 5 minutos, pantalla estable con refresco manual disponible. Antes habia
+    // un fetchPriceHistories() aparte cada 10 minutos que pedia exactamente
+    // el mismo endpoint (/crypto/prices) solo para leer priceHistory: con
+    // fetchPrices() ya propagandolo, esa segunda llamada duplicaba trafico e
+    // impactos al proveedor (CoinGecko) sin ganar nada nuevo.
     const priceInterval = setInterval(fetchPrices, 300000);
-
-    // Update histories every 10 minutes
-    const historyInterval = setInterval(fetchPriceHistories, 600000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(priceInterval);
-      clearInterval(historyInterval);
     };
-  }, [fetchPrices, fetchPriceHistories]);
+  }, [fetchPrices]);
 
   // Precios en vivo por WebSocket mientras la vista esta abierta. El hook
   // existia sin que nadie lo montara; el canal quedo sano en el PR #103. El
@@ -280,7 +276,19 @@ export const CryptoView: React.FC = () => {
     const timer = setTimeout(() => {
       dispatchRef.current({
         type: 'UPDATE_CRYPTO_PRICES',
-        payload: entradas.map(p => ({ symbol: p.symbol, price: p.price, change24h: p.change_24h })),
+        // priceHistory: el WebSocket no lo trae (ver el comentario de
+        // setMarketData abajo), pero hay que RE-ENVIAR el ultimo real que
+        // guardo el sondeo REST -si se omite, updatePrices() de
+        // crypto.store.ts lo lee como "sin historial nuevo" y le corta el
+        // punto mas viejo al sparkline para pegarle este precio al final. Con
+        // un tick cada 5-15s eso se comeria el historial real de 7 dias en
+        // minutos (ver el hallazgo original: PR #201).
+        payload: entradas.map(p => ({
+          symbol: p.symbol,
+          price: p.price,
+          change24h: p.change_24h,
+          priceHistory: marketDataRef.current[p.symbol]?.priceHistory ?? [],
+        })),
       });
       setMarketData(prev => {
         const siguiente = { ...prev };

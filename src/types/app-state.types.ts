@@ -76,7 +76,7 @@ export type AppAction =
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
   | { type: 'MARK_ALL_NOTIFICATIONS_READ' }
   | { type: 'DELETE_NOTIFICATION'; payload: string }
-  | { type: 'UPDATE_CRYPTO_PRICES'; payload: { symbol: string; price: number; change24h: number }[] }
+  | { type: 'UPDATE_CRYPTO_PRICES'; payload: { symbol: string; price: number; change24h: number; priceHistory?: number[] }[] }
   | { type: 'BUY_CRYPTO'; payload: { asset: string; amount: number; price: number; fromCurrency: string; fromAmount: number } }
   | { type: 'SELL_CRYPTO'; payload: { asset: string; amount: number; price: number; toCurrency: string; toAmount: number } }
   | { type: 'CONVERT_CRYPTO'; payload: { fromAsset: string; toAsset: string; fromAmount: number; toAmount: number; price: number } }
