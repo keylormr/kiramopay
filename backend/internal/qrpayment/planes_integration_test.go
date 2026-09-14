@@ -214,6 +214,8 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 
 	verificado := registrarComercio(t, svc, owner, "Verificado")
 	conRotulo := registrarComercio(t, svc, owner, "Pendiente con rotulo")
+	editado := registrarComercio(t, svc, owner, "Aprobado y editado")
+	legado := registrarComercio(t, svc, owner, "De antes de la 038")
 	nuevo := registrarComercio(t, svc, owner, "Pendiente nuevo")
 	rechazado := registrarComercio(t, svc, owner, "Rechazado")
 
@@ -221,10 +223,6 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 		`UPDATE qr_merchants SET verification_status = 'verified', reviewed_at = NOW() - INTERVAL '30 days'
 		  WHERE id = $1::uuid`, verificado.ID); err != nil {
 		t.Fatalf("preparar verificado: %v", err)
-	}
-	if _, err := pool.Exec(ctx,
-		`UPDATE qr_merchants SET verification_status = 'rejected' WHERE id = $1::uuid`, rechazado.ID); err != nil {
-		t.Fatalf("preparar rechazado: %v", err)
 	}
 	// Un comercio aprobado que cambio su cedula esta en 'pending', pero su rotulo
 	// prueba que estuvo aprobado: emitirlo exige la verificacion.
@@ -234,12 +232,64 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 		owner, conRotulo.ID, "PRUEBA-068-"+conRotulo.ID); err != nil {
 		t.Fatalf("preparar rotulo: %v", err)
 	}
+	// Aprobado, cambio su cedula antes de cobrar nada y volvio a 'pending'. No
+	// tiene huella de cobro: lo unico que queda de su aprobacion es reviewed_at.
+	if _, err := svc.ApproveMerchant(ctx, editado.ID, owner); err != nil {
+		t.Fatalf("aprobar editado: %v", err)
+	}
+	e, err := svc.UpdateMerchant(ctx, editado.ID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Aprobado y editado", Category: "restaurant", Cedula: "702650930", CedulaType: "fisica", LegalName: "Otra Persona",
+	})
+	if err != nil {
+		t.Fatalf("editar identidad: %v", err)
+	}
+	if e.VerificationStatus != "pending" {
+		t.Fatalf("editar identidad: quedo en %q, se esperaba pending", e.VerificationStatus)
+	}
+	// Antes de la 068 estas columnas no existian: la aprobacion de arriba no pudo
+	// dejarlo marcado.
+	if _, err := pool.Exec(ctx,
+		`UPDATE qr_merchants SET primera_aprobacion_at = NULL, promo_hasta = NULL WHERE id = $1::uuid`, editado.ID); err != nil {
+		t.Fatalf("quitar marcas del editado: %v", err)
+	}
+	// Solo rechazado, nunca aprobado. Es el costo aceptado de mirar reviewed_at:
+	// un rechazo lo llena igual que una aprobacion.
+	if _, err := svc.RejectMerchant(ctx, rechazado.ID, owner, "documento ilegible"); err != nil {
+		t.Fatalf("rechazar: %v", err)
+	}
+	// Nacio antes de que se aplicara la 038, que lo dio por verificado sin llenar
+	// reviewed_at, y al editar su perfil volvio a 'pending': sin revision ni cobro.
+	if _, err := pool.Exec(ctx,
+		`UPDATE qr_merchants SET created_at = NOW() - INTERVAL '90 days' WHERE id = $1::uuid`, legado.ID); err != nil {
+		t.Fatalf("preparar legado: %v", err)
+	}
 
 	sql, err := os.ReadFile("../../migrations/068_planes_y_promocion.sql")
 	if err != nil {
 		t.Fatalf("leer migracion: %v", err)
 	}
-	if _, err := pool.Exec(ctx, string(sql)); err != nil {
+
+	// schema_migrations la crea el runner, no el esquema de pruebas. Una tabla
+	// temporal en una conexion propia hace sus veces sin dejar nada en la base
+	// compartida, con la 038 aplicada hace 60 dias.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("conexion: %v", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx,
+		`CREATE TEMP TABLE schema_migrations (
+		     filename   TEXT PRIMARY KEY,
+		     checksum   TEXT NOT NULL,
+		     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+		 INSERT INTO schema_migrations (filename, checksum, applied_at)
+		 VALUES ('038_merchant_multi_kyc_commission.sql', 'prueba', NOW() - INTERVAL '60 days');`); err != nil {
+		t.Fatalf("schema_migrations temporal: %v", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), `DROP TABLE IF EXISTS pg_temp.schema_migrations`)
+	}()
+	if _, err := conn.Exec(ctx, string(sql)); err != nil {
 		t.Fatalf("correr migracion: %v", err)
 	}
 
@@ -253,30 +303,57 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	if v2, p2 := marcasDePromocion(t, pool, conRotulo.ID); v2 == nil || p2 != nil {
 		t.Fatalf("pendiente con rotulo: primera_aprobacion=%v promo=%v; se esperaba marcado", v2, p2)
 	}
-	if v3, _ := marcasDePromocion(t, pool, nuevo.ID); v3 != nil {
-		t.Fatalf("pendiente nuevo: quedo marcado (%v) sin haber sido aprobado nunca", *v3)
+	if v3, p3 := marcasDePromocion(t, pool, editado.ID); v3 == nil || p3 != nil {
+		t.Fatalf("aprobado y editado sin cobrar: primera_aprobacion=%v promo=%v; se esperaba marcado", v3, p3)
 	}
-	if v4, _ := marcasDePromocion(t, pool, rechazado.ID); v4 != nil {
-		t.Fatalf("rechazado sin historia: quedo marcado (%v)", *v4)
+	vl, pl := marcasDePromocion(t, pool, legado.ID)
+	if vl == nil || pl != nil {
+		t.Fatalf("de antes de la 038: primera_aprobacion=%v promo=%v; se esperaba marcado", vl, pl)
+	}
+	if time.Since(*vl) < 59*24*time.Hour {
+		t.Fatalf("de antes de la 038: la marca es %v; debia ser cuando se aplico la 038", *vl)
+	}
+	if v4, _ := marcasDePromocion(t, pool, rechazado.ID); v4 == nil {
+		t.Fatal("rechazado antes del despliegue: no quedo marcado; reviewed_at no distingue un rechazo de una aprobacion")
+	}
+	if v5, _ := marcasDePromocion(t, pool, nuevo.ID); v5 != nil {
+		t.Fatalf("pendiente nuevo: quedo marcado (%v) sin haber sido revisado nunca", *v5)
 	}
 
-	// Una segunda pasada no cambia nada.
+	// Una segunda pasada no cambia nada. Corre por otra conexion del pool, sin
+	// la tabla temporal: asi tambien se prueba el camino sin schema_migrations
+	// (el initdb de docker-compose).
 	if _, err := pool.Exec(ctx, string(sql)); err != nil {
 		t.Fatalf("segunda pasada: %v", err)
 	}
 	if otra, _ := marcasDePromocion(t, pool, verificado.ID); otra == nil || !otra.Equal(*v1) {
-		t.Fatalf("la segunda pasada movio la marca: %v -> %v", *v1, otra)
+		t.Fatalf("la segunda pasada movio la marca del verificado: %v -> %v", *v1, otra)
+	}
+	if otra, _ := marcasDePromocion(t, pool, legado.ID); otra == nil || !otra.Equal(*vl) {
+		t.Fatalf("la segunda pasada movio la marca del legado: %v -> %v", *vl, otra)
 	}
 
 	// Lo que eso significa al aprobar.
-	if a, err := svc.ApproveMerchant(ctx, conRotulo.ID, owner); err != nil || a.PromoHasta != nil {
-		t.Fatalf("ya aprobado antes: promo=%v (err %v); no la recibe", a.PromoHasta, err)
+	for _, c := range []struct{ nombre, id string }{
+		{"con rotulo", conRotulo.ID},
+		{"aprobado y editado", editado.ID},
+		{"de antes de la 038", legado.ID},
+		{"rechazado antes del despliegue", rechazado.ID},
+	} {
+		a, err := svc.ApproveMerchant(ctx, c.id, owner)
+		if err != nil {
+			t.Fatalf("aprobar %s: %v", c.nombre, err)
+		}
+		if a.PromoHasta != nil {
+			t.Fatalf("%s: recibio la promocion (hasta %v); ya habia pasado por una revision", c.nombre, *a.PromoHasta)
+		}
 	}
-	if b, err := svc.ApproveMerchant(ctx, nuevo.ID, owner); err != nil || b.PromoHasta == nil {
-		t.Fatalf("nuevo: promo=%v (err %v); la recibe", b.PromoHasta, err)
+	b, err := svc.ApproveMerchant(ctx, nuevo.ID, owner)
+	if err != nil {
+		t.Fatalf("aprobar nuevo: %v", err)
 	}
-	if c, err := svc.ApproveMerchant(ctx, rechazado.ID, owner); err != nil || c.PromoHasta == nil {
-		t.Fatalf("rechazado sin haber sido aprobado: promo=%v (err %v); la recibe", c.PromoHasta, err)
+	if b.PromoHasta == nil {
+		t.Fatal("nuevo: no recibio la promocion")
 	}
 }
 

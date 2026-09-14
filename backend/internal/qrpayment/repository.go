@@ -95,7 +95,8 @@ func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, erro
 // comercio que cambia su cedula vuelve a 'pending' (UpdateMerchant) y al
 // re-aprobarse NO recibe otra promocion ni alarga la que tenia. Los comercios
 // aprobados antes de la migracion 068 ya tienen la marca, asi que tampoco la
-// reciben.
+// reciben; la migracion explica que cuenta como "aprobado antes" y por que un
+// comercio que entonces solo fue rechazado tambien quedo marcado.
 //
 // En un UPDATE todas las expresiones del SET leen la fila VIEJA: el
 // `primera_aprobacion_at IS NULL` de promo_hasta ve el valor anterior a esta

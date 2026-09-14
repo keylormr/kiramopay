@@ -45,13 +45,51 @@ ALTER TABLE qr_merchants
 -- Quien ya fue aprobado antes de este despliegue queda marcado, y por eso no
 -- recibe la promocion aunque vuelva a aprobarse. "Ya fue aprobado" no se puede
 -- leer solo de verification_status: un comercio aprobado que cambio su cedula
--- esta hoy en 'pending'. Pero nadie cobra sin estar verificado — emitir un
--- codigo de comercio, un cobro o recibir un pago lo exigen —, asi que haber
--- dejado cualquiera de esas huellas prueba que estuvo aprobado.
+-- o su razon social esta hoy en 'pending', y ese cambio (UpdateMerchantProfile)
+-- no deja ningun otro rastro. Se marca a quien muestre cualquiera de estas
+-- senales:
+--
+--   a. Nacio antes de que se aplicara la 038. Esa migracion dio por verificados
+--      a todos los comercios que existian, sin llenar reviewed_at, y cualquiera
+--      de ellos que despues edito su perfil volvio a 'pending': su cedula estaba
+--      vacia, asi que llenarla cuenta como cambio de identidad. La fecha sale de
+--      schema_migrations, que crea el runner (RUN_MIGRATIONS). Donde las
+--      migraciones corren sin el (el initdb de docker-compose, sobre una base
+--      vacia) esa tabla no existe ni hay comercios viejos: de ahi el IF.
+--   b. Esta verificado hoy.
+--   c. Un administrador ya lo reviso alguna vez (reviewed_at). Cubre al que fue
+--      aprobado y cambio su identidad antes de cobrar nada.
+--   d. Dejo huella de cobro: emitir un codigo de comercio, un cobro o recibir un
+--      pago exigen estar verificado.
+--
+-- Costo aceptado de (c): reviewed_at tambien se llena al RECHAZAR, y hoy nada
+-- distingue "rechazado y nunca aprobado" de "aprobado, cambio su identidad y
+-- despues rechazado". Un comercio que antes del despliegue solo fue rechazado
+-- tampoco recibira la promocion cuando se apruebe. Se prefiere ese error, que
+-- cobra 0,5 % a quien pudo pagar 0,25 %, al contrario, que regala la promocion
+-- a un comercio que ya estaba aprobado.
+--
+-- (a) va primero para que esos comercios queden con la fecha en que la 038 los
+-- aprobo y no con la de su ultima revision. created_at es TIMESTAMP sin zona:
+-- la comparacion usa la zona de la sesion, la misma con la que la app lo
+-- escribio.
+DO $$
+BEGIN
+    IF to_regclass('schema_migrations') IS NOT NULL THEN
+        UPDATE qr_merchants m
+           SET primera_aprobacion_at = s.applied_at
+          FROM schema_migrations s
+         WHERE s.filename = '038_merchant_multi_kyc_commission.sql'
+           AND m.primera_aprobacion_at IS NULL
+           AND m.created_at < s.applied_at;
+    END IF;
+END $$;
+
 UPDATE qr_merchants m
    SET primera_aprobacion_at = COALESCE(m.reviewed_at, m.created_at, NOW())
  WHERE m.primera_aprobacion_at IS NULL
    AND (m.verification_status = 'verified'
+        OR m.reviewed_at IS NOT NULL
         OR EXISTS (SELECT 1 FROM qr_payments p      WHERE p.merchant_id = m.id)
         OR EXISTS (SELECT 1 FROM qr_payment_codes c WHERE c.merchant_id = m.id)
         OR EXISTS (SELECT 1 FROM qr_charges ch      WHERE ch.merchant_id = m.id));
