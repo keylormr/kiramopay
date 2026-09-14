@@ -332,5 +332,56 @@ describe('CryptoView — sin precios lo dice, no inventa un total', () => {
       expect(mocks.getPrices).toHaveBeenCalledTimes(1);
       expect(mocks.getAllPriceHistories).not.toHaveBeenCalled();
     });
+
+    // Revision del PR #201, hallazgo ALTA: un sondeo REST que trae MENOS
+    // simbolos que el anterior -el backend omite uno sin precio real, ver el
+    // comentario de getPrices() en cryptoPrices.ts- reemplazaba por completo
+    // marketData en vez de fusionarlo, y ese simbolo perdia su priceHistory
+    // real en la cache local. El siguiente tick de WebSocket para ese simbolo
+    // entonces reenviaba [] -la misma corrupcion del sparkline que las dos
+    // pruebas de arriba ya cierran, reintroducida por un camino mas angosto.
+    it('un sondeo REST que omite un simbolo no le borra el priceHistory real de la cache', async () => {
+      mocks.activos = [activo('BTC', 0.5, 40000), activo('ETH', 2, 2000)];
+      const historialReal = [60000, 60500, 61000, 61234.5];
+      mocks.getPrices.mockResolvedValueOnce(
+        feed().map(p => (p.symbol === 'BTC' ? { ...p, priceHistory: historialReal } : p)),
+      );
+      const user = userEvent.setup();
+      const { rerender } = montar();
+
+      // Sondeo inicial: BTC llega con su historial real completo.
+      await waitFor(() => {
+        expect(mocks.dispatch.mock.calls.some(([a]) => a.type === 'UPDATE_CRYPTO_PRICES')).toBe(true);
+      });
+      mocks.dispatch.mockClear();
+
+      // Segundo sondeo (manual, mismo camino que el automatico de 5 min):
+      // el backend omite BTC por completo -degradacion parcial real, no una
+      // lista vacia-, y solo trae ETH.
+      mocks.getPrices.mockResolvedValueOnce(feed(['BTC']));
+      await user.click(screen.getByRole('button', { name: 'Actualizar precios' }));
+
+      await waitFor(() => {
+        expect(mocks.getPrices).toHaveBeenCalledTimes(2);
+      });
+
+      // Tick de WebSocket para BTC: debe reenviar el ultimo historial real
+      // que trajo el primer sondeo, no una lista vacia.
+      mocks.preciosWs = { BTC: { symbol: 'BTC', price: 61500, change_24h: 1.2, volume_24h: 0, market_cap: 0 } };
+      rerender(
+        <LanguageProvider>
+          <CryptoView />
+        </LanguageProvider>,
+      );
+
+      await waitFor(() => {
+        const llamada = mocks.dispatch.mock.calls
+          .filter(([a]) => a.type === 'UPDATE_CRYPTO_PRICES')
+          .find(([a]) => a.payload.some((u: { symbol: string }) => u.symbol === 'BTC'));
+        expect(llamada).toBeDefined();
+        const paraBtc = llamada![0].payload.find((u: { symbol: string }) => u.symbol === 'BTC');
+        expect(paraBtc.priceHistory).toEqual(historialReal);
+      });
+    });
   });
 });

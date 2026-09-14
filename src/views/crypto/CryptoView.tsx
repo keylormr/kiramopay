@@ -213,10 +213,16 @@ export const CryptoView: React.FC = () => {
       setPriceError(faltanPrecios(prices.filter(p => p.price > 0).map(p => p.symbol)));
 
       if (prices.length > 0) {
-        // Store full market data
+        // Store full market data. Fusionar, NUNCA reemplazar: un sondeo
+        // puntual puede traer MENOS simbolos que el anterior (el backend
+        // omite uno sin precio real, ver el comentario de getPrices() en
+        // cryptoPrices.ts), y reemplazar el mapa entero le borraria a ese
+        // simbolo el ultimo priceHistory real conocido -el siguiente tick de
+        // WebSocket lo leeria como [] y le comeria el sparkline real, el
+        // mismo bug que el comentario de abajo dice haber cerrado.
         const dataMap: Record<string, CryptoPriceData> = {};
         prices.forEach(p => { dataMap[p.symbol] = p; });
-        setMarketData(dataMap);
+        setMarketData(prev => ({ ...prev, ...dataMap }));
 
         // Update state with new prices. priceHistory viaja en la MISMA
         // respuesta (getPrices ya trae sparkline_7d, ver cryptoPrices.ts): si
