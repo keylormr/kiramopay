@@ -1,24 +1,34 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { encodeContactQr } from '@/utils/contactQr';
 import { HomeView } from '../home/HomeView';
 
 // Mock useApp with realistic state data
 const mockDispatch = vi.fn();
 
+// Mutable a proposito: la descripcion de "contacto duplicado o numero propio"
+// abajo necesita variar sinpeContacts sin reescribir el mock entero.
+const mockState = {
+  isAuthenticated: true,
+  user: {
+    id: 'user-001',
+    cedula: '702650930',
+    phone: '70265093',
+    firstName: 'Keilor',
+    lastName: 'Martinez',
+    kycLevel: 1,
+    createdAt: '2024-01-01',
+  },
+  sinpeContacts: [] as Array<{ id: string; name: string; phone: string; bank?: string; isFavorite?: boolean }>,
+};
+
 vi.mock('@/hooks/useApp', () => ({
   useApp: () => ({
     state: {
-      isAuthenticated: true,
-      user: {
-        id: 'user-001',
-        cedula: '702650930',
-        phone: '70265093',
-        firstName: 'Keilor',
-        lastName: 'Martinez',
-        kycLevel: 1,
-        createdAt: '2024-01-01',
-      },
+      isAuthenticated: mockState.isAuthenticated,
+      user: mockState.user,
+      sinpeContacts: mockState.sinpeContacts,
       baseCurrency: 'CRC',
       accounts: [
         {
@@ -115,6 +125,7 @@ describe('HomeView', () => {
     localStorage.clear();
     localStorage.setItem('kiramopay_language', 'es');
     mockDispatch.mockReset();
+    mockState.sinpeContacts = [];
   });
 
   it('should render the total balance section', () => {
@@ -229,5 +240,86 @@ describe('HomeView — ayuda en las tarjetas', () => {
     expect(await screen.findByText('Ahorros')).toBeInTheDocument();
     expect(screen.getByText(/no genera intereses/)).toBeInTheDocument();
     expect(abrirAhorros).not.toHaveBeenCalled();
+  });
+});
+
+// El boton "Escanear QR" de las acciones rapidas es una SEGUNDA via, aparte de
+// SinpeView, para escanear el QR de un contacto y guardarlo. Tenia que avisar
+// igual que la primera en vez de dejar duplicar el alta o guardarse a si mismo.
+describe('HomeView — escaneo de contacto: duplicado y numero propio', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('kiramopay_language', 'es');
+    mockDispatch.mockReset();
+    mockState.sinpeContacts = [];
+    // jsdom no tiene camara; una promesa que nunca resuelve deja el escaner en
+    // su estado inicial sin actualizaciones de estado fuera de act().
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: () => new Promise(() => {}) },
+      configurable: true,
+    });
+  });
+
+  async function abrirEscaner(user: ReturnType<typeof userEvent.setup>) {
+    renderHomeView();
+    await user.click(screen.getByRole('button', { name: 'Escanear QR' }));
+    return within(await screen.findByRole('dialog'));
+  }
+
+  function leerCodigo(d: ReturnType<typeof within>, raw: string) {
+    fireEvent.change(d.getByPlaceholderText('Código QR'), { target: { value: raw } });
+    fireEvent.click(d.getByRole('button', { name: 'Continuar' }));
+  }
+
+  it('avisa al escanear el propio QR y no abre la hoja de envio', async () => {
+    const user = userEvent.setup();
+    const d = await abrirEscaner(user);
+
+    leerCodigo(d, encodeContactQr({ name: 'Keilor Martinez', phone: '+506 7026-5093' }));
+
+    expect(await screen.findByText(/no puedes agregarte como contacto/)).toBeInTheDocument();
+    // Sigue en el escaner: nunca se llego a fijar el contacto escaneado, asi
+    // que la hoja de "cuanto le envias" (que depende de el) no tiene nada que
+    // mostrar.
+    expect(screen.queryByText('Keilor Martinez')).not.toBeInTheDocument();
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it('abre la hoja de envio para un contacto ya guardado, pero no deja tocar "Agregar contacto" sin avisar', async () => {
+    mockState.sinpeContacts = [{ id: 'c1', name: 'Diego Mora', phone: '8888-7777', bank: 'BAC' }];
+    const user = userEvent.setup();
+    const d = await abrirEscaner(user);
+
+    // El QR trae otro nombre/banco a proposito: el gesto de escanear a un
+    // conocido para pagarle de nuevo es el caso normal y debe abrir la hoja.
+    leerCodigo(d, encodeContactQr({ name: 'Diego (alias)', phone: '+506 8888-7777', bank: 'BCR' }));
+
+    // La hoja del escaner se cierra y la de envio se abre: ambas pueden
+    // convivir un instante mientras una se desvanece; la ultima es la vigente.
+    const dialogs = await screen.findAllByRole('dialog');
+    const sendDialog = within(dialogs[dialogs.length - 1]);
+    expect(sendDialog.getByText('Diego (alias)')).toBeInTheDocument();
+
+    // El boton ya refleja que esta guardado, sin necesidad de tocarlo.
+    const boton = sendDialog.getByRole('button', { name: 'Contacto guardado' });
+    expect(boton).toBeDisabled();
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it('agrega un contacto nuevo sin problema cuando no es duplicado ni el propio numero', async () => {
+    const user = userEvent.setup();
+    const d = await abrirEscaner(user);
+
+    leerCodigo(d, encodeContactQr({ name: 'Ana Solís', phone: '+506 8888-7777', bank: 'BAC' }));
+
+    const dialogs = await screen.findAllByRole('dialog');
+    const sendDialog = within(dialogs[dialogs.length - 1]);
+    await user.click(sendDialog.getByRole('button', { name: 'Agregar contacto' }));
+
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'ADD_SINPE_CONTACT',
+      payload: expect.objectContaining({ name: 'Ana Solís', phone: '+506 8888-7777', bank: 'BAC' }),
+    });
+    expect(await sendDialog.findByRole('button', { name: 'Contacto guardado' })).toBeDisabled();
   });
 });
