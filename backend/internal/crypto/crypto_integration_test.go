@@ -29,26 +29,27 @@ func d(f float64) decimal.Decimal { return decimal.NewFromFloat(f) }
 // numero suelto, para que el stub y lo que se espera no se separen.
 func stubPriceAt(i int) float64 { return 1000 * float64(i+1) }
 
-// startPriceStub serves the CoinGecko simple/price shape from memory, so the
+// startPriceStub serves the CoinGecko coins/markets shape from memory, so the
 // suite never leaves the machine. La respuesta se arma con los ids que pide el
 // servicio, asi que sirve para cualquier simbolo sin tocar el stub.
 func startPriceStub(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body := make(map[string]map[string]float64)
+		var body []map[string]any
 		for i, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
 			if id == "" {
 				continue
 			}
 			// Precios distintos por id: si el servicio cruzara un simbolo con
 			// otro, la prueba lo delataria en vez de pasar por casualidad.
-			body[id] = map[string]float64{
-				"usd":            stubPriceAt(i),
-				"usd_24h_change": 1.5,
-				"usd_24h_vol":    2_000_000,
-				"usd_market_cap": 3_000_000,
-			}
+			body = append(body, map[string]any{
+				"id":                          id,
+				"current_price":               stubPriceAt(i),
+				"price_change_percentage_24h": 1.5,
+				"total_volume":                2_000_000,
+				"market_cap":                  3_000_000,
+			})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(body)
@@ -69,7 +70,7 @@ func setupCryptoServiceSinPrecios(t *testing.T) (*crypto.Service, string) {
 	t.Helper()
 	vacio := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
+		_, _ = w.Write([]byte("[]"))
 	}))
 	t.Cleanup(vacio.Close)
 	return montarCripto(t, vacio.URL)

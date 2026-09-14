@@ -1161,19 +1161,26 @@ export interface paths {
         /** Get current crypto prices (public) */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Comma-separated symbols (e.g. BTC,ETH). Defaults to BTC,ETH,SOL,ADA,DOT. */
+                    symbols?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Current prices for supported cryptocurrencies */
+                /** @description Current prices for the requested cryptocurrencies, keyed by symbol. A symbol the provider did not return (rate limit, unknown coin) is simply absent — never a fabricated price. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": {
+                            [key: string]: components["schemas"]["CryptoPriceData"];
+                        };
+                    };
                 };
             };
         };
@@ -6508,6 +6515,25 @@ export interface components {
             symbol: string;
             /** @description Amount in CRC centimos */
             amount_crc: number;
+        };
+        CryptoPriceData: {
+            /** @example BTC */
+            symbol: string;
+            /** @example 68000.12 */
+            price: number;
+            /**
+             * @description 24h price change, percent
+             * @example 1.85
+             */
+            change_24h: number;
+            volume_24h: number;
+            market_cap: number;
+            /** @description Real 24h high from the provider (CoinGecko /coins/markets). Omitted when the provider did not supply it — never estimated. */
+            high_24h?: number;
+            /** @description Real 24h low from the provider (CoinGecko /coins/markets). Omitted when the provider did not supply it — never estimated. */
+            low_24h?: number;
+            /** @description Approximately hourly USD prices for the last 7 days, as CoinGecko's sparkline_in_7d.price. Omitted (never a fabricated flat line or random walk) when the provider did not supply it. */
+            sparkline_7d?: number[];
         };
         NotificationRecord: {
             /** Format: uuid */

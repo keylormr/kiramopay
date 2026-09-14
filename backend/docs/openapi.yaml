@@ -676,9 +676,25 @@ paths:
     get:
       tags: [Crypto]
       summary: Get current crypto prices (public)
+      parameters:
+        - name: symbols
+          in: query
+          schema: { type: string }
+          description: >-
+            Comma-separated symbols (e.g. BTC,ETH). Defaults to
+            BTC,ETH,SOL,ADA,DOT.
       responses:
         '200':
-          description: Current prices for supported cryptocurrencies
+          description: >-
+            Current prices for the requested cryptocurrencies, keyed by
+            symbol. A symbol the provider did not return (rate limit, unknown
+            coin) is simply absent — never a fabricated price.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/CryptoPriceData'
 
   /api/v1/crypto/assets:
     get:
@@ -3529,6 +3545,42 @@ components:
         amount_crc:
           type: integer
           description: Amount in CRC centimos
+
+    CryptoPriceData:
+      type: object
+      required: [symbol, price, change_24h, volume_24h, market_cap]
+      properties:
+        symbol:
+          type: string
+          example: BTC
+        price:
+          type: number
+          example: 68000.12
+        change_24h:
+          type: number
+          description: 24h price change, percent
+          example: 1.85
+        volume_24h:
+          type: number
+        market_cap:
+          type: number
+        high_24h:
+          type: number
+          description: >-
+            Real 24h high from the provider (CoinGecko /coins/markets).
+            Omitted when the provider did not supply it — never estimated.
+        low_24h:
+          type: number
+          description: >-
+            Real 24h low from the provider (CoinGecko /coins/markets).
+            Omitted when the provider did not supply it — never estimated.
+        sparkline_7d:
+          type: array
+          items: { type: number }
+          description: >-
+            Approximately hourly USD prices for the last 7 days, as
+            CoinGecko's sparkline_in_7d.price. Omitted (never a fabricated
+            flat line or random walk) when the provider did not supply it.
 
     NotificationRecord:
       type: object

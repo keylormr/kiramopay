@@ -104,4 +104,16 @@ type PriceData struct {
 	Change24h float64 `json:"change_24h"`
 	Volume24h float64 `json:"volume_24h"`
 	MarketCap float64 `json:"market_cap"`
+	// High24h y Low24h: reales, tal como los da /coins/markets. Antes el
+	// feed (/simple/price) no los traia y el frontend los ESTIMABA a mano
+	// desde change_24h (ver el comentario de cabecera de cryptoPrices.ts).
+	// omitempty: si el proveedor no los trae, no se inventa un numero.
+	High24h float64 `json:"high_24h,omitempty"`
+	Low24h  float64 `json:"low_24h,omitempty"`
+	// Sparkline7d: precios aproximadamente horarios de los ultimos 7 dias,
+	// tal como CoinGecko los da en sparkline_in_7d.price. Vacio cuando el
+	// proveedor no los trajo (respuesta parcial, simbolo sin datos): la
+	// regla de este servicio es no inventar un historial, ni con un random
+	// walk ni con una linea plana.
+	Sparkline7d []float64 `json:"sparkline_7d,omitempty"`
 }

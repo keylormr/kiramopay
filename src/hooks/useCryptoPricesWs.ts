@@ -7,6 +7,13 @@ interface PriceData {
   change_24h: number;
   volume_24h: number;
   market_cap: number;
+  // Reales desde CoinGecko /coins/markets; el backend los omite del JSON
+  // (omitempty) cuando no los tiene, nunca los inventa. El sparkline de 7
+  // dias NO viaja por WebSocket a proposito (ver sinSparkline en el
+  // broadcaster): solo cambia cada ~6h en el origen y reenviarlo en cada
+  // tick infla el mensaje sin traer un dato mas fresco.
+  high_24h?: number;
+  low_24h?: number;
 }
 
 interface PriceUpdate {

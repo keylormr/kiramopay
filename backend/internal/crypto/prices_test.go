@@ -3,11 +3,13 @@ package crypto
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -57,8 +59,8 @@ func TestPriceService_BaseURLOverride(t *testing.T) {
 		default:
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000,"usd_24h_change":1.5,` +
-			`"usd_24h_vol":2000000,"usd_market_cap":3000000}}`))
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000,` +
+			`"price_change_percentage_24h":1.5,"total_volume":2000000,"market_cap":3000000}]`))
 	}))
 	defer srv.Close()
 
@@ -91,6 +93,101 @@ func TestPriceService_BaseURLOverride(t *testing.T) {
 	}
 }
 
+// El pedido que origino esta prueba: el grafico de "Mis Activos" se apagaba
+// porque el feed nunca dio historial (/simple/price no lo trae). Con
+// /coins/markets y sparkline=true el historial de 7 dias -y el high/low
+// reales, que antes el frontend estimaba a mano- llegan en la MISMA llamada
+// que ya se hacia para el precio. Esta prueba fija que el parametro se pide y
+// que los datos llegan intactos hasta PriceData.
+func TestPriceService_SparklineYRangoRealDesdeCoinsMarkets(t *testing.T) {
+	var vista *url.URL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vista = r.URL
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id": "bitcoin",
+			"current_price": 65000,
+			"price_change_percentage_24h": 1.5,
+			"total_volume": 2000000,
+			"market_cap": 3000000,
+			"high_24h": 66000,
+			"low_24h": 64000,
+			"sparkline_in_7d": {"price": [64000, 64500, 65000]}
+		}]`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
+	if err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+
+	if vista == nil {
+		t.Fatal("el servicio nunca llamo al proveedor")
+	}
+	q := vista.Query()
+	if q.Get("sparkline") != "true" {
+		t.Errorf("sparkline = %q, se esperaba \"true\": sin este parametro CoinGecko no manda el historial", q.Get("sparkline"))
+	}
+	if q.Get("price_change_percentage") != "24h" {
+		t.Errorf("price_change_percentage = %q, se esperaba \"24h\"", q.Get("price_change_percentage"))
+	}
+
+	btc, ok := prices["BTC"]
+	if !ok {
+		t.Fatal("BTC missing from prices")
+	}
+	if btc.High24h != 66000 || btc.Low24h != 64000 {
+		t.Errorf("high24h=%v low24h=%v, se esperaba 66000/64000 reales (no estimados)", btc.High24h, btc.Low24h)
+	}
+	want := []float64{64000, 64500, 65000}
+	if len(btc.Sparkline7d) != len(want) {
+		t.Fatalf("sparkline7d = %v, se esperaba %v", btc.Sparkline7d, want)
+	}
+	for i, v := range want {
+		if btc.Sparkline7d[i] != v {
+			t.Fatalf("sparkline7d[%d] = %v, se esperaba %v", i, btc.Sparkline7d[i], v)
+		}
+	}
+}
+
+// Un simbolo sin el campo sparkline_in_7d (proveedor recortando la respuesta,
+// o el activo sin suficiente historial en origen) no debe fabricar un
+// historial: el campo se queda vacio y desaparece del JSON, no una linea
+// plana ni un random walk como hacia el simulador viejo.
+func TestPriceService_SinSparklineNoInventaHistorial(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000}]`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC"})
+	if err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	if len(prices["BTC"].Sparkline7d) != 0 {
+		t.Errorf("sparkline7d = %v, se esperaba vacio sin dato real", prices["BTC"].Sparkline7d)
+	}
+
+	// El JSON que sale al cliente tampoco puede traer el campo (omitempty):
+	// un arreglo `[]` presente insinuaria "hay datos y estan vacios" en vez
+	// de "no hay dato".
+	b, err := json.Marshal(prices["BTC"])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "sparkline") {
+		t.Errorf("el JSON trae sparkline_7d sin datos reales: %s", b)
+	}
+}
+
 // Las claves Demo y Pro de CoinGecko NO son intercambiables: cada una viaja en
 // su propia cabecera y la Pro ademas cambia de host. Estas pruebas fijan que
 // cabecera manda cada modo contra el stub.
@@ -102,7 +199,7 @@ func TestPriceService_ClaveDemoViajaEnSuCabecera(t *testing.T) {
 		default:
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000}]`))
 	}))
 	defer srv.Close()
 
@@ -130,7 +227,7 @@ func TestPriceService_ClaveProViajaEnSuCabecera(t *testing.T) {
 		default:
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000}]`))
 	}))
 	defer srv.Close()
 
@@ -280,7 +377,7 @@ func TestCacheTTLPorPlan(t *testing.T) {
 
 // Servidor que imita a CoinGecko en /ping: acepta la clave solo bajo la
 // cabecera del plan indicado (demo o pro) y responde 401 a la otra, como hace
-// el proveedor real. En /simple/price devuelve un precio y deja ver la cabecera.
+// el proveedor real. En /coins/markets devuelve un precio y deja ver la cabecera.
 func servidorCoinGecko(t *testing.T, aceptaDemo, aceptaPro bool, cabeceras chan<- [2]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -301,7 +398,7 @@ func servidorCoinGecko(t *testing.T, aceptaDemo, aceptaPro bool, cabeceras chan<
 			default:
 			}
 		}
-		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000}]`))
 	}))
 }
 
@@ -408,7 +505,7 @@ func TestDiagnostics_RegistraElUltimoEstadoDelProveedor(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(`{"bitcoin":{"usd":65000}}`))
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000}]`))
 	}))
 	defer srv.Close()
 
