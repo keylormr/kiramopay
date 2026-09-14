@@ -43,6 +43,7 @@ BEGIN
             UPDATE users
                SET username = par.nombre
              WHERE cedula_hash = fn_pii_hmac(par.cedula)
+               AND COALESCE(role, '') <> 'admin'
                AND username IS NULL
                AND deleted_at IS NULL;
         END IF;
