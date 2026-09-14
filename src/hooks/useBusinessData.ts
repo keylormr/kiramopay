@@ -17,8 +17,24 @@ export interface BusinessData {
    * que hoy no vendio nada.
    */
   paymentsFailed: boolean;
+  /**
+   * La lista de comercios no se pudo traer (red, limite de tasa, 5xx). Distinto
+   * de "no tenes ese comercio": sin esta distincion, un solo fallo de
+   * GET /qr/merchants justo al recargar o al cambiar de perfil vaciaba la lista,
+   * y App "autocuraba" el perfil persistido sacando al cajero del modo negocio
+   * sin decir nada.
+   */
+  merchantsFailed: boolean;
+  /** Hay un reintento automatico programado tras ese fallo. */
+  retrying: boolean;
   reload: () => void;
 }
+
+// Reintentos automaticos tras un fallo de la lista de comercios, con espera
+// creciente (3s, 6s, 12s, 24s). Pasado el ultimo, queda el boton de reintentar:
+// insistir sin tope contra un servidor que responde 429 solo alarga el bloqueo.
+const REINTENTOS_MAX = 4;
+const ESPERA_BASE_MS = 3000;
 
 /**
  * Loads the owner's merchants and, for the active one, its collected payments.
@@ -31,9 +47,15 @@ export function useBusinessData(): BusinessData {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [paymentsFailed, setPaymentsFailed] = useState(false);
+  const [merchantsFailed, setMerchantsFailed] = useState(false);
+  const [reintentos, setReintentos] = useState(0);
   const [nonce, setNonce] = useState(0);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  // Un reintento pedido por la persona vuelve a habilitar los automaticos.
+  const reload = useCallback(() => {
+    setReintentos(0);
+    setNonce((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +70,16 @@ export function useBusinessData(): BusinessData {
       setError('');
       const mRes = await api.getMerchants();
       if (cancelled) return;
-      const list = mRes.success && mRes.data ? mRes.data : [];
-      setMerchants(list);
-      if (!mRes.success) setError(mRes.error?.message || 'MERCHANTS_FETCH_FAILED');
+      if (mRes.success) {
+        setMerchants(mRes.data ?? []);
+        setMerchantsFailed(false);
+        setReintentos(0);
+      } else {
+        // Se CONSERVA la lista anterior: que la consulta falle no dice que el
+        // comercio haya dejado de existir.
+        setMerchantsFailed(true);
+        setError(mRes.error?.message || 'MERCHANTS_FETCH_FAILED');
+      }
 
       if (activeMerchantId) {
         // The MERCHANT-scoped feed: every sale of the shop, no matter which
@@ -77,9 +106,21 @@ export function useBusinessData(): BusinessData {
     return () => { cancelled = true; };
   }, [activeMerchantId, nonce]);
 
+  // Reintento automatico: solo en modo negocio, que es donde la lista decide
+  // que se pinta.
+  const retrying = merchantsFailed && activeMerchantId !== null && reintentos < REINTENTOS_MAX;
+  useEffect(() => {
+    if (!retrying) return;
+    const temporizador = setTimeout(() => {
+      setReintentos((r) => r + 1);
+      setNonce((n) => n + 1);
+    }, ESPERA_BASE_MS * 2 ** reintentos);
+    return () => clearTimeout(temporizador);
+  }, [retrying, reintentos]);
+
   const active = activeMerchantId
     ? merchants.find((m) => m.id === activeMerchantId) ?? null
     : null;
 
-  return { merchants, active, payments, loading, error, paymentsFailed, reload };
+  return { merchants, active, payments, loading, error, paymentsFailed, merchantsFailed, retrying, reload };
 }

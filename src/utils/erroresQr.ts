@@ -24,6 +24,23 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
       return t('qr_err_cancelado');
     case 'COBRO_DUPLICADO_APP_VIEJA':
       return t('qr_err_actualiza_app');
+    // Los de forma y de seguridad. Sin estos, la vista caia al texto del
+    // servidor, que esta solo en espanol y en voseo ("no podes pagarte a vos
+    // mismo"): con la app en otro idioma el motivo salia sin traducir.
+    case 'QR_INVALIDO':
+      return t('qr_err_invalido');
+    case 'NO_PODES_PAGARTE':
+      return t('qr_err_pago_propio');
+    case 'MONTO_REQUERIDO':
+      return t('qr_err_monto_requerido');
+    case 'LLAVE_REUTILIZADA':
+      return t('qr_err_llave_reutilizada');
+    case 'LLAVE_INVALIDA':
+      return t('qr_err_llave_invalida');
+    case 'PAGO_NO_REGISTRADO':
+      return t('qr_err_pago_no_registrado');
+    case 'MFA_REQUIRED':
+      return t('qr_err_mfa');
     default:
       return '';
   }

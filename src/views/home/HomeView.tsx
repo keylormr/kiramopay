@@ -17,6 +17,8 @@ import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
+import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
 import { getTxTime } from '@/utils/fechasTx';
@@ -661,7 +663,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <div>
                   <div className="text-lg font-bold truncate tabular-nums">{formatCurrency(acc.balance, acc.ccy)}</div>
-                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.name}</div>
+                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{nombreDeCuenta(acc, t)}</div>
                 </div>
               </button>
             );
@@ -876,45 +878,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Transaction Detail Sheet */}
-      {selectedTx && (
-        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
-          <div className="flex flex-col items-center py-6">
-             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-4 ${selectedTx.amount < 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                {selectedTx.amount < 0 ? <Icons.Bank size={32} /> : <Icons.Wallet size={32} />}
-             </div>
-             <div className="text-2xl font-bold mb-1">{txTitle(selectedTx, t)}</div>
-             <div className={`text-3xl font-black mb-6 ${selectedTx.amount < 0 ? 'uv-text-primary' : 'text-green-600'}`}>
-                {selectedTx.amount > 0 ? '+' : ''}{formatCurrency(selectedTx.amount, selectedTx.ccy)}
-             </div>
-
-             <div className="w-full space-y-4">
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('status')}</span>
-                   <span className="font-bold uv-text-primary capitalize flex items-center gap-2">
-                     {selectedTx.status} <Icons.Check size={14} className="text-green-500" />
-                   </span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('date')}</span>
-                   <span className="font-bold uv-text-primary">{selectedTx.date}</span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('category')}</span>
-                   <span className="font-bold uv-text-primary">{selectedTx.category || 'General'}</span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('transaction_id')}</span>
-                   <span className="font-mono text-xs font-bold uv-text-primary">#{selectedTx.id}</span>
-                </div>
-             </div>
-
-             <button className="mt-8 py-3 px-6 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-slate-700 dark:text-white font-bold text-sm w-full">
-               {t('report_issue')}
-             </button>
-          </div>
-        </BottomSheet>
-      )}
+      {/* Detalle del movimiento: compartido con "Todos los movimientos". */}
+      <TransactionDetailSheet tx={selectedTx} isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} />
 
       {/* QR Scanner Sheet — cámara real (jsQR) con fallback manual */}
       <BottomSheet

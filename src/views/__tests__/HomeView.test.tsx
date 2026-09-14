@@ -148,9 +148,11 @@ describe('HomeView', () => {
     // Account currency codes
     expect(screen.getByText('CRC')).toBeInTheDocument();
     expect(screen.getByText('USD')).toBeInTheDocument();
-    // Account names
-    expect(screen.getByText('Colones')).toBeInTheDocument();
-    expect(screen.getByText('US Dollar')).toBeInTheDocument();
+    // Account names: se resuelven por moneda con el diccionario activo, no con
+    // el `name` que trae la cuenta (el adaptador lo fijaba en espanol y con la
+    // app en ingles las tarjetas seguian diciendo "Cuenta Colones").
+    expect(screen.getByText('Cuenta Colones')).toBeInTheDocument();
+    expect(screen.getByText('Cuenta Dólares')).toBeInTheDocument();
   });
 
   it('should render the recent transactions section', () => {
