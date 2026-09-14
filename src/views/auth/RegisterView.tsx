@@ -6,6 +6,8 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import { normalizarCodigoInvitacion, clearReferralCode } from '@/utils/referralCode';
 import { esNombreDeUsuarioValido } from '@/utils/identificador';
+import { useCapa } from '@/navegacion/pilaDeCapas';
+import { BotonIdioma } from './BotonIdioma';
 
 interface RegisterViewProps {
   onComplete: () => void;
@@ -653,6 +655,17 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
     }
   };
 
+  // Atras hace lo mismo que la flecha de arriba: un paso atras dentro del
+  // registro y, desde el primero, de vuelta al login. Antes el boton Atras del
+  // navegador sacaba del sitio con el formulario a medio llenar. La clave `step`
+  // repone la entrada del historial en cada paso (ver navegacion/pilaDeCapas).
+  const volverUnPaso = () => {
+    const actual = ORDEN_DE_PASOS.indexOf(step);
+    if (actual > 0) setStep(ORDEN_DE_PASOS[actual - 1]);
+  };
+  const atras = step === 'phone' ? onBack : volverUnPaso;
+  useCapa(true, 'seccion', atras, undefined, step);
+
   const getProgress = () => {
     return ((ORDEN_DE_PASOS.indexOf(step) + 1) / ORDEN_DE_PASOS.length) * 100;
   };
@@ -663,16 +676,14 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
       <div className="p-4 pt-6">
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={step === 'phone' ? onBack : () => {
-              const actual = ORDEN_DE_PASOS.indexOf(step);
-              if (actual > 0) setStep(ORDEN_DE_PASOS[actual - 1]);
-            }}
+            onClick={atras}
+            aria-label={t('back')}
             className="p-2 -ml-2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
           >
             <Icons.ChevronLeft size={24} />
           </button>
           <span className="text-[var(--color-text-muted-dark)] text-sm">{t('create_account')}</span>
-          <div className="w-8" />
+          <BotonIdioma className="-mr-3" />
         </div>
 
         {/* Progress bar */}

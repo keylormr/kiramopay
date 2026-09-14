@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -37,6 +38,15 @@ func responderError(w http.ResponseWriter, err error) {
 		{ErrCobroDuplicadoAppVieja, "COBRO_DUPLICADO_APP_VIEJA", http.StatusConflict,
 			"actualiza la aplicacion para volver a pagar este codigo"},
 		{ErrPagoNoRegistrado, "PAGO_NO_REGISTRADO", http.StatusConflict, "el pago no quedo registrado"},
+		{ErrMontoInvalido, "MONTO_INVALIDO", http.StatusBadRequest, "el monto debe ser mayor que cero"},
+		// El umbral del segundo factor lo aplica el motor de transferencias, que
+		// comparten SINPE y QR. SINPE ya respondia 428 MFA_REQUIRED y la pantalla
+		// abria la verificacion; QR caia al PAYMENT_FAILED de abajo con "qr
+		// payment transfer: mfa challenge required", asi que un pago por encima
+		// del umbral no se podia completar nunca. Mismo contrato que SINPE: se
+		// verifica el codigo y se reintenta la misma peticion.
+		{transaction.ErrMFARequired, "MFA_REQUIRED", http.StatusPreconditionRequired,
+			"este monto necesita verificar el segundo factor"},
 	}
 	for _, c := range casos {
 		if errors.Is(err, c.err) {
@@ -45,6 +55,18 @@ func responderError(w http.ResponseWriter, err error) {
 		}
 	}
 	response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+}
+
+// responderErrorDeEquipo traduce los errores de administrar el equipo del
+// comercio. `generico` es el codigo que ya usaba cada ruta, que se conserva
+// para todo lo que no tiene codigo propio.
+func responderErrorDeEquipo(w http.ResponseWriter, generico string, err error) {
+	if errors.Is(err, ErrCedulaSinCuenta) {
+		response.Error(w, http.StatusUnprocessableEntity, "STAFF_CEDULA_NOT_FOUND",
+			"esa cedula no tiene una cuenta de KiramoPay")
+		return
+	}
+	response.Error(w, http.StatusBadRequest, generico, err.Error())
 }
 
 // ── Identidad permanente ────────────────────────────────────────────────────

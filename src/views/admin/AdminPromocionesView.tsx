@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
 
@@ -112,10 +113,9 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
           <p className="font-bold uv-text-primary">{t('admin_promo_fund_title')}</p>
           <div>
             <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('admin_promo_amount')}</label>
-            <input
+            <CampoMonto
               value={monto}
-              onChange={(e) => setMonto(e.target.value.replace(/[^0-9.]/g, ''))}
-              inputMode="decimal"
+              onChange={setMonto}
               placeholder="0.00"
               className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)]"
             />

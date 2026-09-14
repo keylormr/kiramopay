@@ -19,6 +19,12 @@ const pending = {
   legalName: 'Soda Tica SA', verificationStatus: 'pending', commissionBps: 50,
 };
 
+// commissionBps no multiplo de 10: al pasarlo a porcentaje trae 2 decimales
+// (573 -> "5.73"), como puede ocurrir con cualquier comercio real.
+const pendingConDosDecimales = {
+  ...pending, id: 'm2', name: 'Cafe Central', commissionBps: 573,
+};
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -52,5 +58,22 @@ describe('AdminMerchantsView', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Aprobar' }));
     await waitFor(() => expect(mockApi.qrPayments.approveMerchant).toHaveBeenCalledWith('m1'));
+  });
+
+  it('no trunca el segundo decimal de una comision existente al editar el campo', async () => {
+    mockApi.qrPayments.listPendingMerchants.mockResolvedValue({ success: true, data: [pendingConDosDecimales] });
+    const user = userEvent.setup();
+    setup();
+
+    const input = await screen.findByLabelText<HTMLInputElement>('Comisión');
+    expect(input.value).toBe('5.73');
+
+    // Cualquier edicion del campo (aca, insertar un digito al inicio) no debe
+    // descartar el segundo decimal ya cargado.
+    await user.click(input);
+    input.setSelectionRange(0, 0);
+    await user.keyboard('1');
+
+    expect(input.value).toBe('15.73');
   });
 });

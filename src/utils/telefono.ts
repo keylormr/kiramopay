@@ -30,3 +30,13 @@ export function formatearTelefonoCR(entrada: string): string {
   const local = normalizado.slice(4);
   return `+506 ${local.slice(0, 4)}-${local.slice(4)}`;
 }
+
+/**
+ * Compara dos representaciones de un numero costarricense por su forma
+ * canonica, sin importar si traen guion, espacios o el prefijo +506. Dos
+ * entradas que no normalicen a un numero valido nunca se consideran iguales.
+ */
+export function mismoTelefonoCR(a: string, b: string): boolean {
+  const na = normalizarTelefonoCR(a);
+  return na !== null && na === normalizarTelefonoCR(b);
+}

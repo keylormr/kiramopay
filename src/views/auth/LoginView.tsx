@@ -1,11 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Icons } from '../../components/Icons';
 import { MarcaKiramo } from '../../components/MarcaKiramo';
 import { Button, Card } from '../../components/ui';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
-import { clasificarIdentificador } from '@/utils/identificador';
-import { olvidarUltimoAcceso } from '@/stores/olvidarUltimoAcceso';
+import { clasificarIdentificador, type TipoIdentificador } from '@/utils/identificador';
+import {
+  CLAVE_ULTIMO_IDENTIFICADOR,
+  CLAVE_ULTIMO_NOMBRE,
+  CLAVE_ULTIMO_TIPO,
+  olvidarUltimoAcceso,
+} from '@/stores/olvidarUltimoAcceso';
+import { BotonIdioma } from './BotonIdioma';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
@@ -48,6 +54,19 @@ const apiLocal = (() => {
 
 const MOSTRAR_CUENTAS_LOCALES = import.meta.env.DEV && apiLocal;
 
+const TIPOS_IDENTIFICADOR: TipoIdentificador[] = ['usuario', 'cedula', 'correo', 'telefono'];
+
+// Tipo del identificador recordado. La tarjeta de acceso rapido lo rotulaba
+// siempre "Cédula", y desde que se guarda el nombre de usuario mostraba
+// "Cédula: keilor". El tipo se guarda desde este cambio; una instalacion
+// anterior solo tiene el valor, y se deduce de su forma: los cuatro formatos
+// son disjuntos (ver utils/identificador).
+function tipoDelUltimoAcceso(valor: string): TipoIdentificador {
+  const guardado = localStorage.getItem(CLAVE_ULTIMO_TIPO);
+  if (guardado && (TIPOS_IDENTIFICADOR as string[]).includes(guardado)) return guardado as TipoIdentificador;
+  return clasificarIdentificador(valor)?.tipo ?? 'cedula';
+}
+
 interface LoginViewProps {
   onLogin: (user: User) => void;
   onRegister: () => void;
@@ -69,11 +88,29 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   const [error, setError] = useState('');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
-  const [lastUser, setLastUser] = useState<{ cedula: string; name: string } | null>(() => {
-    const savedCedula = localStorage.getItem('kiramopay_last_cedula');
-    const savedName = localStorage.getItem('kiramopay_last_name');
-    return savedCedula && savedName ? { cedula: savedCedula, name: savedName } : null;
+  const [lastUser, setLastUser] = useState<{ cedula: string; name: string; tipo: TipoIdentificador } | null>(() => {
+    const savedCedula = localStorage.getItem(CLAVE_ULTIMO_IDENTIFICADOR);
+    const savedName = localStorage.getItem(CLAVE_ULTIMO_NOMBRE);
+    return savedCedula && savedName
+      ? { cedula: savedCedula, name: savedName, tipo: tipoDelUltimoAcceso(savedCedula) }
+      : null;
   });
+  // El rotulo visible del campo queda asociado al input: sin esto un lector de
+  // pantalla anunciaba un campo sin nombre.
+  const idCampoIdentificador = useId();
+
+  const rotuloDelTipo = (tipo: TipoIdentificador): string => {
+    switch (tipo) {
+      case 'usuario':
+        return t('login_last_label_usuario');
+      case 'correo':
+        return t('login_last_label_correo');
+      case 'telefono':
+        return t('login_last_label_telefono');
+      default:
+        return t('cedula');
+    }
+  };
 
   useEffect(() => {
     const checkBiometric = async () => {
@@ -136,8 +173,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     // pantalla ofrece ahora. La cedula queda de respaldo para las cuentas que
     // todavia no tienen nombre de usuario.
     const guardado = user.username || user.cedula || userIdentificador;
-    localStorage.setItem('kiramopay_last_cedula', guardado);
-    localStorage.setItem('kiramopay_last_name', `${user.firstName} ${user.lastName}`);
+    const tipoGuardado: TipoIdentificador = user.username
+      ? 'usuario'
+      : user.cedula
+        ? 'cedula'
+        : (clasificarIdentificador(userIdentificador)?.tipo ?? 'cedula');
+    localStorage.setItem(CLAVE_ULTIMO_IDENTIFICADOR, guardado);
+    localStorage.setItem(CLAVE_ULTIMO_NOMBRE, `${user.firstName} ${user.lastName}`);
+    localStorage.setItem(CLAVE_ULTIMO_TIPO, tipoGuardado);
     // Persist credentials to the OS Keychain/Keystore (native only; a no-op
     // on web, never localStorage) so the user can log in with fingerprint /
     // Face ID next time. Retrieved in handleBiometricLogin via getCredentials;
@@ -222,13 +265,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       />
 
       {/* Brand mark */}
-      <header className="relative px-6 pt-12 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary">
+      <header className="relative px-6 pt-12 pb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary shrink-0">
             <MarcaKiramo size={30} />
           </div>
           <span className="text-2xl font-black text-white tracking-tight">KiramoPay</span>
         </div>
+        {/* El idioma se corrige ANTES de entrar: quien no entiende la pantalla
+            no puede ni registrarse. */}
+        <BotonIdioma conNombre className="-mr-3 shrink-0" />
       </header>
 
       {/* Aviso de expulsion: la cuenta fue bloqueada por un administrador */}
@@ -287,7 +333,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-semibold truncate">{lastUser.name}</p>
                     <p className="text-[var(--color-text-muted-dark)] text-sm truncate">
-                      {t('cedula')}: {lastUser.cedula}
+                      {rotuloDelTipo(lastUser.tipo)}: {lastUser.cedula}
                     </p>
                   </div>
                   <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
@@ -327,7 +373,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
 
             {/* Identifier input: cedula, correo o telefono en un solo campo */}
             <div className="mb-6">
-              <label className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+              <label
+                htmlFor={idCampoIdentificador}
+                className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block"
+              >
                 {t('login_identifier_label')}
               </label>
               <div className="relative">
@@ -336,6 +385,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] pointer-events-none z-10"
                 />
                 <input
+                  id={idCampoIdentificador}
                   type="text"
                   autoComplete="username"
                   autoCapitalize="none"
@@ -348,7 +398,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                     setError('');
                   }}
                   placeholder={t('login_identifier_placeholder')}
-                  className={`w-full h-14 pl-12 pr-4 rounded-xl text-white text-lg font-semibold placeholder:text-[var(--color-text-muted-dark)] placeholder:font-normal bg-[var(--color-surface-2-dark)] border ${
+                  // text-ellipsis: si un idioma no cabe en 390px, el ejemplo
+                  // termina en "..." en vez de cortarse a media palabra.
+                  className={`w-full h-14 pl-12 pr-4 rounded-xl text-white text-lg font-semibold text-ellipsis placeholder:text-[var(--color-text-muted-dark)] placeholder:font-normal bg-[var(--color-surface-2-dark)] border ${
                     error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border-dark)]'
                   } focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] outline-none transition-all`}
                   onKeyDown={(e) => {

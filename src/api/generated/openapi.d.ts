@@ -894,6 +894,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description The phone is already saved as a contact (CONTACT_EXISTS). The existing contact is never overwritten in silence; `data` carries it as it stands today so the client can offer it instead of guessing. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SinpeContactConflict"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -1253,7 +1262,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Buy cryptocurrency */
+        /**
+         * Buy cryptocurrency
+         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1274,6 +1286,24 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify a high_value_tx challenge and retry the same request. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -1291,7 +1321,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sell cryptocurrency */
+        /**
+         * Sell cryptocurrency
+         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1311,6 +1344,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify a high_value_tx challenge and retry the same request. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -1469,7 +1520,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create price alert */
+        /**
+         * Create price alert
+         * @description `asset` must be one of the symbols the system quotes; `direction` is above or below; `target_price` is in USD (the feed currency), must be positive and at most 10,000,000, and — when a current market price is available — between 1/100 and 100 times that price.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1477,14 +1531,36 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example BTC */
+                        asset: string;
+                        /** @description USD */
+                        target_price: number;
+                        /** @enum {string} */
+                        direction: "above" | "below";
+                    };
+                };
+            };
             responses: {
                 /** @description Alert created */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PriceAlertRecord"];
+                    };
+                };
+                /** @description ALERT_UNSUPPORTED_ASSET (the symbol is not quoted), ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -2234,7 +2310,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Scan and pay via QR */
+        /**
+         * Scan and pay via QR
+         * @description A payment at or above the second-factor threshold follows the same contract as POST /api/v1/sinpe/send: 428 MFA_REQUIRED, no money moves; the client verifies a high_value_tx challenge (POST /api/v1/mfa/totp/verify) and retries the same request, with the same idempotency_key on an open-amount code.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2250,6 +2329,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description MFA_REQUIRED — verify the second factor and retry the same request. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -2310,7 +2398,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Split list */
+                /** @description Split list. Always an array: a user without splits gets `[]`, never `null` (every list response is normalized the same way). */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -4680,6 +4768,24 @@ export interface paths {
                         "application/json": components["schemas"]["EscrowAgreement"];
                     };
                 };
+                /** @description ESCROW_SELF (the seller is the caller), ESCROW_INVALID_AMOUNT (amount_minor <= 0), ESCROW_DESCRIPTION_REQUIRED (blank description), INVALID_REQUEST (any other malformed input: missing or malformed seller, unsupported currency) or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description ESCROW_SELLER_NOT_FOUND — the seller has no KiramoPay account. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -6495,6 +6601,12 @@ export interface components {
             is_favorite?: boolean;
             /** Format: date-time */
             created_at?: string;
+        };
+        SinpeContactConflict: {
+            /** @example false */
+            success?: boolean;
+            error?: components["schemas"]["ApiError"];
+            data?: components["schemas"]["SinpeContactRecord"];
         };
         SinpeHistoryRecord: {
             /** Format: uuid */

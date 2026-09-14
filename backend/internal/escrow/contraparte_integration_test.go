@@ -140,8 +140,10 @@ func TestNoSePuedeAbrirUnEscrowConUnoMismo(t *testing.T) {
 	_, err := svc.Create(ctx, comprador, &escrow.CreateRequest{
 		SellerPhone: telefonoComprador, AmountMinor: 150_000, Currency: "CRC", Description: "yo conmigo",
 	})
-	if !errors.Is(err, escrow.ErrInvalidRequest) {
-		t.Fatalf("escrow con uno mismo: err = %v, se esperaba ErrInvalidRequest", err)
+	// Con su propio error: la pantalla tiene que poder decir "no puedes crear un
+	// acuerdo contigo mismo" en vez de "invalid request".
+	if !errors.Is(err, escrow.ErrContraparteEsUnoMismo) {
+		t.Fatalf("escrow con uno mismo: err = %v, se esperaba ErrContraparteEsUnoMismo", err)
 	}
 	if got := cuantosAcuerdos(t, pool); got != antes {
 		t.Fatalf("se creo el acuerdo consigo mismo")

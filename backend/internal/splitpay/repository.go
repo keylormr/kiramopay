@@ -38,11 +38,16 @@ func (r *Repository) CrearGrupoConCuotas(ctx context.Context, group *SplitGroup,
 
 	for i := range shares {
 		sh := &shares[i]
+		// El estado y "ya esta pagada" viajan en parametros distintos. Con $7
+		// usado a la vez como valor de la columna VARCHAR y en `$7 = 'paid'`,
+		// Postgres deducia dos tipos para el mismo parametro y rechazaba la
+		// sentencia entera (42P08). Como la cuota del creador se inserta
+		// siempre, NINGUNA division se pudo crear nunca.
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO split_shares (id, group_id, user_id, user_phone, user_name, amount, status, paid_at)
-			 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, CASE WHEN $7 = 'paid' THEN NOW() END)`,
+			 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, CASE WHEN $8::boolean THEN NOW() END)`,
 			sh.ID, sh.GroupID, sh.UserID, sh.UserPhone,
-			sh.UserName, sh.Amount, sh.Status); err != nil {
+			sh.UserName, sh.Amount, sh.Status, sh.Status == "paid"); err != nil {
 			return err
 		}
 	}

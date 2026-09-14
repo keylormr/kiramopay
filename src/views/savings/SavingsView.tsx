@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
+import { CampoMonto } from '@/components/CampoMonto';
 import { useSavingsStore, SavingsGoal } from '@/stores/savings.store';
 import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
@@ -447,10 +448,9 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_target_amount')}</label>
             <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
               <span className="text-lg font-bold text-gray-400 mr-2">₡</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={goalTarget}
-                onChange={(e) => setGoalTarget(e.target.value)}
+                onChange={setGoalTarget}
                 placeholder="0"
                 className="flex-1 bg-transparent text-lg font-bold outline-none uv-text-primary"
               />
@@ -535,10 +535,9 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
                 <div className="flex items-center justify-center gap-2">
                   <span className={`text-3xl font-bold ${isInsufficient ? 'text-red-500' : 'text-gray-400'}`}>₡</span>
-                  <input
-                    type="number"
+                  <CampoMonto
                     value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
+                    onChange={setDepositAmount}
                     placeholder="0"
                     className={`text-4xl font-black bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficient ? 'text-red-500' : 'uv-text-primary'}`}
                     autoFocus

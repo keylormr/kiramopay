@@ -7,6 +7,7 @@ import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { HelpButton } from '../../components/HelpSheet';
 import { GraficoArea } from '../../components/GraficoArea';
+import { CampoMonto } from '../../components/CampoMonto';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -16,8 +17,10 @@ import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
+import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
-import { normalizarTelefonoCR, formatearTelefonoCR } from '@/utils/telefono';
+import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
 import { getTxTime } from '@/utils/fechasTx';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 import { BannerInicio } from '@/components/home/BannerInicio';
@@ -67,6 +70,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   // A scanned QR may be a contact (added to the list) instead of a payment.
   const [scannedContact, setScannedContact] = useState<ContactQrPayload | null>(null);
+  // Aviso del escaner cuando el codigo leido no sirve para este flujo (p. ej.
+  // el propio QR del usuario): el escaner sigue encendido, igual que en SINPE.
+  const [scanError, setScanError] = useState('');
 
   // Envio directo al escanear el QR de una persona: escanear -> monto ->
   // enviar. Antes escanear solo agregaba el contacto y habia que ir a
@@ -158,20 +164,42 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     setActiveSheet('none');
   };
 
+  // Contacto ya guardado bajo ese numero, si lo hay. Mismo criterio que
+  // SinpeView (buscarContactoPorTelefono/esMiPropioNumero): esta es una
+  // SEGUNDA via para escanear el QR de un contacto y guardarlo, y tenia
+  // que avisar igual que la primera en vez de dejar que "Agregar contacto"
+  // duplique el alta o guarde el propio numero.
+  const buscarContactoPorTelefono = (telefono: string): SinpeContact | undefined =>
+    state.sinpeContacts.find((c) => mismoTelefonoCR(c.phone, telefono));
+
+  const esMiPropioNumero = (telefono: string): boolean =>
+    !!state.user?.phone && mismoTelefonoCR(telefono, state.user.phone);
+
   // Abre la hoja del escáner; la cámara la maneja QrScannerPanel.
   const startQRScan = () => {
+    setScanError('');
     setActiveSheet('scanner');
   };
 
   // Un código leído aquí puede ser dos cosas distintas: un QR de contacto, que
   // agrega a alguien y nunca toca el riel de pago, o cualquier otro, que va al
   // flujo de cobro. Vale para la cámara y para el respaldo manual.
-  const handleScannedCode = (raw: string) => {
+  const handleScannedCode = (raw: string): boolean | void => {
     const contact = tryParseContactQr(raw);
     if (contact) {
+      // El propio QR no tiene destino posible (no se puede enviar dinero a
+      // uno mismo): se avisa y el escaner sigue encendido, igual que en
+      // SinpeView, en vez de abrir una hoja de envio sin sentido.
+      if (esMiPropioNumero(contact.phone)) {
+        setScanError(t('contact_own_number'));
+        return false;
+      }
       // Directo a "cuanto le envias": el gesto de escanear a una persona ES
       // querer transferirle (guardar el contacto queda como accion secundaria
-      // dentro de la misma hoja).
+      // dentro de la misma hoja). Un contacto YA guardado tambien abre este
+      // flujo con normalidad -escanear a alguien conocido para pagarle de
+      // nuevo es el caso comun-; lo que se bloquea es volver a "agregarlo".
+      setScanError('');
       setScannedContact(contact);
       setEnvioMonto('');
       setEnvioNota('');
@@ -182,6 +210,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       setActiveSheet('enviarA'); // cerrar la hoja apaga la cámara
       return;
     }
+    setScanError('');
     setScannedQrData(raw);
     setPaymentAmount('');
     setPayError('');
@@ -191,6 +220,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   const handleAddScannedContact = () => {
     if (!scannedContact || contactoGuardado) return;
+    if (esMiPropioNumero(scannedContact.phone)) {
+      setEnvioError(t('contact_own_number'));
+      return;
+    }
+    if (buscarContactoPorTelefono(scannedContact.phone)) {
+      // Ya estaba guardado (aca o en otra sesion que sincronizo primero):
+      // se avisa y se refleja el estado real en vez de duplicar el alta.
+      setEnvioError(t('contact_already_exists'));
+      setContactoGuardado(true);
+      return;
+    }
     const contact: SinpeContact = {
       id: Date.now().toString(),
       name: scannedContact.name,
@@ -667,7 +707,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <div>
                   <div className="text-lg font-bold truncate tabular-nums">{formatCurrency(acc.balance, acc.ccy)}</div>
-                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.name}</div>
+                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{nombreDeCuenta(acc, t)}</div>
                 </div>
               </button>
             );
@@ -806,10 +846,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </label>
                 <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
                   <span className="text-xl font-bold text-gray-400 mr-2">{baseAccount?.symbol ?? '₡'}</span>
-                  <input
-                    type="number"
+                  <CampoMonto
                     value={cobrarAmount}
-                    onChange={(e) => setCobrarAmount(e.target.value)}
+                    onChange={setCobrarAmount}
                     placeholder="0.00"
                     className="flex-1 bg-transparent text-xl font-bold outline-none uv-text-primary"
                   />
@@ -883,45 +922,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Transaction Detail Sheet */}
-      {selectedTx && (
-        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
-          <div className="flex flex-col items-center py-6">
-             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-4 ${selectedTx.amount < 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                {selectedTx.amount < 0 ? <Icons.Bank size={32} /> : <Icons.Wallet size={32} />}
-             </div>
-             <div className="text-2xl font-bold mb-1">{txTitle(selectedTx, t)}</div>
-             <div className={`text-3xl font-black mb-6 ${selectedTx.amount < 0 ? 'uv-text-primary' : 'text-green-600'}`}>
-                {selectedTx.amount > 0 ? '+' : ''}{formatCurrency(selectedTx.amount, selectedTx.ccy)}
-             </div>
-
-             <div className="w-full space-y-4">
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('status')}</span>
-                   <span className="font-bold uv-text-primary capitalize flex items-center gap-2">
-                     {selectedTx.status} <Icons.Check size={14} className="text-green-500" />
-                   </span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('date')}</span>
-                   <span className="font-bold uv-text-primary">{selectedTx.date}</span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('category')}</span>
-                   <span className="font-bold uv-text-primary">{selectedTx.category || 'General'}</span>
-                </div>
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                   <span className="uv-text-muted">{t('transaction_id')}</span>
-                   <span className="font-mono text-xs font-bold uv-text-primary">#{selectedTx.id}</span>
-                </div>
-             </div>
-
-             <button className="mt-8 py-3 px-6 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-slate-700 dark:text-white font-bold text-sm w-full">
-               {t('report_issue')}
-             </button>
-          </div>
-        </BottomSheet>
-      )}
+      {/* Detalle del movimiento: compartido con "Todos los movimientos". */}
+      <TransactionDetailSheet tx={selectedTx} isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} />
 
       {/* QR Scanner Sheet — cámara real (jsQR) con fallback manual */}
       <BottomSheet
@@ -929,7 +931,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         onClose={() => setActiveSheet('none')}
         title={t('qr_scanner')}
       >
-        <QrScannerPanel active={activeSheet === 'scanner'} onDecode={handleScannedCode}>
+        <QrScannerPanel active={activeSheet === 'scanner'} onDecode={handleScannedCode} error={scanError}>
           {/* Monedas soportadas */}
           <div className="flex gap-4 justify-center mt-6">
             {(['BTC', 'ETH', 'CRC', 'USD'] as QRCurrency[]).map((ccy) => {
@@ -1016,10 +1018,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                       </label>
                       <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
                         <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
-                        <input
-                          type="number"
+                        <CampoMonto
                           value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          onChange={setPaymentAmount}
                           placeholder="0.00"
                           className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
                           autoFocus
@@ -1094,12 +1095,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 <div className="text-center py-2">
                   <div className="flex items-center justify-center gap-1">
                     <span className="text-3xl font-bold uv-text-muted">₡</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
+                    <CampoMonto
                       autoFocus
                       value={envioMonto}
-                      onChange={(e) => { setEnvioMonto(e.target.value); setEnvioError(''); }}
+                      onChange={(v) => { setEnvioMonto(v); setEnvioError(''); }}
                       placeholder="0"
                       className="text-4xl font-black uv-text-primary bg-transparent outline-none w-40 text-center tabular-nums placeholder:uv-text-muted"
                     />
@@ -1140,10 +1139,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
                 <button
                   onClick={handleAddScannedContact}
-                  disabled={contactoGuardado}
+                  disabled={contactoGuardado || (!!scannedContact && !!buscarContactoPorTelefono(scannedContact.phone))}
                   className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] disabled:uv-text-muted"
                 >
-                  {contactoGuardado ? t('sinpe_contact_saved') : t('add_contact')}
+                  {contactoGuardado || (scannedContact && buscarContactoPorTelefono(scannedContact.phone))
+                    ? t('sinpe_contact_saved')
+                    : t('add_contact')}
                 </button>
               </>
             )}

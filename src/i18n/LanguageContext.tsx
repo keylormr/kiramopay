@@ -7,6 +7,7 @@ import {
   defaultTranslations,
   loadLanguage,
 } from './translations';
+import { fijarDiccionarioActivo } from './mensajesDeError';
 
 interface LanguageContextType {
   language: Language;
@@ -58,6 +59,12 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       cancelled = true;
     };
   }, [language]);
+
+  // Los mensajes de error que arma el cliente HTTP (fuera de React) salen del
+  // mismo diccionario que la pantalla.
+  useEffect(() => {
+    fijarDiccionarioActivo(messages);
+  }, [messages]);
 
   // Keep the document's lang attribute in sync so screen readers, hyphenation
   // and browser translation match the UI language (it otherwise stays "en").

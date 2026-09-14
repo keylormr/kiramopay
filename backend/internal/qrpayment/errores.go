@@ -39,6 +39,16 @@ var (
 	ErrNoPodesPagarte = errors.New("no podes pagarte a vos mismo")
 	ErrMontoRequerido = errors.New("este codigo necesita que indiques el monto")
 
+	// ErrMontoInvalido: un cobro con monto cero o negativo. La pantalla ya no
+	// deja llegar aca, pero otro cliente si, y recibia "amount must be
+	// positive" en ingles bajo el PAYMENT_FAILED generico.
+	ErrMontoInvalido = errors.New("el monto debe ser mayor que cero")
+
+	// ErrCedulaSinCuenta: se quiso sumar al equipo del comercio una cedula que
+	// no es de ninguna cuenta. Salia como ADD_STAFF_FAILED con la frase en
+	// ingles, igual que un rol invalido: la pantalla no podia distinguirlos.
+	ErrCedulaSinCuenta = errors.New("no KiramoPay user with that cedula")
+
 	// ErrLlaveReutilizada: llego un nonce ya usado pero describiendo otro pago.
 	// El nonce lo controla quien recibe la mercaderia, asi que no alcanza con
 	// devolver el pago viejo: hay que comparar antes.

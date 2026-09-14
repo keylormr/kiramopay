@@ -23,11 +23,15 @@ import { biometricService } from '@/services/biometric';
 
 export const CLAVE_ULTIMO_IDENTIFICADOR = 'kiramopay_last_cedula';
 export const CLAVE_ULTIMO_NOMBRE = 'kiramopay_last_name';
+// Que clase de identificador es el guardado (usuario, cedula, correo, telefono):
+// la tarjeta de acceso rapido lo rotula con eso.
+export const CLAVE_ULTIMO_TIPO = 'kiramopay_last_tipo';
 
 export function olvidarUltimoAcceso(): void {
   try {
     localStorage.removeItem(CLAVE_ULTIMO_IDENTIFICADOR);
     localStorage.removeItem(CLAVE_ULTIMO_NOMBRE);
+    localStorage.removeItem(CLAVE_ULTIMO_TIPO);
   } catch {
     // Almacenamiento bloqueado (ventana privada, ajustes del navegador): no
     // hay nada guardado que borrar, y fallar aqui no puede impedir el cierre

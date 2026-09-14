@@ -195,6 +195,10 @@ func (h *Handler) AddPriceAlert(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.AddPriceAlert(r.Context(), userID, &alert)
 	if err != nil {
+		if codigo, estado, ok := errorDeAlerta(err); ok {
+			response.Error(w, estado, codigo, err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "ALERT_FAILED", err.Error())
 		return
 	}

@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer } from '@/api';
 import type { CatalogItem } from '@/api/repositories/qrpayment.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
@@ -160,7 +161,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
             </div>
             <div>
               <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('business_catalog_price')}</label>
-              <input value={price} onChange={(e) => setPrice(e.target.value)} className={field} type="number" inputMode="decimal" placeholder="0.00" />
+              <CampoMonto value={price} onChange={setPrice} className={field} placeholder="0.00" />
             </div>
             <Button onClick={add} loading={saving} disabled={saving || !name.trim() || !(parseFloat(price) > 0)} fullWidth>
               {saving ? t('processing') : t('add')}

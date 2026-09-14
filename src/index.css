@@ -143,6 +143,20 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Ningun input[type=number] debe mostrar las flechas de subir/bajar — todos
+   los campos numericos de la app usan CampoMonto (type="text") o
+   inputMode="numeric"/"decimal" sobre texto plano, pero esta regla queda
+   como red de seguridad ante cualquiera que se cuele o se agregue despues. */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Utility classes for the Unified Vision surface system
    ═══════════════════════════════════════════════════════════════════════════ */
