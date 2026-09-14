@@ -59,8 +59,8 @@ func (s *Service) GetContacts(ctx context.Context, userID string) ([]ContactReco
 	return s.repo.GetContacts(ctx, userID)
 }
 
-func (s *Service) AddContact(ctx context.Context, userID, phone, name, bank string) (*ContactRecord, error) {
-	return s.repo.AddContact(ctx, userID, phone, name, bank)
+func (s *Service) AddContact(ctx context.Context, userID, phone, name, bank string, isFavorite bool) (*ContactRecord, error) {
+	return s.repo.AddContact(ctx, userID, phone, name, bank, isFavorite)
 }
 
 func (s *Service) GetHistory(ctx context.Context, userID string) ([]HistoryRecord, error) {
@@ -88,7 +88,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("amount exceeds single-payment ceiling")
 	}
 	if !validCRMobile(req.Phone) {
-		return nil, fmt.Errorf("invalid SINPE Móvil phone number")
+		return nil, ErrInvalidPhone
 	}
 
 	// Serialize concurrent SINPE sends for THIS user so the daily-limit check

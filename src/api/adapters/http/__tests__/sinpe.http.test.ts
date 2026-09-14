@@ -17,7 +17,7 @@ describe('HttpSinpeRepository.addContact', () => {
   it('normaliza el telefono del contacto antes de mandarlo al backend', async () => {
     const post = vi.fn().mockResolvedValue({
       success: true,
-      data: { id: 'srv-1', phone: '+50688881234', name: 'Diego Mora', bank: 'BAC' },
+      data: { id: 'srv-1', phone: '+50688881234', name: 'Diego Mora', bank: 'BAC', is_favorite: false },
     });
     const client = fakeClient({ post });
     const repo = new HttpSinpeRepository(client);
@@ -28,6 +28,34 @@ describe('HttpSinpeRepository.addContact', () => {
       phone: '+50688881234',
       name: 'Diego Mora',
       bank: 'BAC',
+      is_favorite: false,
+    });
+  });
+
+  // "Marcar como favorito" se perdía en silencio: el POST nunca lo mandaba,
+  // así que quedaba en su default (false) sin importar lo que eligiera el
+  // usuario en el formulario.
+  it('manda is_favorite cuando el contacto se marca como favorito', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { id: 'srv-1', phone: '+50688881234', name: 'Diego Mora', bank: 'BAC', is_favorite: true },
+    });
+    const client = fakeClient({ post });
+    const repo = new HttpSinpeRepository(client);
+
+    await repo.addContact({
+      id: 'local-1',
+      name: 'Diego Mora',
+      phone: '8888-1234',
+      bank: 'BAC',
+      isFavorite: true,
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/v1/sinpe/contacts', {
+      phone: '+50688881234',
+      name: 'Diego Mora',
+      bank: 'BAC',
+      is_favorite: true,
     });
   });
 

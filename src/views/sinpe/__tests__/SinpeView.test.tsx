@@ -111,7 +111,10 @@ describe('SinpeView — send', () => {
     // The challenge appears instead of completing/erroring.
     expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('000000'), '123456');
-    await user.click(screen.getByText('Verificar y activar'));
+    // No "Verificar y activar" (ese texto es para ACTIVAR 2FA en Perfil, y
+    // aquí confundía sobre qué se está autorizando: este reto es para ESTE
+    // envío puntual).
+    await user.click(screen.getByText('Verificar y enviar'));
 
     await waitFor(() => {
       expect(mocks.api.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
@@ -176,6 +179,86 @@ describe('SinpeView — send', () => {
     expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
     expect(screen.queryByText('Envío en proceso')).not.toBeInTheDocument();
   });
+
+  // El backend rechaza el numero con su propio codigo (INVALID_PHONE) para
+  // que la vista lo traduzca, en vez del "invalid SINPE Móvil phone number"
+  // en ingles que se filtraba antes tal cual a la pantalla en español.
+  it('traduce el rechazo del servidor por teléfono inválido', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({
+      success: false,
+      error: { code: 'INVALID_PHONE', message: 'invalid SINPE Móvil phone number' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText('Revisa el número: debe tener 8 dígitos')).toBeInTheDocument();
+    expect(screen.queryByText(/invalid SINPE Móvil phone number/)).not.toBeInTheDocument();
+  });
+
+  // Un monto de ₡0 dejaba la hoja de confirmar "muerta": el botón de enviar
+  // nunca se deshabilitaba y tocar "Enviar" ahí adentro no hacía nada, sin
+  // ningún aviso.
+  it('deshabilita el botón de enviar con un monto de ₡0', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Enviar' })[0]);
+    const dialog = await screen.findByRole('dialog');
+    const d = within(dialog);
+    await user.type(d.getByPlaceholderText('8888-0000'), '88887777');
+    await user.type(d.getByPlaceholderText('0'), '0');
+
+    expect(d.getByRole('button', { name: /Enviar/ })).toBeDisabled();
+    expect(mocks.api.sinpe.send).not.toHaveBeenCalled();
+  });
+
+  // El "+506" que se muestra junto al campo es solo un rótulo decorativo:
+  // si el usuario lo teclea dentro del campo, el recorte se quedaba con los
+  // PRIMEROS 8 dígitos ("50688880") en vez de los últimos, armando un
+  // número que no era el que la persona quiso escribir.
+  it('usa los últimos 8 dígitos cuando el usuario teclea el +506 a mano', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Enviar' })[0]);
+    const dialog = await screen.findByRole('dialog');
+    const d = within(dialog);
+    await user.type(d.getByPlaceholderText('8888-0000'), '+50688880005');
+    await user.type(d.getByPlaceholderText('0'), '100');
+    await user.click(d.getByRole('button', { name: /Enviar/ }));
+    const sheets = await screen.findAllByRole('dialog');
+    await user.click(within(sheets[sheets.length - 1]).getByRole('button', { name: /Enviar/ }));
+
+    await waitFor(() =>
+      expect(mocks.api.sinpe.send).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: '+50688880005' }),
+      ),
+    );
+  });
+
+  // Los botones de "Montos rápidos" armaban el texto con
+  // formatCurrency(val).replace(',00', ''): String.replace sin regex global
+  // borra la PRIMERA coincidencia, que en "₡5,000.00" es la coma de miles,
+  // no los centavos -- el botón terminaba diciendo "₡5.00" (mil veces menos
+  // que el monto real que sí se manda al tocar el botón).
+  it('muestra el monto real en los botones de montos rápidos', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Enviar' })[0]);
+    const dialog = await screen.findByRole('dialog');
+    const d = within(dialog);
+
+    expect(d.getByRole('button', { name: '₡5,000' })).toBeInTheDocument();
+    expect(d.getByRole('button', { name: '₡10,000' })).toBeInTheDocument();
+    expect(d.getByRole('button', { name: '₡25,000' })).toBeInTheDocument();
+    expect(d.getByRole('button', { name: '₡50,000' })).toBeInTheDocument();
+    // Ninguno quedó recortado como "₡5.00" / "₡50.00".
+    expect(d.queryByText('₡5.00')).not.toBeInTheDocument();
+  });
 });
 
 // El usuario pidió varias veces poder agregar un contacto ESCANEANDO: la hoja
@@ -216,7 +299,9 @@ describe('SinpeView — agregar contacto escaneando', () => {
       type: 'ADD_SINPE_CONTACT',
       payload: expect.objectContaining({
         name: 'Ana Solís',
-        phone: '8888-7777',
+        // Formato canónico del backend (+506XXXXXXXX), no el "8888-7777"
+        // armado a mano que el servidor rechazaba con 400.
+        phone: '+50688887777',
         bank: 'BAC',
       }),
     });
@@ -343,6 +428,26 @@ describe('SinpeView — contacto duplicado o número propio', () => {
 
     expect(await screen.findByText(/no puedes agregarte como contacto/)).toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+// El nombre de la contraparte compartía línea con el prefijo "Recibido
+// de"/"Enviado a", que se comía buena parte del ancho frente al monto de la
+// derecha y cortaba nombres relativamente cortos ("Emmanuel C...").
+describe('SinpeView — historial', () => {
+  it('muestra el nombre completo del contacto en su propia línea', async () => {
+    mocks.state.sinpeHistory = [
+      { ...sentTx, id: 'h1', type: 'received', name: 'Emmanuel Coto', phone: '+50688889999' },
+    ];
+    setup();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }));
+
+    // El nombre completo aparece como su propio texto, no concatenado con
+    // el prefijo "Recibido de " (que ahora vive en la línea chica de abajo).
+    expect(await screen.findByText('Emmanuel Coto')).toBeInTheDocument();
+    expect(screen.getByText(/Recibido/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recibido de Emmanuel Coto/)).not.toBeInTheDocument();
   });
 });
 

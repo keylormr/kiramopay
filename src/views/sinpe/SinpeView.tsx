@@ -106,6 +106,20 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
 
+  // Los "Montos rapidos" siempre son colones enteros. Antes se armaban con
+  // formatCurrency(val).replace(',00', ''): String.replace sin regex global
+  // borra la PRIMERA ',00' que encuentra, que en "₡5,000.00" es la coma de
+  // miles, no los centavos -- "₡5,000.00" quedaba en "₡5.00" (mil veces
+  // menos). Se pide maximumFractionDigits:0 en vez de recortar el string.
+  const formatCurrencyEntero = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currencyDisplay: 'narrowSymbol',
+      currency: 'CRC',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
   const crcAccount = state.accounts.find(a => a.ccy === 'CRC');
   const balance = crcAccount?.balance || 0;
 
@@ -137,7 +151,21 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     if (!amount || !phone) return;
 
     const numAmount = parseFloat(amount);
-    if (!(numAmount > 0) || numAmount > balance) return;
+    // El boton del formulario ya bloquea estos casos, pero el saldo puede
+    // haber cambiado entre abrir la hoja "Confirmar" y tocar "Enviar" ahi
+    // adentro (esa hoja no vuelve a chequear disabled). Antes este return era
+    // mudo: la hoja de confirmar se quedaba abierta sin ningun aviso, como si
+    // el boton estuviera muerto.
+    if (!(numAmount > 0)) {
+      setShowConfirm(false);
+      setSendError(t('sinpe_invalid_amount'));
+      return;
+    }
+    if (numAmount > balance) {
+      setShowConfirm(false);
+      setSendError(t('insufficient_funds'));
+      return;
+    }
 
     // Block sending to your own number: it would fall onto the external rail
     // (debit + fee, no credit back) — a silent loss. The backend also rejects it.
@@ -186,6 +214,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       const porCodigo: Record<string, string> = {
         RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
         SELF_SEND: t('sinpe_self_send_error'),
+        // El backend distingue este rechazo (numero mal formado tras la
+        // validacion del servidor) del resto de fallos de SINPE_FAILED; sin
+        // este mapeo se filtraba el "invalid SINPE Móvil phone number" del
+        // servidor tal cual, en ingles, en medio de una pantalla en español.
+        INVALID_PHONE: t('sinpe_phone_invalid'),
       };
       const code = res.error?.code ?? '';
       setSendError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
@@ -375,11 +408,18 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     if (!newContactName || !newContactPhone) return;
 
     const telefono = normalizarTelefonoCR(newContactPhone);
-    if (telefono && esMiPropioNumero(telefono)) {
+    // El botón ya exige 8 dígitos (disabled más abajo), así que esto no
+    // debería pasar; defensivo por si acaso, en vez de guardar un contacto
+    // con un teléfono que el backend seguro rechaza.
+    if (!telefono) {
+      setContactAddError(t('sinpe_phone_invalid'));
+      return;
+    }
+    if (esMiPropioNumero(telefono)) {
       setContactAddError(t('contact_own_number'));
       return;
     }
-    const existing = telefono ? buscarContactoPorTelefono(telefono) : undefined;
+    const existing = buscarContactoPorTelefono(telefono);
     if (existing) {
       setContactAddError('');
       setDuplicateContact(existing);
@@ -389,7 +429,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     const newContact: SinpeContact = {
       id: Date.now().toString(),
       name: newContactName,
-      phone: newContactPhone.slice(0, 4) + '-' + newContactPhone.slice(4),
+      // Formato canónico del backend (+506XXXXXXXX), el mismo que usan los
+      // contactos que ya vienen del servidor. Antes se armaba a mano como
+      // "8888-1234" sin el prefijo de país: quedaba inconsistente con el
+      // resto de la lista hasta el siguiente refresco de datos.
+      phone: telefono,
       bank: newContactBank,
       isFavorite: newContactFavorite,
     };
@@ -727,10 +771,18 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                       {incoming ? <Icons.ArrowDownLeft size={20} /> : <Icons.ArrowUpRight size={20} />}
                     </div>
                     <div className="flex-1 min-w-0">
+                      {/* El nombre va SOLO en su propia línea (antes compartía
+                          línea con "Recibido de"/"Enviado a", que se comía
+                          buena parte del ancho frente al monto y cortaba
+                          nombres cortos como "Emmanuel Coto" a "Emmanuel
+                          C..."). El sentido/dirección queda en la línea
+                          chica de abajo, junto a la fecha. */}
                       <div className="font-semibold uv-text-primary truncate">
-                        {incoming ? `${t('received_from')} ${tx.name}` : `${t('sent_to')} ${tx.name}`}
+                        {tx.name}
                       </div>
                       <div className="text-xs uv-text-muted mt-0.5">
+                        {incoming ? t('sinpe_received_short') : t('sinpe_sent_short')}
+                        {' · '}
                         {/* Filas recibidas viejas traen un UUID en `phone` (el
                             backend guardaba el id del emisor como relleno):
                             solo se muestra lo que normaliza como telefono. */}
@@ -1028,7 +1080,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(-8))}
                   placeholder="8888-0000"
                   className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
                 />
@@ -1062,7 +1114,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 onClick={() => setAmount(val.toString())}
                 className="flex-1 py-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-lg text-sm font-bold uv-text-secondary hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] transition-colors"
               >
-                {formatCurrency(val).replace(',00', '')}
+                {formatCurrencyEntero(val)}
               </button>
             ))}
           </div>
@@ -1087,7 +1139,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           {/* Boton enviar */}
           <button
             onClick={() => setShowConfirm(true)}
-            disabled={!phone || !amount || parseFloat(amount) > balance || isProcessing}
+            disabled={!phone || !amount || !(parseFloat(amount) > 0) || parseFloat(amount) > balance || isProcessing}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >
             {isProcessing ? (
@@ -1342,6 +1394,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           setShowMfa(false);
           handleSendMoney();
         }}
+        confirmLabel={t('mfa_verify_and_send')}
       />
     </div>
   );
