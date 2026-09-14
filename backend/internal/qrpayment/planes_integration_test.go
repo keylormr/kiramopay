@@ -177,6 +177,14 @@ func TestPromocion_NoSeRenuevaNiSeAlargaAlReaprobar(t *testing.T) {
 	if err != nil || cambiado.VerificationStatus != "pending" {
 		t.Fatalf("cambio de identidad: %+v (err %v)", cambiado, err)
 	}
+	// El cambio de identidad borra la revision anterior (reviewed_at), pero no la
+	// marca de la primera aprobacion: es ella la que impide renovar la promocion.
+	if cambiado.ReviewedAt != nil {
+		t.Fatalf("pending con reviewed_at = %v", cambiado.ReviewedAt)
+	}
+	if marca, _ := marcasDePromocion(t, pool, m.ID); marca == nil {
+		t.Fatal("el cambio de identidad borro la marca de la primera aprobacion")
+	}
 	re2, err := svc.ApproveMerchant(ctx, m.ID, owner)
 	if err != nil {
 		t.Fatalf("re-aprobar tras cambio de identidad: %v", err)
@@ -218,6 +226,7 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	legado := registrarComercio(t, svc, owner, "De antes de la 038")
 	nuevo := registrarComercio(t, svc, owner, "Pendiente nuevo")
 	rechazado := registrarComercio(t, svc, owner, "Rechazado")
+	corregido := registrarComercio(t, svc, owner, "Rechazado y corregido")
 
 	if _, err := pool.Exec(ctx,
 		`UPDATE qr_merchants SET verification_status = 'verified', reviewed_at = NOW() - INTERVAL '30 days'
@@ -232,30 +241,36 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 		owner, conRotulo.ID, "PRUEBA-068-"+conRotulo.ID); err != nil {
 		t.Fatalf("preparar rotulo: %v", err)
 	}
-	// Aprobado, cambio su cedula antes de cobrar nada y volvio a 'pending'. No
-	// tiene huella de cobro: lo unico que queda de su aprobacion es reviewed_at.
-	if _, err := svc.ApproveMerchant(ctx, editado.ID, owner); err != nil {
-		t.Fatalf("aprobar editado: %v", err)
-	}
-	e, err := svc.UpdateMerchant(ctx, editado.ID, owner, &qrpayment.RegisterMerchantRequest{
-		Name: "Aprobado y editado", Category: "restaurant", Cedula: "702650930", CedulaType: "fisica", LegalName: "Otra Persona",
-	})
-	if err != nil {
-		t.Fatalf("editar identidad: %v", err)
-	}
-	if e.VerificationStatus != "pending" {
-		t.Fatalf("editar identidad: quedo en %q, se esperaba pending", e.VerificationStatus)
-	}
-	// Antes de la 068 estas columnas no existian: la aprobacion de arriba no pudo
-	// dejarlo marcado.
+	// Aprobado, cambio su cedula antes de cobrar nada y volvio a 'pending' antes
+	// del 13-09-2026, cuando esa edicion todavia conservaba reviewed_at y
+	// reviewed_by. Sin huella de cobro, lo unico que queda de su aprobacion es esa
+	// revision. El codigo de hoy ya no deja ese estado (limpia la revision al
+	// volver a 'pending'), asi que se escribe tal como quedo en la base.
 	if _, err := pool.Exec(ctx,
-		`UPDATE qr_merchants SET primera_aprobacion_at = NULL, promo_hasta = NULL WHERE id = $1::uuid`, editado.ID); err != nil {
-		t.Fatalf("quitar marcas del editado: %v", err)
+		`UPDATE qr_merchants
+		    SET verification_status = 'pending', reviewed_at = NOW() - INTERVAL '20 days', reviewed_by = $2::uuid,
+		        cedula = '702650930', cedula_type = 'fisica', legal_name = 'Otra Persona'
+		  WHERE id = $1::uuid`, editado.ID, owner); err != nil {
+		t.Fatalf("preparar editado antes del 13-09-2026: %v", err)
 	}
 	// Solo rechazado, nunca aprobado. Es el costo aceptado de mirar reviewed_at:
 	// un rechazo lo llena igual que una aprobacion.
 	if _, err := svc.RejectMerchant(ctx, rechazado.ID, owner, "documento ilegible"); err != nil {
 		t.Fatalf("rechazar: %v", err)
+	}
+	// Rechazado y despues corregido con el codigo de hoy: la edicion lo devuelve a
+	// 'pending' y limpia la revision. Es el camino normal de quien corrige sus
+	// datos, y queda igual que un comercio que nunca se reviso. La migracion no
+	// puede distinguirlo de uno aprobado, rechazado y corregido en la misma
+	// ventana (ver el comentario de la 068): lo trata como nuevo.
+	if _, err := svc.RejectMerchant(ctx, corregido.ID, owner, "cedula ilegible"); err != nil {
+		t.Fatalf("rechazar el que se corrige: %v", err)
+	}
+	corr, err := svc.UpdateMerchant(ctx, corregido.ID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Rechazado y corregido", Category: "restaurant", Cedula: "3-101-123", CedulaType: "juridica", LegalName: "Rechazado y corregido SA",
+	})
+	if err != nil || corr.VerificationStatus != "pending" || corr.ReviewedAt != nil {
+		t.Fatalf("corregir tras el rechazo: %+v (err %v); se esperaba pending sin revision", corr, err)
 	}
 	// Nacio antes de que se aplicara la 038, que lo dio por verificado sin llenar
 	// reviewed_at, y al editar su perfil volvio a 'pending': sin revision ni cobro.
@@ -303,8 +318,12 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	if v2, p2 := marcasDePromocion(t, pool, conRotulo.ID); v2 == nil || p2 != nil {
 		t.Fatalf("pendiente con rotulo: primera_aprobacion=%v promo=%v; se esperaba marcado", v2, p2)
 	}
-	if v3, p3 := marcasDePromocion(t, pool, editado.ID); v3 == nil || p3 != nil {
+	v3, p3 := marcasDePromocion(t, pool, editado.ID)
+	if v3 == nil || p3 != nil {
 		t.Fatalf("aprobado y editado sin cobrar: primera_aprobacion=%v promo=%v; se esperaba marcado", v3, p3)
+	}
+	if time.Since(*v3) < 19*24*time.Hour {
+		t.Fatalf("aprobado y editado sin cobrar: la marca es %v; debia ser la fecha de su revision, no la de hoy", *v3)
 	}
 	vl, pl := marcasDePromocion(t, pool, legado.ID)
 	if vl == nil || pl != nil {
@@ -318,6 +337,9 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	}
 	if v5, _ := marcasDePromocion(t, pool, nuevo.ID); v5 != nil {
 		t.Fatalf("pendiente nuevo: quedo marcado (%v) sin haber sido revisado nunca", *v5)
+	}
+	if v6, _ := marcasDePromocion(t, pool, corregido.ID); v6 != nil {
+		t.Fatalf("rechazado y corregido: quedo marcado (%v) sin revision ni huella", *v6)
 	}
 
 	// Una segunda pasada no cambia nada. Corre por otra conexion del pool, sin
@@ -348,12 +370,115 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 			t.Fatalf("%s: recibio la promocion (hasta %v); ya habia pasado por una revision", c.nombre, *a.PromoHasta)
 		}
 	}
-	b, err := svc.ApproveMerchant(ctx, nuevo.ID, owner)
-	if err != nil {
-		t.Fatalf("aprobar nuevo: %v", err)
+	for _, c := range []struct{ nombre, id string }{
+		{"nuevo", nuevo.ID},
+		{"rechazado y corregido", corregido.ID},
+	} {
+		b, err := svc.ApproveMerchant(ctx, c.id, owner)
+		if err != nil {
+			t.Fatalf("aprobar %s: %v", c.nombre, err)
+		}
+		if b.PromoHasta == nil {
+			t.Fatalf("%s: no recibio la promocion", c.nombre)
+		}
 	}
-	if b.PromoHasta == nil {
-		t.Fatal("nuevo: no recibio la promocion")
+}
+
+// Una fila 'verified' sin marca solo la deja codigo que no conoce la columna: la
+// version anterior, que sigue atendiendo mientras arranca la nueva (la 068 corre
+// al arrancar), o una vuelta atras del despliegue. Esa fila ya fue aprobada.
+// Desde que volver a 'pending' limpia reviewed_at, sin esta regla un cambio de
+// identidad borraria lo unico que lo recuerda y la re-aprobacion le regalaria la
+// promocion. Salir de 'verified' por cualquier camino le deja la marca con la
+// fecha de esa revision, y aprobarla de nuevo no la otorga.
+func TestPromocion_VerificadoSinMarcaNoLaRecibeAlSalirYVolver(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+
+	aprobadoSinMarca := func(nombre string) *qrpayment.Merchant {
+		t.Helper()
+		m := registrarComercio(t, svc, owner, nombre)
+		if _, err := pool.Exec(ctx,
+			`UPDATE qr_merchants
+			    SET verification_status = 'verified', reviewed_at = NOW() - INTERVAL '10 days', reviewed_by = $2::uuid,
+			        primera_aprobacion_at = NULL, promo_hasta = NULL
+			  WHERE id = $1::uuid`, m.ID, owner); err != nil {
+			t.Fatalf("preparar %s: %v", nombre, err)
+		}
+		return m
+	}
+	conLaFechaDeSuRevision := func(nombre, id string) {
+		t.Helper()
+		marca, promo := marcasDePromocion(t, pool, id)
+		if marca == nil || promo != nil {
+			t.Fatalf("%s: primera_aprobacion=%v promo=%v; se esperaba marcado y sin promocion", nombre, marca, promo)
+		}
+		if time.Since(*marca) < 9*24*time.Hour {
+			t.Fatalf("%s: la marca es %v; debia ser la fecha de la revision anterior, no la de hoy", nombre, *marca)
+		}
+	}
+	aprobarSinPromocion := func(nombre, id string) {
+		t.Helper()
+		a, err := svc.ApproveMerchant(ctx, id, owner)
+		if err != nil {
+			t.Fatalf("aprobar %s: %v", nombre, err)
+		}
+		if a.PromoHasta != nil || a.ComisionEfectivaBps != qrpayment.DefaultCommissionBps {
+			t.Fatalf("%s: recibio la promocion (hasta %v, efectiva %d); ya estaba aprobado", nombre, a.PromoHasta, a.ComisionEfectivaBps)
+		}
+		conLaFechaDeSuRevision(nombre, id)
+	}
+
+	// Cambia su identidad: vuelve a 'pending' y la revision se limpia, la marca no.
+	editado := aprobadoSinMarca("Editado")
+	e, err := svc.UpdateMerchant(ctx, editado.ID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Editado", Category: "restaurant", Cedula: "702650930", CedulaType: "fisica", LegalName: "Otra Persona",
+	})
+	if err != nil || e.VerificationStatus != "pending" || e.ReviewedAt != nil {
+		t.Fatalf("cambio de identidad: %+v (err %v); se esperaba pending sin revision", e, err)
+	}
+	conLaFechaDeSuRevision("editado", editado.ID)
+	aprobarSinPromocion("editado", editado.ID)
+
+	// Un rechazo pisa reviewed_at con la fecha de hoy: la marca toma la anterior.
+	rechazado := aprobadoSinMarca("Rechazado")
+	if _, err := svc.RejectMerchant(ctx, rechazado.ID, owner, "documento vencido"); err != nil {
+		t.Fatalf("rechazar: %v", err)
+	}
+	conLaFechaDeSuRevision("rechazado", rechazado.ID)
+	aprobarSinPromocion("rechazado", rechazado.ID)
+
+	// Aprobarlo otra vez tal como esta.
+	aprobarSinPromocion("aprobado otra vez", aprobadoSinMarca("Aprobado otra vez").ID)
+
+	// Una edicion que no toca la identidad lo deja 'verified' y tambien lo marca.
+	sinIdentidad := aprobadoSinMarca("Sin identidad")
+	s, err := svc.UpdateMerchant(ctx, sinIdentidad.ID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Sin identidad renovado", Category: "restaurant", Cedula: "3-101-123", CedulaType: "juridica", LegalName: "Sin identidad SA",
+	})
+	if err != nil || s.VerificationStatus != "verified" {
+		t.Fatalf("edicion sin identidad: %+v (err %v)", s, err)
+	}
+	conLaFechaDeSuRevision("sin identidad", sinIdentidad.ID)
+
+	// Lo que nunca estuvo 'verified' no se marca por pasar por aqui: rechazado
+	// desde 'pending', corregido y aprobado recibe la promocion como cualquier
+	// comercio nuevo.
+	nunca := registrarComercio(t, svc, owner, "Nunca aprobado")
+	if _, err := svc.RejectMerchant(ctx, nunca.ID, owner, "falta la cedula"); err != nil {
+		t.Fatalf("rechazar el nunca aprobado: %v", err)
+	}
+	if _, err := svc.UpdateMerchant(ctx, nunca.ID, owner, &qrpayment.RegisterMerchantRequest{
+		Name: "Nunca aprobado", Category: "restaurant", Cedula: "3-101-123", CedulaType: "juridica", LegalName: "Nunca aprobado SA",
+	}); err != nil {
+		t.Fatalf("corregir el nunca aprobado: %v", err)
+	}
+	if marca, _ := marcasDePromocion(t, pool, nunca.ID); marca != nil {
+		t.Fatalf("nunca aprobado: quedo marcado (%v) al rechazarse y corregirse", *marca)
+	}
+	a, err := svc.ApproveMerchant(ctx, nunca.ID, owner)
+	if err != nil || a.PromoHasta == nil || a.ComisionEfectivaBps != qrpayment.PromoEntradaBps {
+		t.Fatalf("nunca aprobado: %+v (err %v); se esperaba la promocion", a, err)
 	}
 }
 

@@ -3602,7 +3602,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a merchant's verification (admin)
-         * @description Sets verification_status=verified. The FIRST approval of a merchant grants the entry promotion: promo_hasta = approval + 3 months, during which the commission charged is the lower of commission_bps and 25 bps. Approving again (after a rejection, or after the owner changed the legal identity and the merchant went back to pending) neither renews nor extends it, and a merchant approved before the promotion existed never receives it.
+         * @description Sets verification_status=verified. The FIRST approval of a merchant grants the entry promotion: promo_hasta = approval + 3 months, during which the commission charged is the lower of commission_bps and 25 bps. Approving again (after a rejection, or after the owner changed the legal identity and the merchant went back to pending) neither renews nor extends it, and approving a merchant that is already verified never grants it. A merchant approved before the promotion existed does not receive it; migration 068 documents the one case the stored data cannot recognize.
          */
         post: {
             parameters: {

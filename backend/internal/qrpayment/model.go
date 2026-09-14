@@ -45,7 +45,8 @@ type Merchant struct {
 	PromoHasta *time.Time `json:"promo_hasta"`
 
 	// PrimeraAprobacionAt es la primera vez que se aprobo la verificacion. La
-	// promocion solo se otorga en esa aprobacion. Interna.
+	// promocion solo se otorga en esa aprobacion. Nada la limpia: sobrevive a un
+	// cambio de identidad aunque reviewed_at se borre. Interna.
 	PrimeraAprobacionAt *time.Time `json:"-"`
 
 	// Role is how the REQUESTING user relates to this merchant (owner, manager

@@ -95,13 +95,22 @@ func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, erro
 // comercio que cambia su cedula vuelve a 'pending' (UpdateMerchant) y al
 // re-aprobarse NO recibe otra promocion ni alarga la que tenia. Los comercios
 // aprobados antes de la migracion 068 ya tienen la marca, asi que tampoco la
-// reciben; la migracion explica que cuenta como "aprobado antes" y por que un
-// comercio que entonces solo fue rechazado tambien quedo marcado.
+// reciben; la migracion explica que cuenta como "aprobado antes", por que un
+// comercio que entonces solo fue rechazado tambien quedo marcado y que caso no
+// puede reconocer.
+//
+// Una fila que YA esta 'verified' fue aprobada, tenga o no la marca. Sin marca
+// solo la deja codigo que no conoce la columna: la version anterior, que sigue
+// atendiendo mientras arranca la nueva (la 068 corre al arrancar), o una vuelta
+// atras del despliegue. Por eso aprobarla de nuevo no otorga la promocion, y
+// cualquier decision sobre ella le deja la marca con la fecha de su revision
+// anterior antes de pisar reviewed_at. UpdateMerchantProfile hace lo mismo.
 //
 // En un UPDATE todas las expresiones del SET leen la fila VIEJA: el
-// `primera_aprobacion_at IS NULL` de promo_hasta ve el valor anterior a esta
-// misma sentencia. Los ::text no son decoracion: $2 aparece tres veces y sin
-// el tipo explicito Postgres deduce uno distinto en cada lugar (42P08).
+// verification_status, el reviewed_at y el `primera_aprobacion_at IS NULL` de
+// los CASE son los anteriores a esta misma sentencia. Los ::text no son
+// decoracion: $2 aparece tres veces y sin el tipo explicito Postgres deduce uno
+// distinto en cada lugar (42P08).
 func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status, reviewedBy, reason string) (*Merchant, error) {
 	m, err := scanMerchant(r.db.QueryRow(ctx,
 		`UPDATE qr_merchants
@@ -109,10 +118,14 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 		        reviewed_by           = NULLIF($3, '')::uuid,
 		        reviewed_at           = NOW(),
 		        rejection_reason      = $4,
-		        promo_hasta           = CASE WHEN $2::text = 'verified' AND primera_aprobacion_at IS NULL
+		        promo_hasta           = CASE WHEN $2::text = 'verified'
+		                                      AND verification_status IS DISTINCT FROM 'verified'
+		                                      AND primera_aprobacion_at IS NULL
 		                                     THEN NOW() + make_interval(months => $5)
 		                                     ELSE promo_hasta END,
-		        primera_aprobacion_at = CASE WHEN $2::text = 'verified'
+		        primera_aprobacion_at = CASE WHEN verification_status = 'verified'
+		                                     THEN COALESCE(primera_aprobacion_at, reviewed_at, NOW())
+		                                     WHEN $2::text = 'verified'
 		                                     THEN COALESCE(primera_aprobacion_at, NOW())
 		                                     ELSE primera_aprobacion_at END
 		  WHERE id = $1
@@ -143,18 +156,29 @@ func (r *Repository) UpdateMerchantProfile(
 	// era de los datos anteriores y ya no aplica. Sin esto un comercio quedaba
 	// 'pending' con un reviewed_at poblado, que dice que alguien reviso lo que
 	// nadie ha revisado todavia.
+	//
+	// Limpiar reviewed_at borra la fecha de la aprobacion anterior, y hasta la
+	// migracion 068 esa fecha era la unica senal de que el comercio ya habia sido
+	// aprobado. Desde la 068 la senal es primera_aprobacion_at, que
+	// UpdateVerification fija al aprobar y que nada limpia. Si la fila esta
+	// 'verified' sin la marca (la aprobo codigo que no conoce la columna, ver
+	// UpdateVerification), se la deja aqui con la fecha de esa revision: el SET
+	// lee la fila vieja, asi que reviewed_at todavia es el anterior.
 	m, err := scanMerchant(r.db.QueryRow(ctx,
 		`UPDATE qr_merchants
-		    SET name                = $2,
-		        description         = $3,
-		        category            = $4,
-		        cedula              = $5,
-		        cedula_type         = $6,
-		        legal_name          = $7,
-		        verification_status = $8::text,
-		        rejection_reason    = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END,
-		        reviewed_at         = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_at END,
-		        reviewed_by         = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_by END
+		    SET name                  = $2,
+		        description           = $3,
+		        category              = $4,
+		        cedula                = $5,
+		        cedula_type           = $6,
+		        legal_name            = $7,
+		        verification_status   = $8::text,
+		        primera_aprobacion_at = CASE WHEN verification_status = 'verified'
+		                                     THEN COALESCE(primera_aprobacion_at, reviewed_at, NOW())
+		                                     ELSE primera_aprobacion_at END,
+		        rejection_reason      = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END,
+		        reviewed_at           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_at END,
+		        reviewed_by           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_by END
 		  WHERE id = $1
 		  RETURNING `+merchantCols,
 		merchantID, name, description, category, cedula, cedulaType, legalName, status))

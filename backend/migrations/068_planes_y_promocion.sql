@@ -46,7 +46,7 @@ ALTER TABLE qr_merchants
 -- recibe la promocion aunque vuelva a aprobarse. "Ya fue aprobado" no se puede
 -- leer solo de verification_status: un comercio aprobado que cambio su cedula
 -- o su razon social esta hoy en 'pending', y ese cambio (UpdateMerchantProfile)
--- no deja ningun otro rastro. Se marca a quien muestre cualquiera de estas
+-- no deja un rastro propio. Se marca a quien muestre cualquiera de estas
 -- senales:
 --
 --   a. Nacio antes de que se aplicara la 038. Esa migracion dio por verificados
@@ -57,17 +57,38 @@ ALTER TABLE qr_merchants
 --      migraciones corren sin el (el initdb de docker-compose, sobre una base
 --      vacia) esa tabla no existe ni hay comercios viejos: de ahi el IF.
 --   b. Esta verificado hoy.
---   c. Un administrador ya lo reviso alguna vez (reviewed_at). Cubre al que fue
---      aprobado y cambio su identidad antes de cobrar nada.
+--   c. Conserva la revision de un administrador (reviewed_at). Cubre al que fue
+--      aprobado y cambio su identidad antes de cobrar nada, si ese cambio es
+--      anterior al 13-09-2026: hasta entonces volver a 'pending' conservaba
+--      reviewed_at.
 --   d. Dejo huella de cobro: emitir un codigo de comercio, un cobro o recibir un
 --      pago exigen estar verificado.
 --
--- Costo aceptado de (c): reviewed_at tambien se llena al RECHAZAR, y hoy nada
+-- Costo aceptado de (c): reviewed_at tambien se llena al RECHAZAR, y nada
 -- distingue "rechazado y nunca aprobado" de "aprobado, cambio su identidad y
--- despues rechazado". Un comercio que antes del despliegue solo fue rechazado
--- tampoco recibira la promocion cuando se apruebe. Se prefiere ese error, que
--- cobra 0,5 % a quien pudo pagar 0,25 %, al contrario, que regala la promocion
--- a un comercio que ya estaba aprobado.
+-- despues rechazado". Un comercio que llega a este despliegue rechazado, o en
+-- 'pending' con la revision de un rechazo, tampoco recibira la promocion cuando
+-- se apruebe. Se prefiere ese error, que cobra 0,5 % a quien pudo pagar 0,25 %,
+-- al contrario, que regala la promocion a un comercio que ya estaba aprobado.
+--
+-- Lo que ninguna senal reconoce. Desde el 13-09-2026, volver a 'pending' limpia
+-- reviewed_at y reviewed_by (UpdateMerchantProfile): esa revision era de los
+-- datos anteriores. Un comercio que se aprobo, nacio despues de la 038, nunca
+-- emitio un codigo ni cobro, y cambio su identidad entre ese despliegue y esta
+-- migracion queda igual que uno que nunca se reviso: 'pending', sin reviewed_at
+-- y sin huella. Igual queda el aprobado, rechazado y corregido en esa ventana.
+-- No hay dato en la base que los distinga, asi que esta migracion los trata
+-- como nuevos y reciben la promocion al aprobarse. Lo unico que los separa es
+-- el registro de peticiones del servidor (POST /api/v1/admin/merchants/{id}/approve
+-- con estado 200). Los candidatos se revisan a mano antes de desplegar: los
+-- comercios en 'pending' sin reviewed_at, sin huella de cobro y nacidos despues
+-- de la 038.
+--
+-- El hueco no se repite despues de esta migracion: la marca deja de depender de
+-- reviewed_at. UpdateVerification la fija en la primera aprobacion, nada la
+-- limpia, y UpdateVerification y UpdateMerchantProfile se la dejan a toda fila
+-- 'verified' que toquen y no la tenga (la que aprueba la version anterior
+-- mientras arranca la nueva).
 --
 -- (a) va primero para que esos comercios queden con la fecha en que la 038 los
 -- aprobo y no con la de su ultima revision. created_at es TIMESTAMP sin zona:
