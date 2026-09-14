@@ -51,13 +51,16 @@ export function mensajeDelCliente(codigo: CodigoDelCliente): string {
  * pensado para una persona:
  *  - 5xx: `response.Error` del backend lo pisa a proposito con "internal server
  *    error" para no filtrar detalles internos. Es un texto fijo en ingles.
- *  - INVALID_REQUEST: el cuerpo no se pudo leer; el backend dice "invalid
- *    request", que no le dice a nadie que corregir.
+ *  - INVALID_REQUEST / INVALID_BODY: el cuerpo no se pudo leer; el backend dice
+ *    "invalid request" o "invalid request body", que no le dice a nadie que
+ *    corregir.
  *  - sin mensaje: antes se inventaba "Request failed with status 404".
  */
+const CUERPO_ILEGIBLE = new Set(['INVALID_REQUEST', 'INVALID_BODY']);
+
 export function mensajeDelServidor(estadoHttp: number, codigo: string, mensaje?: string): string {
   if (estadoHttp >= 500) return traducirFueraDeReact('err_server');
-  if (codigo === 'INVALID_REQUEST') return traducirFueraDeReact('err_invalid_request');
+  if (CUERPO_ILEGIBLE.has(codigo)) return traducirFueraDeReact('err_invalid_request');
   const limpio = (mensaje ?? '').trim();
   return limpio || traducirFueraDeReact('err_generic');
 }

@@ -30,6 +30,7 @@ describe('mensajesDeError', () => {
     fijarDiccionarioActivo(en);
     expect(mensajeDelServidor(500, 'INTERNAL_ERROR', 'internal server error')).toBe(en.err_server);
     expect(mensajeDelServidor(400, 'INVALID_REQUEST', 'invalid request')).toBe(en.err_invalid_request);
+    expect(mensajeDelServidor(400, 'INVALID_BODY', 'invalid request body')).toBe(en.err_invalid_request);
     expect(mensajeDelServidor(404, 'HTTP_ERROR', '')).toBe(en.err_generic);
     expect(mensajeDelServidor(404, 'HTTP_ERROR')).not.toMatch(/request failed with status/i);
   });
