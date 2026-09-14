@@ -1,7 +1,11 @@
-// Package plans registra el interes en los planes de pago. Hoy la aplicacion no
-// puede cobrar — no hay pasarela ni suscripcion —, asi que lo unico honesto que
-// se puede guardar es la intencion: quien dijo que quiere que plan y cuando.
-// Registrar interes NO otorga el plan ni mueve dinero.
+// Package plans registra el interes en los planes de pago y aplica los topes
+// de cada plan personal. Hoy la aplicacion no puede cobrar — no hay pasarela ni
+// suscripcion —, asi que del lado del cobro lo unico honesto que se puede
+// guardar es la intencion: quien dijo que quiere que plan y cuando. Registrar
+// interes NO otorga el plan ni mueve dinero.
+//
+// Mientras no exista cobro, un administrador puede asignar a mano el plan de
+// una persona para un piloto. Queda en el rastro de auditoria.
 package plans
 
 import (
@@ -10,21 +14,32 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kiramopay/backend/internal/audit"
 )
 
-// ErrPlanInvalid es cualquier plan que no sea uno de los dos de pago. El plan
-// gratuito no se registra: no hay nada que contratar.
+// ErrPlanInvalid es cualquier plan que no sea uno de los aceptados por la
+// operacion. El plan gratuito no se registra como interes: no hay nada que
+// contratar.
 var ErrPlanInvalid = errors.New("plan invalido")
 
-// planesDePago espeja chk_plan_interest_plan (migracion 056). Validar aqui
-// tambien evita gastar un viaje a la base para recibir un error de constraint.
-var planesDePago = map[string]bool{
-	"negocio": true,
-	"cima":    true,
+// planesConInteres son los planes en los que se puede anotar interes desde el
+// 13-09-2026: los dos personales de pago y la analitica de comercio. Los
+// valores viejos 'negocio' y 'cima' se retiraron (prometian umbrales y
+// beneficios que no existian). chk_plan_interest_plan (migracion 068) los sigue
+// admitiendo para no perder las filas que ya estaban; que no se acepten filas
+// nuevas lo decide esta lista.
+var planesConInteres = map[string]bool{
+	PlanPlus:      true,
+	PlanPro:       true,
+	PlanAnalitica: true,
 }
+
+// PlanAnalitica es el plan opcional del comercio (qr_merchants.plan). Aqui solo
+// se usa para anotar interes; el plan del comercio vive en qrpayment.
+const PlanAnalitica = "analitica"
 
 const (
 	defaultListLimit = 100
@@ -54,6 +69,14 @@ type AdminInterest struct {
 	RegisteredAt time.Time `json:"registered_at"`
 }
 
+// PlanAsignado es la respuesta de un cambio de plan hecho por un administrador.
+type PlanAsignado struct {
+	UserID       string    `json:"user_id"`
+	Plan         string    `json:"plan"`
+	PlanAnterior string    `json:"plan_anterior"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type Options struct{ AuditLogger *audit.Logger }
 
 type Service struct {
@@ -72,7 +95,7 @@ func NewService(db *pgxpool.Pool, opts *Options) *Service {
 // (user_id, plan): repetirlo no duplica la fila, solo refresca la fecha, que es
 // la lectura util (cuando lo pidio por ultima vez).
 func (s *Service) Register(ctx context.Context, userID, plan string, ac ActorContext) (*Interest, error) {
-	if !planesDePago[plan] {
+	if !planesConInteres[plan] {
 		return nil, ErrPlanInvalid
 	}
 
@@ -88,7 +111,68 @@ func (s *Service) Register(ctx context.Context, userID, plan string, ac ActorCon
 
 	// El plan no es PII y es justo lo que hay que poder auditar; el nombre y el
 	// contacto NO van aqui: details es JSONB sin cifrar.
-	s.audit(userID, ac, plan)
+	s.log(audit.Event{
+		UserID:       userID,
+		Action:       "plan_interest",
+		ResourceType: "plan",
+		IPAddress:    ac.IPAddress,
+		UserAgent:    ac.UserAgent,
+		Details:      map[string]interface{}{"plan": plan},
+		RiskLevel:    "low",
+	})
+	return &out, nil
+}
+
+// AsignarPlan cambia el plan personal de una cuenta. Es una accion de
+// administrador para pilotos mientras no exista cobro: NO cobra nada.
+//
+// El plan anterior se lee con FOR UPDATE en la misma sentencia, asi que el
+// rastro dice de que plan a que plan se paso aunque dos administradores lo
+// cambien a la vez. Bajar de plan no toca lo que la persona ya tiene: los
+// topes solo frenan la creacion.
+func (s *Service) AsignarPlan(ctx context.Context, targetID, adminID, plan string, ac ActorContext) (*PlanAsignado, error) {
+	if !PlanPersonalValido(plan) {
+		return nil, ErrPlanInvalid
+	}
+
+	out := PlanAsignado{UserID: targetID}
+	err := s.db.QueryRow(ctx,
+		`WITH anterior AS (
+		     SELECT id, COALESCE(plan, 'free') AS plan
+		       FROM users
+		      WHERE id = $1::uuid AND deleted_at IS NULL
+		        FOR UPDATE
+		 )
+		 UPDATE users u
+		    SET plan = $2, updated_at = NOW()
+		   FROM anterior
+		  WHERE u.id = anterior.id
+		 RETURNING anterior.plan, u.plan, u.updated_at`,
+		targetID, plan,
+	).Scan(&out.PlanAnterior, &out.Plan, &out.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUsuarioNoEncontrado
+		}
+		return nil, fmt.Errorf("asignar plan: %w", err)
+	}
+
+	// Riesgo alto: cambia lo que la cuenta puede crear y lo que el asistente le
+	// responde, y lo hace alguien que no es la persona.
+	s.log(audit.Event{
+		UserID:       adminID,
+		Action:       "admin_user_plan_set",
+		ResourceType: "user",
+		ResourceID:   targetID,
+		IPAddress:    ac.IPAddress,
+		UserAgent:    ac.UserAgent,
+		Details: map[string]interface{}{
+			"plan_anterior": out.PlanAnterior,
+			"plan_nuevo":    out.Plan,
+			"cobro":         false,
+		},
+		RiskLevel: "high",
+	})
 	return &out, nil
 }
 
@@ -123,7 +207,8 @@ const listSelect = `
 	 LIMIT $1`
 
 // List devuelve quien mostro interes, lo mas reciente primero. Solo se monta
-// dentro del grupo RequireAdmin.
+// dentro del grupo RequireAdmin. Incluye las filas viejas de 'negocio' y
+// 'cima': quitar un plan no es borrar lo que la gente pidio.
 func (s *Service) List(ctx context.Context, limit int) ([]AdminInterest, error) {
 	rows, err := s.db.Query(ctx, listSelect, clampLimit(limit))
 	if err != nil {
@@ -149,19 +234,11 @@ func (s *Service) List(ctx context.Context, limit int) ([]AdminInterest, error) 
 	return out, nil
 }
 
-func (s *Service) audit(userID string, ac ActorContext, plan string) {
+func (s *Service) log(evt audit.Event) {
 	if s.auditLogger == nil {
 		return
 	}
-	s.auditLogger.Log(audit.Event{
-		UserID:       userID,
-		Action:       "plan_interest",
-		ResourceType: "plan",
-		IPAddress:    ac.IPAddress,
-		UserAgent:    ac.UserAgent,
-		Details:      map[string]interface{}{"plan": plan},
-		RiskLevel:    "low",
-	})
+	s.auditLogger.Log(evt)
 }
 
 func clampLimit(limit int) int {

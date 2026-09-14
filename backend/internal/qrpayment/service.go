@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
 )
@@ -42,19 +43,24 @@ type Notifier interface {
 type Options struct {
 	// Notifier puede ser nil: sin el, el pago funciona igual y nadie se entera.
 	Notifier Notifier
+	// AuditLogger deja el rastro de las acciones de administrador que cambian
+	// el plan de un comercio. Puede ser nil en pruebas.
+	AuditLogger *audit.Logger
 }
 
 type Service struct {
-	repo     *Repository
-	tx       *transaction.Service
-	users    userLookup
-	notifier Notifier
+	repo        *Repository
+	tx          *transaction.Service
+	users       userLookup
+	notifier    Notifier
+	auditLogger *audit.Logger
 }
 
 func NewService(repo *Repository, tx *transaction.Service, users userLookup, opts *Options) *Service {
 	s := &Service{repo: repo, tx: tx, users: users}
 	if opts != nil {
 		s.notifier = opts.Notifier
+		s.auditLogger = opts.AuditLogger
 	}
 	return s
 }
@@ -99,6 +105,10 @@ func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *Regi
 		VerificationStatus: "pending",
 		CommissionBps:      DefaultCommissionBps,
 		CreatedAt:          time.Now(),
+		// Los DEFAULT de la fila, reflejados para que la respuesta no diga "" ni
+		// 0: nace en 'base', sin promocion (llega con la primera aprobacion).
+		Plan:                PlanComercioBase,
+		ComisionEfectivaBps: DefaultCommissionBps,
 	}
 
 	if err := s.repo.CreateMerchant(ctx, merchant); err != nil {
@@ -337,7 +347,9 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 		if merchant.VerificationStatus != "verified" {
 			return nil, fmt.Errorf("merchant is not available")
 		}
-		fee = commissionFee(amount, merchant.CommissionBps)
+		// La efectiva, no commission_bps: durante la promocion de entrada se
+		// cobra la menor entre las dos. GetMerchant la calculo al leer la fila.
+		fee = commissionFee(amount, merchant.ComisionEfectivaBps)
 		feeFromReceiver = fee > 0
 		payeeName = merchant.Name
 	} else {
@@ -801,32 +813,49 @@ func (s *Service) DeleteCatalogItem(ctx context.Context, merchantID, userID, ite
 // days is a calendar window in the CLIENT's timezone (tzOffsetMin, minutes
 // west of UTC as JS reports it): "last 7 days" starts at the client's local
 // midnight six days ago, not at an arbitrary rolling instant.
+//
+// With the 'analitica' plan the report also carries Comparison: the previous
+// window of equal length. The 'base' plan gets the same report without it.
 func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string, days, tzOffsetMin int) (*MerchantReport, error) {
-	if _, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager); err != nil {
+	m, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager)
+	if err != nil {
 		return nil, err
 	}
-	if days <= 0 || days > 365 {
-		days = 30
+	return s.armarReporte(ctx, m, calcularVentana(time.Now(), days, tzOffsetMin), tzOffsetMin)
+}
+
+// ReporteExportable es el reporte que se exporta en CSV. Mismo acceso que el
+// reporte (dueno o gerente) y ademas exige el plan analitica: sin el devuelve
+// ErrPlanAnaliticaRequerido, DESPUES de comprobar el rol, para no revelarle a
+// quien no es del equipo que plan tiene un comercio.
+func (s *Service) ReporteExportable(ctx context.Context, merchantID, userID string, days, tzOffsetMin int) (*MerchantReport, error) {
+	m, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager)
+	if err != nil {
+		return nil, err
 	}
+	if m.Plan != PlanComercioAnalitica {
+		return nil, ErrPlanAnaliticaRequerido
+	}
+	return s.armarReporte(ctx, m, calcularVentana(time.Now(), days, tzOffsetMin), tzOffsetMin)
+}
+
+func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReporte, tzOffsetMin int) (*MerchantReport, error) {
+	// calcularVentana ya descarto un desfase fuera de rango; ReportDaily tiene
+	// que agrupar con el mismo que uso la ventana.
 	if tzOffsetMin < -840 || tzOffsetMin > 840 {
 		tzOffsetMin = 0
 	}
+	since := v.desde.UTC()
 
-	clientZone := time.FixedZone("client", -tzOffsetMin*60)
-	nowClient := time.Now().In(clientZone)
-	startClient := time.Date(nowClient.Year(), nowClient.Month(), nowClient.Day(), 0, 0, 0, 0, clientZone).
-		AddDate(0, 0, -(days - 1))
-	since := startClient.UTC()
-
-	daily, err := s.repo.ReportDaily(ctx, merchantID, since, tzOffsetMin)
+	daily, err := s.repo.ReportDaily(ctx, m.ID, since, tzOffsetMin)
 	if err != nil {
 		return nil, fmt.Errorf("report daily: %w", err)
 	}
-	byLocation, err := s.repo.ReportByLocation(ctx, merchantID, since)
+	byLocation, err := s.repo.ReportByLocation(ctx, m.ID, since)
 	if err != nil {
 		return nil, fmt.Errorf("report by location: %w", err)
 	}
-	byCollector, err := s.repo.ReportByCollector(ctx, merchantID, since)
+	byCollector, err := s.repo.ReportByCollector(ctx, m.ID, since)
 	if err != nil {
 		return nil, fmt.Errorf("report by collector: %w", err)
 	}
@@ -839,13 +868,37 @@ func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string,
 	}
 	totals.Net = totals.Gross - totals.Fee
 
-	return &MerchantReport{
-		Days:        days,
+	// Un comercio sin ventas devuelve listas vacias, no null: la pantalla no
+	// tiene por que distinguir "no hay filas" de "no vino el campo".
+	if daily == nil {
+		daily = []ReportDay{}
+	}
+	if byLocation == nil {
+		byLocation = []ReportBucket{}
+	}
+	if byCollector == nil {
+		byCollector = []ReportBucket{}
+	}
+
+	rep := &MerchantReport{
+		Days:        v.dias,
+		From:        v.desde.Format(formatoDia),
+		To:          v.hasta.Format(formatoDia),
 		Totals:      totals,
 		Daily:       daily,
 		ByLocation:  byLocation,
 		ByCollector: byCollector,
-	}, nil
+		Plan:        m.Plan,
+	}
+
+	if m.Plan == PlanComercioAnalitica {
+		anterior, err := s.repo.ReportTotals(ctx, m.ID, v.anteriorDesde.UTC(), v.anteriorHasta.UTC())
+		if err != nil {
+			return nil, fmt.Errorf("report previous window: %w", err)
+		}
+		rep.Comparison = compararTotales(v, totals, anterior)
+	}
+	return rep, nil
 }
 
 // ── Admin verification ───────────────────────────────────────────────────────
@@ -854,8 +907,40 @@ func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) 
 	return s.repo.ListPendingMerchants(ctx)
 }
 
+// ApproveMerchant verifica el comercio. Si es su PRIMERA aprobacion, le otorga
+// la promocion de entrada (ver Repository.UpdateVerification).
 func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string) (*Merchant, error) {
 	return s.repo.UpdateVerification(ctx, merchantID, "verified", adminID, "")
+}
+
+// AsignarPlanComercio cambia el plan del comercio a mano (base o analitica).
+// Mientras no exista cobro es la unica forma de habilitar la analitica, para
+// pilotos: no cobra nada. Queda en el rastro de auditoria con riesgo alto.
+func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, plan string, ac ActorContext) (*Merchant, error) {
+	if plan != PlanComercioBase && plan != PlanComercioAnalitica {
+		return nil, ErrPlanComercioInvalido
+	}
+	m, anterior, err := s.repo.UpdateMerchantPlan(ctx, merchantID, plan)
+	if err != nil {
+		return nil, err
+	}
+	if s.auditLogger != nil {
+		s.auditLogger.Log(audit.Event{
+			UserID:       adminID,
+			Action:       "admin_merchant_plan_set",
+			ResourceType: "merchant",
+			ResourceID:   merchantID,
+			IPAddress:    ac.IPAddress,
+			UserAgent:    ac.UserAgent,
+			Details: map[string]interface{}{
+				"plan_anterior": anterior,
+				"plan_nuevo":    m.Plan,
+				"cobro":         false,
+			},
+			RiskLevel: "high",
+		})
+	}
+	return m, nil
 }
 
 func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string) (*Merchant, error) {

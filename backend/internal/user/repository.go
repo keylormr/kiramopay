@@ -55,7 +55,7 @@ const userSelectCols = `id, fn_pii_decrypt(cedula_enc), fn_pii_decrypt(phone_enc
 	        first_name, last_name, birth_date, COALESCE(profile_picture_url, ''),
 	        password_hash, biometric_enabled, kyc_level, COALESCE(kyc_status, 'pending'), status,
 	        created_at, updated_at, last_login_at, referral_code,
-	        COALESCE(username, ''), demo_login`
+	        COALESCE(username, ''), demo_login, COALESCE(plan, 'free')`
 
 func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 	u := &UserRecord{}
@@ -64,7 +64,7 @@ func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 		&u.FirstName, &u.LastName, &u.BirthDate, &u.ProfilePictureURL,
 		&u.PasswordHash, &u.BiometricEnabled, &u.KYCLevel, &u.KYCStatus, &u.Status,
 		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt, &u.ReferralCode,
-		&u.Username, &u.DemoLogin,
+		&u.Username, &u.DemoLogin, &u.Plan,
 	)
 	return u, err
 }

@@ -2,10 +2,12 @@ package savings
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -39,6 +41,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	g, err := h.service.Create(r.Context(), userID, &req)
 	if err != nil {
+		var tope *plans.TopeAlcanzadoError
+		if errors.As(err, &tope) {
+			response.ErrorConDetalle(w, http.StatusConflict, "SAVINGS_GOAL_LIMIT",
+				"your plan does not allow more active savings goals", tope.Detalle())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CREATE_FAILED", err.Error())
 		return
 	}

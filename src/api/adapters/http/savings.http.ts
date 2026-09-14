@@ -4,7 +4,7 @@ import type {
   CreateSavingsGoalRequest,
 } from '../../repositories/savings.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 import { HttpClient } from './client';
 
 interface GoalDTO {
@@ -56,7 +56,12 @@ export class HttpSavingsRepository implements ISavingsRepository {
       icon: request.icon,
       color: request.color,
     });
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    // El codigo y el detalle del servidor viajan intactos: con un CREATE_FAILED
+    // fijo, un 409 SAVINGS_GOAL_LIMIT {plan, limite, actuales} se volvia un
+    // "no se pudo crear" sin explicacion.
+    if (!res.success || !res.data) {
+      return apiErrorConDetalle(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed', res.error?.details);
+    }
     return apiSuccess(mapGoal(res.data));
   }
 
