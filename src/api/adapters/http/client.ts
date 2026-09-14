@@ -1,5 +1,8 @@
 import { ApiResponse, apiError, apiErrorConDetalle } from '../../types';
 import type { ArchivoDescargado } from '../../types';
+// Ningun texto visible nace aqui: el cliente pone el CODIGO y el mensaje sale
+// del diccionario del idioma activo (ver i18n/mensajesDeError.ts).
+import { mensajeDelCliente, mensajeDelServidor } from '@/i18n/mensajesDeError';
 
 // In-memory token holders. The auth store registers a provider after login
 // so the HttpClient can read the current access token without going through
@@ -144,7 +147,7 @@ export class HttpClient {
           return this.request<T>(method, path, body, auth, true, extraHeaders);
         }
         if (authFailureHandler) authFailureHandler();
-        return apiError<T>('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
+        return apiError<T>('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
       }
 
       if (res.status === 204) {
@@ -154,7 +157,7 @@ export class HttpClient {
       // Rate limited: surface a distinct code so the UI doesn't mistake it for
       // bad credentials, and don't try to parse a possibly non-JSON body.
       if (res.status === 429) {
-        return apiError<T>('RATE_LIMITED', 'Demasiadas solicitudes. Espera un momento e intenta de nuevo.');
+        return apiError<T>('RATE_LIMITED', mensajeDelCliente('RATE_LIMITED'));
       }
 
       const json = await res.json();
@@ -169,7 +172,7 @@ export class HttpClient {
         }
         return apiError<T>(
           code,
-          json.error?.message || `Request failed with status ${res.status}`,
+          mensajeDelServidor(res.status, code, json.error?.message),
           // `data` viaja como HERMANO de `error` en el envelope (ver
           // ErrorWithData en backend/pkg/response/response.go), nunca anidado
           // dentro de error — APIError no tiene campo Data.
@@ -184,7 +187,7 @@ export class HttpClient {
         data: json.data,
       };
     } catch {
-      return apiError<T>('NETWORK_ERROR', 'Network request failed. Check your connection.');
+      return apiError<T>('NETWORK_ERROR', mensajeDelCliente('NETWORK_ERROR'));
     } finally {
       clearTimeout(temporizador);
     }
@@ -219,10 +222,10 @@ export class HttpClient {
         const refreshed = await dedupedRefresh();
         if (refreshed) return this.getArchivo(path, true);
         if (authFailureHandler) authFailureHandler();
-        return apiError('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
+        return apiError('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
       }
       if (res.status === 429) {
-        return apiError('RATE_LIMITED', 'Demasiadas solicitudes. Espera un momento e intenta de nuevo.');
+        return apiError('RATE_LIMITED', mensajeDelCliente('RATE_LIMITED'));
       }
       if (res.status !== 200) {
         let json: unknown = null;
@@ -233,13 +236,14 @@ export class HttpClient {
           // codigo: queda el generico con el estado.
         }
         const err = (json as { error?: { code?: string; message?: string } } | null)?.error;
-        return apiErrorConDetalle(err?.code || 'HTTP_ERROR', err?.message || `Request failed with status ${res.status}`, detallesDe(json));
+        const code = err?.code || 'HTTP_ERROR';
+        return apiErrorConDetalle(code, mensajeDelServidor(res.status, code, err?.message), detallesDe(json));
       }
 
       const blob = await res.blob();
       return { success: true, data: { blob, nombre: nombreDeDisposicion(res.headers.get('Content-Disposition')) } };
     } catch {
-      return apiError('NETWORK_ERROR', 'Network request failed. Check your connection.');
+      return apiError('NETWORK_ERROR', mensajeDelCliente('NETWORK_ERROR'));
     } finally {
       clearTimeout(temporizador);
     }

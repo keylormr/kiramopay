@@ -135,9 +135,14 @@ func (r *Repository) UpdateMerchantProfile(
 	ctx context.Context,
 	merchantID, name, description, category, cedula, cedulaType, legalName, status string,
 ) (*Merchant, error) {
-	// $8 appears twice (assignment and comparison); without the explicit casts
-	// Postgres deduces two different types for the parameter and rejects the
-	// statement with 42P08 "inconsistent types deduced".
+	// $8 appears several times (assignment and comparisons); without the
+	// explicit casts Postgres deduces different types for the parameter and
+	// rejects the statement with 42P08 "inconsistent types deduced".
+	//
+	// Volver a 'pending' limpia tambien reviewed_at y reviewed_by: esa revision
+	// era de los datos anteriores y ya no aplica. Sin esto un comercio quedaba
+	// 'pending' con un reviewed_at poblado, que dice que alguien reviso lo que
+	// nadie ha revisado todavia.
 	m, err := scanMerchant(r.db.QueryRow(ctx,
 		`UPDATE qr_merchants
 		    SET name                = $2,
@@ -147,7 +152,9 @@ func (r *Repository) UpdateMerchantProfile(
 		        cedula_type         = $6,
 		        legal_name          = $7,
 		        verification_status = $8::text,
-		        rejection_reason    = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END
+		        rejection_reason    = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END,
+		        reviewed_at         = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_at END,
+		        reviewed_by         = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_by END
 		  WHERE id = $1
 		  RETURNING `+merchantCols,
 		merchantID, name, description, category, cedula, cedulaType, legalName, status))

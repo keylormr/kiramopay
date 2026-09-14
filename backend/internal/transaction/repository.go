@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -33,9 +34,18 @@ func (r *Repository) Pool() *pgxpool.Pool { return r.db }
 // truncate it here, at the single choke point every caller goes through.
 const counterpartyNameMax = 100
 
+// puntosSuspensivos marca que el nombre se corto. VARCHAR(100) cuenta
+// caracteres (la base es UTF-8), asi que los tres puntos entran en el tope.
+const puntosSuspensivos = "..."
+
 // truncateCounterpartyName cuts on RUNE boundaries: Postgres counts characters,
 // not bytes, and slicing bytes would split a multi-byte rune (an accented name
 // is routine here) into invalid UTF-8.
+//
+// Y corta en un limite de PALABRA, con puntos suspensivos. Antes cortaba en el
+// caracter 100 exacto: la descripcion larga de un escrow aparecia en el
+// historial como "...para ver que hac", a mitad de palabra y sin ninguna senal
+// de que faltaba texto.
 func truncateCounterpartyName(name string) string {
 	if len(name) <= counterpartyNameMax {
 		return name // fast path: ASCII-length under the cap is always fine
@@ -44,7 +54,27 @@ func truncateCounterpartyName(name string) string {
 	if len(runes) <= counterpartyNameMax {
 		return name
 	}
-	return string(runes[:counterpartyNameMax])
+	cabe := counterpartyNameMax - len(puntosSuspensivos)
+	corte := runes[:cabe]
+	// Si lo que sigue al corte es un espacio, no se partio ninguna palabra. Si
+	// no, se retrocede hasta el ultimo espacio, sin sacrificar mas de la mitad
+	// del texto: una sola palabra enorme se corta donde caiga.
+	if !unicode.IsSpace(runes[cabe]) {
+		for i := len(corte) - 1; i >= cabe/2; i-- {
+			if unicode.IsSpace(corte[i]) {
+				corte = corte[:i]
+				break
+			}
+		}
+	}
+	// "Cena, ..." o "S.A. ..." se leen mal: los separadores del final sobran.
+	texto := strings.TrimRightFunc(string(corte), func(r rune) bool {
+		return unicode.IsSpace(r) || strings.ContainsRune(",;:.-", r)
+	})
+	if texto == "" {
+		texto = string(runes[:cabe])
+	}
+	return texto + puntosSuspensivos
 }
 
 // Create inserts a transaction in pending status with idempotency_key

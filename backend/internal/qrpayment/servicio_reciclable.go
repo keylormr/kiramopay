@@ -80,7 +80,7 @@ func (s *Service) RevokeCode(ctx context.Context, userID, codeID string) error {
 // 7.500. En un producto de dinero esa historia vale mas que ahorrarse una fila.
 func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateChargeRequest) (*QRCharge, error) {
 	if req.Amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+		return nil, ErrMontoInvalido
 	}
 	code, err := s.repo.GetQRCodeByID(ctx, req.QRCodeID)
 	if err != nil {

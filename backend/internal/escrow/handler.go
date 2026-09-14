@@ -191,6 +191,17 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrVendedorSinCuenta):
 		response.Error(w, http.StatusUnprocessableEntity, "ESCROW_SELLER_NOT_FOUND",
 			"that number does not have a KiramoPay account")
+	// Los tres de forma envuelven a ErrInvalidRequest: van ANTES de su caso, o
+	// el switch los tomaria por el generico.
+	case errors.Is(err, ErrContraparteEsUnoMismo):
+		response.Error(w, http.StatusBadRequest, "ESCROW_SELF",
+			"cannot create an agreement with yourself")
+	case errors.Is(err, ErrMontoInvalido):
+		response.Error(w, http.StatusBadRequest, "ESCROW_INVALID_AMOUNT",
+			"amount must be greater than zero")
+	case errors.Is(err, ErrDescripcionVacia):
+		response.Error(w, http.StatusBadRequest, "ESCROW_DESCRIPTION_REQUIRED",
+			"description is required")
 	case errors.Is(err, ErrInvalidRequest):
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
 	default:

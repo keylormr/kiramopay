@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Icons } from '../../components/Icons';
+import { useCapa } from '@/navegacion/pilaDeCapas';
 import { Button } from '../../components/ui';
 import { clasificarIdentificador } from '@/utils/identificador';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -51,14 +52,9 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
   const [error, setError] = useState('');
   const [devToken, setDevToken] = useState<string | null>(null);
 
-  // Escape closes the overlay, mirroring the rest of the app's sheets.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Pantalla completa: Escape y el boton Atras del navegador la cierran, igual
+  // que la flecha de volver (ver navegacion/pilaDeCapas).
+  useCapa(true, 'pantalla', onClose);
 
   const clasificado = clasificarIdentificador(identificador);
 

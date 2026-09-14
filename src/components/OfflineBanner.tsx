@@ -1,35 +1,74 @@
-import React from 'react';
-import { useServiceWorker } from '../hooks/useServiceWorker';
-import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import React, { useEffect, useState } from 'react';
+import { Icons } from './Icons';
+import { useLanguage } from '@/i18n/LanguageContext';
 
+// Cuanto se muestra "Conexion restablecida" antes de retirarse.
+const AVISO_RECONEXION_MS = 3000;
+
+/**
+ * Aviso de conexion, visible sobre cualquier pantalla y hoja.
+ *
+ * El componente existia pero nadie lo montaba: sin senal, la persona tocaba
+ * "Pagar" y lo unico que veia era un error. Ahora el aviso aparece apenas el
+ * dispositivo pierde la red.
+ *
+ * No promete reintentos. La cola de `useOfflineQueue` no la usa ningun flujo,
+ * asi que decir "pendiente, se enviara al reconectar" seria mentir sobre una
+ * operacion de dinero: el texto dice que nada sale mientras tanto y que hay que
+ * repetir la operacion. Tampoco registra el service worker (lo hacia a traves
+ * de `useServiceWorker`); de eso se ocupa la guardia de version.
+ */
 export function OfflineBanner() {
-  const { isOffline, updateAvailable, update } = useServiceWorker();
-  const { queueLength } = useOfflineQueue();
+  const { t } = useLanguage();
+  const [sinConexion, setSinConexion] = useState(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false,
+  );
+  const [reconectado, setReconectado] = useState(false);
 
-  if (!isOffline && !updateAvailable) return null;
+  useEffect(() => {
+    let temporizador: ReturnType<typeof setTimeout> | undefined;
+    const alPerder = () => {
+      clearTimeout(temporizador);
+      setReconectado(false);
+      setSinConexion(true);
+    };
+    const alRecuperar = () => {
+      clearTimeout(temporizador);
+      setSinConexion(false);
+      setReconectado(true);
+      temporizador = setTimeout(() => setReconectado(false), AVISO_RECONEXION_MS);
+    };
+    window.addEventListener('offline', alPerder);
+    window.addEventListener('online', alRecuperar);
+    return () => {
+      clearTimeout(temporizador);
+      window.removeEventListener('offline', alPerder);
+      window.removeEventListener('online', alRecuperar);
+    };
+  }, []);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50">
-      {isOffline && (
-        <div className="bg-amber-500 text-white text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2">
-          <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          Sin conexión
-          {queueLength > 0 && (
-            <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">
-              {queueLength} pendiente{queueLength > 1 ? 's' : ''}
-            </span>
-          )}
+    // La region viva existe siempre, vacia o no: un lector de pantalla solo
+    // anuncia cambios en una region que ya estaba en el documento.
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none fixed inset-x-0 z-[10000] flex justify-center px-4"
+      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
+    >
+      {sinConexion && (
+        <div className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl bg-[var(--color-navy-900)] px-4 py-3 text-white uv-shadow-floating animate-fade-in-scale">
+          <Icons.Offline size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-amber-300" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold">{t('offline_title')}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-white/80">{t('offline_desc')}</p>
+          </div>
         </div>
       )}
-      {updateAvailable && (
-        <div className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-center py-2 px-4 text-sm font-medium">
-          Nueva versión disponible
-          <button
-            onClick={update}
-            className="ml-2 underline font-bold"
-          >
-            Actualizar
-          </button>
+      {!sinConexion && reconectado && (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--color-navy-900)] px-4 py-2 text-sm font-bold text-white uv-shadow-floating animate-fade-in-scale">
+          <Icons.Wifi size={16} aria-hidden="true" className="shrink-0 text-emerald-300" />
+          {t('online_again')}
         </div>
       )}
     </div>

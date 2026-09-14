@@ -125,8 +125,14 @@ func (s *Service) emit(ctx context.Context, a *Agreement, eventType string) {
 
 // Create opens a pending agreement with the caller as buyer. No money moves.
 func (s *Service) Create(ctx context.Context, buyerID string, req *CreateRequest) (*Agreement, error) {
-	if req == nil || req.AmountMinor <= 0 || strings.TrimSpace(req.Description) == "" {
+	if req == nil {
 		return nil, ErrInvalidRequest
+	}
+	if req.AmountMinor <= 0 {
+		return nil, ErrMontoInvalido
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		return nil, ErrDescripcionVacia
 	}
 	req.Currency = strings.ToUpper(strings.TrimSpace(req.Currency))
 	if req.Currency == "" {
@@ -141,7 +147,7 @@ func (s *Service) Create(ctx context.Context, buyerID string, req *CreateRequest
 		return nil, err
 	}
 	if req.SellerID == buyerID {
-		return nil, ErrInvalidRequest
+		return nil, ErrContraparteEsUnoMismo
 	}
 	a, err := s.repo.Create(ctx, buyerID, req)
 	if err != nil {

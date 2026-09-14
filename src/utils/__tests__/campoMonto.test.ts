@@ -38,7 +38,18 @@ describe('sanitizeAmountInput', () => {
   });
 
   it('con decimals=0 no deja escribir el punto', () => {
-    expect(sanitizeAmountInput('12.5', 4, 0)).toEqual({ clean: '125', cursor: 3 });
+    // El punto se descarta y TAMBIEN los digitos que le siguen (son
+    // decimales, no mas digitos enteros): '12.5' trunca a '12', no se
+    // convierte en '125' (10x el valor).
+    expect(sanitizeAmountInput('12.5', 4, 0)).toEqual({ clean: '12', cursor: 2 });
+  });
+
+  it('con decimals=0 pegar un monto con decimales trunca en vez de multiplicar', () => {
+    // Caso real: limite de presupuesto (BudgetView, decimals=0) pegado de un
+    // tiron. Antes del fix, sanitizeAmountInput('80,000.99', 9, 0) daba
+    // '8000099' (100x el valor) porque los digitos tras el punto se leian
+    // como parte entera.
+    expect(sanitizeAmountInput('80,000.99', 9, 0)).toEqual({ clean: '80000', cursor: 5 });
   });
 
   it('nunca deja signos negativos', () => {

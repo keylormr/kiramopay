@@ -643,7 +643,7 @@ func (s *Service) AddStaff(ctx context.Context, merchantID, userID string, req *
 	}
 	employee, err := s.users.FindByCedula(ctx, cedula)
 	if err != nil {
-		return nil, fmt.Errorf("no KiramoPay user with that cedula")
+		return nil, ErrCedulaSinCuenta
 	}
 	if employee.ID == m.UserID {
 		return nil, fmt.Errorf("the owner is already part of the business")

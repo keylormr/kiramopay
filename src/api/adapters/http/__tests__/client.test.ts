@@ -6,6 +6,7 @@ import {
   registerAuthFailureHandler,
   registerAccountBlockedHandler,
 } from '../client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 function makeRes(status: number, data: unknown) {
   return {
@@ -60,12 +61,25 @@ describe('HttpClient: el detalle del error y los archivos', () => {
 
   it('un details que no es objeto no se cuela', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      status: 400,
+      status: 409,
       ok: false,
-      json: async () => ({ error: { code: 'INVALID_BODY', message: 'x', details: [] } }),
+      json: async () => ({ error: { code: 'CARD_LIMIT', message: 'x', details: [] } }),
     }));
     const r = await new HttpClient('http://x').post('/api/v1/cards', {});
-    expect(r.error).toEqual({ code: 'INVALID_BODY', message: 'x' });
+    expect(r.error).toEqual({ code: 'CARD_LIMIT', message: 'x' });
+  });
+
+  it('getArchivo no inventa texto: un 5xx sin JSON sale con el mensaje traducido', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 502,
+      ok: false,
+      headers: new Headers(),
+      json: async () => { throw new Error('no es JSON'); },
+    }));
+
+    const r = await new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv');
+
+    expect(r.error).toEqual({ code: 'HTTP_ERROR', message: traducirFueraDeReact('err_server') });
   });
 
   it('getArchivo entrega el cuerpo y el nombre del Content-Disposition con 200', async () => {

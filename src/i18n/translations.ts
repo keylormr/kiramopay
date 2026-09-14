@@ -125,6 +125,15 @@ export type TranslationKeys = {
   done: string;
   loading: string;
   error: string;
+  err_network: string;
+  err_session_expired: string;
+  err_rate_limited: string;
+  err_server: string;
+  err_invalid_request: string;
+  err_generic: string;
+  offline_title: string;
+  offline_desc: string;
+  online_again: string;
   success: string;
 
   // Auth
@@ -162,6 +171,8 @@ export type TranslationKeys = {
   total_balance: string;
   available: string;
   accounts: string;
+  account_name_crc: string;
+  account_name_usd: string;
   quick_actions: string;
   scan_qr: string;
   charge_qr: string;
@@ -288,6 +299,7 @@ export type TranslationKeys = {
   date: string;
   category: string;
   transaction_id: string;
+  tx_status_completed: string;
   report_issue: string;
   address: string;
   transaction_details: string;
@@ -363,6 +375,9 @@ export type TranslationKeys = {
   business_sales_total: string;
   business_commission_paid: string;
   business_back_to_personal: string;
+  business_load_failed_title: string;
+  business_load_failed_desc: string;
+  business_load_failed_retrying: string;
   business_commission_note: string;
   business_step_type_desc: string;
   business_review_notice: string;
@@ -639,6 +654,9 @@ export type TranslationKeys = {
   login_detected_telefono: string;
   login_no_soy_yo: string;
   login_last_access: string;
+  login_last_label_usuario: string;
+  login_last_label_correo: string;
+  login_last_label_telefono: string;
   login_change_cedula: string;
   login_password_title: string;
   login_verifying: string;
@@ -741,6 +759,7 @@ export type TranslationKeys = {
   share_transactions: string;
   share_transactions_desc: string;
   export_success: string;
+  export_copy_failed: string;
 
   // Transactions view
   income: string;
@@ -748,6 +767,8 @@ export type TranslationKeys = {
   search_transactions: string;
   all_categories: string;
   num_transactions: string;
+  num_transactions_one: string;
+  tx_searching: string;
 
   // Theme scheduling
   theme_schedule: string;
@@ -921,6 +942,13 @@ export type TranslationKeys = {
   qr_err_vencido: string;
   qr_err_cancelado: string;
   qr_err_actualiza_app: string;
+  qr_err_invalido: string;
+  qr_err_pago_propio: string;
+  qr_err_monto_requerido: string;
+  qr_err_llave_reutilizada: string;
+  qr_err_llave_invalida: string;
+  qr_err_pago_no_registrado: string;
+  qr_err_mfa: string;
   home_top_cat: string;
   home_savings: string;
   home_savings_view: string;

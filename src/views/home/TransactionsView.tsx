@@ -5,6 +5,13 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
+import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
+import {
+  estiloDeCategoria,
+  etiquetaDeCategoria,
+  normalizarCategoria,
+  type CategoriaMovimiento,
+} from '@/utils/categoriaMovimiento';
 import {
   exportTransactionsCSV,
   exportTransactionsJSON,
@@ -12,25 +19,6 @@ import {
   shareTransactions,
 } from '@/utils/export';
 import type { Transaction } from '@/types';
-
-// Category icon/color mapping
-const CATEGORY_STYLES: Record<string, { icon: React.FC<{ size?: number }>; bg: string; text: string }> = {
-  Transfer: { icon: Icons.ArrowDownUp, bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400' },
-  'QR Payment': { icon: Icons.QrCode, bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-400' },
-  Services: { icon: Icons.Zap, bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400' },
-  Recharge: { icon: Icons.Phone, bg: 'bg-teal-100 dark:bg-teal-900/30', text: 'text-teal-600 dark:text-teal-400' },
-  SINPE: { icon: Icons.Smartphone, bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-600 dark:text-indigo-400' },
-  Food: { icon: Icons.UtensilsCrossed, bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-600 dark:text-orange-400' },
-  Shopping: { icon: Icons.ShoppingCart, bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-600 dark:text-pink-400' },
-  Transport: { icon: Icons.Car, bg: 'bg-cyan-100 dark:bg-cyan-900/30', text: 'text-cyan-600 dark:text-cyan-400' },
-};
-
-const DEFAULT_STYLE = { icon: Icons.Circle, bg: 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]', text: 'text-gray-500' };
-
-function getCategoryStyle(category?: string) {
-  if (!category) return DEFAULT_STYLE;
-  return CATEGORY_STYLES[category] || DEFAULT_STYLE;
-}
 
 // Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
 const ccyDe = (tx: Transaction) => tx.ccy || 'CRC';
@@ -60,13 +48,24 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
   const { state } = useApp();
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CategoriaMovimiento | null>(null);
   const [showExportSheet, setShowExportSheet] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  // El aviso lleva su tipo: un "Error" pintado con el check verde del exito
+  // decia que la copia habia funcionado.
+  const [toast, setToast] = useState<{ texto: string; tipo: 'ok' | 'error' } | null>(null);
+  // Detalle del movimiento tocado. `detalleAbierto` va aparte para que la hoja
+  // conserve su contenido mientras se anima al cerrarse.
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
+  const showToast = (texto: string, tipo: 'ok' | 'error' = 'ok') => {
+    setToast({ texto, tipo });
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const abrirDetalle = (tx: Transaction) => {
+    setSelectedTx(tx);
+    setDetalleAbierto(true);
   };
 
   // La busqueda la resuelve el SERVIDOR, sobre TODO el historial.
@@ -192,16 +191,24 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
   // Derived data
   const allTransactions = pagina ? pagina.txs : state.transactions;
+  // Los chips salen de la categoria NORMALIZADA (utils/categoriaMovimiento): un
+  // slug desconocido cuenta como "otros" en vez de imprimirse crudo.
   const categories = useMemo(() => {
-    const cats = new Set<string>();
-    allTransactions.forEach((tx) => { if (tx.category) cats.add(tx.category); });
+    const cats = new Set<CategoriaMovimiento>();
+    allTransactions.forEach((tx) => cats.add(normalizarCategoria(tx.category)));
     return Array.from(cats);
   }, [allTransactions]);
+
+  // La lista en pantalla corresponde a lo que esta escrito en el buscador?
+  // Mientras la busqueda espera su turno o viaja al servidor, la pagina anterior
+  // sigue en memoria: pintarla hacia creer que el filtro no habia funcionado
+  // (36 filas visibles con "zzz" escrito, durante segundos).
+  const buscando = !modoLocal && (pagina ? pagina.clave : '') !== search.trim();
 
   const filtered = useMemo(() => {
     let txs = allTransactions;
     if (selectedCategory) {
-      txs = txs.filter((tx) => tx.category === selectedCategory);
+      txs = txs.filter((tx) => normalizarCategoria(tx.category) === selectedCategory);
     }
     // El texto lo filtra el servidor. Aca solo se vuelve a filtrar cuando NO
     // hubo servidor y se esta mostrando lo guardado en el dispositivo: filtrar
@@ -212,7 +219,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
       txs = txs.filter(
         (tx) =>
           txTitle(tx, t).toLowerCase().includes(q) ||
-          (tx.category || '').toLowerCase().includes(q) ||
+          etiquetaDeCategoria(tx.category, t).toLowerCase().includes(q) ||
           tx.amount.toString().includes(q),
       );
     }
@@ -263,24 +270,28 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     }
   };
 
-  // Export handlers
+  // Export handlers. Lo exportado se titula igual que la pantalla: un SINPE sin
+  // contraparte ni nota trae el titulo vacio y la fila del archivo quedaba sin
+  // nombre, mientras la lista lo mostraba como "Transferencia SINPE enviada".
+  const conTitulos = () => filtered.map((tx) => ({ ...tx, title: txTitle(tx, t) }));
   const handleExportCSV = () => {
-    exportTransactionsCSV(filtered);
+    exportTransactionsCSV(conTitulos());
     setShowExportSheet(false);
     showToast(t('export_success'));
   };
   const handleExportJSON = () => {
-    exportTransactionsJSON(filtered);
+    exportTransactionsJSON(conTitulos());
     setShowExportSheet(false);
     showToast(t('export_success'));
   };
   const handleCopy = async () => {
-    const ok = await copyTransactionsToClipboard(filtered);
+    const ok = await copyTransactionsToClipboard(conTitulos());
     setShowExportSheet(false);
-    showToast(ok ? t('copied_to_clipboard') : t('error'));
+    if (ok) showToast(t('copied_to_clipboard'));
+    else showToast(t('export_copy_failed'), 'error');
   };
   const handleShare = async () => {
-    await shareTransactions(filtered);
+    await shareTransactions(conTitulos());
     setShowExportSheet(false);
   };
 
@@ -436,20 +447,21 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 {t('all_categories')}
               </button>
               {categories.map((cat) => {
-                const style = getCategoryStyle(cat);
+                const style = estiloDeCategoria(cat);
                 const isActive = selectedCategory === cat;
                 return (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(isActive ? null : cat)}
+                    aria-pressed={isActive}
                     className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                       isActive
                         ? 'bg-[var(--color-primary)] text-white uv-shadow-primary'
                         : `${style.bg} ${style.text}`
                     }`}
                   >
-                    <style.icon size={12} />
-                    {cat}
+                    <style.icon size={12} aria-hidden="true" />
+                    {etiquetaDeCategoria(cat, t)}
                   </button>
                 );
               })}
@@ -458,14 +470,25 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
         )}
 
         {/* Transaction Count */}
-        <div className="px-4 py-1">
+        <div className="px-4 py-1" aria-live="polite">
           <span className="text-xs font-semibold uv-text-muted uppercase tracking-wider">
-            {filtered.length} {t('num_transactions')}
+            {buscando
+              ? t('tx_searching')
+              : `${filtered.length} ${filtered.length === 1 ? t('num_transactions_one') : t('num_transactions')}`}
           </span>
         </div>
 
         {/* Transactions List */}
-        {filtered.length === 0 ? (
+        {buscando ? (
+          <div className="px-4 space-y-2 pt-1" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-[4.5rem] rounded-2xl uv-surface-1 uv-shadow-soft animate-pulse motion-reduce:animate-none"
+              />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 uv-text-muted">
             <div className="w-20 h-20 rounded-3xl uv-surface-2 flex items-center justify-center mb-4">
               <Icons.Receipt size={32} className="opacity-40" />
@@ -476,7 +499,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
         ) : (
           <div className="px-4 space-y-2 pt-1">
             {filtered.map((tx) => (
-              <TransactionCard key={tx.id} tx={tx} formatCurrency={formatCurrency} />
+              <TransactionCard key={tx.id} tx={tx} formatCurrency={formatCurrency} onOpen={() => abrirDetalle(tx)} />
             ))}
           </div>
         )}
@@ -526,13 +549,20 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
       {/* Toast notification */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] animate-fade-in-scale">
+        <div role="status" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] animate-fade-in-scale">
           <div className="bg-[var(--color-navy-900)] text-white px-5 py-3 rounded-2xl uv-shadow-floating flex items-center gap-2.5 text-sm font-bold">
-            <Icons.CheckCircle size={18} className="text-[var(--color-success)]" />
-            {toast}
+            {toast.tipo === 'error' ? (
+              <Icons.AlertCircle size={18} aria-hidden="true" className="shrink-0 text-red-300" />
+            ) : (
+              <Icons.CheckCircle size={18} aria-hidden="true" className="shrink-0 text-[var(--color-success)]" />
+            )}
+            {toast.texto}
           </div>
         </div>
       )}
+
+      {/* Detalle del movimiento: la misma hoja que abre Inicio. */}
+      <TransactionDetailSheet tx={selectedTx} isOpen={detalleAbierto} onClose={() => setDetalleAbierto(false)} />
     </div>
   );
 };
@@ -542,50 +572,53 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 const TransactionCard: React.FC<{
   tx: Transaction;
   formatCurrency: (amount: number, ccy?: string) => string;
-}> = ({ tx, formatCurrency }) => {
+  onOpen: () => void;
+}> = ({ tx, formatCurrency, onOpen }) => {
   const { t } = useLanguage();
-  const style = getCategoryStyle(tx.category);
+  const style = estiloDeCategoria(tx.category);
   const Icon = style.icon;
   const incoming = tx.amount > 0;
+  const completado = (tx.status ?? 'completed') === 'completed';
 
+  // Un boton de verdad: la fila parecia tocable (cursor, sombra al pasar) y no
+  // abria nada, ni con el dedo ni con el teclado.
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 uv-surface-1 rounded-2xl uv-shadow-soft hover:uv-shadow-elevated transition-all group cursor-pointer">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full text-left flex items-center gap-3 px-4 py-3.5 uv-surface-1 rounded-2xl uv-shadow-soft hover:uv-shadow-elevated transition-all group uv-focus-ring"
+    >
       {/* Category Icon */}
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${style.bg} ${style.text} group-hover:scale-105 transition-transform`}>
-        <Icon size={20} />
-      </div>
+      <span className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${style.bg} ${style.text} group-hover:scale-105 transition-transform`}>
+        <Icon size={20} aria-hidden="true" />
+      </span>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold uv-text-primary text-sm truncate">
+      <span className="flex-1 min-w-0">
+        <span className="block font-semibold uv-text-primary text-sm truncate">
           {txTitle(tx, t)}
-        </div>
-        <div className="text-xs uv-text-muted flex items-center gap-1.5 mt-0.5">
-          <Icons.Clock size={10} />
+        </span>
+        <span className="text-xs uv-text-muted flex items-center gap-1.5 mt-0.5">
+          <Icons.Clock size={10} aria-hidden="true" />
           <span>{tx.date}</span>
-          {tx.category && (
-            <>
-              <span className="opacity-40">·</span>
-              <span className={style.text}>{tx.category}</span>
-            </>
-          )}
-        </div>
-      </div>
+          <span className="opacity-40" aria-hidden="true">·</span>
+          <span className={style.text}>{etiquetaDeCategoria(tx.category, t)}</span>
+        </span>
+      </span>
 
       {/* Amount */}
-      <div className="text-right flex-shrink-0">
-        <div className={`font-extrabold text-sm tabular-nums ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
+      <span className="text-right flex-shrink-0">
+        <span className={`block font-extrabold text-sm tabular-nums ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
           {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
-        </div>
-        <div className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-block ${
-          tx.status === 'completed'
-            ? 'uv-chip-success'
-            : 'uv-chip-warning'
+        </span>
+        <span className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${
+          completado ? 'uv-chip-success' : 'uv-chip-warning'
         }`}>
-          {tx.status === 'completed' ? '✓' : '⏳'} {tx.status || 'completed'}
-        </div>
-      </div>
-    </div>
+          {completado ? <Icons.Check size={10} aria-hidden="true" /> : <Icons.Clock size={10} aria-hidden="true" />}
+          {completado ? t('tx_status_completed') : t('pending')}
+        </span>
+      </span>
+    </button>
   );
 };
 

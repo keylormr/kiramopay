@@ -204,7 +204,7 @@ func (h *Handler) AddStaff(w http.ResponseWriter, r *http.Request) {
 	}
 	member, err := h.service.AddStaff(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "ADD_STAFF_FAILED", err.Error())
+		responderErrorDeEquipo(w, "ADD_STAFF_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, member)

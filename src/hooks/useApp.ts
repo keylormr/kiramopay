@@ -122,11 +122,22 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         auth.completeOnboarding();
         break;
       case 'ADD_SINPE_CONTACT': {
-        // Optimistic local update
+        // Optimistic local update. Antes el .catch(() => {}) se comia
+        // cualquier rechazo del servidor (p. ej. CONTACT_EXISTS cuando otra
+        // sesion del mismo usuario ya lo habia guardado con otro nombre/banco)
+        // y el alta fantasma se quedaba en pantalla hasta el proximo
+        // syncAllData completo. Se resincroniza contra el servidor -misma
+        // verdad que ya usan MARK_NOTIFICATION_READ/MARK_ALL_NOTIFICATIONS_READ
+        // arriba- para revertir o reemplazar por el contacto real.
         sinpe.addContact(action.payload);
         if (hasBackend) {
           const api = getApiLayer();
-          api.sinpe.addContact(action.payload).catch(() => {});
+          api.sinpe
+            .addContact(action.payload)
+            .then((res) => {
+              if (!res.success) refreshSinpe().catch(() => {});
+            })
+            .catch(() => refreshSinpe().catch(() => {}));
         }
         break;
       }

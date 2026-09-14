@@ -34,6 +34,9 @@ import { useBusinessStore } from './stores/business.store';
 import { useBusinessData } from './hooks/useBusinessData';
 import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
 import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingSheet';
+import { NegocioSinCargar } from './views/business/NegocioSinCargar';
+import { OfflineBanner } from './components/OfflineBanner';
+import { instalarNavegacionPorCapas, retroceder, useCapa } from './navegacion/pilaDeCapas';
 
 // Lazy-loaded views (code splitting)
 const HomeView = lazyConRecarga(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
@@ -381,35 +384,56 @@ const Layout = () => {
   // Same login, several profiles: personal wallet or any of the owner's shops.
   const activeMerchantId = useBusinessStore((s) => s.activeMerchantId);
   const setActiveMerchant = useBusinessStore((s) => s.setActiveMerchant);
-  const { merchants, active: activeMerchant, payments: bizPayments, loading: bizLoading, paymentsFailed: bizPaymentsFailed, reload: reloadBiz } = useBusinessData();
+  const {
+    merchants,
+    active: activeMerchant,
+    payments: bizPayments,
+    loading: bizLoading,
+    paymentsFailed: bizPaymentsFailed,
+    merchantsFailed: bizMerchantsFailed,
+    retrying: bizRetrying,
+    reload: reloadBiz,
+  } = useBusinessData();
   const [bizTab, setBizTab] = useState<'home' | 'reports' | 'movements' | 'settings'>('home');
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const businessMode = activeMerchantId !== null;
 
-  // Self-heal: the stored id may point at a shop that no longer exists.
+  // Self-heal: the stored id may point at a shop that no longer exists. Solo con
+  // la lista de comercios traida DE VERDAD: si la consulta fallo, que el id no
+  // aparezca no prueba nada, y expulsar al perfil personal por un 429 o un
+  // corte de red sacaba al cajero del negocio sin decir por que.
   useEffect(() => {
-    if (businessMode && !bizLoading && !activeMerchant) setActiveMerchant(null);
-  }, [businessMode, bizLoading, activeMerchant, setActiveMerchant]);
+    if (businessMode && !bizLoading && !bizMerchantsFailed && !activeMerchant) setActiveMerchant(null);
+  }, [businessMode, bizLoading, bizMerchantsFailed, activeMerchant, setActiveMerchant]);
 
-  // Android hardware back: close an open overlay first, else return to Home,
-  // else exit the app. Without this the WebView has a single history entry, so
-  // Back quits the app from any screen. No-op on web (no hardware back).
+  // Atras. Una pantalla completa abierta, una pestana distinta de Inicio y una
+  // pestana del negocio distinta de su Inicio son capas de navegacion/pilaDeCapas,
+  // que las refleja en el historial del navegador: Atras cierra la de arriba
+  // (primero las hojas, luego la pantalla, luego vuelve a Inicio) y, sin nada
+  // abierto, sale como siempre. Escape cierra hojas y pantallas, no pestanas.
+  useCapa(overlayView !== null, 'pantalla', () => {
+    setOverlayView(null);
+    setVolverDePlanes(null);
+  });
+  // Planes abierto desde ahorro, tarjetas o lealtad queda encima de esa
+  // pantalla: Atras y Escape vuelven a ella, igual que la flecha de Planes.
+  useCapa(overlayView === 'plans' && volverDePlanes !== null, 'pantalla', cerrarPlanes);
+  useCapa(!businessMode && activeTab !== 'home', 'seccion', () => setActiveTab('home'));
+  useCapa(businessMode && bizTab !== 'home', 'seccion', () => setBizTab('home'));
+
+  // Boton fisico de Android: se le pide el retroceso a la misma pila, que ahora
+  // conoce tambien las hojas de cada vista (antes una hoja abierta en SINPE se
+  // perdia saltando a Inicio). Sin nada abierto, sale de la app.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = CapApp.addListener('backButton', () => {
-      if (overlayView !== null) {
-        setOverlayView(null);
-      } else if (activeTab !== 'home') {
-        setActiveTab('home');
-      } else {
-        void CapApp.exitApp();
-      }
+      if (!retroceder()) void CapApp.exitApp();
     });
     return () => {
       void listener.then((handle) => handle.remove());
     };
-  }, [overlayView, activeTab]);
+  }, []);
 
   // Apply deep link targets. The listener itself lives above the auth gate, so
   // this only subscribes for the resolved destination; a target that resolved
@@ -463,7 +487,17 @@ const Layout = () => {
     // Business mode replaces the personal tabs entirely: the owner is acting as
     // the shop, so the wallet/crypto/services surfaces do not apply.
     if (businessMode) {
-      if (!activeMerchant) return <LoadingSkeleton />;
+      if (!activeMerchant) {
+        return bizMerchantsFailed ? (
+          <NegocioSinCargar
+            reintentando={bizRetrying}
+            onReintentar={reloadBiz}
+            onVolverAPersonal={() => setActiveMerchant(null)}
+          />
+        ) : (
+          <LoadingSkeleton />
+        );
+      }
       switch (bizTab) {
         case 'reports':
           // Role may have changed under a persisted tab; fall back to home.
@@ -1007,10 +1041,19 @@ const AppConGuardia: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // Atras del navegador y Escape. Se instala al montar, antes de cualquier capa:
+  // una recarga con pantallas abiertas deja entradas de historial de la carga
+  // anterior, y hay que limpiarlas aunque se caiga en el login.
+  useEffect(() => {
+    instalarNavegacionPorCapas();
+  }, []);
+
   return (
     <ErrorBoundary>
       <LanguageProvider>
         <AppConGuardia />
+        {/* Sin conexion: visible sobre el login, la app y cualquier hoja. */}
+        <OfflineBanner />
       </LanguageProvider>
     </ErrorBoundary>
   );
