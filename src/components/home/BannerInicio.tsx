@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../Icons';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -15,6 +15,10 @@ interface BannerInicioProps {
 }
 
 type TarjetaId = 'plans' | 'referral' | 'qr';
+
+// Usado solo para encontrar un destino de foco fuera del banner cuando se
+// cierra la ultima tarjeta visible (ver cerrarTarjeta).
+const SELECTOR_ENFOCABLE = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface Tarjeta {
   id: TarjetaId;
@@ -48,10 +52,19 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
   const [referidos, setReferidos] = useState<ReferralSummary | null>(null);
   const [referidosListos, setReferidosListos] = useState(false);
   useEffect(() => {
+    // Si no hay modulo de lealtad configurado, resolver de una vez de forma
+    // SINCRONICA: un "await" sobre "undefined?.getReferrals()" igual cede un
+    // microtask (await siempre encola una continuacion), y eso llega despues
+    // de que la prueba que monta este componente ya termino su "act()".
+    const loyalty = getApiLayer().loyalty;
+    if (!loyalty) {
+      setReferidosListos(true);
+      return;
+    }
     let cancelado = false;
     void (async () => {
       try {
-        const res = await getApiLayer().loyalty?.getReferrals();
+        const res = await loyalty.getReferrals();
         if (!cancelado && res?.success && res.data?.referralCode) setReferidos(res.data);
       } catch {
         /* sin resumen: la tarjeta de referidos no se arma */
@@ -142,12 +155,32 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
   // Destino estable de foco cuando se cierra una tarjeta: ver cerrarTarjeta.
   const seccionRef = useRef<HTMLElement>(null);
   const [indice, setIndice] = useState(0);
+  const idsAnterioresRef = useRef<TarjetaId[]>([]);
 
-  // El índice nunca debe apuntar fuera del arreglo: cerrar una tarjeta, o que
-  // la de referidos aparezca/desaparezca, puede achicar la lista.
-  useEffect(() => {
-    setIndice((i) => Math.min(i, Math.max(tarjetas.length - 1, 0)));
-  }, [tarjetas.length]);
+  // El índice sigue al ID de la tarjeta que la persona tiene a la vista, NUNCA
+  // a su posición numérica. Si la lista cambia sin ningún gesto de nadie (el
+  // resumen de referidos resuelve tarde e inserta una tarjeta en medio, por
+  // ejemplo), la tarjeta que ya se estaba mostrando no debe cambiar bajo el
+  // dedo: se le busca su nueva posición y se reubica el scroll ahí. Solo si
+  // esa tarjeta desapareció (se cerró) se recorta el índice al final.
+  useLayoutEffect(() => {
+    const idsAnteriores = idsAnterioresRef.current;
+    const idVisible = idsAnteriores[indice];
+    idsAnterioresRef.current = tarjetas.map((t) => t.id);
+
+    const nuevaPos = idVisible ? tarjetas.findIndex((t) => t.id === idVisible) : -1;
+    const destino = nuevaPos !== -1 ? nuevaPos : Math.min(indice, Math.max(tarjetas.length - 1, 0));
+
+    if (destino !== indice) setIndice(destino);
+
+    const el = scrollerRef.current;
+    if (el && el.clientWidth > 0) {
+      const scrollEsperado = destino * el.clientWidth;
+      if (Math.abs(el.scrollLeft - scrollEsperado) > 1) {
+        el.scrollTo({ left: scrollEsperado, behavior: 'auto' });
+      }
+    }
+  }, [tarjetas, indice]);
 
   const irA = (i: number) => {
     const el = scrollerRef.current;
@@ -182,8 +215,19 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
     // en el siguiente render: sin esto, el navegador deja caer el foco a
     // <body> y quien navega con teclado pierde el punto donde estaba. Mover
     // el foco a la seccion (contenedor estable) ANTES de actualizar el
-    // estado evita esa perdida.
-    seccionRef.current?.focus();
+    // estado evita esa perdida — EXCEPTO cuando esta era la ULTIMA tarjeta
+    // visible: ahi la seccion entera se desmonta en el mismo ciclo (mas
+    // abajo, "if tarjetas.length === 0 return null") y el foco se cae igual.
+    // En ese caso se busca el siguiente elemento enfocable fuera del banner.
+    if (tarjetas.length === 1) {
+      const siguiente = seccionRef.current?.nextElementSibling ?? null;
+      const destino = siguiente?.matches(SELECTOR_ENFOCABLE)
+        ? (siguiente as HTMLElement)
+        : siguiente?.querySelector<HTMLElement>(SELECTOR_ENFOCABLE);
+      destino?.focus();
+    } else {
+      seccionRef.current?.focus();
+    }
     cerrarTarjetaBanner(userId, id);
     setCerradas((prev) => new Set(prev).add(id));
   };

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { cerrarTarjetaBanner } from '@/utils/bannerInicio';
 import { BannerInicio } from '../BannerInicio';
 
 // Banner de 3 tarjetas cerrables en Inicio (planes, referidos, QR). La de
@@ -37,6 +38,21 @@ function renderBanner(props: { onAbrirPlanes?: () => void; onCobrarQR?: () => vo
   return render(
     <LanguageProvider>
       <BannerInicio {...props} />
+    </LanguageProvider>,
+  );
+}
+
+// Reproduce el layout real de HomeView: el banner tiene un hermano enfocable
+// despues (ahi, "Acciones rapidas"). Sirve para probar a donde va el foco
+// cuando se cierra la ULTIMA tarjeta visible y la seccion del banner
+// desaparece del DOM en el mismo ciclo.
+function renderBannerConHermano(props: { onAbrirPlanes?: () => void; onCobrarQR?: () => void } = {}) {
+  return render(
+    <LanguageProvider>
+      <div>
+        <BannerInicio {...props} />
+        <button type="button">Acciones rápidas</button>
+      </div>
     </LanguageProvider>,
   );
 }
@@ -157,5 +173,44 @@ describe('BannerInicio', () => {
       expect.any(String),
       'https://kiramopay.com/?ref=ABCD1234',
     );
+  });
+
+  it('no cambia la tarjeta que ya estaba a la vista cuando la de referidos llega tarde, sin que nadie deslice', async () => {
+    // "plans" ya esta cerrada para esta cuenta: al montar solo queda "qr" a
+    // la vista (la de referidos todavia no resolvio).
+    cerrarTarjetaBanner('user-001', 'plans');
+    let resolverReferidos: (valor: unknown) => void = () => {};
+    mocks.getReferrals.mockReturnValue(new Promise((resolve) => { resolverReferidos = resolve; }));
+
+    renderBanner();
+
+    expect(screen.getByRole('group', { name: '1/1: Cobra con QR sin comisión' })).toBeInTheDocument();
+
+    // El resumen de referidos resuelve DESPUES de montado, sin ningun gesto
+    // de la persona.
+    resolverReferidos({
+      success: true,
+      data: { referralCode: 'ABCD1234', invitedCount: 0, pointsEarned: 0, bonusPoints: 500 },
+    });
+    await screen.findByText('Invita y gana puntos');
+
+    // La de referidos se inserta ANTES que "qr" en el arreglo, pero "qr" es
+    // la que la persona ya tenia a la vista: el punto que marca la tarjeta
+    // ACTUAL debe seguirla a su nueva posicion (la 2), no quedarse en la 1
+    // (que ahora es "Invita y gana puntos") sin que nadie haya deslizado.
+    expect(screen.getByLabelText('Ir a la tarjeta 2')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByLabelText('Ir a la tarjeta 1')).toHaveAttribute('aria-current', 'false');
+  });
+
+  it('mueve el foco fuera del banner cuando se cierra la ultima tarjeta visible', async () => {
+    mocks.getReferrals.mockRejectedValue(new Error('sin referidos'));
+    const user = userEvent.setup();
+    renderBannerConHermano();
+    await waitFor(() => expect(mocks.getReferrals).toHaveBeenCalled());
+
+    await user.click(screen.getByLabelText(/Cerrar tarjeta: Más asistente, más metas/));
+    await user.click(screen.getByLabelText(/Cerrar tarjeta: Cobra con QR sin comisión/));
+
+    expect(screen.getByText('Acciones rápidas')).toHaveFocus();
   });
 });
