@@ -2425,6 +2425,24 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description SPLIT_TITLE_REQUIRED, SPLIT_INVALID_AMOUNT (total_amount <= 0), SPLIT_PARTICIPANT_REQUIRED (no participants besides the creator), SPLIT_PHONE_REQUIRED (a participant has no phone), SPLIT_INVALID_PHONE, SPLIT_SELF_INCLUDED (a participant's phone resolves to the caller — their own share is added automatically), SPLIT_DUPLICATE_PARTICIPANT (same phone twice), SPLIT_TOTAL_TOO_SMALL (equal split: the total does not cover 1 minor unit per person), SPLIT_CUSTOM_AMOUNT_REQUIRED (split_type=custom: a participant amount <= 0), SPLIT_EXCEEDS_TOTAL (split_type=custom: the custom amounts add up to more than total_amount), SPLIT_PERCENTAGE_REQUIRED, SPLIT_PERCENTAGE_EXCEEDS_TOTAL, SPLIT_PERCENTAGE_ROUNDS_TO_ZERO (split_type=percentage), SPLIT_INVALID_TYPE (split_type is none of equal/custom/percentage), INVALID_REQUEST or INVALID_BODY. The response never carries a dynamic amount or name — those cases are all in minor units server-side; the client already has its own amounts in the display currency and should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SPLIT_ACCOUNT_NOT_FOUND — a participant's phone has no KiramoPay account. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
