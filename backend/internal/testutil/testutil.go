@@ -729,6 +729,32 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
 
+	-- Dividir cuenta (migration 008). No estaba en el esquema de pruebas, asi
+	-- que ninguna prueba ejecutaba su SQL: el 42P08 que impedia crear TODA
+	-- division llego a produccion con la CI en verde.
+	CREATE TABLE IF NOT EXISTS split_groups (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		title VARCHAR(200) NOT NULL,
+		description TEXT,
+		total_amount BIGINT NOT NULL,
+		currency VARCHAR(10) DEFAULT 'CRC',
+		split_type VARCHAR(20) NOT NULL,
+		status VARCHAR(20) DEFAULT 'active',
+		created_at TIMESTAMP DEFAULT NOW(),
+		settled_at TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS split_shares (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		group_id UUID NOT NULL REFERENCES split_groups(id) ON DELETE CASCADE,
+		user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+		user_phone VARCHAR(20),
+		user_name VARCHAR(100) NOT NULL,
+		amount BIGINT NOT NULL,
+		status VARCHAR(20) DEFAULT 'pending',
+		paid_at TIMESTAMP
+	);
+
 	-- KYC / AML (migration 025).
 	CREATE TABLE IF NOT EXISTS kyc_verifications (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1208,6 +1234,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"webhook_deliveries", "webhook_endpoints", "api_keys",
 		"push_subscriptions", "push_dispositivos",
 		"escrow_agreements",
+		"split_shares", "split_groups",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
 		"qr_payments", "qr_charges", "qr_payment_codes", "qr_merchants",
