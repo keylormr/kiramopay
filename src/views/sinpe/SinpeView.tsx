@@ -5,6 +5,7 @@ import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
+import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
@@ -936,10 +937,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             <label className="text-sm text-gray-500 mb-2 block">{t('amount_to_send')}</label>
             <div className="flex items-center justify-center gap-2">
               <span className="text-4xl font-bold uv-text-primary">₡</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0"
                 className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
               />
@@ -1065,10 +1065,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             <label className="text-sm text-gray-500 mb-2 block">{t('amount_to_request')}</label>
             <div className="flex items-center justify-center gap-2">
               <span className="text-4xl font-bold uv-text-primary">₡</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0"
                 className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
               />

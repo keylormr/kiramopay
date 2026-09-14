@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
+import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
 import type { SplitGroup, SplitShare } from '@/api/repositories/splitpay.repository';
@@ -257,7 +258,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('amount')}</label>
             <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
               <span className="text-lg font-bold text-gray-400 mr-2">₡</span>
-              <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0"
+              <CampoMonto value={totalAmount} onChange={setTotalAmount} placeholder="0"
                 className="flex-1 bg-transparent text-lg font-bold outline-none uv-text-primary" />
             </div>
           </div>
@@ -288,8 +289,8 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     placeholder={t('phone')}
                     className="min-w-0 w-32 flex-shrink bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
                   {splitType === 'custom' && (
-                    <input type="number" inputMode="decimal" value={p.amount}
-                      onChange={(e) => updateParticipant(i, 'amount', e.target.value)}
+                    <CampoMonto value={p.amount}
+                      onChange={(v) => updateParticipant(i, 'amount', v)}
                       placeholder={t('amount')}
                       className="min-w-0 w-24 flex-shrink bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-3 py-2.5 rounded-xl text-sm outline-none" />
                   )}
