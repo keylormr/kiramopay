@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiLayer } from '@/api';
 import type {
@@ -394,10 +395,9 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
           <p className="text-sm uv-text-muted">{t('business_withdraw_hint')}</p>
           <div className="flex items-center gap-2">
             <span className="text-3xl font-bold uv-text-primary">{symbol}</span>
-            <input
-              type="number"
+            <CampoMonto
               value={wdAmount}
-              onChange={(e) => setWdAmount(e.target.value)}
+              onChange={setWdAmount}
               placeholder="0.00"
               className="flex-1 text-3xl font-bold bg-transparent outline-none uv-text-primary placeholder-gray-300"
             />
@@ -508,10 +508,9 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
                   <label className="text-sm font-medium uv-text-secondary block">{t('merchant_qr_amount')}</label>
                   <div className="flex items-center gap-2">
                     <span className="text-3xl font-bold uv-text-primary">{symbol}</span>
-                    <input
-                      type="number"
+                    <CampoMonto
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      onChange={setAmount}
                       placeholder="0.00"
                       className="flex-1 text-3xl font-bold bg-transparent outline-none uv-text-primary placeholder-gray-300"
                     />

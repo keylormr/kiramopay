@@ -6,6 +6,7 @@ import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData, SIMBOLOS_SIN_FEED } from '@/services/cryptoPrices';
@@ -1088,10 +1089,9 @@ export const CryptoView: React.FC = () => {
             <label className="text-sm text-gray-500">{t('invest_amount')} (USD)</label>
             <div className="flex items-center justify-center gap-2 mt-2">
               <span className="text-4xl font-bold uv-text-primary">$</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0.00"
                 className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
               />
@@ -1180,10 +1180,11 @@ export const CryptoView: React.FC = () => {
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('crypto_amount_to_sell')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
-              <input
-                type="number"
+              <CampoMonto
+                decimals={6}
+                thousands={false}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0.00"
                 className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
               />
@@ -1261,10 +1262,11 @@ export const CryptoView: React.FC = () => {
           </div>
 
           <div className="text-center">
-            <input
-              type="number"
+            <CampoMonto
+              decimals={6}
+              thousands={false}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={setAmount}
               placeholder="0.00"
               className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
             />
@@ -1334,10 +1336,11 @@ export const CryptoView: React.FC = () => {
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('amount')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
-              <input
-                type="number"
+              <CampoMonto
+                decimals={6}
+                thousands={false}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0.00"
                 className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
               />
@@ -1407,10 +1410,11 @@ export const CryptoView: React.FC = () => {
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('crypto_amount_to_stake')}</label>
             <div className="flex items-center justify-center gap-2 mt-2">
-              <input
-                type="number"
+              <CampoMonto
+                decimals={6}
+                thousands={false}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
                 placeholder="0.00"
                 className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
               />

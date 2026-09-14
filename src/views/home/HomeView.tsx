@@ -7,6 +7,7 @@ import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { HelpButton } from '../../components/HelpSheet';
 import { GraficoArea } from '../../components/GraficoArea';
+import { CampoMonto } from '../../components/CampoMonto';
 import { Account, Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -799,10 +800,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </label>
                 <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
                   <span className="text-xl font-bold text-gray-400 mr-2">{baseAccount?.symbol ?? '₡'}</span>
-                  <input
-                    type="number"
+                  <CampoMonto
                     value={cobrarAmount}
-                    onChange={(e) => setCobrarAmount(e.target.value)}
+                    onChange={setCobrarAmount}
                     placeholder="0.00"
                     className="flex-1 bg-transparent text-xl font-bold outline-none uv-text-primary"
                   />
@@ -1009,10 +1009,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                       </label>
                       <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
                         <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
-                        <input
-                          type="number"
+                        <CampoMonto
                           value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          onChange={setPaymentAmount}
                           placeholder="0.00"
                           className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
                           autoFocus
@@ -1087,12 +1086,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 <div className="text-center py-2">
                   <div className="flex items-center justify-center gap-1">
                     <span className="text-3xl font-bold uv-text-muted">₡</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
+                    <CampoMonto
                       autoFocus
                       value={envioMonto}
-                      onChange={(e) => { setEnvioMonto(e.target.value); setEnvioError(''); }}
+                      onChange={(v) => { setEnvioMonto(v); setEnvioError(''); }}
                       placeholder="0"
                       className="text-4xl font-black uv-text-primary bg-transparent outline-none w-40 text-center tabular-nums placeholder:uv-text-muted"
                     />

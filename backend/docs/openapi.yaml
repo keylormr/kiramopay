@@ -563,6 +563,16 @@ paths:
       responses:
         '201':
           description: Contact added
+        '409':
+          description: >-
+            The phone is already saved as a contact (CONTACT_EXISTS). The
+            existing contact is never overwritten in silence; `data` carries
+            it as it stands today so the client can offer it instead of
+            guessing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SinpeContactConflict'
 
   /api/v1/sinpe/send:
     post:
@@ -4052,6 +4062,13 @@ components:
         bank: { type: string }
         is_favorite: { type: boolean }
         created_at: { type: string, format: date-time }
+
+    SinpeContactConflict:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error: { $ref: '#/components/schemas/ApiError' }
+        data: { $ref: '#/components/schemas/SinpeContactRecord' }
 
     SinpeHistoryRecord:
       type: object

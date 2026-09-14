@@ -894,6 +894,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description The phone is already saved as a contact (CONTACT_EXISTS). The existing contact is never overwritten in silence; `data` carries it as it stands today so the client can offer it instead of guessing. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SinpeContactConflict"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -7191,6 +7200,12 @@ export interface components {
             is_favorite?: boolean;
             /** Format: date-time */
             created_at?: string;
+        };
+        SinpeContactConflict: {
+            /** @example false */
+            success?: boolean;
+            error?: components["schemas"]["ApiError"];
+            data?: components["schemas"]["SinpeContactRecord"];
         };
         SinpeHistoryRecord: {
             /** Format: uuid */

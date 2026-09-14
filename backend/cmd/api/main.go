@@ -717,6 +717,12 @@ func main() {
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.BodyLimit(1 << 20)) // 1MB
+	// CORS va ANTES del limite de tasa. En el orden inverso, un 429 salia sin
+	// Access-Control-Allow-Origin: el navegador lo reportaba como "bloqueado por
+	// CORS" y la pantalla no podia leer RATE_LIMITED para decir "espera un
+	// momento". Ademas cada preflight OPTIONS gastaba cupo del limite global. Las
+	// cabeceras permitidas y por que importan estan en opcionesCORS (cors.go).
+	r.Use(cors.Handler(opcionesCORS(cfg.CORS.Origins)))
 	// /health queda fuera del limite global y lleva el suyo propio, abajo. Con
 	// CLIENT_IP_SOURCE=cf-connecting-ip, el trafico que no pasa por Cloudflare
 	// -la sonda de la plataforma, los monitores de uptime, las sondas internas-
@@ -724,14 +730,6 @@ func main() {
 	// Si esa ventana se llenaba, el propio health check empezaba a recibir 429 y
 	// la plataforma leia como caido un servicio que estaba sano.
 	r.Use(middleware.RateLimitExcept(middleware.RateLimit(redisClient, 100, time.Minute), "/health"))
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   cfg.CORS.Origins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Kiramopay-Dev"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
 
 	// Limite propio y holgado: eximir del global no es abrir la puerta. Cada
 	// consulta hace un ping a la base y a Redis, asi que sigue habiendo techo,

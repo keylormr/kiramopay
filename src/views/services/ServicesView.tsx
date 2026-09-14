@@ -10,6 +10,7 @@ import {
 import { BottomSheet } from '../../components/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
+import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 
@@ -555,10 +556,9 @@ export const ServicesView: React.FC = () => {
             </label>
             <div className="flex items-center gap-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-4 rounded-xl">
               <span className="text-2xl font-bold text-gray-400">₡</span>
-              <input
-                type="number"
+              <CampoMonto
                 value={billAmount}
-                onChange={(e) => setBillAmount(e.target.value)}
+                onChange={setBillAmount}
                 placeholder="0"
                 className="flex-1 bg-transparent outline-none text-2xl font-bold uv-text-primary"
               />
