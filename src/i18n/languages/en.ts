@@ -1192,6 +1192,7 @@ const en: TranslationKeys = {
   plans_same_2: 'Collecting and paying with your personal QR',
   plans_same_3: 'Depositing to and withdrawing from your savings goals',
   plans_same_4: 'Issuing and keeping your virtual card',
+  plans_same_5: 'Buying and selling crypto',
   plans_cta_interested: 'Let me know when it is available',
   plans_cta_sending: 'Noting it down...',
   plans_cta_registered: 'Noted. We will let you know.',
@@ -1219,9 +1220,7 @@ const en: TranslationKeys = {
   plans_excluded_5: 'Yield or interest on the money you set aside',
   plans_excluded_6: 'Better exchange rate',
   plans_excluded_7: 'Transfers to accounts at other banks',
-  plans_excluded_8: 'Higher card limits',
-  plans_excluded_9: 'Crypto is not part of any plan',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: 'Higher card limits',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: 'You reached your plan limit',
   plans_limit_generic: 'You reached your plan limit.',
   plans_limit_goals_one: 'Your {plan} plan allows 1 active goal.',

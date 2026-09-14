@@ -1192,6 +1192,7 @@ const fr: TranslationKeys = {
   plans_same_2: 'Encaissements et paiements avec votre QR personnel',
   plans_same_3: 'Déposer sur vos objectifs d\'épargne et en retirer',
   plans_same_4: 'Émettre et conserver votre carte virtuelle',
+  plans_same_5: 'Acheter et vendre des cryptos',
   plans_cta_interested: 'Me prévenir quand ce sera disponible',
   plans_cta_sending: 'Enregistrement...',
   plans_cta_registered: 'C\'est noté. Nous vous préviendrons.',
@@ -1219,9 +1220,7 @@ const fr: TranslationKeys = {
   plans_excluded_5: 'Rendement ou intérêts sur l\'argent mis de côté',
   plans_excluded_6: 'Meilleur taux de change',
   plans_excluded_7: 'Virements vers des comptes d\'autres banques',
-  plans_excluded_8: 'Plafonds de carte plus élevés',
-  plans_excluded_9: 'Les cryptos ne font partie d\'aucun forfait',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: 'Plafonds de carte plus élevés',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: 'Vous avez atteint la limite de votre forfait',
   plans_limit_generic: 'Vous avez atteint la limite de votre forfait.',
   plans_limit_goals_one: 'Votre forfait {plan} permet 1 objectif actif.',

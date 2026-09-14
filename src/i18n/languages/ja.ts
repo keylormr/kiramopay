@@ -1184,6 +1184,7 @@ const ja: TranslationKeys = {
   plans_same_2: '個人用QRでの受け取りと支払い',
   plans_same_3: '貯蓄目標への入金と引き出し',
   plans_same_4: 'バーチャルカードの発行と維持',
+  plans_same_5: '暗号資産の購入と売却',
   plans_cta_interested: '利用可能になったら知らせる',
   plans_cta_sending: '記録しています...',
   plans_cta_registered: '記録しました。お知らせします。',
@@ -1211,9 +1212,7 @@ const ja: TranslationKeys = {
   plans_excluded_5: '貯めたお金への利回りや利息',
   plans_excluded_6: 'より有利な為替レート',
   plans_excluded_7: '他の銀行口座への送金',
-  plans_excluded_8: 'より高いカード限度額',
-  plans_excluded_9: '暗号資産はどのプランにも含まれません',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: 'より高いカード限度額',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: 'プランの上限に達しました',
   plans_limit_generic: 'プランの上限に達しました。',
   plans_limit_goals_one: '{plan}プランで有効にできる目標は1件です。',

@@ -1196,6 +1196,7 @@ const es: TranslationKeys = {
   plans_same_2: 'Cobros y pagos con tu QR personal',
   plans_same_3: 'Depositar y retirar de tus metas de ahorro',
   plans_same_4: 'Emitir y mantener tu tarjeta virtual',
+  plans_same_5: 'Comprar y vender cripto',
   plans_cta_interested: 'Avisarme cuando esté disponible',
   plans_cta_sending: 'Anotando...',
   plans_cta_registered: 'Anotado. Te avisamos.',
@@ -1223,9 +1224,7 @@ const es: TranslationKeys = {
   plans_excluded_5: 'Rendimiento o intereses sobre el dinero guardado',
   plans_excluded_6: 'Mejor tipo de cambio',
   plans_excluded_7: 'Transferencias a cuentas de otros bancos',
-  plans_excluded_8: 'Límites de tarjeta más altos',
-  plans_excluded_9: 'Las cripto no forman parte de ningún plan',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: 'Límites de tarjeta más altos',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: 'Llegaste al tope de tu plan',
   plans_limit_generic: 'Llegaste al tope de tu plan.',
   plans_limit_goals_one: 'Tu plan {plan} permite 1 meta activa.',

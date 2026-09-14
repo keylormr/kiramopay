@@ -191,12 +191,12 @@ describe('PlansView', () => {
       expect(screen.queryByRole('slider')).toBeNull();
     });
 
-    it('lo que no incluye lleva nueve limites con la misma letra que los beneficios', async () => {
+    it('lo que no incluye lleva ocho limites con la misma letra que los beneficios', async () => {
       montar();
 
       const titulo = await screen.findByRole('heading', { name: 'Lo que no incluye ningún plan' });
       const lista = within(titulo.parentElement as HTMLElement).getAllByRole('listitem');
-      expect(lista).toHaveLength(9);
+      expect(lista).toHaveLength(8);
       expect(screen.getByText('Mejor tipo de cambio')).toBeInTheDocument();
       expect(screen.getByText('Transferencias a cuentas de otros bancos')).toBeInTheDocument();
       expect(screen.getByText('Límites de tarjeta más altos')).toBeInTheDocument();
@@ -206,6 +206,20 @@ describe('PlansView', () => {
       expect(screen.getByText('Tarjeta física').className).toBe(
         screen.getByText('Transferencias entre cuentas KiramoPay').className,
       );
+    });
+
+    it('comprar y vender cripto sale como igual en los tres planes, no como algo que no se incluye', async () => {
+      // La app si deja comprar y vender cripto sin comision. Con la cruz de
+      // "no incluido" una persona entendia que no podia operar.
+      montar();
+
+      const igual = await screen.findByRole('heading', { name: 'Igual en los tres, sin costo' });
+      const incluidos = within(igual.parentElement as HTMLElement).getAllByRole('listitem');
+      expect(incluidos.map((li) => li.textContent)).toContain('Comprar y vender cripto');
+
+      const noIncluye = screen.getByRole('heading', { name: 'Lo que no incluye ningún plan' });
+      const excluidos = within(noIncluye.parentElement as HTMLElement).getAllByRole('listitem');
+      expect(excluidos.some((li) => /cripto/i.test(li.textContent ?? ''))).toBe(false);
     });
 
     it('no promete rendimiento ni porcentajes "hasta"', async () => {

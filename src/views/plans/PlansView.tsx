@@ -24,10 +24,13 @@ const SECCION_COMERCIO = 'planes-para-tu-comercio';
 const EXCLUSIONES = [
   'plans_excluded_1', 'plans_excluded_2', 'plans_excluded_3',
   'plans_excluded_4', 'plans_excluded_5', 'plans_excluded_6',
-  'plans_excluded_7', 'plans_excluded_8', 'plans_excluded_9',
+  'plans_excluded_7', 'plans_excluded_8',
 ] as const;
 
-const IGUAL_EN_TODOS = ['plans_same_1', 'plans_same_2', 'plans_same_3', 'plans_same_4'] as const;
+// Comprar y vender cripto va aqui y no en lo que no incluye: existe, no cobra
+// comision y es igual en los tres planes, asi que no sostiene el precio de
+// ninguno. Con la cruz de "no incluido" se leia como que la app no deja operar.
+const IGUAL_EN_TODOS = ['plans_same_1', 'plans_same_2', 'plans_same_3', 'plans_same_4', 'plans_same_5'] as const;
 
 const precioDe = (usd: number) => formatMoney(usd, 'USD', { decimals: usd === 0 ? 0 : 2 });
 

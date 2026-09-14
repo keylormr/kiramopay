@@ -1185,6 +1185,7 @@ const zhCn: TranslationKeys = {
   plans_same_2: '用个人二维码收款和付款',
   plans_same_3: '向储蓄目标存入和取出',
   plans_same_4: '开通并保留虚拟卡',
+  plans_same_5: '买入和卖出加密货币',
   plans_cta_interested: '上线时通知我',
   plans_cta_sending: '正在记录...',
   plans_cta_registered: '已记录，我们会通知你。',
@@ -1212,9 +1213,7 @@ const zhCn: TranslationKeys = {
   plans_excluded_5: '存下的钱没有收益或利息',
   plans_excluded_6: '更优汇率',
   plans_excluded_7: '向其他银行账户转账',
-  plans_excluded_8: '更高的卡片额度',
-  plans_excluded_9: '加密货币不属于任何套餐',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: '更高的卡片额度',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: '已达到套餐上限',
   plans_limit_generic: '已达到套餐上限。',
   plans_limit_goals_one: '你的{plan}套餐允许 1 个进行中的目标。',

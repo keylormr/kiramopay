@@ -1255,6 +1255,7 @@ export type TranslationKeys = {
   plans_same_2: string;
   plans_same_3: string;
   plans_same_4: string;
+  plans_same_5: string;
   plans_cta_interested: string;
   plans_cta_sending: string;
   plans_cta_registered: string;
@@ -1283,7 +1284,6 @@ export type TranslationKeys = {
   plans_excluded_6: string;
   plans_excluded_7: string;
   plans_excluded_8: string;
-  plans_excluded_9: string;
   // Topes del plan (ahorro y tarjetas)
   plans_limit_title: string;
   plans_limit_generic: string;

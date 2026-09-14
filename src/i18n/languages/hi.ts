@@ -1184,6 +1184,7 @@ const hi: TranslationKeys = {
   plans_same_2: 'अपने निजी QR से पैसे लेना और देना',
   plans_same_3: 'बचत लक्ष्यों में जमा करना और निकालना',
   plans_same_4: 'वर्चुअल कार्ड जारी करना और रखना',
+  plans_same_5: 'क्रिप्टो खरीदना और बेचना',
   plans_cta_interested: 'उपलब्ध होने पर मुझे बताएँ',
   plans_cta_sending: 'दर्ज किया जा रहा है...',
   plans_cta_registered: 'दर्ज हो गया। हम आपको बताएँगे।',
@@ -1211,9 +1212,7 @@ const hi: TranslationKeys = {
   plans_excluded_5: 'बचाए गए पैसे पर रिटर्न या ब्याज',
   plans_excluded_6: 'बेहतर विनिमय दर',
   plans_excluded_7: 'दूसरे बैंकों के खातों में ट्रांसफ़र',
-  plans_excluded_8: 'ज़्यादा कार्ड सीमाएँ',
-  plans_excluded_9: 'क्रिप्टो किसी प्लान का हिस्सा नहीं है',
-  // Topes del plan (ahorro y tarjetas)
+  plans_excluded_8: 'ज़्यादा कार्ड सीमाएँ',  // Topes del plan (ahorro y tarjetas)
   plans_limit_title: 'आप अपने प्लान की सीमा तक पहुँच गए हैं',
   plans_limit_generic: 'आप अपने प्लान की सीमा तक पहुँच गए हैं।',
   plans_limit_goals_one: 'आपका {plan} प्लान 1 सक्रिय लक्ष्य की अनुमति देता है।',
