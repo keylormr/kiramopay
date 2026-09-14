@@ -1045,7 +1045,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 value={amount}
                 onChange={setAmount}
                 placeholder="0"
-                className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
+                autoWidth
+                className="text-5xl font-black bg-transparent max-w-full text-center outline-none uv-text-primary placeholder-gray-300"
               />
             </div>
             <p className={`text-sm mt-2 ${parseFloat(amount || '0') > balance ? 'text-red-500' : 'text-gray-400'}`}>
@@ -1173,7 +1174,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 value={amount}
                 onChange={setAmount}
                 placeholder="0"
-                className="text-5xl font-black bg-transparent w-48 text-center outline-none uv-text-primary placeholder-gray-300"
+                autoWidth
+                className="text-5xl font-black bg-transparent max-w-full text-center outline-none uv-text-primary placeholder-gray-300"
               />
             </div>
           </div>

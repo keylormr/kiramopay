@@ -56,9 +56,14 @@ export function sanitizeAmountInput(raw: string, cursor: number, decimals: numbe
         keep = true;
         decCount++;
       }
-    } else if (ch === '.' && !seenDot && decimals > 0) {
-      keep = true;
+    } else if (ch === '.' && !seenDot) {
+      // Marcar seenDot SIEMPRE que aparece el primer punto, incluso con
+      // decimals=0: si no, los digitos que vienen despues se cuelan como
+      // parte entera (multiplicando el monto por 10^n) en vez de
+      // descartarse. Solo se conserva el caracter '.' en la salida cuando
+      // el campo admite decimales.
       seenDot = true;
+      if (decimals > 0) keep = true;
     }
 
     if (keep) out += ch;

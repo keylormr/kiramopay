@@ -1093,7 +1093,8 @@ export const CryptoView: React.FC = () => {
                 value={amount}
                 onChange={setAmount}
                 placeholder="0.00"
-                className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+                autoWidth
+                className="text-5xl font-bold bg-transparent max-w-full text-center outline-none uv-text-primary"
               />
             </div>
             {/* Sin precio la division da Infinity y formatCrypto lo imprime
