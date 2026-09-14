@@ -112,6 +112,22 @@ describe('CampoMonto', () => {
     expect(onChange).toHaveBeenLastCalledWith('252200.50');
   });
 
+  it('con decimals=0 pegar un monto con decimales trunca en vez de multiplicarlo por 100', async () => {
+    // Caso real: limite de presupuesto (BudgetView usa decimals={0}). Antes
+    // del fix, pegar "80,000.99" daba "8000099" (100x) porque los digitos
+    // tras el punto se leian como parte entera en vez de descartarse.
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Controlado decimals={0} onChange={onChange} />);
+    const input = screen.getByLabelText<HTMLInputElement>('monto');
+
+    await user.click(input);
+    await user.paste('80,000.99');
+
+    expect(input.value).toBe('80,000');
+    expect(onChange).toHaveBeenLastCalledWith('80000');
+  });
+
   it('el cursor queda despues del ultimo digito escrito, no al final del texto formateado', async () => {
     const user = userEvent.setup();
     // value es el numero LIMPIO ("25200"); el componente lo muestra como
@@ -135,5 +151,26 @@ describe('CampoMonto', () => {
     render(<Controlado value="1234567" />);
     const input = screen.getByLabelText<HTMLInputElement>('monto');
     expect(input.value).toBe('1,234,567');
+  });
+
+  it('sin autoWidth no fija ancho (el ancho fijo lo pone la clase del que llama)', () => {
+    render(<Controlado value="1000000" />);
+    const input = screen.getByLabelText<HTMLInputElement>('monto');
+    expect(input.style.width).toBe('');
+  });
+
+  it('con autoWidth el ancho crece con el texto YA formateado, comas incluidas', () => {
+    // "1,000,000" son 9 caracteres: el separador de miles nuevo no puede
+    // quedar fuera de una caja de ancho fijo (bug real de SinpeView/
+    // CryptoView con w-48) porque aca el ancho se deriva del propio texto.
+    render(<Controlado value="1000000" autoWidth />);
+    const input = screen.getByLabelText<HTMLInputElement>('monto');
+    expect(input.style.width).toBe('10ch');
+  });
+
+  it('con autoWidth el placeholder tambien cuenta para el ancho minimo', () => {
+    render(<Controlado value="" autoWidth placeholder="0.00" />);
+    const input = screen.getByLabelText<HTMLInputElement>('monto');
+    expect(input.style.width).toBe('5ch');
   });
 });

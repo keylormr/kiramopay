@@ -11,6 +11,15 @@ export interface CampoMontoProps
   decimals?: number;
   /** Agrupar la parte entera con comas de miles. Desactivar para cantidades de un activo cripto. */
   thousands?: boolean;
+  /**
+   * Ancho en `ch` derivado del texto ya formateado (comas incluidas) en vez
+   * de una clase de ancho fijo (w-48, etc). Usar en las pantallas de "monto
+   * grande centrado" (SINPE, cripto): un ancho fijo en px/rem no preve el
+   * ancho que agrega el separador de miles y el texto termina recortado
+   * para montos grandes. No usar en un input de formulario normal (ahi el
+   * ancho lo da el layout, con w-full).
+   */
+  autoWidth?: boolean;
 }
 
 /**
@@ -29,6 +38,9 @@ export function CampoMonto({
   decimals = 2,
   thousands = true,
   inputMode = 'decimal',
+  autoWidth = false,
+  placeholder,
+  style,
   ...rest
 }: CampoMontoProps) {
   const display = formatAmountDisplay(value, thousands);
@@ -50,7 +62,21 @@ export function CampoMonto({
     if (clean !== value) onChange(clean);
   };
 
+  // El ancho crece caracter a caracter con el texto YA formateado (comas de
+  // miles incluidas), asi el separador nunca deja el valor mas ancho que la
+  // caja. +1ch de holgura para el caret al final mientras se escribe.
+  const chars = Math.max(display.length, String(placeholder ?? '').length, 1);
+  const autoWidthStyle = autoWidth ? { width: `${chars + 1}ch` } : undefined;
+
   return (
-    <input type="text" inputMode={inputMode} value={display} onChange={handleChange} {...rest} />
+    <input
+      type="text"
+      inputMode={inputMode}
+      value={display}
+      onChange={handleChange}
+      placeholder={placeholder}
+      style={{ ...autoWidthStyle, ...style }}
+      {...rest}
+    />
   );
 }
