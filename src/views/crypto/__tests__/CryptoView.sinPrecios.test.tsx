@@ -13,6 +13,11 @@ import { CryptoView } from '../CryptoView';
 // estado y la respuesta de precios entre casos, y aquel los tiene fijos.
 const mocks = vi.hoisted(() => ({
   getPrices: vi.fn(),
+  // Expuesto para poder afirmar que NADIE lo llama: CryptoView ya no tiene un
+  // fetchPriceHistories() propio (se elimino junto con el arreglo del
+  // sparkline), asi que este metodo del servicio -que hace su propia llamada
+  // a /crypto/prices- debe quedar mudo mientras la vista este montada.
+  getAllPriceHistories: vi.fn().mockResolvedValue({}),
   dispatch: vi.fn(),
   // La cartera cambia por caso. La vista lee `currentPrice` de aqui, no de la
   // respuesta de precios: son dos cosas distintas y hay casos donde difieren.
@@ -28,7 +33,7 @@ vi.mock('@/api', () => ({
 vi.mock('@/services/cryptoPrices', () => ({
   cryptoPriceService: {
     getPrices: mocks.getPrices,
-    getAllPriceHistories: vi.fn().mockResolvedValue({}),
+    getAllPriceHistories: mocks.getAllPriceHistories,
   },
   // La vista lo lee al cargarse para saber que simbolos no dependen del feed.
   SIMBOLOS_SIN_FEED: ['USDT', 'USDC'],
@@ -106,6 +111,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   mocks.getPrices.mockReset();
+  mocks.getAllPriceHistories.mockClear();
   mocks.dispatch.mockReset();
   mocks.activos = [activo('BTC', 0.5, 0)];
   mocks.preciosWs = {};
@@ -306,6 +312,25 @@ describe('CryptoView — sin precios lo dice, no inventa un total', () => {
         // guardo el sondeo REST.
         expect(paraBtc.priceHistory).toEqual(historialReal);
       });
+    });
+
+    // PR #201, hallazgo MEDIA: fetchPriceHistories() pedia su propio
+    // /crypto/prices via getAllPriceHistories() -el mismo dato que
+    // fetchPrices() ya trajo en la respuesta de getPrices()-, asi que al
+    // montar salian dos fetch en paralelo al mismo endpoint. El arreglo fue
+    // borrar esa segunda llamada, no agregarle cache: esta prueba fija que no
+    // vuelva.
+    it('al montar hace una sola llamada de red (getPrices), no una segunda en paralelo por getAllPriceHistories', async () => {
+      mocks.activos = [activo('BTC', 0.5, 40000)];
+      mocks.getPrices.mockResolvedValue(feed());
+      montar();
+
+      await waitFor(() => {
+        expect(mocks.dispatch.mock.calls.some(([a]) => a.type === 'UPDATE_CRYPTO_PRICES')).toBe(true);
+      });
+
+      expect(mocks.getPrices).toHaveBeenCalledTimes(1);
+      expect(mocks.getAllPriceHistories).not.toHaveBeenCalled();
     });
   });
 });
