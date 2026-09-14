@@ -11,6 +11,7 @@ package escrow
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -118,6 +119,14 @@ var (
 	ErrInsufficient   = errors.New("escrow: insufficient balance")
 	ErrMFARequired    = errors.New("escrow: verified MFA challenge required for this amount")
 	ErrInvalidRequest = errors.New("escrow: invalid request")
+	// Los tres rechazos de forma que la hoja de crear acuerdo SI puede provocar,
+	// cada uno con su propio codigo. Todos colapsaban en ErrInvalidRequest y la
+	// pantalla mostraba "invalid request" sin poder decir que estaba mal.
+	// Envuelven a ErrInvalidRequest: para quien ya lo comprobaba asi, siguen
+	// siendo una peticion invalida.
+	ErrContraparteEsUnoMismo = fmt.Errorf("%w: cannot create an agreement with yourself", ErrInvalidRequest)
+	ErrMontoInvalido         = fmt.Errorf("%w: amount must be greater than zero", ErrInvalidRequest)
+	ErrDescripcionVacia      = fmt.Errorf("%w: description is required", ErrInvalidRequest)
 	// ErrVendedorSinCuenta: el telefono (o el id) del vendedor no corresponde a
 	// ninguna cuenta. Un acuerdo hacia una cuenta que no existe se puede
 	// fondear —la plata sale de la billetera del comprador— y no se puede

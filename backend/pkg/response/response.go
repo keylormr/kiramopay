@@ -22,7 +22,7 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(APIResponse{
 		Success: true,
-		Data:    data,
+		Data:    listaVaciaSiNil(data),
 	})
 }
 
