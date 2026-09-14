@@ -60,6 +60,21 @@ describe('HttpSavingsRepository', () => {
     );
   });
 
+  // Con un CREATE_FAILED fijo, el 409 del tope del plan llegaba a la pantalla
+  // como un "no se pudo crear" sin plan, sin limite y sin cuantas hay.
+  it('conserva SAVINGS_GOAL_LIMIT y su detalle al crear', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: false,
+      error: { code: 'SAVINGS_GOAL_LIMIT', message: 'limit', details: { plan: 'free', limite: 3, actuales: 3 } },
+    });
+    const res = await new HttpSavingsRepository(fakeClient({ post })).createGoal({ name: 'Casa', target: 1000 });
+    expect(res.error).toEqual({
+      code: 'SAVINGS_GOAL_LIMIT',
+      message: 'limit',
+      details: { plan: 'free', limite: 3, actuales: 3 },
+    });
+  });
+
   it('deletes a goal', async () => {
     const del = vi.fn().mockResolvedValue({ success: true, data: { status: 'deleted' } });
     const res = await new HttpSavingsRepository(fakeClient({ del })).deleteGoal('g1');

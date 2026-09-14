@@ -12,4 +12,9 @@ export interface User {
   createdAt: string;
   /** Código de invitación propio (programa de referidos). Lo asigna el backend. */
   referralCode?: string;
+  /**
+   * Plan personal. Mientras no exista el cobro solo lo cambia un administrador;
+   * un backend anterior a los planes no lo manda y se lee como 'free'.
+   */
+  plan?: 'free' | 'plus' | 'pro';
 }

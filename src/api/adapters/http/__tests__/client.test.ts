@@ -38,6 +38,88 @@ function makeErrResConData(status: number, code: string, data: unknown) {
   } as unknown as Response;
 }
 
+describe('HttpClient: el detalle del error y los archivos', () => {
+  beforeEach(() => {
+    registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
+    registerRefreshHandler(async () => true);
+    registerAuthFailureHandler(() => {});
+  });
+
+  it('pasa error.details de un 409 a quien llama', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 409,
+      ok: false,
+      json: async () => ({
+        success: false,
+        error: { code: 'SAVINGS_GOAL_LIMIT', message: 'limit', details: { plan: 'free', limite: 3, actuales: 3 } },
+      }),
+    }));
+    const r = await new HttpClient('http://x').post('/api/v1/savings/goals', {});
+    expect(r.error).toEqual({ code: 'SAVINGS_GOAL_LIMIT', message: 'limit', details: { plan: 'free', limite: 3, actuales: 3 } });
+  });
+
+  it('un details que no es objeto no se cuela', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 400,
+      ok: false,
+      json: async () => ({ error: { code: 'INVALID_BODY', message: 'x', details: [] } }),
+    }));
+    const r = await new HttpClient('http://x').post('/api/v1/cards', {});
+    expect(r.error).toEqual({ code: 'INVALID_BODY', message: 'x' });
+  });
+
+  it('getArchivo entrega el cuerpo y el nombre del Content-Disposition con 200', async () => {
+    const blob = new Blob(['seccion,desde']);
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: new Headers({ 'Content-Disposition': 'attachment; filename="reporte-2026-09-07-a-2026-09-13.csv"' }),
+      blob: async () => blob,
+      json: async () => { throw new Error('no es JSON'); },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv?days=7&tz=360');
+
+    expect(r.success).toBe(true);
+    expect(r.data?.blob).toBe(blob);
+    expect(r.data?.nombre).toBe('reporte-2026-09-07-a-2026-09-13.csv');
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer tok' });
+  });
+
+  it('getArchivo lee el sobre de error como JSON cuando no es 200', async () => {
+    const blob = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 403,
+      ok: false,
+      headers: new Headers(),
+      blob,
+      json: async () => ({ success: false, error: { code: 'PLAN_REQUIRED', message: 'plan', details: { plan_requerido: 'analitica' } } }),
+    }));
+
+    const r = await new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv');
+
+    expect(r.error).toEqual({ code: 'PLAN_REQUIRED', message: 'plan', details: { plan_requerido: 'analitica' } });
+    expect(blob).not.toHaveBeenCalled();
+  });
+
+  it('getArchivo refresca una vez ante un 401 y reintenta', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 401, ok: false, headers: new Headers(), json: async () => ({}) })
+      .mockResolvedValueOnce({ status: 200, ok: true, headers: new Headers(), blob: async () => new Blob(['x']) });
+    vi.stubGlobal('fetch', fetchMock);
+    const refresh = vi.fn(async () => true);
+    registerRefreshHandler(refresh);
+
+    const r = await new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv');
+
+    expect(r.success).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('HttpClient refresh-on-401', () => {
   beforeEach(() => {
     registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));

@@ -8,8 +8,11 @@ const mockApi = vi.hoisted(() => ({
     listPendingMerchants: vi.fn(),
     approveMerchant: vi.fn(),
     rejectMerchant: vi.fn(),
+    setMerchantPlan: vi.fn(),
   },
 }));
+
+const UUID = '5b0e7c1e-2a3f-4d5b-9c8e-1f2a3b4c5d6e';
 
 vi.mock('@/api', () => ({ getApiLayer: () => mockApi }));
 
@@ -39,6 +42,7 @@ beforeEach(() => {
   mockApi.qrPayments.listPendingMerchants.mockReset();
   mockApi.qrPayments.approveMerchant.mockReset();
   mockApi.qrPayments.rejectMerchant.mockReset();
+  mockApi.qrPayments.setMerchantPlan.mockReset();
 });
 
 describe('AdminMerchantsView', () => {
@@ -75,5 +79,58 @@ describe('AdminMerchantsView', () => {
     await user.keyboard('1');
 
     expect(input.value).toBe('15.73');
+  });
+});
+
+describe('AdminMerchantsView - plan de un comercio', () => {
+  beforeEach(() => {
+    mockApi.qrPayments.listPendingMerchants.mockResolvedValue({ success: true, data: [] });
+  });
+
+  it('asigna el plan por identificador solo despues de confirmar', async () => {
+    mockApi.qrPayments.setMerchantPlan.mockResolvedValue({
+      success: true,
+      data: { ...pending, id: UUID, plan: 'analitica', comisionEfectivaBps: 25 },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('tab', { name: 'Plan de un comercio' }));
+    await user.type(screen.getByLabelText('Identificador del comercio'), UUID);
+    await user.click(screen.getByRole('radio', { name: /Analítica/ }));
+    await user.click(screen.getByRole('button', { name: 'Revisar y asignar' }));
+
+    expect(mockApi.qrPayments.setMerchantPlan).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Sí, asignar Analítica' }));
+
+    await waitFor(() => expect(mockApi.qrPayments.setMerchantPlan).toHaveBeenCalledWith(UUID, 'analitica'));
+    expect(mockApi.qrPayments.setMerchantPlan).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('status')).toHaveTextContent('Soda Tica quedó con el plan Analítica.');
+    expect(screen.getByRole('status')).toHaveTextContent('0.25%');
+  });
+
+  it('un identificador mal escrito no llega al servidor', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('tab', { name: 'Plan de un comercio' }));
+    await user.type(screen.getByLabelText('Identificador del comercio'), 'soda-tica');
+    await user.click(screen.getByRole('button', { name: 'Revisar y asignar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ese identificador no tiene el formato correcto.');
+    expect(mockApi.qrPayments.setMerchantPlan).not.toHaveBeenCalled();
+  });
+
+  it('dice cuando el comercio no existe', async () => {
+    mockApi.qrPayments.setMerchantPlan.mockResolvedValue({ success: false, error: { code: 'MERCHANT_NOT_FOUND', message: 'no' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('tab', { name: 'Plan de un comercio' }));
+    await user.type(screen.getByLabelText('Identificador del comercio'), UUID);
+    await user.click(screen.getByRole('button', { name: 'Revisar y asignar' }));
+    await user.click(await screen.findByRole('button', { name: 'Sí, asignar Analítica' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No existe un comercio con ese identificador.');
   });
 });

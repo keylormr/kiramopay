@@ -1,13 +1,27 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { useAuthStore } from '@/stores/auth.store';
+import { olvidarTarifas } from '@/hooks/usePlanes';
+import { TARIFAS_POR_DEFECTO } from '@/utils/planes';
+import type { Tarifas } from '@/api/repositories/plans.repository';
+import type { User } from '@/types/auth.types';
 import { PlansView } from '../PlansView';
 
-const { registrarInteres } = vi.hoisted(() => ({ registrarInteres: vi.fn() }));
+const { registrarInteres, getTarifas } = vi.hoisted(() => ({
+  registrarInteres: vi.fn(),
+  getTarifas: vi.fn(),
+}));
 
 vi.mock('@/api', () => ({
-  getApiLayer: () => ({ plans: { registrarInteres } }),
+  getApiLayer: () => ({ plans: { registrarInteres, getTarifas } }),
 }));
+
+function conPlan(plan: User['plan']) {
+  useAuthStore.setState({
+    user: { id: 'u1', phone: '', firstName: 'Keilor', lastName: 'M', kycLevel: 1, createdAt: '', plan } as User,
+  });
+}
 
 function montar() {
   return render(
@@ -17,62 +31,89 @@ function montar() {
   );
 }
 
-// La fila recomendada de la calculadora se marca con aria-current, que es la
-// misma senal que lee un lector de pantalla: no hay un gancho solo de prueba.
-function filaRecomendada(): HTMLElement {
-  const fila = document.querySelector('[aria-current="true"]');
-  if (!fila) throw new Error('la calculadora no marco ninguna fila como recomendada');
-  return fila as HTMLElement;
+// Los valores de una fila de la comparacion, en el orden Gratis, Plus, Pro.
+function fila(nombre: string): (string | null)[] {
+  const encabezado = screen.getByRole('rowheader', { name: nombre });
+  return within(encabezado.closest('tr') as HTMLElement).getAllByRole('cell').map((c) => c.textContent);
 }
 
-async function escribirCobrado(monto: string) {
-  const user = userEvent.setup();
-  const campo = screen.getByLabelText('Cobrado al mes en el panel de comercio', {
-    selector: 'input[type="text"]',
-  });
-  await user.clear(campo);
-  await user.type(campo, monto);
-}
+const copia = (): Tarifas => JSON.parse(JSON.stringify(TARIFAS_POR_DEFECTO));
 
 describe('PlansView', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('kiramopay_language', 'es');
     registrarInteres.mockReset();
+    getTarifas.mockReset();
+    getTarifas.mockResolvedValue({ success: true, data: TARIFAS_POR_DEFECTO });
+    olvidarTarifas();
+    conPlan('free');
   });
 
-  describe('la calculadora', () => {
-    it('recomienda el plan gratuito con 3.000 cobrados al mes', async () => {
+  describe('para ti', () => {
+    it('compara Gratis, Plus y Pro con sus precios y los tres topes reales', async () => {
       montar();
-      await escribirCobrado('3000');
 
-      const fila = filaRecomendada();
-      expect(fila).toHaveTextContent('Kiramo');
-      expect(fila).not.toHaveTextContent('Negocio');
-      expect(fila).not.toHaveTextContent('Cima');
-      // 0.5% de 3.000 = 15, contra los 34.99 de cuota del plan mas barato.
-      expect(fila).toHaveTextContent('$15.00');
-      expect(screen.getByRole('status')).toHaveTextContent('te conviene el plan gratuito');
+      const encabezados = await screen.findAllByRole('columnheader');
+      expect(encabezados.map((h) => h.textContent)).toEqual([
+        expect.stringContaining('Gratis'),
+        expect.stringContaining('Plus'),
+        expect.stringContaining('Pro'),
+      ]);
+      expect(within(encabezados[0]).getByText('$0')).toBeInTheDocument();
+      expect(within(encabezados[1]).getByText('$11.99')).toBeInTheDocument();
+      expect(within(encabezados[2]).getByText('$34.99')).toBeInTheDocument();
+
+      expect(fila('Consultas al asistente por día')).toEqual(['2', '15', '50']);
+      expect(fila('Metas de ahorro activas')).toEqual(['3', '10', 'Sin tope']);
+      expect(fila('Tarjetas virtuales activas')).toEqual(['1', '3', '5']);
     });
 
-    it('recomienda Kiramo Negocio con 15.000 cobrados al mes', async () => {
-      montar();
-      await escribirCobrado('15000');
+    it('muestra los topes que publica el servidor, no los escritos en la app', async () => {
+      const tarifas = copia();
+      tarifas.planes.free.topes.metas = 5;
+      // Sin asistente configurado el servidor no publica esa fila.
+      for (const p of ['free', 'plus', 'pro'] as const) delete tarifas.planes[p].topes.asistente;
+      getTarifas.mockResolvedValue({ success: true, data: tarifas });
 
-      const fila = filaRecomendada();
-      expect(fila).toHaveTextContent('Kiramo Negocio');
-      // 34.99 de cuota + 0.25% sobre los 3.000 que exceden los 12.000 = 42.49.
-      expect(fila).toHaveTextContent('$42.49');
-      expect(screen.getByRole('status')).toHaveTextContent('Kiramo Negocio');
+      montar();
+
+      expect(await screen.findByRole('rowheader', { name: 'Metas de ahorro activas' })).toBeInTheDocument();
+      await waitFor(() => expect(fila('Metas de ahorro activas')).toEqual(['5', '10', 'Sin tope']));
+      expect(screen.queryByRole('rowheader', { name: 'Consultas al asistente por día' })).toBeNull();
     });
 
-    it('arranca en 7.000, el punto donde la cuota alcanza a la comision', () => {
+    it('marca el plan del perfil y no ofrece anotarse al plan que ya se tiene', async () => {
+      conPlan('plus');
       montar();
-      expect(
-        screen.getByLabelText('Cobrado al mes en el panel de comercio', {
-          selector: 'input[type="text"]',
-        }),
-      ).toHaveValue('7,000');
+
+      const encabezados = await screen.findAllByRole('columnheader');
+      expect(within(encabezados[1]).getByText('Tu plan')).toBeInTheDocument();
+      expect(within(encabezados[0]).queryByText('Tu plan')).toBeNull();
+      expect(within(encabezados[2]).getByText('Próximamente')).toBeInTheDocument();
+
+      expect(screen.queryByRole('button', { name: /Avisarme cuando esté disponible Plus/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /Avisarme cuando esté disponible Pro/ })).toBeInTheDocument();
+    });
+
+    it('con Pro no ofrece anotarse a un plan personal inferior, solo a Analitica', async () => {
+      conPlan('pro');
+      montar();
+
+      const encabezados = await screen.findAllByRole('columnheader');
+      expect(within(encabezados[2]).getByText('Tu plan')).toBeInTheDocument();
+      const botones = screen.getAllByRole('button', { name: /Avisarme cuando esté disponible/ });
+      expect(botones.map((b) => b.getAttribute('aria-label'))).toEqual(['Avisarme cuando esté disponible Analítica']);
+    });
+
+    it('con el plan Gratis ofrece anotarse a Plus, a Pro y a Analitica, y ninguno es Gratis', async () => {
+      montar();
+      const botones = await screen.findAllByRole('button', { name: /Avisarme cuando esté disponible/ });
+      expect(botones.map((b) => b.getAttribute('aria-label'))).toEqual([
+        'Avisarme cuando esté disponible Plus',
+        'Avisarme cuando esté disponible Pro',
+        'Avisarme cuando esté disponible Analítica',
+      ]);
     });
   });
 
@@ -84,87 +125,98 @@ describe('PlansView', () => {
       const user = userEvent.setup();
       montar();
 
-      const boton = screen.getByRole('button', { name: /Me interesa Kiramo Negocio/i });
+      const boton = await screen.findByRole('button', { name: /Avisarme cuando esté disponible Plus/ });
       await user.click(boton);
       await user.click(boton);
 
       expect(registrarInteres).toHaveBeenCalledTimes(1);
-      expect(registrarInteres).toHaveBeenCalledWith('negocio');
+      expect(registrarInteres).toHaveBeenCalledWith('plus');
     });
 
     it('pasa a "anotado" y ya no se puede reenviar', async () => {
-      registrarInteres.mockResolvedValue({
-        success: true,
-        data: { plan: 'cima', registeredAt: '2026-09-04T00:00:00Z' },
-      });
+      registrarInteres.mockResolvedValue({ success: true, data: { plan: 'analitica', registeredAt: '2026-09-13T00:00:00Z' } });
       const user = userEvent.setup();
       montar();
 
-      await user.click(screen.getByRole('button', { name: /Me interesa Kiramo Cima/i }));
+      await user.click(await screen.findByRole('button', { name: /Avisarme cuando esté disponible Analítica/ }));
 
-      const anotado = await screen.findByRole('button', { name: /Anotado\. Te contactamos\. Kiramo Cima/i });
+      const anotado = await screen.findByRole('button', { name: 'Anotado. Te avisamos. Analítica' });
       expect(anotado).toBeDisabled();
-
       await user.click(anotado);
       expect(registrarInteres).toHaveBeenCalledTimes(1);
+      expect(registrarInteres).toHaveBeenCalledWith('analitica');
     });
 
     it('avisa cuando el registro falla y deja volver a intentarlo', async () => {
-      registrarInteres.mockResolvedValue({
-        success: false,
-        error: { code: 'INTEREST_FAILED', message: 'boom' },
-      });
+      registrarInteres.mockResolvedValue({ success: false, error: { code: 'INTEREST_FAILED', message: 'boom' } });
       const user = userEvent.setup();
       montar();
 
-      await user.click(screen.getByRole('button', { name: /Me interesa Kiramo Negocio/i }));
+      await user.click(await screen.findByRole('button', { name: /Avisarme cuando esté disponible Pro/ }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo anotar tu interés');
-      expect(screen.getByRole('button', { name: /Me interesa Kiramo Negocio/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Avisarme cuando esté disponible Pro/ })).toBeEnabled();
+    });
+  });
+
+  describe('para tu comercio', () => {
+    it('dice la comision, la promocion de entrada y Analitica como proximamente', async () => {
+      montar();
+
+      expect(await screen.findByText('0.5%')).toBeInTheDocument();
+      expect(screen.getByText('El QR entre personas es gratis.')).toBeInTheDocument();
+      expect(screen.getByText('Comercios nuevos: 0.25% los primeros 3 meses')).toBeInTheDocument();
+      expect(screen.getByText(/Después se cobra 0\.5%\. Si tu comisión fijada es menor, se respeta la menor\./)).toBeInTheDocument();
+      expect(screen.getByText(/ya estaban aprobados antes de la promoción no la reciben/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Analítica' })).toBeInTheDocument();
+      expect(screen.getByText('$9.99')).toBeInTheDocument();
+    });
+
+    it('si el servidor no publica la promocion ni Analitica, no se anuncian', async () => {
+      getTarifas.mockResolvedValue({ success: true, data: { ...copia(), promo: null, analitica: null } });
+      montar();
+
+      expect(await screen.findByText('0.5%')).toBeInTheDocument();
+      await screen.findAllByRole('columnheader');
+      expect(screen.queryByText(/Comercios nuevos/)).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Analítica' })).toBeNull();
     });
   });
 
   describe('la honestidad de la pagina', () => {
-    it('muestra el bloque de lo que no incluye, con los cinco limites', () => {
+    it('ya no ofrece Kiramo Negocio, Kiramo Cima ni su calculadora', async () => {
       montar();
-
-      expect(screen.getByRole('heading', { name: 'Lo que no incluye' })).toBeInTheDocument();
-      expect(screen.getByText(/no es emisor de tarjetas/)).toBeInTheDocument();
-      expect(screen.getByText(/No hay seguros de ningún tipo/)).toBeInTheDocument();
-      expect(screen.getByText(/no pagan intereses ni rendimiento/)).toBeInTheDocument();
-      expect(screen.getByText(/licencia de proveedor de activos virtuales/)).toBeInTheDocument();
-      expect(screen.getByText(/fondo de garantía de depósitos/)).toBeInTheDocument();
+      await screen.findAllByRole('columnheader');
+      expect(screen.queryByText(/Negocio|Cima/)).toBeNull();
+      expect(screen.queryByRole('slider')).toBeNull();
     });
 
-    it('avisa junto al boton que todavia no se puede pagar en la app', () => {
+    it('lo que no incluye lleva nueve limites con la misma letra que los beneficios', async () => {
       montar();
-      expect(screen.getAllByText(/Todavía no se puede pagar dentro de la app/)).toHaveLength(2);
+
+      const titulo = await screen.findByRole('heading', { name: 'Lo que no incluye ningún plan' });
+      const lista = within(titulo.parentElement as HTMLElement).getAllByRole('listitem');
+      expect(lista).toHaveLength(9);
+      expect(screen.getByText('Mejor tipo de cambio')).toBeInTheDocument();
+      expect(screen.getByText('Transferencias a cuentas de otros bancos')).toBeInTheDocument();
+      expect(screen.getByText('Límites de tarjeta más altos')).toBeInTheDocument();
+      expect(screen.getByText('Rendimiento o intereses sobre el dinero guardado')).toBeInTheDocument();
+
+      // Mismo tamano, peso y color que la lista de lo que si trae.
+      expect(screen.getByText('Tarjeta física').className).toBe(
+        screen.getByText('Transferencias entre cuentas KiramoPay').className,
+      );
     });
 
-    it('no ofrece contratar el plan gratuito: dice que ya se esta usando', () => {
+    it('no promete rendimiento ni porcentajes "hasta"', async () => {
       montar();
-      expect(screen.getByText('Es el plan que tienes hoy.')).toBeInTheDocument();
-      expect(screen.getAllByRole('button', { name: /Me interesa/i })).toHaveLength(2);
+      await screen.findAllByRole('columnheader');
+      expect(document.body.textContent).not.toMatch(/APY|hasta \d+(\.\d+)? ?%|mejor tipo de cambio garantizado/i);
     });
-  });
 
-  describe('el selector mensual y anual', () => {
-    it('cambia el precio mostrado y ofrece los dos meses gratis', async () => {
-      const user = userEvent.setup();
+    it('avisa junto a los botones que todavia no se cobra nada', async () => {
       montar();
-
-      // El precio se busca dentro de la tarjeta: la calculadora tambien muestra
-      // $34.99 en su fila de Negocio con los 7.000 que trae por defecto.
-      const tarjeta = () =>
-        within(screen.getByRole('heading', { name: 'Kiramo Negocio' }).closest('article') as HTMLElement);
-
-      expect(tarjeta().getByText('$34.99')).toBeInTheDocument();
-      expect(tarjeta().getByText('O $349.90 al año, con dos meses gratis.')).toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'Anual' }));
-
-      expect(tarjeta().getByText('$349.90')).toBeInTheDocument();
-      expect(tarjeta().getByText('Equivale a $29.16 al mes. Dos meses gratis.')).toBeInTheDocument();
+      expect(await screen.findAllByText(/Este botón no cobra nada ni te cambia de plan/)).toHaveLength(2);
     });
   });
 });

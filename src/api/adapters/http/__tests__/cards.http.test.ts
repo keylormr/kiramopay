@@ -5,6 +5,19 @@ import type { HttpClient } from '../client';
 // undefined`. Cero es falso, asi que poner el limite en 0 —la forma de dejar
 // la tarjeta sin margen— viajaba como "no cambiar nada": la hoja se cerraba
 // sin error y la tarjeta seguia con el limite anterior.
+describe('HttpCardsRepository.createCard', () => {
+  it('conserva CARD_LIMIT y su detalle: la pantalla explica el tope con ellos', async () => {
+    const client = {
+      post: async () => ({
+        success: false,
+        error: { code: 'CARD_LIMIT', message: 'limit', details: { plan: 'plus', limite: 3, actuales: 4 } },
+      }),
+    } as unknown as HttpClient;
+    const res = await new HttpCardsRepository(client).createCard({ type: 'virtual', currency: 'CRC' });
+    expect(res.error).toEqual({ code: 'CARD_LIMIT', message: 'limit', details: { plan: 'plus', limite: 3, actuales: 4 } });
+  });
+});
+
 describe('HttpCardsRepository.updateLimits', () => {
   function espia() {
     const enviado: { url?: string; body?: unknown } = {};
