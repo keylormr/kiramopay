@@ -28,7 +28,7 @@ var (
 	ErrSinPrecio = errors.New("no market price available for this asset")
 	// ErrPrecioMovido: el precio que el cliente vio quedo lejos del actual. Se
 	// rechaza en vez de ejecutar a un precio que la persona no acepto.
-	ErrPrecioMovido = errors.New("price moved since it was quoted")
+	ErrPrecioMovido = errors.New("el precio cambio desde que se mostro")
 	// ErrMonedaNoSoportada: solo se cotiza contra las monedas del monedero.
 	ErrMonedaNoSoportada = errors.New("unsupported fiat currency")
 )
@@ -50,6 +50,16 @@ type RateLookup func(ctx context.Context, from, to string) (float64, error)
 // suelta. Si falta cualquiera de los dos, no hay precio: mejor no operar que
 // operar con un numero inventado.
 func (s *Service) precioEn(ctx context.Context, asset, currency string) (decimal.Decimal, error) {
+	usd, err := s.precioEnDolares(ctx, asset)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return s.convertirDesdeDolares(ctx, usd, currency)
+}
+
+// precioEnDolares es el precio del feed, que cotiza en dolares. Es tambien el
+// unico precio que la pantalla le muestra a la persona.
+func (s *Service) precioEnDolares(ctx context.Context, asset string) (decimal.Decimal, error) {
 	usd, err := s.prices.GetPrice(ctx, asset)
 	// Un precio vencido no es "no hay precio": el sistema si tiene un numero,
 	// pero esta muerto. Se propaga tal cual para que el cliente reciba su
@@ -61,8 +71,35 @@ func (s *Service) precioEn(ctx context.Context, asset, currency string) (decimal
 	if err != nil || usd <= 0 {
 		return decimal.Zero, fmt.Errorf("%w: %s", ErrSinPrecio, asset)
 	}
-	precio := decimal.NewFromFloat(usd)
+	return decimal.NewFromFloat(usd), nil
+}
 
+// precioParaLiquidar compara el precio que la persona vio contra el del
+// servidor y devuelve el precio de una unidad en la moneda en que se liquida.
+//
+// La comparacion va en DOLARES, la moneda en que la pantalla muestra el
+// precio, sin importar en que moneda se pague o se cobre. Antes se comparaba
+// lo visto (dolares) contra el precio ya convertido a colones: 77.294 contra
+// 34.777.662 es una desviacion del 99,98 %, asi que vender cripto para recibir
+// colones —la opcion que la pantalla trae marcada— se rechazaba SIEMPRE con
+// PRICE_MOVED. La liquidacion si va en la moneda pedida, con el tipo de cambio
+// del sistema.
+//
+// La moneda y el tipo de cambio se resuelven primero: si no se puede liquidar,
+// ese es el motivo que importa, no la desviacion.
+func (s *Service) precioParaLiquidar(ctx context.Context, usd, visto decimal.Decimal, currency string) (decimal.Decimal, error) {
+	precio, err := s.convertirDesdeDolares(ctx, usd, currency)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	if err := comprobarDesviacion(visto, usd); err != nil {
+		return decimal.Zero, err
+	}
+	return precio, nil
+}
+
+// convertirDesdeDolares pasa el precio del feed a la moneda del monedero.
+func (s *Service) convertirDesdeDolares(ctx context.Context, precio decimal.Decimal, currency string) (decimal.Decimal, error) {
 	switch currency {
 	case "USD":
 		return precio, nil
@@ -87,17 +124,17 @@ func (s *Service) precioEn(ctx context.Context, asset, currency string) (decimal
 }
 
 // comprobarDesviacion compara el precio que el cliente dice haber visto contra
-// el que manda el servidor. Cero o negativo significa que el cliente no mando
-// ninguno, y entonces no hay nada que comparar: el precio del servidor rige
-// igual, esto solo protege a la persona de una sorpresa.
-func comprobarDesviacion(visto, actual decimal.Decimal) error {
-	if !visto.IsPositive() || !actual.IsPositive() {
+// el que manda el servidor, los dos en dolares. Cero o negativo significa que
+// el cliente no mando ninguno, y entonces no hay nada que comparar: el precio
+// del servidor rige igual, esto solo protege a la persona de una sorpresa.
+func comprobarDesviacion(visto, actualUSD decimal.Decimal) error {
+	if !visto.IsPositive() || !actualUSD.IsPositive() {
 		return nil
 	}
-	desvio := visto.Sub(actual).Abs().Div(actual)
+	desvio := visto.Sub(actualUSD).Abs().Div(actualUSD)
 	if desvio.GreaterThan(decimal.NewFromFloat(desviacionMaxima)) {
-		return fmt.Errorf("%w: se mostro %s y ahora vale %s", ErrPrecioMovido,
-			visto.StringFixed(2), actual.StringFixed(2))
+		return fmt.Errorf("%w: en pantalla %s USD, ahora %s USD", ErrPrecioMovido,
+			visto.StringFixed(2), actualUSD.StringFixed(2))
 	}
 	return nil
 }

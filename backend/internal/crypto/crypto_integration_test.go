@@ -172,8 +172,8 @@ func TestBuy_IgnoraLaCantidadYElPrecioDelCliente(t *testing.T) {
 
 	tx, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Amount:       d(1000),   // absurdo, a proposito
-		Price:        d(500000), // el del servidor, para pasar la guarda de desvio
+		Amount:       d(1000), // absurdo, a proposito
+		Price:        d(1000), // el que muestra la pantalla: dolares del feed, pasa la guarda de desvio
 		FromCurrency: "CRC",
 		FromAmount:   d(50000),
 	})
@@ -202,7 +202,7 @@ func TestBuy_RechazaUnPrecioQueNoEsElDelMercado(t *testing.T) {
 
 	_, err := svc.Buy(context.Background(), userID, &crypto.BuyRequest{
 		Asset:        "BTC",
-		Price:        d(1), // el mercado dice 500000
+		Price:        d(1), // el mercado dice 1000 dolares
 		FromCurrency: "CRC",
 		FromAmount:   d(50000),
 	})
@@ -354,7 +354,7 @@ func TestPriceAlert_CRUD(t *testing.T) {
 	// Add alert
 	alert, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
 		Asset:       "BTC",
-		TargetPrice: d(100000),
+		TargetPrice: d(1500), // el stub cotiza BTC a 1000 dolares
 		Direction:   "above",
 	})
 	if err != nil {
@@ -462,5 +462,156 @@ func TestUnTipoDeCambioViejoFrenaSoloLoQueCotizaEnColones(t *testing.T) {
 	})
 	if !errors.Is(err, crypto.ErrPrecioViejo) {
 		t.Fatalf("Buy en colones = %v, se esperaba ErrPrecioViejo", err)
+	}
+}
+
+// ── El precio visto se compara en dolares ──────────────────────────────────
+//
+// La pantalla muestra el precio del feed, en dolares, y lo manda tal cual sin
+// importar en que moneda se liquide. Vender para recibir colones —la opcion que
+// viene marcada— comparaba ese precio contra el ya convertido a colones y se
+// rechazaba SIEMPRE con PRICE_MOVED. El stub cotiza a 1000 dolares y el tipo de
+// cambio de estas pruebas es 500.
+
+func comprarSeisETH(t *testing.T, svc *crypto.Service, userID string) {
+	t.Helper()
+	if _, err := svc.Buy(context.Background(), userID, &crypto.BuyRequest{
+		Asset: "ETH", FromCurrency: "CRC", FromAmount: d(3000000),
+	}); err != nil {
+		t.Fatalf("comprar ETH: %v", err)
+	}
+}
+
+func saldoDeActivo(t *testing.T, svc *crypto.Service, userID, simbolo string) decimal.Decimal {
+	t.Helper()
+	activos, err := svc.GetAssets(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("GetAssets: %v", err)
+	}
+	for _, a := range activos {
+		if a.Symbol == simbolo {
+			return a.Balance
+		}
+	}
+	return decimal.Zero
+}
+
+func TestSell_EnColonesConElPrecioQueMostroLaPantalla(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	comprarSeisETH(t, svc, userID)
+
+	tx, err := svc.Sell(context.Background(), userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(0.5), Price: d(stubPriceAt(0)), ToCurrency: "CRC",
+	})
+	if err != nil {
+		t.Fatalf("vender a colones con el precio en dolares de la pantalla: %v", err)
+	}
+	// 0,5 ETH a 1000 dolares por 500 de tipo de cambio: 250.000 colones.
+	if !tx.Total.Equal(d(250000)) || !tx.Price.Equal(d(500000)) {
+		t.Fatalf("liquidado %s a %s la unidad, se esperaba 250000 a 500000", tx.Total, tx.Price)
+	}
+}
+
+func TestSell_EnColonesConElPrecioMovidoSeRechazaSinTocarElSaldo(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	comprarSeisETH(t, svc, userID)
+
+	_, err := svc.Sell(context.Background(), userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(0.5), Price: d(1030), ToCurrency: "CRC", // 3 %: pasa el 2 % tolerado
+	})
+	if !errors.Is(err, crypto.ErrPrecioMovido) {
+		t.Fatalf("vender a colones con el precio movido: err = %v, se esperaba ErrPrecioMovido", err)
+	}
+	if got := saldoDeActivo(t, svc, userID, "ETH"); !got.Equal(d(6)) {
+		t.Fatalf("saldo ETH = %s tras un rechazo, se esperaba 6", got)
+	}
+}
+
+func TestSell_EnDolaresConPrecioSinMoverYMovido(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	comprarSeisETH(t, svc, userID)
+	ctx := context.Background()
+
+	tx, err := svc.Sell(ctx, userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(0.5), Price: d(1000), ToCurrency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("vender a dolares con el precio sin mover: %v", err)
+	}
+	if !tx.Total.Equal(d(500)) || tx.Currency != "USD" {
+		t.Fatalf("liquidado %s %s, se esperaba 500 USD", tx.Total, tx.Currency)
+	}
+
+	_, err = svc.Sell(ctx, userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(0.5), Price: d(970), ToCurrency: "USD",
+	})
+	if !errors.Is(err, crypto.ErrPrecioMovido) {
+		t.Fatalf("vender a dolares con el precio movido: err = %v, se esperaba ErrPrecioMovido", err)
+	}
+}
+
+func TestBuy_EnColonesYEnDolaresComparaElPrecioEnDolares(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	ctx := context.Background()
+
+	casos := []struct {
+		nombre   string
+		moneda   string
+		gasto    float64
+		visto    float64
+		cantidad float64 // 0 = se espera ErrPrecioMovido
+	}{
+		{"colones, precio sin mover", "CRC", 50000, 1000, 0.1},
+		{"colones, dentro de la tolerancia", "CRC", 50000, 1015, 0.1},
+		{"colones, precio movido", "CRC", 50000, 1025, 0},
+		{"dolares, precio sin mover", "USD", 100, 1000, 0.1},
+		{"dolares, precio movido", "USD", 100, 1030, 0},
+	}
+	for _, c := range casos {
+		tx, err := svc.Buy(ctx, userID, &crypto.BuyRequest{
+			Asset: "BTC", FromCurrency: c.moneda, FromAmount: d(c.gasto), Price: d(c.visto),
+		})
+		if c.cantidad == 0 {
+			if !errors.Is(err, crypto.ErrPrecioMovido) {
+				t.Fatalf("%s: err = %v, se esperaba ErrPrecioMovido", c.nombre, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", c.nombre, err)
+		}
+		if !tx.Amount.Equal(d(c.cantidad)) {
+			t.Fatalf("%s: se compraron %s BTC, se esperaba %v", c.nombre, tx.Amount, c.cantidad)
+		}
+	}
+}
+
+// Las alertas se acotan contra el precio de mercado cuando el feed responde:
+// el stub cotiza BTC a 1000 dolares.
+func TestPriceAlert_ContraElPrecioDeMercado(t *testing.T) {
+	svc, userID := setupCryptoService(t)
+	ctx := context.Background()
+
+	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+		Asset: "BTC", TargetPrice: d(1500), Direction: "above",
+	}); err != nil {
+		t.Fatalf("una meta razonable se rechazo: %v", err)
+	}
+	for _, meta := range []float64{200000, 5} { // 200 veces el precio, y la doscientosava parte
+		if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+			Asset: "BTC", TargetPrice: d(meta), Direction: "above",
+		}); !errors.Is(err, crypto.ErrAlertaPrecioFueraDeRango) {
+			t.Fatalf("meta %v: err = %v, se esperaba ErrAlertaPrecioFueraDeRango", meta, err)
+		}
+	}
+	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+		Asset: "NOEXISTE", TargetPrice: d(100), Direction: "above",
+	}); !errors.Is(err, crypto.ErrAlertaActivoNoSoportado) {
+		t.Fatalf("activo inexistente: err = %v, se esperaba ErrAlertaActivoNoSoportado", err)
+	}
+
+	alertas, err := svc.GetPriceAlerts(ctx, userID)
+	if err != nil || len(alertas) != 1 {
+		t.Fatalf("solo la alerta valida debe quedar guardada: %+v (err %v)", alertas, err)
 	}
 }

@@ -55,11 +55,12 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 
 	// El precio y la cantidad de cripto los pone el servidor. Lo que decide el
 	// cliente es cuanto de SU plata gasta, que es lo unico suyo que hay aqui.
-	precio, err := s.precioEn(ctx, req.Asset, currency)
+	usd, err := s.precioEnDolares(ctx, req.Asset)
 	if err != nil {
 		return nil, err
 	}
-	if err := comprobarDesviacion(req.Price, precio); err != nil {
+	precio, err := s.precioParaLiquidar(ctx, usd, req.Price, currency)
+	if err != nil {
 		return nil, err
 	}
 	cantidad := req.FromAmount.Div(precio)
@@ -127,11 +128,12 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 
 	// Lo que el cliente decide es cuanto cripto vende; cuanto fiat recibe por
 	// el lo dice el servidor. Al reves era acreditarse el monto que uno quiera.
-	precio, err := s.precioEn(ctx, req.Asset, currency)
+	usd, err := s.precioEnDolares(ctx, req.Asset)
 	if err != nil {
 		return nil, err
 	}
-	if err := comprobarDesviacion(req.Price, precio); err != nil {
+	precio, err := s.precioParaLiquidar(ctx, usd, req.Price, currency)
+	if err != nil {
 		return nil, err
 	}
 	totalFiat := req.Amount.Mul(precio)
@@ -312,6 +314,12 @@ func (s *Service) GetPriceAlerts(ctx context.Context, userID string) ([]PriceAle
 }
 
 func (s *Service) AddPriceAlert(ctx context.Context, userID string, alert *PriceAlertRecord) (*PriceAlertRecord, error) {
+	if err := s.validarAlerta(ctx, alert); err != nil {
+		return nil, err
+	}
+	// El id lo pone el servidor: uno del cliente podia chocar con otra fila o
+	// no ser un UUID, y salir como un error crudo de la base.
+	alert.ID = ""
 	alert.UserID = userID
 	if err := s.repo.AddPriceAlert(ctx, alert); err != nil {
 		return nil, err
