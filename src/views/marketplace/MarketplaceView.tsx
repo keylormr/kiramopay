@@ -457,7 +457,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black uv-text-primary mb-1">
-          Marketplace
+          {t('home_marketplace')}
         </h1>
         <p className="uv-text-muted">Paga con KiramoPay en tus apps favoritas</p>
       </div>

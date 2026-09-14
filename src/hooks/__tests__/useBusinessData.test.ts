@@ -82,4 +82,40 @@ describe('useBusinessData', () => {
     // pantalla lee como "no hubo error".
     expect(result.current.error).not.toBe('');
   });
+
+  // Un solo fallo de GET /qr/merchants al recargar o al cambiar de perfil
+  // vaciaba la lista; App leia "ese comercio ya no es tuyo" y sacaba al cajero
+  // del modo negocio sin decir nada.
+  it('un fallo de la lista de comercios conserva la lista anterior y lo marca', async () => {
+    mocks.getMerchants
+      .mockResolvedValueOnce({ success: true, data: [COMERCIO] })
+      .mockResolvedValue({ success: false, error: { code: 'RATE_LIMITED', message: 'espera' } });
+    mocks.getMerchantPayments.mockResolvedValue({ success: true, data: [] });
+
+    const { result } = renderHook(() => useBusinessData());
+    await waitFor(() => expect(result.current.active?.id).toBe('m1'));
+    expect(result.current.merchantsFailed).toBe(false);
+
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.merchantsFailed).toBe(true));
+    expect(result.current.merchants).toHaveLength(1);
+    expect(result.current.active?.id).toBe('m1');
+    expect(result.current.retrying).toBe(true);
+  });
+
+  it('la lista traida con exito reemplaza a la anterior y apaga el fallo', async () => {
+    mocks.getMerchants
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } })
+      .mockResolvedValue({ success: true, data: [] });
+    mocks.getMerchantPayments.mockResolvedValue({ success: true, data: [] });
+
+    const { result } = renderHook(() => useBusinessData());
+    await waitFor(() => expect(result.current.merchantsFailed).toBe(true));
+
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.merchantsFailed).toBe(false));
+    // Ahora si es un hecho: el comercio no esta en la lista.
+    expect(result.current.active).toBeNull();
+    expect(result.current.retrying).toBe(false);
+  });
 });

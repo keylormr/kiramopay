@@ -76,11 +76,13 @@ export function exportTransactionsJSON(transactions: Transaction[], filename?: s
     count: transactions.length,
     // Por moneda, por la misma razon que el CSV: un total que mezcla colones y
     // dolares no es un total de nada.
+    // Redondeado a centimos, como el CSV: los totales se suman en coma flotante
+    // y un neto de -84550.55 salia escrito -84550.54999999999.
     summaryByCurrency: resumirPorMoneda(transactions).map((r) => ({
       currency: r.moneda,
-      totalIncome: r.ingresos,
-      totalExpenses: r.egresos,
-      net: r.neto,
+      totalIncome: aCentimos(r.ingresos),
+      totalExpenses: aCentimos(r.egresos),
+      net: aCentimos(r.neto),
     })),
     transactions: transactions.map((tx) => ({
       id: tx.id,
@@ -154,6 +156,10 @@ export async function shareTransactions(transactions: Transaction[]): Promise<bo
 }
 
 // --- Helpers ---
+function aCentimos(monto: number): number {
+  return Math.round(monto * 100) / 100;
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
