@@ -1308,6 +1308,22 @@ const hi: TranslationKeys = {
   order_no_integration: 'इस ऑर्डर सेवा के साथ हमारा अभी इंटीग्रेशन नहीं है, इसलिए ऑर्डर रेस्टोरेंट तक नहीं पहुंचेगा। कुछ भी नहीं काटा गया: आपका बैलेंस वैसा ही है।',
   ride_price_after_quote: 'कीमत और समय तब दिखेंगे जब सेवा उनका अनुमान देगी।',
   order_delivery_fee_pending: 'डिलीवरी शुल्क ऑर्डर करते समय सेवा तय करती है।',
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: 'KiramoPay की नई सुविधाएं',
+  banner_plans_title: 'ज़्यादा सहायक, ज़्यादा लक्ष्य',
+  banner_plans_body: 'Plus और Pro जल्द आ रहे हैं: सहायक से ज़्यादा सवाल, ज़्यादा बचत लक्ष्य और ज़्यादा कार्ड।',
+  banner_plans_cta: 'प्लान देखें',
+  banner_referral_title: 'आमंत्रित करें और पॉइंट्स कमाएं',
+  banner_referral_body: 'अपना लिंक साझा करें और पंजीकरण करने वाले हर व्यक्ति पर {puntos} पॉइंट्स कमाएं।',
+  banner_referral_cta: 'मेरा लिंक साझा करें',
+  banner_qr_title: 'बिना कमीशन QR से शुल्क लें',
+  banner_qr_body: 'लोगों के बीच, QR से शुल्क लेना और भुगतान करना मुफ़्त है।',
+  banner_qr_cta: 'अभी शुल्क लें',
+  banner_close_card: 'कार्ड बंद करें',
+  banner_prev: 'पिछला कार्ड',
+  banner_next: 'अगला कार्ड',
+  banner_go_to: 'कार्ड {n} पर जाएं',
 };
 
 export default hi;

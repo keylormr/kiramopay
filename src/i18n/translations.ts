@@ -1380,6 +1380,22 @@ export type TranslationKeys = {
   order_no_integration: string;
   ride_price_after_quote: string;
   order_delivery_fee_pending: string;
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: string;
+  banner_plans_title: string;
+  banner_plans_body: string;
+  banner_plans_cta: string;
+  banner_referral_title: string;
+  banner_referral_body: string;
+  banner_referral_cta: string;
+  banner_qr_title: string;
+  banner_qr_body: string;
+  banner_qr_cta: string;
+  banner_close_card: string;
+  banner_prev: string;
+  banner_next: string;
+  banner_go_to: string;
 };
 
 import es from './languages/es';

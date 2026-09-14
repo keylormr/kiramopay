@@ -1309,6 +1309,22 @@ const zhCn: TranslationKeys = {
   order_no_integration: '我们尚未接入这个订餐服务，订单无法送到餐厅。没有扣款：你的余额保持不变。',
   ride_price_after_quote: '服务方给出报价后，价格和时间才会显示。',
   order_delivery_fee_pending: '配送费由服务方在下单时确认。',
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: 'KiramoPay 新动态',
+  banner_plans_title: '更多助理，更多目标',
+  banner_plans_body: 'Plus 和 Pro 即将上线：更多助理咨询次数、更多储蓄目标、更多卡片。',
+  banner_plans_cta: '查看套餐',
+  banner_referral_title: '邀请好友赚积分',
+  banner_referral_body: '分享你的链接，每有一位好友注册即可获得 {puntos} 积分。',
+  banner_referral_cta: '分享我的链接',
+  banner_qr_title: '扫码收款零手续费',
+  banner_qr_body: '个人之间用二维码收款和付款都是免费的。',
+  banner_qr_cta: '立即收款',
+  banner_close_card: '关闭卡片',
+  banner_prev: '上一张卡片',
+  banner_next: '下一张卡片',
+  banner_go_to: '前往第 {n} 张卡片',
 };
 
 export default zhCn;
