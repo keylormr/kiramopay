@@ -52,12 +52,37 @@ const telefonoSinCuenta = "+50677776666"
 func TestAddContact_Success(t *testing.T) {
 	svc, userID, _ := setupSinpeService(t)
 	ctx := context.Background()
-	contact, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC")
+	contact, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC", false)
 	if err != nil {
 		t.Fatalf("AddContact() error: %v", err)
 	}
 	if contact.Name != "Maria Lopez" || contact.Phone != "+50688885678" {
 		t.Fatalf("unexpected contact %+v", contact)
+	}
+}
+
+// El "Marcar como favorito" del formulario se perdía en silencio: el POST
+// nunca lo mandaba y el INSERT tampoco lo guardaba, así que is_favorite
+// quedaba siempre en su default (false) sin importar lo que eligiera el
+// usuario.
+func TestAddContact_Favorite(t *testing.T) {
+	svc, userID, _ := setupSinpeService(t)
+	ctx := context.Background()
+
+	contact, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC", true)
+	if err != nil {
+		t.Fatalf("AddContact() error: %v", err)
+	}
+	if !contact.IsFav {
+		t.Fatalf("contact.IsFav = false, se esperaba true (recien creado como favorito)")
+	}
+
+	contacts, err := svc.GetContacts(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetContacts: %v", err)
+	}
+	if len(contacts) != 1 || !contacts[0].IsFav {
+		t.Fatalf("contactos tras GetContacts = %+v, se esperaba is_favorite=true persistido", contacts)
 	}
 }
 
@@ -68,11 +93,11 @@ func TestAddContact_Success(t *testing.T) {
 func TestAddContact_Duplicate(t *testing.T) {
 	svc, userID, _ := setupSinpeService(t)
 	ctx := context.Background()
-	if _, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC"); err != nil {
+	if _, err := svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC", false); err != nil {
 		t.Fatalf("first AddContact: %v", err)
 	}
 
-	_, err := svc.AddContact(ctx, userID, "+50688885678", "Maria L.", "BCR")
+	_, err := svc.AddContact(ctx, userID, "+50688885678", "Maria L.", "BCR", false)
 	if err == nil {
 		t.Fatal("se esperaba un rechazo por contacto duplicado")
 	}
@@ -149,8 +174,8 @@ func TestHandlerAddContact_Conflict(t *testing.T) {
 func TestGetContacts_Success(t *testing.T) {
 	svc, userID, _ := setupSinpeService(t)
 	ctx := context.Background()
-	_, _ = svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC")
-	_, _ = svc.AddContact(ctx, userID, "+50688889999", "Carlos Perez", "BCR")
+	_, _ = svc.AddContact(ctx, userID, "+50688885678", "Maria Lopez", "BAC", false)
+	_, _ = svc.AddContact(ctx, userID, "+50688889999", "Carlos Perez", "BCR", false)
 	contacts, err := svc.GetContacts(ctx, userID)
 	if err != nil {
 		t.Fatalf("GetContacts: %v", err)
@@ -199,6 +224,30 @@ func TestSend_ToOwnNumber_Rejected(t *testing.T) {
 	}, "")
 	if err == nil {
 		t.Fatal("expected self-send to be rejected")
+	}
+}
+
+// Un telefono mal formado (no son 8 digitos de movil CR) se rechaza con su
+// propio codigo (INVALID_PHONE), no con el generico SINPE_FAILED: el cliente
+// necesita distinguirlo para mostrar un mensaje traducido en vez del ingles
+// crudo que devolvia antes fmt.Errorf.
+func TestSend_TelefonoInvalido_Rechazado(t *testing.T) {
+	svc, userID, _ := setupSinpeService(t)
+	ctx := context.Background()
+
+	_, err := svc.Send(ctx, userID, &sinpe.SendRequest{
+		// Lo que mandaba el frontend cuando el campo manual recortaba con
+		// slice(0,8) en vez de slice(-8): "+50688880005" tecleado terminaba
+		// en "50688880" (le faltan los ultimos digitos reales, le sobran los
+		// del prefijo "506"), y normalizarTelefonoCR lo volvia a anteponer.
+		Phone:  "+50650688880",
+		Amount: 1000000,
+	}, "")
+	if err == nil {
+		t.Fatal("se acepto un envio con telefono invalido")
+	}
+	if !errors.Is(err, sinpe.ErrInvalidPhone) {
+		t.Fatalf("error = %v, se esperaba ErrInvalidPhone (el handler lo mapea a INVALID_PHONE)", err)
 	}
 }
 

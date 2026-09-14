@@ -6451,6 +6451,7 @@ export interface components {
         AddSinpeContactRequest: {
             name: string;
             phone: string;
+            is_favorite?: boolean;
         };
         SinpeSendRequest: {
             to_phone: string;

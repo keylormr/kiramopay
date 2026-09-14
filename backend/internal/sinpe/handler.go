@@ -43,9 +43,10 @@ func (h *Handler) AddContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Phone string `json:"phone"`
-		Name  string `json:"name"`
-		Bank  string `json:"bank"`
+		Phone      string `json:"phone"`
+		Name       string `json:"name"`
+		Bank       string `json:"bank"`
+		IsFavorite bool   `json:"is_favorite"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -61,7 +62,7 @@ func (h *Handler) AddContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contact, err := h.service.AddContact(r.Context(), userID, req.Phone, req.Name, req.Bank)
+	contact, err := h.service.AddContact(r.Context(), userID, req.Phone, req.Name, req.Bank, req.IsFavorite)
 	if err != nil {
 		var exists *ContactExistsError
 		if errors.As(err, &exists) {
@@ -126,7 +127,7 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 				"MFA challenge required for amounts >= 100,000 CRC")
 			return
 		}
-		// These two get their own codes so the client can translate them and
+		// These get their own codes so the client can translate them and
 		// explain what to do, instead of surfacing an English sentence.
 		if errors.Is(err, ErrRecipientNotUser) {
 			response.Error(w, http.StatusBadRequest, "RECIPIENT_NOT_USER", err.Error())
@@ -134,6 +135,10 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrSelfSend) {
 			response.Error(w, http.StatusBadRequest, "SELF_SEND", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidPhone) {
+			response.Error(w, http.StatusBadRequest, "INVALID_PHONE", err.Error())
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "SINPE_FAILED", err.Error())

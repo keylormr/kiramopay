@@ -45,10 +45,14 @@ export class HttpSinpeRepository implements ISinpeRepository {
       phone: string;
       name: string;
       bank: string;
+      is_favorite?: boolean;
     }>('/api/v1/sinpe/contacts', {
       phone: telefono,
       name: contact.name,
       bank: contact.bank || '',
+      // Antes se perdía en silencio: el POST nunca mandaba este campo, así
+      // que marcar "favorito" al guardar no sobrevivía a un refresco.
+      is_favorite: contact.isFavorite ?? false,
     });
 
     if (!res.success || !res.data) {
