@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
+import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import { useApp } from '@/hooks/useApp';
@@ -338,10 +339,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
           <div>
             <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('escrow_amount')}</label>
-            <input
+            <CampoMonto
               value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              inputMode="decimal"
+              onChange={setAmount}
               placeholder="0.00"
               className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
             />

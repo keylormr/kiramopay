@@ -4,6 +4,7 @@ import { useAccountStore } from '@/stores/account.store';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
+import { CampoMonto } from '@/components/CampoMonto';
 import type { Budget } from '@/types';
 import {
   UtensilsCrossed,
@@ -362,12 +363,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
             <label className="block text-sm font-medium uv-text-secondary mb-1">
               {t('amount')}
             </label>
-            <input
-              type="number"
+            <CampoMonto
+              decimals={0}
               value={formLimit}
-              onChange={(e) => setFormLimit(e.target.value)}
+              onChange={setFormLimit}
               placeholder="80000"
-              min="0"
               className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-2 text-sm outline-none focus:border-primary dark:text-white"
             />
           </div>
