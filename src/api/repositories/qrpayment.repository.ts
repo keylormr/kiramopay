@@ -1,4 +1,5 @@
-import type { ApiResponse } from '../types';
+import type { ApiResponse, ArchivoDescargado } from '../types';
+import type { PlanComercio } from './plans.repository';
 
 export type MerchantVerificationStatus = 'pending' | 'verified' | 'rejected';
 
@@ -17,7 +18,17 @@ export interface QRMerchant {
   legalName: string;
   verificationStatus: MerchantVerificationStatus;
   rejectionReason?: string;
+  /** La comision que fijo la plataforma, en puntos basicos (50 = 0.5%). */
   commissionBps: number;
+  /**
+   * La que se cobra HOY: la menor entre commissionBps y la promocion mientras
+   * dure. Falta solo en respuestas de un servidor anterior: se lee commissionBps.
+   */
+  comisionEfectivaBps?: number;
+  /** Fin de la promocion de entrada (ISO-8601); null si nunca la tuvo. */
+  promoHasta?: string | null;
+  /** base o analitica; falta en servidores anteriores y se lee como base. */
+  plan?: PlanComercio;
   /** Role of the CURRENT user on this business; drives which UI is shown. */
   role: MerchantRole;
 }
@@ -72,12 +83,39 @@ export interface BusinessReportBucket {
   count: number;
 }
 
+/** Actual menos anterior, en unidades mayores. Los porcentajes son null si el anterior fue 0. */
+export interface BusinessReportDelta {
+  gross: number;
+  fee: number;
+  net: number;
+  count: number;
+  /** Porcentaje con dos decimales (12.5 = 12.5%), o null. */
+  grossPct: number | null;
+  netPct: number | null;
+  countPct: number | null;
+}
+
+/** La misma ventana corrida `days` dias atras y cortada a la misma hora. */
+export interface BusinessReportComparison {
+  previousFrom: string;
+  previousTo: string;
+  previousTotals: BusinessReportBucket;
+  delta: BusinessReportDelta;
+}
+
 export interface BusinessReport {
   days: number;
+  /** YYYY-MM-DD en la zona del cliente; `to` es hoy. */
+  from?: string;
+  to?: string;
   totals: BusinessReportBucket;
   daily: BusinessReportDay[];
   byLocation: BusinessReportBucket[];
   byCollector: BusinessReportBucket[];
+  /** El plan con el que el servidor armo el reporte. */
+  plan?: PlanComercio;
+  /** Solo con el plan analitica. */
+  comparison?: BusinessReportComparison;
 }
 
 /**
@@ -252,6 +290,11 @@ export interface IQRPaymentRepository {
   getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>>;
   /** Aggregated sales report (daily, by location, by collector). Owner/manager. */
   getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>>;
+  /**
+   * El mismo reporte en CSV (plan analitica). Sin el plan responde
+   * PLAN_REQUIRED; fuera del equipo, NOT_FOUND.
+   */
+  exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>>;
   // Team (owner manages; identified by the cedula the employee registered with).
   getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>>;
   addStaff(merchantId: string, cedula: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>>;
@@ -271,4 +314,6 @@ export interface IQRPaymentRepository {
   approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>>;
   rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>>;
   setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>>;
+  /** Plan del comercio a mano, para pilotos. No cobra nada; queda en la auditoria. */
+  setMerchantPlan(merchantId: string, plan: PlanComercio): Promise<ApiResponse<QRMerchant>>;
 }

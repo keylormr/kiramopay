@@ -6,7 +6,7 @@ import type {
   UpdateLimitsRequest,
 } from '../../repositories/cards.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 import { HttpClient } from './client';
 
 export class HttpCardsRepository implements ICardsRepository {
@@ -14,7 +14,11 @@ export class HttpCardsRepository implements ICardsRepository {
 
   async createCard(request: CreateCardRequest): Promise<ApiResponse<VirtualCard>> {
     const res = await this.client.post<RawCard>('/api/v1/cards', request);
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    // El codigo y el detalle del servidor viajan intactos: CARD_LIMIT trae
+    // {plan, limite, actuales} y la pantalla lo necesita para explicar el tope.
+    if (!res.success || !res.data) {
+      return apiErrorConDetalle(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed', res.error?.details);
+    }
     return apiSuccess(mapCard(res.data));
   }
 

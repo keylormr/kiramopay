@@ -277,6 +277,17 @@ const Layout = () => {
   // Which SINPE sub-tab to open when navigating there from Home's quick actions.
   const [sinpeTab, setSinpeTab] = useState<'send' | 'receive' | 'history'>('send');
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
+  // Planes tambien se abre desde ahorro, tarjetas y lealtad (al llegar al tope
+  // del plan): al cerrarlo se vuelve a esa pantalla, no al inicio.
+  const [volverDePlanes, setVolverDePlanes] = useState<OverlayView>(null);
+  const abrirPlanesDesde = (origen: OverlayView) => {
+    setVolverDePlanes(origen);
+    setOverlayView('plans');
+  };
+  const cerrarPlanes = () => {
+    setOverlayView(volverDePlanes);
+    setVolverDePlanes(null);
+  };
   const [showLanguage, setShowLanguage] = useState(false);
   const { state, dispatch } = useApp();
   const { t, currentLanguage } = useLanguage();
@@ -607,13 +618,13 @@ const Layout = () => {
           <AnalyticsView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'savings' && (
-          <SavingsView onClose={() => setOverlayView(null)} />
+          <SavingsView onClose={() => setOverlayView(null)} onOpenPlans={() => abrirPlanesDesde('savings')} />
         )}
         {overlayView === 'splitpay' && (
           <SplitPayView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'loyalty' && (
-          <LoyaltyView onClose={() => setOverlayView(null)} />
+          <LoyaltyView onClose={() => setOverlayView(null)} onOpenPlans={() => abrirPlanesDesde('loyalty')} />
         )}
         {overlayView === 'escrow' && (
           <EscrowView onClose={() => setOverlayView(null)} />
@@ -634,7 +645,7 @@ const Layout = () => {
           <AdminPromocionesView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'plans' && (
-          <PlansView onClose={() => setOverlayView(null)} />
+          <PlansView onClose={cerrarPlanes} />
         )}
         {overlayView === 'sessions' && (
           <SessionsView onClose={() => setOverlayView(null)} />
@@ -649,7 +660,7 @@ const Layout = () => {
         )}
         {overlayView === 'cards' && (
           <OverlayShell title={t('home_cards')} onClose={() => setOverlayView(null)}>
-            <CardsView />
+            <CardsView onOpenPlans={() => abrirPlanesDesde('cards')} />
           </OverlayShell>
         )}
       </Suspense>

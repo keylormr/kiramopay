@@ -9,6 +9,7 @@ import { BusinessTeamSheet } from './BusinessTeamSheet';
 import { BusinessLocationsSheet } from './BusinessLocationsSheet';
 import { BusinessCatalogSheet } from './BusinessCatalogSheet';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
+import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -33,7 +34,7 @@ interface Props {
 }
 
 export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfile, onBackToPersonal, onUpdated }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { state } = useApp();
   const ccy = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.ccy ?? 'CRC';
   const cat = t(`merchant_cat_${merchant.category}` as Parameters<typeof t>[0]);
@@ -53,6 +54,27 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
   const [legalName, setLegalName] = useState(merchant.legalName);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [idCopiado, setIdCopiado] = useState(false);
+  // El instante con el que se compara el fin de la promocion, tomado una vez al
+  // montar: leer el reloj en cada render rompe la regla de pureza de React.
+  const [ahora] = useState(() => Date.now());
+
+  // Lo que se cobra HOY lo decide el servidor (promocion incluida): esta
+  // pantalla no recalcula la comision, la muestra.
+  const efectivaBps = merchant.comisionEfectivaBps ?? merchant.commissionBps;
+  const finPromo = merchant.promoHasta ? new Date(merchant.promoHasta).getTime() : Number.NaN;
+  const promoVigente = Number.isFinite(finPromo) && finPromo > ahora && efectivaBps < merchant.commissionBps;
+  const promoTerminada = Number.isFinite(finPromo) && finPromo <= ahora;
+
+  const copiarId = async () => {
+    try {
+      await navigator.clipboard.writeText(merchant.id);
+      setIdCopiado(true);
+      setTimeout(() => setIdCopiado(false), 2000);
+    } catch {
+      // Sin portapapeles el identificador sigue a la vista para copiarlo a mano.
+    }
+  };
 
   const openEdit = () => {
     setName(merchant.name);
@@ -114,11 +136,60 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           label={t('merchant_cedula')}
           value={`${merchant.cedula} · ${merchant.cedulaType === 'juridica' ? t('merchant_cedula_juridica') : t('merchant_cedula_fisica')}`}
         />
-        <Row label={t('merchant_commission')} value={`${(merchant.commissionBps / 100).toFixed(2)}%`} />
+        <Row label={t('business_commission_today')} value={porcentajeDeBps(efectivaBps)} />
+        <Row
+          label={t('business_plan_label')}
+          value={t(merchant.plan === 'analitica' ? 'business_plan_analitica' : 'business_plan_base')}
+        />
         {merchant.description && <Row label={t('merchant_desc')} value={merchant.description} />}
       </div>
 
+      {promoVigente && (
+        <div className="flex gap-3 rounded-2xl bg-[var(--color-success-soft)] p-4">
+          <Icons.Percent
+            size={18}
+            className="mt-0.5 shrink-0 text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]"
+            aria-hidden="true"
+          />
+          <p className="text-sm font-semibold leading-relaxed text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]">
+            {rellenar(t('business_promo_until'), {
+              pct: porcentajeDeBps(efectivaBps),
+              fecha: fechaLarga(merchant.promoHasta, language),
+              std: porcentajeDeBps(merchant.commissionBps),
+            })}
+          </p>
+        </div>
+      )}
+      {promoTerminada && (
+        <p className="text-xs uv-text-muted px-1">
+          {rellenar(t('business_promo_ended'), { fecha: fechaLarga(merchant.promoHasta, language) })}
+        </p>
+      )}
+
       <p className="text-xs uv-text-muted px-1">{t('business_commission_note')}</p>
+
+      {/* Para un piloto el administrador asigna el plan por este identificador. */}
+      {isOwner && (
+        <div className="uv-surface-1 rounded-2xl uv-shadow-soft px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm uv-text-muted">{t('business_merchant_id')}</p>
+              <p className="mt-0.5 font-mono text-xs uv-text-primary break-all">{merchant.id}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void copiarId()}
+              aria-label={`${t('copy')} ${t('business_merchant_id')}`}
+              className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center uv-text-secondary hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] uv-focus-ring"
+            >
+              {idCopiado ? <Icons.Check size={18} /> : <Icons.Copy size={18} />}
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs uv-text-muted" aria-live="polite">
+            {idCopiado ? t('business_merchant_id_copied') : t('business_merchant_id_hint')}
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2.5">
         {isOwner && (
