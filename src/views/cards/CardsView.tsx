@@ -170,8 +170,12 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
     const res = await api.cancelCard(card.id);
     setBusy(false);
     setShowCancel(false);
-    if (res.success) await load();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    if (res.success) {
+      // Cancelar libera un lugar del tope: el aviso de un 409 anterior ya no
+      // es verdad y escondia el boton de crear otra hasta recargar.
+      setTopeServidor(null);
+      await load();
+    } else setError(res.error?.message || t('assistant_action_failed'));
   };
 
   const copyNumber = async () => {
@@ -370,16 +374,28 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
           ) : enTope && topeTarjetas !== null ? (
             avisoTope({ plan, limite: topeTarjetas, actuales: ocupan }, false)
           ) : (
-            <Button
-              variant="secondary"
-              size="lg"
-              fullWidth
-              onClick={handleCreate}
-              disabled={busy}
-              leftIcon={<Icons.Plus size={18} />}
-            >
-              {busy ? t('processing') : t('cards_create_another')}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                onClick={handleCreate}
+                disabled={busy}
+                leftIcon={<Icons.Plus size={18} />}
+              >
+                {busy ? t('processing') : t('cards_create_another')}
+              </Button>
+              {/* El tope se ve ANTES de chocar con el: cuantas quedan. */}
+              {topeTarjetas !== null && (
+                <p className="text-center text-xs uv-text-muted tabular-nums">
+                  {rellenar(t('cards_usage'), {
+                    actuales: ocupan,
+                    limite: topeTarjetas,
+                    plan: t(`plans_name_${plan}`),
+                  })}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
@@ -446,7 +462,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
           {/* El numero no es de ninguna red de pago y falla a proposito la
               verificacion que usan todas las tarjetas: se avisa, para que
               nadie intente usarlo en un comercio. */}
-          <p className="text-sm rounded-xl px-3 py-2 bg-[var(--color-warning-soft)] text-[var(--color-warning)]">
+          <p className="text-sm rounded-xl px-3 py-2 bg-[var(--color-warning-soft)] text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]">
             {t('card_decorative_note')}
           </p>
           {revealed && (

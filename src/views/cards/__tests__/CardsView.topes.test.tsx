@@ -92,6 +92,42 @@ describe('CardsView y el tope del plan', () => {
     expect(screen.getByRole('button', { name: /•••• 1113/ })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  // El tope se veia solo al chocar con el. Ahora se ve antes: cuantas quedan.
+  it('con Plus y una tarjeta dice cuantas permite el plan antes de llegar al tope', async () => {
+    conPlan('plus');
+    mocks.api.cards.getCards.mockResolvedValue({ success: true, data: [tarjeta('c1', '1113')] });
+    pintar();
+
+    expect(await screen.findByRole('button', { name: /Crear otra tarjeta/ })).toBeInTheDocument();
+    expect(screen.getByText('Tienes 1 de las 3 tarjetas que permite tu plan Plus.')).toBeInTheDocument();
+  });
+
+  // Tras un 409 CARD_LIMIT el aviso se quedaba aunque se cancelara una
+  // tarjeta: el boton de crear otra no volvia hasta recargar.
+  it('cancelar una tarjeta despues de un CARD_LIMIT vuelve a ofrecer crear otra', async () => {
+    conPlan('plus');
+    mocks.api.cards.getCards
+      .mockResolvedValueOnce({ success: true, data: [tarjeta('c1', '1113'), tarjeta('c2', '2224')] })
+      .mockResolvedValue({ success: true, data: [tarjeta('c2', '2224')] });
+    mocks.api.cards.createCard.mockResolvedValue({
+      success: false,
+      error: { code: 'CARD_LIMIT', message: 'card limit reached', details: { plan: 'plus', limite: 3, actuales: 3 } },
+    });
+    mocks.api.cards.cancelCard.mockResolvedValue({ success: true });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: /Crear otra tarjeta/ }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Tu plan Plus permite 3 tarjetas activas.');
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar tarjeta' }));
+    const botones = await screen.findAllByRole('button', { name: 'Cancelar tarjeta' });
+    await user.click(botones[botones.length - 1]);
+
+    expect(await screen.findByRole('button', { name: /Crear otra tarjeta/ })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('cuando el servidor responde CARD_LIMIT lo explica con su detalle, sin error generico', async () => {
     conPlan('plus');
     mocks.api.cards.getCards.mockResolvedValue({ success: true, data: [tarjeta('c1', '1113')] });
