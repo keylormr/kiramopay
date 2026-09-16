@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,14 +18,17 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 // ── Cards ────────────────────────────────────────────────────────────────────
 
-func (r *Repository) CreateCard(ctx context.Context, card *VirtualCard) error {
+// CrearEnTx inserta la tarjeta por la transaccion del tope del plan. No hay
+// variante por el pool a proposito: una tarjeta creada por fuera de esa
+// transaccion no la veria el conteo de otra peticion simultanea.
+func CrearEnTx(ctx context.Context, tx pgx.Tx, card *VirtualCard) error {
 	// PCI-DSS: the full PAN is NEVER persisted. It is returned to the client
 	// exactly once in the creation response (card.CardNumber in memory) and
 	// then discarded. The DB only ever holds the masked form + last4. Real
 	// issuance must hold the PAN at a PCI-Level-1 provider, referenced by
 	// provider_card_id — not in our own database.
 	maskedPAN := "•••• •••• •••• " + card.Last4
-	_, err := r.db.Exec(ctx,
+	_, err := tx.Exec(ctx,
 		`INSERT INTO virtual_cards (id, user_id, card_number, last4, expiry_month, expiry_year,
 		 cardholder_name, brand, type, currency, status, daily_limit, monthly_limit, atm_limit)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
@@ -78,6 +82,16 @@ func (r *Repository) GetUserCards(ctx context.Context, userID string) ([]Virtual
 		cardList = append(cardList, card)
 	}
 	return cardList, nil
+}
+
+// ContarActivasEnTx cuenta las tarjetas que ocupan lugar en el tope del plan:
+// las activas y las congeladas.
+func ContarActivasEnTx(ctx context.Context, tx pgx.Tx, userID string) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM virtual_cards WHERE user_id = $1::uuid AND status IN ('active', 'frozen')`,
+		userID).Scan(&n)
+	return n, err
 }
 
 func (r *Repository) CountUserCards(ctx context.Context, userID string) (int, error) {

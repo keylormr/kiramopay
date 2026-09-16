@@ -9,6 +9,8 @@ import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import type { Transaction } from '@/types';
+import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
+import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
@@ -39,10 +41,12 @@ const iconLookup: Record<string, React.FC<{ size?: number; className?: string; s
   star: Icons.Star,
 };
 
-export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => void }> = ({ onClose, onOpenPlans }) => {
   const { t } = useLanguage();
   const { state, dispatch } = useApp();
   const { goals, addGoal, removeGoal, setGoals, updateGoal } = useSavingsStore();
+  const plan = usePlanPersonal();
+  const tarifas = useTarifas();
 
   // Una consulta que falla NO es una lista vacia. Sin estas dos banderas la
   // pantalla afirmaba "Total ahorrado 0" y "Sin metas de ahorro" cuando lo
@@ -120,6 +124,27 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [metaAEliminar, setMetaAEliminar] = useState<SavingsGoal | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
+  // El tope del plan. Toda meta cuenta, igual que en el servidor: eliminar una
+  // devuelve lo ahorrado y la saca. null es "sin tope".
+  const topeMetas = tarifas.planes[plan].topes.metas;
+  const enTope = topeMetas !== null && goals.length >= topeMetas;
+  // Lo que respondio el servidor en un 409 manda sobre el calculo local.
+  const [topeServidor, setTopeServidor] = useState<TopeAlcanzado | null>(null);
+  const [verTope, setVerTope] = useState(false);
+  const tope = topeServidor ?? { plan, limite: topeMetas ?? 0, actuales: goals.length };
+
+  // Antes de abrir el formulario: si ya esta en el tope, se dice ahi mismo en
+  // vez de dejarle llenar una meta que el servidor va a rechazar.
+  const abrirNuevaMeta = () => {
+    if (enTope) {
+      setTopeServidor(null);
+      setVerTope(true);
+      return;
+    }
+    setErrorHoja(null);
+    setShowAddSheet(true);
+  };
+
   // New goal form
   const [goalName, setGoalName] = useState('');
   const [goalTarget, setGoalTarget] = useState('');
@@ -153,6 +178,15 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         color: goalColor,
       });
       if (!res.success || !res.data) {
+        const alTope = topeDelError(res.error, 'SAVINGS_GOAL_LIMIT');
+        if (alTope) {
+          // Un "no se pudo crear" a secas no le dice a nadie que es por su
+          // plan: se cierra el formulario (lo escrito queda) y se explica.
+          setShowAddSheet(false);
+          setTopeServidor(alTope);
+          setVerTope(true);
+          return;
+        }
         setErrorHoja(t('savings_err_create'));
         return;
       }
@@ -258,7 +292,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </button>
         <h1 className="text-lg font-bold">{t('savings_title')}</h1>
         <button
-          onClick={() => setShowAddSheet(true)}
+          onClick={abrirNuevaMeta}
           className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]"
           aria-label={t('savings_add_goal')}
         >
@@ -329,6 +363,32 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         </div>
 
+        {enTope && topeMetas !== null && (
+          <div className="mx-4 mt-2 flex gap-3 rounded-2xl uv-surface-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
+            <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold leading-relaxed uv-text-primary">
+                {mensajeDeTope(t, 'goals', plan, topeMetas, tarifas)}
+              </p>
+              {goals.length > topeMetas && (
+                <p className="mt-1 text-xs leading-relaxed uv-text-secondary">
+                  {rellenar(t('plans_limit_keep'), { actuales: goals.length })}
+                </p>
+              )}
+              {onOpenPlans && (
+                <button
+                  type="button"
+                  onClick={onOpenPlans}
+                  className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] uv-focus-ring"
+                >
+                  {t('plans_limit_see_plans')}
+                  <Icons.ChevronRight size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Goals List */}
         {goals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 px-4">
@@ -340,7 +400,7 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <Button
               variant="primary"
               size="md"
-              onClick={() => setShowAddSheet(true)}
+              onClick={abrirNuevaMeta}
             >
               {t('savings_create_first')}
             </Button>
@@ -581,6 +641,30 @@ export const SavingsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           })()}
         </BottomSheet>
       )}
+
+      {/* El tope del plan: antes de intentar, o cuando el servidor lo dijo. */}
+      <BottomSheet isOpen={verTope} onClose={() => setVerTope(false)} title={t('plans_limit_title')}>
+        <div className="space-y-4 pb-2">
+          <p className="text-[15px] leading-relaxed uv-text-primary">
+            {mensajeDeTope(t, 'goals', tope.plan, tope.limite, tarifas)}
+          </p>
+          {tope.limite > 0 && tope.actuales > tope.limite && (
+            <p className="text-sm leading-relaxed uv-text-secondary">
+              {rellenar(t('plans_limit_keep'), { actuales: tope.actuales })}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <Button variant="secondary" size="lg" fullWidth onClick={() => setVerTope(false)}>
+              {t('plans_limit_ok')}
+            </Button>
+            {onOpenPlans && (
+              <Button size="lg" fullWidth onClick={() => { setVerTope(false); onOpenPlans(); }}>
+                {t('plans_limit_see_plans')}
+              </Button>
+            )}
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* Confirmacion de borrado */}
       <BottomSheet

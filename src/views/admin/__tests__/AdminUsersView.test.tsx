@@ -12,6 +12,7 @@ const mockApi = vi.hoisted(() => ({
     blockUser: vi.fn(),
     unblockUser: vi.fn(),
     setUserExpiry: vi.fn(),
+    setUserPlan: vi.fn(),
   },
 }));
 
@@ -34,6 +35,7 @@ const keilor: AdminUser = {
   blockedReason: '',
   blockedByName: '',
   expiresAt: null,
+  plan: 'free',
 };
 
 const keilorConVencimiento: AdminUser = {
@@ -239,6 +241,69 @@ describe('AdminUsersView', () => {
 
     await waitFor(() => expect(mockApi.admin.setUserExpiry).toHaveBeenCalledWith('u1', null));
     await waitFor(() => expect(screen.queryByText('Vence el')).not.toBeInTheDocument());
+  });
+
+  it('shows the plan and assigns a new one after confirming, once', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    const pending = deferred<{ success: boolean; data: { userId: string; plan: string; planAnterior: string; updatedAt: string } }>();
+    mockApi.admin.setUserPlan.mockReturnValue(pending.promise);
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: /Plan\s*Gratis/ }));
+    await user.click(screen.getByRole('radio', { name: 'Plus' }));
+    const confirmar = screen.getByRole('button', { name: 'Asignar el plan Plus' });
+    await user.click(confirmar);
+    await user.click(confirmar);
+
+    expect(mockApi.admin.setUserPlan).toHaveBeenCalledTimes(1);
+    expect(mockApi.admin.setUserPlan).toHaveBeenCalledWith('u1', 'plus');
+
+    pending.resolve({ success: true, data: { userId: 'u1', plan: 'plus', planAnterior: 'free', updatedAt: '2026-09-13T10:00:00Z' } });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Plan cambiado de Gratis a Plus.');
+    expect(screen.getByRole('button', { name: /Plan\s*Plus/ })).toBeInTheDocument();
+  });
+
+  it('does not let the same plan be assigned again', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: /Plan\s*Gratis/ }));
+
+    expect(screen.getByRole('button', { name: 'Asignar el plan Gratis' })).toBeDisabled();
+    expect(mockApi.admin.setUserPlan).not.toHaveBeenCalled();
+  });
+
+  it('warns that lowering the plan deletes nothing', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [{ ...keilor, plan: 'pro' }] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: /Plan\s*Pro/ }));
+    expect(screen.queryByText(/Bajar de plan no borra metas ni tarjetas/)).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Gratis' }));
+
+    expect(screen.getByText(/Bajar de plan no borra metas ni tarjetas/)).toBeInTheDocument();
+  });
+
+  it('explains USER_NOT_FOUND and keeps the sheet open', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    mockApi.admin.setUserPlan.mockResolvedValue({ success: false, error: { code: 'USER_NOT_FOUND', message: 'x' } });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: /Plan\s*Gratis/ }));
+    await user.click(screen.getByRole('radio', { name: 'Pro' }));
+    await user.click(screen.getByRole('button', { name: 'Asignar el plan Pro' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esa cuenta ya no existe');
+    expect(screen.getByRole('button', { name: 'Asignar el plan Pro' })).toBeInTheDocument();
   });
 
   it('lists the blocked accounts on the second tab', async () => {

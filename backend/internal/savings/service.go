@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/transaction"
 )
 
@@ -20,11 +21,17 @@ type Service struct {
 	repo    *Repository
 	ledger  *ledger.Engine
 	history HistoryRecorder
+	topes   plans.Topes
 }
 
+// NewService arranca con los topes de fabrica del plan (3 / 10 / sin tope).
+// main los reemplaza con los de la configuracion via SetTopes.
 func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder) *Service {
-	return &Service{repo: repo, ledger: eng, history: history}
+	return &Service{repo: repo, ledger: eng, history: history, topes: plans.TopesMetasDeAhorro}
 }
+
+// SetTopes fija cuantas metas ACTIVAS permite cada plan.
+func (s *Service) SetTopes(t plans.Topes) { s.topes = t }
 
 func (s *Service) List(ctx context.Context, userID string) ([]Goal, error) {
 	return s.repo.ListByUser(ctx, userID)
@@ -56,7 +63,14 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateGoalRequ
 		Icon:        icon,
 		Color:       req.Color,
 	}
-	if err := s.repo.Create(ctx, g); err != nil {
+	// El tope del plan se aplica solo a la creacion. Una meta no tiene estado:
+	// mientras existe esta activa, y al eliminarla se devuelve lo ahorrado.
+	// Quien ya tenga mas metas que su plan las conserva todas.
+	err := plans.CrearConTope(ctx, s.repo.db, plans.RecursoMetasDeAhorro, userID, s.topes,
+		func(ctx context.Context, tx pgx.Tx) (int, error) { return ContarMetasEnTx(ctx, tx, userID) },
+		func(ctx context.Context, tx pgx.Tx) error { return CrearEnTx(ctx, tx, g) },
+	)
+	if err != nil {
 		return nil, err
 	}
 	return g, nil

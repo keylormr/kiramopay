@@ -15,6 +15,10 @@ type APIResponse struct {
 type APIError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Details lleva datos que la pantalla necesita para explicar el rechazo
+	// (por ejemplo el tope y cuantas tiene la persona). Solo en errores 4xx:
+	// ErrorConDetalle nunca lo pone en un 5xx.
+	Details any `json:"details,omitempty"`
 }
 
 func JSON(w http.ResponseWriter, status int, data interface{}) {
@@ -42,6 +46,28 @@ func Error(w http.ResponseWriter, status int, code, message string) {
 		Error: &APIError{
 			Code:    code,
 			Message: message,
+		},
+	})
+}
+
+// ErrorConDetalle es Error con `details`: los datos que la pantalla necesita
+// para explicar el rechazo sin adivinar (el tope del plan y cuantas tiene la
+// persona, el plan que haria falta). Solo para 4xx: en un 5xx el detalle se
+// descarta y se responde exactamente lo mismo que Error, porque un detalle de
+// un fallo interno es justo lo que Error se niega a filtrar.
+func ErrorConDetalle(w http.ResponseWriter, status int, code, message string, details any) {
+	if status >= http.StatusInternalServerError {
+		Error(w, status, code, message)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(APIResponse{
+		Success: false,
+		Error: &APIError{
+			Code:    code,
+			Message: message,
+			Details: details,
 		},
 	})
 }

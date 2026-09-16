@@ -16,8 +16,9 @@ import type {
   CreateChargeRequest,
   ResolvedQR,
 } from '../../repositories/qrpayment.repository';
-import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import type { PlanComercio } from '../../repositories/plans.repository';
+import type { ApiResponse, ArchivoDescargado } from '../../types';
+import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 
 const STORAGE_KEY = 'kiramopay_app_state';
 const DEFAULT_COMMISSION_BPS = 50; // 0.50%
@@ -130,6 +131,9 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
       // The mock has no admin, so it auto-verifies to keep the demo flow working.
       verificationStatus: 'verified',
       commissionBps: DEFAULT_COMMISSION_BPS,
+      comisionEfectivaBps: DEFAULT_COMMISSION_BPS,
+      promoHasta: null,
+      plan: 'base',
       role: 'owner',
     };
     const merchants = readMerchants();
@@ -416,6 +420,7 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess({
       days,
       totals,
+      plan: readMerchants().find((m) => m.id === merchantId)?.plan ?? 'base',
       daily: [...daily.entries()]
         .map(([date, v]) => ({ date, gross: v.gross, fee: v.fee, net: v.gross - v.fee, count: v.count }))
         .sort((a, b) => (a.date < b.date ? -1 : 1)),
@@ -592,6 +597,38 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     merchants[idx] = { ...merchants[idx], commissionBps };
     saveField('qrMerchants', merchants);
     return apiSuccess(merchants[idx]);
+  }
+
+  async setMerchantPlan(merchantId: string, plan: PlanComercio): Promise<ApiResponse<QRMerchant>> {
+    const merchants = readMerchants();
+    const idx = merchants.findIndex((m) => m.id === merchantId);
+    if (idx === -1) return apiError('MERCHANT_NOT_FOUND', 'merchant not found');
+    merchants[idx] = { ...merchants[idx], plan };
+    saveField('qrMerchants', merchants);
+    return apiSuccess(merchants[idx]);
+  }
+
+  // El mock arma el mismo CSV que el servidor (columnas, BOM, montos en
+  // unidades) y responde PLAN_REQUIRED sin el plan, para que la pantalla se
+  // pueda probar sin backend.
+  async exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>> {
+    const merchant = readMerchants().find((m) => m.id === merchantId);
+    if (!merchant) return apiError('NOT_FOUND', 'merchant not found');
+    if (merchant.plan !== 'analitica') {
+      return apiErrorConDetalle('PLAN_REQUIRED', 'plan analitica required', { plan_requerido: 'analitica' });
+    }
+    const rep = await this.getMerchantReport(merchantId, days);
+    if (!rep.success || !rep.data) return apiError('EXPORT_FAILED', 'export failed');
+    const monto = (v: number) => v.toFixed(2);
+    const filas = [
+      'seccion,desde,hasta,clave,nombre,bruto,comision,neto,cobros',
+      ...rep.data.daily.map((d) => `dia,${d.date},${d.date},,,${monto(d.gross)},${monto(d.fee)},${monto(d.net)},${d.count}`),
+      `total,,,,,${monto(rep.data.totals.gross)},${monto(rep.data.totals.fee)},${monto(rep.data.totals.net)},${rep.data.totals.count}`,
+    ];
+    return apiSuccess({
+      blob: new Blob([`${String.fromCharCode(0xfeff)}${filas.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }),
+      nombre: `reporte-${days}-dias.csv`,
+    });
   }
 
   private setStatus(
