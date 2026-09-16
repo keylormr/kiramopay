@@ -17,6 +17,26 @@ describe('useAccountStore', () => {
     expect(accounts[0].ccy).toBe('CRC');
   });
 
+  // Una moneda base que el servidor ya no devuelve quedaba huerfana: el rotulo
+  // "GBP · Base" sobre un saldo en colones, persistido hasta tocar otra cuenta.
+  it('al sincronizar, una moneda base sin cuenta real vuelve a colones', () => {
+    useAccountStore.setState({ baseCurrency: 'GBP' });
+    useAccountStore.getState().setAccounts([...initialAccounts]);
+    expect(useAccountStore.getState().baseCurrency).toBe('CRC');
+  });
+
+  it('al sincronizar, una moneda base que si existe se respeta', () => {
+    useAccountStore.setState({ baseCurrency: 'USD' });
+    useAccountStore.getState().setAccounts([...initialAccounts]);
+    expect(useAccountStore.getState().baseCurrency).toBe('USD');
+  });
+
+  it('una lista vacia no toca la moneda base', () => {
+    useAccountStore.setState({ baseCurrency: 'USD' });
+    useAccountStore.getState().setAccounts([]);
+    expect(useAccountStore.getState().baseCurrency).toBe('USD');
+  });
+
   it('should add a new account', () => {
     useAccountStore.getState().addAccount({
       ccy: 'EUR',

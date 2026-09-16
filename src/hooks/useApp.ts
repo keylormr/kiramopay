@@ -102,9 +102,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         txStore.addTransaction(action.payload);
         accounts.updateAccountBalance(action.payload.ccy, action.payload.amount);
         break;
-      case 'ADD_ACCOUNT':
-        accounts.addAccount(action.payload);
-        break;
       case 'CHANGE_PASSWORD':
         // No-op locally: actual password change goes through auth.changePassword
         // which talks to the backend. We do not retain any client-side

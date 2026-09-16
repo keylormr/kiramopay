@@ -57,7 +57,6 @@ export type AppAction =
   | { type: 'TOGGLE_LOCK'; payload: boolean }
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
   | { type: 'SET_BASE_CURRENCY'; payload: string }
-  | { type: 'ADD_ACCOUNT'; payload: Account }
   | { type: 'CHANGE_PASSWORD'; payload: string }
   | { type: 'LOGIN'; payload: User }
   | { type: 'LOGOUT' }

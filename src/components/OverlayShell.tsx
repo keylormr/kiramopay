@@ -6,12 +6,18 @@ interface OverlayShellProps {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  /**
+   * Elemento opcional al final de la cabecera, pensado para el boton de ayuda:
+   * la ayuda de una pantalla tiene que estar EN la pantalla, no solo en el
+   * mosaico de Inicio que lleva a ella.
+   */
+  accessory?: React.ReactNode;
 }
 
 // Full-screen overlay wrapper with a sticky back-header, used to host views that
 // render their own body but no chrome (e.g. Marketplace). Mirrors the header of
 // the other overlay views (SavingsView, EscrowView, …) for a consistent feel.
-export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, children }) => {
+export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, children, accessory }) => {
   const { t } = useLanguage();
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-fade-in">
@@ -24,6 +30,7 @@ export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, chil
           <Icons.ChevronLeft size={20} />
         </button>
         <span className="font-bold text-lg tracking-tight uv-text-primary">{title}</span>
+        {accessory && <div className="ml-auto flex items-center pr-1">{accessory}</div>}
       </div>
       <div className="flex-1 overflow-y-auto max-w-2xl mx-auto w-full">
         {children}

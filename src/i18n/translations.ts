@@ -236,6 +236,7 @@ export type TranslationKeys = {
   mfa_challenge_title: string;
   mfa_challenge_desc: string;
   mfa_verify_and_send: string;
+  mfa_verify_and_pay: string;
   twofa_recovery_title: string;
   twofa_recovery_desc: string;
   twofa_copy: string;
@@ -289,6 +290,10 @@ export type TranslationKeys = {
   add_money: string;
   add_account: string;
   open_new_account: string;
+  accounts_other_ccy_title: string;
+  accounts_other_ccy_desc: string;
+  accounts_crypto_hint: string;
+  accounts_go_crypto: string;
   insufficient_funds: string;
   card: string;
   deposit_crypto: string;
@@ -981,6 +986,7 @@ export type TranslationKeys = {
   qr_err_ya_pagado: string;
   qr_err_vencido: string;
   qr_err_cancelado: string;
+  qr_cobro_cerrado_hint: string;
   qr_err_actualiza_app: string;
   qr_err_invalido: string;
   qr_err_pago_propio: string;
@@ -1056,6 +1062,7 @@ export type TranslationKeys = {
   loyalty_rewards: string;
   loyalty_history: string;
   loyalty_earn: string;
+  loyalty_earn_preview_title: string;
   loyalty_earn_desc: string;
   loyalty_no_rewards: string;
   loyalty_no_rewards_hint: string;
@@ -1413,6 +1420,7 @@ export type TranslationKeys = {
   plans_limit_see_plans: string;
   plans_limit_ok: string;
   cards_create_another: string;
+  cards_usage: string;
   cards_pick_label: string;
   // Comercio: comision, promocion y analitica
   business_commission_today: string;
