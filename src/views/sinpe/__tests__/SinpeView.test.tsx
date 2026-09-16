@@ -336,6 +336,25 @@ describe('SinpeView — agregar contacto escaneando', () => {
     // Y desde ahí también se puede pasar a escanear.
     expect(dialog.getByRole('button', { name: /Escanear código QR/ })).toBeInTheDocument();
   });
+
+  // El mismo bug del "+506" tecleado a mano (ver la prueba equivalente en
+  // "SinpeView — send") también vivía en este formulario: el recorte se
+  // quedaba con los PRIMEROS 8 dígitos en vez de los últimos.
+  it('usa los últimos 8 dígitos al guardar un contacto con el +506 tecleado a mano', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Ana Solís');
+    await user.type(dialog.getByPlaceholderText('8888-0000'), '+50688880005');
+    await user.click(dialog.getByRole('button', { name: /Guardar contacto/ }));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'ADD_SINPE_CONTACT',
+      payload: expect.objectContaining({ name: 'Ana Solís', phone: '+50688880005' }),
+    });
+  });
 });
 
 // Pedido del dueño: si el número escaneado o tecleado ya está guardado, o es

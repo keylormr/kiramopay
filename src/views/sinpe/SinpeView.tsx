@@ -949,7 +949,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <input
                 type="tel"
                 value={newContactPhone}
-                onChange={(e) => setNewContactPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                onChange={(e) => setNewContactPhone(e.target.value.replace(/\D/g, '').slice(-8))}
                 placeholder="8888-0000"
                 className="flex-1 bg-transparent outline-none"
               />
