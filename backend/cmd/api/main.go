@@ -698,6 +698,16 @@ func main() {
 	defer qrChargePollerCancel()
 	go qrChargePoller.Run(qrChargePollerCtx)
 
+	// Alertas de precio. Evalua contra los precios que el cache YA tiene (no
+	// gasta cuota del proveedor) y avisa por el mismo servicio de
+	// notificaciones: historial, socket, web push y telefonos. Cada vuelta corre
+	// bajo el lock de cluster, y cada alerta se marca una sola vez.
+	evaluadorAlertas := crypto.NuevoEvaluadorDeAlertas(cryptoRepo, priceService, notifService,
+		pool, time.Minute, logger)
+	evaluadorAlertasCtx, evaluadorAlertasCancel := context.WithCancel(context.Background())
+	defer evaluadorAlertasCancel()
+	go evaluadorAlertas.Run(evaluadorAlertasCtx)
+
 	// Router
 	r := chi.NewRouter()
 

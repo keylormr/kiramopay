@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -156,16 +157,24 @@ func (h *Handler) GetPriceAlerts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AddPriceAlert(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
-	var alert PriceAlertRecord
-	if err := json.NewDecoder(r.Body).Decode(&alert); err != nil {
+	var req CrearAlertaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
 
-	result, err := h.service.AddPriceAlert(r.Context(), userID, &alert)
+	result, err := h.service.AddPriceAlert(r.Context(), userID, &req)
 	if err != nil {
 		if codigo, estado, ok := errorDeAlerta(err); ok {
 			response.Error(w, estado, codigo, err.Error())
+			return
+		}
+		// El tope de activas: 409 con los numeros, para que la pantalla diga
+		// cuantas permite sin repetirlos a mano.
+		var tope *plans.TopeAlcanzadoError
+		if errors.As(err, &tope) {
+			response.ErrorConDetalle(w, http.StatusConflict, "ALERT_LIMIT_REACHED",
+				"you already have the maximum number of active price alerts", tope.Detalle())
 			return
 		}
 		// Lo que pasa la validacion y aun asi falla es el INSERT.

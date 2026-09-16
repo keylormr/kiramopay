@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kiramopay/backend/internal/observability"
+	"github.com/shopspring/decimal"
 )
 
 // CoinGecko endpoints. Free tier by default; the Pro host is used when an API
@@ -377,6 +378,11 @@ func (ps *PriceService) GetPrice(ctx context.Context, symbol string) (float64, e
 func (ps *PriceService) precioVencido(symbol string) (time.Duration, bool) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
+	return ps.precioVencidoConLock(symbol)
+}
+
+// precioVencidoConLock exige el lock tomado.
+func (ps *PriceService) precioVencidoConLock(symbol string) (time.Duration, bool) {
 	desde, ok := ps.cachedAt[symbol]
 	if !ok {
 		desde = ps.lastSuccess
@@ -388,7 +394,30 @@ func (ps *PriceService) precioVencido(symbol string) (time.Duration, bool) {
 	return edad, edad > ps.edadMaxima()
 }
 
-// edadMaxima exige el lock tomado (lo llama precioVencido, que lo sostiene).
+// PreciosVigentes devuelve, en dolares, los precios que el cache tiene al dia,
+// con el mismo corte de edad que GetPrice. NUNCA sale al proveedor: lo usa el
+// barrido de alertas, que no puede gastar cuota propia (la clave Demo tiene
+// 10.000 llamadas al mes y el broadcaster ya las administra).
+//
+// Un simbolo sin precio, con precio no positivo o con precio vencido
+// simplemente no aparece: con el no se decide nada.
+func (ps *PriceService) PreciosVigentes() map[string]decimal.Decimal {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	vigentes := make(map[string]decimal.Decimal, len(ps.cache))
+	for simbolo, p := range ps.cache {
+		if p == nil || !(p.Price > 0) {
+			continue
+		}
+		if _, vencido := ps.precioVencidoConLock(simbolo); vencido {
+			continue
+		}
+		vigentes[simbolo] = decimal.NewFromFloat(p.Price)
+	}
+	return vigentes
+}
+
+// edadMaxima exige el lock tomado (lo llama precioVencidoConLock).
 func (ps *PriceService) edadMaxima() time.Duration {
 	maxima := factorEdadMaxima * ps.cacheTTL
 	if maxima < edadMaximaMinima {

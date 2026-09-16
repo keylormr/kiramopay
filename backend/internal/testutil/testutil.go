@@ -736,6 +736,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
 
+	-- Alertas de precio (migraciones 004, 019 y 071). La 071 agrega el estado
+	-- de cumplida y quitada, y el CHECK que impide que una cumplida siga activa:
+	-- el barrido de alertas escribe esas columnas y las pruebas de integracion
+	-- lo ejercitan contra este esquema.
 	CREATE TABLE IF NOT EXISTS crypto_price_alerts (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL,
@@ -743,8 +747,18 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		target_price NUMERIC(38,18) NOT NULL,
 		direction VARCHAR(10) NOT NULL,
 		active BOOLEAN DEFAULT true,
-		created_at TIMESTAMPTZ DEFAULT NOW()
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		cumplida_at TIMESTAMPTZ,
+		precio_cumplida NUMERIC(38,18),
+		borrada_at TIMESTAMPTZ,
+		CONSTRAINT chk_alert_target_positive CHECK (target_price > 0),
+		CONSTRAINT chk_alert_direction CHECK (direction IN ('above','below')),
+		CONSTRAINT chk_alert_cumplida CHECK ((cumplida_at IS NULL) = (precio_cumplida IS NULL)
+			AND NOT (active AND cumplida_at IS NOT NULL))
 	);
+	ALTER TABLE crypto_price_alerts ADD COLUMN IF NOT EXISTS cumplida_at TIMESTAMPTZ;
+	ALTER TABLE crypto_price_alerts ADD COLUMN IF NOT EXISTS precio_cumplida NUMERIC(38,18);
+	ALTER TABLE crypto_price_alerts ADD COLUMN IF NOT EXISTS borrada_at TIMESTAMPTZ;
 
 	-- Dividir cuenta (migration 008). No estaba en el esquema de pruebas, asi
 	-- que ninguna prueba ejecutaba su SQL: el 42P08 que impedia crear TODA

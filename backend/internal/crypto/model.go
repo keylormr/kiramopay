@@ -51,14 +51,36 @@ type StakingRecord struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
+// Estados de una alerta de precio, tal como los ve el cliente. Ver la
+// migracion 071 para como se derivan de las columnas.
+const (
+	AlertaActiva   = "active"
+	AlertaCumplida = "triggered"
+)
+
 type PriceAlertRecord struct {
 	ID          string          `json:"id"`
 	UserID      string          `json:"user_id"`
 	Asset       string          `json:"asset"`
-	TargetPrice decimal.Decimal `json:"target_price"`
-	Direction   string          `json:"direction"` // above, below
+	TargetPrice decimal.Decimal `json:"target_price"` // USD, la moneda del feed
+	Direction   string          `json:"direction"`    // above, below
 	Active      bool            `json:"active"`
-	CreatedAt   time.Time       `json:"created_at"`
+	// Status es AlertaActiva o AlertaCumplida. Las quitadas no salen en
+	// ninguna lista.
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	// TriggeredAt y TriggeredPrice: cuando y con que precio (USD) la cumplio el
+	// barrido. Nulos mientras la alerta esta activa.
+	TriggeredAt    *time.Time       `json:"triggered_at,omitempty"`
+	TriggeredPrice *decimal.Decimal `json:"triggered_price,omitempty"`
+}
+
+// CrearAlertaRequest es lo unico que el cliente decide de una alerta. El resto
+// (id, dueno, estado, fechas) lo pone el servidor.
+type CrearAlertaRequest struct {
+	Asset       string          `json:"asset"`
+	TargetPrice decimal.Decimal `json:"target_price"`
+	Direction   string          `json:"direction"`
 }
 
 // API request/response types
