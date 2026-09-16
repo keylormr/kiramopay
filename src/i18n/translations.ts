@@ -989,6 +989,29 @@ export type TranslationKeys = {
   splitpay_share_pending: string;
   splitpay_share_declined: string;
   splitpay_detail: string;
+  splitpay_decline_share: string;
+  splitpay_cancel_split: string;
+  splitpay_confirm_decline: string;
+  splitpay_confirm_cancel: string;
+  splitpay_err_detail: string;
+  splitpay_err_pay: string;
+  splitpay_err_decline: string;
+  splitpay_err_cancel: string;
+  splitpay_err_title_required: string;
+  splitpay_err_invalid_amount: string;
+  splitpay_err_participant_required: string;
+  splitpay_err_phone_required: string;
+  splitpay_err_invalid_phone: string;
+  splitpay_err_account_not_found: string;
+  splitpay_err_self_included: string;
+  splitpay_err_duplicate_participant: string;
+  splitpay_err_total_too_small: string;
+  splitpay_err_custom_amount_required: string;
+  splitpay_err_exceeds_total: string;
+  splitpay_err_percentage_required: string;
+  splitpay_err_percentage_exceeds_total: string;
+  splitpay_err_percentage_rounds_zero: string;
+  splitpay_err_invalid_type: string;
 
   // Loyalty
   loyalty_title: string;

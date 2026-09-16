@@ -40,7 +40,12 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       })),
     });
 
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    // El codigo real (SPLIT_SELF_INCLUDED, SPLIT_EXCEEDS_TOTAL, etc.) tiene que
+    // sobrevivir hasta la vista: ahi es donde CLAVES_ERROR_CREAR lo traduce. Si
+    // se pisa con un literal generico, la vista nunca matchea nada y muestra el
+    // texto crudo del servidor tal cual (hallazgo QA n=52).
+    if (!res.success) return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed');
+    if (!res.data) return apiError('CREATE_FAILED', 'Failed');
 
     return apiSuccess({
       group: mapGroup(res.data.group),
@@ -53,11 +58,15 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       id: string; creator_id: string; title: string; description: string;
       total_amount: number; currency: string; split_type: string; status: string;
       created_at: string;
-    }>>('/api/v1/splits');
+    }> | null>('/api/v1/splits');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch splits');
+    if (!res.success) return apiError('FETCH_FAILED', res.error?.message || 'Failed to fetch splits');
 
-    return apiSuccess(res.data.map(mapGroup));
+    // Un payload null es "sin divisiones todavia", no una falla: el backend ya
+    // normaliza la lista nil a [] (ver listaVaciaSiNil en el propio backend),
+    // pero esta guarda queda igual que en cards.http.ts por si algun consumidor
+    // futuro de este endpoint no pasa por esa normalizacion.
+    return apiSuccess(Array.isArray(res.data) ? res.data.map(mapGroup) : []);
   }
 
   async getSplit(groupId: string): Promise<ApiResponse<SplitDetail>> {

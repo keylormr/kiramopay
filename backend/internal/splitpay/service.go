@@ -34,13 +34,13 @@ func NewService(repo *Repository, tx *transaction.Service, cuentas BuscadorDeCue
 
 func (s *Service) CreateSplit(ctx context.Context, creatorID string, req *CreateSplitRequest) (*SplitGroup, []SplitShare, error) {
 	if req.Title == "" {
-		return nil, nil, fmt.Errorf("title is required")
+		return nil, nil, ErrTitleRequired
 	}
 	if req.TotalAmount <= 0 {
-		return nil, nil, fmt.Errorf("total amount must be positive")
+		return nil, nil, ErrInvalidAmount
 	}
 	if len(req.Participants) < 1 {
-		return nil, nil, fmt.Errorf("at least one participant besides you is required")
+		return nil, nil, ErrParticipantRequired
 	}
 	if req.Currency == "" {
 		req.Currency = "CRC"
@@ -82,7 +82,7 @@ func (s *Service) CreateSplit(ctx context.Context, creatorID string, req *Create
 // guardar una cuota que nadie podra pagar nunca.
 func (s *Service) resolverParticipantes(ctx context.Context, creatorID string, req *CreateSplitRequest) error {
 	if s.cuentas == nil {
-		return fmt.Errorf("account lookup unavailable")
+		return ErrAccountLookupUnavailable
 	}
 	vistos := map[string]bool{creatorID: true}
 	for i := range req.Participants {
@@ -93,16 +93,15 @@ func (s *Service) resolverParticipantes(ctx context.Context, creatorID string, r
 		// resuelve contra la base.
 		p.UserID = ""
 		if p.UserPhone == "" {
-			return fmt.Errorf("%q needs a phone number: a split can only be charged to KiramoPay accounts",
-				nombreVisible(p, i))
+			return ErrPhoneRequired
 		}
 		kind, canonico, err := identifier.Classify(p.UserPhone)
 		if err != nil || kind != identifier.KindPhone {
-			return fmt.Errorf("%q: %q is not a valid phone number", nombreVisible(p, i), p.UserPhone)
+			return ErrInvalidPhone
 		}
 		u, err := s.cuentas.FindByPhone(ctx, canonico)
 		if err != nil || u == nil {
-			return fmt.Errorf("%q (%s) does not have a KiramoPay account", nombreVisible(p, i), canonico)
+			return ErrAccountNotFound
 		}
 		p.UserID = u.ID
 		p.UserPhone = canonico
@@ -111,29 +110,19 @@ func (s *Service) resolverParticipantes(ctx context.Context, creatorID string, r
 		}
 		if vistos[p.UserID] {
 			if p.UserID == creatorID {
-				return fmt.Errorf("%q is you: your own share is added automatically", nombreVisible(p, i))
+				return ErrSelfIncluded
 			}
-			return fmt.Errorf("%q appears twice in the split", nombreVisible(p, i))
+			return ErrDuplicateParticipant
 		}
 		vistos[p.UserID] = true
 	}
 	return nil
 }
 
-func nombreVisible(p *ParticipantReq, i int) string {
-	if n := strings.TrimSpace(p.UserName); n != "" {
-		return n
-	}
-	if p.UserPhone != "" {
-		return p.UserPhone
-	}
-	return fmt.Sprintf("participant %d", i+1)
-}
-
 func (s *Service) GetSplit(ctx context.Context, groupID string) (*SplitGroup, []SplitShare, error) {
 	group, err := s.repo.GetGroup(ctx, groupID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("split group not found")
+		return nil, nil, ErrGroupNotFound
 	}
 
 	shares, err := s.repo.GetGroupShares(ctx, groupID)
@@ -150,14 +139,14 @@ func (s *Service) ListUserSplits(ctx context.Context, userID string) ([]SplitGro
 
 func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 	if userID == "" {
-		return fmt.Errorf("user not authenticated")
+		return ErrUnauthenticated
 	}
 	group, err := s.repo.GetGroup(ctx, groupID)
 	if err != nil {
-		return fmt.Errorf("split group not found")
+		return ErrGroupNotFound
 	}
 	if group.Status != "active" {
-		return fmt.Errorf("split is no longer active")
+		return ErrNotActive
 	}
 
 	// Locate this user's pending share.
@@ -173,7 +162,7 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 		}
 	}
 	if share == nil {
-		return fmt.Errorf("no share for this user in the split")
+		return ErrNoShareForUser
 	}
 	if share.Status == "paid" {
 		return nil // idempotent: already settled
@@ -221,7 +210,7 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 
 func (s *Service) DeclineShare(ctx context.Context, userID, groupID string) error {
 	if userID == "" {
-		return fmt.Errorf("user not authenticated")
+		return ErrUnauthenticated
 	}
 	if err := s.repo.DeclineShare(ctx, groupID, userID); err != nil {
 		return err
@@ -247,10 +236,10 @@ func (s *Service) liquidarSiNoQuedaNadaPendiente(ctx context.Context, groupID st
 func (s *Service) CancelSplit(ctx context.Context, userID, groupID string) error {
 	group, err := s.repo.GetGroup(ctx, groupID)
 	if err != nil {
-		return fmt.Errorf("split group not found")
+		return ErrGroupNotFound
 	}
 	if group.CreatorID != userID {
-		return fmt.Errorf("only the creator can cancel a split")
+		return ErrNotCreator
 	}
 	return s.repo.UpdateGroupStatus(ctx, groupID, "cancelled")
 }
@@ -293,7 +282,7 @@ func (s *Service) calculateShares(groupID, creatorID string, req *CreateSplitReq
 		porPersona := req.TotalAmount / personas
 		sobrante := req.TotalAmount - porPersona*personas
 		if porPersona <= 0 {
-			return nil, fmt.Errorf("the total is too small to split among %d people", personas)
+			return nil, ErrTotalTooSmall
 		}
 
 		shares = append(shares, nuevaCuota(creatorID, "", "", porPersona+sobrante))
@@ -305,12 +294,12 @@ func (s *Service) calculateShares(groupID, creatorID string, req *CreateSplitReq
 		var total int64
 		for _, p := range req.Participants {
 			if p.Amount <= 0 {
-				return nil, fmt.Errorf("%q has no amount to pay", p.UserName)
+				return nil, ErrCustomAmountRequired
 			}
 			total += p.Amount
 		}
 		if total > req.TotalAmount {
-			return nil, fmt.Errorf("the shares (%d) add up to more than the total (%d)", total, req.TotalAmount)
+			return nil, ErrExceedsTotal
 		}
 		// Lo que no se reparte queda a cargo del creador: es su cuenta.
 		shares = append(shares, nuevaCuota(creatorID, "", "", req.TotalAmount-total))
@@ -322,19 +311,19 @@ func (s *Service) calculateShares(groupID, creatorID string, req *CreateSplitReq
 		var totalPct float64
 		for _, p := range req.Participants {
 			if p.Percentage <= 0 {
-				return nil, fmt.Errorf("%q has no percentage assigned", p.UserName)
+				return nil, ErrPercentageRequired
 			}
 			totalPct += p.Percentage
 		}
 		if totalPct > 100.0 {
-			return nil, fmt.Errorf("the percentages add up to more than 100 (got %.1f)", totalPct)
+			return nil, ErrPercentageExceedsTotal
 		}
 		var repartido int64
 		invitadas := make([]SplitShare, 0, len(req.Participants))
 		for _, p := range req.Participants {
 			monto := int64(float64(req.TotalAmount) * p.Percentage / 100)
 			if monto <= 0 {
-				return nil, fmt.Errorf("%q's percentage rounds down to zero", p.UserName)
+				return nil, ErrPercentageRoundsToZero
 			}
 			repartido += monto
 			invitadas = append(invitadas, nuevaCuota(p.UserID, p.UserPhone, p.UserName, monto))
@@ -345,7 +334,7 @@ func (s *Service) calculateShares(groupID, creatorID string, req *CreateSplitReq
 		shares = append(shares, invitadas...)
 
 	default:
-		return nil, fmt.Errorf("invalid split type: %s", req.SplitType)
+		return nil, ErrInvalidSplitType
 	}
 
 	return shares, nil

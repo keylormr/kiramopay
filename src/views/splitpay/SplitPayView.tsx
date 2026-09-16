@@ -9,6 +9,48 @@ import { formatMoney } from '@/utils/money';
 import type { SplitGroup, SplitShare } from '@/api/repositories/splitpay.repository';
 import { useAuthStore } from '@/stores/auth.store';
 
+type RespuestaConError = { error?: { code: string; message: string } };
+
+// Los nueve rechazos de forma de "Crear division" (backend/internal/splitpay)
+// traian el mismo codigo generico y el texto crudo de fmt.Errorf en ingles y
+// en centimos: '"Yo mismo" is you: your own share is added automatically',
+// '"Victor otra vez" appears twice in the split', 'the shares (40000) add up
+// to more than the total (30000)' (hallazgo QA n=52). Ahora cada caso tiene su
+// propio codigo estable; esta tabla lo traduce a una clave de i18n. Lo que NO
+// esta aqui (SPLIT_EXCEEDS_TOTAL, que necesita los montos en colones que ya
+// tiene el formulario) se resuelve aparte en handleCreate.
+const CLAVES_ERROR_CREAR: Record<string, string> = {
+  SPLIT_TITLE_REQUIRED: 'splitpay_err_title_required',
+  SPLIT_INVALID_AMOUNT: 'splitpay_err_invalid_amount',
+  SPLIT_PARTICIPANT_REQUIRED: 'splitpay_err_participant_required',
+  SPLIT_PHONE_REQUIRED: 'splitpay_err_phone_required',
+  SPLIT_INVALID_PHONE: 'splitpay_err_invalid_phone',
+  SPLIT_ACCOUNT_NOT_FOUND: 'splitpay_err_account_not_found',
+  SPLIT_SELF_INCLUDED: 'splitpay_err_self_included',
+  SPLIT_DUPLICATE_PARTICIPANT: 'splitpay_err_duplicate_participant',
+  SPLIT_TOTAL_TOO_SMALL: 'splitpay_err_total_too_small',
+  SPLIT_CUSTOM_AMOUNT_REQUIRED: 'splitpay_err_custom_amount_required',
+  SPLIT_PERCENTAGE_REQUIRED: 'splitpay_err_percentage_required',
+  SPLIT_PERCENTAGE_EXCEEDS_TOTAL: 'splitpay_err_percentage_exceeds_total',
+  SPLIT_PERCENTAGE_ROUNDS_TO_ZERO: 'splitpay_err_percentage_rounds_zero',
+  SPLIT_INVALID_TYPE: 'splitpay_err_invalid_type',
+};
+
+// El resto de acciones del modulo (ver detalle, pagar, rechazar, cancelar)
+// solo tienen UN codigo por fallo (nunca lo distinguen mas), y ese codigo
+// viaja con el texto de diagnostico en ingles del backend (`err.Error()`).
+// Para esos, siempre el texto fijo de la pantalla. Cualquier OTRO codigo
+// (RATE_LIMITED, SESSION_EXPIRED, NETWORK_ERROR, INVALID_REQUEST...) ya llega
+// traducido al idioma activo desde el cliente HTTP (src/i18n/mensajesDeError.ts)
+// y se respeta tal cual, en vez de perder ese detalle contra un texto generico.
+const CODIGOS_GENERICOS_DEL_MODULO = new Set(['NOT_FOUND', 'PAY_FAILED', 'DECLINE_FAILED', 'CANCEL_FAILED']);
+
+function mensajeDeAccion(res: RespuestaConError, claveGenerica: string, t: (k: string) => string): string {
+  const codigo = res.error?.code;
+  if (!codigo || CODIGOS_GENERICOS_DEL_MODULO.has(codigo)) return t(claveGenerica);
+  return res.error?.message || t(claveGenerica);
+}
+
 export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
   const [splits, setSplits] = useState<SplitGroup[]>([]);
@@ -37,6 +79,12 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
   const [pagando, setPagando] = useState(false);
+  // "Rechazar mi parte" y "Cancelar division" son irreversibles (la ayuda de
+  // la pantalla los promete, pero hasta ahora no existian ningun boton para
+  // hacerlos: hallazgo QA n=53). Piden confirmacion explicita antes de llamar
+  // al servidor.
+  const [confirmando, setConfirmando] = useState<'decline' | 'cancel' | null>(null);
+  const [procesandoAccion, setProcesandoAccion] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +130,13 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const amount = parseFloat(totalAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
+    // Para el mensaje de "excede el total" (ver abajo) la pantalla ya tiene
+    // los montos en colones: no hace falta parsear nada de lo que responda el
+    // servidor, que ademas los manda en centimos (hallazgo QA n=52).
+    const sumaPersonalizada = splitType === 'custom'
+      ? validParticipants.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0)
+      : 0;
+
     setCreating(true);
     setCreateError(null);
     const res = await api.splitPay.createSplit({
@@ -102,7 +157,21 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setCreating(false);
 
     if (!res.success) {
-      setCreateError(res.error?.message || t('error'));
+      const codigo = res.error?.code;
+      if (codigo === 'SPLIT_EXCEEDS_TOTAL') {
+        setCreateError(
+          t('splitpay_err_exceeds_total')
+            .replace('{suma}', formatMoney(sumaPersonalizada))
+            .replace('{total}', formatMoney(amount)),
+        );
+      } else if (codigo && CLAVES_ERROR_CREAR[codigo]) {
+        setCreateError(t(CLAVES_ERROR_CREAR[codigo]));
+      } else {
+        // Codigos que ya llegan traducidos (red, sesion vencida, limite de
+        // tasa) o cualquier otro no mapeado: se respeta el mensaje del
+        // servidor antes de caer al generico.
+        setCreateError(res.error?.message || t('error'));
+      }
       return;
     }
     setShowCreate(false);
@@ -121,7 +190,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const res = await api.splitPay.getSplit(groupId);
     setCargandoDetalle(false);
     if (!res.success || !res.data) {
-      setErrorDetalle(res.error?.message || t('error'));
+      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_detail', t));
       return;
     }
     setDetalle(res.data);
@@ -136,7 +205,45 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const res = await api.splitPay.payShare(detalle.group.id);
     setPagando(false);
     if (!res.success) {
-      setErrorDetalle(res.error?.message || t('error'));
+      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_pay', t));
+      return;
+    }
+    await abrirDetalle(detalle.group.id);
+    setLoadTrigger(n => n + 1);
+  };
+
+  // Rechazar la cuota propia y cancelar la division entera: el texto de ayuda
+  // de la pantalla (help_splitpay_body) los promete desde siempre, pero hasta
+  // ahora no existia ningun boton para hacerlos (hallazgo QA n=53). El backend
+  // ya los soporta (POST /splits/:id/decline, DELETE /splits/:id).
+  const rechazarMiParte = async () => {
+    if (!detalle || procesandoAccion) return;
+    const api = getApiLayer();
+    if (!api.splitPay) return;
+    setProcesandoAccion(true);
+    setErrorDetalle(null);
+    const res = await api.splitPay.declineShare(detalle.group.id);
+    setProcesandoAccion(false);
+    setConfirmando(null);
+    if (!res.success) {
+      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_decline', t));
+      return;
+    }
+    await abrirDetalle(detalle.group.id);
+    setLoadTrigger(n => n + 1);
+  };
+
+  const cancelarDivision = async () => {
+    if (!detalle || procesandoAccion) return;
+    const api = getApiLayer();
+    if (!api.splitPay) return;
+    setProcesandoAccion(true);
+    setErrorDetalle(null);
+    const res = await api.splitPay.cancelSplit(detalle.group.id);
+    setProcesandoAccion(false);
+    setConfirmando(null);
+    if (!res.success) {
+      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_cancel', t));
       return;
     }
     await abrirDetalle(detalle.group.id);
@@ -331,7 +438,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       {/* Detalle: quien debe que, y el pago de la propia parte. */}
       <BottomSheet
         isOpen={cargandoDetalle || detalle !== null || errorDetalle !== null}
-        onClose={() => { setDetalle(null); setErrorDetalle(null); }}
+        onClose={() => { setDetalle(null); setErrorDetalle(null); setConfirmando(null); }}
         title={t('splitpay_detail')}
       >
         {cargandoDetalle ? (
@@ -377,12 +484,63 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{errorDetalle}</p>
             )}
 
-            {detalle.group.status === 'active' &&
-              detalle.shares.some((c) => c.userId === yoID && c.status === 'pending') && (
-                <Button variant="primary" size="lg" fullWidth loading={pagando} onClick={pagarMiParte}>
-                  {t('splitpay_pay_share')}
-                </Button>
-              )}
+            {confirmando ? (
+              // "Rechazar mi parte" y "Cancelar division" son irreversibles
+              // (la segunda liquida la cuota de TODOS, no solo la propia): se
+              // pide confirmacion explicita antes de llamar al servidor.
+              <div className="space-y-3 rounded-xl bg-[var(--color-danger-soft)] p-3">
+                <p className="text-sm text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
+                  {confirmando === 'decline' ? t('splitpay_confirm_decline') : t('splitpay_confirm_cancel')}
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    fullWidth
+                    disabled={procesandoAccion}
+                    onClick={() => setConfirmando(null)}
+                  >
+                    {t('back')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="md"
+                    fullWidth
+                    loading={procesandoAccion}
+                    onClick={confirmando === 'decline' ? rechazarMiParte : cancelarDivision}
+                  >
+                    {confirmando === 'decline' ? t('splitpay_decline_share') : t('splitpay_cancel_split')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {detalle.group.status === 'active' &&
+                  detalle.shares.some((c) => c.userId === yoID && c.status === 'pending') && (
+                    <>
+                      <Button variant="primary" size="lg" fullWidth loading={pagando} onClick={pagarMiParte}>
+                        {t('splitpay_pay_share')}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmando('decline')}
+                        className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
+                      >
+                        {t('splitpay_decline_share')}
+                      </button>
+                    </>
+                  )}
+                {detalle.group.status === 'active' && !!yoID && detalle.group.creatorId === yoID && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmando('cancel')}
+                    className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
+                  >
+                    {t('splitpay_cancel_split')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-[var(--color-danger)] py-6" aria-live="polite">{errorDetalle}</p>
