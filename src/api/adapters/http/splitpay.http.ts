@@ -40,7 +40,12 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       })),
     });
 
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    // El codigo real (SPLIT_SELF_INCLUDED, SPLIT_EXCEEDS_TOTAL, etc.) tiene que
+    // sobrevivir hasta la vista: ahi es donde CLAVES_ERROR_CREAR lo traduce. Si
+    // se pisa con un literal generico, la vista nunca matchea nada y muestra el
+    // texto crudo del servidor tal cual (hallazgo QA n=52).
+    if (!res.success) return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed');
+    if (!res.data) return apiError('CREATE_FAILED', 'Failed');
 
     return apiSuccess({
       group: mapGroup(res.data.group),

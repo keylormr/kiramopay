@@ -43,3 +43,53 @@ describe('HttpSplitPayRepository.listSplits', () => {
     expect(res.error?.message).toBe('Espera un momento.');
   });
 });
+
+// createSplit() pisaba TODO codigo de error real con el literal 'CREATE_FAILED',
+// asi que SplitPayView nunca podia distinguir SPLIT_SELF_INCLUDED de
+// SPLIT_EXCEEDS_TOTAL de cualquier otro caso: el switch de CLAVES_ERROR_CREAR
+// caia siempre al mensaje crudo en ingles del servidor (hallazgo QA n=52, la
+// parte que sobrevivia despues de agregar la tabla de traduccion en la vista).
+describe('HttpSplitPayRepository.createSplit', () => {
+  function clienteQueResponde(respuesta: unknown) {
+    return { post: async () => respuesta } as unknown as HttpClient;
+  }
+
+  const pedido = {
+    title: 'Cena', totalAmount: 300, currency: 'CRC', splitType: 'equal' as const,
+    participants: [{ userName: 'Ana', userPhone: '+50688880001' }],
+  };
+
+  it('un codigo de error especifico del backend llega intacto, sin pisarse', async () => {
+    const client = clienteQueResponde({
+      success: false,
+      error: { code: 'SPLIT_SELF_INCLUDED', message: 'cannot include your own phone as a participant' },
+    });
+    const res = await new HttpSplitPayRepository(client).createSplit(pedido);
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('SPLIT_SELF_INCLUDED');
+  });
+
+  it('sin codigo del servidor, cae al literal generico como antes', async () => {
+    const client = clienteQueResponde({ success: false, error: { message: 'algo fallo' } });
+    const res = await new HttpSplitPayRepository(client).createSplit(pedido);
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('CREATE_FAILED');
+  });
+
+  it('un exito se sigue mapeando igual que antes', async () => {
+    const client = clienteQueResponde({
+      success: true,
+      data: {
+        group: {
+          id: 'g1', creator_id: 'u1', title: 'Cena', description: '',
+          total_amount: 30000, currency: 'CRC', split_type: 'equal', status: 'active',
+          created_at: '2026-09-13T00:00:00Z',
+        },
+        shares: [],
+      },
+    });
+    const res = await new HttpSplitPayRepository(client).createSplit(pedido);
+    expect(res.success).toBe(true);
+    expect(res.data?.group.id).toBe('g1');
+  });
+});
