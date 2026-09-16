@@ -45,6 +45,7 @@ const zhCn: TranslationKeys = {
   error: '错误',
   err_network: '无法连接到 KiramoPay。请检查网络连接后重试。',
   err_session_expired: '会话已过期，请重新登录。',
+  err_session_unconfirmed: '无法确认会话状态。请检查网络连接，稍后重试。',
   err_rate_limited: '请求过于频繁。请稍候再试。',
   err_server: '服务器出现问题，请稍后重试。',
   err_invalid_request: '无法处理这些信息。请检查后重试。',

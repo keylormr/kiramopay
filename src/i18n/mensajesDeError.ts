@@ -30,7 +30,7 @@ export function traducirFueraDeReact(clave: keyof TranslationKeys): string {
 }
 
 /** Codigos que nacen en el propio cliente: el servidor nunca los escribio. */
-export type CodigoDelCliente = 'NETWORK_ERROR' | 'SESSION_EXPIRED' | 'RATE_LIMITED';
+export type CodigoDelCliente = 'NETWORK_ERROR' | 'SESSION_EXPIRED' | 'SESSION_UNCONFIRMED' | 'RATE_LIMITED';
 
 export function mensajeDelCliente(codigo: CodigoDelCliente): string {
   switch (codigo) {
@@ -38,6 +38,9 @@ export function mensajeDelCliente(codigo: CodigoDelCliente): string {
       return traducirFueraDeReact('err_network');
     case 'SESSION_EXPIRED':
       return traducirFueraDeReact('err_session_expired');
+    // La sesion no se pudo renovar por un fallo pasajero: sigue abierta.
+    case 'SESSION_UNCONFIRMED':
+      return traducirFueraDeReact('err_session_unconfirmed');
     case 'RATE_LIMITED':
       return traducirFueraDeReact('err_rate_limited');
   }

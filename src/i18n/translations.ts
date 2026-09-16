@@ -127,6 +127,7 @@ export type TranslationKeys = {
   error: string;
   err_network: string;
   err_session_expired: string;
+  err_session_unconfirmed: string;
   err_rate_limited: string;
   err_server: string;
   err_invalid_request: string;

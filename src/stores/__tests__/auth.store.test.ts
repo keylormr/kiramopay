@@ -1,4 +1,7 @@
 import { useAuthStore, ESPERAS_REINTENTO_RESTAURACION_MS } from '../auth.store';
+import { HttpClient, ESPERAS_REINTENTO_REFRESCO_MS } from '@/api/adapters/http/client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
+import { secureTokenStore } from '@/services/secureTokenStore';
 
 // Stable mock for the refresh call so bootstrap tests can drive its result.
 const { mockRefresh } = vi.hoisted(() => ({ mockRefresh: vi.fn() }));
@@ -292,6 +295,152 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().restauracion).toBe('normal');
       // Descartar el aviso no cierra la sesion guardada.
       expect(useAuthStore.getState().sessionHint).toBe(true);
+    });
+  });
+
+  // A mitad de sesion, un 401 pide renovar. Antes cualquier fallo de esa
+  // renovacion (sin red, un 429, un 5xx) cerraba la sesion sin explicacion.
+  describe('renovacion a mitad de sesion', () => {
+    const sinRed = { success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } };
+    const renovada = { success: true, data: { access_token: 'nuevo-access', refresh_token: 'nuevo-refresh' } };
+
+    async function entrar() {
+      await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      expect(useAuthStore.getState().refreshToken).toBe('fake-refresh');
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('renueva los tokens y guarda el rotado en el almacen seguro', async () => {
+      await entrar();
+      const guardar = vi.spyOn(secureTokenStore, 'setRefreshToken');
+      mockRefresh.mockResolvedValue(renovada);
+
+      await expect(useAuthStore.getState().refresh()).resolves.toBe('renovada');
+
+      expect(mockRefresh).toHaveBeenCalledWith('fake-refresh');
+      expect(useAuthStore.getState().accessToken).toBe('nuevo-access');
+      expect(useAuthStore.getState().refreshToken).toBe('nuevo-refresh');
+      // Sin esto, en el telefono el proximo arranque presentaba el token ya
+      // consumido y el servidor cerraba la sesion por reuso.
+      expect(guardar).toHaveBeenCalledWith('nuevo-refresh');
+    });
+
+    it.each([
+      ['NETWORK_ERROR', 'pasajero'],
+      ['RATE_LIMITED', 'pasajero'],
+      ['INTERNAL_ERROR', 'pasajero'],
+      ['HTTP_ERROR', 'pasajero'],
+      ['REFRESH_FAILED', 'rechazada'],
+      ['INVALID_BODY', 'rechazada'],
+      ['ACCOUNT_BLOCKED', 'bloqueada'],
+    ])('un fallo %s es %s y no toca la sesion por si solo', async (codigo, esperado) => {
+      await entrar();
+      mockRefresh.mockResolvedValue({ success: false, error: { code: codigo, message: 'x' } });
+
+      await expect(useAuthStore.getState().refresh()).resolves.toBe(esperado);
+
+      // Quien decide cerrar es el cliente HTTP; el store solo informa.
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().accessToken).toBe('fake-access');
+    });
+
+    it('sin token en memoria la renovacion es un rechazo', async () => {
+      await expect(useAuthStore.getState().refresh()).resolves.toBe('rechazada');
+      expect(mockRefresh).not.toHaveBeenCalled();
+    });
+
+    it('si la persona sale mientras se renueva, el resultado se descarta', async () => {
+      await entrar();
+      let responder: (r: unknown) => void = () => {};
+      mockRefresh.mockReturnValue(new Promise((r) => { responder = r; }));
+
+      const renovacion = useAuthStore.getState().refresh();
+      useAuthStore.getState().logout();
+      responder(renovada);
+
+      await expect(renovacion).resolves.toBe('descartada');
+      expect(useAuthStore.getState().accessToken).toBeNull();
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+
+    describe('con el cliente HTTP real', () => {
+      const fetch401 = () =>
+        ({ status: 401, ok: false, json: async () => ({ error: { code: 'TOKEN_EXPIRED', message: 'x' } }) }) as unknown as Response;
+      const totalEsperas = ESPERAS_REINTENTO_REFRESCO_MS.reduce((a, b) => a + b, 0);
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      it('un fallo pasajero que no se recupera deja a la persona dentro con un aviso traducido', async () => {
+        await entrar();
+        const fetchMock = vi.fn().mockResolvedValue(fetch401());
+        vi.stubGlobal('fetch', fetchMock);
+        mockRefresh.mockResolvedValue(sinRed);
+
+        const pendiente = new HttpClient('http://x').get('/api/v1/wallets/me');
+        await vi.advanceTimersByTimeAsync(totalEsperas);
+        const r = await pendiente;
+
+        expect(r.success).toBe(false);
+        expect(r.error?.code).toBe('SESSION_UNCONFIRMED');
+        expect(r.error?.message).toBe(traducirFueraDeReact('err_session_unconfirmed'));
+        // Un intento y un reintento por espera; la peticion no se repitio.
+        expect(mockRefresh).toHaveBeenCalledTimes(ESPERAS_REINTENTO_REFRESCO_MS.length + 1);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const s = useAuthStore.getState();
+        expect(s.isAuthenticated).toBe(true);
+        expect(s.sessionHint).toBe(true);
+        expect(s.accessToken).toBe('fake-access');
+      });
+
+      it('si la red vuelve durante los reintentos, la peticion se repite con el token nuevo', async () => {
+        await entrar();
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(fetch401())
+          .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ data: { ok: 1 } }) });
+        vi.stubGlobal('fetch', fetchMock);
+        mockRefresh.mockResolvedValueOnce(sinRed).mockResolvedValueOnce(renovada);
+
+        const pendiente = new HttpClient('http://x').get<{ ok: number }>('/api/v1/wallets/me');
+        await vi.advanceTimersByTimeAsync(ESPERAS_REINTENTO_REFRESCO_MS[0]);
+        const r = await pendiente;
+
+        expect(r).toEqual({ success: true, data: { ok: 1 } });
+        expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer nuevo-access');
+        expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      });
+
+      it('un rechazo definitivo si cierra la sesion', async () => {
+        await entrar();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetch401()));
+        mockRefresh.mockResolvedValue({ success: false, error: { code: 'REFRESH_FAILED', message: 'x' } });
+
+        const r = await new HttpClient('http://x').get('/api/v1/wallets/me');
+
+        expect(r.error?.code).toBe('SESSION_EXPIRED');
+        expect(mockRefresh).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().isAuthenticated).toBe(false);
+        expect(useAuthStore.getState().logoutReason).toBeNull();
+      });
+
+      it('una cuenta bloqueada cierra la sesion y el login dice por que', async () => {
+        await entrar();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetch401()));
+        mockRefresh.mockResolvedValue({ success: false, error: { code: 'ACCOUNT_BLOCKED', message: 'x' } });
+
+        const r = await new HttpClient('http://x').get('/api/v1/wallets/me');
+
+        expect(r.error?.code).toBe('ACCOUNT_BLOCKED');
+        expect(useAuthStore.getState().isAuthenticated).toBe(false);
+        expect(useAuthStore.getState().logoutReason).toBe('blocked');
+      });
     });
   });
 

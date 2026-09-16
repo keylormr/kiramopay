@@ -44,6 +44,7 @@ const pt: TranslationKeys = {
   error: 'Erro',
   err_network: 'Não foi possível conectar ao KiramoPay. Verifique sua conexão e tente novamente.',
   err_session_expired: 'Sua sessão expirou. Entre novamente.',
+  err_session_unconfirmed: 'Não foi possível confirmar sua sessão. Verifique sua conexão e tente novamente em instantes.',
   err_rate_limited: 'Muitas solicitações. Aguarde um momento e tente novamente.',
   err_server: 'O servidor teve um problema. Tente novamente em instantes.',
   err_invalid_request: 'Não foi possível processar esses dados. Revise e tente novamente.',
