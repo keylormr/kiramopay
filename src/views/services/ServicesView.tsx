@@ -131,7 +131,14 @@ export const ServicesView: React.FC = () => {
   const handlePayService = async () => {
     if (!clientId || !billAmount || !selectedProvider || isProcessing) return;
     const amount = parseFloat(billAmount);
-    if (!(amount > 0)) return;
+    if (!(amount > 0)) {
+      // Defensa: el boton de abajo ya queda deshabilitado con un monto
+      // invalido. Si algun dia se dispara desde otro lado (Enter, reintento
+      // tras MFA), que la persona vea por que no paso nada.
+      setActionBlocked(false);
+      setActionError(t('bill_invalid_amount'));
+      return;
+    }
 
     setIsProcessing(true);
     setActionError('');
@@ -575,7 +582,7 @@ export const ServicesView: React.FC = () => {
             fullWidth
             onClick={handlePayService}
             loading={isProcessing}
-            disabled={!clientId || !billAmount || parseFloat(billAmount) > balance}
+            disabled={!clientId || !billAmount || !(parseFloat(billAmount) > 0) || parseFloat(billAmount) > balance}
           >
             {isProcessing ? t('processing_payment') : <>{t('pay')} {billAmount && formatCurrency(parseFloat(billAmount))}</>}
           </Button>
@@ -634,7 +641,9 @@ export const ServicesView: React.FC = () => {
                       : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary'
                   }`}
                 >
-                  {formatCurrency(amt).replace(',00', '')}
+                  {/* .replace(',00', '') se comia la coma de miles en vez del
+                      ".00" final (ej. ₡1,000.00 -> ₡10.00): anclado al final. */}
+                  {formatCurrency(amt).replace(/\.00$/, '')}
                 </button>
               ))}
             </div>

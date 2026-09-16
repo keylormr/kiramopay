@@ -1037,6 +1037,18 @@ const pt: TranslationKeys = {
   escrow_closed_delivery: 'O pagamento foi devolvido porque venceu o prazo para marcar a entrega.',
   escrow_closed_review: 'O vendedor recebeu porque venceu o prazo para reclamar.',
   escrow_deadline_passed: 'Esse prazo já venceu. O sistema aplica o resultado em alguns minutos.',
+  // Mensagens por código de erro do módulo: o texto bruto que o servidor
+  // envia nunca é mostrado (vem em inglês e é para os registros, não para a pessoa).
+  escrow_self_not_allowed: 'Você não pode criar um acordo com você mesmo',
+  escrow_amount_invalid: 'O valor deve ser maior que zero',
+  escrow_description_required: 'Informe o que está sendo comprado',
+  escrow_not_found: 'Esse acordo não existe mais',
+  escrow_forbidden: 'Você não faz parte desse acordo',
+  escrow_buyer_only: 'Só o comprador pode fazer isso',
+  escrow_seller_only: 'Só o vendedor pode fazer isso',
+  escrow_invalid_state: 'Essa ação não está mais disponível para esse acordo',
+  escrow_daily_limit_exceeded: 'Esse valor ultrapassa seu limite diário',
+  escrow_monthly_limit_exceeded: 'Esse valor ultrapassa seu limite mensal',
   admin_disputes_menu: 'Disputas de escrow',
   admin_disputes_menu_desc: 'Revisar e resolver os casos em disputa',
   admin_disputes_title: 'Disputas',
@@ -1348,6 +1360,7 @@ const pt: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'Ainda não temos convênio com esta empresa, por isso não podemos entregar o seu pagamento. Nada foi cobrado: o seu saldo continua igual.',
   recharge_no_agreement: 'Ainda não temos convênio com esta operadora, por isso a recarga não chegaria ao telefone. Nada foi cobrado: o seu saldo continua igual.',
+  bill_invalid_amount: 'Informe um valor maior que zero',
   ride_no_integration: 'Ainda não temos integração com este aplicativo de viagens, por isso não podemos pagar a corrida. Nada foi cobrado: o seu saldo continua igual.',
   order_no_integration: 'Ainda não temos integração com este serviço de pedidos, por isso o pedido não chegaria ao restaurante. Nada foi cobrado: o seu saldo continua igual.',
   ride_price_after_quote: 'O preço e o tempo aparecem quando o serviço os cotar.',

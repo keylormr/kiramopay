@@ -1183,6 +1183,18 @@ export type TranslationKeys = {
   escrow_closed_delivery: string;
   escrow_closed_review: string;
   escrow_deadline_passed: string;
+  // Mensajes por codigo de error del modulo (ver escrow/handler.go): nunca se
+  // muestra el texto crudo que manda el servidor.
+  escrow_self_not_allowed: string;
+  escrow_amount_invalid: string;
+  escrow_description_required: string;
+  escrow_not_found: string;
+  escrow_forbidden: string;
+  escrow_buyer_only: string;
+  escrow_seller_only: string;
+  escrow_invalid_state: string;
+  escrow_daily_limit_exceeded: string;
+  escrow_monthly_limit_exceeded: string;
   admin_disputes_menu: string;
   admin_disputes_menu_desc: string;
   admin_disputes_title: string;
@@ -1413,6 +1425,7 @@ export type TranslationKeys = {
   // (SIN_CONVENIO / SIN_INTEGRACION).
   bill_no_agreement: string;
   recharge_no_agreement: string;
+  bill_invalid_amount: string;
   ride_no_integration: string;
   order_no_integration: string;
   ride_price_after_quote: string;

@@ -1037,6 +1037,18 @@ const en: TranslationKeys = {
   escrow_closed_delivery: 'The payment was returned because the deadline to mark the delivery passed.',
   escrow_closed_review: 'The seller was paid because the deadline to dispute passed.',
   escrow_deadline_passed: 'That deadline has passed. The system will apply the result within a few minutes.',
+  // Messages per module error code: the raw text the server sends is never
+  // shown (it is in English and meant for logs, not for the person).
+  escrow_self_not_allowed: 'You cannot create an agreement with yourself',
+  escrow_amount_invalid: 'The amount must be greater than zero',
+  escrow_description_required: 'Enter what is being purchased',
+  escrow_not_found: 'That agreement no longer exists',
+  escrow_forbidden: 'You are not a party to this agreement',
+  escrow_buyer_only: 'Only the buyer can do this',
+  escrow_seller_only: 'Only the seller can do this',
+  escrow_invalid_state: 'That action is no longer available for this agreement',
+  escrow_daily_limit_exceeded: 'That amount exceeds your daily limit',
+  escrow_monthly_limit_exceeded: 'That amount exceeds your monthly limit',
   admin_disputes_menu: 'Escrow disputes',
   admin_disputes_menu_desc: 'Review and resolve disputed cases',
   admin_disputes_title: 'Disputes',
@@ -1348,6 +1360,7 @@ const en: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'We do not have an agreement with this company yet, so we cannot deliver your payment. Nothing was charged: your balance is unchanged.',
   recharge_no_agreement: 'We do not have an agreement with this carrier yet, so the top-up would not reach the phone. Nothing was charged: your balance is unchanged.',
+  bill_invalid_amount: 'Enter an amount greater than zero',
   ride_no_integration: 'We are not integrated with this ride app yet, so we cannot pay for the trip. Nothing was charged: your balance is unchanged.',
   order_no_integration: 'We are not integrated with this delivery service yet, so the order would not reach the restaurant. Nothing was charged: your balance is unchanged.',
   ride_price_after_quote: 'The price and the time show up once the service quotes them.',

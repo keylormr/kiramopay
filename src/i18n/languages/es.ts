@@ -1037,6 +1037,18 @@ const es: TranslationKeys = {
   escrow_closed_delivery: 'Se devolvió el pago porque venció el plazo para marcar la entrega.',
   escrow_closed_review: 'Se pagó al vendedor porque venció el plazo para reclamar.',
   escrow_deadline_passed: 'Ese plazo ya venció. El sistema aplica el resultado en unos minutos.',
+  // Mensajes por codigo de error del modulo: nunca se muestra el texto crudo
+  // que manda el servidor (va en ingles y es para logs, no para la persona).
+  escrow_self_not_allowed: 'No puedes crear un acuerdo contigo mismo',
+  escrow_amount_invalid: 'El monto debe ser mayor a cero',
+  escrow_description_required: 'Escribe qué se está comprando',
+  escrow_not_found: 'Ese acuerdo ya no existe',
+  escrow_forbidden: 'No formas parte de este acuerdo',
+  escrow_buyer_only: 'Solo el comprador puede hacer esto',
+  escrow_seller_only: 'Solo el vendedor puede hacer esto',
+  escrow_invalid_state: 'Esa acción ya no está disponible para este acuerdo',
+  escrow_daily_limit_exceeded: 'Ese monto supera tu límite diario',
+  escrow_monthly_limit_exceeded: 'Ese monto supera tu límite mensual',
   admin_disputes_menu: 'Disputas de escrow',
   admin_disputes_menu_desc: 'Revisar y resolver los casos en disputa',
   admin_disputes_title: 'Disputas',
@@ -1352,6 +1364,7 @@ const es: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'Todavía no tenemos convenio con esta empresa, así que no podemos entregarle tu pago. No se cobró nada: tu saldo sigue igual.',
   recharge_no_agreement: 'Todavía no tenemos convenio con este operador, así que la recarga no llegaría al teléfono. No se cobró nada: tu saldo sigue igual.',
+  bill_invalid_amount: 'Ingresa un monto mayor a cero',
   ride_no_integration: 'Todavía no tenemos integración con esta aplicación de viajes, así que no podemos pagarle el viaje. No se cobró nada: tu saldo sigue igual.',
   order_no_integration: 'Todavía no tenemos integración con este servicio de pedidos, así que el pedido no llegaría al restaurante. No se cobró nada: tu saldo sigue igual.',
   ride_price_after_quote: 'El precio y el tiempo aparecen cuando el servicio los cotice.',

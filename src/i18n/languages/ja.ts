@@ -1029,6 +1029,18 @@ const ja: TranslationKeys = {
   escrow_closed_delivery: '配送済みにする期限が過ぎたため、代金は返金されました。',
   escrow_closed_review: '異議申し立ての期限が過ぎたため、販売者に支払われました。',
   escrow_deadline_passed: 'この期限はすでに過ぎています。数分以内にシステムが結果を適用します。',
+  // モジュールのエラーコードごとのメッセージ。サーバーが返す生のテキストは
+  // 英語でログ用のため、画面には表示しません。
+  escrow_self_not_allowed: '自分自身と契約を作成することはできません',
+  escrow_amount_invalid: '金額は0より大きい必要があります',
+  escrow_description_required: '購入する内容を入力してください',
+  escrow_not_found: 'この契約はもう存在しません',
+  escrow_forbidden: 'この契約の当事者ではありません',
+  escrow_buyer_only: 'これは購入者のみ実行できます',
+  escrow_seller_only: 'これは販売者のみ実行できます',
+  escrow_invalid_state: 'この契約ではこの操作はもう利用できません',
+  escrow_daily_limit_exceeded: 'この金額は1日の上限を超えています',
+  escrow_monthly_limit_exceeded: 'この金額は月間の上限を超えています',
   admin_disputes_menu: 'エスクローの紛争',
   admin_disputes_menu_desc: '紛争中の案件を確認・解決',
   admin_disputes_title: '紛争',
@@ -1340,6 +1352,7 @@ const ja: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'この会社とはまだ提携していないため、お支払いをお届けできません。請求は発生していません。残高はそのままです。',
   recharge_no_agreement: 'この通信事業者とはまだ提携していないため、チャージはその番号に届きません。請求は発生していません。残高はそのままです。',
+  bill_invalid_amount: '0より大きい金額を入力してください',
   ride_no_integration: 'この配車アプリとはまだ連携していないため、乗車料金をお支払いできません。請求は発生していません。残高はそのままです。',
   order_no_integration: 'この注文サービスとはまだ連携していないため、注文はお店に届きません。請求は発生していません。残高はそのままです。',
   ride_price_after_quote: '料金と所要時間は、サービスが見積もりを出してから表示されます。',
