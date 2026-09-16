@@ -154,9 +154,14 @@ func (r *Repository) ConvertirEnUnaTx(
 	return tx.Commit(ctx)
 }
 
-// ApartarParaStakingEnUnaTx descuenta el activo y escribe la posicion juntos.
-// Sueltos, un fallo al escribir la posicion dejaba el saldo descontado sin nada
-// que lo respalde: el usuario perdia el activo y no tenia posicion en staking.
+// ApartarParaStakingEnUnaTx descuenta el activo, escribe la posicion y anota el
+// movimiento, los tres juntos. Sueltos, un fallo al escribir la posicion dejaba
+// el saldo descontado sin nada que lo respalde: el usuario perdia el activo y no
+// tenia posicion en staking.
+//
+// El movimiento es lo que la pantalla muestra en "Transacciones recientes", que
+// se arma solo con crypto_transactions. Sin el, el activo salia del saldo y el
+// historial no decia a donde.
 func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRecord) error {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
@@ -177,7 +182,29 @@ func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRe
 	); err != nil {
 		return err
 	}
+	if err := insertarMovimiento(ctx, tx, movimientoDeStaking(s.UserID, "stake", s.Asset, s.Amount)); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// movimientoDeStaking arma la anotacion de apartar o liberar un activo.
+//
+// No hay precio ni fiat de por medio: el activo solo cambia de lugar. Por eso
+// Price va en cero y Total repite la cantidad, en el mismo activo (Currency),
+// igual que una conversion anota lo recibido en el simbolo de destino.
+func movimientoDeStaking(userID, tipo, activo string, cantidad decimal.Decimal) *TransactionRecord {
+	return &TransactionRecord{
+		UserID:   userID,
+		Type:     tipo,
+		Asset:    activo,
+		Amount:   cantidad,
+		Price:    decimal.Zero,
+		Total:    cantidad,
+		Currency: activo,
+		Fee:      decimal.Zero,
+		Status:   "completed",
+	}
 }
 
 // VenderEnTx descuenta el activo vendido y anota la venta DENTRO de la
@@ -335,6 +362,11 @@ func (r *Repository) GetStakingByID(ctx context.Context, id, userID string) (*St
 // returns its principal plus any accrued earnings to the user's asset balance,
 // in one transaction. The row lock prevents a double release under concurrent
 // unstake calls.
+//
+// El retiro queda anotado en crypto_transactions dentro de la misma
+// transaccion: el historial de la pantalla sale solo de esa tabla, y sin la
+// fila el activo volvia al saldo sin que nada lo explicara. Dos retiros
+// simultaneos no anotan dos veces: el segundo no pasa del bloqueo.
 func (r *Repository) CompleteStakingAndRelease(ctx context.Context, id, userID string) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -378,6 +410,10 @@ func (r *Repository) CompleteStakingAndRelease(ctx context.Context, id, userID s
 			uuid.New().String(), userID, asset, release); err != nil {
 			return err
 		}
+	}
+
+	if err := insertarMovimiento(ctx, tx, movimientoDeStaking(userID, "unstake", asset, release)); err != nil {
+		return err
 	}
 
 	return tx.Commit(ctx)

@@ -1286,7 +1286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get crypto transaction history */
+        /**
+         * Get crypto transaction history
+         * @description The last 50 movements, newest first: buy, sell, convert, stake and unstake. Staking and withdrawing are recorded here in the same transaction that moves the asset, so this list is the whole history of the crypto balance.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1301,7 +1304,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"][];
+                    };
                 };
             };
         };
@@ -1588,7 +1593,7 @@ export interface paths {
         put?: never;
         /**
          * Stake cryptocurrency
-         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero.
+         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves.
          */
         post: {
             parameters: {
@@ -1665,7 +1670,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Unstaked; principal and earnings are back in the asset balance. */
+                /** @description Unstaked; principal and earnings are back in the asset balance, and an `unstake` movement with the released quantity is in the crypto history. Both commit together. */
                 204: {
                     headers: {
                         [name: string]: unknown;
@@ -7703,7 +7708,7 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
-        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. Buy, sell and convert charge no fee: `fee` is zero. */
+        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. For stake and unstake, `amount` and `total` are the quantity set aside or released, `currency` is the asset itself and `price` is zero: no price or fiat is involved. No movement charges a fee: `fee` is zero. */
         CryptoTransactionRecord: {
             /** Format: uuid */
             id?: string;

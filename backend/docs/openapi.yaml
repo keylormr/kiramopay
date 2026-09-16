@@ -758,11 +758,22 @@ paths:
     get:
       tags: [Crypto]
       summary: Get crypto transaction history
+      description: >-
+        The last 50 movements, newest first: buy, sell, convert, stake and
+        unstake. Staking and withdrawing are recorded here in the same
+        transaction that moves the asset, so this list is the whole history
+        of the crypto balance.
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Crypto transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CryptoTransactionRecord'
 
   /api/v1/crypto/buy:
     post:
@@ -947,7 +958,9 @@ paths:
         USDT and USDC were withdrawn from the program: a new position is
         rejected with STAKING_NOT_AVAILABLE, while positions opened before
         stay listed and can still be withdrawn. The rate is set by the server;
-        earnings accrual is not live, so `earned` stays at zero.
+        earnings accrual is not live, so `earned` stays at zero. The asset set
+        aside is recorded as a `stake` movement in the crypto history, in the
+        same transaction; if it cannot be recorded, nothing moves.
       security:
         - bearerAuth: []
       responses:
@@ -988,7 +1001,10 @@ paths:
         - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
-          description: Unstaked; principal and earnings are back in the asset balance.
+          description: >-
+            Unstaked; principal and earnings are back in the asset balance, and
+            an `unstake` movement with the released quantity is in the crypto
+            history. Both commit together.
         '404':
           description: STAKING_POSITION_NOT_FOUND — the position does not exist or belongs to someone else.
           content:
@@ -4591,8 +4607,10 @@ components:
         unit price in `currency`, and `total` is the fiat that moved, to the
         centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity
         given, `total` the quantity received, `currency` the destination
-        symbol and `price` the destination's USD unit price. Buy, sell and
-        convert charge no fee: `fee` is zero.
+        symbol and `price` the destination's USD unit price. For stake and
+        unstake, `amount` and `total` are the quantity set aside or released,
+        `currency` is the asset itself and `price` is zero: no price or fiat
+        is involved. No movement charges a fee: `fee` is zero.
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }

@@ -26,12 +26,12 @@ type AssetRecord struct {
 type TransactionRecord struct {
 	ID        string          `json:"id"`
 	UserID    string          `json:"user_id"`
-	Type      string          `json:"type"`     // buy, sell, convert, send, receive
+	Type      string          `json:"type"`     // buy, sell, convert, stake, unstake
 	Asset     string          `json:"asset"`    // Symbol
 	Amount    decimal.Decimal `json:"amount"`   // Crypto amount
-	Price     decimal.Decimal `json:"price"`    // Por unidad: en Currency (compra, venta) o en USD (conversion)
-	Total     decimal.Decimal `json:"total"`    // Fiat movido al centimo, o lo recibido en una conversion
-	Currency  string          `json:"currency"` // Moneda del Total: USD, CRC o el simbolo de destino
+	Price     decimal.Decimal `json:"price"`    // Por unidad: en Currency (compra, venta), en USD (conversion) o cero (staking)
+	Total     decimal.Decimal `json:"total"`    // Fiat movido al centimo, lo recibido en una conversion o lo apartado/liberado en staking
+	Currency  string          `json:"currency"` // Moneda del Total: USD, CRC o un simbolo (destino de la conversion, activo del staking)
 	Fee       decimal.Decimal `json:"fee"`
 	Status    string          `json:"status"`
 	CreatedAt time.Time       `json:"created_at"`
