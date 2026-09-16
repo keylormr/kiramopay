@@ -391,6 +391,61 @@ describe('CryptoPriceService', () => {
       expect(await cryptoPriceService.getPriceHistory('BTC')).toEqual([]);
       expect(await cryptoPriceService.getAllPriceHistories(['BTC', 'ETH'])).toEqual({ BTC: [], ETH: [] });
     });
+
+    it('entrega el historial REAL cuando el backend lo trae (sparkline_7d)', async () => {
+      backendResponde({
+        BTC: {
+          symbol: 'BTC', price: 61234.5, change_24h: 1.25, volume_24h: 111, market_cap: 222,
+          sparkline_7d: [60000, 60500, 61000, 61234.5],
+        },
+      });
+
+      expect(await cryptoPriceService.getPriceHistory('BTC')).toEqual([60000, 60500, 61000, 61234.5]);
+      expect(await cryptoPriceService.getAllPriceHistories(['BTC', 'ETH'])).toEqual({
+        BTC: [60000, 60500, 61000, 61234.5],
+        ETH: [],
+      });
+    });
+
+    it('getAllPriceHistories pide un solo lote, no uno por simbolo', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            BTC: { symbol: 'BTC', price: 61234.5, change_24h: 0, volume_24h: 0, market_cap: 0, sparkline_7d: [1, 2] },
+            ETH: { symbol: 'ETH', price: 2500, change_24h: 0, volume_24h: 0, market_cap: 0, sparkline_7d: [3, 4] },
+          },
+        }),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await cryptoPriceService.getAllPriceHistories(['BTC', 'ETH']);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('high24h/low24h reales del backend reemplazan al estimado', async () => {
+      backendResponde({
+        BTC: {
+          symbol: 'BTC', price: 61234.5, change_24h: 1.25, volume_24h: 111, market_cap: 222,
+          high_24h: 62000, low_24h: 60500,
+        },
+      });
+
+      const btc = await cryptoPriceService.getPrice('BTC');
+      expect(btc!.high24h).toBe(62000);
+      expect(btc!.low24h).toBe(60500);
+    });
+
+    it('sin high_24h/low_24h reales, sigue estimando en vez de mostrar cero', async () => {
+      backendResponde({
+        BTC: { symbol: 'BTC', price: 61234.5, change_24h: 1.25, volume_24h: 111, market_cap: 222 },
+      });
+
+      const btc = await cryptoPriceService.getPrice('BTC');
+      expect(btc!.high24h).toBeGreaterThan(btc!.price);
+      expect(btc!.low24h).toBeLessThan(btc!.price);
+    });
   });
 
   describe('modo demo (sin backend)', () => {

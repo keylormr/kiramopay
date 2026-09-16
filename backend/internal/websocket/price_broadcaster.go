@@ -78,8 +78,27 @@ func (pb *PriceBroadcaster) broadcastPrices() {
 	msg := PriceMessage{
 		Type:      "price_update",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Prices:    prices,
+		Prices:    sinSparkline(prices),
 	}
 
 	pb.hub.Broadcast(msg)
+}
+
+// sinSparkline devuelve una copia liviana del mapa de precios sin el
+// historial de 7 dias. El sparkline solo cambia en el origen cada ~6 horas
+// (ver el comentario de la URL en prices.go): reenviar ~168 numeros por
+// moneda en CADA tick del WebSocket (cada 5-15s) no trae un dato mas fresco,
+// solo infla el mensaje a cada cliente conectado. Las sparklines de la
+// pantalla se alimentan por REST (GET /crypto/prices), que si las incluye.
+func sinSparkline(prices map[string]*crypto.PriceData) map[string]*crypto.PriceData {
+	liviano := make(map[string]*crypto.PriceData, len(prices))
+	for symbol, p := range prices {
+		if p == nil {
+			continue
+		}
+		copia := *p
+		copia.Sparkline7d = nil
+		liviano[symbol] = &copia
+	}
+	return liviano
 }

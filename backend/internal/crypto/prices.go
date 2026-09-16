@@ -114,7 +114,7 @@ func resolverHost(base, apiKey string, demo bool) string {
 }
 
 // SetBaseURL points the service at another host that speaks the CoinGecko
-// simple/price API. Empty restores the default endpoint.
+// coins/markets API. Empty restores the default endpoint.
 //
 // Exists so the tests can serve their own prices instead of reaching
 // api.coingecko.com: the free tier rate-limits, the circuit breaker opens and
@@ -213,8 +213,15 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	base := resolverHost(ps.baseURL, ps.apiKey, ps.apiKeyDemo)
 	ps.mu.RUnlock()
 
+	// /coins/markets con sparkline=true reemplaza a /simple/price: trae en la
+	// MISMA llamada precio, cambio 24h, volumen, market cap, high/low 24h
+	// reales (antes estimados a mano en el frontend) y el historial de 7 dias
+	// para las sparklines de "Mis Activos" — sin costar una llamada extra de
+	// cuota, porque viaja en la respuesta que ya se pedia. Ver la
+	// investigacion de la ronda de cripto (2026-09-13) para las alternativas
+	// descartadas (por-moneda: 10x mas caras) y el calculo de cuota.
 	url := fmt.Sprintf(
-		"%s/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true",
+		"%s/coins/markets?vs_currency=usd&ids=%s&sparkline=true&price_change_percentage=24h",
 		base, strings.Join(ids, ","),
 	)
 
@@ -263,11 +270,20 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		return ps.copiaDeCache(), nil
 	}
 
-	var data map[string]struct {
-		USD          float64 `json:"usd"`
-		USD24hChange float64 `json:"usd_24h_change"`
-		USD24hVol    float64 `json:"usd_24h_vol"`
-		USDMarketCap float64 `json:"usd_market_cap"`
+	// /coins/markets devuelve un ARREGLO de objetos (uno por moneda pedida),
+	// no un mapa por id como /simple/price: el decode cambia de forma, no
+	// solo la URL.
+	var data []struct {
+		ID                       string  `json:"id"`
+		CurrentPrice             float64 `json:"current_price"`
+		MarketCap                float64 `json:"market_cap"`
+		TotalVolume              float64 `json:"total_volume"`
+		High24h                  float64 `json:"high_24h"`
+		Low24h                   float64 `json:"low_24h"`
+		PriceChangePercentage24h float64 `json:"price_change_percentage_24h"`
+		SparklineIn7d            struct {
+			Price []float64 `json:"price"`
+		} `json:"sparkline_in_7d"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
@@ -281,14 +297,23 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 	defer ps.mu.Unlock()
 
 	ahora := time.Now()
-	for cgID, prices := range data {
-		symbol := symbolToID[cgID]
+	for _, item := range data {
+		symbol, ok := symbolToID[item.ID]
+		if !ok {
+			// Un id que el catalogo no pidio (o que CoinGecko devolviera mal
+			// formado): no hay a que simbolo asignarlo, se descarta en vez de
+			// adivinar.
+			continue
+		}
 		pd := &PriceData{
-			Symbol:    symbol,
-			Price:     prices.USD,
-			Change24h: prices.USD24hChange,
-			Volume24h: prices.USD24hVol,
-			MarketCap: prices.USDMarketCap,
+			Symbol:      symbol,
+			Price:       item.CurrentPrice,
+			Change24h:   item.PriceChangePercentage24h,
+			Volume24h:   item.TotalVolume,
+			MarketCap:   item.MarketCap,
+			High24h:     item.High24h,
+			Low24h:      item.Low24h,
+			Sparkline7d: item.SparklineIn7d.Price,
 		}
 		result[symbol] = pd
 		ps.cache[symbol] = pd

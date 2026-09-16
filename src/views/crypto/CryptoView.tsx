@@ -44,17 +44,27 @@ const formatLargeNumber = (value: number | string | undefined | null): string =>
 
 // Mini sparkline: curva suavizada (Catmull-Rom a Bezier) con area
 // degradada, en vez de la polilinea quebrada que se veia de juguete.
-const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean }> = ({ data, positive }) => {
+//
+// Sin historial real (backend sin sparkline para el simbolo, o modo demo
+// recien arrancando) NO se dibuja una linea: una linea punteada gris se ve
+// como un grafico -sugiere una tendencia plana real, o un grafico roto- y
+// ninguna de las dos cosas es cierta. Se usa el mismo "—" que el resto de
+// esta pantalla ya usa para un dato que no llego (ver SIN_DATO), del mismo
+// tamano que el grafico real para que la fila no salte de layout.
+const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean; sinDatosLabel: string }> = ({ data, positive, sinDatosLabel }) => {
   // Need at least 2 valid numbers to draw a line
   const validData = Array.isArray(data) ? data.filter(d => typeof d === 'number' && !isNaN(d)) : [];
   const tono = positive ? '#10B981' : '#EF4444';
 
   if (validData.length < 2) {
-    // Show a flat line instead of loading skeleton when we have some data
     return (
-      <svg width={80} height={40} className="overflow-visible">
-        <line x1="0" y1="20" x2="80" y2="20" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4,4" />
-      </svg>
+      <div
+        role="img"
+        aria-label={sinDatosLabel}
+        className="w-20 h-10 shrink-0 flex items-center justify-center uv-text-muted text-lg font-semibold select-none"
+      >
+        —
+      </div>
     );
   }
 
@@ -79,7 +89,9 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
   const gradId = `spark-${positive ? 'up' : 'down'}`;
 
   return (
-    <svg width={width} height={height} className="overflow-visible">
+    // Decorativo: el cambio de 24h ya se lee en texto junto a la fila: la
+    // curva no le agrega informacion a quien usa lector de pantalla.
+    <svg width={width} height={height} className="overflow-visible shrink-0" aria-hidden="true">
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={tono} stopOpacity="0.25" />
@@ -181,6 +193,15 @@ export const CryptoView: React.FC = () => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
 
+  // Ref para leer el ultimo priceHistory real dentro del efecto del
+  // WebSocket sin meter marketData en su arreglo de dependencias: ese efecto
+  // llama setMarketData al final, asi que declarar marketData como
+  // dependencia lo reprogramaria a si mismo en bucle en cada tick.
+  const marketDataRef = useRef(marketData);
+  useEffect(() => {
+    marketDataRef.current = marketData;
+  }, [marketData]);
+
   // Fetch prices from simulated service
   const fetchPrices = useCallback(async () => {
     try {
@@ -193,16 +214,30 @@ export const CryptoView: React.FC = () => {
       setPriceError(faltanPrecios(prices.filter(p => p.price > 0).map(p => p.symbol)));
 
       if (prices.length > 0) {
-        // Store full market data
+        // Store full market data. Fusionar, NUNCA reemplazar: un sondeo
+        // puntual puede traer MENOS simbolos que el anterior (el backend
+        // omite uno sin precio real, ver el comentario de getPrices() en
+        // cryptoPrices.ts), y reemplazar el mapa entero le borraria a ese
+        // simbolo el ultimo priceHistory real conocido -el siguiente tick de
+        // WebSocket lo leeria como [] y le comeria el sparkline real, el
+        // mismo bug que el comentario de abajo dice haber cerrado.
         const dataMap: Record<string, CryptoPriceData> = {};
         prices.forEach(p => { dataMap[p.symbol] = p; });
-        setMarketData(dataMap);
+        setMarketData(prev => ({ ...prev, ...dataMap }));
 
-        // Update state with new prices
+        // Update state with new prices. priceHistory viaja en la MISMA
+        // respuesta (getPrices ya trae sparkline_7d, ver cryptoPrices.ts): si
+        // se omitiera aca, el reductor updatePrices() de crypto.store.ts lo
+        // toma como "no hay historial nuevo" y le corta el punto mas viejo al
+        // sparkline real para pegarle el precio actual al final -en unos 14 a
+        // 42 minutos de sondeo el historial de 7 dias quedaria irreconocible.
+        // Antes esto no importaba porque priceHistory siempre llegaba vacio;
+        // ahora que trae datos reales hay que propagarlos.
         const updates = prices.map(p => ({
           symbol: p.symbol,
           price: p.price,
-          change24h: p.change24h
+          change24h: p.change24h,
+          priceHistory: p.priceHistory
         }));
         dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
         setLastUpdated(new Date());
@@ -214,47 +249,26 @@ export const CryptoView: React.FC = () => {
     }
   }, []);
 
-  // Fetch price history for sparklines
-  const fetchPriceHistories = useCallback(async () => {
-    try {
-      const histories = await cryptoPriceService.getAllPriceHistories(CRYPTO_SYMBOLS);
-
-      // Update assets with price history
-      const updates = Object.entries(histories).map(([symbol, history]) => ({
-        symbol,
-        price: 0,
-        change24h: 0,
-        priceHistory: history
-      })).filter(u => u.priceHistory.length > 0);
-
-      if (updates.length > 0) {
-        dispatchRef.current({ type: 'UPDATE_CRYPTO_PRICES', payload: updates });
-      }
-    } catch {
-      // Price history fetch failed — sparklines will show flat line
-    }
-  }, []);
-
   // Initial fetch and periodic updates — runs only once on mount
   useEffect(() => {
     // Schedule initial fetch asynchronously to avoid synchronous setState in effect
     const initialTimer = setTimeout(() => {
       fetchPrices();
-      fetchPriceHistories();
     }, 0);
 
-    // Update prices every 5 minutes (stable display, manual refresh available)
+    // Update prices (y su sparkline, propagada en fetchPrices de arriba) cada
+    // 5 minutos, pantalla estable con refresco manual disponible. Antes habia
+    // un fetchPriceHistories() aparte cada 10 minutos que pedia exactamente
+    // el mismo endpoint (/crypto/prices) solo para leer priceHistory: con
+    // fetchPrices() ya propagandolo, esa segunda llamada duplicaba trafico e
+    // impactos al proveedor (CoinGecko) sin ganar nada nuevo.
     const priceInterval = setInterval(fetchPrices, 300000);
-
-    // Update histories every 10 minutes
-    const historyInterval = setInterval(fetchPriceHistories, 600000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(priceInterval);
-      clearInterval(historyInterval);
     };
-  }, [fetchPrices, fetchPriceHistories]);
+  }, [fetchPrices]);
 
   // Precios en vivo por WebSocket mientras la vista esta abierta. El hook
   // existia sin que nadie lo montara; el canal quedo sano en el PR #103. El
@@ -269,11 +283,26 @@ export const CryptoView: React.FC = () => {
     const timer = setTimeout(() => {
       dispatchRef.current({
         type: 'UPDATE_CRYPTO_PRICES',
-        payload: entradas.map(p => ({ symbol: p.symbol, price: p.price, change24h: p.change_24h })),
+        // priceHistory: el WebSocket no lo trae (ver el comentario de
+        // setMarketData abajo), pero hay que RE-ENVIAR el ultimo real que
+        // guardo el sondeo REST -si se omite, updatePrices() de
+        // crypto.store.ts lo lee como "sin historial nuevo" y le corta el
+        // punto mas viejo al sparkline para pegarle este precio al final. Con
+        // un tick cada 5-15s eso se comeria el historial real de 7 dias en
+        // minutos (ver el hallazgo original: PR #201).
+        payload: entradas.map(p => ({
+          symbol: p.symbol,
+          price: p.price,
+          change24h: p.change_24h,
+          priceHistory: marketDataRef.current[p.symbol]?.priceHistory ?? [],
+        })),
       });
       setMarketData(prev => {
         const siguiente = { ...prev };
         for (const p of entradas) {
+          // El WebSocket ya trae high/low REALES (mismo /coins/markets que el
+          // REST); el estimado desde change_24h queda solo como ultimo
+          // respaldo si ni el socket ni un sondeo REST previo los trajeron.
           const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
           siguiente[p.symbol] = {
             symbol: p.symbol,
@@ -281,9 +310,12 @@ export const CryptoView: React.FC = () => {
             change24h: p.change_24h ?? 0,
             marketCap: p.market_cap ?? prev[p.symbol]?.marketCap ?? 0,
             volume24h: p.volume_24h ?? prev[p.symbol]?.volume24h ?? 0,
-            high24h: prev[p.symbol]?.high24h ?? p.price * (1 + rango / 2),
-            low24h: prev[p.symbol]?.low24h ?? p.price * (1 - rango / 2),
+            high24h: p.high_24h ?? prev[p.symbol]?.high24h ?? p.price * (1 + rango / 2),
+            low24h: p.low_24h ?? prev[p.symbol]?.low24h ?? p.price * (1 - rango / 2),
             lastUpdated: preciosWsMomento ?? new Date().toISOString(),
+            // El sparkline no viaja por WebSocket (ver el comentario de
+            // high_24h/low_24h arriba): se conserva el ultimo que trajo REST.
+            priceHistory: prev[p.symbol]?.priceHistory ?? [],
           };
         }
         return siguiente;
@@ -729,7 +761,7 @@ export const CryptoView: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </button>
                 );
               })}
@@ -821,7 +853,7 @@ export const CryptoView: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </div>
                 </button>
               );

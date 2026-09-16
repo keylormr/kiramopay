@@ -69,6 +69,47 @@ describe('useCryptoStore', () => {
     expect(btc.priceChange24h).toBe(5.0);
   });
 
+  // PR #201: el sparkline de 7 dias que trae el backend (sparkline_7d via
+  // getPrices) se corrompia porque los llamadores periodicos (sondeo REST de
+  // fetchPrices() cada 5 min y el WebSocket de precios cada 5-15s en
+  // CryptoView.tsx) despachaban UPDATE_CRYPTO_PRICES sin priceHistory. El
+  // reductor de abajo (updatePrices) tomaba eso como "no hay historial nuevo,
+  // simula un paso mas" y le cortaba el punto mas viejo al historial real
+  // para pegarle el precio actual al final. La correccion fue en el llamador
+  // (CryptoView.tsx propaga el priceHistory que ya trae getPrices() y
+  // reenvia el ultimo real conocido en cada tick de WebSocket, ver
+  // marketDataRef); esta prueba fija ese contrato: si el reductor recibe el
+  // historial real (llegue de donde llegue), debe conservarlo intacto.
+  it('conserva el sparkline real si el update lo trae, incluso en llamadas seguidas (fetchPrices + tick de WebSocket)', () => {
+    const historialReal = Array.from({ length: 168 }, (_, i) => 60000 + i * 10);
+
+    // 1) fetchPrices() del backend: trae el historial real de 7 dias.
+    useCryptoStore.getState().updatePrices([
+      { symbol: 'BTC', price: 65000, change24h: 1.5, priceHistory: historialReal },
+    ]);
+    let btc = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!;
+    expect(btc.priceHistory).toEqual(historialReal);
+
+    // 2) Tick de WebSocket instantes despues: CryptoView reenvia el mismo
+    // historial (el socket no trae sparkline) en vez de omitirlo.
+    useCryptoStore.getState().updatePrices([
+      { symbol: 'BTC', price: 65123, change24h: 1.6, priceHistory: historialReal },
+    ]);
+    btc = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!;
+    expect(btc.priceHistory).toEqual(historialReal); // ni se corto el primero ni se inventa uno al final
+    expect(btc.priceHistory[0]).toBe(60000);
+    expect(btc.currentPrice).toBe(65123);
+  });
+
+  it('sin priceHistory en el update (backend no lo trajo para este simbolo), sigue simulando un paso mas — comportamiento del modo demo', () => {
+    const antes = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!.priceHistory;
+    useCryptoStore.getState().updatePrices([
+      { symbol: 'BTC', price: 45500, change24h: 2.0 },
+    ]);
+    const btc = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!;
+    expect(btc.priceHistory).toEqual([...antes.slice(1), 45500]);
+  });
+
   it('should toggle favorites', () => {
     expect(useCryptoStore.getState().favoriteAssets).toContain('BTC');
     useCryptoStore.getState().toggleFavorite('BTC');

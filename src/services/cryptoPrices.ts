@@ -17,6 +17,14 @@
 // produccion mostraba precios de enero 2025 con ruido aleatorio como si
 // fueran de hoy y el aviso de "no se pudieron actualizar los precios" nunca
 // llegaba a encenderse.
+//
+// Historial de 7 dias (sparklines): el backend ahora lo trae REAL en la misma
+// respuesta de /crypto/prices (sparkline_7d, desde CoinGecko /coins/markets),
+// junto con high_24h/low_24h reales. Antes esos dos ultimos se ESTIMABAN aca
+// desde change_24h porque el feed viejo (/simple/price) no los traia; el
+// estimado queda solo como respaldo si el campo faltara. La regla de fondo no
+// cambia: un simbolo sin sparkline real se queda sin historial, nunca con uno
+// inventado.
 
 import { getUsdToCrcRate } from './fxRate';
 import { resolveApiBaseUrl } from '@/api/baseUrl';
@@ -84,6 +92,9 @@ export interface CryptoPriceData {
   high24h: number;
   low24h: number;
   lastUpdated: string;
+  /** Precios de los ultimos 7 dias para la sparkline. Vacio si no hay dato
+   * real (nunca un historial inventado). */
+  priceHistory: number[];
 }
 
 export interface PriceHistoryPoint {
@@ -179,8 +190,16 @@ class CryptoPriceService {
       const r = await fetch(`${base}/api/v1/crypto/prices?symbols=${symbols.map(s => s.toUpperCase()).join(',')}`);
       if (!r.ok) return reales;
       const cuerpo = await r.json();
-      const datos: Record<string, { symbol: string; price: number; change_24h: number; volume_24h: number; market_cap: number }> =
-        cuerpo?.data ?? {};
+      const datos: Record<string, {
+        symbol: string;
+        price: number;
+        change_24h: number;
+        volume_24h: number;
+        market_cap: number;
+        high_24h?: number;
+        low_24h?: number;
+        sparkline_7d?: number[];
+      }> = cuerpo?.data ?? {};
       const ahora = new Date().toISOString();
       // Solo se acepta lo que se pidio: un simbolo que no estaba en la consulta
       // acabaria contestando por otro (getPrice devolveria el precio de una
@@ -189,19 +208,29 @@ class CryptoPriceService {
       for (const p of Object.values(datos)) {
         if (!p || typeof p.price !== 'number' || p.price <= 0) continue;
         if (typeof p.symbol !== 'string' || !pedidos.has(p.symbol.toUpperCase())) continue;
-        // El feed no trae maximo/minimo del dia; se estiman desde la variacion
-        // para que las tarjetas no muestren cero.
-        const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
         const simbolo = p.symbol.toUpperCase();
+        // high_24h/low_24h reales del proveedor (CoinGecko /coins/markets).
+        // El estimado desde change_24h queda solo de respaldo por si el
+        // backend no los trajera para este simbolo.
+        const rango = Math.abs(p.change_24h ?? 0) / 100 + 0.02;
+        const high24h = typeof p.high_24h === 'number' && p.high_24h > 0 ? p.high_24h : p.price * (1 + rango / 2);
+        const low24h = typeof p.low_24h === 'number' && p.low_24h > 0 ? p.low_24h : p.price * (1 - rango / 2);
+        // sparkline_7d: historial REAL de 7 dias. Si el backend no lo trajo
+        // para este simbolo, la sparkline se queda sin datos — nunca con un
+        // historial inventado (ver la cabecera de este archivo).
+        const priceHistory = Array.isArray(p.sparkline_7d)
+          ? p.sparkline_7d.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+          : [];
         reales.set(simbolo, {
           symbol: simbolo,
           price: p.price,
           change24h: p.change_24h ?? 0,
           marketCap: p.market_cap ?? 0,
           volume24h: p.volume_24h ?? 0,
-          high24h: p.price * (1 + rango / 2),
-          low24h: p.price * (1 - rango / 2),
+          high24h,
+          low24h,
           lastUpdated: ahora,
+          priceHistory,
         });
         // Anclar el simulador al precio real: los historiales de sparkline
         // terminan donde el mercado esta de verdad.
@@ -249,6 +278,9 @@ class CryptoPriceService {
       high24h: precio,
       low24h: precio,
       lastUpdated: new Date().toISOString(),
+      // Un dolar anclado vale lo mismo hoy que hace una semana: una linea
+      // plana real (por definicion del anclaje), no un historial inventado.
+      priceHistory: Array(7).fill(precio),
     };
   }
 
@@ -293,6 +325,10 @@ class CryptoPriceService {
         high24h,
         low24h,
         lastUpdated: now.toISOString(),
+        // El simulador ya mantiene un historial propio por simbolo (ver
+        // generatePriceHistory); se reusa aca para que getPrices() en modo
+        // demo tambien traiga sparkline sin depender de getAllPriceHistories.
+        priceHistory: this.priceHistories.get(upperSymbol) ?? [],
       });
     });
 
@@ -310,13 +346,17 @@ class CryptoPriceService {
     return prices.find(p => p.symbol === buscado) ?? null;
   }
 
-  // Historial de 7 dias para las sparklines. Con backend NO se devuelve nada:
-  // el feed real solo da el precio de hoy, asi que la curva de los ultimos
-  // dias seria una caminata aleatoria sobre precios de enero 2025 — una
-  // tendencia inventada, que es justo lo que un grafico le hace creer al
-  // usuario. Una lista vacia deja la sparkline en su marca de "sin datos".
+  // Historial de 7 dias para las sparklines. Con backend, viene del mismo
+  // /crypto/prices que ya trae el precio (ver obtenerPreciosReales): real, o
+  // vacio si el proveedor no lo trajo para este simbolo. Nunca una caminata
+  // aleatoria inventada sobre precios de enero 2025 — que es lo que hacia el
+  // simulador antes de que el PR #146 lo cortara para el modo con backend, y
+  // justo la tendencia falsa que un grafico le hace creer al usuario.
   async getPriceHistory(symbol: string, days: number = 7): Promise<number[]> {
-    if (resolveApiBaseUrl()) return [];
+    if (resolveApiBaseUrl()) {
+      const [precio] = await this.getPrices([symbol]);
+      return precio?.priceHistory ?? [];
+    }
 
     await new Promise(resolve => setTimeout(resolve, 50)); // Small delay
 
@@ -337,9 +377,21 @@ class CryptoPriceService {
     return history;
   }
 
-  // Get all price histories at once
+  // Historiales de varios simbolos a la vez. Con backend se piden TODOS en
+  // una sola llamada a getPrices (que ya batchea /crypto/prices por
+  // querystring) en vez de una llamada por simbolo: es la misma respuesta que
+  // ya se pedia para el precio, sin llamadas extra al proveedor.
   async getAllPriceHistories(symbols: string[]): Promise<Record<string, number[]>> {
     const histories: Record<string, number[]> = {};
+
+    if (resolveApiBaseUrl()) {
+      const precios = await this.getPrices(symbols);
+      for (const symbol of symbols) {
+        const buscado = symbol.toUpperCase();
+        histories[buscado] = precios.find(p => p.symbol === buscado)?.priceHistory ?? [];
+      }
+      return histories;
+    }
 
     for (const symbol of symbols) {
       histories[symbol] = await this.getPriceHistory(symbol);

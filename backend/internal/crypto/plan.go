@@ -75,7 +75,7 @@ func (ps *PriceService) notarResultado(status int, errText string) {
 }
 
 // probe pregunta a /ping con la clave en la cabecera del plan indicado. A
-// diferencia de /simple/price (que en el host publico ignora una clave Demo
+// diferencia de /coins/markets (que en el host publico ignora una clave Demo
 // mala y responde 200 igual), /ping valida la clave en los dos hosts: 200 si
 // es buena para ese plan, 401 si no.
 func (ps *PriceService) probe(ctx context.Context, base, key string, demo bool) (int, error) {
