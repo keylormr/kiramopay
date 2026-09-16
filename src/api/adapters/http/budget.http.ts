@@ -25,7 +25,7 @@ export class HttpBudgetRepository implements IBudgetRepository {
     >('/api/v1/budgets');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch budgets');
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch budgets');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -61,7 +61,9 @@ export class HttpBudgetRepository implements IBudgetRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('CREATE_FAILED', res.error?.message || 'Failed to create budget');
+      // El codigo del servidor viaja intacto: la pantalla traduce por codigo
+      // (BUDGET_LABEL_TOO_LONG, BUDGET_INVALID_LIMIT...) y uno fijo lo borraba.
+      return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed to create budget');
     }
 
     return apiSuccess({
@@ -85,7 +87,7 @@ export class HttpBudgetRepository implements IBudgetRepository {
 
     const res = await this.client.patch<void>(`/api/v1/budgets/${id}`, body);
     if (!res.success) {
-      return apiError('UPDATE_FAILED', res.error?.message || 'Failed to update budget');
+      return apiError(res.error?.code || 'UPDATE_FAILED', res.error?.message || 'Failed to update budget');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -93,7 +95,7 @@ export class HttpBudgetRepository implements IBudgetRepository {
   async delete(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<void>(`/api/v1/budgets/${id}`);
     if (!res.success) {
-      return apiError('DELETE_FAILED', res.error?.message || 'Failed to delete budget');
+      return apiError(res.error?.code || 'DELETE_FAILED', res.error?.message || 'Failed to delete budget');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -101,7 +103,7 @@ export class HttpBudgetRepository implements IBudgetRepository {
   async resetAll(): Promise<ApiResponse<void>> {
     const res = await this.client.post<void>('/api/v1/budgets/reset');
     if (!res.success) {
-      return apiError('RESET_FAILED', res.error?.message || 'Failed to reset budgets');
+      return apiError(res.error?.code || 'RESET_FAILED', res.error?.message || 'Failed to reset budgets');
     }
     return apiSuccess(undefined as unknown as void);
   }

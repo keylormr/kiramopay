@@ -268,3 +268,86 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
     });
   });
 });
+
+// Hallazgo QA n=54: con "0" en el objetivo el boton quedaba habilitado, el
+// servidor rechazaba y la hoja solo decia "no se pudo crear la meta".
+describe('SavingsView — el objetivo de una meta nueva', () => {
+  const abrirFormulario = async (user: ReturnType<typeof userEvent.setup>) => {
+    setup();
+    await user.click(await screen.findByRole('button', { name: 'Nueva meta' }));
+    await user.type(await screen.findByPlaceholderText('Ej: Vacaciones, Auto nuevo...'), 'Casa');
+  };
+
+  it.each(['0', '0.00', '0.001', '.'])('con "%s" el boton queda deshabilitado', async (valor) => {
+    const user = userEvent.setup();
+    await abrirFormulario(user);
+
+    await user.type(screen.getByLabelText('Monto objetivo'), valor);
+
+    expect(screen.getByRole('button', { name: 'Crear meta' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Crear meta' }));
+    expect(mocks.api.savings.createGoal).not.toHaveBeenCalled();
+  });
+
+  it('con "0" dice por que, junto al campo', async () => {
+    const user = userEvent.setup();
+    await abrirFormulario(user);
+
+    await user.type(screen.getByLabelText('Monto objetivo'), '0');
+
+    expect(screen.getByText('El monto objetivo debe ser mayor a cero.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Monto objetivo')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('un nombre de solo espacios no habilita el boton', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(await screen.findByRole('button', { name: 'Nueva meta' }));
+    await user.type(await screen.findByPlaceholderText('Ej: Vacaciones, Auto nuevo...'), '   ');
+    await user.type(screen.getByLabelText('Monto objetivo'), '50000');
+
+    expect(screen.getByRole('button', { name: 'Crear meta' })).toBeDisabled();
+  });
+
+  it('un objetivo valido se envia, y el campo vacio no muestra aviso', async () => {
+    mocks.api.savings.createGoal.mockResolvedValue({ success: true, data: { ...meta, id: 'g2', name: 'Casa' } });
+    const user = userEvent.setup();
+    await abrirFormulario(user);
+
+    expect(screen.queryByText('El monto objetivo debe ser mayor a cero.')).toBeNull();
+    await user.type(screen.getByLabelText('Monto objetivo'), '50000');
+    await user.click(screen.getByRole('button', { name: 'Crear meta' }));
+
+    await waitFor(() => {
+      expect(mocks.api.savings.createGoal).toHaveBeenCalledWith(expect.objectContaining({ name: 'Casa', target: 50000 }));
+    });
+  });
+
+  it('si el servidor rechaza el objetivo, la hoja dice el motivo en vez del generico', async () => {
+    mocks.api.savings.createGoal.mockResolvedValue({
+      success: false,
+      error: { code: 'SAVINGS_INVALID_TARGET', message: 'the target must be greater than zero' },
+    });
+    const user = userEvent.setup();
+    await abrirFormulario(user);
+    await user.type(screen.getByLabelText('Monto objetivo'), '50000');
+    await user.click(screen.getByRole('button', { name: 'Crear meta' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El monto objetivo debe ser mayor a cero.');
+    expect(screen.queryByText('No se pudo crear la meta. Intenta de nuevo.')).toBeNull();
+    expect(screen.queryByText(/greater than zero/)).toBeNull();
+  });
+
+  it('un rechazo desconocido cae al generico traducido, nunca al texto del servidor', async () => {
+    mocks.api.savings.createGoal.mockResolvedValue({
+      success: false,
+      error: { code: 'CREATE_FAILED', message: 'internal server error' },
+    });
+    const user = userEvent.setup();
+    await abrirFormulario(user);
+    await user.type(screen.getByLabelText('Monto objetivo'), '50000');
+    await user.click(screen.getByRole('button', { name: 'Crear meta' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo crear la meta. Intenta de nuevo.');
+  });
+});

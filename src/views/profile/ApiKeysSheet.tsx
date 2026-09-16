@@ -4,6 +4,19 @@ import { Icons } from '../../components/Icons';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import { B2B_SCOPES, type ApiKey } from '@/api';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+
+type ErrorCrudo = { code?: string; message?: string };
+
+// Los rechazos del modulo que la hoja explica. INVALID_REQUEST, la red y la
+// sesion ya llegan traducidos desde el cliente HTTP; cualquier otro codigo cae
+// al generico de cada accion, nunca al texto del servidor (esta en ingles).
+const CLAVES_ERROR: Record<string, string> = {
+  B2B_NOT_FOUND: 'apikeys_err_not_found',
+};
+
+// El largo que acepta el servidor (b2b.CreateKey).
+const LARGO_MAXIMO_NOMBRE = 100;
 
 interface ApiKeysSheetProps {
   isOpen: boolean;
@@ -21,6 +34,9 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
   const [step, setStep] = useState<Step>('list');
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(false);
+  // Una lista que no se pudo leer no es "no tienes claves". Se guarda el error
+  // crudo para no meter `t` en las dependencias del efecto de carga.
+  const [errorLista, setErrorLista] = useState<ErrorCrudo | null>(null);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>([...B2B_SCOPES]);
@@ -32,11 +48,11 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
   // here is fine — it is outside an effect body.
   const load = async () => {
     setLoading(true);
-    setError('');
+    setErrorLista(null);
     const res = await getApiLayer().b2b.listKeys();
     setLoading(false);
     if (res.success && res.data) setKeys(res.data);
-    else setError(res.error?.message || '');
+    else setErrorLista(res.error ?? {});
   };
 
   // Reset + initial load when the sheet opens. All setState lives inside the
@@ -49,11 +65,12 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
       setConfirmRevoke(null);
       setLoading(true);
       setError('');
+      setErrorLista(null);
       const res = await getApiLayer().b2b.listKeys();
       if (cancelled) return;
       setLoading(false);
       if (res.success && res.data) setKeys(res.data);
-      else setError(res.error?.message || '');
+      else setErrorLista(res.error ?? {});
     };
     run();
     return () => {
@@ -67,6 +84,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
     setScopes([...B2B_SCOPES]);
     setFullKey('');
     setError('');
+    setErrorLista(null);
     setConfirmRevoke(null);
     onClose();
   };
@@ -78,7 +96,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
     const res = await getApiLayer().b2b.createKey(name.trim(), scopes.join(','));
     setLoading(false);
     if (!res.success || !res.data) {
-      setError(res.error?.message || t('escrow_action_failed'));
+      setError(mensajeDeRechazo(res.error, CLAVES_ERROR, 'apikeys_err_create', t));
       return;
     }
     setFullKey(res.data.full);
@@ -89,13 +107,17 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
   const revoke = async (id: string) => {
     if (loading) return;
     setConfirmRevoke(null);
+    setError('');
     setLoading(true);
     const res = await getApiLayer().b2b.revokeKey(id);
-    if (res.success) load();
-    else {
-      setLoading(false);
-      setError(res.error?.message || '');
+    if (res.success) {
+      void load();
+      return;
     }
+    setError(mensajeDeRechazo(res.error, CLAVES_ERROR, 'apikeys_err_revoke', t));
+    // Si ya no existia, la lista que se ve esta vieja: se relee.
+    if (res.error?.code === 'B2B_NOT_FOUND') void load();
+    else setLoading(false);
   };
 
   const copyFull = async () => {
@@ -117,10 +139,29 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
         {step === 'list' && (
           <>
             <p className="uv-text-secondary text-sm">{t('apikeys_desc')}</p>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && (
+              <p role="alert" className="text-[var(--color-danger)] text-sm">
+                {error}
+              </p>
+            )}
             {loading && <p className="uv-text-muted text-sm text-center">{t('loading')}</p>}
 
-            {!loading && keys.length === 0 && (
+            {!loading && errorLista && (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <p role="alert" className="text-[var(--color-danger)] text-sm">
+                  {mensajeDeRechazo(errorLista, {}, 'apikeys_err_load', t)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="h-10 px-4 rounded-xl uv-surface-2 uv-text-primary text-sm font-semibold"
+                >
+                  {t('error_retry')}
+                </button>
+              </div>
+            )}
+
+            {!loading && !errorLista && keys.length === 0 && (
               <div className="text-center py-6 uv-text-muted text-sm">{t('apikeys_empty')}</div>
             )}
 
@@ -173,7 +214,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
             </div>
 
             <button
-              onClick={() => setStep('create')}
+              onClick={() => { setError(''); setStep('create'); }}
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               <Icons.Plus size={18} />
@@ -190,7 +231,8 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
               </label>
               <input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                maxLength={LARGO_MAXIMO_NOMBRE}
+                onChange={(e) => { setName(e.target.value); setError(''); }}
                 placeholder={t('apikeys_name_hint')}
                 className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
               />
@@ -220,10 +262,14 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
                 ))}
               </div>
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && (
+              <p role="alert" className="text-[var(--color-danger)] text-sm">
+                {error}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
-                onClick={() => setStep('list')}
+                onClick={() => { setError(''); setStep('list'); }}
                 className="flex-1 uv-surface-2 uv-text-primary py-3.5 rounded-xl font-bold"
               >
                 {t('cancel')}

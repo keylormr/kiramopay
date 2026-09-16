@@ -80,7 +80,9 @@ export class HttpB2BRepository implements IB2BRepository {
   async listKeys(): Promise<ApiResponse<ApiKey[]>> {
     const res = await this.client.get<RawKey[]>('/api/v1/b2b/keys');
     if (!res.success || !res.data) {
-      return apiError('B2B_KEYS_FAILED', res.error?.message || 'Could not load API keys');
+      // Todos los metodos dejan pasar el codigo del servidor (B2B_NOT_FOUND,
+      // WEBHOOK_INVALID_URL, NETWORK_ERROR...): las hojas traducen por codigo.
+      return apiError(res.error?.code || 'B2B_KEYS_FAILED', res.error?.message || 'Could not load API keys');
     }
     return apiSuccess(res.data.map(mapKey));
   }
@@ -91,7 +93,7 @@ export class HttpB2BRepository implements IB2BRepository {
       scopes,
     });
     if (!res.success || !res.data) {
-      return apiError('B2B_KEY_CREATE_FAILED', res.error?.message || 'Could not create API key');
+      return apiError(res.error?.code || 'B2B_KEY_CREATE_FAILED', res.error?.message || 'Could not create API key');
     }
     return apiSuccess({ key: mapKey(res.data.key), full: res.data.full });
   }
@@ -99,7 +101,7 @@ export class HttpB2BRepository implements IB2BRepository {
   async revokeKey(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<{ status: string }>(`/api/v1/b2b/keys/${id}`);
     if (!res.success) {
-      return apiError('B2B_KEY_REVOKE_FAILED', res.error?.message || 'Could not revoke API key');
+      return apiError(res.error?.code || 'B2B_KEY_REVOKE_FAILED', res.error?.message || 'Could not revoke API key');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -107,7 +109,7 @@ export class HttpB2BRepository implements IB2BRepository {
   async listWebhooks(): Promise<ApiResponse<WebhookEndpoint[]>> {
     const res = await this.client.get<RawEndpoint[]>('/api/v1/b2b/webhooks');
     if (!res.success || !res.data) {
-      return apiError('B2B_WEBHOOKS_FAILED', res.error?.message || 'Could not load webhooks');
+      return apiError(res.error?.code || 'B2B_WEBHOOKS_FAILED', res.error?.message || 'Could not load webhooks');
     }
     return apiSuccess(res.data.map(mapEndpoint));
   }
@@ -128,7 +130,7 @@ export class HttpB2BRepository implements IB2BRepository {
   async deleteWebhook(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<{ status: string }>(`/api/v1/b2b/webhooks/${id}`);
     if (!res.success) {
-      return apiError('B2B_WEBHOOK_DELETE_FAILED', res.error?.message || 'Could not delete webhook');
+      return apiError(res.error?.code || 'B2B_WEBHOOK_DELETE_FAILED', res.error?.message || 'Could not delete webhook');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -138,7 +140,7 @@ export class HttpB2BRepository implements IB2BRepository {
       `/api/v1/b2b/webhooks/${endpointId}/deliveries?limit=${limit}`,
     );
     if (!res.success || !res.data) {
-      return apiError('B2B_DELIVERIES_FAILED', res.error?.message || 'Could not load deliveries');
+      return apiError(res.error?.code || 'B2B_DELIVERIES_FAILED', res.error?.message || 'Could not load deliveries');
     }
     return apiSuccess(res.data.map(mapDelivery));
   }

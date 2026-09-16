@@ -5,6 +5,16 @@ import { HelpButton } from '../../components/HelpSheet';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import type { WebhookEndpoint, WebhookDelivery } from '@/api';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+
+type ErrorCrudo = { code?: string; message?: string };
+
+// Los rechazos del modulo que la hoja explica. INVALID_REQUEST, la red y la
+// sesion ya llegan traducidos desde el cliente HTTP; cualquier otro codigo cae
+// al generico de cada accion, nunca al texto del servidor (esta en ingles).
+const CLAVES_ERROR: Record<string, string> = {
+  B2B_NOT_FOUND: 'webhooks_err_not_found',
+};
 
 interface WebhooksSheetProps {
   isOpen: boolean;
@@ -23,7 +33,13 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
   const [endpoints, setEndpoints] = useState<WebhookEndpoint[]>([]);
   const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
   const [loading, setLoading] = useState(false);
+  // El error del formulario de registro.
   const [error, setError] = useState('');
+  // Los de la lista. Una lista que no se pudo leer no es "no tienes webhooks";
+  // se guarda el error crudo para no meter `t` en las dependencias del efecto.
+  const [errorLista, setErrorLista] = useState<ErrorCrudo | null>(null);
+  const [errorBorrar, setErrorBorrar] = useState('');
+  const [errorEntregas, setErrorEntregas] = useState(false);
   const [url, setUrl] = useState('');
   const [events, setEvents] = useState('*');
   const [secret, setSecret] = useState('');
@@ -39,11 +55,11 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
   // here is fine — it is outside an effect body.
   const load = async () => {
     setLoading(true);
-    setError('');
+    setErrorLista(null);
     const res = await getApiLayer().b2b.listWebhooks();
     setLoading(false);
     if (res.success && res.data) setEndpoints(res.data);
-    else setError(res.error?.message || '');
+    else setErrorLista(res.error ?? {});
   };
 
   // Reset + initial load when the sheet opens. All setState lives inside the
@@ -56,11 +72,13 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
       setConfirmDelete(null);
       setLoading(true);
       setError('');
+      setErrorLista(null);
+      setErrorBorrar('');
       const res = await getApiLayer().b2b.listWebhooks();
       if (cancelled) return;
       setLoading(false);
       if (res.success && res.data) setEndpoints(res.data);
-      else setError(res.error?.message || '');
+      else setErrorLista(res.error ?? {});
     };
     run();
     return () => {
@@ -74,6 +92,8 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
     setEvents('*');
     setSecret('');
     setError('');
+    setErrorLista(null);
+    setErrorBorrar('');
     setUrlInvalida(false);
     setConfirmDelete(null);
     onClose();
@@ -94,7 +114,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
         setError(t('webhooks_error_invalid_url'));
         return;
       }
-      setError(res.error?.message || t('escrow_action_failed'));
+      setError(mensajeDeRechazo(res.error, CLAVES_ERROR, 'webhooks_err_create', t));
       return;
     }
     setSecret(res.data.secret);
@@ -106,21 +126,29 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
   const remove = async (id: string) => {
     if (loading) return;
     setConfirmDelete(null);
+    setErrorBorrar('');
     setLoading(true);
     const res = await getApiLayer().b2b.deleteWebhook(id);
-    if (res.success) load();
-    else {
-      setLoading(false);
-      setError(res.error?.message || '');
+    if (res.success) {
+      void load();
+      return;
     }
+    setErrorBorrar(mensajeDeRechazo(res.error, CLAVES_ERROR, 'webhooks_err_delete', t));
+    // Si ya no existia, la lista que se ve esta vieja: se relee.
+    if (res.error?.code === 'B2B_NOT_FOUND') void load();
+    else setLoading(false);
   };
 
   const openDeliveries = async (id: string) => {
     setStep('deliveries');
     setLoading(true);
+    setErrorEntregas(false);
+    setDeliveries([]);
     const res = await getApiLayer().b2b.listDeliveries(id);
     setLoading(false);
-    setDeliveries(res.success && res.data ? res.data : []);
+    // Un fallo no es "sin entregas": se dice.
+    if (res.success && res.data) setDeliveries(res.data);
+    else setErrorEntregas(true);
   };
 
   const copySecret = async () => {
@@ -151,10 +179,29 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
         {step === 'list' && (
           <>
             <p className="uv-text-secondary text-sm">{t('webhooks_desc')}</p>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {errorBorrar && (
+              <p role="alert" className="text-[var(--color-danger)] text-sm">
+                {errorBorrar}
+              </p>
+            )}
             {loading && <p className="uv-text-muted text-sm text-center">{t('loading')}</p>}
 
-            {!loading && endpoints.length === 0 && (
+            {!loading && errorLista && (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <p role="alert" className="text-[var(--color-danger)] text-sm">
+                  {mensajeDeRechazo(errorLista, {}, 'webhooks_err_load', t)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="h-10 px-4 rounded-xl uv-surface-2 uv-text-primary text-sm font-semibold"
+                >
+                  {t('error_retry')}
+                </button>
+              </div>
+            )}
+
+            {!loading && !errorLista && endpoints.length === 0 && (
               <div className="text-center py-6 uv-text-muted text-sm">{t('webhooks_empty')}</div>
             )}
 
@@ -211,7 +258,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
             </div>
 
             <button
-              onClick={() => setStep('create')}
+              onClick={() => { setError(''); setErrorBorrar(''); setStep('create'); }}
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               <Icons.Plus size={18} />
@@ -334,7 +381,12 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
             </button>
             <h3 className="font-bold uv-text-primary text-sm">{t('webhooks_deliveries')}</h3>
             {loading && <p className="uv-text-muted text-sm text-center">{t('loading')}</p>}
-            {!loading && deliveries.length === 0 && (
+            {!loading && errorEntregas && (
+              <p role="alert" className="text-center py-6 text-[var(--color-danger)] text-sm">
+                {t('webhooks_err_deliveries')}
+              </p>
+            )}
+            {!loading && !errorEntregas && deliveries.length === 0 && (
               <div className="text-center py-6 uv-text-muted text-sm">{t('webhooks_no_deliveries')}</div>
             )}
             <div className="space-y-2">
