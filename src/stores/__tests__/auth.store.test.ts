@@ -1,4 +1,4 @@
-import { useAuthStore } from '../auth.store';
+import { useAuthStore, ESPERAS_REINTENTO_RESTAURACION_MS } from '../auth.store';
 
 // Stable mock for the refresh call so bootstrap tests can drive its result.
 const { mockRefresh } = vi.hoisted(() => ({ mockRefresh: vi.fn() }));
@@ -75,6 +75,7 @@ describe('useAuthStore', () => {
       accessToken: null,
       refreshToken: null,
       logoutReason: null,
+      restauracion: 'normal',
     });
   });
 
@@ -156,6 +157,142 @@ describe('useAuthStore', () => {
     const s = useAuthStore.getState();
     expect(s.isAuthenticated).toBe(false);
     expect(s.accessToken).toBeNull();
+  });
+
+  // Recargar la pagina con la red caida (o con el cupo de peticiones agotado,
+  // que el navegador entrega como fallo de red) cerraba la sesion sin decir
+  // nada. Solo una respuesta definitiva del servidor la cierra ahora.
+  describe('restauracion ante fallos pasajeros', () => {
+    const sinRed = { success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } };
+    const limitado = { success: false, error: { code: 'RATE_LIMITED', message: 'espera' } };
+    const restaurada = {
+      success: true,
+      data: { access_token: 'fresh-access', refresh_token: 'fresh-refresh' },
+    };
+    const totalEsperas = ESPERAS_REINTENTO_RESTAURACION_MS.reduce((a, b) => a + b, 0);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      useAuthStore.setState({ sessionHint: true });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('reintenta y restaura la sesion cuando vuelve la conexion', async () => {
+      mockRefresh.mockResolvedValueOnce(sinRed).mockResolvedValueOnce(limitado).mockResolvedValueOnce(restaurada);
+
+      const arranque = useAuthStore.getState().bootstrap();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(useAuthStore.getState().restauracion).toBe('reintentando');
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(totalEsperas);
+      await arranque;
+
+      const s = useAuthStore.getState();
+      expect(mockRefresh).toHaveBeenCalledTimes(3);
+      expect(s.isAuthenticated).toBe(true);
+      expect(s.accessToken).toBe('fresh-access');
+      expect(s.restauracion).toBe('normal');
+    });
+
+    it('si no se recupera, no cierra la sesion: avisa y deja reintentar', async () => {
+      mockRefresh.mockResolvedValue(sinRed);
+
+      const arranque = useAuthStore.getState().bootstrap();
+      await vi.advanceTimersByTimeAsync(totalEsperas);
+      await arranque;
+
+      const s = useAuthStore.getState();
+      // Un intento y un reintento por cada espera, ni uno mas.
+      expect(mockRefresh).toHaveBeenCalledTimes(ESPERAS_REINTENTO_RESTAURACION_MS.length + 1);
+      expect(s.isAuthenticated).toBe(false);
+      expect(s.sessionHint).toBe(true);
+      expect(s.restauracion).toBe('sin_conexion');
+      expect(s.logoutReason).toBeNull();
+
+      // El boton del aviso: se ve reintentando de inmediato y, con red, entra.
+      mockRefresh.mockReset();
+      mockRefresh.mockResolvedValue(restaurada);
+      const reintento = useAuthStore.getState().bootstrap();
+      expect(useAuthStore.getState().restauracion).toBe('reintentando');
+      await reintento;
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().restauracion).toBe('normal');
+    });
+
+    it('un 5xx tambien es pasajero', async () => {
+      mockRefresh.mockResolvedValue({ success: false, error: { code: 'INTERNAL_ERROR', message: 'x' } });
+      const arranque = useAuthStore.getState().bootstrap();
+      await vi.advanceTimersByTimeAsync(totalEsperas);
+      await arranque;
+      expect(useAuthStore.getState().sessionHint).toBe(true);
+      expect(useAuthStore.getState().restauracion).toBe('sin_conexion');
+    });
+
+    it.each(['REFRESH_FAILED', 'INVALID_BODY'])('%s cierra la sesion sin reintentar', async (codigo) => {
+      mockRefresh.mockResolvedValue({ success: false, error: { code: codigo, message: 'x' } });
+      await useAuthStore.getState().bootstrap();
+      const s = useAuthStore.getState();
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(s.isAuthenticated).toBe(false);
+      expect(s.sessionHint).toBe(false);
+      expect(s.restauracion).toBe('normal');
+      expect(s.logoutReason).toBeNull();
+    });
+
+    it('una cuenta bloqueada no se reintenta y el login dice por que', async () => {
+      mockRefresh.mockResolvedValue({ success: false, error: { code: 'ACCOUNT_BLOCKED', message: 'account blocked' } });
+      await useAuthStore.getState().bootstrap();
+      const s = useAuthStore.getState();
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(s.sessionHint).toBe(false);
+      expect(s.logoutReason).toBe('blocked');
+    });
+
+    it('dos arranques a la vez hacen un solo refresh', async () => {
+      mockRefresh.mockResolvedValue(restaurada);
+      const uno = useAuthStore.getState().bootstrap();
+      const dos = useAuthStore.getState().bootstrap();
+      expect(dos).toBe(uno);
+      await Promise.all([uno, dos]);
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('un login durante los reintentos no queda pisado', async () => {
+      mockRefresh.mockResolvedValue(sinRed);
+      const arranque = useAuthStore.getState().bootstrap();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const ok = await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      expect(ok.success).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(totalEsperas);
+      await arranque;
+      const s = useAuthStore.getState();
+      expect(s.isAuthenticated).toBe(true);
+      expect(s.accessToken).toBe('fake-access');
+      expect(s.restauracion).toBe('normal');
+      // El arranque dejo de reintentar al ver la sesion nueva.
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('el aviso se puede descartar y no se persiste', async () => {
+      mockRefresh.mockResolvedValue(sinRed);
+      const arranque = useAuthStore.getState().bootstrap();
+      await vi.advanceTimersByTimeAsync(totalEsperas);
+      await arranque;
+      expect(useAuthStore.getState().restauracion).toBe('sin_conexion');
+
+      const persistido = JSON.parse(localStorage.getItem('kiramopay-auth')!);
+      expect(persistido.state.restauracion).toBeUndefined();
+
+      useAuthStore.getState().descartarAvisoRestauracion();
+      expect(useAuthStore.getState().restauracion).toBe('normal');
+      // Descartar el aviso no cierra la sesion guardada.
+      expect(useAuthStore.getState().sessionHint).toBe(true);
+    });
   });
 
   describe('expulsion por bloqueo remoto (logoutReason)', () => {

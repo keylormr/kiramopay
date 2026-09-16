@@ -243,7 +243,11 @@ export class HttpAuthRepository implements IAuthRepository {
     }>('/api/v1/auth/refresh', { refresh_token: refreshToken }, false);
 
     if (!res.success || !res.data) {
-      return apiError('REFRESH_FAILED', res.error?.message || 'Token refresh failed');
+      // El codigo original viaja tal cual. Antes todo fallo salia como
+      // REFRESH_FAILED, y el arranque no podia distinguir una sesion invalida
+      // (REFRESH_FAILED, ACCOUNT_BLOCKED) de un corte pasajero (NETWORK_ERROR,
+      // RATE_LIMITED, un 5xx): cerraba la sesion por un parpadeo de la red.
+      return apiError(res.error?.code || 'REFRESH_FAILED', res.error?.message || 'Token refresh failed');
     }
     return apiSuccess<TokenPair>({
       access_token: res.data.access_token,

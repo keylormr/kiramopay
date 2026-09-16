@@ -836,6 +836,7 @@ export type TranslationKeys = {
   tx_local_only: string;
   boot_connecting: string;
   boot_waking: string;
+  boot_retrying: string;
   update_title: string;
   update_body: string;
   // iOS no instala un binario bajado de un link: se abre el canal (TestFlight,
@@ -1012,6 +1013,13 @@ export type TranslationKeys = {
   home_marketplace: string;
   home_marketplace_view: string;
   home_marketplace_desc: string;
+  market_cat_all: string;
+  market_cat_transport: string;
+  market_cat_food: string;
+  market_cat_supermarket: string;
+  market_cat_entertainment: string;
+  market_all_services: string;
+  market_connected_apps: string;
   // Assistant Phase 3b (confirmation)
   assistant_confirm: string;
   assistant_confirmed: string;
@@ -1137,6 +1145,9 @@ export type TranslationKeys = {
   account_blocked_title: string;
   account_blocked_body: string;
   login_account_blocked: string;
+  restore_offline_title: string;
+  restore_offline_body: string;
+  restore_retrying: string;
   escrow_title: string;
   escrow_subtitle: string;
   escrow_empty: string;
@@ -1246,6 +1257,7 @@ export type TranslationKeys = {
   webhooks_empty: string;
   webhooks_new: string;
   webhooks_url: string;
+  webhooks_error_invalid_url: string;
   webhooks_events: string;
   webhooks_events_hint: string;
   webhooks_create_btn: string;

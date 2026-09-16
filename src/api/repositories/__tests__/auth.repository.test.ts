@@ -310,5 +310,31 @@ describe('HttpAuthRepository', () => {
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe('REFRESH_FAILED');
     });
+
+    // El arranque decide si cierra la sesion segun este codigo: un corte de
+    // red o un 429 no pueden llegarle disfrazados de sesion invalida.
+    it('conserva el codigo de un fallo pasajero', async () => {
+      mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      expect((await repo.refresh('')).error?.code).toBe('NETWORK_ERROR');
+
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
+      expect((await repo.refresh('')).error?.code).toBe('RATE_LIMITED');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: { code: 'SERVICE_UNAVAILABLE', message: 'internal server error' } }),
+      });
+      expect((await repo.refresh('')).error?.code).toBe('SERVICE_UNAVAILABLE');
+    });
+
+    it('conserva ACCOUNT_BLOCKED: la cuenta fue bloqueada, no vencio', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: { code: 'ACCOUNT_BLOCKED', message: 'account blocked' } }),
+      });
+      expect((await repo.refresh('')).error?.code).toBe('ACCOUNT_BLOCKED');
+    });
   });
 });

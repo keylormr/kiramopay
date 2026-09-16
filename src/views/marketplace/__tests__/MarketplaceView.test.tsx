@@ -223,3 +223,27 @@ describe('MarketplaceView — pedidos', () => {
     expect(screen.getByText('₡1,500.00')).toBeInTheDocument();
   });
 });
+
+// El encabezado, los filtros y los titulos de seccion estaban en espanol fijo:
+// con la app en ingles se leia "Todo", "Transporte" o "Apps conectadas".
+describe('MarketplaceView — idioma', () => {
+  it('traduce el subtitulo, los filtros y los titulos de seccion', async () => {
+    localStorage.setItem('kiramopay_language', 'en');
+    const user = userEvent.setup();
+    setup();
+
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    for (const filtro of ['All', 'Transport', 'Food', 'Groceries', 'Movies']) {
+      expect(screen.getByRole('button', { name: new RegExp(filtro) })).toBeInTheDocument();
+    }
+    expect(screen.getByText('Connected apps')).toBeInTheDocument();
+    expect(screen.getByText('All services')).toBeInTheDocument();
+    for (const fijo of ['Paga con KiramoPay en tus apps favoritas', 'Apps conectadas', 'Todos los servicios', 'Transporte']) {
+      expect(screen.queryByText(fijo)).not.toBeInTheDocument();
+    }
+
+    // El titulo de la seccion sigue al filtro elegido, en el mismo idioma.
+    await user.click(screen.getByRole('button', { name: /Groceries/ }));
+    expect(screen.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+  });
+});

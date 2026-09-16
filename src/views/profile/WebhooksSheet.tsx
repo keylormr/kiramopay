@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Icons } from '../../components/Icons';
 import { HelpButton } from '../../components/HelpSheet';
@@ -29,6 +29,11 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
   const [secret, setSecret] = useState('');
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // El error de la hoja es de la URL: el campo se marca y el mensaje queda
+  // asociado a el para un lector de pantalla.
+  const [urlInvalida, setUrlInvalida] = useState(false);
+  const idCampoUrl = useId();
+  const idErrorCrear = useId();
 
   // Manual refresh used by button handlers (create/delete). Calling setState
   // here is fine — it is outside an effect body.
@@ -69,6 +74,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
     setEvents('*');
     setSecret('');
     setError('');
+    setUrlInvalida(false);
     setConfirmDelete(null);
     onClose();
   };
@@ -77,9 +83,17 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
     if (!url.trim()) return;
     setLoading(true);
     setError('');
+    setUrlInvalida(false);
     const res = await getApiLayer().b2b.createWebhook(url.trim(), events.trim() || '*');
     setLoading(false);
     if (!res.success || !res.data) {
+      // La URL rechazada tiene su propio codigo: el servidor respondia
+      // "invalid request" y la persona no sabia que corregir.
+      if (res.error?.code === 'WEBHOOK_INVALID_URL') {
+        setUrlInvalida(true);
+        setError(t('webhooks_error_invalid_url'));
+        return;
+      }
       setError(res.error?.message || t('escrow_action_failed'));
       return;
     }
@@ -209,15 +223,31 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
         {step === 'create' && (
           <>
             <div>
-              <label className="text-sm font-medium uv-text-secondary mb-1.5 block">
+              <label htmlFor={idCampoUrl} className="text-sm font-medium uv-text-secondary mb-1.5 block">
                 {t('webhooks_url')}
               </label>
               <input
+                id={idCampoUrl}
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  // Al corregir la URL, el aviso anterior ya no aplica.
+                  if (urlInvalida) {
+                    setUrlInvalida(false);
+                    setError('');
+                  }
+                }}
                 placeholder="https://"
                 inputMode="url"
-                className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-primary)] transition-all"
+                type="url"
+                autoComplete="url"
+                aria-invalid={urlInvalida || undefined}
+                aria-describedby={urlInvalida ? idErrorCrear : undefined}
+                className={`w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border uv-text-primary px-4 py-3 rounded-xl outline-none transition-all ${
+                  urlInvalida
+                    ? 'border-[var(--color-danger)] focus:border-[var(--color-danger)]'
+                    : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)] focus:border-[var(--color-primary)]'
+                }`}
               />
             </div>
             <div>
@@ -232,10 +262,20 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
               />
               <p className="text-xs uv-text-muted mt-1">{t('webhooks_events_hint')}</p>
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && (
+              <p id={idErrorCrear} role="alert" className="text-red-500 text-sm">
+                {error}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
-                onClick={() => setStep('list')}
+                onClick={() => {
+                  // El aviso de la URL es de este formulario: no debe
+                  // quedar pintado en la lista.
+                  setError('');
+                  setUrlInvalida(false);
+                  setStep('list');
+                }}
                 className="flex-1 uv-surface-2 uv-text-primary py-3.5 rounded-xl font-bold"
               >
                 {t('cancel')}

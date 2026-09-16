@@ -887,6 +887,9 @@ const AppContainer = () => {
   // servidor esta despertando (Render Free tarda 30-90s en frio) en vez de
   // dejar un esqueleto mudo que parece una app rota.
   const [bootLento, setBootLento] = useState(false);
+  // Si el primer intento fallo por algo pasajero (sin red, 429), el arranque
+  // lo dice mientras reintenta en vez de parecer colgado.
+  const restauracion = useAuthStore((s) => s.restauracion);
 
   useEffect(() => {
     if (!hasBackend || !useAuthStore.getState().sessionHint) return;
@@ -942,8 +945,12 @@ const AppContainer = () => {
           <MarcaKiramo size={40} />
         </div>
         <div className="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-hidden="true" />
-        <p className="text-sm text-[var(--color-text-secondary-dark)] px-8 text-center">
-          {bootLento ? t('boot_waking') : t('boot_connecting')}
+        <p role="status" aria-live="polite" className="text-sm text-[var(--color-text-secondary-dark)] px-8 text-center">
+          {restauracion === 'reintentando'
+            ? t('boot_retrying')
+            : bootLento
+              ? t('boot_waking')
+              : t('boot_connecting')}
         </p>
       </div>
     );
