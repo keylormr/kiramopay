@@ -9,6 +9,22 @@ import {
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
+/**
+ * Las tenencias que trae el servidor no traen mercado: precio, cambio de 24 h
+ * e historial los pone el feed. Reemplazar la lista entera los dejaba en cero
+ * hasta el siguiente sondeo —cinco minutos— y la pantalla decia "valor no
+ * disponible" sobre una cartera que un segundo antes se veia completa.
+ */
+function conservarMercado(nuevo: CryptoAsset, previo: CryptoAsset | undefined): CryptoAsset {
+  if (!previo || nuevo.currentPrice > 0) return nuevo;
+  return {
+    ...nuevo,
+    currentPrice: previo.currentPrice,
+    priceChange24h: previo.priceChange24h,
+    priceHistory: nuevo.priceHistory.length > 0 ? nuevo.priceHistory : previo.priceHistory,
+  };
+}
+
 interface CryptoStoreState extends CryptoState {
   setAssets: (assets: CryptoAsset[]) => void;
   setCryptoTransactions: (txs: CryptoTransaction[]) => void;
@@ -19,7 +35,7 @@ interface CryptoStoreState extends CryptoState {
   convertCrypto: (fromAsset: string, toAsset: string, fromAmount: number, toAmount: number, price: number) => void;
   sendCrypto: (asset: string, amount: number, fee: number) => void;
   receiveCrypto: (asset: string, amount: number) => void;
-  stakeCrypto: (asset: string, amount: number, apy: number, locked: boolean, lockDays?: number) => void;
+  stakeCrypto: (position: StakingPosition) => void;
   unstakeCrypto: (positionId: string) => void;
   claimYield: (positionId: string, amount: number) => void;
   addPriceAlert: (alert: PriceAlert) => void;
@@ -38,7 +54,11 @@ export const useCryptoStore = create<CryptoStoreState>()(
       favoriteAssets: ['BTC', 'ETH', 'USDT'],
       defaultConvertCurrency: 'CRC',
 
-      setAssets: (assets) => set({ assets }),
+      setAssets: (assets) =>
+        set((s) => {
+          const previos = new Map(s.assets.map((a) => [a.symbol, a]));
+          return { assets: assets.map((a) => conservarMercado(a, previos.get(a.symbol))) };
+        }),
 
       setCryptoTransactions: (txs) => set({ transactions: txs }),
 
@@ -118,25 +138,19 @@ export const useCryptoStore = create<CryptoStoreState>()(
           ),
         })),
 
-      stakeCrypto: (asset, amount, apy, locked, lockDays) =>
-        set((s) => {
-          const position: StakingPosition = {
-            id: `stake-${Date.now()}`,
-            asset,
-            amount,
-            apy,
-            startDate: 'Ahora',
-            earned: 0,
-            locked,
-            lockPeriodDays: lockDays,
-          };
-          return {
-            assets: s.assets.map((a) =>
-              a.symbol === asset ? { ...a, balance: a.balance - amount } : a,
-            ),
-            stakingPositions: [...s.stakingPositions, position],
-          };
-        }),
+      // La posicion llega con el id que le dio el servidor. Aqui se fabricaba
+      // uno (`stake-<fecha>`) y retirarla despues fallaba SIEMPRE: el servidor
+      // respondia "staking position not found" porque ese id nunca existio.
+      stakeCrypto: (position) =>
+        set((s) => ({
+          assets: s.assets.map((a) =>
+            a.symbol === position.asset ? { ...a, balance: a.balance - position.amount } : a,
+          ),
+          stakingPositions: [
+            ...s.stakingPositions.filter((p) => p.id !== position.id),
+            position,
+          ],
+        })),
 
       unstakeCrypto: (positionId) =>
         set((s) => {

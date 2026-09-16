@@ -74,7 +74,7 @@ describe('MockCryptoRepository', () => {
         toAmount: 999 * 42000,
       });
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('INSUFFICIENT');
+      expect(result.error?.code).toBe('CRYPTO_INSUFFICIENT_BALANCE');
     });
   });
 
@@ -82,30 +82,49 @@ describe('MockCryptoRepository', () => {
     it('should get staking positions', async () => {
       const result = await repo.getStakingPositions();
       expect(result.success).toBe(true);
-      expect(result.data!.length).toBeGreaterThanOrEqual(2);
+      expect(result.data!.length).toBeGreaterThanOrEqual(1);
+      // USDT y USDC salieron del programa: la demostracion no las muestra.
+      expect(result.data!.some((p) => p.asset === 'USDT' || p.asset === 'USDC')).toBe(false);
     });
 
-    it('should stake crypto', async () => {
+    it('should stake crypto at the program rate', async () => {
       const result = await repo.stake({
         asset: 'ETH',
         amount: 0.1,
-        apy: 5.0,
         locked: false,
       });
       expect(result.success).toBe(true);
       expect(result.data!.asset).toBe('ETH');
-      expect(result.data!.apy).toBe(5.0);
+      // La tasa la pone el programa, no quien pide.
+      expect(result.data!.apy).toBe(4.5);
     });
 
     it('should fail staking with insufficient balance', async () => {
       const result = await repo.stake({
         asset: 'SOL',
         amount: 1000,
-        apy: 7.0,
         locked: false,
       });
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('INSUFFICIENT');
+      expect(result.error?.code).toBe('CRYPTO_INSUFFICIENT_BALANCE');
+    });
+
+    it('rechaza las monedas fuera del programa, aunque haya saldo', async () => {
+      for (const asset of ['USDT', 'USDC', 'BTC']) {
+        const result = await repo.stake({ asset, amount: 1, locked: false });
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe('STAKING_NOT_AVAILABLE');
+      }
+    });
+
+    // El defecto de produccion: la posicion se retiraba con un id distinto
+    // del que devolvio el alta. Con el id devuelto, el retiro funciona.
+    it('retira la posicion con el id que devolvio el alta', async () => {
+      const alta = await repo.stake({ asset: 'ETH', amount: 0.1, locked: false });
+      const retiro = await repo.unstake(alta.data!.id);
+      expect(retiro.success).toBe(true);
+      const otra = await repo.unstake(alta.data!.id);
+      expect(otra.error?.code).toBe('STAKING_POSITION_NOT_FOUND');
     });
   });
 

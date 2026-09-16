@@ -5,6 +5,7 @@ import type {
   ConvertCryptoRequest,
   StakeCryptoRequest,
 } from '../../repositories/crypto.repository';
+import { ACTIVOS_CON_STAKING } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
 import type { CryptoAsset, CryptoTransaction, StakingPosition, PriceAlert } from '@/types';
@@ -34,6 +35,14 @@ function getCryptoState() {
       defaultConvertCurrency: 'CRC',
     };
   }
+}
+
+// Mismo formato de id que el servidor: la pantalla retira la posicion por el id
+// que le devolvieron, y dos Date.now() seguidos no siempre coinciden.
+function nuevoId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function saveCryptoState(crypto: Record<string, unknown>) {
@@ -68,14 +77,16 @@ export class MockCryptoRepository implements ICryptoRepository {
     asset.avgBuyPrice = newBalance > 0 ? totalCost / newBalance : request.price;
 
     const tx: CryptoTransaction = {
-      id: `ctx-${Date.now()}`,
+      id: nuevoId(),
       type: 'buy',
       fromAsset: request.fromCurrency,
       toAsset: request.asset,
       fromAmount: request.fromAmount,
       toAmount: request.amount,
       price: request.price,
-      fee: request.fromAmount * 0.005,
+      priceCurrency: 'USD',
+      // El servidor no cobra comision por comprar, vender ni convertir.
+      fee: 0,
       date: 'Ahora',
       status: 'completed',
     };
@@ -88,18 +99,19 @@ export class MockCryptoRepository implements ICryptoRepository {
     const crypto = getCryptoState();
     const asset = crypto.assets.find((a: CryptoAsset) => a.symbol === request.asset);
     if (!asset) return apiError('NOT_FOUND', `Asset ${request.asset} not found`);
-    if (asset.balance < request.amount) return apiError('INSUFFICIENT', 'Insufficient balance');
+    if (asset.balance < request.amount) return apiError('CRYPTO_INSUFFICIENT_BALANCE', 'insufficient asset balance');
 
     asset.balance -= request.amount;
     const tx: CryptoTransaction = {
-      id: `ctx-${Date.now()}`,
+      id: nuevoId(),
       type: 'sell',
       fromAsset: request.asset,
       toAsset: request.toCurrency,
       fromAmount: request.amount,
       toAmount: request.toAmount,
       price: request.price,
-      fee: request.toAmount * 0.005,
+      priceCurrency: 'USD',
+      fee: 0,
       date: 'Ahora',
       status: 'completed',
     };
@@ -113,7 +125,7 @@ export class MockCryptoRepository implements ICryptoRepository {
     const from = crypto.assets.find((a: CryptoAsset) => a.symbol === request.fromAsset);
     const to = crypto.assets.find((a: CryptoAsset) => a.symbol === request.toAsset);
     if (!from || !to) return apiError('NOT_FOUND', 'Asset not found');
-    if (from.balance < request.fromAmount) return apiError('INSUFFICIENT', 'Insufficient balance');
+    if (from.balance < request.fromAmount) return apiError('CRYPTO_INSUFFICIENT_BALANCE', 'insufficient asset balance');
 
     from.balance -= request.fromAmount;
     const newBalance = to.balance + request.toAmount;
@@ -122,14 +134,15 @@ export class MockCryptoRepository implements ICryptoRepository {
     to.avgBuyPrice = newBalance > 0 ? totalCost / newBalance : request.price;
 
     const tx: CryptoTransaction = {
-      id: `ctx-${Date.now()}`,
+      id: nuevoId(),
       type: 'convert',
       fromAsset: request.fromAsset,
       toAsset: request.toAsset,
       fromAmount: request.fromAmount,
       toAmount: request.toAmount,
       price: request.price,
-      fee: request.fromAmount * 0.001,
+      priceCurrency: 'USD',
+      fee: 0,
       date: 'Ahora',
       status: 'completed',
     };
@@ -143,18 +156,22 @@ export class MockCryptoRepository implements ICryptoRepository {
   }
 
   async stake(request: StakeCryptoRequest): Promise<ApiResponse<StakingPosition>> {
+    // Las mismas reglas que el servidor: solo los activos del programa.
+    const apy = ACTIVOS_CON_STAKING[request.asset];
+    if (apy === undefined) return apiError('STAKING_NOT_AVAILABLE', 'staking is not available for this asset');
     const crypto = getCryptoState();
     const asset = crypto.assets.find((a: CryptoAsset) => a.symbol === request.asset);
-    if (!asset) return apiError('NOT_FOUND', `Asset ${request.asset} not found`);
-    if (asset.balance < request.amount) return apiError('INSUFFICIENT', 'Insufficient balance');
+    if (!asset || asset.balance < request.amount) {
+      return apiError('CRYPTO_INSUFFICIENT_BALANCE', 'insufficient asset balance');
+    }
 
     asset.balance -= request.amount;
     const position: StakingPosition = {
-      id: `stake-${Date.now()}`,
+      id: nuevoId(),
       asset: request.asset,
       amount: request.amount,
-      apy: request.apy,
-      startDate: 'Ahora',
+      apy,
+      startDate: new Date().toISOString(),
       earned: 0,
       locked: request.locked,
       lockPeriodDays: request.lockDays,
@@ -167,7 +184,7 @@ export class MockCryptoRepository implements ICryptoRepository {
   async unstake(positionId: string): Promise<ApiResponse<void>> {
     const crypto = getCryptoState();
     const position = crypto.stakingPositions.find((p: StakingPosition) => p.id === positionId);
-    if (!position) return apiError('NOT_FOUND', 'Staking position not found');
+    if (!position) return apiError('STAKING_POSITION_NOT_FOUND', 'staking position not found');
 
     const asset = crypto.assets.find((a: CryptoAsset) => a.symbol === position.asset);
     if (asset) {

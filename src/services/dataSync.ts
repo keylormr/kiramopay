@@ -118,6 +118,40 @@ export async function refreshAccounts(): Promise<void> {
   }
 }
 
+/**
+ * Trae del servidor todo lo de cripto: tenencias, movimientos y posiciones de
+ * staking.
+ *
+ * Sin esto la pantalla vivia de su propia copia local, persistida en el
+ * aparato: los movimientos eran los que ella misma inventaba (con una
+ * comision que nadie cobraba) y las posiciones de staking guardaban un id
+ * fabricado con el que ningun retiro podia funcionar. Ni recargar la pagina lo
+ * arreglaba, porque nada le pedia al servidor el estado real. Llamarla al
+ * abrir la pantalla tambien repara las posiciones que ya quedaron guardadas
+ * con el id falso.
+ */
+export async function refreshCrypto(): Promise<void> {
+  if (!hasBackend) return;
+  const generacion = generacionActual();
+  const api = getApiLayer();
+  const [activos, movimientos, posiciones] = await Promise.allSettled([
+    api.crypto.getAssets(),
+    api.crypto.getTransactions(),
+    api.crypto.getStakingPositions(),
+  ]);
+  if (!sigueVigente(generacion)) return;
+  const store = useCryptoStore.getState();
+  if (activos.status === 'fulfilled' && activos.value.success && activos.value.data) {
+    store.setAssets(fusionarConCatalogo(activos.value.data));
+  }
+  if (movimientos.status === 'fulfilled' && movimientos.value.success && movimientos.value.data) {
+    store.setCryptoTransactions(movimientos.value.data);
+  }
+  if (posiciones.status === 'fulfilled' && posiciones.value.success && posiciones.value.data) {
+    store.setStakingPositions(posiciones.value.data);
+  }
+}
+
 export async function refreshTransactions(): Promise<void> {
   if (!hasBackend) return;
   const generacion = generacionActual();

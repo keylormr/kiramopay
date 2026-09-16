@@ -60,6 +60,27 @@ describe('los adaptadores conservan el codigo de error del servidor', () => {
       const res = await llamar(repo);
       expect(res.error?.code).toBe('MFA_REQUIRED');
     });
+
+    it.each(casos)('%s deja pasar CRYPTO_INSUFFICIENT_BALANCE', async (_nombre, llamar) => {
+      const repo = new HttpCryptoRepository(clienteQueFalla('CRYPTO_INSUFFICIENT_BALANCE'));
+      const res = await llamar(repo);
+      expect(res.error?.code).toBe('CRYPTO_INSUFFICIENT_BALANCE');
+    });
+
+    // Staking y retiro pisaban el codigo con STAKE_FAILED y UNSTAKE_FAILED: la
+    // pantalla solo tenia el texto en ingles para decidir, y lo mostraba.
+    const deStaking: Array<[string, string, (r: HttpCryptoRepository) => Promise<{ error?: { code: string } }>]> = [
+      ['stake', 'STAKING_NOT_AVAILABLE', (r) => r.stake({ asset: 'USDT', amount: 1, locked: false })],
+      ['stake', 'CRYPTO_INSUFFICIENT_BALANCE', (r) => r.stake({ asset: 'ETH', amount: 1, locked: false })],
+      ['unstake', 'STAKING_POSITION_NOT_FOUND', (r) => r.unstake('stake-1789326379706')],
+      ['unstake', 'STAKING_POSITION_LOCKED', (r) => r.unstake('pos-1')],
+    ];
+
+    it.each(deStaking)('%s deja pasar %s', async (_nombre, codigo, llamar) => {
+      const repo = new HttpCryptoRepository(clienteQueFalla(codigo));
+      const res = await llamar(repo);
+      expect(res.error?.code).toBe(codigo);
+    });
   });
 
   // Misma politica en la remesa a otro pais: sin corresponsal que la entregue,

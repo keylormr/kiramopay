@@ -559,6 +559,16 @@ export type TranslationKeys = {
   crypto_prices_unavailable_hint: string;
   crypto_sparkline_sin_datos: string;
   crypto_price_stale: string;
+  crypto_err_insufficient_asset: string;
+  crypto_err_insufficient_funds: string;
+  crypto_err_invalid_amount: string;
+  crypto_err_repeated_request: string;
+  crypto_err_price_unavailable: string;
+  crypto_err_price_moved: string;
+  crypto_err_unsupported_currency: string;
+  crypto_err_daily_limit: string;
+  crypto_err_monthly_limit: string;
+  crypto_err_generic: string;
   crypto_action_needs_price: string;
   crypto_value_unavailable: string;
   crypto_refresh_prices: string;
@@ -574,6 +584,11 @@ export type TranslationKeys = {
   crypto_staked: string;
   crypto_withdraw: string;
   crypto_claim_unavailable: string;
+  crypto_err_staking_not_available: string;
+  crypto_err_position_gone: string;
+  crypto_err_position_locked: string;
+  crypto_staking_program_assets: string;
+  crypto_staking_no_yield: string;
   crypto_days: string;
   crypto_market_cap: string;
   crypto_volume_24h: string;
@@ -604,6 +619,9 @@ export type TranslationKeys = {
   crypto_price: string;
   crypto_fee: string;
   crypto_total_usd: string;
+  crypto_tx_gave: string;
+  crypto_tx_got: string;
+  crypto_status_failed: string;
   crypto_onramp_cta: string;
   crypto_onramp_soon_title: string;
   crypto_onramp_soon_desc: string;

@@ -7,6 +7,11 @@ export interface BuyCryptoRequest {
   price: number;
   fromCurrency: string;
   fromAmount: number;
+  /**
+   * Llave de idempotencia del intento. Repetir la MISMA compra con la misma
+   * llave (tras un corte de red o el desafio de MFA) no cobra dos veces.
+   */
+  idempotencyKey?: string;
 }
 
 export interface SellCryptoRequest {
@@ -15,6 +20,8 @@ export interface SellCryptoRequest {
   price: number;
   toCurrency: string;
   toAmount: number;
+  /** Igual que en la compra: la repeticion de la misma venta no vende dos veces. */
+  idempotencyKey?: string;
 }
 
 export interface ConvertCryptoRequest {
@@ -25,13 +32,24 @@ export interface ConvertCryptoRequest {
   price: number;
 }
 
+// Sin tasa: la fija el servidor y cualquier valor del cliente se ignora.
 export interface StakeCryptoRequest {
   asset: string;
   amount: number;
-  apy: number;
   locked: boolean;
   lockDays?: number;
 }
+
+/**
+ * Los activos del programa de staking, con la tasa objetivo que anota el
+ * servidor (stakingAPY en backend/internal/crypto/service.go). USDT y USDC
+ * salieron del programa: anunciar rendimiento sobre monedas atadas al dolar
+ * roza la captacion, y ademas no se podian conseguir en la aplicacion.
+ */
+export const ACTIVOS_CON_STAKING: Readonly<Record<string, number>> = {
+  ETH: 4.5,
+  SOL: 7.2,
+};
 
 export interface ICryptoRepository {
   getAssets(): Promise<ApiResponse<CryptoAsset[]>>;

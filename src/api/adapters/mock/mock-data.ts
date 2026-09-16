@@ -67,16 +67,16 @@ export const initialCryptoAssets: CryptoAsset[] = [
 ];
 
 export const initialCryptoTransactions: CryptoTransaction[] = [
-  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 2.50, date: 'Hoy, 10:30 AM', status: 'completed', txHash: '0xabc123...' },
+  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 0, date: 'Hoy, 10:30 AM', status: 'completed', txHash: '0xabc123...' },
   { id: 'ctx2', type: 'receive', fromAsset: 'ETH', fromAmount: 0.5, price: 2320, fee: 0, date: 'Ayer, 3:15 PM', status: 'completed', txHash: '0xdef456...' },
-  { id: 'ctx3', type: 'convert', fromAsset: 'USDT', toAsset: 'ETH', fromAmount: 200, toAmount: 0.085, price: 2352, fee: 1.00, date: '28 Dic, 2024', status: 'completed' },
+  { id: 'ctx3', type: 'convert', fromAsset: 'USDT', toAsset: 'ETH', fromAmount: 200, toAmount: 0.085, price: 2352, fee: 0, date: '28 Dic, 2024', status: 'completed' },
   { id: 'ctx4', type: 'stake', fromAsset: 'ETH', fromAmount: 0.5, price: 2340, fee: 0, date: '25 Dic, 2024', status: 'completed' },
   { id: 'ctx5', type: 'yield', fromAsset: 'ETH', fromAmount: 0.0012, price: 2340, fee: 0, date: '30 Dic, 2024', status: 'completed' },
 ];
 
 export const initialStakingPositions: StakingPosition[] = [
+  // Sin posiciones en USDT ni USDC: salieron del programa de staking.
   { id: 'stake1', asset: 'ETH', amount: 0.5, apy: 4.5, startDate: '25 Dic, 2024', earned: 0.0012, locked: false },
-  { id: 'stake2', asset: 'USDT', amount: 200, apy: 8.0, startDate: '20 Dic, 2024', earned: 1.32, locked: true, lockPeriodDays: 30 },
 ];
 
 export const initialSavedServices: SavedService[] = [
