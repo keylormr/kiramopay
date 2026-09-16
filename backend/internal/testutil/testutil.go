@@ -904,8 +904,19 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		reviewed_by UUID REFERENCES users(id),
 		rejection_reason TEXT NOT NULL DEFAULT '',
 		commission_bps INTEGER NOT NULL DEFAULT 50,
-		created_at TIMESTAMP DEFAULT NOW()
+		created_at TIMESTAMP DEFAULT NOW(),
+		-- Plan del comercio y promocion de entrada (migracion 068).
+		plan VARCHAR(16) NOT NULL DEFAULT 'base',
+		promo_hasta TIMESTAMPTZ,
+		primera_aprobacion_at TIMESTAMPTZ
 	);
+	-- Mismo respaldo que users para una base de pruebas persistida: CREATE
+	-- TABLE IF NOT EXISTS no agrega columnas a una tabla que ya existia.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS plan VARCHAR(16) NOT NULL DEFAULT 'base';
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS promo_hasta TIMESTAMPTZ;
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS primera_aprobacion_at TIMESTAMPTZ;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
 
 	-- Phase 3 of business mode (migration 046): locations, staff, catalog.
 	CREATE TABLE IF NOT EXISTS merchant_locations (
@@ -1168,13 +1179,18 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 	-- Interest in a paid plan (migration 056). Not a subscription: nothing
 	-- charges. The unique index is what makes registering twice one row.
+	-- La 068 cambio el CHECK: plus, pro y analitica, conservando validas las
+	-- filas viejas de negocio y cima.
 	CREATE TABLE IF NOT EXISTS plan_interest (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		plan VARCHAR(16) NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		CONSTRAINT chk_plan_interest_plan CHECK (plan IN ('negocio', 'cima'))
+		CONSTRAINT chk_plan_interest_plan CHECK (plan IN ('plus', 'pro', 'analitica', 'negocio', 'cima'))
 	);
+	ALTER TABLE plan_interest DROP CONSTRAINT IF EXISTS chk_plan_interest_plan;
+	ALTER TABLE plan_interest ADD CONSTRAINT chk_plan_interest_plan
+		CHECK (plan IN ('plus', 'pro', 'analitica', 'negocio', 'cima'));
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_plan_interest_user_plan
 		ON plan_interest (user_id, plan);
 	CREATE INDEX IF NOT EXISTS idx_plan_interest_created

@@ -62,6 +62,17 @@ func countPaymentsByTx(t *testing.T, pool *pgxpool.Pool, txID string) int {
 	return n
 }
 
+// terminarPromocion deja al comercio fuera de la promocion de entrada. La usan
+// las pruebas que verifican la comision estandar de 0,50 %: desde la migracion
+// 068 toda primera aprobacion otorga 3 meses a 0,25 %.
+func terminarPromocion(t *testing.T, pool *pgxpool.Pool, merchantID string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE qr_merchants SET promo_hasta = NOW() - INTERVAL '1 second' WHERE id = $1::uuid`, merchantID); err != nil {
+		t.Fatalf("terminar promocion: %v", err)
+	}
+}
+
 func verifiedMerchantQR(t *testing.T, svc *qrpayment.Service, owner string, amount int64) *qrpayment.QRPaymentCode {
 	t.Helper()
 	ctx := context.Background()
@@ -93,6 +104,7 @@ func TestScanAndPay_MerchantCommission_AndIdempotency(t *testing.T) {
 	const amount int64 = 100000 // ₡1000.00
 	const fee int64 = 500       // 0.50%
 	qr := verifiedMerchantQR(t, svc, owner, amount)
+	terminarPromocion(t, pool, qr.MerchantID)
 
 	payer0, owner0, fees0 := walletCRC(t, pool, payer), walletCRC(t, pool, owner), feesCRC(t, pool)
 
@@ -154,6 +166,7 @@ func TestWithdrawToOwner_ReplayAndStatus(t *testing.T) {
 	const amount int64 = 100000 // ₡1000.00
 	const fee int64 = 500       // 0.50%
 	qr := verifiedMerchantQR(t, svc, owner, amount)
+	terminarPromocion(t, pool, qr.MerchantID)
 	if _, err := svc.ScanAndPay(ctx, payer, &qrpayment.ScanQRPaymentRequest{QRData: qr.QRData, Currency: "CRC"}); err != nil {
 		t.Fatalf("ScanAndPay: %v", err)
 	}
@@ -270,6 +283,8 @@ func TestSetCommission_AppliesToNextPayment(t *testing.T) {
 	if _, err := svc.ApproveMerchant(ctx, m.ID, owner); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
+	// Fuera de la promocion de entrada, que cobraria la menor (25 bps).
+	terminarPromocion(t, pool, m.ID)
 	// Bump the commission to 1.00% (100 bps).
 	updated, err := svc.SetCommission(ctx, m.ID, 100)
 	if err != nil {

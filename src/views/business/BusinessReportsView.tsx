@@ -1,10 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
+import { Button } from '@/components/ui';
 import { getApiLayer } from '@/api';
-import type { QRMerchant, BusinessReport, BusinessReportBucket } from '@/api/repositories/qrpayment.repository';
+import type {
+  QRMerchant,
+  BusinessReport,
+  BusinessReportBucket,
+  BusinessReportComparison,
+} from '@/api/repositories/qrpayment.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { useTarifas } from '@/hooks/usePlanes';
+import { diaCorto, rellenar } from '@/utils/planes';
 
 interface Props {
   merchant: QRMerchant;
@@ -16,15 +25,53 @@ const RANGES = [7, 30, 90] as const;
 const localKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+type EstadoExport = 'quieto' | 'exportando' | 'listo' | 'error' | 'plan' | 'solo_web';
+
+/**
+ * Entrega el CSV a quien lo pidio. En el navegador lo descarga. En la app del
+ * telefono un enlace de descarga no hace nada (el WebView lo ignora en
+ * silencio), asi que ahi se ofrece compartir el archivo si el sistema lo deja
+ * y, si no, se dice que hoy se exporta desde la web: nunca un "listo" falso.
+ */
+async function entregarArchivo(blob: Blob, nombre: string): Promise<EstadoExport> {
+  if (Capacitor.isNativePlatform()) {
+    const nav = navigator as Navigator & { canShare?: (datos: ShareData) => boolean };
+    const archivo = typeof File === 'function' ? new File([blob], nombre, { type: 'text/csv' }) : null;
+    if (archivo && nav.share && nav.canShare?.({ files: [archivo] })) {
+      try {
+        await nav.share({ files: [archivo], title: nombre });
+        return 'listo';
+      } catch {
+        return 'quieto';
+      }
+    }
+    return 'solo_web';
+  }
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return 'listo';
+}
+
 /**
  * The shop's numbers (owner/manager): headline totals, a single-series daily
  * bar chart, and the per-location / per-collector breakdowns built from the
  * attribution phase 3 records. One hue for one measure; text stays in ink
  * tokens; the grid is recessive.
+ *
+ * Con el plan Analitica suma la comparacion contra el periodo anterior y la
+ * exportacion en CSV. Sin el plan muestra una vista previa honesta: la forma,
+ * el precio y "Proximamente", sin un solo numero inventado.
  */
 export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { state } = useApp();
+  const tarifas = useTarifas();
   const ccy = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.ccy ?? 'CRC';
   // utils/money y no `symbol + toFixed(2)`: el atajo perdia los miles con coma.
   const money = (v: number) => formatMoney(v, ccy as CurrencyCode, { decimals: 2 });
@@ -33,6 +80,12 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   const [report, setReport] = useState<BusinessReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [exportacion, setExportacion] = useState<EstadoExport>('quieto');
+  const exportandoRef = useRef(false);
+
+  const [interes, setInteres] = useState<'quieto' | 'enviando' | 'anotado' | 'error'>('quieto');
+  const interesRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +104,43 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     })();
     return () => { cancelled = true; };
   }, [merchant.id, days, t]);
+
+  // El plan con el que el servidor armo el reporte manda; el del comercio
+  // cargado antes es solo el respaldo mientras llega.
+  const conAnalitica = (report?.plan ?? merchant.plan) === 'analitica';
+
+  const exportar = async () => {
+    const api = getApiLayer().qrPayments;
+    if (!api || exportandoRef.current) return;
+    exportandoRef.current = true;
+    setExportacion('exportando');
+    try {
+      const res = await api.exportMerchantReportCsv(merchant.id, days);
+      if (!res.success || !res.data) {
+        setExportacion(res.error?.code === 'PLAN_REQUIRED' ? 'plan' : 'error');
+        return;
+      }
+      setExportacion(await entregarArchivo(res.data.blob, res.data.nombre));
+    } catch {
+      setExportacion('error');
+    } finally {
+      exportandoRef.current = false;
+    }
+  };
+
+  const avisarme = async () => {
+    if (interesRef.current || interes === 'anotado') return;
+    interesRef.current = true;
+    setInteres('enviando');
+    try {
+      const res = await getApiLayer().plans?.registrarInteres('analitica');
+      setInteres(res?.success ? 'anotado' : 'error');
+    } catch {
+      setInteres('error');
+    } finally {
+      interesRef.current = false;
+    }
+  };
 
   // Zero-fill the window so every day gets a bar, sparse data included.
   const byDate = new Map((report?.daily ?? []).map((d) => [d.date, d]));
@@ -97,6 +187,14 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     );
   };
 
+  const mensajeExport: Partial<Record<EstadoExport, { clave: string; tono: 'ok' | 'mal' }>> = {
+    listo: { clave: 'business_report_exported', tono: 'ok' },
+    error: { clave: 'business_report_export_failed', tono: 'mal' },
+    plan: { clave: 'business_report_export_plan', tono: 'mal' },
+    solo_web: { clave: 'business_report_export_web_only', tono: 'mal' },
+  };
+  const aviso = mensajeExport[exportacion];
+
   return (
     <div className="pb-24 pt-4 px-4 space-y-5">
       {/* Range selector */}
@@ -104,7 +202,8 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         {RANGES.map((r) => (
           <button
             key={r}
-            onClick={() => setDays(r)}
+            onClick={() => { setDays(r); if (exportacion !== 'exportando') setExportacion('quieto'); }}
+            aria-pressed={days === r}
             className={`flex-1 h-9 rounded-xl text-sm font-bold transition-colors ${
               days === r
                 ? 'bg-[var(--color-primary)] text-white'
@@ -137,6 +236,100 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </div>
         </div>
       </div>
+
+      {/* ── Analitica: la comparacion y el CSV, o la vista previa honesta ── */}
+      {report && conAnalitica && (
+        <>
+          {report.comparison && (
+            <Comparacion comp={report.comparison} actual={report.totals} money={money} idioma={language} />
+          )}
+          <div>
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              onClick={() => void exportar()}
+              loading={exportacion === 'exportando'}
+              leftIcon={<Icons.Download size={18} />}
+            >
+              {exportacion === 'exportando' ? t('business_report_exporting') : t('business_report_export')}
+            </Button>
+            {aviso && (
+              <p
+                role={aviso.tono === 'ok' ? 'status' : 'alert'}
+                className={`mt-2 text-sm ${aviso.tono === 'ok' ? 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' : 'text-[var(--color-danger)]'}`}
+              >
+                {t(aviso.clave)}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {report && !conAnalitica && tarifas.analitica && (
+        <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="analitica-bloqueada">
+          <div className="flex flex-wrap items-center gap-2">
+            <Icons.Lock size={16} className="uv-text-secondary" aria-hidden="true" />
+            <h3 id="analitica-bloqueada" className="text-base font-black uv-text-primary">
+              {t('business_report_locked_title')}
+            </h3>
+            <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
+              {t('plans_badge_soon')}
+            </span>
+          </div>
+          <p className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black tabular-nums tracking-tight uv-text-primary">
+              {formatMoney(tarifas.analitica.precio, 'USD', { decimals: 2 })}
+            </span>
+            <span className="text-sm font-semibold uv-text-muted">{t('plans_per_month')}</span>
+          </p>
+          <p className="mt-2 text-sm leading-relaxed uv-text-secondary">{t('business_report_locked_desc')}</p>
+
+          {/* La forma de lo que traeria, sin un solo numero: nada inventado. */}
+          <div
+            aria-hidden="true"
+            className="mt-4 rounded-2xl border border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] p-4"
+          >
+            <p className="text-xs font-semibold uv-text-muted">{t('business_report_locked_preview')}</p>
+            <div className="mt-3 space-y-3">
+              {[t('business_report_net'), t('business_report_sales')].map((etiqueta) => (
+                <div key={etiqueta} className="flex items-center justify-between gap-3">
+                  <span className="text-sm uv-text-secondary">{etiqueta}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-bold uv-text-muted">—</span>
+                    <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-muted">
+                      ± —%
+                    </span>
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm uv-text-secondary">{t('business_report_export')}</span>
+                <Icons.Download size={16} className="uv-text-muted" />
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-4 text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
+          <button
+            type="button"
+            onClick={() => void avisarme()}
+            disabled={interes === 'enviando' || interes === 'anotado'}
+            aria-label={`${t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')} ${t('plans_analytics_name')}`}
+            className={`mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
+              interes === 'anotado'
+                ? 'uv-chip-success'
+                : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
+            }`}
+          >
+            {interes === 'anotado' ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
+            {t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')}
+          </button>
+          {interes === 'error' && (
+            <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">{t('plans_cta_error')}</p>
+          )}
+        </section>
+      )}
 
       {empty ? (
         <div className="flex flex-col items-center py-10 text-center">
@@ -174,5 +367,76 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         </>
       )}
     </div>
+  );
+};
+
+// ── La comparacion contra el periodo anterior (plan Analitica) ───────────────
+
+interface ComparacionProps {
+  comp: BusinessReportComparison;
+  actual: BusinessReportBucket;
+  money: (v: number) => string;
+  idioma: string;
+}
+
+const Comparacion: React.FC<ComparacionProps> = ({ comp, actual, money, idioma }) => {
+  const { t } = useLanguage();
+
+  const filas = [
+    { etiqueta: t('business_report_net'), ahora: money(actual.net), antes: money(comp.previousTotals.net), pct: comp.delta.netPct },
+    { etiqueta: t('merchant_gross'), ahora: money(actual.gross), antes: money(comp.previousTotals.gross), pct: comp.delta.grossPct },
+    { etiqueta: t('business_report_sales'), ahora: String(actual.count), antes: String(comp.previousTotals.count), pct: comp.delta.countPct },
+  ];
+
+  return (
+    <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="comparacion-titulo">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h3 id="comparacion-titulo" className="text-base font-black uv-text-primary">
+          {t('business_report_compare_title')}
+        </h3>
+        <p className="text-xs uv-text-muted tabular-nums">
+          {rellenar(t('business_report_compare_range'), {
+            desde: diaCorto(comp.previousFrom, idioma),
+            hasta: diaCorto(comp.previousTo, idioma),
+          })}
+        </p>
+      </div>
+      <ul className="mt-3 divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+        {filas.map((f) => (
+          <li key={f.etiqueta} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold uv-text-primary">{f.etiqueta}</p>
+              <p className="mt-0.5 text-xs uv-text-muted tabular-nums">
+                {rellenar(t('business_report_compare_prev'), { valor: f.antes })}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <span className="text-sm font-bold tabular-nums uv-text-primary">{f.ahora}</span>
+              <ChipVariacion pct={f.pct} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+};
+
+// El signo va escrito: el color solo no le dice nada a quien no lo distingue.
+const ChipVariacion: React.FC<{ pct: number | null }> = ({ pct }) => {
+  const { t } = useLanguage();
+  if (pct === null) {
+    return (
+      <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-muted">
+        {t('business_report_compare_no_base')}
+      </span>
+    );
+  }
+  const valor = Number(pct.toFixed(2));
+  const tono = valor > 0 ? 'uv-chip-success' : valor < 0 ? 'uv-chip-danger' : 'bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] uv-text-secondary';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${tono}`}>
+      {valor > 0 ? '+' : ''}
+      {valor}%
+    </span>
   );
 };

@@ -49,7 +49,8 @@ const (
 	DefaultDailyLimit   = 50000000  // 500,000 CRC
 	DefaultMonthlyLimit = 200000000 // 2,000,000 CRC
 	DefaultATMLimit     = 10000000  // 100,000 CRC
-	MaxCardsPerUser     = 5
+	// El tope de tarjetas ya no es uno para todos: depende del plan (1 / 3 / 5
+	// activas o congeladas). Ver plans.TopesTarjetas y config.PlanesConfig.
 	// MarcaKiramoPay: la tarjeta no pertenece a ninguna red de pago.
 	MarcaKiramoPay = "kiramopay"
 )

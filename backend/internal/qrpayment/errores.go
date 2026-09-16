@@ -68,3 +68,17 @@ var (
 	// porque la alternativa seria fabricar una venta que nadie hizo.
 	ErrPagoNoRegistrado = errors.New("el pago no quedo registrado")
 )
+
+// Errores de los planes del comercio.
+var (
+	// ErrPlanAnaliticaRequerido: la exportacion del reporte es del plan
+	// analitica. El handler responde 403 PLAN_REQUIRED con el plan que falta.
+	ErrPlanAnaliticaRequerido = errors.New("el comercio necesita el plan analitica")
+
+	// ErrPlanComercioInvalido: un plan de comercio que no es base ni analitica,
+	// escrito exactamente asi.
+	ErrPlanComercioInvalido = errors.New("plan de comercio invalido")
+
+	// ErrComercioNoEncontrado: no existe un comercio con ese id.
+	ErrComercioNoEncontrado = errors.New("merchant not found")
+)

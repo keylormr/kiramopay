@@ -1,115 +1,38 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
-import type { TranslationKeys } from '@/i18n/translations';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
-import type { PaidPlanId } from '@/api/repositories/plans.repository';
+import type { PlanDeInteres, PlanPersonal, Tarifas } from '@/api/repositories/plans.repository';
+import { PLANES_PERSONALES, porcentajeDeBps, rellenar } from '@/utils/planes';
+import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 
-type Clave = keyof TranslationKeys;
-type PlanId = 'gratuito' | PaidPlanId;
-type Periodo = 'mensual' | 'anual';
+// ── Decision del dueno (2026-09-13) ─────────────────────────────────────────
+// Personas: Gratis / Plus / Pro con tres beneficios que el servidor aplica de
+// verdad (consultas al asistente, metas de ahorro activas, tarjetas activas).
+// Comercios: 0.5% por cobro con QR, promocion de 0.25% los primeros 3 meses
+// para comercios nuevos y Analitica opcional. Nada se puede cobrar todavia:
+// cada precio va con "Proximamente" y un boton que solo anota el interes.
+//
+// Se retiraron Kiramo Negocio y Kiramo Cima con su calculadora: prometian
+// umbrales sin comision, prueba de 30 dias y liquidacion prioritaria que no
+// existen. Los numeros de esta pantalla salen de /transparency/fees.
 
-// ── La aritmetica de la escalera ────────────────────────────────────────────
-// Los precios NO se traducen: van en dolares en todas las lenguas, y con la
-// convencion de money.ts (miles con coma, decimales con punto).
-const CUOTA = { negocio: 34.99, cima: 54.99 } as const;
-const CUOTA_ANUAL = { negocio: 349.9, cima: 549.9 } as const;
-const MESES_DEL_ANO = 12;
+const SECCION_PERSONAL = 'planes-para-ti';
+const SECCION_COMERCIO = 'planes-para-tu-comercio';
 
-const TASA_GRATUITO = 0.005;
-const TASA_NEGOCIO = 0.0025;
-const TASA_CIMA = 0.001;
-const SIN_COMISION_NEGOCIO = 12000;
-const SIN_COMISION_CIMA = 50000;
-
-// Etiquetas de porcentaje escritas a mano para que sigan la misma convencion
-// decimal que los montos; no se traducen.
-const PCT = { gratuito: '0.5%', negocio: '0.25%', cima: '0.1%' } as const;
-
-const COBRADO_PREDETERMINADO = 7000;
-const TOPE_DESLIZADOR = 60000;
-const PASO_DESLIZADOR = 500;
-const TOPE_MANUAL = 1000000;
-
-const dolares = (v: number) => formatMoney(v, 'USD', { decimals: 2 });
-const dolaresRedondos = (v: number) => formatMoney(v, 'USD', { decimals: 0 });
-
-// Los totales se comparan redondeados al centavo: 34.99 + 0.0025 * 8000 no da
-// exactamente 54.99 en coma flotante, y sin esto el empate de los 20 mil
-// -el punto exacto donde Cima alcanza a Negocio- se decidiria por ruido.
-const alCentavo = (v: number) => Math.round(v * 100) / 100;
-
-function costoDelMes(plan: PlanId, cobrado: number): number {
-  if (plan === 'gratuito') return alCentavo(cobrado * TASA_GRATUITO);
-  if (plan === 'negocio') {
-    return alCentavo(CUOTA.negocio + Math.max(0, cobrado - SIN_COMISION_NEGOCIO) * TASA_NEGOCIO);
-  }
-  return alCentavo(CUOTA.cima + Math.max(0, cobrado - SIN_COMISION_CIMA) * TASA_CIMA);
-}
-
-interface DefinicionPlan {
-  id: PlanId;
-  nombre: Clave;
-  lema: Clave;
-  hereda: Clave | null;
-  resalte: Clave;
-  resalteNota: Clave;
-  beneficios: readonly Clave[];
-  destacado: boolean;
-}
-
-const PLANES: readonly DefinicionPlan[] = [
-  {
-    id: 'gratuito',
-    nombre: 'plans_free_name',
-    lema: 'plans_free_tagline',
-    hereda: null,
-    resalte: 'plans_free_highlight',
-    resalteNota: 'plans_free_highlight_note',
-    beneficios: [
-      'plans_free_f1', 'plans_free_f2', 'plans_free_f3', 'plans_free_f4',
-      'plans_free_f5', 'plans_free_f6', 'plans_free_f7', 'plans_free_f8',
-    ],
-    destacado: false,
-  },
-  {
-    id: 'negocio',
-    nombre: 'plans_business_name',
-    lema: 'plans_business_tagline',
-    hereda: 'plans_business_includes',
-    resalte: 'plans_business_highlight',
-    resalteNota: 'plans_business_highlight_note',
-    beneficios: [
-      'plans_business_f1', 'plans_business_f2', 'plans_business_f3', 'plans_business_f4',
-      'plans_business_f5', 'plans_business_f6', 'plans_business_f7', 'plans_business_f8',
-    ],
-    destacado: true,
-  },
-  {
-    id: 'cima',
-    nombre: 'plans_peak_name',
-    lema: 'plans_peak_tagline',
-    hereda: 'plans_peak_includes',
-    resalte: 'plans_peak_highlight',
-    resalteNota: 'plans_peak_highlight_note',
-    beneficios: [
-      'plans_peak_f1', 'plans_peak_f2', 'plans_peak_f3',
-      'plans_peak_f4', 'plans_peak_f5', 'plans_peak_f6',
-    ],
-    destacado: false,
-  },
-];
-
-const EXCLUSIONES: readonly Clave[] = [
+const EXCLUSIONES = [
   'plans_excluded_1', 'plans_excluded_2', 'plans_excluded_3',
-  'plans_excluded_4', 'plans_excluded_5',
-];
+  'plans_excluded_4', 'plans_excluded_5', 'plans_excluded_6',
+  'plans_excluded_7', 'plans_excluded_8',
+] as const;
 
-// El degradado de marca de CryptoView aclara demasiado en su extremo azul para
-// sostener texto secundario blanco (queda bajo 4.5:1). Este baja el tono sin
-// salirse de la paleta: navy-950 -> navy-800 -> primary-700.
-const DEGRADADO_CALCULADORA = 'linear-gradient(135deg, #060E1F 0%, #12294F 55%, #1858CC 100%)';
+// Comprar y vender cripto va aqui y no en lo que no incluye: existe, no cobra
+// comision y es igual en los tres planes, asi que no sostiene el precio de
+// ninguno. Con la cruz de "no incluido" se leia como que la app no deja operar.
+const IGUAL_EN_TODOS = ['plans_same_1', 'plans_same_2', 'plans_same_3', 'plans_same_4', 'plans_same_5'] as const;
+
+const precioDe = (usd: number) => formatMoney(usd, 'USD', { decimals: usd === 0 ? 0 : 2 });
 
 interface PlansViewProps {
   onClose: () => void;
@@ -117,91 +40,54 @@ interface PlansViewProps {
 
 export const PlansView: React.FC<PlansViewProps> = ({ onClose }) => {
   const { t } = useLanguage();
+  const tarifas = useTarifas();
+  const planActual = usePlanPersonal();
 
-  const [cobrado, setCobrado] = useState(COBRADO_PREDETERMINADO);
-  const [periodo, setPeriodo] = useState<Periodo>('mensual');
-  const [registrados, setRegistrados] = useState<Partial<Record<PaidPlanId, boolean>>>({});
-  const [enviando, setEnviando] = useState<PaidPlanId | null>(null);
-  const [errores, setErrores] = useState<Partial<Record<PaidPlanId, string>>>({});
+  const [registrados, setRegistrados] = useState<Partial<Record<PlanDeInteres, boolean>>>({});
+  const [enviando, setEnviando] = useState<PlanDeInteres | null>(null);
+  const [errores, setErrores] = useState<Partial<Record<PlanDeInteres, boolean>>>({});
 
   // Guarda sincronica contra el doble envio: el estado de React se aplica
   // despues del evento, asi que dos toques seguidos entrarian los dos antes de
   // que el boton llegue a deshabilitarse.
   const enviandoRef = useRef(false);
 
-  const conDatos = (clave: Clave, datos: Record<string, string>) =>
-    Object.entries(datos).reduce((texto, [k, v]) => texto.replace(`{${k}}`, v), t(clave));
-
-  const escribirMonto = (valor: string) => {
-    const digitos = valor.replace(/\D/g, '');
-    setCobrado(digitos === '' ? 0 : Math.min(Number(digitos), TOPE_MANUAL));
-  };
-
-  const calculo = useMemo(() => {
-    const filas = PLANES.map((p) => ({
-      id: p.id,
-      nombre: p.nombre,
-      costo: costoDelMes(p.id, cobrado),
-    }));
-    // Empate: gana el primero de la lista, es decir el plan mas barato de
-    // contratar. En los 20 mil exactos Cima iguala a Negocio y el comercio no
-    // tiene por que pagar la cuota mayor para quedar igual.
-    const ganadora = filas.reduce((mejor, fila) => (fila.costo < mejor.costo ? fila : mejor), filas[0]);
-    const techo = Math.max(...filas.map((f) => f.costo));
-    return { filas, ganador: ganadora.id, costoGanador: ganadora.costo, techo };
-  }, [cobrado]);
-
-  const desglose = (plan: PlanId): string => {
-    if (plan === 'gratuito') {
-      return conDatos('plans_calc_breakdown_rate', {
-        pct: PCT.gratuito,
-        amount: dolaresRedondos(cobrado),
-      });
-    }
-    const franquicia = plan === 'negocio' ? SIN_COMISION_NEGOCIO : SIN_COMISION_CIMA;
-    const exceso = Math.max(0, cobrado - franquicia);
-    if (exceso === 0) return t('plans_calc_breakdown_fee_only');
-    return conDatos('plans_calc_breakdown_fee_plus', {
-      fee: dolares(CUOTA[plan]),
-      pct: PCT[plan],
-      excess: dolaresRedondos(exceso),
-    });
-  };
-
-  const veredicto = (): string => {
-    const monto = dolaresRedondos(cobrado);
-    if (calculo.ganador === 'gratuito') return conDatos('plans_calc_verdict_free', { amount: monto });
-    return conDatos('plans_calc_verdict_paid', {
-      amount: monto,
-      plan: t(calculo.ganador === 'negocio' ? 'plans_business_name' : 'plans_peak_name'),
-      total: dolares(calculo.costoGanador),
-      free: dolares(costoDelMes('gratuito', cobrado)),
-    });
-  };
-
-  const registrarInteres = async (plan: PaidPlanId) => {
+  const registrarInteres = async (plan: PlanDeInteres) => {
     if (enviandoRef.current || registrados[plan]) return;
     enviandoRef.current = true;
     setEnviando(plan);
-    setErrores((previos) => ({ ...previos, [plan]: undefined }));
+    setErrores((previos) => ({ ...previos, [plan]: false }));
     try {
       const res = await getApiLayer().plans?.registrarInteres(plan);
       if (res?.success) setRegistrados((previos) => ({ ...previos, [plan]: true }));
-      else setErrores((previos) => ({ ...previos, [plan]: t('plans_cta_error') }));
+      else setErrores((previos) => ({ ...previos, [plan]: true }));
     } catch {
-      setErrores((previos) => ({ ...previos, [plan]: t('plans_cta_error') }));
+      setErrores((previos) => ({ ...previos, [plan]: true }));
     } finally {
       enviandoRef.current = false;
       setEnviando(null);
     }
   };
 
+  const irA = (id: string) => {
+    const quieto = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: quieto ? 'auto' : 'smooth', block: 'start' });
+  };
+
+  const interes = (plan: PlanDeInteres, nombre: string) => ({
+    registrado: registrados[plan] === true,
+    enviando: enviando === plan,
+    error: errores[plan] === true,
+    nombre,
+    onClick: () => void registrarInteres(plan),
+  });
+
   return (
     <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
-          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]"
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] uv-focus-ring"
           aria-label={t('back')}
         >
           <Icons.ChevronLeft size={20} />
@@ -210,164 +96,53 @@ export const PlansView: React.FC<PlansViewProps> = ({ onClose }) => {
         <span className="w-9" />
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-12">
+      <div className="flex-1 overflow-y-auto pb-16">
         <div className="mx-auto w-full max-w-3xl">
-
-          {/* La tesis de la pagina, antes de cualquier precio. */}
           <section className="px-4 pt-6">
-            <h2 className="text-2xl font-black leading-tight tracking-tight uv-text-primary">
+            <h2 className="text-2xl sm:text-3xl font-black leading-tight tracking-tight uv-text-primary text-balance">
               {t('plans_intro_title')}
             </h2>
             <p className="mt-3 max-w-2xl text-[15px] leading-relaxed uv-text-secondary">{t('plans_intro')}</p>
-          </section>
 
-          {/* ── La calculadora: una sola superficie, sin tarjetas anidadas ── */}
-          <section className="px-4 pt-6">
-            <div
-              className="relative overflow-hidden rounded-3xl p-5 text-white uv-shadow-floating"
-              style={{ backgroundImage: DEGRADADO_CALCULADORA }}
-            >
-              <div
-                className="absolute -right-16 -top-20 w-56 h-56 rounded-full opacity-40 pointer-events-none"
-                style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.55), transparent)' }}
-                aria-hidden="true"
-              />
-
-              <div className="relative">
-                <h3 className="text-lg font-bold">{t('plans_calc_title')}</h3>
-
-                <label
-                  htmlFor="plans-cobrado"
-                  className="mt-5 block text-xs font-semibold uppercase tracking-wider text-white/80"
+            <nav aria-label={t('plans_jump_label')} className="mt-5 flex gap-2">
+              {[
+                { id: SECCION_PERSONAL, etiqueta: t('plans_personal_title'), Icono: Icons.User },
+                { id: SECCION_COMERCIO, etiqueta: t('plans_business_title'), Icono: Icons.QrCode },
+              ].map(({ id, etiqueta, Icono }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => irA(id)}
+                  className="flex items-center gap-2 rounded-full border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-1 px-4 h-10 text-sm font-bold uv-text-primary hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors uv-focus-ring"
                 >
-                  {t('plans_calc_label')}
-                </label>
-                <div className="mt-1.5 flex items-baseline gap-1 border-b border-white/25 pb-2 focus-within:border-white">
-                  <span className="text-2xl font-bold text-white/80" aria-hidden="true">$</span>
-                  <input
-                    id="plans-cobrado"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={new Intl.NumberFormat('en-US').format(cobrado)}
-                    onChange={(e) => escribirMonto(e.target.value)}
-                    className="w-full bg-transparent text-4xl font-black tabular-nums text-white outline-none"
-                  />
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={TOPE_DESLIZADOR}
-                  step={PASO_DESLIZADOR}
-                  value={Math.min(cobrado, TOPE_DESLIZADOR)}
-                  onChange={(e) => setCobrado(Number(e.target.value))}
-                  aria-label={t('plans_calc_label')}
-                  className="mt-4 w-full accent-white cursor-pointer"
-                />
-                <div className="flex justify-between text-[11px] font-medium tabular-nums text-white/80">
-                  <span>{dolaresRedondos(0)}</span>
-                  <span>{dolaresRedondos(TOPE_DESLIZADOR)}</span>
-                </div>
-
-                {/* Los tres totales, a escala. La barra es el argumento: con 50
-                    mil cobrados, la del gratuito mide cinco veces la de Cima. */}
-                <ul className="mt-6 space-y-4">
-                  {calculo.filas.map((fila) => {
-                    const ganadora = fila.id === calculo.ganador;
-                    const ancho = calculo.techo > 0 ? (fila.costo / calculo.techo) * 100 : 0;
-                    return (
-                      <li key={fila.id} aria-current={ganadora ? 'true' : undefined}>
-                        <div className="flex items-baseline justify-between gap-3">
-                          <p className="text-sm font-bold text-white">
-                            {t(fila.nombre)}
-                            {ganadora && (
-                              <span className="ml-2 align-middle rounded-full bg-white px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-[#0A152B]">
-                                {t('plans_calc_best')}
-                              </span>
-                            )}
-                          </p>
-                          <p className="shrink-0 text-lg font-black tabular-nums text-white">
-                            {dolares(fila.costo)}
-                          </p>
-                        </div>
-                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/15">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ease-out ${ganadora ? 'bg-white' : 'bg-white/40'}`}
-                            style={{ width: `${ancho}%` }}
-                          />
-                        </div>
-                        <p className="mt-1.5 text-xs tabular-nums text-white/80">{desglose(fila.id)}</p>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {/* El veredicto se dice con todas las letras, tambien -sobre
-                    todo- cuando lo que conviene es no pagar nada. */}
-                <p
-                  role="status"
-                  aria-live="polite"
-                  className="mt-6 border-t border-white/20 pt-4 text-[15px] font-semibold leading-relaxed text-white"
-                >
-                  {veredicto()}
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-white/80">{t('plans_calc_note')}</p>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Los planes ─────────────────────────────────────────────────── */}
-          <section className="px-4 pt-9">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-lg font-bold uv-text-primary">{t('plans_section_title')}</h3>
-              <div className="flex flex-col items-start gap-1.5 sm:items-end">
-                <div className="flex items-center rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] p-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                  {(['mensual', 'anual'] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPeriodo(p)}
-                      aria-pressed={periodo === p}
-                      className={`rounded-full px-3.5 py-1.5 text-sm font-bold transition-colors ${
-                        periodo === p
-                          ? 'bg-[var(--color-primary)] text-white uv-shadow-soft'
-                          : 'uv-text-secondary'
-                      }`}
-                    >
-                      {t(p === 'mensual' ? 'plans_billing_monthly' : 'plans_billing_yearly')}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs uv-text-muted">{t('plans_billing_hint')}</p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-5 md:grid-cols-3">
-              {PLANES.map((plan) => (
-                <TarjetaPlan
-                  key={plan.id}
-                  plan={plan}
-                  periodo={periodo}
-                  conviene={calculo.ganador === plan.id}
-                  registrado={plan.id !== 'gratuito' && registrados[plan.id] === true}
-                  enviando={plan.id !== 'gratuito' && enviando === plan.id}
-                  error={plan.id !== 'gratuito' ? errores[plan.id] : undefined}
-                  onInteres={() => {
-                    if (plan.id !== 'gratuito') void registrarInteres(plan.id);
-                  }}
-                />
+                  <Icono size={16} aria-hidden="true" className="text-[var(--color-primary)]" />
+                  {etiqueta}
+                </button>
               ))}
-            </div>
+            </nav>
           </section>
 
-          {/* ── Lo que no incluye: mismo peso visual que los beneficios ────── */}
-          <section className="px-4 pt-9">
-            <h3 className="text-lg font-bold uv-text-primary">{t('plans_excluded_title')}</h3>
+          <PlanesPersonales
+            tarifas={tarifas}
+            planActual={planActual}
+            interesPlus={interes('plus', t('plans_name_plus'))}
+            interesPro={interes('pro', t('plans_name_pro'))}
+          />
+
+          <PlanesComercio tarifas={tarifas} interesAnalitica={interes('analitica', t('plans_analytics_name'))} />
+
+          {/* ── Lo que no incluye: la misma letra y el mismo tamano que los
+              beneficios. Una lista mas chica o mas gris seria esconderla. ── */}
+          <section className="px-4 pt-12" aria-labelledby="planes-no-incluye">
+            <h2 id="planes-no-incluye" className="text-xl font-black tracking-tight uv-text-primary">
+              {t('plans_excluded_title')}
+            </h2>
             <p className="mt-1.5 text-[15px] leading-relaxed uv-text-secondary">{t('plans_excluded_desc')}</p>
-            <ul className="mt-4 uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+            <ul className="mt-4 uv-surface-1 rounded-3xl uv-shadow-soft p-2 grid sm:grid-cols-2">
               {EXCLUSIONES.map((clave) => (
-                <li key={clave} className="flex gap-3 px-4 py-3.5">
+                <li key={clave} className="flex items-start gap-3 px-3 py-3">
                   <Icons.XCircle size={18} className="mt-0.5 shrink-0 uv-text-secondary" aria-hidden="true" />
-                  <span className="text-sm leading-relaxed uv-text-secondary">{t(clave)}</span>
+                  <span className="text-sm font-medium leading-relaxed uv-text-primary">{t(clave)}</span>
                 </li>
               ))}
             </ul>
@@ -378,137 +153,271 @@ export const PlansView: React.FC<PlansViewProps> = ({ onClose }) => {
   );
 };
 
-interface TarjetaPlanProps {
-  plan: DefinicionPlan;
-  periodo: Periodo;
-  conviene: boolean;
+// ── Para ti ─────────────────────────────────────────────────────────────────
+
+interface EstadoInteres {
   registrado: boolean;
   enviando: boolean;
-  error?: string;
-  onInteres: () => void;
+  error: boolean;
+  nombre: string;
+  onClick: () => void;
 }
 
-const TarjetaPlan: React.FC<TarjetaPlanProps> = ({
-  plan,
-  periodo,
-  conviene,
-  registrado,
-  enviando,
-  error,
-  onInteres,
-}) => {
+interface PlanesPersonalesProps {
+  tarifas: Tarifas;
+  planActual: PlanPersonal;
+  interesPlus: EstadoInteres;
+  interesPro: EstadoInteres;
+}
+
+const PlanesPersonales: React.FC<PlanesPersonalesProps> = ({ tarifas, planActual, interesPlus, interesPro }) => {
   const { t } = useLanguage();
-  const esDePago = plan.id !== 'gratuito';
-  const cuotaMensual = esDePago ? CUOTA[plan.id as PaidPlanId] : 0;
-  const cuotaAnual = esDePago ? CUOTA_ANUAL[plan.id as PaidPlanId] : 0;
 
-  const conDatos = (clave: Clave, datos: Record<string, string>) =>
-    Object.entries(datos).reduce((texto, [k, v]) => texto.replace(`{${k}}`, v), t(clave));
+  // El asistente solo se publica si el servidor lo tiene configurado. Ofrecer
+  // consultas que no existen seria prometer un beneficio que no se entrega.
+  const hayAsistente = PLANES_PERSONALES.some((p) => tarifas.planes[p].topes.asistente !== undefined);
+  const filas: { etiqueta: string; valor: (p: PlanPersonal) => number | null | undefined }[] = [
+    ...(hayAsistente ? [{ etiqueta: t('plans_row_assistant'), valor: (p: PlanPersonal) => tarifas.planes[p].topes.asistente }] : []),
+    { etiqueta: t('plans_row_goals'), valor: (p: PlanPersonal) => tarifas.planes[p].topes.metas },
+    { etiqueta: t('plans_row_cards'), valor: (p: PlanPersonal) => tarifas.planes[p].topes.tarjetas },
+  ];
 
-  const etiquetaBoton = registrado
+  const celdaActual = (p: PlanPersonal) =>
+    p === planActual ? 'bg-[var(--color-primary-soft)]' : '';
+
+  const interesDe: Partial<Record<PlanPersonal, EstadoInteres>> = { plus: interesPlus, pro: interesPro };
+  // Solo los planes por encima del actual: a quien ya esta en Pro no se le
+  // ofrece anotarse para Plus, y a quien esta en Plus solo se le ofrece Pro.
+  const ofrecibles = (['plus', 'pro'] as const).filter(
+    (p) => PLANES_PERSONALES.indexOf(p) > PLANES_PERSONALES.indexOf(planActual),
+  );
+
+  return (
+    <section id={SECCION_PERSONAL} className="px-4 pt-12 scroll-mt-4" aria-labelledby="planes-personales-titulo">
+      <h2 id="planes-personales-titulo" className="text-xl font-black tracking-tight uv-text-primary">
+        {t('plans_personal_title')}
+      </h2>
+      <p className="mt-1.5 text-[15px] leading-relaxed uv-text-secondary">{t('plans_personal_desc')}</p>
+
+      <div className="mt-5 uv-surface-1 rounded-3xl uv-shadow-soft overflow-hidden">
+        {/* En el telefono cada fila pone su titulo arriba, a todo lo ancho, y los
+            tres valores debajo: con el titulo como cuarta columna, a 390 px
+            cada plan quedaba en ~80 px y "Proximamente" se cortaba. Los roles
+            explicitos conservan la tabla para los lectores de pantalla aunque
+            las filas se dibujen como grilla. */}
+        <table role="table" className="w-full table-fixed border-collapse max-sm:block">
+          <caption className="sr-only">{t('plans_personal_title')}</caption>
+          <colgroup>
+            <col className="sm:w-[40%]" />
+            <col />
+            <col />
+            <col />
+          </colgroup>
+          <thead role="rowgroup" className="max-sm:block">
+            <tr role="row" className="align-top max-sm:grid max-sm:grid-cols-3">
+              <td role="cell" className="p-4 max-sm:sr-only" />
+              {PLANES_PERSONALES.map((p) => (
+                <th key={p} role="columnheader" scope="col" className={`px-2 py-4 sm:px-3 text-center font-normal ${celdaActual(p)}`}>
+                  <span className="block text-sm sm:text-base font-black uv-text-primary">{t(`plans_name_${p}`)}</span>
+                  <span className="mt-1 block text-xl sm:text-2xl font-black tabular-nums tracking-tight uv-text-primary">
+                    {precioDe(tarifas.planes[p].precio)}
+                  </span>
+                  <span className="block text-[11px] uv-text-muted">{t('plans_per_month')}</span>
+                  <span className="mt-2 flex justify-center min-h-[22px]">
+                    {p === planActual ? (
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[11px] font-bold text-white">
+                        <Icons.Check size={12} aria-hidden="true" />
+                        {t('plans_badge_current')}
+                      </span>
+                    ) : p !== 'free' ? (
+                      <span className="whitespace-nowrap rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
+                        {t('plans_badge_soon')}
+                      </span>
+                    ) : null}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody role="rowgroup" className="max-sm:block">
+            {filas.map((fila) => (
+              <tr
+                key={fila.etiqueta}
+                role="row"
+                className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] max-sm:grid max-sm:grid-cols-3"
+              >
+                <th
+                  role="rowheader"
+                  scope="row"
+                  className="p-4 text-left text-sm font-semibold leading-snug uv-text-primary max-sm:col-span-3 max-sm:pb-1"
+                >
+                  {fila.etiqueta}
+                </th>
+                {PLANES_PERSONALES.map((p) => {
+                  const v = fila.valor(p);
+                  return (
+                    <td key={p} role="cell" className={`px-2 py-3 sm:px-3 text-center ${celdaActual(p)}`}>
+                      {v === null || v === undefined ? (
+                        <span className="text-[13px] sm:text-sm font-bold uv-text-primary">{t('plans_unlimited')}</span>
+                      ) : (
+                        <span className="text-2xl font-black tabular-nums uv-text-primary">{v}</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 py-3.5 space-y-2">
+          {[t('plans_row_cards_note'), t('plans_keep_note')].map((nota) => (
+            <p key={nota} className="flex gap-2 text-xs leading-relaxed uv-text-secondary">
+              <Icons.Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{nota}</span>
+            </p>
+          ))}
+        </div>
+
+        <div className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 py-4">
+          <h3 className="text-sm font-bold uv-text-primary">{t('plans_same_title')}</h3>
+          <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
+            {IGUAL_EN_TODOS.map((clave) => (
+              <li key={clave} className="flex items-start gap-3">
+                <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+                <span className="text-sm font-medium leading-relaxed uv-text-primary">{t(clave)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {ofrecibles.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
+          <div className={`mt-2.5 grid gap-3 ${ofrecibles.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+            {ofrecibles.map((p) => (
+              <BotonInteres
+                key={p}
+                estado={interesDe[p]!}
+                encabezado={`${t(`plans_name_${p}`)} · ${precioDe(tarifas.planes[p].precio)} ${t('plans_per_month')}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ── Para tu comercio ────────────────────────────────────────────────────────
+
+const PlanesComercio: React.FC<{ tarifas: Tarifas; interesAnalitica: EstadoInteres }> = ({ tarifas, interesAnalitica }) => {
+  const { t } = useLanguage();
+  const std = porcentajeDeBps(tarifas.comisionBps);
+
+  return (
+    <section id={SECCION_COMERCIO} className="px-4 pt-12 scroll-mt-4" aria-labelledby="planes-comercio-titulo">
+      <h2 id="planes-comercio-titulo" className="text-xl font-black tracking-tight uv-text-primary">
+        {t('plans_business_title')}
+      </h2>
+      <p className="mt-1.5 text-[15px] leading-relaxed uv-text-secondary">{t('plans_business_desc')}</p>
+
+      <div className="mt-5 uv-surface-1 rounded-3xl uv-shadow-soft overflow-hidden">
+        <div className="p-5">
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-5xl font-black tabular-nums tracking-tight uv-text-primary">{std}</span>
+            <span className="text-base font-bold uv-text-primary">{t('plans_business_rate')}</span>
+          </p>
+          <p className="mt-2 text-sm leading-relaxed uv-text-secondary">{t('plans_business_rate_note')}</p>
+          <p className="mt-3 inline-flex items-center gap-2 rounded-full uv-chip-success px-3 py-1 text-xs font-bold">
+            <Icons.QrCode size={14} aria-hidden="true" />
+            {t('plans_business_p2p')}
+          </p>
+
+          {tarifas.promo && (
+            <div className="mt-5 rounded-2xl bg-[var(--color-success-soft)] p-4">
+              <p className="text-base font-black leading-snug text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]">
+                {rellenar(t('plans_promo_title'), { pct: porcentajeDeBps(tarifas.promo.bps), meses: tarifas.promo.meses })}
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed uv-text-primary">
+                {rellenar(t('plans_promo_desc'), { std })}
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed uv-text-secondary">{t('plans_promo_existing')}</p>
+            </div>
+          )}
+        </div>
+
+        {tarifas.analitica && (
+          <div className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Icons.TrendingUp size={20} className="text-[var(--color-primary)]" aria-hidden="true" />
+              <h3 className="text-lg font-black uv-text-primary">{t('plans_analytics_name')}</h3>
+              <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
+                {t('plans_analytics_tag')}
+              </span>
+              <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
+                {t('plans_badge_soon')}
+              </span>
+            </div>
+            <p className="mt-2 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black tabular-nums tracking-tight uv-text-primary">{precioDe(tarifas.analitica.precio)}</span>
+              <span className="text-sm font-semibold uv-text-muted">{t('plans_per_month')}</span>
+            </p>
+            <p className="mt-1 text-sm leading-relaxed uv-text-secondary">{t('plans_analytics_desc')}</p>
+            <ul className="mt-3 space-y-2.5">
+              {(['plans_analytics_f1', 'plans_analytics_f2'] as const).map((clave) => (
+                <li key={clave} className="flex items-start gap-3">
+                  <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+                  <span className="text-sm font-medium leading-relaxed uv-text-primary">{t(clave)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
+            <div className="mt-2.5">
+              <BotonInteres estado={interesAnalitica} />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
+// ── El boton que solo anota el interes ──────────────────────────────────────
+
+const BotonInteres: React.FC<{ estado: EstadoInteres; encabezado?: string }> = ({ estado, encabezado }) => {
+  const { t } = useLanguage();
+  const etiqueta = estado.registrado
     ? t('plans_cta_registered')
-    : enviando
+    : estado.enviando
       ? t('plans_cta_sending')
       : t('plans_cta_interested');
 
   return (
-    <article
-      className={`relative flex flex-col rounded-3xl p-5 ${
-        plan.destacado
-          ? 'bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)] border-2 border-[var(--color-primary)] uv-shadow-floating md:-mt-2'
-          : 'uv-surface-1 uv-shadow-soft'
-      }`}
-    >
-      {(plan.destacado || conviene) && (
-        <span
-          className={`absolute -top-3 left-5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide uv-shadow-soft ${
-            conviene ? 'uv-chip-success' : 'bg-[var(--color-primary)] text-white'
-          }`}
-        >
-          {t(conviene ? 'plans_calc_best' : 'plans_recommended')}
-        </span>
+    <div className={encabezado ? 'uv-surface-1 rounded-2xl uv-shadow-soft p-4' : ''}>
+      {encabezado && <p className="mb-2.5 text-sm font-black tabular-nums uv-text-primary">{encabezado}</p>}
+      <button
+        type="button"
+        onClick={estado.onClick}
+        disabled={estado.enviando || estado.registrado}
+        // Con dos o tres botones iguales en pantalla, el nombre del plan va en
+        // el nombre accesible: "Avisarme" a secas no dice cual se enfoca.
+        aria-label={`${etiqueta} ${estado.nombre}`}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
+          estado.registrado
+            ? 'uv-chip-success'
+            : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
+        }`}
+      >
+        {estado.registrado ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
+        {etiqueta}
+      </button>
+      {estado.error && (
+        <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">
+          {t('plans_cta_error')}
+        </p>
       )}
-
-      <h4 className={`text-xl font-black uv-text-primary ${plan.destacado || conviene ? 'mt-2' : ''}`}>
-        {t(plan.nombre)}
-      </h4>
-      <p className="mt-1 text-sm leading-snug uv-text-muted">{t(plan.lema)}</p>
-
-      <div className="mt-4">
-        {esDePago ? (
-          <>
-            <p className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-black tabular-nums uv-text-primary">
-                {dolares(periodo === 'mensual' ? cuotaMensual : cuotaAnual)}
-              </span>
-              <span className="text-sm font-semibold uv-text-muted">
-                {t(periodo === 'mensual' ? 'plans_per_month' : 'plans_per_year')}
-              </span>
-            </p>
-            <p className="mt-1.5 text-xs leading-relaxed uv-text-secondary">
-              {periodo === 'mensual'
-                ? conDatos('plans_or_yearly', { amount: dolares(cuotaAnual) })
-                : conDatos('plans_yearly_equivalent', { amount: dolares(cuotaAnual / MESES_DEL_ANO) })}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-4xl font-black uv-text-primary">{t('plans_free_price')}</p>
-            <p className="mt-1.5 text-xs leading-relaxed uv-text-secondary">{t('plans_free_forever')}</p>
-          </>
-        )}
-      </div>
-
-      {/* El unico numero que decide cada plan, fuera de la lista de vinetas. */}
-      <div className="mt-5 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pt-4">
-        <p className="text-base font-bold leading-snug uv-text-primary">{t(plan.resalte)}</p>
-        <p className="mt-1 text-sm leading-relaxed uv-text-secondary">{t(plan.resalteNota)}</p>
-      </div>
-
-      {plan.hereda && <p className="mt-5 text-sm font-bold uv-text-primary">{t(plan.hereda)}</p>}
-      <ul className={`${plan.hereda ? 'mt-2.5' : 'mt-5'} space-y-2.5`}>
-        {plan.beneficios.map((clave) => (
-          <li key={clave} className="flex gap-2.5">
-            <Icons.Check size={17} className="mt-px shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
-            <span className="text-sm leading-relaxed uv-text-secondary">{t(clave)}</span>
-          </li>
-        ))}
-      </ul>
-
-      {esDePago ? (
-        <div className="mt-auto pt-6">
-          <p className="text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
-          <button
-            onClick={onInteres}
-            disabled={enviando || registrado}
-            // El nombre del plan va en el aria-label y no en la etiqueta
-            // visible: con dos botones iguales en pantalla, "Me interesa" a
-            // secas no le dice a nadie cual de los dos esta enfocando.
-            aria-label={`${etiquetaBoton} ${t(plan.nombre)}`}
-            className={`mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold transition-colors disabled:cursor-default ${
-              registrado
-                ? 'uv-chip-success'
-                : plan.destacado
-                  ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white disabled:opacity-70'
-                  : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
-            }`}
-          >
-            {registrado && <Icons.Check size={17} aria-hidden="true" />}
-            {etiquetaBoton}
-          </button>
-          {error && (
-            <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">
-              {error}
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="mt-auto pt-6">
-          <p className="rounded-xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 py-2.5 text-sm font-semibold uv-text-secondary">
-            {t('plans_current_plan')}
-          </p>
-        </div>
-      )}
-    </article>
+    </div>
   );
 };

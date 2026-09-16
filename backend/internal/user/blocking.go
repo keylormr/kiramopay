@@ -33,6 +33,9 @@ type AdminUserView struct {
 	// ExpiresAt es el vencimiento programado de la cuenta (demos). NULL para
 	// las cuentas que no vencen, que son casi todas.
 	ExpiresAt *time.Time `json:"expires_at"`
+	// Plan es el plan personal (free, plus, pro). El administrador lo necesita
+	// a la vista para asignarlo a mano durante un piloto.
+	Plan string `json:"plan"`
 }
 
 // Topes de las listas admin. El handler pasa el limit del query string; aqui
@@ -79,7 +82,8 @@ const adminViewSelect = `
 	       COALESCE(u.created_at, NOW()), u.last_login_at,
 	       u.blocked_at, COALESCE(u.blocked_reason, ''),
 	       COALESCE(b.first_name || ' ' || b.last_name, ''),
-	       u.expires_at
+	       u.expires_at,
+	       COALESCE(u.plan, 'free')
 	  FROM users u
 	  LEFT JOIN users b ON b.id = u.blocked_by`
 
@@ -94,6 +98,7 @@ func scanAdminView(row interface{ Scan(...any) error }) (*AdminUserView, error) 
 		&v.BlockedAt, &v.BlockedReason,
 		&v.BlockedByName,
 		&v.ExpiresAt,
+		&v.Plan,
 	)
 	return v, err
 }

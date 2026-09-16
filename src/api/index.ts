@@ -186,5 +186,13 @@ export type {
 } from './repositories/savings.repository';
 export type { IKycRepository, IdentityVerifyResult } from './repositories/kyc.repository';
 export type { IAdminRepository, AdminUser, AdminUserStatus } from './repositories/admin.repository';
-export type { IPlansRepository, PaidPlanId, PlanInterest } from './repositories/plans.repository';
+export type {
+  IPlansRepository,
+  PlanDeInteres,
+  PlanInterest,
+  PlanPersonal,
+  PlanComercio,
+  Tarifas,
+  TopesDePlan,
+} from './repositories/plans.repository';
 export type { ISessionsRepository, DeviceSession } from './repositories/sessions.repository';

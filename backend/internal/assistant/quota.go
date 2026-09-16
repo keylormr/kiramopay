@@ -80,6 +80,14 @@ func (q *RedisQuota) limitFor(ctx context.Context, userID string) int {
 			plan = p
 		}
 	}
+	return q.LimiteDelPlan(plan)
+}
+
+// LimiteDelPlan es el tope diario que se aplica a un plan, con la misma regla
+// que la cuota: un plan sin limite positivo recibe el del gratuito. Lo usa
+// tambien /transparency/fees, para publicar exactamente el numero que se
+// aplica y no una copia de la configuracion.
+func (q *RedisQuota) LimiteDelPlan(plan string) int {
 	if lim := q.planLimits[plan]; lim > 0 {
 		return lim
 	}

@@ -18,9 +18,12 @@ import type {
   QRChargeStatus,
   CreateChargeRequest,
   ResolvedQR,
+  BusinessReportComparison,
 } from '../../repositories/qrpayment.repository';
-import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import type { PlanComercio } from '../../repositories/plans.repository';
+import type { ApiResponse, ArchivoDescargado } from '../../types';
+import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
+import { normalizarPlanComercio } from '../../../utils/planes';
 import { HttpClient } from './client';
 
 interface MerchantDTO {
@@ -36,6 +39,9 @@ interface MerchantDTO {
   verification_status?: string;
   rejection_reason?: string;
   commission_bps?: number;
+  comision_efectiva_bps?: number;
+  promo_hasta?: string | null;
+  plan?: string;
   role?: string;
 }
 
@@ -53,6 +59,11 @@ function mapMerchant(d: MerchantDTO): QRMerchant {
     verificationStatus: (d.verification_status as MerchantVerificationStatus) ?? 'pending',
     rejectionReason: d.rejection_reason || undefined,
     commissionBps: d.commission_bps ?? 0,
+    // Lo que se cobra hoy lo decide el servidor (promocion incluida). Si no lo
+    // manda, la unica verdad disponible es la comision fijada.
+    comisionEfectivaBps: typeof d.comision_efectiva_bps === 'number' ? d.comision_efectiva_bps : d.commission_bps ?? 0,
+    promoHasta: d.promo_hasta || null,
+    plan: normalizarPlanComercio(d.plan),
     // Endpoints that return a single merchant (register/update/admin) are all
     // owner or admin flows, so owner is the right default when absent.
     role: (d.role as MerchantRole) || 'owner',
@@ -433,9 +444,14 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const tz = new Date().getTimezoneOffset();
     interface BucketDTO { key?: string; label?: string; gross: number; fee: number; net: number; count: number }
     interface DayDTO { date: string; gross: number; fee: number; net: number; count: number }
-    interface ReportDTO { days: number; totals: BucketDTO; daily: DayDTO[] | null; by_location: BucketDTO[] | null; by_collector: BucketDTO[] | null }
+    interface DeltaDTO { gross: number; fee: number; net: number; count: number; gross_pct: number | null; net_pct: number | null; count_pct: number | null }
+    interface ComparisonDTO { previous_from: string; previous_to: string; previous_totals: BucketDTO; delta: DeltaDTO }
+    interface ReportDTO {
+      days: number; from?: string; to?: string; totals: BucketDTO; daily: DayDTO[] | null;
+      by_location: BucketDTO[] | null; by_collector: BucketDTO[] | null; plan?: string; comparison?: ComparisonDTO | null;
+    }
     const res = await this.client.get<ReportDTO>(`/api/v1/qr/merchants/${merchantId}/report?days=${days}&tz=${tz}`);
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
     const bucket = (b: BucketDTO): BusinessReportBucket => ({
       key: b.key || undefined,
       label: b.label || undefined,
@@ -447,13 +463,48 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const day = (d: DayDTO): BusinessReportDay => ({
       date: d.date, gross: d.gross / 100, fee: d.fee / 100, net: d.net / 100, count: d.count,
     });
+    const pct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    const c = res.data.comparison;
+    const comparison: BusinessReportComparison | undefined = c && c.previous_totals && c.delta
+      ? {
+          previousFrom: c.previous_from,
+          previousTo: c.previous_to,
+          previousTotals: bucket(c.previous_totals),
+          delta: {
+            gross: c.delta.gross / 100,
+            fee: c.delta.fee / 100,
+            net: c.delta.net / 100,
+            count: c.delta.count,
+            grossPct: pct(c.delta.gross_pct),
+            netPct: pct(c.delta.net_pct),
+            countPct: pct(c.delta.count_pct),
+          },
+        }
+      : undefined;
     return apiSuccess({
       days: res.data.days,
+      from: res.data.from,
+      to: res.data.to,
       totals: bucket(res.data.totals),
       daily: (res.data.daily ?? []).map(day),
       byLocation: (res.data.by_location ?? []).map(bucket),
       byCollector: (res.data.by_collector ?? []).map(bucket),
+      plan: normalizarPlanComercio(res.data.plan),
+      comparison,
     });
+  }
+
+  async exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>> {
+    const tz = new Date().getTimezoneOffset();
+    // Se pide como archivo: un 200 es el CSV tal cual; un 403 PLAN_REQUIRED o
+    // un 404 llegan como el sobre de error de siempre, con su codigo.
+    const res = await this.client.getArchivo(
+      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?days=${days}&tz=${tz}`,
+    );
+    if (!res.success || !res.data) {
+      return apiErrorConDetalle(res.error?.code || 'EXPORT_FAILED', res.error?.message || 'Failed', res.error?.details);
+    }
+    return apiSuccess({ blob: res.data.blob, nombre: res.data.nombre || `reporte-${days}-dias.csv` });
   }
 
   // ── Team ───────────────────────────────────────────────────────────────────
@@ -579,6 +630,19 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   async setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.patch<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/commission`, { commission_bps: commissionBps });
     if (!res.success || !res.data) return apiError('SET_COMMISSION_FAILED', res.error?.message || 'Failed');
+    return apiSuccess(mapMerchant(res.data));
+  }
+
+  async setMerchantPlan(merchantId: string, plan: PlanComercio): Promise<ApiResponse<QRMerchant>> {
+    // El cuerpo es exactamente {plan}; el codigo del servidor se conserva para
+    // que la vista distinga INVALID_ID y MERCHANT_NOT_FOUND de una caida.
+    const res = await this.client.patch<MerchantDTO>(
+      `/api/v1/admin/merchants/${encodeURIComponent(merchantId)}/plan`,
+      { plan },
+    );
+    if (!res.success || !res.data || Array.isArray(res.data)) {
+      return apiError(res.error?.code || 'PLAN_UPDATE_FAILED', res.error?.message || 'Failed');
+    }
     return apiSuccess(mapMerchant(res.data));
   }
 }

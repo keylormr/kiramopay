@@ -39,6 +39,8 @@ tags:
     description: Bill splitting
   - name: Virtual Cards
     description: Virtual card management
+  - name: Savings
+    description: Savings goals (money set aside in SYSTEM:SAVINGS; it earns nothing)
   - name: Fraud
     description: Fraud detection and risk assessment
   - name: Multi-Country
@@ -1120,6 +1122,116 @@ paths:
         '200':
           description: Merchant info
 
+  /api/v1/qr/merchants:
+    get:
+      tags: [QR Payments]
+      summary: List the merchants the user owns or works for
+      description: >-
+        Merchants the user owns come with role owner; the ones they work for,
+        with their staff role. commission_bps is the rate the platform set.
+        comision_efectiva_bps is the rate charged on a payment made now: the
+        lower of commission_bps and 25 while promo_hasta is in the future
+        (the entry promotion a merchant receives on its FIRST approval, for 3
+        months), and commission_bps afterwards. promo_hasta is null for a
+        merchant that never had the promotion. plan is base or analitica; only
+        an administrator changes it while there is no charging.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Merchants (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Merchant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: FETCH_FAILED
+
+  /api/v1/qr/merchants/{id}/report:
+    get:
+      tags: [QR Payments]
+      summary: Sales report of a merchant (owner or manager)
+      description: >-
+        Calendar window of `days` days in the client's timezone, up to now.
+        With the analitica plan the report also carries `comparison`: the same
+        window moved `days` days back and cut at the same hour, so today's
+        half day is not compared with a whole day. With the base plan
+        `comparison` is absent. Anyone who is not the owner or a manager gets
+        404, without learning whether the merchant exists.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantReport'
+        '404':
+          description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
+
+  /api/v1/qr/merchants/{id}/report.csv:
+    get:
+      tags: [QR Payments]
+      summary: Export the sales report as CSV (owner or manager, analitica plan)
+      description: >-
+        Same window and access as the report, plus the analitica plan. The
+        role is checked first: someone outside the team gets 404 and never
+        learns which plan the merchant has.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: >-
+            UTF-8 CSV with byte order mark, served as an attachment with
+            Cache-Control no-store. Columns: seccion, desde, hasta, clave,
+            nombre, bruto, comision, neto, cobros. seccion is dia, sucursal,
+            cobrador, total or periodo_anterior. Amounts are units with two
+            decimals, not centimos. Every cell that starts with = + - @, a tab
+            or a carriage return is prefixed with an apostrophe, so a
+            spreadsheet shows it as text instead of running it as a formula.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="reporte-2026-09-07-a-2026-09-13.csv"'
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          description: PLAN_REQUIRED (the merchant does not have the analitica plan)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanRequiredError'
+        '404':
+          description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
+        '500':
+          description: EXPORT_FAILED
+
   /api/v1/qr/codes:
     post:
       tags: [QR Payments]
@@ -1270,11 +1382,27 @@ paths:
     post:
       tags: [Virtual Cards]
       summary: Create a virtual card
+      description: >-
+        The card is decorative: it belongs to no payment network and cannot
+        spend outside the app. The person's plan limits how many cards can be
+        active or frozen at once (by default free 1, plus 3, pro 5; the
+        numbers in force are published in /api/v1/transparency/fees).
+        Cancelled, expired and replaced cards do not count. The limit only
+        stops creating: whoever already has more keeps every card. Two
+        simultaneous creations cannot both slip past the limit.
       security:
         - bearerAuth: []
       responses:
         '201':
-          description: Card created (max 5 per user)
+          description: Card created
+        '400':
+          description: INVALID_BODY | CREATE_FAILED
+        '409':
+          description: CARD_LIMIT (the plan does not allow another active or frozen card)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanLimitError'
     get:
       tags: [Virtual Cards]
       summary: List user's virtual cards
@@ -1341,6 +1469,56 @@ paths:
       responses:
         '200':
           description: Card transaction history
+
+  # ── Savings ────────────────────────────────────────────────────────────
+  /api/v1/savings/goals:
+    get:
+      tags: [Savings]
+      summary: List the person's savings goals
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Goals, oldest first (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavingsGoal'
+    post:
+      tags: [Savings]
+      summary: Create a savings goal
+      description: >-
+        The person's plan limits how many goals they can have at once (by
+        default free 3, plus 10, pro without limit; the numbers in force are
+        published in /api/v1/transparency/fees). The limit only stops
+        creating: whoever already has more keeps every goal. Two simultaneous
+        creations cannot both slip past the limit. Money kept in a goal earns
+        nothing.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavingsGoalCreateRequest'
+      responses:
+        '201':
+          description: Goal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavingsGoal'
+        '400':
+          description: INVALID_BODY | CREATE_FAILED (missing name, non-positive target, unknown currency)
+        '409':
+          description: SAVINGS_GOAL_LIMIT (the plan does not allow another goal)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanLimitError'
 
   # ── Fraud Detection (Phase 5) ──────────────────────────────────────────
   /api/v1/fraud/profile:
@@ -1470,6 +1648,10 @@ paths:
         yet, so the only honest thing to store is the intent. Idempotent per
         (user, plan) — registering twice keeps a single row and refreshes its
         date. Audited as plan_interest (low); the plan is the only detail kept.
+        Accepts plus and pro (personal plans) and analitica (merchant
+        analytics). The retired negocio and cima plans are rejected with
+        PLAN_INVALID; the rows registered for them before stay in the
+        administrator's list.
       security:
         - bearerAuth: []
       requestBody:
@@ -1486,7 +1668,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlanInterest'
         '400':
-          description: PLAN_INVALID (plan must be negocio or cima) | INVALID_BODY
+          description: PLAN_INVALID (plan must be plus, pro or analitica) | INVALID_BODY
         '401':
           description: UNAUTHORIZED
         '500':
@@ -1531,6 +1713,73 @@ paths:
       responses:
         '200':
           description: User restricted
+
+  # ── Admin: merchants (verification and plan) ──────────────────────
+  /api/v1/admin/merchants/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Approve a merchant's verification (admin)
+      description: >-
+        Sets verification_status=verified. The FIRST approval of a merchant
+        grants the entry promotion: promo_hasta = approval + 3 months, during
+        which the commission charged is the lower of commission_bps and 25
+        bps. Approving again (after a rejection, or after the owner changed
+        the legal identity and the merchant went back to pending) neither
+        renews nor extends it, and approving a merchant that is already
+        verified never grants it. A merchant approved before the promotion
+        existed does not receive it; migration 068 documents the one case
+        the stored data cannot recognize.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Approved merchant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: APPROVE_FAILED
+        '403':
+          description: FORBIDDEN (not an administrator)
+
+  /api/v1/admin/merchants/{id}/plan:
+    patch:
+      tags: [Admin]
+      summary: Assign a merchant's plan by hand (admin)
+      description: >-
+        base or analitica. There is no charging for plans yet: this is how a
+        pilot merchant gets the report comparison and the CSV export, and it
+        charges nothing. Validation is strict: the body must be exactly one
+        plan field. Audited as admin_merchant_plan_set (high) with
+        plan_anterior and plan_nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminPlanComercioRequest'
+      responses:
+        '200':
+          description: Merchant with its new plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not base or analitica, written exactly so)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: MERCHANT_NOT_FOUND
+        '500':
+          description: PLAN_UPDATE_FAILED
 
   # ── Admin: user management (remote block) ─────────────────────────
   /api/v1/admin/users/search:
@@ -1726,6 +1975,46 @@ paths:
           description: USER_NOT_FOUND
         '500':
           description: EXPIRY_FAILED
+
+  /api/v1/admin/users/{id}/plan:
+    patch:
+      tags: [Admin]
+      summary: Assign a person's plan by hand (admin)
+      description: >-
+        free, plus or pro. There is no charging for plans yet: this is how a
+        pilot account gets plus or pro, and it charges nothing. Lowering the
+        plan removes nothing: the limits only stop creating new goals and
+        cards. Validation is strict: the body must be exactly one plan field.
+        Shares the 30/min per-administrator budget with the rest of account
+        management. Audited as admin_user_plan_set (high) with plan_anterior
+        and plan_nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminPlanPersonalRequest'
+      responses:
+        '200':
+          description: Plan assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanAsignado'
+        '400':
+          description: INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not free, plus or pro, written exactly so)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+        '429':
+          description: RATE_LIMITED
+        '500':
+          description: PLAN_UPDATE_FAILED
 
   # ── Admin: sessions of one account  ───────────────────────────────
   /api/v1/admin/users/{id}/sessions:
@@ -2944,6 +3233,10 @@ components:
             Scheduled expiry. When it passes, a periodic sweep blocks the
             account with reason "demo vencido". Null means the account never
             expires, which is the case for almost every account.
+        plan:
+          type: string
+          enum: [free, plus, pro]
+          description: Personal plan. While there is no charging only an administrator changes it.
 
     PlanInterestRequest:
       type: object
@@ -2951,17 +3244,231 @@ components:
       properties:
         plan:
           type: string
-          enum: [negocio, cima]
+          enum: [plus, pro, analitica]
           description: >-
-            Paid plan the person wants. The free plan is not registered: there
-            is nothing to contract.
+            Plan the person wants: plus or pro (personal) or analitica
+            (merchant analytics). The free plan is not registered: there is
+            nothing to contract. The retired negocio and cima are rejected.
 
     PlanInterest:
       type: object
       description: Interest registered. Not a subscription — nothing was charged.
       properties:
-        plan: { type: string, enum: [negocio, cima] }
+        plan: { type: string, enum: [plus, pro, analitica] }
         registered_at: { type: string, format: date-time }
+
+    PlanLimitError:
+      type: object
+      description: >-
+        409 answer when creating a savings goal or a virtual card would go
+        past the limit of the person's plan. The limit only stops CREATING:
+        whoever already has more than the plan allows keeps everything, which
+        is why actuales can be above limite.
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code: { type: string, enum: [SAVINGS_GOAL_LIMIT, CARD_LIMIT] }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: false
+              required: [plan, limite, actuales]
+              properties:
+                plan: { type: string, enum: [free, plus, pro] }
+                limite:
+                  type: integer
+                  minimum: 1
+                  description: How many the plan allows (goals; cards active or frozen)
+                actuales:
+                  type: integer
+                  minimum: 0
+                  description: How many the person has now
+
+    PlanRequiredError:
+      type: object
+      description: 403 answer when the merchant lacks the plan a feature needs.
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code: { type: string, enum: [PLAN_REQUIRED] }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: false
+              required: [plan_requerido]
+              properties:
+                plan_requerido: { type: string, enum: [analitica] }
+
+    AdminPlanPersonalRequest:
+      type: object
+      additionalProperties: false
+      required: [plan]
+      properties:
+        plan: { type: string, enum: [free, plus, pro] }
+
+    AdminPlanComercioRequest:
+      type: object
+      additionalProperties: false
+      required: [plan]
+      properties:
+        plan: { type: string, enum: [base, analitica] }
+
+    PlanAsignado:
+      type: object
+      description: A personal plan assigned by an administrator. Nothing was charged.
+      additionalProperties: false
+      required: [user_id, plan, plan_anterior, updated_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        plan: { type: string, enum: [free, plus, pro] }
+        plan_anterior: { type: string, enum: [free, plus, pro] }
+        updated_at: { type: string, format: date-time }
+
+    Merchant:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, name, verification_status, commission_bps, comision_efectiva_bps, promo_hasta, plan, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        logo_url: { type: string }
+        qr_code: { type: string }
+        active: { type: boolean }
+        cedula: { type: string }
+        cedula_type: { type: string, enum: [fisica, juridica] }
+        legal_name: { type: string }
+        verification_status: { type: string, enum: [pending, verified, rejected] }
+        rejection_reason: { type: string }
+        reviewed_at: { type: string, format: date-time }
+        commission_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Commission the platform set, in basis points (50 = 0.5%)
+        comision_efectiva_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Commission charged on a payment made now, in basis points: the
+            lower of commission_bps and 25 while promo_hasta is in the future,
+            commission_bps afterwards.
+        promo_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: End of the entry promotion. Null when the merchant never had it.
+        plan:
+          type: string
+          enum: [base, analitica]
+          description: analitica adds the report comparison and the CSV export.
+        created_at: { type: string, format: date-time }
+        role:
+          type: string
+          enum: [owner, manager, cashier]
+          description: How the requesting user relates to the merchant (only in the user's own list)
+
+    ReportBucket:
+      type: object
+      additionalProperties: false
+      required: [gross, fee, net, count]
+      properties:
+        key: { type: string, description: 'Location or collector id; absent for the unattributed bucket' }
+        label: { type: string }
+        gross: { type: integer, format: int64, description: centimos charged to payers }
+        fee: { type: integer, format: int64, description: centimos of commission }
+        net: { type: integer, format: int64, description: gross - fee }
+        count: { type: integer }
+
+    ReportDay:
+      type: object
+      additionalProperties: false
+      required: [date, gross, fee, net, count]
+      properties:
+        date: { type: string, format: date }
+        gross: { type: integer, format: int64 }
+        fee: { type: integer, format: int64 }
+        net: { type: integer, format: int64 }
+        count: { type: integer }
+
+    ReportDelta:
+      type: object
+      description: Current minus previous. Percentages are null when the previous value is 0.
+      additionalProperties: false
+      required: [gross, fee, net, count, gross_pct, net_pct, count_pct]
+      properties:
+        gross: { type: integer, format: int64 }
+        fee: { type: integer, format: int64 }
+        net: { type: integer, format: int64 }
+        count: { type: integer }
+        gross_pct: { type: number, nullable: true }
+        net_pct: { type: number, nullable: true }
+        count_pct: { type: number, nullable: true }
+
+    ReportComparison:
+      type: object
+      additionalProperties: false
+      required: [previous_from, previous_to, previous_totals, delta]
+      properties:
+        previous_from: { type: string, format: date }
+        previous_to: { type: string, format: date }
+        previous_totals: { $ref: '#/components/schemas/ReportBucket' }
+        delta: { $ref: '#/components/schemas/ReportDelta' }
+
+    MerchantReport:
+      type: object
+      additionalProperties: false
+      required: [days, from, to, totals, daily, by_location, by_collector, plan]
+      properties:
+        days: { type: integer, minimum: 1, maximum: 365 }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        totals: { $ref: '#/components/schemas/ReportBucket' }
+        daily:
+          type: array
+          items: { $ref: '#/components/schemas/ReportDay' }
+        by_location:
+          type: array
+          items: { $ref: '#/components/schemas/ReportBucket' }
+        by_collector:
+          type: array
+          items: { $ref: '#/components/schemas/ReportBucket' }
+        plan: { type: string, enum: [base, analitica] }
+        comparison: { $ref: '#/components/schemas/ReportComparison' }
+
+    SavingsGoal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        target_minor: { type: integer, format: int64, description: centimos }
+        saved_minor: { type: integer, format: int64, description: centimos }
+        currency: { type: string, enum: [CRC, USD] }
+        icon: { type: string }
+        color: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SavingsGoalCreateRequest:
+      type: object
+      required: [name, target_minor]
+      properties:
+        name: { type: string }
+        target_minor: { type: integer, format: int64, minimum: 1, description: centimos }
+        currency: { type: string, enum: [CRC, USD], default: CRC }
+        icon: { type: string }
+        color: { type: string }
 
     PlanInterestAdmin:
       type: object
@@ -2975,7 +3482,10 @@ components:
         cedula_masked: { type: string, example: "••••••930" }
         phone_masked: { type: string, example: "••••••••1234" }
         email_masked: { type: string, example: "k•••••@gmail.com" }
-        plan: { type: string, enum: [negocio, cima] }
+        plan:
+          type: string
+          enum: [plus, pro, analitica, negocio, cima]
+          description: negocio and cima are retired plans; their rows are kept, not deleted.
         registered_at: { type: string, format: date-time }
 
     AdminExpiryRequest:
@@ -3200,6 +3710,12 @@ components:
           type: string
         message:
           type: string
+        details:
+          type: object
+          additionalProperties: true
+          description: >-
+            Data the screen needs to explain the rejection (see PlanLimitError
+            and PlanRequiredError). Only on 4xx answers; never on a 5xx.
 
     HealthResponse:
       type: object
@@ -3366,6 +3882,10 @@ components:
                 referral_code:
                   type: string
                   description: The new user's own invitation code (8 chars)
+                plan:
+                  type: string
+                  enum: [free, plus, pro]
+                  description: Personal plan; every account starts on free
 
     UserProfile:
       type: object
@@ -3390,6 +3910,13 @@ components:
           pattern: '^[A-Z0-9]{8}$'
           description: Own invitation code to share (stable, not PII)
           example: "K7PM3XQ2"
+        plan:
+          type: string
+          enum: [free, plus, pro]
+          description: >-
+            Personal plan. It sets the savings goal and card limits and the
+            assistant's daily questions. There is no charging yet: only an
+            administrator changes it.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }
@@ -3608,6 +4135,7 @@ components:
         kyc_level: { type: integer }
         kyc_status: { type: string }
         status: { type: string }
+        plan: { type: string, enum: [free, plus, pro] }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time, nullable: true }

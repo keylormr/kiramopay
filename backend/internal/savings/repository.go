@@ -46,12 +46,24 @@ func (r *Repository) ListByUser(ctx context.Context, userID string) ([]Goal, err
 	return out, rows.Err()
 }
 
-func (r *Repository) Create(ctx context.Context, g *Goal) error {
-	return r.db.QueryRow(ctx,
+// CrearEnTx inserta la meta por la transaccion del tope del plan. No hay
+// variante por el pool a proposito: una meta creada por fuera de esa
+// transaccion no la veria el conteo de otra peticion simultanea.
+func CrearEnTx(ctx context.Context, tx pgx.Tx, g *Goal) error {
+	return tx.QueryRow(ctx,
 		`INSERT INTO savings_goals (user_id, name, target_minor, currency, icon, color)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id, saved_minor, created_at`,
 		g.UserID, g.Name, g.TargetMinor, g.Currency, g.Icon, g.Color).Scan(&g.ID, &g.SavedMinor, &g.CreatedAt)
+}
+
+// ContarMetasEnTx cuenta las metas activas de la persona. Toda fila de
+// savings_goals es una meta activa: eliminar una devuelve lo ahorrado y la saca.
+func ContarMetasEnTx(ctx context.Context, tx pgx.Tx, userID string) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM savings_goals WHERE user_id = $1::uuid`, userID).Scan(&n)
+	return n, err
 }
 
 func (r *Repository) Get(ctx context.Context, id, userID string) (*Goal, error) {

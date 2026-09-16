@@ -8,26 +8,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/kiramopay/backend/internal/plans"
 )
 
 type Service struct {
-	repo *Repository
+	repo  *Repository
+	topes plans.Topes
 }
 
+// NewService arranca con los topes de fabrica del plan (1 / 3 / 5). main los
+// reemplaza con los de la configuracion via SetTopes.
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{repo: repo, topes: plans.TopesTarjetas}
 }
+
+// SetTopes fija cuantas tarjetas activas o congeladas permite cada plan.
+func (s *Service) SetTopes(t plans.Topes) { s.topes = t }
 
 func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string, req *CreateCardRequest) (*VirtualCard, error) {
-	// Check max cards
-	count, err := s.repo.CountUserCards(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if count >= MaxCardsPerUser {
-		return nil, fmt.Errorf("maximum %d cards allowed", MaxCardsPerUser)
-	}
-
 	if req.Currency == "" {
 		req.Currency = "CRC"
 	}
@@ -65,7 +65,14 @@ func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string,
 		CreatedAt:    time.Now(),
 	}
 
-	if err := s.repo.CreateCard(ctx, card); err != nil {
+	// El tope cuenta las activas y las congeladas: una congelada se descongela
+	// con un toque, asi que sigue ocupando su lugar. Las canceladas, vencidas y
+	// reemplazadas no. Quien ya tenga mas que su plan las conserva todas.
+	err := plans.CrearConTope(ctx, s.repo.db, plans.RecursoTarjetas, userID, s.topes,
+		func(ctx context.Context, tx pgx.Tx) (int, error) { return ContarActivasEnTx(ctx, tx, userID) },
+		func(ctx context.Context, tx pgx.Tx) error { return CrearEnTx(ctx, tx, card) },
+	)
+	if err != nil {
 		return nil, err
 	}
 
