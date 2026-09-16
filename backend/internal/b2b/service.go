@@ -3,6 +3,7 @@ package b2b
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -85,7 +86,7 @@ func (s *Service) CreateEndpoint(ctx context.Context, userID, rawURL, events str
 	// dispatcher to defeat DNS-rebinding.
 	normalizedURL, err := validateWebhookURL(rawURL)
 	if err != nil {
-		return nil, ErrInvalid
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, ErrURLWebhookInvalida)
 	}
 	if events = strings.TrimSpace(events); events == "" {
 		events = "*"

@@ -6255,6 +6255,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description WEBHOOK_INVALID_URL (the url is not a full http(s) address of a public server: missing scheme or host, another scheme, embedded credentials, or a loopback/private/link-local destination) or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;

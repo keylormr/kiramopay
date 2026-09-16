@@ -158,6 +158,11 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		response.Error(w, http.StatusNotFound, "B2B_NOT_FOUND", "resource not found")
+	// Envuelve a ErrInvalid: va ANTES de su caso, o el switch la tomaria por
+	// el generico.
+	case errors.Is(err, ErrURLWebhookInvalida):
+		response.Error(w, http.StatusBadRequest, "WEBHOOK_INVALID_URL",
+			"the webhook url must be a full http(s) address of a public server")
 	case errors.Is(err, ErrInvalid):
 		response.Error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request")
 	default:

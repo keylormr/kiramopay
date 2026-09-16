@@ -2989,6 +2989,16 @@ paths:
       responses:
         '201':
           description: '{ endpoint, secret }'
+        '400':
+          description: >-
+            WEBHOOK_INVALID_URL (the url is not a full http(s) address of a
+            public server: missing scheme or host, another scheme, embedded
+            credentials, or a loopback/private/link-local destination) or
+            INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     get:
       tags: [B2B]
       summary: List webhook endpoints

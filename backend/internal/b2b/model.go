@@ -115,6 +115,11 @@ var (
 	ErrNotFound   = errors.New("b2b: not found")
 	ErrInvalidKey = errors.New("b2b: invalid or revoked API key")
 	ErrInvalid    = errors.New("b2b: invalid request")
+	// ErrURLWebhookInvalida: la URL del webhook no es una direccion http(s)
+	// completa de un servidor publico. Envuelve a ErrInvalid; tiene su propio
+	// codigo para que el cliente pueda decir QUE corregir en vez de un
+	// "invalid request" que no orienta a nadie.
+	ErrURLWebhookInvalida = errors.New("b2b: invalid webhook url")
 )
 
 // GenerateKey mints a fresh API key. It returns the FULL key (shown to the
