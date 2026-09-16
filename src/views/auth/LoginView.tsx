@@ -78,6 +78,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   // bloqueo la cuenta, esta pantalla lo dice en vez de parecer un logout mudo.
   const logoutReason = useAuthStore((s) => s.logoutReason);
   const clearLogoutReason = useAuthStore((s) => s.clearLogoutReason);
+  // Sesion sin confirmar: el arranque no pudo hablar con el servidor y NO la
+  // cerro. Esta pantalla lo explica y ofrece reintentar sin teclear nada.
+  const restauracion = useAuthStore((s) => s.restauracion);
+  const reintentarRestauracion = useAuthStore((s) => s.bootstrap);
+  const descartarAvisoRestauracion = useAuthStore((s) => s.descartarAvisoRestauracion);
+  const reintentando = restauracion === 'reintentando';
+  const sesionSinConfirmar = restauracion === 'sin_conexion' || reintentando;
   // Un solo campo de entrada: cedula, correo o telefono. Se clasifica en vivo
   // para habilitar Continuar y mostrar que tipo se detecto.
   const [identificador, setIdentificador] = useState('');
@@ -295,6 +302,50 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             onClick={clearLogoutReason}
             aria-label={t('close')}
             className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Icons.X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Aviso de sesion sin confirmar: fallo la red, no la sesion */}
+      {sesionSinConfirmar && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4 animate-slide-up"
+        >
+          <Icons.Offline size={22} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-white">{t('restore_offline_title')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+              {t('restore_offline_body')}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                void reintentarRestauracion();
+              }}
+              disabled={reintentando}
+              aria-busy={reintentando || undefined}
+              className="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[var(--color-warning)]/15 px-4 text-sm font-bold text-[var(--color-warning)] transition-colors hover:bg-[var(--color-warning)]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-warning)] disabled:cursor-wait"
+            >
+              <Icons.RefreshCw size={16} className={reintentando ? 'animate-spin' : ''} aria-hidden="true" />
+              {reintentando ? t('restore_retrying') : t('error_retry')}
+            </button>
+          </div>
+          {/* Mientras reintenta no se ofrece cerrar, pero el boton conserva su
+              lugar: sin el, el texto se reacomodaba a mitad del reintento. */}
+          <button
+            type="button"
+            onClick={descartarAvisoRestauracion}
+            aria-label={t('close')}
+            disabled={reintentando}
+            aria-hidden={reintentando || undefined}
+            tabIndex={reintentando ? -1 : undefined}
+            className={`-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors ${
+              reintentando ? 'invisible' : ''
+            }`}
           >
             <Icons.X size={18} />
           </button>

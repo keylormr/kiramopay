@@ -1,0 +1,15 @@
+-- Bajada de 070_cashback_con_existencia.sql
+--
+-- No hay reversion automatica, a proposito.
+--
+-- La 070 paso a `stock = -1` los cashback que la 060 habia dejado en cero.
+-- Devolverlos a cero no se puede hacer con precision: la 066 tambien inserta
+-- cashback con `stock = -1`, y despues de la 070 no queda forma de saber cual
+-- de los dos caminos siguio cada fila. Un UPDATE a cero sobre todos vaciaria el
+-- catalogo entero, que es justo el defecto que la 070 corrige.
+--
+-- Si hace falta sacar un premio del catalogo, se desactiva de a uno, con el id
+-- a la vista (los nombres llevan el simbolo del colon):
+--
+--   SELECT id, name, active, stock, cashback_minor FROM loyalty_rewards ORDER BY points_cost;
+--   UPDATE loyalty_rewards SET active = FALSE WHERE id = '<id>';

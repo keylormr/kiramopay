@@ -118,7 +118,9 @@ export class HttpB2BRepository implements IB2BRepository {
       { url, events },
     );
     if (!res.success || !res.data) {
-      return apiError('B2B_WEBHOOK_CREATE_FAILED', res.error?.message || 'Could not register webhook');
+      // El codigo del servidor viaja tal cual: la hoja traduce
+      // WEBHOOK_INVALID_URL, y un codigo fijo aqui lo borraba.
+      return apiError(res.error?.code || 'B2B_WEBHOOK_CREATE_FAILED', res.error?.message || 'Could not register webhook');
     }
     return apiSuccess({ endpoint: mapEndpoint(res.data.endpoint), secret: res.data.secret });
   }

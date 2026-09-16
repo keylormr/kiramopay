@@ -445,11 +445,11 @@ export const MarketplaceView: React.FC = () => {
     : allPartners.filter(p => p.category === activeCategory);
 
   const categories = [
-    { id: 'all', label: 'Todo', icon: '🏠' },
-    { id: 'transport', label: 'Transporte', icon: '🚗' },
-    { id: 'food', label: 'Comida', icon: '🍔' },
-    { id: 'supermarket', label: 'Super', icon: '🛒' },
-    { id: 'entertainment', label: 'Cine', icon: '🎬' },
+    { id: 'all', label: t('market_cat_all'), icon: '🏠' },
+    { id: 'transport', label: t('market_cat_transport'), icon: '🚗' },
+    { id: 'food', label: t('market_cat_food'), icon: '🍔' },
+    { id: 'supermarket', label: t('market_cat_supermarket'), icon: '🛒' },
+    { id: 'entertainment', label: t('market_cat_entertainment'), icon: '🎬' },
   ];
 
   return (
@@ -459,7 +459,10 @@ export const MarketplaceView: React.FC = () => {
         <h1 className="text-2xl font-black uv-text-primary mb-1">
           {t('home_marketplace')}
         </h1>
-        <p className="uv-text-muted">Paga con KiramoPay en tus apps favoritas</p>
+        {/* El mismo texto de la tarjeta del Inicio. Antes decia "Paga con
+            KiramoPay en tus apps favoritas", en espanol fijo y prometiendo una
+            integracion con esas apps que no existe (ver help_marketplace_body). */}
+        <p className="uv-text-muted">{t('home_marketplace_desc')}</p>
       </div>
 
       {/* Categories */}
@@ -484,7 +487,7 @@ export const MarketplaceView: React.FC = () => {
       {state.connectedPartners.length > 0 && (
         <div>
           <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-            Apps conectadas
+            {t('market_connected_apps')}
           </h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
             {state.connectedPartners.map((partnerId) => {
@@ -512,7 +515,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Partners Grid */}
       <div>
         <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-          {activeCategory === 'all' ? 'Todos los servicios' : categories.find(c => c.id === activeCategory)?.label}
+          {activeCategory === 'all' ? t('market_all_services') : categories.find(c => c.id === activeCategory)?.label}
         </h3>
         <div className="grid grid-cols-2 gap-3">
           {filteredPartners.map((partner) => (

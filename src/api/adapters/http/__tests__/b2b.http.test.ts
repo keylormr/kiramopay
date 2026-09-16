@@ -76,6 +76,26 @@ describe('HttpB2BRepository — webhooks', () => {
     });
   });
 
+  // La hoja traduce el rechazo por su codigo: si el adaptador lo pisa con uno
+  // propio, la persona vuelve a ver el texto del servidor en ingles.
+  it('conserva el codigo del servidor cuando rechaza la URL', async () => {
+    const client = fakeClient({
+      post: vi.fn().mockResolvedValue({
+        success: false,
+        error: { code: 'WEBHOOK_INVALID_URL', message: 'the webhook url must be a full http(s) address of a public server' },
+      }),
+    });
+    const res = await new HttpB2BRepository(client).createWebhook('esto-no-es-una-url', '*');
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('WEBHOOK_INVALID_URL');
+  });
+
+  it('usa su codigo propio si el rechazo no trae ninguno', async () => {
+    const client = fakeClient({ post: vi.fn().mockResolvedValue({ success: false }) });
+    const res = await new HttpB2BRepository(client).createWebhook('https://example.com/hook', '*');
+    expect(res.error?.code).toBe('B2B_WEBHOOK_CREATE_FAILED');
+  });
+
   it('lists deliveries and maps them', async () => {
     const client = fakeClient({
       get: vi.fn().mockResolvedValue({
