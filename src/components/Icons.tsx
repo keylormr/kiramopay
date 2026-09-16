@@ -96,12 +96,16 @@ import {
   MessageCircle,
   Send,
   Inbox,
-  Circle
+  Circle,
+  CalendarDays,
+  TrendingDown,
 } from 'lucide-react';
 
 export const Icons = {
   // Navigation
   Home,
+  Calendar: CalendarDays,
+  TrendingDown,
   Card: CreditCard,
   Exchange: Repeat,
   Scan: ScanLine,

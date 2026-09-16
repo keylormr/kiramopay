@@ -517,6 +517,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
 
+  /api/v1/transactions/summary:
+    get:
+      tags: [Transactions]
+      summary: Summarize the user's completed transactions over a date range
+      description: >-
+        Aggregates EVERY completed transaction of the authenticated user in a
+        range of Costa Rica calendar days (America/Costa_Rica): one group per
+        (day, type, currency) plus the largest movements of each (type,
+        currency). The analytics screen uses it instead of paging the list,
+        which cannot cover a long range completely. The server does not decide
+        what counts as income or expense: the type carries the direction, as
+        in the list. Only `completed` rows count; a failed or pending movement
+        moved no money. The documented schema is the `data` payload of the
+        usual `{success, data}` envelope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: First Costa Rica calendar day, inclusive (`YYYY-MM-DD`).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: >-
+            Exclusive end day (`YYYY-MM-DD`), so August 2026 is
+            `from=2026-08-01&to=2026-09-01`. Must be after `from`; the range
+            may span at most 732 days.
+      responses:
+        '200':
+          description: Aggregates of the range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSummary'
+        '400':
+          description: >-
+            `VALIDATION_ERROR` when a bound is missing, is not a plain date,
+            `to` is not after `from`, or the range is longer than 732 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /api/v1/transactions/{id}:
     get:
       tags: [Transactions]
@@ -4461,6 +4507,47 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    TransactionSummaryGroup:
+      type: object
+      required: [date, type, currency, count, amount]
+      properties:
+        date: { type: string, format: date, description: Costa Rica calendar day }
+        type: { type: string, description: Transaction type; it carries the direction }
+        currency: { type: string }
+        count: { type: integer, minimum: 1 }
+        amount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sum of the magnitudes, in minor units (centimos)
+
+    TransactionSummary:
+      type: object
+      required: [from, to, timezone, status, groups, top, top_per_type, first_date]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date, description: Exclusive }
+        timezone: { type: string, enum: [America/Costa_Rica] }
+        status: { type: string, enum: [completed], description: The only status counted }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/TransactionSummaryGroup' }
+        top:
+          type: array
+          description: Largest movements of each (type, currency), biggest first
+          items: { $ref: '#/components/schemas/TransactionRecord' }
+        top_per_type:
+          type: integer
+          description: How many movements `top` keeps per (type, currency)
+        first_date:
+          type: string
+          format: date
+          nullable: true
+          description: >-
+            Costa Rica calendar day of the user's first completed movement ever,
+            or null when there is none. A previous period that starts before it
+            is incomplete, so the screen does not compare against it.
 
     CryptoAssetRecord:
       type: object

@@ -295,6 +295,142 @@ func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTra
 	}, nil
 }
 
+// filtroResumen es el WHERE que comparten las dos consultas del resumen, para
+// que los grupos y los principales nunca describan conjuntos distintos.
+//
+// $1 usuario, $2/$3 instantes del rango en UTC, $4/$5 fechas de particion; cada
+// consulta agrega su propio $6. Postgres rechaza un parametro que la consulta no
+// usa, asi que el desfase y el tope no pueden ir en el filtro comun.
+// Solo cuenta 'completed': un movimiento pendiente o fallido no movio dinero.
+const filtroResumen = `user_id = $1
+	   AND status = 'completed'
+	   AND created_at >= $2 AND created_at < $3
+	   AND created_date >= $4 AND created_date < $5`
+
+// sqlResumenGrupos suma por (dia de Costa Rica, tipo, moneda).
+//
+// El dia sale de sumar el desfase ($6) al instante y dividir entre 86400.
+// extract(epoch) sobre un TIMESTAMP sin zona lee su hora de pared como UTC, que
+// es como la guarda el servidor, y sobre un TIMESTAMPTZ lee el instante: la
+// cuenta da lo mismo en produccion y en el esquema de pruebas.
+var sqlResumenGrupos = `SELECT floor((extract(epoch FROM created_at) + $6::bigint) / 86400)::bigint AS dia,
+	       type,
+	       COALESCE(currency, 'CRC') AS moneda,
+	       COUNT(*)::int,
+	       COALESCE(SUM(ABS(amount)), 0)::bigint
+	  FROM transactions
+	 WHERE ` + filtroResumen + `
+	 GROUP BY 1, 2, 3
+	 ORDER BY 1, 2, 3`
+
+// sqlResumenPrincipales devuelve los $6 movimientos mas grandes de cada
+// (tipo, moneda). El desempate por fecha e id hace el orden TOTAL: dos montos
+// iguales no pueden cambiar de lugar entre una consulta y otra.
+var sqlResumenPrincipales = `SELECT id, wallet_id, user_id, type, amount, moneda, fee,
+	       counterparty_type, counterparty_name, counterparty_phone, status,
+	       external_reference, metadata, created_at, processed_at, completed_at, created_date
+	  FROM (
+	        SELECT id, wallet_id, user_id, type, amount, COALESCE(currency, 'CRC') AS moneda, fee,
+	               COALESCE(counterparty_type, '') AS counterparty_type,
+	               COALESCE(counterparty_name, '') AS counterparty_name,
+	               COALESCE(counterparty_phone, '') AS counterparty_phone,
+	               status,
+	               COALESCE(external_reference, '') AS external_reference,
+	               COALESCE(metadata::text, '{}') AS metadata,
+	               created_at, processed_at, completed_at, created_date::text AS created_date,
+	               ROW_NUMBER() OVER (
+	                   PARTITION BY type, COALESCE(currency, 'CRC')
+	                   ORDER BY amount DESC, created_at DESC, id DESC
+	               ) AS puesto
+	          FROM transactions
+	         WHERE ` + filtroResumen + `
+	       ) principales
+	 WHERE puesto <= $6
+	 ORDER BY amount DESC, created_at DESC, id DESC`
+
+// sqlPrimerMovimiento busca el primer movimiento completado de la persona, en
+// cualquier fecha. Ordena por la llave de particion primero para que la base
+// recorra el indice (user_id, created_date) de cada particion y se detenga en
+// la primera fila, en vez de leer todo el historial.
+var sqlPrimerMovimiento = `SELECT floor((extract(epoch FROM created_at) + $2::bigint) / 86400)::bigint
+	  FROM transactions
+	 WHERE user_id = $1
+	   AND status = 'completed'
+	 ORDER BY created_date, created_at
+	 LIMIT 1`
+
+// PrimerDiaConMovimientos devuelve el dia civil (con el desfase dado) del
+// primer movimiento completado del usuario, o nil si no tiene ninguno.
+func (r *Repository) PrimerDiaConMovimientos(ctx context.Context, userID string, desfaseSegundos int64) (*string, error) {
+	var dia int64
+	err := r.db.QueryRow(ctx, sqlPrimerMovimiento, userID, desfaseSegundos).Scan(&dia)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("summary first date: %w", err)
+	}
+	fecha := fechaDeDiaEpoch(dia)
+	return &fecha, nil
+}
+
+// GruposResumen suma los movimientos completados del rango por dia, tipo y
+// moneda.
+func (r *Repository) GruposResumen(ctx context.Context, userID string, rango RangoResumen) ([]GrupoResumen, error) {
+	rows, err := r.db.Query(ctx, sqlResumenGrupos,
+		userID, rango.Inicio, rango.Fin, rango.ParticionDesde, rango.ParticionHasta, rango.DesfaseSegundos)
+	if err != nil {
+		return nil, fmt.Errorf("summary groups: %w", err)
+	}
+	defer rows.Close()
+
+	grupos := []GrupoResumen{}
+	for rows.Next() {
+		var (
+			dia int64
+			g   GrupoResumen
+		)
+		if err := rows.Scan(&dia, &g.Type, &g.Currency, &g.Count, &g.Amount); err != nil {
+			return nil, fmt.Errorf("scan summary group: %w", err)
+		}
+		g.Fecha = fechaDeDiaEpoch(dia)
+		grupos = append(grupos, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("summary groups: %w", err)
+	}
+	return grupos, nil
+}
+
+// PrincipalesResumen devuelve los movimientos completados mas grandes del
+// rango, hasta porTipo por cada (tipo, moneda).
+func (r *Repository) PrincipalesResumen(ctx context.Context, userID string, rango RangoResumen, porTipo int) ([]TransactionRecord, error) {
+	rows, err := r.db.Query(ctx, sqlResumenPrincipales,
+		userID, rango.Inicio, rango.Fin, rango.ParticionDesde, rango.ParticionHasta, porTipo)
+	if err != nil {
+		return nil, fmt.Errorf("summary top: %w", err)
+	}
+	defer rows.Close()
+
+	top := []TransactionRecord{}
+	for rows.Next() {
+		var tx TransactionRecord
+		if err := rows.Scan(
+			&tx.ID, &tx.WalletID, &tx.UserID, &tx.Type, &tx.Amount, &tx.Currency, &tx.Fee,
+			&tx.CounterpartyType, &tx.CounterpartyName, &tx.CounterpartyPhone,
+			&tx.Status, &tx.ExternalReference, &tx.Metadata,
+			&tx.CreatedAt, &tx.ProcessedAt, &tx.CompletedAt, &tx.CreatedDate,
+		); err != nil {
+			return nil, fmt.Errorf("scan summary top: %w", err)
+		}
+		top = append(top, tx)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("summary top: %w", err)
+	}
+	return top, nil
+}
+
 func (r *Repository) UpdateStatusTx(ctx context.Context, q pgxQuerier, id, status string) error {
 	var setClause string
 	switch status {

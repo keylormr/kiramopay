@@ -789,9 +789,6 @@ export type TranslationKeys = {
 
   // Analytics
   analytics_title: string;
-  analytics_week: string;
-  analytics_month: string;
-  analytics_all: string;
   analytics_flow: string;
   analytics_by_category: string;
   analytics_cat_transfers: string;
@@ -813,7 +810,6 @@ export type TranslationKeys = {
   tx_title_generic_in: string;
   tx_title_generic_out: string;
   analytics_no_expenses: string;
-  analytics_partial: string;
   analytics_offline: string;
   other_currency_note: string;
   // Cashback de puntos y fondo de promociones (migracion 066).
@@ -868,11 +864,6 @@ export type TranslationKeys = {
   reg_referral_placeholder: string;
   reg_referral_from: string;
   reg_referral_invalid: string;
-  analytics_compare_less: string;
-  analytics_compare_more: string;
-  analytics_compare_flat: string;
-  analytics_prev_week: string;
-  analytics_prev_month: string;
   analytics_daily_avg: string;
   analytics_peak_day: string;
   analytics_top_moves: string;
@@ -881,7 +872,13 @@ export type TranslationKeys = {
   analytics_dir_out: string;
   analytics_no_moves: string;
   analytics_tx_line: string;
-  analytics_total_movido: string;
+  // Piezas de la frase del conteo; _one cuando Intl.PluralRules dice "one".
+  analytics_tx_count_one: string;
+  analytics_tx_count: string;
+  analytics_tx_in_one: string;
+  analytics_tx_in: string;
+  analytics_tx_out_one: string;
+  analytics_tx_out: string;
   analytics_insight: string;
   analytics_top_category: string;
   analytics_of_spending: string;
@@ -889,13 +886,50 @@ export type TranslationKeys = {
   analytics_total_tx: string;
   analytics_received: string;
   analytics_sent: string;
-  analytics_sun: string;
-  analytics_mon: string;
-  analytics_tue: string;
-  analytics_wed: string;
-  analytics_thu: string;
-  analytics_fri: string;
-  analytics_sat: string;
+  // Periodos, graficos y comparacion de la pantalla de analisis.
+  analytics_preset_this_month: string;
+  analytics_preset_last_month: string;
+  analytics_preset_30d: string;
+  analytics_preset_this_year: string;
+  analytics_preset_other: string;
+  analytics_period_prev: string;
+  analytics_period_next: string;
+  analytics_pick_title: string;
+  analytics_pick_month: string;
+  analytics_pick_range: string;
+  analytics_pick_year_prev: string;
+  analytics_pick_year_next: string;
+  analytics_range_hint: string;
+  analytics_range_days: string;
+  analytics_range_max: string;
+  analytics_range_apply: string;
+  analytics_balance_title: string;
+  analytics_balance_hint: string;
+  analytics_spent_share: string;
+  analytics_flow_title: string;
+  analytics_group_day: string;
+  analytics_group_week: string;
+  analytics_group_month: string;
+  analytics_compare_title: string;
+  analytics_this_period: string;
+  analytics_prev_short: string;
+  analytics_vs_less: string;
+  analytics_vs_more: string;
+  analytics_vs_flat: string;
+  analytics_vs_none: string;
+  analytics_spent_center: string;
+  analytics_empty_hint: string;
+  analytics_footnote: string;
+  analytics_load_failed: string;
+  analytics_chart_table: string;
+  analytics_chart_help: string;
+  analytics_categories_chart: string;
+  analytics_currency_label: string;
+  analytics_currency_crc: string;
+  analytics_currency_usd: string;
+  analytics_compare_failed: string;
+  analytics_compare_partial: string;
+  analytics_loading_slow: string;
 
   // Savings
   savings_title: string;

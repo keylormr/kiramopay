@@ -3,568 +3,239 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { getApiLayer } from '@/api';
-import { GraficoDona } from '@/components/GraficoDona';
-import { txTitle } from '@/utils/txTitle';
-import { getTxTime } from '@/utils/fechasTx';
+import type { TransactionSummary } from '@/api/repositories/transaction.repository';
 import type { Transaction } from '@/types';
+import { COLOR, colorDeCategoria } from '@/components/graficos/tokens';
+import { GraficoFlujo } from '@/components/graficos/GraficoFlujo';
+import { GraficoDonaCategorias } from '@/components/graficos/GraficoDonaCategorias';
+import { GraficoComparacion } from '@/components/graficos/GraficoComparacion';
+import { txTitle } from '@/utils/txTitle';
+import { resumirMovimientos } from '@/utils/resumenMovimientos';
+import {
+  etiquetaDeTramo,
+  etiquetaLargaDeTramo,
+  fechaParaFormato,
+  hoyCR,
+  localeDe,
+  nombreDeRango,
+  periodoAnterior,
+  rangoPreset,
+  mismosRangos,
+  type Rango,
+} from '@/utils/periodos';
+import { analizar, totalesEn, variacion } from './calculosAnalitica';
+import { SelectorPeriodo } from './SelectorPeriodo';
 
-// Keyed by the category slugs the transaction adapter emits (see mapCategory in
-// api/adapters/http/transaction.http.ts). They used to be English display names,
-// which matched nothing coming from the backend: every category fell through to
-// the grey default and the raw slug was printed as its label.
-const CATEGORY_CONFIG: Record<string, { color: string; bg: string; darkBg: string }> = {
-  transfers: { color: '#3b82f6', bg: 'bg-blue-100', darkBg: 'dark:bg-blue-900/30' },
-  services: { color: '#f59e0b', bg: 'bg-amber-100', darkBg: 'dark:bg-amber-900/30' },
-  shopping: { color: '#ec4899', bg: 'bg-pink-100', darkBg: 'dark:bg-pink-900/30' },
-  income: { color: '#10b981', bg: 'bg-emerald-100', darkBg: 'dark:bg-emerald-900/30' },
-  cash: { color: '#14b8a6', bg: 'bg-teal-100', darkBg: 'dark:bg-teal-900/30' },
-  other: { color: '#6b7280', bg: 'bg-gray-100', darkBg: 'dark:bg-gray-800' },
-};
+/**
+ * Analisis de gastos.
+ *
+ * Las cifras salen del RESUMEN del periodo que calcula el servidor sobre todos
+ * los movimientos completados del rango (GET /transactions/summary). Antes esta
+ * pantalla descargaba la ventana fila por fila con un techo de mil: con rangos
+ * largos ese techo se alcanza y un total pasa a describir solo una parte.
+ *
+ * Si el servidor no responde, se resume lo que el telefono tiene guardado (los
+ * movimientos recientes) y la pantalla lo dice: nunca se presenta un total
+ * calculado sobre datos incompletos como si fuera el del periodo.
+ */
 
-const FALLBACK_CATEGORY = 'other';
+// Texto de montos con contraste suficiente sobre la tarjeta (los tonos base de
+// estado no llegan a 4.5:1 como texto).
+const TEXTO_INGRESO = 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]';
+const TEXTO_GASTO = 'text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]';
 
-function getCategoryConfig(cat: string) {
-  return CATEGORY_CONFIG[cat] || CATEGORY_CONFIG[FALLBACK_CATEGORY];
+const TARJETA = 'uv-surface-1 rounded-3xl p-5 sm:p-6 shadow-[var(--shadow-soft)] min-w-0';
+const RELLENO = 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]';
+
+/** Cuantos principales se muestran: la lista completa pesa mas de lo que dice. */
+const PRINCIPALES_VISIBLES = { all: 8, in: 6, out: 6 } as const;
+
+/** Tras este tiempo sin respuesta, la espera se explica con texto. */
+const ESPERA_LARGA_MS = 2500;
+
+type Direccion = 'all' | 'in' | 'out';
+
+interface Carga {
+  clave: string;
+  rango: Rango;
+  resumen: TransactionSummary | null;
+  /** El servidor no respondio: se resume lo guardado en el telefono. */
+  fallo: boolean;
 }
 
-// Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
-const ccyDe = (tx: Transaction) => tx.ccy || 'CRC';
+/** El periodo anterior viaja aparte y puede no llegar: cada estado se dice. */
+type Anterior =
+  | { clave: string; estado: 'cargando' }
+  | { clave: string; estado: 'fallo' }
+  | { clave: string; estado: 'listo'; rango: Rango; resumen: TransactionSummary };
 
-// Income (green) and expense (red) — the app-wide cash-flow semantics. In the
-// trend chart these are also separated by POSITION (income up, expense down from
-// a zero baseline), so identity never rests on color alone (colorblind-safe).
-const INCOME_COLOR = '#10b981';
-const EXPENSE_COLOR = '#ef4444';
+const claveDe = (r: Rango) => `${r.desde}|${r.hasta}`;
 
-const LOCALE_BY_LANG: Record<string, string> = {
-  es: 'es-CR',
-  en: 'en-US',
-  fr: 'fr-FR',
-  pt: 'pt-BR',
-  'zh-cn': 'zh-CN',
-  'zh-tw': 'zh-TW',
-  ja: 'ja-JP',
-  hi: 'hi-IN',
-};
-
-type Period = 'week' | 'month' | 'all';
-
-// Server pagination for the active window. The synced store only ever holds
-// the LAST 50 transactions (dataSync), so computing analytics off it made
-// "all" and older months silently wrong; the view now asks the API for the
-// whole window, page by page. The page cap bounds a pathological history —
-// when it is hit, the UI says so instead of pretending the window is complete.
-const PAGE_SIZE = 100;
-const MAX_PAGES = 10;
-
-interface Bucket {
-  label: string;
-  income: number;
-  expense: number;
-}
-
-// Diverging bar chart: income grows up, expense grows down from a shared
-// baseline. One tap on a column reveals its exact figures.
-const CashflowChart: React.FC<{
-  buckets: Bucket[];
-  format: (n: number) => string;
-  incomeLabel: string;
-  expenseLabel: string;
-}> = ({ buckets, format, incomeLabel, expenseLabel }) => {
-  const [selected, setSelected] = useState<number | null>(null);
-  const half = 64; // px per side of the baseline
-  const maxVal = Math.max(1, ...buckets.map((b) => Math.max(b.income, b.expense)));
-  // Label density: always for few buckets, sparse for a full month.
-  const step = buckets.length <= 10 ? 1 : Math.ceil(buckets.length / 6);
-  const sel = selected != null ? buckets[selected] : null;
-
-  return (
-    <div>
-      {/* Readout / legend line */}
-      <div className="h-6 mb-1 flex items-center justify-between text-[11px]">
-        {sel ? (
-          <span className="font-semibold uv-text-primary truncate">
-            {sel.label}
-            <span className="ml-2 text-green-600 dark:text-green-400">+{format(sel.income)}</span>
-            <span className="ml-2 text-red-500 dark:text-red-400">-{format(sel.expense)}</span>
-          </span>
-        ) : (
-          <div className="flex items-center gap-4 uv-text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: INCOME_COLOR }} />
-              {incomeLabel}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: EXPENSE_COLOR }} />
-              {expenseLabel}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Columns */}
-      <div className="flex items-stretch gap-[3px]">
-        {buckets.map((b, i) => {
-          const active = selected === i;
-          const dim = selected != null && !active;
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setSelected(active ? null : i)}
-              aria-label={`${b.label}: +${format(b.income)} / -${format(b.expense)}`}
-              className={`group flex-1 min-w-0 flex flex-col items-center transition-opacity duration-200 ${dim ? 'opacity-30' : 'opacity-100'}`}
-            >
-              {/* income (up) */}
-              <div className="w-full flex flex-col justify-end items-center" style={{ height: half }}>
-                <div
-                  className="w-full max-w-[14px] rounded-full transition-all duration-500"
-                  style={{
-                    height: Math.max(b.income > 0 ? 4 : 0, (b.income / maxVal) * half),
-                    background: `linear-gradient(to top, ${INCOME_COLOR}99, ${INCOME_COLOR})`,
-                  }}
-                />
-              </div>
-              {/* baseline */}
-              <div className="w-full h-px my-[2px] bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
-              {/* expense (down) */}
-              <div className="w-full flex flex-col justify-start items-center" style={{ height: half }}>
-                <div
-                  className="w-full max-w-[14px] rounded-full transition-all duration-500"
-                  style={{
-                    height: Math.max(b.expense > 0 ? 4 : 0, (b.expense / maxVal) * half),
-                    background: `linear-gradient(to bottom, ${EXPENSE_COLOR}99, ${EXPENSE_COLOR})`,
-                  }}
-                />
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Labels */}
-      <div className="flex gap-[2px] mt-1.5">
-        {buckets.map((b, i) => (
-          <span key={i} className="flex-1 min-w-0 text-center text-[9px] font-medium uv-text-muted truncate">
-            {i % step === 0 ? b.label : ''}
-          </span>
-        ))}
-      </div>
-    </div>
+/** Si la pantalla cumple la consulta de medios (y se actualiza al cambiar). */
+function useConsultaMedios(consulta: string): boolean {
+  const [cumple, setCumple] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(consulta).matches,
   );
-};
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(consulta);
+    const cambiar = () => setCumple(mq.matches);
+    mq.addEventListener?.('change', cambiar);
+    return () => mq.removeEventListener?.('change', cambiar);
+  }, [consulta]);
+  return cumple;
+}
 
 export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { state } = useApp();
   const { t, language } = useLanguage();
-  // Abre en "Todo": el mes en curso suele tener pocos movimientos y la vista
-  // arrancaba casi vacia — la primera impresion debe ser la historia completa.
-  const [period, setPeriod] = useState<Period>('all');
-  // 0 = current month, -1 = previous, ... (only used when period === 'month')
-  const [monthOffset, setMonthOffset] = useState(0);
-  // Filtro de direccion para la lista de movimientos principales.
-  const [direction, setDirection] = useState<'all' | 'in' | 'out'>('all');
+  const locale = localeDe(language);
 
-  const locale = LOCALE_BY_LANG[language] || 'es-CR';
+  const [hoy] = useState(() => hoyCR());
+  const [rango, setRango] = useState<Rango>(() => rangoPreset('este_mes', hoyCR()));
+  const [intento, setIntento] = useState(0);
+  const [carga, setCarga] = useState<Carga | null>(null);
+  const [pidiendo, setPidiendo] = useState<string | null>(claveDe(rango));
+  const [anterior, setAnterior] = useState<Anterior | null>(null);
+  const [direccion, setDireccion] = useState<Direccion>('all');
+  // null: la regla de siempre (moneda base, o la que tenga datos).
+  const [monedaElegida, setMonedaElegida] = useState<string | null>(null);
+  // En escritorio el flujo comparte fila con el balance: se estira a su alto.
+  const escritorio = useConsultaMedios('(min-width: 1024px)');
 
-  // The stored category is a slug, never a display string: it goes through i18n
-  // so the breakdown reads in the selected language.
-  const categoryLabel = (cat: string) =>
-    t(`analytics_cat_${cat in CATEGORY_CONFIG ? cat : FALLBACK_CATEGORY}`);
-  const allTransactions = state.transactions;
-
-  // The active date window for the selected period.
-  const range = useMemo(() => {
-    const now = new Date();
-    if (period === 'week') {
-      const end = now.getTime();
-      return { start: end - 7 * 86400000, end, label: '' };
-    }
-    if (period === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 1);
-      const label = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(start);
-      return { start: start.getTime(), end: end.getTime(), label, monthStart: start };
-    }
-    return { start: -Infinity, end: Infinity, label: '' };
-  }, [period, monthOffset, locale]);
-
-  // Identity of the active window, used to match a fetch result to the
-  // selection that requested it (a stale response must not repaint a window
-  // the user already left).
-  const windowKey = period === 'month' ? `month:${monthOffset}` : period;
-
-  // The window fetched from the server, or null while loading / when the very
-  // first page failed (the synced store then serves as fallback).
-  const [serverWindow, setServerWindow] = useState<{
-    key: string;
-    txs: Transaction[];
-    total: number;
-  } | null>(null);
-
-  // Set when the window could not be fetched at all and the charts are running
-  // on the synced store, which holds only the last 50 movements — the very
-  // problem this view exists to fix, so it must be visible, not silent.
-  const [fallbackKey, setFallbackKey] = useState<string | null>(null);
-
-  // Gastos del periodo ANTERIOR (semana pasada / mes pasado), para poner el
-  // periodo actual en contexto: "gastaste 23% menos que el mes pasado" dice
-  // algo; una cifra suelta no. En "todo" no hay periodo anterior.
-  // Se guarda separado POR MONEDA: comparar contra un total que mezcla monedas
-  // daria un porcentaje inventado.
-  const [prevExpense, setPrevExpense] = useState<{
-    key: string;
-    byCcy: Record<string, number>;
-  } | null>(null);
-
-  // Ventana visible cargando desde el servidor: gobierna los esqueletos de la
-  // vista para que la espera se VEA (pedido explicito del dueno: nada de
-  // pantallas mudas mientras se consulta).
-  const [loadingKey, setLoadingKey] = useState<string | null>(windowKey);
+  const clave = claveDe(rango);
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelado = false;
+    const pedido = { desde: rango.desde, hasta: rango.hasta };
+    const k = `${pedido.desde}|${pedido.hasta}`;
+    const api = getApiLayer();
+
     (async () => {
-      const api = getApiLayer();
-      // Accumulate by id. OFFSET paging is not stable against writes: a
-      // transaction landing between two page requests shifts every later
-      // offset by one, so a row already collected would come back again and
-      // be counted twice in the totals.
-      const fetchWindow = async (startMs: number, endMs: number) => {
-        const from = Number.isFinite(startMs) ? new Date(startMs).toISOString() : undefined;
-        const to = Number.isFinite(endMs) ? new Date(endMs).toISOString() : undefined;
-        const byId = new Map<string, Transaction>();
-        let total = 0;
-        for (let page = 0; page < MAX_PAGES; page++) {
-          const res = await api.transactions.listTransactions({
-            from,
-            to,
-            limit: PAGE_SIZE,
-            offset: page * PAGE_SIZE,
-          });
-          // A failed page keeps whatever earlier pages returned: partial data
-          // still beats the 50-item store, and the coverage note below tells
-          // the user it is partial rather than passing it off as complete.
-          if (!res.success || !res.data) break;
-          for (const tx of res.data.transactions) byId.set(tx.id, tx);
-          total = res.data.total;
-          if (byId.size >= total || res.data.transactions.length < PAGE_SIZE) break;
-        }
-        return { txs: [...byId.values()], total };
-      };
-
-      setLoadingKey(windowKey);
+      setPidiendo(k);
       try {
-        const win = await fetchWindow(range.start, range.end);
-        if (cancelled) return;
-        if (win.txs.length > 0) {
-          setServerWindow({ key: windowKey, txs: win.txs, total: win.total });
-          setFallbackKey(null);
-        } else {
-          // Nothing arrived: keep serverWindow null so the store fallback stays
-          // in place rather than rendering an empty month, and flag it.
-          setFallbackKey(windowKey);
-        }
+        const res = await api.transactions.getSummary({ from: pedido.desde, to: pedido.hasta });
+        if (cancelado) return;
+        if (!res.success || !res.data) throw new Error('summary');
+        setCarga({ clave: k, rango: pedido, resumen: res.data, fallo: false });
       } catch {
-        // Offline / API error: analytics still render from the synced store.
-        if (!cancelled) setFallbackKey(windowKey);
+        if (!cancelado) setCarga({ clave: k, rango: pedido, resumen: null, fallo: true });
       } finally {
-        if (!cancelled) setLoadingKey((k) => (k === windowKey ? null : k));
-      }
-
-      // Comparacion con el periodo anterior — best effort, nunca bloquea la
-      // vista principal. Solo aplica a semana y mes.
-      if (period === 'all') {
-        if (!cancelled) setPrevExpense(null);
-        return;
-      }
-      try {
-        let prevStart: number;
-        let prevEnd: number;
-        if (period === 'week') {
-          prevEnd = range.start;
-          prevStart = range.start - 7 * 86400000;
-        } else {
-          const now = new Date();
-          prevStart = new Date(now.getFullYear(), now.getMonth() + monthOffset - 1, 1).getTime();
-          prevEnd = range.start;
-        }
-        const prev = await fetchWindow(prevStart, prevEnd);
-        if (cancelled) return;
-        const byCcy: Record<string, number> = {};
-        for (const tx of prev.txs) {
-          if (tx.amount >= 0) continue;
-          const c = ccyDe(tx);
-          byCcy[c] = (byCcy[c] || 0) + Math.abs(tx.amount);
-        }
-        setPrevExpense({ key: windowKey, byCcy });
-      } catch {
-        if (!cancelled) setPrevExpense(null);
+        if (!cancelado) setPidiendo((p) => (p === k ? null : p));
       }
     })();
+
+    // El periodo anterior viaja en paralelo y nunca bloquea la vista.
+    (async () => {
+      const prev = periodoAnterior(pedido, hoy);
+      if (!prev) {
+        if (!cancelado) setAnterior({ clave: k, estado: 'fallo' });
+        return;
+      }
+      setAnterior({ clave: k, estado: 'cargando' });
+      try {
+        const res = await api.transactions.getSummary({ from: prev.desde, to: prev.hasta });
+        if (cancelado) return;
+        setAnterior(
+          res.success && res.data
+            ? { clave: k, estado: 'listo', rango: prev, resumen: res.data }
+            : { clave: k, estado: 'fallo' },
+        );
+      } catch {
+        if (!cancelado) setAnterior({ clave: k, estado: 'fallo' });
+      }
+    })();
+
     return () => {
-      cancelled = true;
+      cancelado = true;
     };
-  }, [windowKey, range.start, range.end, period, monthOffset]);
+  }, [rango.desde, rango.hasta, hoy, intento]);
 
-  // Transactions inside the active window: the server-fetched window when it
-  // matches the current selection, else the synced store filtered locally
-  // (undated ones are excluded from week/month and kept only in "all").
-  const transactions = useMemo(() => {
-    if (serverWindow && serverWindow.key === windowKey) return serverWindow.txs;
-    if (period === 'all') return allTransactions;
-    return allTransactions.filter((tx) => {
-      const time = getTxTime(tx);
-      return time !== null && time >= range.start && time < range.end;
-    });
-  }, [serverWindow, windowKey, allTransactions, period, range.start, range.end]);
+  // Lo que se muestra: la ultima carga, aunque sea del periodo anterior mientras
+  // llega el nuevo (se atenua, sin saltos ni esqueletos al cambiar de periodo).
+  const resumen = useMemo(() => {
+    if (!carga) return null;
+    return carga.fallo ? resumirMovimientos(state.transactions, carga.rango) : carga.resumen;
+  }, [carga, state.transactions]);
 
-  // True when the window is short of its own total — the page cap cut it, or a
-  // page failed. Either way the charts cover only part of the period and the
-  // UI must say so instead of presenting them as the whole month.
-  const windowTruncated =
-    serverWindow !== null &&
-    serverWindow.key === windowKey &&
-    serverWindow.txs.length < serverWindow.total;
-
-  // The window could not be fetched and the charts are on the synced store.
-  const usingFallback =
-    fallbackKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
-
-  // Toda esta vista suma UNA sola moneda. Antes sumaba tx.amount en crudo y
-  // rotulaba el total con la moneda base, que se cambia con un toque en las
-  // tarjetas del home: un gasto de 1.196.850 colones se imprimia como
-  // "$1,196,850.00", y ademas colones y dolares se sumaban 1:1.
-  // Se rotula la moneda base; solo si la ventana no tiene ni un movimiento en
-  // ella se cae a la moneda mas frecuente, para no mostrar ceros habiendo datos.
-  const { viewCcy, viewTransactions, otherCcyCount } = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const tx of transactions) {
-      const c = ccyDe(tx);
-      counts.set(c, (counts.get(c) || 0) + 1);
-    }
-    const base = state.baseCurrency || 'CRC';
-    let ccy = base;
-    if (!counts.has(base) && counts.size > 0) {
-      ccy = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-    }
-    const inCcy = transactions.filter((tx) => ccyDe(tx) === ccy);
-    return {
-      viewCcy: ccy,
-      viewTransactions: inCcy,
-      otherCcyCount: transactions.length - inCcy.length,
-    };
-  }, [transactions, state.baseCurrency]);
-
-  // Category breakdown for expenses
-  const categoryData = useMemo(() => {
-    const expenses = viewTransactions.filter((tx: Transaction) => tx.amount < 0);
-    const totals: Record<string, number> = {};
-
-    for (const tx of expenses) {
-      const cat = tx.category || FALLBACK_CATEGORY;
-      totals[cat] = (totals[cat] || 0) + Math.abs(tx.amount);
-    }
-
-    const totalExpenses = Object.values(totals).reduce((s, v) => s + v, 0);
-    const sorted = Object.entries(totals)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-
-    return { items: sorted, total: totalExpenses };
-  }, [viewTransactions]);
-
-  // Income vs Expenses summary
-  const summary = useMemo(() => {
-    const income = viewTransactions
-      .filter((tx: Transaction) => tx.amount > 0)
-      .reduce((s: number, tx: Transaction) => s + tx.amount, 0);
-    const expenses = viewTransactions
-      .filter((tx: Transaction) => tx.amount < 0)
-      .reduce((s: number, tx: Transaction) => s + Math.abs(tx.amount), 0);
-    return { income, expenses, net: income - expenses };
-  }, [viewTransactions]);
-
-  // Cash-flow buckets over the active period (income up / expense down).
-  const cashflowBuckets = useMemo<Bucket[]>(() => {
-    const addTo = (b: Bucket, amount: number) => {
-      if (amount >= 0) b.income += amount;
-      else b.expense += Math.abs(amount);
-    };
-
-    if (period === 'week') {
-      const now = new Date();
-      const days: { key: string; b: Bucket }[] = [];
-      const wd = new Intl.DateTimeFormat(locale, { weekday: 'short' });
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        days.push({ key: d.toDateString(), b: { label: wd.format(d), income: 0, expense: 0 } });
-      }
-      const byKey = new Map(days.map((d) => [d.key, d.b]));
-      for (const tx of viewTransactions) {
-        const time = getTxTime(tx);
-        if (time === null) continue;
-        const b = byKey.get(new Date(time).toDateString());
-        if (b) addTo(b, tx.amount);
-      }
-      return days.map((d) => d.b);
-    }
-
-    if (period === 'month') {
-      const start = (range as { monthStart?: Date }).monthStart || new Date();
-      const year = start.getFullYear();
-      const month = start.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const buckets: Bucket[] = Array.from({ length: daysInMonth }, (_, i) => ({
-        label: String(i + 1),
-        income: 0,
-        expense: 0,
-      }));
-      for (const tx of viewTransactions) {
-        const time = getTxTime(tx);
-        if (time === null) continue;
-        const day = new Date(time).getDate();
-        if (day >= 1 && day <= daysInMonth) addTo(buckets[day - 1], tx.amount);
-      }
-      return buckets;
-    }
-
-    // all — group by calendar month
-    const mo = new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' });
-    const map = new Map<string, Bucket>();
-    const order: string[] = [];
-    const dated = viewTransactions
-      .map((tx) => ({ tx, time: getTxTime(tx) }))
-      .filter((x): x is { tx: Transaction; time: number } => x.time !== null)
-      .sort((a, b) => a.time - b.time);
-    for (const { tx, time } of dated) {
-      const d = new Date(time);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      let b = map.get(key);
-      if (!b) {
-        b = { label: mo.format(d), income: 0, expense: 0 };
-        map.set(key, b);
-        order.push(key);
-      }
-      addTo(b, tx.amount);
-    }
-    return order.map((k) => map.get(k)!);
-  }, [viewTransactions, period, range, locale]);
-
-  const hasCashflow = cashflowBuckets.some((b) => b.income > 0 || b.expense > 0);
-
-  // Spending by day of week (mini heatmap) over the active period.
-  const { weekdaySpending, hasWeekdayData } = useMemo(() => {
-    const days = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
-    let counted = 0;
-    for (const tx of viewTransactions) {
-      if (tx.amount >= 0) continue; // expenses only
-      const time = getTxTime(tx);
-      if (time === null) continue; // skip unparseable/relative dates
-      days[new Date(time).getDay()] += Math.abs(tx.amount);
-      counted++;
-    }
-    const dayNames = [t('analytics_sun'), t('analytics_mon'), t('analytics_tue'), t('analytics_wed'), t('analytics_thu'), t('analytics_fri'), t('analytics_sat')];
-    const max = Math.max(...days, 1);
-    return {
-      weekdaySpending: dayNames.map((name, i) => ({ name, value: days[i], intensity: days[i] / max })),
-      hasWeekdayData: counted > 0,
-    };
-  }, [viewTransactions, t]);
-
-  // Movimientos principales del periodo: los montos mas grandes en absoluto,
-  // filtrables por direccion. Es lo que el usuario reconoce de un vistazo:
-  // nombres y montos, no abstracciones.
-  const topMoves = useMemo(() => {
-    const filtered = viewTransactions.filter((tx) =>
-      direction === 'all' ? true : direction === 'in' ? tx.amount > 0 : tx.amount < 0,
-    );
-    return [...filtered].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 6);
-  }, [viewTransactions, direction]);
-
-  // Gasto promedio por dia del periodo activo. Para el mes en curso divide
-  // entre los dias transcurridos (no los 30-31 del calendario); para "todo",
-  // entre el rango real de fechas con datos.
-  const dailyAvg = useMemo(() => {
-    if (summary.expenses <= 0) return 0;
-    const now = Date.now();
-    let days: number;
-    if (period === 'week') {
-      days = 7;
-    } else if (period === 'month') {
-      const start = (range as { monthStart?: Date }).monthStart || new Date();
-      const monthEnd = Math.min(range.end, now);
-      days = Math.max(1, Math.ceil((monthEnd - start.getTime()) / 86400000));
-    } else {
-      const times = viewTransactions
-        .map(getTxTime)
-        .filter((x): x is number => x !== null);
-      if (times.length === 0) return 0;
-      days = Math.max(1, Math.ceil((Math.max(...times) - Math.min(...times)) / 86400000) + 1);
-    }
-    return summary.expenses / days;
-  }, [summary.expenses, period, range, viewTransactions]);
-
-  // Dia de la semana con mas gasto (solo si hay senal).
-  const peakDay = hasWeekdayData
-    ? weekdaySpending.reduce((a, b) => (b.value > a.value ? b : a))
-    : null;
-
-  // Comparacion contra el periodo anterior, cuando su fetch corresponde a la
-  // ventana visible y hubo gasto contra el cual comparar.
-  const comparison = useMemo(() => {
-    if (period === 'all') return null;
-    if (!prevExpense || prevExpense.key !== windowKey) return null;
-    // Solo contra el gasto del periodo anterior EN LA MISMA MONEDA que se rotula.
-    const base = prevExpense.byCcy[viewCcy] || 0;
-    if (base <= 0) return null; // sin base: un % no significa nada
-    const pct = ((summary.expenses - base) / base) * 100;
-    return { pct };
-  }, [period, prevExpense, windowKey, summary.expenses, viewCcy]);
-
-  const txCounts = useMemo(
-    () => ({
-      total: viewTransactions.length,
-      recibidos: viewTransactions.filter((tx) => tx.amount > 0).length,
-      enviados: viewTransactions.filter((tx) => tx.amount < 0).length,
-    }),
-    [viewTransactions],
+  const analisis = useMemo(
+    () => (carga && resumen ? analizar(resumen, carga.rango, hoy, state.baseCurrency || 'CRC', monedaElegida) : null),
+    [carga, resumen, hoy, state.baseCurrency, monedaElegida],
   );
 
-  // Esqueletos mientras la ventana viaja desde el servidor: la espera se ve.
-  const isLoadingWindow =
-    loadingKey === windowKey && !(serverWindow && serverWindow.key === windowKey);
+  const cargando = pidiendo === clave;
+  const desactualizada = !!carga && carga.clave !== clave;
+  const rangoMostrado = carga?.rango ?? rango;
+  const falloActual = !!carga?.fallo && carga.clave === clave;
 
-  const formatCurrency = (amount: number) => {
-    const ccy = viewCcy;
+  const plural = useMemo(() => {
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(amount);
+      return new Intl.PluralRules(locale);
     } catch {
-      return `${amount.toFixed(2)} ${ccy}`;
+      return new Intl.PluralRules('es');
+    }
+  }, [locale]);
+  // Los miles van con coma en toda la app (utils/money.ts), tambien en conteos.
+  const contar = (n: number, llave: string) =>
+    t(plural.select(n) === 'one' ? `${llave}_one` : llave).replace('{n}', n.toLocaleString('en-US'));
+
+  const formatoMonto = (monto: number) => {
+    const ccy = analisis?.moneda ?? 'CRC';
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy }).format(monto);
+    } catch {
+      return `${monto.toFixed(2)} ${ccy}`;
+    }
+  };
+  const formatoCompacto = (monto: number) => {
+    const ccy = analisis?.moneda ?? 'CRC';
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currencyDisplay: 'narrowSymbol',
+        currency: ccy,
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(monto);
+    } catch {
+      return `${Math.round(monto)}`;
     }
   };
 
-  // Compact currency for chart readouts (keeps the line short).
-  const formatCompact = (amount: number) => {
-    const ccy = viewCcy;
+  const nombreCategoria = (cat: string) => t(`analytics_cat_${cat}`);
+  const nombreDia = (dia: number) => {
+    // 4 de enero de 2026 fue domingo: sumar el dia da su nombre en el idioma.
+    const s = new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 0, 4 + dia)));
+    return s.charAt(0).toLocaleUpperCase(locale) + s.slice(1);
+  };
+  const fechaLarga = (f: string) => {
     try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: ccy, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
+      return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(fechaParaFormato(f));
     } catch {
-      return `${Math.round(amount)}`;
+      return f;
     }
   };
+  const nombreMoneda = (ccy: string) =>
+    ccy === 'CRC' ? t('analytics_currency_crc') : ccy === 'USD' ? t('analytics_currency_usd') : ccy;
+
+  // Sin servidor y sin nada guardado del periodo: no es un periodo vacio, es
+  // un periodo que no se pudo leer.
+  const sinDatos = falloActual && !!analisis?.vacio;
+
+  // El periodo anterior se compara solo si llego para ESTA carga y la carga no
+  // salio de lo guardado en el telefono (mezclaria dos fuentes). Y si empieza
+  // antes del primer movimiento de la persona esta incompleto: compararlo
+  // inventaria un porcentaje enorme que no significa nada.
+  const anteriorListo = !carga?.fallo && anterior?.clave === carga?.clave && anterior?.estado === 'listo' ? anterior : null;
+  const primeraFecha = anteriorListo?.resumen.firstDate ?? null;
+  const anteriorIncompleto = !!anteriorListo && primeraFecha !== null && primeraFecha > anteriorListo.rango.desde;
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
-      {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
-          className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-focus-ring"
           aria-label={t('back')}
         >
           <Icons.ChevronLeft size={20} />
@@ -573,280 +244,474 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         <div className="w-8" />
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-8">
-        {/* Period Selector */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex p-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl">
-            {(['week', 'month', 'all'] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => { setPeriod(p); if (p === 'month') setMonthOffset(0); }}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                  period === p
-                    ? 'bg-white dark:bg-gray-700 shadow-sm uv-text-primary'
-                    : 'text-gray-500'
-                }`}
-              >
-                {t(`analytics_${p}`)}
-              </button>
-            ))}
-          </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-4 pt-4 pb-10 sm:px-6 lg:px-8">
+          <SelectorPeriodo rango={rango} hoy={hoy} onCambiar={setRango} />
 
-          {/* Honest coverage note: the window is incomplete, either because the
-              page cap cut it or because a page failed. Never present partial
-              charts as the whole period. */}
-          {windowTruncated && serverWindow && (
-            <p className="mt-2 px-1 text-xs uv-text-muted">
-              {t('analytics_partial')
-                .replace('{shown}', String(serverWindow.txs.length))
-                .replace('{total}', String(serverWindow.total))}
-            </p>
-          )}
-          {usingFallback && (
-            <p className="mt-2 px-1 text-xs uv-text-muted">{t('analytics_offline')}</p>
+          {falloActual && !sinDatos && (
+            <AvisoFallo texto={t('analytics_offline')} reintentar={t('error_retry')} onReintentar={() => setIntento((n) => n + 1)} />
           )}
 
-          {/* Los movimientos en otra moneda quedan fuera de los totales: se
-              dicen, no se esconden. */}
-          {otherCcyCount > 0 && (
-            <p className="mt-2 px-1 text-xs uv-text-muted">
-              {t('other_currency_note').replace('{n}', String(otherCcyCount))}
-            </p>
-          )}
-
-          {/* Month navigator (only for the monthly view) */}
-          {period === 'month' && (
-            <div className="flex items-center justify-between mt-3 px-1">
-              <button
-                onClick={() => setMonthOffset((o) => o - 1)}
-                aria-label={new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset - 1, 1))}
-                className="p-1.5 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-text-secondary"
-              >
-                <Icons.ChevronLeft size={18} />
-              </button>
-              <span className="text-sm font-bold uv-text-primary capitalize">{range.label}</span>
-              <button
-                onClick={() => setMonthOffset((o) => Math.min(0, o + 1))}
-                disabled={monthOffset >= 0}
-                aria-label={new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset + 1, 1))}
-                className="p-1.5 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors uv-text-secondary disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Icons.ChevronRight size={18} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Resumen del periodo: el neto manda, con ingresos y gastos al lado y
-            la comparacion contra el periodo anterior como lectura, no adorno. */}
-        <div className="px-4 py-2">
-          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
-            {isLoadingWindow ? (
-              <div className="animate-pulse space-y-4" aria-hidden="true">
-                <div className="h-3 w-24 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
-                <div className="h-8 w-40 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
-                <div className="h-24 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
-              </div>
-            ) : (
-              <>
-                {/* La dona compone el TOTAL del periodo: ingresos (todo lo
-                    recibido, sea SINPE, pago QR o lo que sea) + gastos = la
-                    cifra del centro. Pedido del dueno: que las partes den el
-                    total, a la vista. */}
-                <div className="flex flex-col items-center gap-4">
-                  <GraficoDona
-                    segmentos={[
-                      { valor: summary.income, color: '#10B981', etiqueta: t('income') },
-                      { valor: summary.expenses, color: '#EF4444', etiqueta: t('expenses') },
-                    ]}
-                  >
-                    <p className="text-[10px] font-bold uv-text-muted uppercase tracking-wide leading-tight">{t('analytics_total_movido')}</p>
-                    <p className="text-lg font-black uv-text-primary tabular-nums leading-tight mt-0.5">
-                      {formatCompact(summary.income + summary.expenses)}
-                    </p>
-                  </GraficoDona>
-
-                  <div className="w-full grid grid-cols-2 gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#10B981' }} />
-                      <div className="min-w-0">
-                        <p className="text-[11px] uv-text-muted leading-tight">{t('income')}</p>
-                        <p className="text-sm font-bold text-green-600 dark:text-green-400 tabular-nums truncate">{formatCurrency(summary.income)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 justify-end text-right">
-                      <div className="min-w-0">
-                        <p className="text-[11px] uv-text-muted leading-tight">{t('expenses')}</p>
-                        <p className="text-sm font-bold text-red-500 dark:text-red-400 tabular-nums truncate">{formatCurrency(summary.expenses)}</p>
-                      </div>
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#EF4444' }} />
-                    </div>
-                  </div>
-
-                  <div className="w-full flex items-center justify-between pt-3 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                    <span className="text-xs font-bold uv-text-muted uppercase tracking-wide">{t('net_balance')}</span>
-                    <span className={`text-lg font-black tabular-nums ${summary.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                      {summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Lectura contra el periodo anterior */}
-                {comparison && (
-                  <p className="mt-3 text-sm uv-text-secondary">
-                    {(comparison.pct <= -1
-                      ? t('analytics_compare_less').replace('{pct}', Math.abs(comparison.pct).toFixed(0))
-                      : comparison.pct >= 1
-                        ? t('analytics_compare_more').replace('{pct}', comparison.pct.toFixed(0))
-                        : t('analytics_compare_flat')
-                    ).replace('{prev}', t(period === 'week' ? 'analytics_prev_week' : 'analytics_prev_month'))}
-                  </p>
-                )}
-
-                <p className="mt-1 text-xs uv-text-muted">
-                  {t('analytics_tx_line')
-                    .replace('{n}', String(txCounts.total))
-                    .replace('{in}', String(txCounts.recibidos))
-                    .replace('{out}', String(txCounts.enviados))}
-                </p>
-
-                {/* Cash-flow trend over the period */}
-                {hasCashflow && (
-                  <div className="mt-5 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                    <CashflowChart
-                      buckets={cashflowBuckets}
-                      format={formatCompact}
-                      incomeLabel={t('income')}
-                      expenseLabel={t('expenses')}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Dos lecturas rapidas que si dicen algo: cuanto se gasta por dia y
-            que dia de la semana pega mas fuerte. */}
-        {!isLoadingWindow && (dailyAvg > 0 || peakDay) && (
-          <div className="px-4 py-2 grid grid-cols-2 gap-3">
-            {dailyAvg > 0 && (
-              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
-                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wide">{t('analytics_daily_avg')}</p>
-                <p className="text-lg font-extrabold uv-text-primary mt-1 tabular-nums">{formatCurrency(dailyAvg)}</p>
-              </div>
-            )}
-            {peakDay && peakDay.value > 0 && (
-              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
-                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wide">{t('analytics_peak_day')}</p>
-                <p className="text-lg font-extrabold uv-text-primary mt-1">{peakDay.name}</p>
-                <p className="text-xs uv-text-muted tabular-nums">{formatCurrency(peakDay.value)}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Category Breakdown */}
-        <div className="px-4 py-2">
-          <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold uv-text-muted">{t('analytics_by_category')}</h3>
-              <span className="text-xs font-bold text-gray-400">{formatCurrency(categoryData.total)}</span>
-            </div>
-
-            {categoryData.items.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-gray-400">
-                <Icons.PiggyBank size={40} className="mb-3 opacity-40" />
-                <p className="text-sm font-medium">{t('analytics_no_expenses')}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {categoryData.items.map((item, i) => {
-                  const config = getCategoryConfig(item.category);
-                  return (
-                    <div key={item.category} className="animate-stagger" style={{ animationDelay: `${i * 60}ms` }}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${config.bg} ${config.darkBg}`}>
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: config.color }} />
-                          </div>
-                          <span className="text-sm font-bold uv-text-primary">{categoryLabel(item.category)}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-sm font-extrabold uv-text-primary">
-                            {formatCurrency(item.amount)}
-                          </span>
-                          <span className="text-xs text-gray-400 ml-2">{item.percentage.toFixed(1)}%</span>
-                        </div>
-                      </div>
-                      {/* Progress bar */}
-                      <div className="h-2.5 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-700 ease-out animate-bar-grow"
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: config.color,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Principales movimientos: nombres y montos reales, lo que el usuario
-            reconoce. Filtro por direccion en chips. */}
-        {!isLoadingWindow && (
-          <div className="px-4 py-2">
-            <div className="uv-surface-1 rounded-3xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <h3 className="text-sm font-bold uv-text-muted">{t('analytics_top_moves')}</h3>
-                <div className="flex gap-1">
-                  {([['all', 'analytics_dir_all'], ['in', 'analytics_dir_in'], ['out', 'analytics_dir_out']] as const).map(([dir, key]) => (
+          {analisis && (analisis.monedas.length > 1 || analisis.otrasMonedas > 0) && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              {analisis.monedas.length > 1 && (
+                <div
+                  className={`flex p-1 rounded-full ${RELLENO}`}
+                  role="group"
+                  aria-label={t('analytics_currency_label')}
+                >
+                  {analisis.monedas.map((ccy) => (
                     <button
-                      key={dir}
-                      onClick={() => setDirection(dir)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
-                        direction === dir
-                          ? 'bg-[var(--color-primary)] text-white'
-                          : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
+                      key={ccy}
+                      type="button"
+                      aria-pressed={analisis.moneda === ccy}
+                      onClick={() => setMonedaElegida(ccy)}
+                      className={`h-9 px-4 rounded-full text-sm font-bold transition-colors uv-focus-ring ${
+                        analisis.moneda === ccy
+                          ? 'uv-surface-1 uv-text-primary shadow-[var(--shadow-soft)]'
+                          : 'border border-transparent uv-text-muted'
                       }`}
                     >
-                      {t(key)}
+                      {nombreMoneda(ccy)}
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {topMoves.length === 0 ? (
-                <p className="text-sm uv-text-muted py-4 text-center">{t('analytics_no_moves')}</p>
-              ) : (
-                <div className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
-                  {topMoves.map((tx) => {
-                    const incoming = tx.amount > 0;
-                    return (
-                      <div key={tx.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
-                          {incoming ? <Icons.ArrowDownLeft size={16} /> : <Icons.ArrowUpRight size={16} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold uv-text-primary truncate">{txTitle(tx, t)}</p>
-                          <p className="text-xs uv-text-muted">{tx.date}</p>
-                        </div>
-                        <span className={`text-sm font-bold tabular-nums shrink-0 ${incoming ? 'text-green-600 dark:text-green-400' : 'uv-text-primary'}`}>
-                          {incoming ? '+' : ''}{formatCurrency(tx.amount)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+              )}
+              {analisis.otrasMonedas > 0 && (
+                <p className="flex items-center gap-1.5 text-xs uv-text-muted">
+                  <Icons.Info size={14} aria-hidden="true" />
+                  {t('other_currency_note').replace('{n}', String(analisis.otrasMonedas))}
+                </p>
               )}
             </div>
+          )}
+
+          {!analisis ? (
+            <Esqueleto aviso={t('analytics_loading_slow')} />
+          ) : sinDatos ? (
+            <section className={`${TARJETA} mt-4 flex flex-col items-center text-center py-10`} role="alert">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center uv-chip-warning mb-4">
+                <Icons.AlertTriangle size={26} aria-hidden="true" />
+              </div>
+              <h2 className="text-base font-bold uv-text-primary">{t('analytics_load_failed')}</h2>
+              <button
+                type="button"
+                onClick={() => setIntento((n) => n + 1)}
+                className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold uv-focus-ring"
+              >
+                {t('error_retry')}
+              </button>
+            </section>
+          ) : analisis.vacio ? (
+            <section
+              className={`${TARJETA} mt-4 flex flex-col items-center text-center py-10 transition-opacity duration-200 ${desactualizada ? 'opacity-50' : ''}`}
+              aria-busy={cargando}
+            >
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[var(--color-primary-soft)] text-[var(--color-primary)] mb-4">
+                <Icons.Calendar size={26} aria-hidden="true" />
+              </div>
+              <h2 className="text-base font-bold uv-text-primary">{t('analytics_no_moves')}</h2>
+              <p className="mt-1 text-sm uv-text-muted max-w-xs">{t('analytics_empty_hint')}</p>
+              {!mismosRangos(rango, rangoPreset('este_ano', hoy)) && (
+                <button
+                  type="button"
+                  onClick={() => setRango(rangoPreset('este_ano', hoy))}
+                  className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold uv-focus-ring"
+                >
+                  {t('analytics_preset_this_year')}
+                </button>
+              )}
+            </section>
+          ) : (
+            <div
+              aria-busy={cargando}
+              className={`mt-4 grid gap-4 lg:grid-cols-12 transition-opacity duration-200 ${desactualizada ? 'opacity-50' : 'opacity-100'}`}
+            >
+              {/* Balance: el neto manda; ingresos y gastos en una misma escala. */}
+              <section aria-labelledby="an-balance" className={`${TARJETA} lg:col-span-5`}>
+                <h2 id="an-balance" className="text-sm font-semibold uv-text-secondary">
+                  {t('analytics_balance_title')}
+                </h2>
+                <p className={`mt-1 text-[2rem] leading-tight font-extrabold tracking-tight break-words ${analisis.neto >= 0 ? TEXTO_INGRESO : TEXTO_GASTO}`}>
+                  {analisis.neto >= 0 ? '+' : '-'}
+                  {formatoMonto(Math.abs(analisis.neto))}
+                </p>
+                <p className="text-xs uv-text-muted">{t('analytics_balance_hint')}</p>
+
+                <div className="mt-5 space-y-3.5">
+                  <BarraMonto
+                    etiqueta={t('analytics_dir_in')}
+                    monto={formatoMonto(analisis.ingresos)}
+                    fraccion={analisis.ingresos / Math.max(analisis.ingresos, analisis.gastos, 0.01)}
+                    color={COLOR.ingreso}
+                    claseTexto={TEXTO_INGRESO}
+                  />
+                  <BarraMonto
+                    etiqueta={t('analytics_dir_out')}
+                    monto={formatoMonto(analisis.gastos)}
+                    fraccion={analisis.gastos / Math.max(analisis.ingresos, analisis.gastos, 0.01)}
+                    color={COLOR.gasto}
+                    claseTexto={TEXTO_GASTO}
+                  />
+                </div>
+
+                {analisis.ingresos > 0 && analisis.gastos > 0 && (
+                  <p className="mt-4 text-sm font-medium uv-text-secondary">
+                    {t('analytics_spent_share').replace('{pct}', String(Math.round((analisis.gastos / analisis.ingresos) * 100)))}
+                  </p>
+                )}
+                <p className="mt-1 text-xs uv-text-muted">
+                  {t('analytics_tx_line')
+                    .replace('{total}', contar(analisis.cantidadIngresos + analisis.cantidadGastos, 'analytics_tx_count'))
+                    .replace('{in}', contar(analisis.cantidadIngresos, 'analytics_tx_in'))
+                    .replace('{out}', contar(analisis.cantidadGastos, 'analytics_tx_out'))}
+                </p>
+
+                {(analisis.promedioDiario > 0 || analisis.diaPico) && (
+                  <dl className="mt-5 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] grid grid-cols-2 gap-4">
+                    <div className="min-w-0">
+                      <dt className="text-xs uv-text-muted">{t('analytics_daily_avg')}</dt>
+                      <dd className="mt-0.5 text-base font-bold uv-text-primary truncate">{formatoMonto(analisis.promedioDiario)}</dd>
+                    </div>
+                    {analisis.diaPico && (
+                      <div className="min-w-0">
+                        <dt className="text-xs uv-text-muted">{t('analytics_peak_day')}</dt>
+                        <dd className="mt-0.5 text-base font-bold uv-text-primary truncate">{nombreDia(analisis.diaPico.dia)}</dd>
+                        <dd className="text-xs uv-text-muted tabular-nums truncate">{formatoMonto(analisis.diaPico.monto)}</dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+              </section>
+
+              {/* Flujo por tramos del periodo. */}
+              <section aria-labelledby="an-flujo" className={`${TARJETA} lg:col-span-7`}>
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-4">
+                  <div>
+                    <h2 id="an-flujo" className="text-sm font-semibold uv-text-primary">{t('analytics_flow_title')}</h2>
+                    <p className="text-xs uv-text-muted">
+                      {t(analisis.granularidad === 'dia' ? 'analytics_group_day' : analisis.granularidad === 'semana' ? 'analytics_group_week' : 'analytics_group_month')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs font-medium uv-text-secondary">
+                    <Leyenda color={COLOR.ingreso} texto={t('analytics_dir_in')} />
+                    <Leyenda color={COLOR.gasto} texto={t('analytics_dir_out')} />
+                  </div>
+                </div>
+                <GraficoFlujo
+                  tramos={analisis.tramos.map((tr) => ({
+                    clave: tr.clave,
+                    etiqueta: etiquetaDeTramo(
+                      tr,
+                      analisis.granularidad,
+                      language,
+                      rangoMostrado.desde.slice(0, 4) !== rangoMostrado.hasta.slice(0, 4) && analisis.tramos.length > 12,
+                    ),
+                    etiquetaLarga: etiquetaLargaDeTramo(tr, analisis.granularidad, language),
+                    ingresos: tr.ingresos,
+                    gastos: tr.gastos,
+                  }))}
+                  formatoEje={formatoCompacto}
+                  formatoMonto={formatoMonto}
+                  alto={escritorio ? 280 : 220}
+                  rotulos={{
+                    ingresos: t('analytics_dir_in'),
+                    gastos: t('analytics_dir_out'),
+                    neto: t('net_balance'),
+                    tabla: t('analytics_chart_table'),
+                    ayuda: t('analytics_chart_help'),
+                  }}
+                />
+              </section>
+
+              {/* Contra el periodo anterior, en los mismos dias. */}
+              <section aria-labelledby="an-comparacion" className={`${TARJETA} lg:col-span-5`}>
+                <h2 id="an-comparacion" className="text-sm font-semibold uv-text-primary">{t('analytics_compare_title')}</h2>
+                {anteriorListo && anteriorIncompleto && primeraFecha ? (
+                  <p className="mt-4 flex items-start gap-2 text-sm uv-text-muted">
+                    <Icons.Info size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                    {t('analytics_compare_partial').replace('{fecha}', fechaLarga(primeraFecha))}
+                  </p>
+                ) : anteriorListo ? (
+                  <Comparacion
+                    actual={{ ingresos: analisis.ingresos, gastos: analisis.gastos }}
+                    previo={totalesEn(anteriorListo.resumen.groups, analisis.moneda)}
+                    nombrePrevio={nombreDeRango(anteriorListo.rango, language)}
+                    formato={formatoCompacto}
+                  />
+                ) : carga?.fallo || (anterior?.clave === carga?.clave && anterior?.estado === 'fallo') ? (
+                  <p className="mt-4 flex items-start gap-2 text-sm uv-text-muted">
+                    <Icons.Info size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                    {t('analytics_compare_failed')}
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3 animate-pulse" aria-hidden="true">
+                    <div className={`h-3 w-32 rounded ${RELLENO}`} />
+                    <div className={`h-16 rounded-xl ${RELLENO}`} />
+                    <div className={`h-16 rounded-xl ${RELLENO}`} />
+                  </div>
+                )}
+              </section>
+
+              {/* Gastos por categoria: las porciones suman la cifra del centro. */}
+              <section aria-labelledby="an-categorias" className={`${TARJETA} lg:col-span-7`}>
+                <h2 id="an-categorias" className="text-sm font-semibold uv-text-primary">{t('analytics_by_category')}</h2>
+                {analisis.categorias.length === 0 ? (
+                  <div className="flex flex-col items-center py-8 uv-text-muted">
+                    <Icons.PiggyBank size={36} className="mb-2 opacity-60" aria-hidden="true" />
+                    <p className="text-sm font-medium">{t('analytics_no_expenses')}</p>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-col sm:flex-row items-center gap-6">
+                    {/* El centro es angosto: montos compactos; los exactos van en la lista. */}
+                    <GraficoDonaCategorias
+                      porciones={analisis.categorias.map((c) => ({ ...c, nombre: nombreCategoria(c.categoria) }))}
+                      formatoMonto={formatoCompacto}
+                      etiquetaAccesible={t('analytics_categories_chart').replace(
+                        '{detalle}',
+                        analisis.categorias.map((c) => `${nombreCategoria(c.categoria)} ${c.porcentaje.toFixed(1)}%`).join(', '),
+                      )}
+                    >
+                      <p className="text-xs uv-text-muted">{t('analytics_spent_center')}</p>
+                      <p className="text-lg font-extrabold uv-text-primary leading-tight">{formatoCompacto(analisis.gastos)}</p>
+                    </GraficoDonaCategorias>
+                    <ul className="w-full flex-1 min-w-0 space-y-3">
+                      {analisis.categorias.map((c) => (
+                        <li key={c.categoria}>
+                          <div className="flex items-center gap-2.5">
+                            <span aria-hidden="true" className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ backgroundColor: colorDeCategoria(c.categoria) }} />
+                            <span className="flex-1 min-w-0 truncate text-sm font-semibold uv-text-primary">{nombreCategoria(c.categoria)}</span>
+                            <span className="text-sm font-bold uv-text-primary tabular-nums">{formatoMonto(c.monto)}</span>
+                            <span className="w-12 text-right text-xs uv-text-muted tabular-nums">{c.porcentaje.toFixed(1)}%</span>
+                          </div>
+                          <div className={`mt-1.5 ml-5 h-1.5 rounded-full overflow-hidden ${RELLENO}`}>
+                            <div
+                              className="h-full rounded-full transition-[width] duration-500 ease-out"
+                              style={{ width: `${Math.max(c.porcentaje, 1)}%`, backgroundColor: colorDeCategoria(c.categoria) }}
+                            />
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+
+              {/* Principales movimientos: nombres y montos que el usuario reconoce. */}
+              <section aria-labelledby="an-principales" className={`${TARJETA} lg:col-span-12`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 id="an-principales" className="text-sm font-semibold uv-text-primary">{t('analytics_top_moves')}</h2>
+                  <div className={`flex p-1 rounded-full ${RELLENO}`} role="group" aria-label={t('analytics_top_moves')}>
+                    {([['all', 'analytics_dir_all'], ['in', 'analytics_dir_in'], ['out', 'analytics_dir_out']] as const).map(([dir, key]) => (
+                      <button
+                        key={dir}
+                        type="button"
+                        aria-pressed={direccion === dir}
+                        onClick={() => setDireccion(dir)}
+                        className={`h-8 px-3.5 rounded-full text-xs font-bold transition-colors uv-focus-ring ${
+                          direccion === dir ? 'uv-surface-1 uv-text-primary shadow-[var(--shadow-soft)]' : 'border border-transparent uv-text-muted'
+                        }`}
+                      >
+                        {t(key)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Principales
+                  movimientos={analisis.principales
+                    .filter((tx) => (direccion === 'all' ? true : direccion === 'in' ? tx.amount > 0 : tx.amount < 0))
+                    .slice(0, PRINCIPALES_VISIBLES[direccion])}
+                  formatoMonto={formatoMonto}
+                  locale={locale}
+                  vacio={t('analytics_no_moves')}
+                  titulo={(tx) => txTitle(tx, t)}
+                />
+              </section>
+            </div>
+          )}
+
+          {analisis && !sinDatos && (
+            <p className="mt-6 text-center text-xs uv-text-muted">{t('analytics_footnote')}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AvisoFallo: React.FC<{ texto: string; reintentar: string; onReintentar: () => void }> = ({ texto, reintentar, onReintentar }) => (
+  <div className="mt-3 flex items-start gap-2 rounded-2xl uv-chip-warning px-3 py-2.5 text-xs font-medium" role="status">
+    <Icons.AlertTriangle size={16} className="shrink-0 mt-px" aria-hidden="true" />
+    <p className="flex-1">{texto}</p>
+    <button type="button" onClick={onReintentar} className="shrink-0 font-bold underline underline-offset-2 uv-focus-ring rounded">
+      {reintentar}
+    </button>
+  </div>
+);
+
+const Leyenda: React.FC<{ color: string; texto: string }> = ({ color, texto }) => (
+  <span className="inline-flex items-center gap-1.5">
+    <span aria-hidden="true" className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: color }} />
+    {texto}
+  </span>
+);
+
+const BarraMonto: React.FC<{ etiqueta: string; monto: string; fraccion: number; color: string; claseTexto: string }> = ({
+  etiqueta,
+  monto,
+  fraccion,
+  color,
+  claseTexto,
+}) => (
+  <div>
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-sm font-medium uv-text-secondary">{etiqueta}</span>
+      <span className={`text-base font-bold tabular-nums truncate ${claseTexto}`}>{monto}</span>
+    </div>
+    <div className={`mt-1.5 h-2 rounded-full overflow-hidden ${RELLENO}`}>
+      <div
+        className="h-full rounded-full transition-[width] duration-500 ease-out"
+        style={{ width: `${fraccion > 0 ? Math.max(fraccion * 100, 1.5) : 0}%`, backgroundColor: color }}
+      />
+    </div>
+  </div>
+);
+
+const Comparacion: React.FC<{
+  actual: { ingresos: number; gastos: number };
+  previo: { ingresos: number; gastos: number };
+  nombrePrevio: string;
+  formato: (n: number) => string;
+}> = ({ actual, previo, nombrePrevio, formato }) => {
+  const { t } = useLanguage();
+  const maximo = Math.max(actual.ingresos, actual.gastos, previo.ingresos, previo.gastos, 0.01);
+  const pctGastos = variacion(actual.gastos, previo.gastos);
+  const rotulos = { actual: t('analytics_this_period'), anterior: t('analytics_prev_short') };
+
+  let frase: string;
+  if (pctGastos === null) frase = t('analytics_vs_none');
+  else if (pctGastos <= -1) frase = t('analytics_vs_less').replace('{pct}', Math.abs(pctGastos).toFixed(0));
+  else if (pctGastos >= 1) frase = t('analytics_vs_more').replace('{pct}', pctGastos.toFixed(0));
+  else frase = t('analytics_vs_flat');
+  frase = frase.replace('{prev}', nombrePrevio);
+
+  return (
+    <div>
+      <p className="text-xs uv-text-muted">{nombrePrevio}</p>
+      <div className="mt-4 space-y-4">
+        <BloqueComparacion titulo={t('analytics_dir_in')} pct={variacion(actual.ingresos, previo.ingresos)} subirEsBueno>
+          <GraficoComparacion actual={actual.ingresos} anterior={previo.ingresos} maximo={maximo} color={COLOR.ingreso} rotulos={rotulos} formato={formato} />
+        </BloqueComparacion>
+        <BloqueComparacion titulo={t('analytics_dir_out')} pct={pctGastos} subirEsBueno={false}>
+          <GraficoComparacion actual={actual.gastos} anterior={previo.gastos} maximo={maximo} color={COLOR.gasto} rotulos={rotulos} formato={formato} />
+        </BloqueComparacion>
+      </div>
+      <p className="mt-4 text-sm font-medium uv-text-secondary">{frase}</p>
+    </div>
+  );
+};
+
+const BloqueComparacion: React.FC<{ titulo: string; pct: number | null; subirEsBueno: boolean; children: React.ReactNode }> = ({
+  titulo,
+  pct,
+  subirEsBueno,
+  children,
+}) => {
+  let chip: React.ReactNode = null;
+  if (pct !== null) {
+    const plano = Math.abs(pct) < 1;
+    const bueno = subirEsBueno ? pct > 0 : pct < 0;
+    const clase = plano ? 'uv-chip-info' : bueno ? 'uv-chip-success' : 'uv-chip-danger';
+    const Icono = pct >= 0 ? Icons.TrendingUp : Icons.TrendingDown;
+    chip = (
+      <span className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-xs font-bold tabular-nums ${clase}`}>
+        {!plano && <Icono size={13} aria-hidden="true" />}
+        {pct > 0 && !plano ? '+' : ''}
+        {plano ? '0' : pct.toFixed(0)}%
+      </span>
+    );
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-semibold uv-text-primary">{titulo}</span>
+        {chip}
+      </div>
+      {children}
+    </div>
+  );
+};
+
+const Principales: React.FC<{
+  movimientos: Transaction[];
+  formatoMonto: (n: number) => string;
+  locale: string;
+  vacio: string;
+  titulo: (tx: Transaction) => string;
+}> = ({ movimientos, formatoMonto, locale, vacio, titulo }) => {
+  if (movimientos.length === 0) {
+    return <p className="text-sm uv-text-muted py-6 text-center">{vacio}</p>;
+  }
+  const fecha = (iso?: string, respaldo?: string) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    if (Number.isNaN(ms)) return respaldo ?? '';
+    try {
+      return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Costa_Rica' }).format(ms);
+    } catch {
+      return respaldo ?? '';
+    }
+  };
+  return (
+    <ul className="mt-2 grid lg:grid-cols-2 lg:gap-x-10">
+      {movimientos.map((tx) => {
+        const entra = tx.amount > 0;
+        return (
+          <li
+            key={tx.id}
+            className="flex items-center gap-3 py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] last:border-b-0 lg:[&:nth-last-child(2):nth-child(odd)]:border-b-0"
+          >
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${entra ? 'uv-chip-success' : 'uv-chip-danger'}`}>
+              {entra ? <Icons.ArrowDownLeft size={16} aria-hidden="true" /> : <Icons.ArrowUpRight size={16} aria-hidden="true" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold uv-text-primary truncate">{titulo(tx)}</p>
+              <p className="text-xs uv-text-muted">{fecha(tx.dateISO, tx.date)}</p>
+            </div>
+            <span className={`text-sm font-bold tabular-nums shrink-0 ${entra ? TEXTO_INGRESO : TEXTO_GASTO}`}>
+              {entra ? '+' : ''}
+              {formatoMonto(tx.amount)}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
+/**
+ * Esqueleto de la primera carga. Si la espera se alarga (el servidor puede
+ * estar despertando), lo dice con texto: un bloque gris que no cambia parece
+ * una pantalla colgada.
+ */
+const Esqueleto: React.FC<{ aviso: string }> = ({ aviso }) => {
+  const [larga, setLarga] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setLarga(true), ESPERA_LARGA_MS);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div className="mt-4">
+      <p role="status" aria-live="polite" className={`mb-3 min-h-[1.25rem] text-sm uv-text-muted text-center transition-opacity duration-300 ${larga ? 'opacity-100' : 'opacity-0'}`}>
+        {larga ? aviso : ''}
+      </p>
+      <div className="grid gap-4 lg:grid-cols-12 animate-pulse" aria-hidden="true">
+        {['lg:col-span-5 h-72', 'lg:col-span-7 h-72', 'lg:col-span-12 h-56'].map((c) => (
+          <div key={c} className={`${TARJETA} ${c}`}>
+            <div className={`h-3 w-28 rounded ${RELLENO}`} />
+            <div className={`mt-3 h-8 w-44 rounded ${RELLENO}`} />
+            <div className={`mt-6 h-24 rounded-xl ${RELLENO}`} />
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

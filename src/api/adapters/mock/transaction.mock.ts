@@ -2,10 +2,13 @@ import type {
   ITransactionRepository,
   TransactionListParams,
   TransactionPage,
+  TransactionSummary,
+  TransactionSummaryParams,
 } from '../../repositories/transaction.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess } from '../../types';
 import type { Transaction } from '@/types';
+import { resumirMovimientos } from '@/utils/resumenMovimientos';
 import { initialTransactions } from './mock-data';
 
 const STORAGE_KEY = 'kiramopay_app_state';
@@ -63,6 +66,11 @@ export class MockTransactionRepository implements ITransactionRepository {
     const offset = params.offset ?? 0;
     const limit = params.limit ?? total;
     return apiSuccess({ transactions: txs.slice(offset, offset + limit), total });
+  }
+
+  // El mismo resumen que arma el servidor, calculado sobre los datos simulados.
+  async getSummary(params: TransactionSummaryParams): Promise<ApiResponse<TransactionSummary>> {
+    return apiSuccess(resumirMovimientos(getTransactions(), { desde: params.from, hasta: params.to }));
   }
 
 }

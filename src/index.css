@@ -328,3 +328,97 @@ input[type='number']::-webkit-inner-spin-button {
     animation: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Graficos (SVG propio: estos valores llegan por var() al fill/stroke)
+   ───────────────────────────────────────────────────────────────────────────
+   Cada tema tiene sus propios pasos, elegidos para su superficie (no una
+   inversion automatica). Categorias: azul, naranja, violeta y ciruela/rosa,
+   validadas para daltonismo con todos los pares en los dos temas; ver
+   components/graficos/tokens.ts.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --grafico-ingreso: #139E68;
+  --grafico-gasto: #E5484D;
+  --grafico-anterior: #B8C5DB;
+  --grafico-rejilla: #E4EAF3;
+  --grafico-eje: #5E73A0;
+  --grafico-texto: #3A4E78;
+  --grafico-cursor: rgba(45, 123, 255, 0.08);
+  --grafico-cat-1: #2A78D6;
+  --grafico-cat-2: #EB6834;
+  --grafico-cat-3: #B699EB;
+  --grafico-cat-4: #94436D;
+  --grafico-cat-otros: #888892;
+}
+.dark {
+  --grafico-ingreso: #22C98A;
+  --grafico-gasto: #F26B6B;
+  --grafico-anterior: #3A4E78;
+  --grafico-rejilla: #1F2F52;
+  --grafico-eje: #8FA3C2;
+  --grafico-texto: #B8C5DB;
+  --grafico-cursor: rgba(130, 176, 255, 0.10);
+  --grafico-cat-1: #3987E5;
+  --grafico-cat-2: #D95926;
+  --grafico-cat-3: #7750B1;
+  --grafico-cat-4: #DF5BA1;
+  --grafico-cat-otros: #606060;
+}
+
+/* Las barras crecen desde el cero (el origen lo pone el grafico) y la dona
+   aparece. Un solo gesto por grafico; con movimiento reducido no corre. */
+@keyframes kp-crecer-barras {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.kp-crecer-barras {
+  transform-box: view-box;
+  animation: kp-crecer-barras 450ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes kp-aparecer {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.kp-aparecer {
+  transform-origin: center;
+  animation: kp-aparecer 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Calendario de rangos (react-day-picker) con los tokens de la app
+   ═══════════════════════════════════════════════════════════════════════════ */
+.kp-calendario .rdp-root {
+  --rdp-accent-color: var(--color-primary);
+  --rdp-accent-background-color: var(--color-primary-soft);
+  --rdp-day-height: 44px;
+  --rdp-day-width: 44px;
+  --rdp-day_button-height: 40px;
+  --rdp-day_button-width: 40px;
+  --rdp-day_button-border-radius: 12px;
+  --rdp-selected-border: 2px solid var(--color-primary);
+  --rdp-today-color: var(--color-primary);
+  --rdp-range_middle-background-color: var(--color-primary-soft);
+  --rdp-range_middle-color: var(--color-text-primary);
+  --rdp-nav_button-height: 2.75rem;
+  --rdp-nav_button-width: 2.75rem;
+  --rdp-nav-height: 2.75rem;
+  --rdp-weekday-opacity: 1;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  margin-inline: auto;
+  width: fit-content;
+}
+.dark .kp-calendario .rdp-root {
+  --rdp-accent-background-color: rgba(79, 144, 255, 0.22);
+  --rdp-range_middle-background-color: rgba(79, 144, 255, 0.22);
+  --rdp-range_middle-color: var(--color-text-primary-dark);
+  color: var(--color-text-primary-dark);
+}
+.kp-calendario .rdp-caption_label { font-size: 15px; font-weight: 700; text-transform: capitalize; }
+.kp-calendario .rdp-chevron { fill: var(--color-primary); }
+.kp-calendario .rdp-weekday { color: var(--color-text-muted); font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.dark .kp-calendario .rdp-weekday { color: var(--color-text-muted-dark); }
+.kp-calendario .rdp-day_button { font-size: 14px; font-weight: 500; }
+.kp-calendario .rdp-day_button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.kp-calendario .rdp-today:not(.rdp-selected) .rdp-day_button { font-weight: 800; }

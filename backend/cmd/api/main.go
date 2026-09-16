@@ -917,6 +917,7 @@ func main() {
 			// Transactions
 			r.Post("/transactions", txHandler.Create)
 			r.Get("/transactions", txHandler.List)
+			r.Get("/transactions/summary", txHandler.Summary)
 			r.Get("/transactions/{id}", txHandler.Get)
 
 			// B2B platform management (API keys + webhooks)
