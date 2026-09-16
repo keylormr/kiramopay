@@ -126,6 +126,15 @@ describe('MockCryptoRepository', () => {
       const otra = await repo.unstake(alta.data!.id);
       expect(otra.error?.code).toBe('STAKING_POSITION_NOT_FOUND');
     });
+
+    // Como el servidor: el alta y el retiro quedan en el historial, sin precio.
+    it('el alta y el retiro quedan en el historial', async () => {
+      const alta = await repo.stake({ asset: 'ETH', amount: 0.1, locked: false });
+      await repo.unstake(alta.data!.id);
+      const [retiro, apartado] = (await repo.getTransactions()).data!;
+      expect(retiro).toMatchObject({ type: 'unstake', fromAsset: 'ETH', fromAmount: 0.1, price: 0, fee: 0 });
+      expect(apartado).toMatchObject({ type: 'stake', fromAsset: 'ETH', fromAmount: 0.1, price: 0, fee: 0 });
+    });
   });
 
   describe('price alerts', () => {

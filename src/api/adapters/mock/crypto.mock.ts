@@ -45,6 +45,20 @@ function nuevoId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Apartar o liberar se anota sin precio: el activo solo cambia de lugar.
+function movimientoDeStaking(type: 'stake' | 'unstake', asset: string, amount: number): CryptoTransaction {
+  return {
+    id: nuevoId(),
+    type,
+    fromAsset: asset,
+    fromAmount: amount,
+    price: 0,
+    fee: 0,
+    date: new Date().toISOString(),
+    status: 'completed',
+  };
+}
+
 function saveCryptoState(crypto: Record<string, unknown>) {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
@@ -177,6 +191,8 @@ export class MockCryptoRepository implements ICryptoRepository {
       lockPeriodDays: request.lockDays,
     };
     crypto.stakingPositions = [...crypto.stakingPositions, position];
+    // Como el servidor: apartar tambien queda en el historial.
+    crypto.transactions = [movimientoDeStaking('stake', position.asset, position.amount), ...crypto.transactions];
     saveCryptoState(crypto);
     return apiSuccess(position);
   }
@@ -191,6 +207,10 @@ export class MockCryptoRepository implements ICryptoRepository {
       asset.balance += position.amount + position.earned;
     }
     crypto.stakingPositions = crypto.stakingPositions.filter((p: StakingPosition) => p.id !== positionId);
+    crypto.transactions = [
+      movimientoDeStaking('unstake', position.asset, position.amount + position.earned),
+      ...crypto.transactions,
+    ];
     saveCryptoState(crypto);
     return apiSuccess(undefined as unknown as void);
   }

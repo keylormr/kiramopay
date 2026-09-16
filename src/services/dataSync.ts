@@ -118,6 +118,9 @@ export async function refreshAccounts(): Promise<void> {
   }
 }
 
+// Numero de la ultima carga de cripto pedida (ver refreshCrypto).
+let ultimaCargaCripto = 0;
+
 /**
  * Trae del servidor todo lo de cripto: tenencias, movimientos y posiciones de
  * staking.
@@ -129,10 +132,17 @@ export async function refreshAccounts(): Promise<void> {
  * arreglaba, porque nada le pedia al servidor el estado real. Llamarla al
  * abrir la pantalla tambien repara las posiciones que ya quedaron guardadas
  * con el id falso.
+ *
+ * Los movimientos REEMPLAZAN la lista local, sin fusionar: el servidor anota
+ * compra, venta, conversion, alta y retiro de staking, que es todo lo que
+ * mueve cripto de verdad. Lo que la lista local tenga ademas (un envio, que no
+ * tiene servidor detras) no ocurrio en ningun lado, y conservarlo seria
+ * mostrar un movimiento que nadie respalda.
  */
 export async function refreshCrypto(): Promise<void> {
   if (!hasBackend) return;
   const generacion = generacionActual();
+  const carga = ++ultimaCargaCripto;
   const api = getApiLayer();
   const [activos, movimientos, posiciones] = await Promise.allSettled([
     api.crypto.getAssets(),
@@ -140,6 +150,10 @@ export async function refreshCrypto(): Promise<void> {
     api.crypto.getStakingPositions(),
   ]);
   if (!sigueVigente(generacion)) return;
+  // Solo escribe la carga mas reciente. La pantalla pide una al abrir y otra
+  // tras cada operacion: si la primera contestaba al final, pisaba la lista
+  // con una foto de antes de la operacion y el movimiento nuevo desaparecia.
+  if (carga !== ultimaCargaCripto) return;
   const store = useCryptoStore.getState();
   if (activos.status === 'fulfilled' && activos.value.success && activos.value.data) {
     store.setAssets(fusionarConCatalogo(activos.value.data));

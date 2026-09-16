@@ -420,13 +420,15 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       case 'STAKE_CRYPTO': {
         const { asset, amount } = action.payload;
         crypto.stakeCrypto(action.payload);
-        const currentAsset = crypto.assets.find((a) => a.symbol === asset);
+        // Sin precio, igual que lo anota el servidor: apartar no compra ni
+        // vende nada. Con el precio del momento, la fila mostraba un valor en
+        // dolares que desaparecia en cuanto llegaba la lista del servidor.
         const stakeTx = {
           id: `ctx-${Date.now()}`,
           type: 'stake' as const,
           fromAsset: asset,
           fromAmount: amount,
-          price: currentAsset?.currentPrice || 0,
+          price: 0,
           fee: 0,
           date: new Date().toISOString(),
           status: 'completed' as const,
@@ -444,14 +446,13 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           (p) => p.id === action.payload.positionId,
         );
         if (position) {
-          const currentAsset = crypto.assets.find((a) => a.symbol === position.asset);
           crypto.unstakeCrypto(action.payload.positionId);
           const unstakeTx = {
             id: `ctx-${Date.now()}`,
             type: 'unstake' as const,
             fromAsset: position.asset,
             fromAmount: position.amount + position.earned,
-            price: currentAsset?.currentPrice || 0,
+            price: 0,
             fee: 0,
             date: new Date().toISOString(),
             status: 'completed' as const,

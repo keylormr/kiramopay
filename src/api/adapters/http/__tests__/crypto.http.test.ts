@@ -105,6 +105,20 @@ describe('HttpCryptoRepository — cada movimiento se lee segun su tipo', () => 
     });
   });
 
+  // Asi anota el servidor apartar y liberar: sin precio, con la cantidad en
+  // `total` y el propio activo en `currency`.
+  it('staking: el alta y el retiro salen con su cantidad y sin precio', async () => {
+    const repo = new HttpCryptoRepository(clientReturning([
+      fila({ id: 'u1', type: 'unstake', asset: 'ETH', amount: '0.25', total: '0.25', currency: 'ETH' }),
+      fila({ id: 's1', type: 'stake', asset: 'ETH', amount: '0.25', total: '0.25', currency: 'ETH' }),
+    ]));
+    const [retiro, alta] = (await repo.getTransactions()).data!;
+    expect(retiro).toMatchObject({ type: 'unstake', fromAsset: 'ETH', fromAmount: 0.25, price: 0, fee: 0 });
+    expect(alta).toMatchObject({ type: 'stake', fromAsset: 'ETH', fromAmount: 0.25, price: 0, fee: 0 });
+    expect(alta.toAsset).toBeUndefined();
+    expect(alta.toAmount).toBeUndefined();
+  });
+
   it('una fecha invalida no rompe la lista', async () => {
     const repo = new HttpCryptoRepository(clientReturning([
       fila({ type: 'buy', asset: 'BTC', amount: '1', total: '1', created_at: 'no-es-fecha' }),

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     movimientos: [] as CryptoTransaction[],
     tenencias: [] as CryptoAsset[],
     esperar: null as null | Promise<void>,
+    esperarMovimientos: null as null | Promise<void>,
   };
 });
 
@@ -26,7 +27,14 @@ vi.mock('@/api', () => ({
         if (mocks.esperar) await mocks.esperar;
         return { success: true, data: mocks.tenencias };
       },
-      getTransactions: async () => ({ success: true, data: mocks.movimientos }),
+      getTransactions: async () => {
+        // La foto es la del momento de la peticion, como en el servidor.
+        const data = mocks.movimientos;
+        const espera = mocks.esperarMovimientos;
+        mocks.esperarMovimientos = null;
+        if (espera) await espera;
+        return { success: true, data };
+      },
       getStakingPositions: async () => ({ success: true, data: mocks.posiciones }),
     },
   }),
@@ -43,6 +51,7 @@ function activo(symbol: string, extra: Partial<CryptoAsset> = {}): CryptoAsset {
 
 beforeEach(() => {
   mocks.esperar = null;
+  mocks.esperarMovimientos = null;
   mocks.tenencias = [activo('ETH', { balance: 0.5, avgBuyPrice: 2400 })];
   mocks.movimientos = [{
     id: 'm1', type: 'buy', fromAsset: 'USD', fromAmount: 1, toAsset: 'ETH', toAmount: 0.0004,
@@ -80,6 +89,27 @@ describe('refreshCrypto', () => {
     expect(eth.icon).toBe('Ξ');
     // El catalogo completo sigue ahi para poder comprar lo que no se tiene.
     expect(s.assets.some((a) => a.symbol === 'BTC')).toBe(true);
+  });
+
+  // El servidor anota el alta y el retiro de staking. La pantalla carga al
+  // abrir y otra vez tras la operacion; si la carga del montaje contestaba al
+  // final, pisaba la lista con una foto sin el alta y la fila desaparecia.
+  it('una carga vieja que contesta tarde no pisa a la que trae el alta', async () => {
+    let soltar: () => void = () => {};
+    mocks.esperarMovimientos = new Promise<void>((r) => { soltar = r; });
+    const delMontaje = refreshCrypto();
+
+    const alta: CryptoTransaction = {
+      id: 's1', type: 'stake', fromAsset: 'ETH', fromAmount: 0.0001, price: 0,
+      priceCurrency: 'USD', fee: 0, date: '2026-09-13T15:05:00Z', status: 'completed',
+    };
+    mocks.movimientos = [alta, ...mocks.movimientos];
+    await refreshCrypto();
+    expect(useCryptoStore.getState().transactions.map((t) => t.id)).toEqual(['s1', 'm1']);
+
+    soltar();
+    await delMontaje;
+    expect(useCryptoStore.getState().transactions.map((t) => t.id)).toEqual(['s1', 'm1']);
   });
 
   it('una respuesta que llega despues de cambiar de sesion no se escribe', async () => {

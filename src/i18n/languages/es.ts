@@ -462,7 +462,7 @@ const es: TranslationKeys = {
   crypto_tx_send: 'Enviado',
   crypto_tx_receive: 'Recibido',
   crypto_tx_convert: 'Conversión',
-  crypto_tx_unstake: 'Unstake',
+  crypto_tx_unstake: 'Retiro de staking',
   crypto_tx_yield: 'Rendimiento',
   crypto_updating: 'Actualizando...',
   crypto_prices_updated: 'Precios actualizados',
