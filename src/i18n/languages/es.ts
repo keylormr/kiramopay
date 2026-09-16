@@ -823,6 +823,7 @@ const es: TranslationKeys = {
   // Home insights
   home_spending: 'Gastos',
   home_spent_month: 'Gastado este mes',
+  home_spent_failed: 'No pudimos cargar tu gasto de este mes.',
   home_vs_last_month: 'vs mes pasado',
   sinpe_contact_saved: 'Contacto guardado',
   qr_te_solicitan: 'Te solicitan',

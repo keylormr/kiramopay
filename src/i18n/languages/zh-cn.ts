@@ -818,6 +818,7 @@ const zhCn: TranslationKeys = {
   splitpay_err_load: '无法加载你的分单记录。',
   home_spending: '支出',
   home_spent_month: '本月支出',
+  home_spent_failed: '无法加载本月支出。',
   home_vs_last_month: '较上月',
   sinpe_contact_saved: '联系人已保存',
   qr_te_solicitan: '向你请求',

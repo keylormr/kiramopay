@@ -817,6 +817,7 @@ const hi: TranslationKeys = {
   splitpay_err_load: 'आपके साझा बिल लोड नहीं हो सके।',
   home_spending: 'खर्च',
   home_spent_month: 'इस महीने खर्च',
+  home_spent_failed: 'इस महीने का खर्च लोड नहीं हो सका।',
   home_vs_last_month: 'पिछले महीने की तुलना में',
   sinpe_contact_saved: 'संपर्क सहेजा गया',
   qr_te_solicitan: 'आपसे अनुरोध',

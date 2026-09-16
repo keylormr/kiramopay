@@ -817,6 +817,7 @@ const ja: TranslationKeys = {
   splitpay_err_load: '割り勘の一覧を読み込めませんでした。',
   home_spending: '支出',
   home_spent_month: '今月の支出',
+  home_spent_failed: '今月の支出を読み込めませんでした。',
   home_vs_last_month: '先月比',
   sinpe_contact_saved: '連絡先を保存しました',
   qr_te_solicitan: '請求金額',

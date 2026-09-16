@@ -21,9 +21,9 @@ import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
-import { getTxTime } from '@/utils/fechasTx';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 import { BannerInicio } from '@/components/home/BannerInicio';
+import { useGastoDelMes } from './useGastoDelMes';
 
 const AVAILABLE_CURRENCIES: Partial<Account>[] = [
   { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
@@ -50,6 +50,7 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
+  const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
   // Los movimientos se refrescan solos cuando llega una notificación en vivo
   // (WebSocket): dinero que entra o sale aparece en la lista sin que el
@@ -727,78 +728,65 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       </div>
 
       {/* Gastado este mes — al final a pedido del dueno: el resumen del
-          gasto es consulta ocasional, no lo primero del dia. */}
-      {(() => {
-        const ahora = new Date();
-        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime();
-        const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).getTime();
-        const diaHoy = ahora.getDate();
-
-        // Acumulado diario del mes en curso (gastos del store sincronizado).
-        // Esta tarjeta rotula colones a mano, asi que suma SOLO colones: un
-        // gasto en dolares sumado 1:1 aqui se imprimiria como si fueran colones.
-        const porDia = new Array(diaHoy).fill(0);
-        let gastadoMesPasado = 0;
-        let otrasMonedas = 0;
-        for (const tx of state.transactions) {
-          if (tx.amount >= 0) continue;
-          const time = getTxTime(tx);
-          if (time === null) continue;
-          if ((tx.ccy || 'CRC') !== 'CRC') {
-            if (time >= inicioMes) otrasMonedas++;
-            continue;
-          }
-          if (time >= inicioMes) {
-            const d = new Date(time).getDate();
-            if (d >= 1 && d <= diaHoy) porDia[d - 1] += Math.abs(tx.amount);
-          } else if (time >= inicioMesPasado) {
-            gastadoMesPasado += Math.abs(tx.amount);
-          }
-        }
-        const acumulado: number[] = [];
-        porDia.reduce((s, v) => { const acc = s + v; acumulado.push(acc); return acc; }, 0);
-        const gastadoMes = acumulado[acumulado.length - 1] ?? 0;
-        const delta = gastadoMesPasado > 0
-          ? ((gastadoMes - gastadoMesPasado) / gastadoMesPasado) * 100
-          : null;
-        const etiquetas = acumulado.map((_, i) => `${i + 1}/${ahora.getMonth() + 1}`);
-
-        return (
-          <button
-            onClick={onOpenAnalytics}
-            className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
-                <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
-                  {formatCurrency(gastadoMes, 'CRC')}
-                </p>
-              </div>
-              {delta !== null && Math.abs(delta) >= 1 && (
-                <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${delta <= 0 ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
-                  {delta <= 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(0)}% {t('home_vs_last_month')}
-                </span>
-              )}
-            </div>
-            {acumulado.length >= 2 && gastadoMes > 0 && (
-              <GraficoArea
-                puntos={acumulado}
-                etiquetas={etiquetas}
-                alto={72}
-                className="mt-2 -mx-1"
-                formato={(v) => formatCurrency(v, 'CRC')}
-                titulo={t('home_spent_month')}
-              />
-            )}
-            {otrasMonedas > 0 && (
-              <p className="mt-2 text-[11px] uv-text-muted">
-                {t('other_currency_note').replace('{n}', String(otrasMonedas))}
+          gasto es consulta ocasional, no lo primero del dia. Las cifras son
+          las de Analisis (useGastoDelMes): el mismo resumen del servidor. */}
+      <button
+        onClick={onOpenAnalytics}
+        aria-busy={gastoMes.estado === 'cargando'}
+        className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
+      >
+        {/* Envuelve en vez de recortar: en idiomas largos la comparacion baja
+            de linea y el monto se sigue leyendo completo. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
+          <div>
+            <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
+            {gastoMes.estado === 'cargando' ? (
+              // Mientras llega el resumen no hay cifra: un cero aqui se leeria
+              // como "no gastaste nada".
+              <div className="h-8 w-36 mt-0.5 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] animate-pulse" aria-hidden="true" />
+            ) : gastoMes.estado === 'sin_datos' ? (
+              <p className="mt-1 flex items-start gap-1.5 text-sm uv-text-secondary">
+                <Icons.AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                {t('home_spent_failed')}
+              </p>
+            ) : (
+              <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
+                {formatCurrency(gastoMes.gastado, gastoMes.moneda)}
               </p>
             )}
-          </button>
-        );
-      })()}
+          </div>
+          {gastoMes.variacion !== null && Math.abs(gastoMes.variacion) >= 1 && (() => {
+            const Icono = gastoMes.variacion <= 0 ? Icons.TrendingDown : Icons.TrendingUp;
+            return (
+              <span className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full tabular-nums ${gastoMes.variacion <= 0 ? 'uv-chip-success' : 'uv-chip-danger'}`}>
+                <Icono size={12} aria-hidden="true" />
+                {Math.abs(gastoMes.variacion).toFixed(0)}% {t('home_vs_last_month')}
+              </span>
+            );
+          })()}
+        </div>
+        {gastoMes.acumulado.length >= 2 && gastoMes.gastado > 0 && (
+          <GraficoArea
+            puntos={gastoMes.acumulado}
+            etiquetas={gastoMes.dias.map((d) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`)}
+            alto={72}
+            className="mt-2 -mx-1"
+            formato={(v) => formatCurrency(v, gastoMes.moneda)}
+            titulo={t('home_spent_month')}
+          />
+        )}
+        {gastoMes.estado === 'respaldo' && (
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] uv-text-muted">
+            <Icons.Info size={13} className="shrink-0 mt-px" aria-hidden="true" />
+            {t('analytics_offline')}
+          </p>
+        )}
+        {gastoMes.otrasMonedas > 0 && (
+          <p className="mt-2 text-[11px] uv-text-muted">
+            {t('other_currency_note').replace('{n}', String(gastoMes.otrasMonedas))}
+          </p>
+        )}
+      </button>
 
       {/* --- Bottom Sheets --- */}
 

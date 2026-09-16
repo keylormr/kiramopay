@@ -959,6 +959,7 @@ export type TranslationKeys = {
   // Home insights
   home_spending: string;
   home_spent_month: string;
+  home_spent_failed: string;
   home_vs_last_month: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;

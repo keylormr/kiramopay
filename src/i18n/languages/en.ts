@@ -823,6 +823,7 @@ const en: TranslationKeys = {
   // Home insights
   home_spending: 'Spending',
   home_spent_month: 'Spent this month',
+  home_spent_failed: "We couldn't load this month's spending.",
   home_vs_last_month: 'vs last month',
   sinpe_contact_saved: 'Contact saved',
   qr_te_solicitan: 'Requested from you',
