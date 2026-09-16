@@ -1344,6 +1344,22 @@ const ja: TranslationKeys = {
   order_no_integration: 'この注文サービスとはまだ連携していないため、注文はお店に届きません。請求は発生していません。残高はそのままです。',
   ride_price_after_quote: '料金と所要時間は、サービスが見積もりを出してから表示されます。',
   order_delivery_fee_pending: '配送料は注文時にサービス側が確定します。',
+
+  // Banner de Inicio: carrusel de 3 tarjetas cerrables (planes, referidos, QR)
+  banner_home_label: 'KiramoPayのお知らせ',
+  banner_plans_title: 'もっとアシスタント、もっと目標',
+  banner_plans_body: 'PlusとProがまもなく登場。アシスタントへの質問数、貯金目標、カードがもっと増えます。',
+  banner_plans_cta: 'プランを見る',
+  banner_referral_title: '招待してポイントをゲット',
+  banner_referral_body: 'リンクを共有すると、登録した人ひとりごとに{puntos}ポイントがもらえます。',
+  banner_referral_cta: 'リンクを共有する',
+  banner_qr_title: '手数料なしでQR請求',
+  banner_qr_body: '個人間でのQRでの請求と支払いは無料です。',
+  banner_qr_cta: '今すぐ請求する',
+  banner_close_card: 'カードを閉じる',
+  banner_prev: '前のカード',
+  banner_next: '次のカード',
+  banner_go_to: 'カード{n}へ移動',
 };
 
 export default ja;
