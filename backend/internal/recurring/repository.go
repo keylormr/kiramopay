@@ -2,8 +2,10 @@ package recurring
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -72,7 +74,7 @@ func (r *Repository) Update(ctx context.Context, id, userID string, req *UpdateR
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("recurring payment not found")
+		return ErrNoEncontrado
 	}
 	return nil
 }
@@ -84,7 +86,7 @@ func (r *Repository) Delete(ctx context.Context, id, userID string) error {
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("recurring payment not found")
+		return ErrNoEncontrado
 	}
 	return nil
 }
@@ -95,8 +97,12 @@ func (r *Repository) ToggleEnabled(ctx context.Context, id, userID string) (bool
 		`UPDATE recurring_payments SET enabled = NOT enabled, updated_at = NOW()
 		 WHERE id = $1 AND user_id = $2
 		 RETURNING enabled`, id, userID).Scan(&enabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNoEncontrado
+	}
 	if err != nil {
-		return false, fmt.Errorf("recurring payment not found")
+		// Antes cualquier falla (la base caida) se reportaba como "no existe".
+		return false, fmt.Errorf("toggle recurring payment: %w", err)
 	}
 	return enabled, nil
 }
@@ -126,8 +132,11 @@ func (r *Repository) MarkPaid(ctx context.Context, id, userID string) (*Recurrin
 		&p.RecipientPhone, &p.RecipientName,
 		&p.ServiceProviderID, &p.ClientID,
 		&p.Enabled, &p.CreatedAt, &p.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNoEncontrado
+	}
 	if err != nil {
-		return nil, fmt.Errorf("recurring payment not found")
+		return nil, fmt.Errorf("mark recurring payment paid: %w", err)
 	}
 	p.LastPaidDate = lastPaid
 	return &p, nil

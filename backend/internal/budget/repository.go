@@ -2,7 +2,6 @@ package budget
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -77,7 +76,7 @@ func (r *Repository) Update(ctx context.Context, id, userID string, req *UpdateB
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("budget not found")
+		return ErrNoEncontrado
 	}
 	return nil
 }
@@ -89,7 +88,7 @@ func (r *Repository) Delete(ctx context.Context, id, userID string) error {
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("budget not found")
+		return ErrNoEncontrado
 	}
 	return nil
 }

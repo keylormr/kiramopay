@@ -47,10 +47,34 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				"your plan does not allow more active savings goals", tope.Detalle())
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "CREATE_FAILED", err.Error())
+		if codigo, mensaje, ok := rechazoAlCrear(err); ok {
+			response.Error(w, http.StatusBadRequest, codigo, mensaje)
+			return
+		}
+		// Lo que queda es una falla del servidor (la base, el tope sin poder
+		// contarse): antes salia como 400 con el texto crudo del driver.
+		response.Error(w, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
 	}
 	response.JSON(w, http.StatusCreated, g)
+}
+
+// rechazoAlCrear traduce un rechazo de entrada a su codigo. El mensaje es para
+// quien integra la API; la pantalla traduce por codigo.
+func rechazoAlCrear(err error) (codigo, mensaje string, ok bool) {
+	switch {
+	case errors.Is(err, ErrNombreRequerido):
+		return "SAVINGS_NAME_REQUIRED", "the goal needs a name", true
+	case errors.Is(err, ErrNombreMuyLargo):
+		return "SAVINGS_NAME_TOO_LONG", "the goal name can have up to 120 characters", true
+	case errors.Is(err, ErrObjetivoInvalido):
+		return "SAVINGS_INVALID_TARGET", "the target must be greater than zero", true
+	case errors.Is(err, ErrMonedaInvalida):
+		return "SAVINGS_INVALID_CURRENCY", "the currency must be CRC or USD", true
+	case errors.Is(err, ErrEstiloInvalido):
+		return "SAVINGS_INVALID_STYLE", "the icon can have up to 40 characters and the color up to 20", true
+	}
+	return "", "", false
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
