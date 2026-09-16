@@ -261,12 +261,102 @@ describe('EscrowView — los plazos', () => {
 });
 
 describe('EscrowView — si la lista no carga', () => {
-  it('no dice que no hay acuerdos: dice que no se pudo consultar', async () => {
+  it('no dice que no hay acuerdos: dice que no se pudo consultar, nunca el texto crudo del servidor', async () => {
+    // Un codigo que la pantalla no conoce: el texto en ingles del servidor
+    // ('sin red' aqui simula ese texto crudo) NUNCA debe llegar a pantalla.
     mockApi.escrow.list.mockResolvedValue({ success: false, error: { code: 'X', message: 'sin red' } });
     setup();
 
-    expect(await screen.findByText('sin red')).toBeInTheDocument();
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText('sin red')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
     expect(screen.queryByText(/aún no tienes acuerdos/i)).not.toBeInTheDocument();
   });
+});
+
+// n=39 de la QA 2026-09-13: el texto crudo del servidor (en ingles) llegaba a
+// pantalla siempre que el codigo no fuera ESCROW_SELLER_NOT_FOUND, incluso
+// para codigos que la pantalla ya conoce y para los que no.
+describe('EscrowView — nunca el texto crudo del servidor (hallazgo n=39)', () => {
+  it('contigo mismo: ESCROW_SELF tiene su propio mensaje en espanol', async () => {
+    mockApi.escrow.create.mockResolvedValue({
+      success: false,
+      error: { code: 'ESCROW_SELF', message: 'cannot create an agreement with yourself' },
+    });
+    const user = userEvent.setup();
+    setup();
+    await screen.findByText('Laptop');
+    await user.click(screen.getByRole('button', { name: 'Nuevo acuerdo' }));
+
+    await user.type(screen.getByPlaceholderText('8888-1234'), '88880001');
+    await user.type(screen.getByPlaceholderText('0.00'), '100');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Yo mismo');
+    await user.click(screen.getByText('Crear acuerdo', { selector: 'button' }));
+
+    expect(await screen.findByText('No puedes crear un acuerdo contigo mismo')).toBeInTheDocument();
+    expect(screen.queryByText(/cannot create an agreement/i)).not.toBeInTheDocument();
+  });
+
+  it('un codigo del modulo que la pantalla no mapea explicitamente cae al generico, nunca al texto crudo', async () => {
+    mockApi.escrow.create.mockResolvedValue({
+      success: false,
+      error: { code: 'ESCROW_FAILED', message: 'operation failed' },
+    });
+    const user = userEvent.setup();
+    setup();
+    await screen.findByText('Laptop');
+    await user.click(screen.getByRole('button', { name: 'Nuevo acuerdo' }));
+
+    await user.type(screen.getByPlaceholderText('8888-1234'), '88880002');
+    await user.type(screen.getByPlaceholderText('0.00'), '100');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Algo');
+    await user.click(screen.getByText('Crear acuerdo', { selector: 'button' }));
+
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText(/operation failed/i)).not.toBeInTheDocument();
+  });
+
+  it('INVALID_REQUEST generico tambien cae al mensaje en espanol, no a "invalid request"', async () => {
+    mockApi.escrow.create.mockResolvedValue({
+      success: false,
+      error: { code: 'INVALID_REQUEST', message: 'invalid request' },
+    });
+    const user = userEvent.setup();
+    setup();
+    await screen.findByText('Laptop');
+    await user.click(screen.getByRole('button', { name: 'Nuevo acuerdo' }));
+
+    await user.type(screen.getByPlaceholderText('8888-1234'), '88880003');
+    await user.type(screen.getByPlaceholderText('0.00'), '100');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Algo');
+    await user.click(screen.getByText('Crear acuerdo', { selector: 'button' }));
+
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText('invalid request')).not.toBeInTheDocument();
+  });
+});
+
+// n=40 de la QA 2026-09-13: con monto "0" el boton parecia listo (habilitado)
+// y el clic no hacia absolutamente nada, sin avisar.
+describe('EscrowView — monto invalido al crear (hallazgo n=40)', () => {
+  const llenarSinMonto = async (user: ReturnType<typeof userEvent.setup>) => {
+    setup();
+    await screen.findByText('Laptop');
+    await user.click(screen.getByRole('button', { name: 'Nuevo acuerdo' }));
+    await user.type(screen.getByPlaceholderText('8888-1234'), '88880004');
+    await user.type(screen.getByPlaceholderText(/qu[eé] se est[aá]/i), 'Bicicleta');
+  };
+
+  it('con monto "0" el boton de crear queda deshabilitado, igual que con el campo vacio', async () => {
+    const user = userEvent.setup();
+    await llenarSinMonto(user);
+
+    await user.type(screen.getByPlaceholderText('0.00'), '0');
+
+    expect(screen.getByText('Crear acuerdo', { selector: 'button' })).toBeDisabled();
+    expect(mockApi.escrow.create).not.toHaveBeenCalled();
+  });
+  // No hay caso de monto negativo aqui: CampoMonto (utils/campoMonto.ts) ya
+  // no preserva el signo "-" al teclear, asi que ese input nunca llega a
+  // valer un numero negativo en esta pantalla.
 });

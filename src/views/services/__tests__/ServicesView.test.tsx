@@ -141,6 +141,25 @@ describe('ServicesView — pago de servicios', () => {
   });
 });
 
+// n=69 de la QA 2026-09-13: con monto "0" el boton de pagar quedaba
+// habilitado (azul) y el clic no hacia absolutamente nada, sin avisar.
+describe('ServicesView — pago de servicios: monto invalido (hallazgo n=69)', () => {
+  it('con monto "0" el boton de pagar queda deshabilitado y no llama al servidor', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByText('ICE Electricidad'));
+    await user.type(await screen.findByPlaceholderText('Ej: 1234567'), '123456');
+    await user.type(screen.getByPlaceholderText('0'), '0');
+
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
+    expect(mocks.api.services.payBill).not.toHaveBeenCalled();
+  });
+  // No hay caso de monto negativo por UI aqui: CampoMonto (utils/campoMonto.ts)
+  // ya no preserva el signo "-" al teclear, asi que este input nunca llega a
+  // valer un numero negativo desde el teclado.
+});
+
 describe('ServicesView — recarga', () => {
   /** Abre la recarga de Kolbi con numero y monto elegidos. */
   async function completarRecarga(user: ReturnType<typeof userEvent.setup>) {
@@ -151,6 +170,25 @@ describe('ServicesView — recarga', () => {
     await user.click(within(montos).getAllByRole('button')[0]);
     await user.click(screen.getByRole('button', { name: /^Recarga ₡/ }));
   }
+
+  // n=68 de la QA 2026-09-13: formatCurrency(1000).replace(',00', '') borraba
+  // la coma de miles en vez del ".00" final y mostraba "₡10.00" en vez de
+  // "₡1,000" — cien veces menos que el monto real que si se cobraba.
+  it('los botones de monto muestran la cifra real, no cien veces menos (hallazgo n=68)', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('tab', { name: 'Recarga' }));
+    await user.click(screen.getByText('Kolbi'));
+    const montos = (await screen.findByText('Selecciona monto')).parentElement as HTMLElement;
+    const botones = within(montos).getAllByRole('button');
+
+    // Kolbi: [1000, 2000, 3000, 5000, 10000, 20000] colones (ver PHONE_OPERATORS).
+    expect(botones.map((b) => b.textContent)).toEqual([
+      '₡1,000', '₡2,000', '₡3,000', '₡5,000', '₡10,000', '₡20,000',
+    ]);
+    expect(screen.queryByText('₡10.00')).not.toBeInTheDocument();
+  });
 
   // Misma negativa, otro canal: sin convenio con el operador la recarga no
   // llega al telefono, y eso hay que decirlo.

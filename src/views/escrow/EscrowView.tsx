@@ -31,6 +31,53 @@ function money(amountMinor: number, currency: string): string {
   }
 }
 
+// Un monto valido para crear un acuerdo: numero finito y mayor a cero. Con
+// "0" o negativo, parseFloat da un string truthy y el boton se veia listo
+// para enviar sin que pasara nada al presionarlo.
+function montoValido(valor: string): boolean {
+  const value = parseFloat(valor);
+  return Number.isFinite(value) && value > 0;
+}
+
+// Todos los codigos que manda el backend de escrow (ver escrow/handler.go),
+// traducidos por codigo. NUNCA se cae al texto crudo del servidor: viene en
+// ingles y esta pensado para logs, no para la persona (ej. "invalid
+// request" en pantalla). Un codigo que este switch no conoce, o que no
+// llegue del todo, cae al generico en espanol.
+function mensajeDeError(err: { code?: string; message: string } | undefined, t: (key: string) => string): string {
+  switch (err?.code) {
+    case 'ESCROW_SELLER_NOT_FOUND':
+      return t('escrow_seller_not_found');
+    case 'ESCROW_SELF':
+      return t('escrow_self_not_allowed');
+    case 'ESCROW_INVALID_AMOUNT':
+      return t('escrow_amount_invalid');
+    case 'ESCROW_DESCRIPTION_REQUIRED':
+      return t('escrow_description_required');
+    case 'ESCROW_NOT_FOUND':
+      return t('escrow_not_found');
+    case 'ESCROW_FORBIDDEN':
+      return t('escrow_forbidden');
+    case 'ESCROW_BUYER_ONLY':
+      return t('escrow_buyer_only');
+    case 'ESCROW_SELLER_ONLY':
+      return t('escrow_seller_only');
+    case 'ESCROW_INVALID_STATE':
+      return t('escrow_invalid_state');
+    case 'INSUFFICIENT_BALANCE':
+      return t('insufficient_funds');
+    case 'DAILY_LIMIT_EXCEEDED':
+      return t('escrow_daily_limit_exceeded');
+    case 'MONTHLY_LIMIT_EXCEEDED':
+      return t('escrow_monthly_limit_exceeded');
+    // El plazo ya vencido: el resultado lo aplica el barrido en un minuto.
+    case 'ESCROW_DEADLINE_PASSED':
+      return t('escrow_deadline_passed');
+    default:
+      return t('escrow_action_failed');
+  }
+}
+
 export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t, language } = useLanguage();
   const { state } = useApp();
@@ -42,7 +89,10 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   // Un error por lugar. Habia UNO solo compartido y la pantalla lo pintaba en
   // la lista, en la hoja de crear y en la del detalle: el mismo mensaje dos o
   // tres veces, y a veces debajo de algo que no lo habia causado.
-  const [errorLista, setErrorLista] = useState('');
+  // Se guarda el error crudo (no el texto ya traducido) para no depender de
+  // `t` dentro del efecto de carga: `t` se recrea en cada render y agregarlo
+  // como dependencia reiniciaria la consulta al servidor en cada render.
+  const [errorLista, setErrorLista] = useState<{ code?: string; message: string } | null>(null);
   const [errorCrear, setErrorCrear] = useState('');
   const [errorAccion, setErrorAccion] = useState('');
 
@@ -72,9 +122,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       if (!cancelled) {
         if (res.success && res.data) {
           setAgreements(res.data);
-          setErrorLista('');
+          setErrorLista(null);
         } else {
-          setErrorLista(res.error?.message || 'ERROR');
+          setErrorLista(res.error ?? { message: '' });
         }
         setLoading(false);
       }
@@ -88,8 +138,16 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const refresh = () => setLoadTrigger((n) => n + 1);
 
   const create = async () => {
+    if (!sellerPhone.trim() || !description.trim()) return;
+    if (!montoValido(amount)) {
+      // Defensa: hoy el unico camino hacia create() es el boton de abajo, que
+      // ya queda deshabilitado con un monto invalido. Si algun dia se dispara
+      // desde otro lado (Enter, reintento tras MFA), que la persona vea por
+      // que no paso nada en vez de un silencio total.
+      setErrorCrear(t('escrow_amount_invalid'));
+      return;
+    }
     const value = parseFloat(amount);
-    if (!sellerPhone.trim() || !description.trim() || !Number.isFinite(value) || value <= 0) return;
     setCreating(true);
     setErrorCrear('');
     const res = await getApiLayer().escrow.create({
@@ -100,14 +158,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     });
     setCreating(false);
     if (!res.success) {
-      // El servidor comprueba que el numero tenga cuenta antes de escribir
-      // nada; ese caso tiene su propio mensaje porque es el que la persona
-      // puede corregir.
-      setErrorCrear(
-        res.error?.code === 'ESCROW_SELLER_NOT_FOUND'
-          ? t('escrow_seller_not_found')
-          : res.error?.message || t('escrow_action_failed'),
-      );
+      setErrorCrear(mensajeDeError(res.error, t));
       return;
     }
     setShowCreate(false);
@@ -138,7 +189,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         setShowMfa(true);
         return;
       }
-      setErrorAccion(mensajeDeAccion(res.error));
+      setErrorAccion(mensajeDeError(res.error, t));
       return;
     }
     setSelected(res.data);
@@ -157,7 +208,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const res = await api.escrow.dispute(selected.id, disputeReason.trim());
     setActing(false);
     if (!res.success || !res.data) {
-      setErrorAccion(mensajeDeAccion(res.error));
+      setErrorAccion(mensajeDeError(res.error, t));
       return;
     }
     setSelected(res.data);
@@ -171,13 +222,6 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const isBuyer = selected && currentUserId === selected.buyerId;
   const isSeller = selected && currentUserId === selected.sellerId;
-
-  // El plazo ya vencido tiene su propio mensaje: el servidor rechaza con
-  // ESCROW_DEADLINE_PASSED y el resultado lo aplica el barrido en un minuto.
-  function mensajeDeAccion(err?: { code?: string; message: string }): string {
-    if (err?.code === 'ESCROW_DEADLINE_PASSED') return t('escrow_deadline_passed');
-    return err?.message || t('escrow_action_failed');
-  }
 
   const fecha = (iso?: string) => fechaYHora(iso, language);
 
@@ -242,7 +286,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           // los tenia. Se dice que no se pudo consultar, y se ofrece reintentar.
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <p className="text-sm text-[var(--color-danger)] mb-4" aria-live="polite">
-              {errorLista === 'ERROR' ? t('escrow_action_failed') : errorLista}
+              {mensajeDeError(errorLista ?? undefined, t)}
             </p>
             <button
               onClick={refresh}
@@ -358,7 +402,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           {errorCrear && <p className="text-red-500 text-sm">{errorCrear}</p>}
           <button
             onClick={create}
-            disabled={creating || !sellerPhone.trim() || !description.trim() || !amount}
+            disabled={creating || !sellerPhone.trim() || !description.trim() || !montoValido(amount)}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
           >
             {creating ? t('loading') : t('escrow_create_btn')}

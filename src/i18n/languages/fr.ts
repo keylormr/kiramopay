@@ -1042,6 +1042,18 @@ const fr: TranslationKeys = {
   escrow_closed_delivery: 'Le paiement a été rendu car le délai pour marquer la livraison est dépassé.',
   escrow_closed_review: 'Le vendeur a été payé car le délai pour contester est dépassé.',
   escrow_deadline_passed: 'Ce délai est dépassé. Le système appliquera le résultat dans quelques minutes.',
+  // Messages par code d'erreur du module : le texte brut envoyé par le
+  // serveur n'est jamais affiché (il est en anglais et destiné aux journaux).
+  escrow_self_not_allowed: 'Vous ne pouvez pas créer un accord avec vous-même',
+  escrow_amount_invalid: 'Le montant doit être supérieur à zéro',
+  escrow_description_required: 'Indiquez ce qui est acheté',
+  escrow_not_found: "Cet accord n'existe plus",
+  escrow_forbidden: "Vous ne faites pas partie de cet accord",
+  escrow_buyer_only: "Seul l'acheteur peut faire cela",
+  escrow_seller_only: 'Seul le vendeur peut faire cela',
+  escrow_invalid_state: "Cette action n'est plus disponible pour cet accord",
+  escrow_daily_limit_exceeded: 'Ce montant dépasse votre limite quotidienne',
+  escrow_monthly_limit_exceeded: 'Ce montant dépasse votre limite mensuelle',
   admin_disputes_menu: 'Litiges escrow',
   admin_disputes_menu_desc: 'Examiner et résoudre les litiges',
   admin_disputes_title: 'Litiges',
@@ -1353,6 +1365,7 @@ const fr: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: "Nous n'avons pas encore d'accord avec cette entreprise, nous ne pouvons donc pas lui remettre votre paiement. Rien n'a été débité : votre solde est inchangé.",
   recharge_no_agreement: "Nous n'avons pas encore d'accord avec cet opérateur, la recharge n'arriverait donc pas sur le téléphone. Rien n'a été débité : votre solde est inchangé.",
+  bill_invalid_amount: 'Indiquez un montant supérieur à zéro',
   ride_no_integration: "Nous ne sommes pas encore intégrés à cette application de transport, nous ne pouvons donc pas payer la course. Rien n'a été débité : votre solde est inchangé.",
   order_no_integration: "Nous ne sommes pas encore intégrés à ce service de commandes, la commande n'arriverait donc pas au restaurant. Rien n'a été débité : votre solde est inchangé.",
   ride_price_after_quote: "Le prix et la durée s'affichent une fois que le service les a estimés.",
