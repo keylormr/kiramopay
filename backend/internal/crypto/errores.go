@@ -29,6 +29,8 @@ var (
 	// ErrPosicionBloqueada: el plazo de la posicion todavia no vence. El
 	// servicio le agrega la fecha.
 	ErrPosicionBloqueada = errors.New("position is locked")
+	// ErrStakingNoDisponible: el activo no esta en el programa de staking.
+	ErrStakingNoDisponible = errors.New("staking is not available for this asset")
 )
 
 // rechazo es la respuesta a un error que se reconoce.
@@ -73,6 +75,21 @@ func rechazoConocido(err error) (rechazo, bool) {
 	case errors.Is(err, transaction.ErrLlaveReutilizada):
 		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
 			transaction.ErrLlaveReutilizada.Error()}, true
+	// Los rechazos del staking tienen codigo propio: salian los tres como
+	// UNSTAKE_FAILED y la pantalla solo podia distinguirlos leyendo el texto en
+	// ingles, que terminaba en pantalla tal cual.
+	case errors.Is(err, ErrStakingNoDisponible):
+		return rechazo{http.StatusBadRequest, "STAKING_NOT_AVAILABLE",
+			ErrStakingNoDisponible.Error()}, true
+	case errors.Is(err, ErrPosicionNoEncontrada):
+		return rechazo{http.StatusNotFound, "STAKING_POSITION_NOT_FOUND",
+			ErrPosicionNoEncontrada.Error()}, true
+	case errors.Is(err, ErrPosicionNoActiva):
+		return rechazo{http.StatusConflict, "STAKING_POSITION_INACTIVE",
+			ErrPosicionNoActiva.Error()}, true
+	// El plazo sale con su fecha, que la arma el servicio.
+	case errors.Is(err, ErrPosicionBloqueada):
+		return rechazo{http.StatusConflict, "STAKING_POSITION_LOCKED", err.Error()}, true
 	}
 	if codigo, estado, ok := errorDePrecio(err); ok {
 		return rechazo{estado, codigo, err.Error()}, true
@@ -84,8 +101,6 @@ func rechazoConocido(err error) (rechazo, bool) {
 // operacion y un 400, como antes, pero con el texto del sentinela.
 var rechazosConElCodigoDeLaOperacion = []error{
 	transaction.ErrBloqueadoPorRiesgo,
-	ErrPosicionNoEncontrada,
-	ErrPosicionNoActiva,
 }
 
 // responderError escribe la respuesta de error de una operacion de cripto.
@@ -99,10 +114,6 @@ func responderError(w http.ResponseWriter, err error, codigoDeLaOperacion string
 func respuestaDeError(err error, codigoDeLaOperacion string) (int, string, string) {
 	if r, ok := rechazoConocido(err); ok {
 		return r.estado, r.codigo, r.mensaje
-	}
-	// El plazo sale con su fecha, que la arma el servicio.
-	if errors.Is(err, ErrPosicionBloqueada) {
-		return http.StatusBadRequest, codigoDeLaOperacion, err.Error()
 	}
 	for _, sentinela := range rechazosConElCodigoDeLaOperacion {
 		if errors.Is(err, sentinela) {

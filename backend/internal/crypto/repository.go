@@ -208,8 +208,12 @@ func (r *Repository) VenderEnTx(ctx context.Context, tx pgx.Tx, mov *Transaction
 // idempotencia acreditara el activo otra vez: el libro reconocia la repeticion
 // y no cobraba, pero el abono corria igual. Dentro del gancho, la repeticion
 // no abona nada porque el gancho no corre.
-func (r *Repository) ComprarEnTx(ctx context.Context, tx pgx.Tx, nombre string, mov *TransactionRecord) error {
-	if err := abonarActivo(ctx, tx, mov.UserID, mov.Asset, nombre, mov.Amount, mov.Price); err != nil {
+//
+// costoUSD es el precio de una unidad en dolares, con el que se promedia el
+// costo del activo. No es mov.Price: ese va en la moneda del pago, y una
+// compra en colones metia en el promedio un precio 500 veces mayor.
+func (r *Repository) ComprarEnTx(ctx context.Context, tx pgx.Tx, nombre string, mov *TransactionRecord, costoUSD decimal.Decimal) error {
+	if err := abonarActivo(ctx, tx, mov.UserID, mov.Asset, nombre, mov.Amount, costoUSD); err != nil {
 		return err
 	}
 	return insertarMovimiento(ctx, tx, mov)
