@@ -690,6 +690,13 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		updated_at TIMESTAMPTZ DEFAULT NOW(),
 		UNIQUE(user_id, symbol)
 	);
+	-- Espejo del CHECK de la 019. Sin el, descontar un activo por el INSERT ...
+	-- ON CONFLICT con delta negativo pasaba verde aqui y fallaba SIEMPRE en
+	-- produccion: Postgres evalua el CHECK sobre la fila que propone el INSERT,
+	-- antes de resolver el conflicto. Vender cripto murio asi.
+	DO $$ BEGIN
+		ALTER TABLE crypto_assets ADD CONSTRAINT chk_crypto_balance_nonneg CHECK (balance >= 0);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 	CREATE TABLE IF NOT EXISTS crypto_transactions (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -704,6 +711,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		status VARCHAR(20) DEFAULT 'completed',
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
+	-- Los otros dos CHECK de la 019. La anotacion de compras y ventas corre
+	-- dentro de la transaccion del asiento: si choca con uno de estos en
+	-- produccion, se cae la operacion entera, asi que aqui tiene que chocar igual.
+	DO $$ BEGIN
+		ALTER TABLE crypto_transactions ADD CONSTRAINT chk_crypto_tx_amount_positive CHECK (amount > 0);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	DO $$ BEGIN
+		ALTER TABLE crypto_transactions ADD CONSTRAINT chk_crypto_tx_type CHECK (
+			type IN ('buy','sell','convert','send','receive','stake','unstake','reward'));
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 	CREATE TABLE IF NOT EXISTS crypto_staking (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

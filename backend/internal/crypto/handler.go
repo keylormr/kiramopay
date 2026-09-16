@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
-	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -70,20 +69,7 @@ func (h *Handler) Buy(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Buy(r.Context(), userID, &req)
 	if err != nil {
-		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
-		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
-		// codigo generico y mostraba el mensaje en ingles del servidor, sin
-		// ofrecer nunca el desafio: la operacion moria ahi.
-		if errors.Is(err, transaction.ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"verified MFA challenge required for this amount")
-			return
-		}
-		if codigo, estado, ok := errorDePrecio(err); ok {
-			response.Error(w, estado, codigo, err.Error())
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "BUY_FAILED", err.Error())
+		responderError(w, err, "BUY_FAILED")
 		return
 	}
 	response.JSON(w, http.StatusCreated, tx)
@@ -99,20 +85,7 @@ func (h *Handler) Sell(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Sell(r.Context(), userID, &req)
 	if err != nil {
-		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
-		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
-		// codigo generico y mostraba el mensaje en ingles del servidor, sin
-		// ofrecer nunca el desafio: la operacion moria ahi.
-		if errors.Is(err, transaction.ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"verified MFA challenge required for this amount")
-			return
-		}
-		if codigo, estado, ok := errorDePrecio(err); ok {
-			response.Error(w, estado, codigo, err.Error())
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "SELL_FAILED", err.Error())
+		responderError(w, err, "SELL_FAILED")
 		return
 	}
 	response.JSON(w, http.StatusCreated, tx)
@@ -128,11 +101,7 @@ func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.service.Convert(r.Context(), userID, &req)
 	if err != nil {
-		if codigo, estado, ok := errorDePrecio(err); ok {
-			response.Error(w, estado, codigo, err.Error())
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "CONVERT_FAILED", err.Error())
+		responderError(w, err, "CONVERT_FAILED")
 		return
 	}
 	response.JSON(w, http.StatusCreated, tx)
@@ -158,7 +127,7 @@ func (h *Handler) Stake(w http.ResponseWriter, r *http.Request) {
 
 	position, err := h.service.Stake(r.Context(), userID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "STAKE_FAILED", err.Error())
+		responderError(w, err, "STAKE_FAILED")
 		return
 	}
 	response.JSON(w, http.StatusCreated, position)
@@ -169,7 +138,7 @@ func (h *Handler) Unstake(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 
 	if err := h.service.Unstake(r.Context(), userID, positionID); err != nil {
-		response.Error(w, http.StatusBadRequest, "UNSTAKE_FAILED", err.Error())
+		responderError(w, err, "UNSTAKE_FAILED")
 		return
 	}
 	response.NoContent(w)
@@ -199,7 +168,8 @@ func (h *Handler) AddPriceAlert(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, estado, codigo, err.Error())
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "ALERT_FAILED", err.Error())
+		// Lo que pasa la validacion y aun asi falla es el INSERT.
+		responderError(w, err, "ALERT_FAILED")
 		return
 	}
 	response.JSON(w, http.StatusCreated, result)
@@ -209,7 +179,7 @@ func (h *Handler) RemovePriceAlert(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	alertID := chi.URLParam(r, "id")
 	if err := h.service.RemovePriceAlert(r.Context(), userID, alertID); err != nil {
-		response.Error(w, http.StatusBadRequest, "REMOVE_FAILED", err.Error())
+		responderError(w, err, "REMOVE_FAILED")
 		return
 	}
 	response.NoContent(w)

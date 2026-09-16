@@ -68,8 +68,21 @@ type pgxQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 }
 
+// errAbonoNoPositivo: se intento pasar un descuento por el camino del abono.
+var errAbonoNoPositivo = errors.New("crypto asset credit must be positive")
+
 // abonarActivo suma saldo, creando la fila si es el primer abono de ese activo.
+//
+// SOLO abona. Un descuento por aqui falla SIEMPRE, tenga o no saldo: Postgres
+// evalua los CHECK sobre la fila que PROPONE el INSERT antes de resolver el
+// ON CONFLICT, y esa fila trae el delta como saldo, asi que un delta negativo
+// choca con chk_crypto_balance_nonneg (migracion 019) aunque la fila existente
+// alcance. Asi murio toda venta en produccion. Los descuentos van por
+// descontarActivo; la guarda de abajo impide que se vuelva a mezclar.
 func abonarActivo(ctx context.Context, q pgxQuerier, userID, symbol, name string, cantidad, precio decimal.Decimal) error {
+	if !cantidad.IsPositive() {
+		return fmt.Errorf("%w: %s %s", errAbonoNoPositivo, cantidad, symbol)
+	}
 	_, err := q.Exec(ctx,
 		`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -167,6 +180,41 @@ func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRe
 	return tx.Commit(ctx)
 }
 
+// VenderEnTx descuenta el activo vendido y anota la venta DENTRO de la
+// transaccion del asiento que acredita el fiat (transaction.CreateTransaction
+// con EnLaMismaTx).
+//
+// Aqui si es el gancho del libro, y no una transaccion propia como la de
+// ConvertirEnUnaTx: la venta tiene una pata en el libro (el fiat) y otra fuera
+// (el activo), y las dos tienen que confirmar juntas. Antes eran pasos
+// sueltos con una compensacion a mano en medio, y el descuento iba por el
+// abono con delta negativo, que el CHECK de saldo rechaza siempre.
+//
+// Dos ventas simultaneas de la misma persona hacen fila en el bloqueo de su
+// billetera que toma el asiento, y aunque no lo hicieran, el UPDATE con guarda
+// de descontarActivo relee la fila ya confirmada por la otra antes de decidir.
+func (r *Repository) VenderEnTx(ctx context.Context, tx pgx.Tx, mov *TransactionRecord) error {
+	if err := descontarActivo(ctx, tx, mov.UserID, mov.Asset, mov.Amount); err != nil {
+		return err
+	}
+	return insertarMovimiento(ctx, tx, mov)
+}
+
+// ComprarEnTx abona el activo comprado y anota la compra DENTRO de la
+// transaccion del asiento que debita el fiat.
+//
+// El abono iba despues del asiento, por fuera. Ademas de la ventana entre los
+// dos pasos, eso hacia que repetir una compra con la misma llave de
+// idempotencia acreditara el activo otra vez: el libro reconocia la repeticion
+// y no cobraba, pero el abono corria igual. Dentro del gancho, la repeticion
+// no abona nada porque el gancho no corre.
+func (r *Repository) ComprarEnTx(ctx context.Context, tx pgx.Tx, nombre string, mov *TransactionRecord) error {
+	if err := abonarActivo(ctx, tx, mov.UserID, mov.Asset, nombre, mov.Amount, mov.Price); err != nil {
+		return err
+	}
+	return insertarMovimiento(ctx, tx, mov)
+}
+
 func insertarMovimiento(ctx context.Context, q pgxQuerier, tx *TransactionRecord) error {
 	if tx.ID == "" {
 		tx.ID = uuid.New().String()
@@ -182,25 +230,32 @@ func insertarMovimiento(ctx context.Context, q pgxQuerier, tx *TransactionRecord
 	return err
 }
 
-func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name string, balanceDelta, price decimal.Decimal) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO crypto_assets (id, user_id, symbol, name, balance, avg_cost, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-		 ON CONFLICT (user_id, symbol) DO UPDATE SET
-		   balance = crypto_assets.balance + $5,
-		   avg_cost = CASE WHEN $5 > 0 THEN
-		     (crypto_assets.balance * crypto_assets.avg_cost + $5 * $6) / (crypto_assets.balance + $5)
-		   ELSE crypto_assets.avg_cost END,
-		   updated_at = NOW()`,
-		uuid.New().String(), userID, symbol, name, balanceDelta, price,
-	)
-	return err
+// UpsertAsset abona `cantidad` al activo, fuera de cualquier transaccion. Es
+// el mismo SQL que abonarActivo, y con su misma guarda: solo abona. Era una
+// copia aparte, y por esa copia pasaba el descuento de la venta con un delta
+// negativo.
+func (r *Repository) UpsertAsset(ctx context.Context, userID, symbol, name string, cantidad, price decimal.Decimal) error {
+	return abonarActivo(ctx, r.db, userID, symbol, name, cantidad, price)
 }
 
 // Transactions
 
 func (r *Repository) AddTransaction(ctx context.Context, tx *TransactionRecord) error {
 	return insertarMovimiento(ctx, r.db, tx)
+}
+
+// GetTransaction lee un movimiento de cripto de la persona por su id.
+func (r *Repository) GetTransaction(ctx context.Context, userID, id string) (*TransactionRecord, error) {
+	var tx TransactionRecord
+	err := r.db.QueryRow(ctx,
+		`SELECT id, user_id, type, asset, amount, price, total, currency, fee, status, created_at
+		 FROM crypto_transactions WHERE id = $1 AND user_id = $2`,
+		id, userID,
+	).Scan(&tx.ID, &tx.UserID, &tx.Type, &tx.Asset, &tx.Amount, &tx.Price, &tx.Total, &tx.Currency, &tx.Fee, &tx.Status, &tx.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &tx, nil
 }
 
 func (r *Repository) GetTransactions(ctx context.Context, userID string, limit int) ([]TransactionRecord, error) {
@@ -290,8 +345,13 @@ func (r *Repository) CompleteStakingAndRelease(ctx context.Context, id, userID s
 		 WHERE id = $1 AND user_id = $2 AND status = 'active' FOR UPDATE`,
 		id, userID,
 	).Scan(&asset, &amount, &earned)
+	// Sin fila es que otro retiro la completo entre la lectura del servicio y
+	// este bloqueo: para quien llega segundo, la posicion ya no esta activa.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrPosicionNoActiva
+	}
 	if err != nil {
-		return fmt.Errorf("active staking position not found")
+		return fmt.Errorf("lock staking position: %w", err)
 	}
 
 	if _, err := tx.Exec(ctx,

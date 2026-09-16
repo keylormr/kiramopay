@@ -729,7 +729,10 @@ paths:
         (the feed quotes in USD): it is compared against the server's own USD
         price, whatever the currency the purchase is paid in, and a deviation
         above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system
-        USD/CRC exchange rate.
+        USD/CRC exchange rate. The fiat debit, the asset credit and the
+        purchase record commit in one transaction. Repeating a completed
+        purchase with the same `idempotency_key` returns the recorded purchase
+        and moves nothing.
       security:
         - bearerAuth: []
       requestBody:
@@ -737,18 +740,51 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CryptoBuySellRequest'
+              $ref: '#/components/schemas/CryptoBuyRequest'
       responses:
-        '200':
+        '201':
           description: Purchase completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoTransactionRecord'
+        '400':
+          description: >-
+            CRYPTO_INVALID_AMOUNT, UNSUPPORTED_CURRENCY, INVALID_BODY, or
+            BUY_FAILED when the risk engine blocked the payment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: PRICE_MOVED — the USD price moved more than 2% since it was shown.
+          description: >-
+            PRICE_MOVED — the USD price moved more than 2% since it was shown.
+            LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
+            amount, currency or operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED. Nothing moved.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '428':
           description: MFA_REQUIRED — verify a high_value_tx challenge and retry the same request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: BUY_FAILED with a generic message; the detail stays in the server log. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price right now.
           content:
             application/json:
               schema:
@@ -764,6 +800,11 @@ paths:
         the screen showed: it is compared against the server's USD price even
         when `to_currency` is CRC, and a deviation above 2% is rejected with
         409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate.
+        The asset debit, the fiat credit (to the centimo, which is what
+        `total` reports) and the sale record commit in one transaction.
+        Repeating a completed sale with the same `idempotency_key` returns the
+        recorded sale and moves nothing; if the price moved since, the fiat
+        amount differs and the retry gets 409 LLAVE_REUTILIZADA.
       security:
         - bearerAuth: []
       requestBody:
@@ -771,18 +812,45 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CryptoBuySellRequest'
+              $ref: '#/components/schemas/CryptoSellRequest'
       responses:
-        '200':
+        '201':
           description: Sale completed
-        '409':
-          description: PRICE_MOVED — the USD price moved more than 2% since it was shown.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoTransactionRecord'
+        '400':
+          description: >-
+            CRYPTO_INVALID_AMOUNT (not positive, more than 18 decimals, or worth
+            less than one centimo), UNSUPPORTED_CURRENCY, or INVALID_BODY.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '428':
-          description: MFA_REQUIRED — verify a high_value_tx challenge and retry the same request.
+        '409':
+          description: >-
+            PRICE_MOVED — the USD price moved more than 2% since it was shown.
+            LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
+            amount, currency or operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: CRYPTO_INSUFFICIENT_BALANCE — the asset balance does not cover `amount`. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: SELL_FAILED with a generic message; the detail stays in the server log. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price right now.
           content:
             application/json:
               schema:
@@ -795,8 +863,26 @@ paths:
       security:
         - bearerAuth: []
       responses:
-        '200':
+        '201':
           description: Conversion completed
+        '400':
+          description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: CRYPTO_INSUFFICIENT_BALANCE — the source asset does not cover the amount. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: CONVERT_FAILED with a generic message; the detail stays in the server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/crypto/staking:
     get:
@@ -813,8 +899,26 @@ paths:
       security:
         - bearerAuth: []
       responses:
-        '200':
+        '201':
           description: Staking initiated
+        '400':
+          description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: CRYPTO_INSUFFICIENT_BALANCE — the asset does not cover the amount. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: STAKE_FAILED with a generic message; the detail stays in the server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/crypto/staking/{id}:
     delete:
@@ -825,8 +929,22 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ResourceId'
       responses:
-        '200':
-          description: Unstaking initiated
+        '204':
+          description: Unstaked; principal and earnings are back in the asset balance.
+        '400':
+          description: >-
+            UNSTAKE_FAILED — the position does not exist, is not active any
+            more, or is still locked (the message carries the unlock date).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: UNSTAKE_FAILED with a generic message; the detail stays in the server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/crypto/alerts:
     get:
@@ -869,6 +987,12 @@ paths:
           description: >-
             ALERT_UNSUPPORTED_ASSET (the symbol is not quoted),
             ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: ALERT_FAILED with a generic message; the detail stays in the server log.
           content:
             application/json:
               schema:
@@ -4062,16 +4186,51 @@ components:
         amount:
           type: integer
 
-    CryptoBuySellRequest:
+    CryptoBuyRequest:
       type: object
-      required: [symbol, amount_crc]
+      required: [asset, from_amount]
       properties:
-        symbol:
+        asset:
           type: string
           example: "BTC"
-        amount_crc:
-          type: integer
-          description: Amount in CRC centimos
+        from_amount:
+          type: number
+          description: Fiat to spend, in `from_currency` units (not centimos).
+        from_currency:
+          type: string
+          enum: [CRC, USD]
+          description: Defaults to CRC.
+        price:
+          type: number
+          description: USD unit price the screen showed. Omit it to skip the 2% check.
+        amount:
+          type: number
+          description: Ignored; the server computes the quantity. Accepted for older clients.
+        idempotency_key:
+          type: string
+
+    CryptoSellRequest:
+      type: object
+      required: [asset, amount]
+      properties:
+        asset:
+          type: string
+          example: "BTC"
+        amount:
+          type: number
+          description: Crypto quantity to sell, at most 18 decimals.
+        to_currency:
+          type: string
+          enum: [CRC, USD]
+          description: Defaults to CRC.
+        price:
+          type: number
+          description: USD unit price the screen showed. Omit it to skip the 2% check.
+        to_amount:
+          type: number
+          description: Ignored; the server computes the fiat credited. Accepted for older clients.
+        idempotency_key:
+          type: string
 
     CryptoPriceData:
       type: object
@@ -4277,16 +4436,22 @@ components:
 
     CryptoTransactionRecord:
       type: object
+      description: >-
+        Quantities and prices are exact decimals serialized as JSON strings
+        (for example "0.5"), never floats. For buy and sell, `id` is the id of
+        the wallet transaction the ledger posting hangs from, `price` is the
+        unit price in `currency`, and `total` is the fiat that moved, to the
+        centimo.
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
         type: { type: string, enum: [buy, sell, convert, send, receive, stake, unstake, reward] }
         asset: { type: string }
-        amount: { type: number }
-        price: { type: number }
-        total: { type: number }
+        amount: { type: string, description: decimal }
+        price: { type: string, description: decimal }
+        total: { type: string, description: decimal }
         currency: { type: string }
-        fee: { type: number }
+        fee: { type: string, description: decimal }
         status: { type: string }
         created_at: { type: string, format: date-time }
 

@@ -2,10 +2,12 @@ package crypto
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/shopspring/decimal"
 )
@@ -29,6 +31,41 @@ func toMinor(v decimal.Decimal) int64 {
 	return v.Mul(decimal.NewFromInt(100)).Round(0).IntPart()
 }
 
+// decimalesDeLaBase es la escala de las columnas de cantidades de cripto
+// (NUMERIC(38,18), migracion 019).
+const decimalesDeLaBase = 18
+
+// validarCantidad rechaza una cantidad de cripto que no se puede operar.
+//
+// Los decimales se acotan a los de la base: con mas, `balance - $3` se
+// redondea al guardarse y lo anotado dejaria de ser lo descontado.
+func validarCantidad(cantidad decimal.Decimal) error {
+	if !cantidad.IsPositive() {
+		return fmt.Errorf("%w: must be positive", ErrMontoInvalido)
+	}
+	if !cantidad.Truncate(decimalesDeLaBase).Equal(cantidad) {
+		return fmt.Errorf("%w: at most %d decimal places", ErrMontoInvalido, decimalesDeLaBase)
+	}
+	return nil
+}
+
+// saldoAlcanza es una comprobacion de CORTESIA: rechaza rapido, sin abrir un
+// asiento ni dejar una fila fallida. Lee fuera de la transaccion, asi que no
+// frena nada bajo concurrencia; lo que frena es la guarda de descontarActivo.
+func (s *Service) saldoAlcanza(ctx context.Context, userID, simbolo string, cantidad decimal.Decimal) error {
+	activo, err := s.repo.GetAsset(ctx, userID, simbolo)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: %s", ErrSaldoDeActivoInsuficiente, simbolo)
+	}
+	if err != nil {
+		return fmt.Errorf("read %s balance: %w", simbolo, err)
+	}
+	if activo.Balance.LessThan(cantidad) {
+		return fmt.Errorf("%w: %s", ErrSaldoDeActivoInsuficiente, simbolo)
+	}
+	return nil
+}
+
 func (s *Service) GetAssets(ctx context.Context, userID string) ([]AssetRecord, error) {
 	return s.repo.GetAssets(ctx, userID)
 }
@@ -37,12 +74,21 @@ func (s *Service) GetTransactions(ctx context.Context, userID string) ([]Transac
 	return s.repo.GetTransactions(ctx, userID, 50)
 }
 
+// Buy compra cripto con fiat.
+//
+// El debito del fiat es el asiento; el abono del activo y la anotacion de la
+// compra corren dentro de su transaccion (EnLaMismaTx), asi que confirman
+// juntos o no confirma ninguno. Antes el abono iba despues y por fuera: una
+// caida entre los dos pasos dejaba el fiat cobrado sin activo —y no hay
+// conciliacion que lo levante, porque los activos no pasan por el libro—, y
+// repetir la compra con la misma llave de idempotencia abonaba el activo otra
+// vez sin cobrar nada.
 func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*TransactionRecord, error) {
 	// req.Amount ya no se valida ni se usa: la cantidad de cripto la calcula el
 	// servidor. Se sigue aceptando en el cuerpo para no romper a los clientes
 	// desplegados, que todavia la mandan.
 	if !req.FromAmount.IsPositive() {
-		return nil, fmt.Errorf("from_amount must be positive")
+		return nil, fmt.Errorf("%w: from_amount must be positive", ErrMontoInvalido)
 	}
 	currency := req.FromCurrency
 	if currency == "" {
@@ -50,8 +96,11 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	}
 	fiatMinor := toMinor(req.FromAmount)
 	if fiatMinor <= 0 {
-		return nil, fmt.Errorf("from_amount too small")
+		return nil, fmt.Errorf("%w: from_amount is less than one centimo", ErrMontoInvalido)
 	}
+	// Lo que el libro cobra, al centimo. La cantidad sale de aqui y no del
+	// monto pedido: con mas de dos decimales, los dos numeros no coinciden.
+	pagado := decimal.New(fiatMinor, -2)
 
 	// El precio y la cantidad de cripto los pone el servidor. Lo que decide el
 	// cliente es cuanto de SU plata gasta, que es lo unico suyo que hay aqui.
@@ -63,9 +112,9 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	if err != nil {
 		return nil, err
 	}
-	cantidad := req.FromAmount.Div(precio)
+	cantidad := pagado.Div(precio)
 	if !cantidad.IsPositive() {
-		return nil, fmt.Errorf("from_amount too small for one unit of %s", req.Asset)
+		return nil, fmt.Errorf("%w: from_amount too small for one unit of %s", ErrMontoInvalido, req.Asset)
 	}
 
 	idem := req.IdempotencyKey
@@ -73,10 +122,21 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		idem = "crypto:buy:" + uuid.New().String()
 	}
 
-	// 1. Debit fiat THROUGH THE LEDGER. Balance check, MFA gating and
-	//    idempotency all live inside the transaction service — no crypto is
-	//    credited unless the fiat actually leaves the wallet.
-	if _, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+	compra := &TransactionRecord{
+		UserID:   userID,
+		Type:     "buy",
+		Asset:    req.Asset,
+		Amount:   cantidad,
+		Price:    precio,
+		Total:    pagado,
+		Currency: currency,
+		Fee:      decimal.Zero,
+		Status:   "completed",
+	}
+	nombre := getAssetName(req.Asset)
+	// El saldo, el tope, el segundo factor y la idempotencia del fiat viven en
+	// CreateTransaction; el abono solo ocurre si el cobro confirma.
+	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
 		Type:             transaction.TypeCryptoBuy,
 		Amount:           fiatMinor,
 		Currency:         currency,
@@ -86,40 +146,29 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		Description:      fmt.Sprintf("Buy %s", req.Asset),
 		IdempotencyKey:   idem,
 		Internal:         true,
-	}); err != nil {
-		return nil, fmt.Errorf("debit fiat: %w", err)
+		EnLaMismaTx: func(ctx context.Context, dbtx pgx.Tx, txID string) error {
+			compra.ID = txID
+			return s.repo.ComprarEnTx(ctx, dbtx, nombre, compra)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("buy %s: %w", req.Asset, err)
 	}
-
-	// 2. Credit the crypto asset. If this fails after the fiat debit, the
-	//    fiat movement is already recorded in the transactions table + journal
-	//    and is caught by reconciliation (ref = idempotency key).
-	assetName := getAssetName(req.Asset)
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, assetName, cantidad, precio); err != nil {
-		return nil, fmt.Errorf("credit crypto asset (fiat already debited, ref %s): %w", idem, err)
-	}
-
-	tx := &TransactionRecord{
-		ID:       uuid.New().String(),
-		UserID:   userID,
-		Type:     "buy",
-		Asset:    req.Asset,
-		Amount:   cantidad,
-		Price:    precio,
-		Total:    req.FromAmount,
-		Currency: currency,
-		Fee:      decimal.Zero,
-		Status:   "completed",
-	}
-	if err := s.repo.AddTransaction(ctx, tx); err != nil {
-		return nil, fmt.Errorf("record transaction: %w", err)
-	}
-
-	return tx, nil
+	return s.anotado(ctx, userID, fila, compra), nil
 }
 
+// Sell vende cripto a cambio de fiat.
+//
+// El descuento del activo, el credito del fiat y la anotacion de la venta
+// confirman juntos o no confirma ninguno: el descuento y la anotacion corren
+// dentro de la transaccion del asiento (EnLaMismaTx), y el credito es el
+// asiento. Antes eran pasos sueltos —descontar, acreditar y, si fallaba el
+// credito, devolver el activo a mano—, y el descuento iba por el abono con un
+// delta negativo, que el CHECK de saldo de la base rechaza SIEMPRE. Vender
+// nunca funciono en produccion.
 func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*TransactionRecord, error) {
-	if !req.Amount.IsPositive() {
-		return nil, fmt.Errorf("amount must be positive")
+	if err := validarCantidad(req.Amount); err != nil {
+		return nil, err
 	}
 	currency := req.ToCurrency
 	if currency == "" {
@@ -136,31 +185,37 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	if err != nil {
 		return nil, err
 	}
-	totalFiat := req.Amount.Mul(precio)
-	fiatMinor := toMinor(totalFiat)
+	fiatMinor := toMinor(req.Amount.Mul(precio))
 	if fiatMinor <= 0 {
-		return nil, fmt.Errorf("amount too small to be worth one centimo")
-	}
-
-	// Check balance
-	asset, err := s.repo.GetAsset(ctx, userID, req.Asset)
-	if err != nil || asset.Balance.LessThan(req.Amount) {
-		return nil, fmt.Errorf("insufficient %s balance", req.Asset)
+		return nil, fmt.Errorf("%w: worth less than one centimo", ErrMontoInvalido)
 	}
 
 	idem := req.IdempotencyKey
 	if idem == "" {
 		idem = "crypto:sell:" + uuid.New().String()
+		// Con llave del cliente no se comprueba antes: el reintento de una venta
+		// que ya se llevo todo el saldo diria "insuficiente" sobre algo que ya
+		// ocurrio, en vez de llegar a la relectura de idempotencia. La guarda
+		// del descuento decide igual.
+		if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
+			return nil, err
+		}
 	}
 
-	// 1. Debit the crypto asset first.
-	if err := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount.Neg(), decimal.Zero); err != nil {
-		return nil, fmt.Errorf("debit crypto asset: %w", err)
+	venta := &TransactionRecord{
+		UserID: userID,
+		Type:   "sell",
+		Asset:  req.Asset,
+		Amount: req.Amount,
+		Price:  precio,
+		// Lo que acredita el libro, al centimo. El producto sin redondear podia
+		// traer mas decimales de los que entraron a la billetera.
+		Total:    decimal.New(fiatMinor, -2),
+		Currency: currency,
+		Fee:      decimal.Zero,
+		Status:   "completed",
 	}
-
-	// 2. Credit fiat THROUGH THE LEDGER. If this fails, compensate by
-	//    re-crediting the crypto so the user is never left short.
-	if _, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
 		Type:             transaction.TypeCryptoSell,
 		Amount:           fiatMinor,
 		Currency:         currency,
@@ -170,41 +225,47 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Description:      fmt.Sprintf("Sell %s", req.Asset),
 		IdempotencyKey:   idem,
 		Internal:         true,
-	}); err != nil {
-		if cerr := s.repo.UpsertAsset(ctx, userID, req.Asset, asset.Name, req.Amount, decimal.Zero); cerr != nil {
-			return nil, fmt.Errorf("credit fiat failed (%v) AND crypto compensation failed (%v) ref %s", err, cerr, idem)
-		}
-		return nil, fmt.Errorf("credit fiat: %w", err)
+		// La venta toma el id de la fila de `transactions` a la que cuelga el
+		// asiento: asi la repeticion con la misma llave encuentra la venta que ya
+		// se hizo en vez de inventar otra. Un reintento por conflicto vuelve a
+		// correr esto sobre una transaccion nueva, con el mismo id.
+		EnLaMismaTx: func(ctx context.Context, dbtx pgx.Tx, txID string) error {
+			venta.ID = txID
+			return s.repo.VenderEnTx(ctx, dbtx, venta)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
 	}
+	return s.anotado(ctx, userID, fila, venta), nil
+}
 
-	tx := &TransactionRecord{
-		ID:       uuid.New().String(),
-		UserID:   userID,
-		Type:     "sell",
-		Asset:    req.Asset,
-		Amount:   req.Amount,
-		Price:    precio,
-		Total:    totalFiat,
-		Currency: currency,
-		Fee:      decimal.Zero,
-		Status:   "completed",
+// anotado devuelve el movimiento de cripto que cuelga de la fila `fila` del
+// libro, tal como quedo en la base.
+//
+// Se lee en vez de devolver lo calculado en esta llamada porque, si fue la
+// repeticion de un movimiento que ya confirmo, el gancho no corrio aqui y lo
+// que vale es lo que se anoto aquella vez, con su precio. Si la lectura falla,
+// el dinero igual ya se movio: se responde exito con lo calculado y el id de la
+// fila, no un error que invite a reintentar.
+func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.TransactionRecord, calculado *TransactionRecord) *TransactionRecord {
+	if mov, err := s.repo.GetTransaction(ctx, userID, fila.ID); err == nil {
+		return mov
 	}
-	if err := s.repo.AddTransaction(ctx, tx); err != nil {
-		return nil, fmt.Errorf("record transaction: %w", err)
+	calculado.ID = fila.ID
+	if calculado.CreatedAt.IsZero() {
+		calculado.CreatedAt = fila.CreatedAt
 	}
-
-	return tx, nil
+	return calculado
 }
 
 func (s *Service) Convert(ctx context.Context, userID string, req *ConvertRequest) (*TransactionRecord, error) {
-	if !req.FromAmount.IsPositive() {
-		return nil, fmt.Errorf("amount must be positive")
+	if err := validarCantidad(req.FromAmount); err != nil {
+		return nil, err
 	}
 
-	// Check from-asset balance
-	fromAsset, err := s.repo.GetAsset(ctx, userID, req.FromAsset)
-	if err != nil || fromAsset.Balance.LessThan(req.FromAmount) {
-		return nil, fmt.Errorf("insufficient %s balance", req.FromAsset)
+	if err := s.saldoAlcanza(ctx, userID, req.FromAsset, req.FromAmount); err != nil {
+		return nil, err
 	}
 
 	// Cuanto se recibe del otro activo lo decide la relacion entre los dos
@@ -220,7 +281,7 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 	}
 	cantidadDestino := req.FromAmount.Mul(precioOrigen).Div(precioDestino)
 	if !cantidadDestino.IsPositive() {
-		return nil, fmt.Errorf("from_amount too small to convert into %s", req.ToAsset)
+		return nil, fmt.Errorf("%w: from_amount too small to convert into %s", ErrMontoInvalido, req.ToAsset)
 	}
 
 	tx := &TransactionRecord{
@@ -262,14 +323,12 @@ var stakingAPY = map[string]float64{
 }
 
 func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (*StakingRecord, error) {
-	if !req.Amount.IsPositive() {
-		return nil, fmt.Errorf("amount must be positive")
+	if err := validarCantidad(req.Amount); err != nil {
+		return nil, err
 	}
 
-	// Check balance
-	asset, err := s.repo.GetAsset(ctx, userID, req.Asset)
-	if err != nil || asset.Balance.LessThan(req.Amount) {
-		return nil, fmt.Errorf("insufficient %s balance for staking", req.Asset)
+	if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
+		return nil, err
 	}
 
 	record := &StakingRecord{
@@ -293,17 +352,28 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID string) error {
-	pos, err := s.repo.GetStakingByID(ctx, positionID, userID)
+	// Un id que no es UUID no puede ser una posicion: sin esto llegaba a la
+	// base y volvia como un error de sintaxis. A la base va la forma canonica,
+	// porque uuid.Parse acepta escrituras (urn:uuid:...) que Postgres no.
+	id, err := uuid.Parse(positionID)
 	if err != nil {
-		return fmt.Errorf("staking position not found")
+		return ErrPosicionNoEncontrada
+	}
+	positionID = id.String()
+	pos, err := s.repo.GetStakingByID(ctx, positionID, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrPosicionNoEncontrada
+	}
+	if err != nil {
+		return fmt.Errorf("read staking position: %w", err)
 	}
 	if pos.Status != "active" {
-		return fmt.Errorf("staking position is not active")
+		return ErrPosicionNoActiva
 	}
 	if pos.Locked {
 		unlockAt := pos.StartDate.AddDate(0, 0, pos.LockDays)
 		if time.Now().Before(unlockAt) {
-			return fmt.Errorf("position is locked until %s", unlockAt.Format("2006-01-02"))
+			return fmt.Errorf("%w until %s", ErrPosicionBloqueada, unlockAt.Format("2006-01-02"))
 		}
 	}
 	return s.repo.CompleteStakingAndRelease(ctx, positionID, userID)
@@ -328,7 +398,14 @@ func (s *Service) AddPriceAlert(ctx context.Context, userID string, alert *Price
 }
 
 func (s *Service) RemovePriceAlert(ctx context.Context, userID, alertID string) error {
-	return s.repo.DeactivatePriceAlert(ctx, alertID, userID)
+	// Quitar una alerta que no existe no hace nada y responde exito; un id que
+	// no es UUID tampoco puede existir, asi que se trata igual en vez de
+	// dejarlo llegar a la base. A la base va la forma canonica.
+	id, err := uuid.Parse(alertID)
+	if err != nil {
+		return nil
+	}
+	return s.repo.DeactivatePriceAlert(ctx, id.String(), userID)
 }
 
 func (s *Service) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
