@@ -12,6 +12,7 @@ import type {
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
 import { apiSuccess, apiError } from '../../types';
+import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
 
 export class HttpAuthRepository implements IAuthRepository {
@@ -29,6 +30,7 @@ export class HttpAuthRepository implements IAuthRepository {
         email: string;
         kyc_level: number;
         status: string;
+        plan?: string;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -54,6 +56,7 @@ export class HttpAuthRepository implements IAuthRepository {
       avatar: '',
       createdAt: new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
+      plan: normalizarPlan(u.plan),
     };
 
     // IMPORTANT: expose the full `tokens` object — the auth store reads
@@ -85,6 +88,7 @@ export class HttpAuthRepository implements IAuthRepository {
         last_name: string;
         email: string;
         referral_code?: string;
+        plan?: string;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -126,6 +130,7 @@ export class HttpAuthRepository implements IAuthRepository {
       createdAt: new Date().toISOString(),
       kycLevel: 0,
       referralCode: u.referral_code,
+      plan: normalizarPlan(u.plan),
     };
 
     return apiSuccess({
@@ -266,6 +271,7 @@ export class HttpAuthRepository implements IAuthRepository {
       profile_picture_url?: string;
       created_at?: string;
       referral_code?: string;
+      plan?: string;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
@@ -285,6 +291,7 @@ export class HttpAuthRepository implements IAuthRepository {
       createdAt: u.created_at || new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
       referralCode: u.referral_code,
+      plan: normalizarPlan(u.plan),
     };
     return apiSuccess<User>(user);
   }

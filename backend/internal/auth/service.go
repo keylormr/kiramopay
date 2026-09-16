@@ -609,6 +609,9 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		Status:        "active",
 		KYCLevel:      0,
 		ReferredBy:    referredBy,
+		// El INSERT no escribe plan: la columna arranca en su DEFAULT 'free'.
+		// Se refleja aqui para que la respuesta del registro no diga "".
+		Plan: "free",
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		// Telefono o correo ya registrados (la cedula se reviso arriba, pero

@@ -1,4 +1,5 @@
-import { ApiResponse, apiError } from '../../types';
+import { ApiResponse, apiError, apiErrorConDetalle } from '../../types';
+import type { ArchivoDescargado } from '../../types';
 // Ningun texto visible nace aqui: el cliente pone el CODIGO y el mensaje sale
 // del diccionario del idioma activo (ver i18n/mensajesDeError.ts).
 import { mensajeDelCliente, mensajeDelServidor } from '@/i18n/mensajesDeError';
@@ -51,6 +52,20 @@ let accountBlockedHandler: AccountBlockedHandler | null = null;
 
 export function registerAccountBlockedHandler(h: AccountBlockedHandler): void {
   accountBlockedHandler = h;
+}
+
+// Solo un objeto de verdad cuenta como detalle: el stub de E2E y un proxy que
+// responda HTML no deben colar un arreglo o un texto donde la vista espera
+// {plan, limite, actuales}.
+function detallesDe(json: unknown): Record<string, unknown> | undefined {
+  const d = (json as { error?: { details?: unknown } } | null)?.error?.details;
+  return typeof d === 'object' && d !== null && !Array.isArray(d) ? (d as Record<string, unknown>) : undefined;
+}
+
+// filename="reporte-2026-09-07-a-2026-09-13.csv" -> reporte-2026-09-07-a-2026-09-13.csv
+function nombreDeDisposicion(valor: string | null): string {
+  const m = valor ? /filename="?([^";]+)"?/i.exec(valor) : null;
+  return m ? m[1].trim() : '';
 }
 
 function dedupedRefresh(): Promise<boolean> {
@@ -162,6 +177,8 @@ export class HttpClient {
           // ErrorWithData en backend/pkg/response/response.go), nunca anidado
           // dentro de error — APIError no tiene campo Data.
           json.data,
+          // `details` si viaja DENTRO de error (ErrorConDetalle).
+          detallesDe(json),
         );
       }
 
@@ -178,6 +195,58 @@ export class HttpClient {
 
   async get<T>(path: string, auth = true): Promise<ApiResponse<T>> {
     return this.request<T>('GET', path, undefined, auth);
+  }
+
+  /**
+   * GET de un archivo. Con 200 entrega el cuerpo tal cual (sin pasarlo por
+   * JSON) y el nombre del Content-Disposition. Con cualquier otro estado el
+   * servidor responde el sobre de error de siempre, y ese SI se lee como JSON:
+   * sin eso un 403 PLAN_REQUIRED se descargaria como si fuera el reporte.
+   */
+  async getArchivo(path: string, isRetry = false): Promise<ApiResponse<ArchivoDescargado>> {
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const abortador = new AbortController();
+    const temporizador = setTimeout(() => abortador.abort(), 20000);
+    try {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+        signal: abortador.signal,
+      });
+
+      if (res.status === 401 && !isRetry && refreshHandler) {
+        const refreshed = await dedupedRefresh();
+        if (refreshed) return this.getArchivo(path, true);
+        if (authFailureHandler) authFailureHandler();
+        return apiError('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
+      }
+      if (res.status === 429) {
+        return apiError('RATE_LIMITED', mensajeDelCliente('RATE_LIMITED'));
+      }
+      if (res.status !== 200) {
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch {
+          // Un cuerpo que no es JSON (una pagina de error de un proxy) no trae
+          // codigo: queda el generico con el estado.
+        }
+        const err = (json as { error?: { code?: string; message?: string } } | null)?.error;
+        const code = err?.code || 'HTTP_ERROR';
+        return apiErrorConDetalle(code, mensajeDelServidor(res.status, code, err?.message), detallesDe(json));
+      }
+
+      const blob = await res.blob();
+      return { success: true, data: { blob, nombre: nombreDeDisposicion(res.headers.get('Content-Disposition')) } };
+    } catch {
+      return apiError('NETWORK_ERROR', mensajeDelCliente('NETWORK_ERROR'));
+    } finally {
+      clearTimeout(temporizador);
+    }
   }
 
   async post<T>(

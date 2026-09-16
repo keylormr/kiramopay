@@ -2249,6 +2249,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qr/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the merchants the user owns or works for
+         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Merchants (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description FETCH_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales report of a merchant (owner or manager)
+         * @description Calendar window of `days` days in the client's timezone, up to now. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    days?: number;
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Report */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantReport"];
+                    };
+                };
+                /** @description NOT_FOUND (unknown merchant, or the caller is not its owner or manager) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/report.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the sales report as CSV (owner or manager, analitica plan)
+         * @description Same window and access as the report, plus the analitica plan. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    days?: number;
+                    /** @description Client offset in minutes WEST of UTC (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description UTF-8 CSV with byte order mark, served as an attachment with Cache-Control no-store. Columns: seccion, desde, hasta, clave, nombre, bruto, comision, neto, cobros. seccion is dia, sucursal, cobrador, total or periodo_anterior. Amounts are units with two decimals, not centimos. Every cell that starts with = + - @, a tab or a carriage return is prefixed with an apostrophe, so a spreadsheet shows it as text instead of running it as a formula. */
+                200: {
+                    headers: {
+                        "Content-Disposition"?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/csv": string;
+                    };
+                };
+                /** @description PLAN_REQUIRED (the merchant does not have the analitica plan) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanRequiredError"];
+                    };
+                };
+                /** @description NOT_FOUND (unknown merchant, or the caller is not its owner or manager) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description EXPORT_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/qr/codes": {
         parameters: {
             query?: never;
@@ -2588,7 +2756,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a virtual card */
+        /**
+         * Create a virtual card
+         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2598,12 +2769,28 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Card created (max 5 per user) */
+                /** @description Card created */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description INVALID_BODY | CREATE_FAILED */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanLimitError"];
+                    };
                 };
             };
         };
@@ -2771,6 +2958,85 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/savings/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the person's savings goals */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Goals, oldest first (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a savings goal
+         * @description The person's plan limits how many goals they can have at once (by default free 3, plus 10, pro without limit; the numbers in force are published in /api/v1/transparency/fees). The limit only stops creating: whoever already has more keeps every goal. Two simultaneous creations cannot both slip past the limit. Money kept in a goal earns nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SavingsGoalCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Goal created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"];
+                    };
+                };
+                /** @description INVALID_BODY | CREATE_FAILED (missing name, non-positive target, unknown currency) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description SAVINGS_GOAL_LIMIT (the plan does not allow another goal) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanLimitError"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3166,7 +3432,7 @@ export interface paths {
         put?: never;
         /**
          * Register interest in a paid plan
-         * @description Records that the authenticated person wants a paid plan. This is NOT a subscription and charges nothing: the app has no payment path for plans yet, so the only honest thing to store is the intent. Idempotent per (user, plan) — registering twice keeps a single row and refreshes its date. Audited as plan_interest (low); the plan is the only detail kept.
+         * @description Records that the authenticated person wants a paid plan. This is NOT a subscription and charges nothing: the app has no payment path for plans yet, so the only honest thing to store is the intent. Idempotent per (user, plan) — registering twice keeps a single row and refreshes its date. Audited as plan_interest (low); the plan is the only detail kept. Accepts plus and pro (personal plans) and analitica (merchant analytics). The retired negocio and cima plans are rejected with PLAN_INVALID; the rows registered for them before stay in the administrator's list.
          */
         post: {
             parameters: {
@@ -3190,7 +3456,7 @@ export interface paths {
                         "application/json": components["schemas"]["PlanInterest"];
                     };
                 };
-                /** @description PLAN_INVALID (plan must be negocio or cima) | INVALID_BODY */
+                /** @description PLAN_INVALID (plan must be plus, pro or analitica) | INVALID_BODY */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3323,6 +3589,134 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a merchant's verification (admin)
+         * @description Sets verification_status=verified. The FIRST approval of a merchant grants the entry promotion: promo_hasta = approval + 3 months, during which the commission charged is the lower of commission_bps and 25 bps. Approving again (after a rejection, or after the owner changed the legal identity and the merchant went back to pending) neither renews nor extends it, and approving a merchant that is already verified never grants it. A merchant approved before the promotion existed does not receive it; migration 068 documents the one case the stored data cannot recognize.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Approved merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description APPROVE_FAILED */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Assign a merchant's plan by hand (admin)
+         * @description base or analitica. There is no charging for plans yet: this is how a pilot merchant gets the report comparison and the CSV export, and it charges nothing. Validation is strict: the body must be exactly one plan field. Audited as admin_merchant_plan_set (high) with plan_anterior and plan_nuevo.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdminPlanComercioRequest"];
+                };
+            };
+            responses: {
+                /** @description Merchant with its new plan */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not base or analitica, written exactly so) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description PLAN_UPDATE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         trace?: never;
     };
     "/api/v1/admin/users/search": {
@@ -3710,6 +4104,86 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Assign a person's plan by hand (admin)
+         * @description free, plus or pro. There is no charging for plans yet: this is how a pilot account gets plus or pro, and it charges nothing. Lowering the plan removes nothing: the limits only stop creating new goals and cards. Validation is strict: the body must be exactly one plan field. Shares the 30/min per-administrator budget with the rest of account management. Audited as admin_user_plan_set (high) with plan_anterior and plan_nuevo.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdminPlanPersonalRequest"];
+                };
+            };
+            responses: {
+                /** @description Plan assigned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanAsignado"];
+                    };
+                };
+                /** @description INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not free, plus or pro, written exactly so) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description PLAN_UPDATE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         trace?: never;
     };
     "/api/v1/admin/users/{id}/sessions": {
@@ -6059,20 +6533,223 @@ export interface components {
              * @description Scheduled expiry. When it passes, a periodic sweep blocks the account with reason "demo vencido". Null means the account never expires, which is the case for almost every account.
              */
             expires_at?: string | null;
+            /**
+             * @description Personal plan. While there is no charging only an administrator changes it.
+             * @enum {string}
+             */
+            plan?: "free" | "plus" | "pro";
         };
         PlanInterestRequest: {
             /**
-             * @description Paid plan the person wants. The free plan is not registered: there is nothing to contract.
+             * @description Plan the person wants: plus or pro (personal) or analitica (merchant analytics). The free plan is not registered: there is nothing to contract. The retired negocio and cima are rejected.
              * @enum {string}
              */
-            plan: "negocio" | "cima";
+            plan: "plus" | "pro" | "analitica";
         };
         /** @description Interest registered. Not a subscription — nothing was charged. */
         PlanInterest: {
             /** @enum {string} */
-            plan?: "negocio" | "cima";
+            plan?: "plus" | "pro" | "analitica";
             /** Format: date-time */
             registered_at?: string;
+        };
+        /** @description 409 answer when creating a savings goal or a virtual card would go past the limit of the person's plan. The limit only stops CREATING: whoever already has more than the plan allows keeps everything, which is why actuales can be above limite. */
+        PlanLimitError: {
+            /** @example false */
+            success: boolean;
+            error: {
+                /** @enum {string} */
+                code: "SAVINGS_GOAL_LIMIT" | "CARD_LIMIT";
+                message: string;
+                details: {
+                    /** @enum {string} */
+                    plan: "free" | "plus" | "pro";
+                    /** @description How many the plan allows (goals; cards active or frozen) */
+                    limite: number;
+                    /** @description How many the person has now */
+                    actuales: number;
+                };
+            };
+        };
+        /** @description 403 answer when the merchant lacks the plan a feature needs. */
+        PlanRequiredError: {
+            /** @example false */
+            success: boolean;
+            error: {
+                /** @enum {string} */
+                code: "PLAN_REQUIRED";
+                message: string;
+                details: {
+                    /** @enum {string} */
+                    plan_requerido: "analitica";
+                };
+            };
+        };
+        AdminPlanPersonalRequest: {
+            /** @enum {string} */
+            plan: "free" | "plus" | "pro";
+        };
+        AdminPlanComercioRequest: {
+            /** @enum {string} */
+            plan: "base" | "analitica";
+        };
+        /** @description A personal plan assigned by an administrator. Nothing was charged. */
+        PlanAsignado: {
+            /** Format: uuid */
+            user_id: string;
+            /** @enum {string} */
+            plan: "free" | "plus" | "pro";
+            /** @enum {string} */
+            plan_anterior: "free" | "plus" | "pro";
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Merchant: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            name: string;
+            description?: string;
+            category?: string;
+            logo_url?: string;
+            qr_code?: string;
+            active?: boolean;
+            cedula?: string;
+            /** @enum {string} */
+            cedula_type?: "fisica" | "juridica";
+            legal_name?: string;
+            /** @enum {string} */
+            verification_status: "pending" | "verified" | "rejected";
+            rejection_reason?: string;
+            /** Format: date-time */
+            reviewed_at?: string;
+            /** @description Commission the platform set, in basis points (50 = 0.5%) */
+            commission_bps: number;
+            /** @description Commission charged on a payment made now, in basis points: the lower of commission_bps and 25 while promo_hasta is in the future, commission_bps afterwards. */
+            comision_efectiva_bps: number;
+            /**
+             * Format: date-time
+             * @description End of the entry promotion. Null when the merchant never had it.
+             */
+            promo_hasta: string | null;
+            /**
+             * @description analitica adds the report comparison and the CSV export.
+             * @enum {string}
+             */
+            plan: "base" | "analitica";
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * @description How the requesting user relates to the merchant (only in the user's own list)
+             * @enum {string}
+             */
+            role?: "owner" | "manager" | "cashier";
+        };
+        ReportBucket: {
+            /** @description Location or collector id; absent for the unattributed bucket */
+            key?: string;
+            label?: string;
+            /**
+             * Format: int64
+             * @description centimos charged to payers
+             */
+            gross: number;
+            /**
+             * Format: int64
+             * @description centimos of commission
+             */
+            fee: number;
+            /**
+             * Format: int64
+             * @description gross - fee
+             */
+            net: number;
+            count: number;
+        };
+        ReportDay: {
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            gross: number;
+            /** Format: int64 */
+            fee: number;
+            /** Format: int64 */
+            net: number;
+            count: number;
+        };
+        /** @description Current minus previous. Percentages are null when the previous value is 0. */
+        ReportDelta: {
+            /** Format: int64 */
+            gross: number;
+            /** Format: int64 */
+            fee: number;
+            /** Format: int64 */
+            net: number;
+            count: number;
+            gross_pct: number | null;
+            net_pct: number | null;
+            count_pct: number | null;
+        };
+        ReportComparison: {
+            /** Format: date */
+            previous_from: string;
+            /** Format: date */
+            previous_to: string;
+            previous_totals: components["schemas"]["ReportBucket"];
+            delta: components["schemas"]["ReportDelta"];
+        };
+        MerchantReport: {
+            days: number;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            totals: components["schemas"]["ReportBucket"];
+            daily: components["schemas"]["ReportDay"][];
+            by_location: components["schemas"]["ReportBucket"][];
+            by_collector: components["schemas"]["ReportBucket"][];
+            /** @enum {string} */
+            plan: "base" | "analitica";
+            comparison?: components["schemas"]["ReportComparison"];
+        };
+        SavingsGoal: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            user_id?: string;
+            name?: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            target_minor?: number;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            saved_minor?: number;
+            /** @enum {string} */
+            currency?: "CRC" | "USD";
+            icon?: string;
+            color?: string;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        SavingsGoalCreateRequest: {
+            name: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            target_minor: number;
+            /**
+             * @default CRC
+             * @enum {string}
+             */
+            currency: "CRC" | "USD";
+            icon?: string;
+            color?: string;
         };
         /** @description One line of the paid plan waiting list. PII is masked in SQL, the same way as in AdminUser. */
         PlanInterestAdmin: {
@@ -6086,8 +6763,11 @@ export interface components {
             phone_masked?: string;
             /** @example k•••••@gmail.com */
             email_masked?: string;
-            /** @enum {string} */
-            plan?: "negocio" | "cima";
+            /**
+             * @description negocio and cima are retired plans; their rows are kept, not deleted.
+             * @enum {string}
+             */
+            plan?: "plus" | "pro" | "analitica" | "negocio" | "cima";
             /** Format: date-time */
             registered_at?: string;
         };
@@ -6280,6 +6960,10 @@ export interface components {
         ApiError: {
             code?: string;
             message?: string;
+            /** @description Data the screen needs to explain the rejection (see PlanLimitError and PlanRequiredError). Only on 4xx answers; never on a 5xx. */
+            details?: {
+                [key: string]: unknown;
+            };
         };
         HealthResponse: {
             /** @enum {string} */
@@ -6384,6 +7068,11 @@ export interface components {
                     full_name?: string;
                     /** @description The new user's own invitation code (8 chars) */
                     referral_code?: string;
+                    /**
+                     * @description Personal plan; every account starts on free
+                     * @enum {string}
+                     */
+                    plan?: "free" | "plus" | "pro";
                 };
             };
         };
@@ -6411,6 +7100,11 @@ export interface components {
              * @example K7PM3XQ2
              */
             referral_code?: string;
+            /**
+             * @description Personal plan. It sets the savings goal and card limits and the assistant's daily questions. There is no charging yet: only an administrator changes it.
+             * @enum {string}
+             */
+            plan?: "free" | "plus" | "pro";
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -6545,6 +7239,8 @@ export interface components {
             kyc_level?: number;
             kyc_status?: string;
             status?: string;
+            /** @enum {string} */
+            plan?: "free" | "plus" | "pro";
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

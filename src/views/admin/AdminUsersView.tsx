@@ -4,6 +4,8 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { AdminUser, AdminUserStatus } from '@/api/repositories/admin.repository';
+import type { PlanPersonal } from '@/api/repositories/plans.repository';
+import { PLANES_PERSONALES, rellenar } from '@/utils/planes';
 
 type Tab = 'search' | 'blocked';
 type Translate = (key: string) => string;
@@ -39,6 +41,10 @@ function errorKey(code?: string | null): string {
     case 'CANNOT_EXPIRE_ADMIN': return 'admin_users_err_expire_admin';
     case 'EXPIRY_REQUIRED':
     case 'INVALID_EXPIRY': return 'admin_users_err_expiry';
+    case 'USER_NOT_FOUND': return 'admin_users_err_not_found';
+    case 'RATE_LIMITED': return 'admin_users_err_rate';
+    case 'PLAN_INVALID':
+    case 'PLAN_UPDATE_FAILED': return 'admin_users_err_plan';
     default: return 'admin_users_action_failed';
   }
 }
@@ -78,9 +84,10 @@ interface UserCardProps {
   onBlock: (u: AdminUser) => void;
   onUnblock: (u: AdminUser) => void;
   onExpiry: (u: AdminUser) => void;
+  onPlan: (u: AdminUser) => void;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock, onUnblock, onExpiry }) => {
+const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock, onUnblock, onExpiry, onPlan }) => {
   const blocked = user.status === 'blocked';
   // Una cuenta puede tener vencimiento sin estar bloqueada todavia: ese dato se
   // muestra siempre que exista, no solo cuando ya se ejecuto.
@@ -186,6 +193,20 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
           </>
         )}
       </div>
+
+      {/* El plan se puede cambiar tambien con la cuenta bloqueada: no es un
+          permiso para entrar, es el tope que tendra cuando vuelva. */}
+      <button
+        type="button"
+        onClick={() => onPlan(user)}
+        disabled={busy}
+        className="mt-2 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-sm disabled:opacity-50 uv-focus-ring"
+      >
+        <Icons.Star size={16} className="uv-text-muted shrink-0" aria-hidden="true" />
+        <span className="uv-text-secondary">{t('admin_users_plan')}</span>
+        <span className="font-bold uv-text-primary">{t(`plans_name_${user.plan}`)}</span>
+        <Icons.ChevronRight size={16} className="ml-auto uv-text-muted shrink-0" aria-hidden="true" />
+      </button>
     </article>
   );
 };
@@ -224,6 +245,9 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const [expiryValue, setExpiryValue] = useState('');
   const [reason, setReason] = useState('');
   const [sheetError, setSheetError] = useState<string | null>(null);
+  const [cambiandoPlan, setCambiandoPlan] = useState<AdminUser | null>(null);
+  const [planElegido, setPlanElegido] = useState<PlanPersonal>('free');
+  const [planCambiado, setPlanCambiado] = useState<{ antes: PlanPersonal; ahora: PlanPersonal } | null>(null);
 
   useEffect(() => {
     setAhora(Date.now());
@@ -365,6 +389,41 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
     }
   };
 
+  const openPlan = (u: AdminUser) => {
+    setPlanElegido(u.plan);
+    setSheetError(null);
+    setCambiandoPlan(u);
+  };
+
+  // Sin cobro todavia, el plan de un piloto se asigna a mano. La guarda de
+  // doble envio es la misma de bloquear: el servidor audita cada cambio.
+  const confirmPlan = async () => {
+    if (!cambiandoPlan || actingRef.current || planElegido === cambiandoPlan.plan) return;
+    const id = cambiandoPlan.id;
+    actingRef.current = true;
+    setActing(id);
+    setSheetError(null);
+    try {
+      const api = getApiLayer();
+      if (!api.admin) return;
+      const res = await api.admin.setUserPlan(id, planElegido);
+      if (res.success && res.data) {
+        const nuevo = res.data.plan;
+        setResults((list) => list.map((x) => (x.id === id ? { ...x, plan: nuevo } : x)));
+        setBlocked((list) => list.map((x) => (x.id === id ? { ...x, plan: nuevo } : x)));
+        setPlanCambiado({ antes: res.data.planAnterior, ahora: nuevo });
+        setCambiandoPlan(null);
+      } else {
+        setSheetError(res.error?.code || 'ADMIN_ACTION_FAILED');
+      }
+    } catch {
+      setSheetError('ADMIN_ACTION_FAILED');
+    } finally {
+      actingRef.current = false;
+      setActing(null);
+    }
+  };
+
   const spinner = (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
@@ -383,7 +442,7 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const list = (users: AdminUser[]) => (
     <div className="px-4 py-4 space-y-3">
       {users.map((u) => (
-        <UserCard key={u.id} user={u} busy={acting === u.id} now={ahora} locale={locale} t={t} onBlock={openBlock} onUnblock={openUnblock} onExpiry={openExpiry} />
+        <UserCard key={u.id} user={u} busy={acting === u.id} now={ahora} locale={locale} t={t} onBlock={openBlock} onUnblock={openUnblock} onExpiry={openExpiry} onPlan={openPlan} />
       ))}
     </div>
   );
@@ -423,6 +482,16 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
             </button>
           </div>
         </div>
+
+        {planCambiado && (
+          <p role="status" className="mx-4 mt-3 flex items-center gap-2 rounded-xl uv-chip-success px-3 py-2 text-sm font-medium">
+            <Icons.Check size={16} className="shrink-0" aria-hidden="true" />
+            {rellenar(t('admin_users_plan_done'), {
+              antes: t(`plans_name_${planCambiado.antes}`),
+              ahora: t(`plans_name_${planCambiado.ahora}`),
+            })}
+          </p>
+        )}
 
         {tab === 'search' && (
           <>
@@ -575,6 +644,59 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 {t('admin_users_expiry_clear')}
               </button>
             )}
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet isOpen={cambiandoPlan !== null} onClose={() => { if (!acting) setCambiandoPlan(null); }} title={t('admin_users_plan_title')} dismissable={acting === null}>
+        {cambiandoPlan && (
+          <div className="space-y-4">
+            {sheetPerson(cambiandoPlan)}
+            <p className="text-sm uv-text-secondary">{t('admin_users_plan_hint')}</p>
+            <fieldset>
+              <legend className="sr-only">{t('admin_users_plan_title')}</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {PLANES_PERSONALES.map((p) => {
+                  const elegido = planElegido === p;
+                  return (
+                    <label
+                      key={p}
+                      className={`cursor-pointer rounded-xl border-2 px-2 py-3 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-primary)] ${
+                        elegido
+                          ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)]'
+                          : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="plan-persona"
+                        value={p}
+                        checked={elegido}
+                        disabled={acting !== null}
+                        onChange={() => { setPlanElegido(p); if (sheetError) setSheetError(null); }}
+                        className="sr-only"
+                      />
+                      <span className="block font-bold uv-text-primary">{t(`plans_name_${p}`)}</span>
+                      {cambiandoPlan.plan === p && (
+                        <span className="mt-0.5 block text-[11px] font-semibold uv-text-muted">{t('admin_users_plan_current')}</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            {PLANES_PERSONALES.indexOf(planElegido) < PLANES_PERSONALES.indexOf(cambiandoPlan.plan) && (
+              <p className="text-xs leading-relaxed uv-text-secondary">{t('admin_users_plan_lower_note')}</p>
+            )}
+            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+            <button
+              type="button"
+              onClick={() => void confirmPlan()}
+              disabled={acting !== null || planElegido === cambiandoPlan.plan}
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            >
+              {acting ? t('loading') : rellenar(t('admin_users_plan_confirm'), { plan: t(`plans_name_${planElegido}`) })}
+            </button>
           </div>
         )}
       </BottomSheet>

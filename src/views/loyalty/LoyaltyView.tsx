@@ -14,7 +14,7 @@ const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon 
   platinum: { color: '#E5E4E2', bg: 'from-slate-200/30 to-purple-300/10', icon: Icons.Trophy },
 };
 
-export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => void }> = ({ onClose, onOpenPlans }) => {
   const { t } = useLanguage();
   const [account, setAccount] = useState<PointsAccount | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
@@ -186,46 +186,27 @@ export const LoyaltyView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </div>
 
-            {/* Subscription plans (scaffold — billing/enforcement not live yet).
-                Prices confirmed by product; internal transfers stay free at every
-                tier, so points are only ever funded by real margin. */}
-            <div className="px-4 py-2">
-              <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-bold uv-text-primary">{t('plan_title')}</span>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('plan_soon')}</span>
-                </div>
-                <div className="space-y-2.5">
-                  {[
-                    { name: 'Free', price: t('plan_price_free'), desc: t('plan_free_desc'), current: true },
-                    { name: 'Plus', price: `$4${t('plan_per_month')}`, desc: t('plan_plus_desc'), current: false },
-                    { name: 'Pro', price: `$11${t('plan_per_month')}`, desc: t('plan_pro_desc'), current: false },
-                  ].map((plan) => (
-                    <div
-                      key={plan.name}
-                      className={`rounded-xl p-3 border ${
-                        plan.current
-                          ? 'border-[var(--color-primary)] bg-primary/5'
-                          : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-2'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold uv-text-primary">{plan.name}</span>
-                          {plan.current && (
-                            <span className="text-[10px] font-bold text-[var(--color-primary)] bg-primary/10 px-2 py-0.5 rounded-full">
-                              {t('plan_current')}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-sm font-extrabold uv-text-primary tabular-nums">{plan.price}</span>
-                      </div>
-                      <p className="text-xs uv-text-muted">{plan.desc}</p>
-                    </div>
-                  ))}
-                </div>
+            {/* Los planes viven en su pantalla. Aqui habia una tarjeta escrita a
+                mano (Plus $4, Pro $11, "mejor tipo de cambio", "sin comision
+                entre bancos") con precios y beneficios que no existen. */}
+            {onOpenPlans && (
+              <div className="px-4 py-2">
+                <button
+                  type="button"
+                  onClick={onOpenPlans}
+                  className="w-full flex items-center gap-3 uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-left hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors uv-focus-ring"
+                >
+                  <span className="w-10 h-10 rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center shrink-0">
+                    <Icons.Star size={18} aria-hidden="true" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold uv-text-primary">{t('plans_menu')}</span>
+                    <span className="block text-xs uv-text-muted mt-0.5">{t('plans_menu_desc')}</span>
+                  </span>
+                  <Icons.ChevronRight size={18} className="uv-text-muted shrink-0" aria-hidden="true" />
+                </button>
               </div>
-            </div>
+            )}
 
             {/* Tabs */}
             <div className="px-4 py-2">
