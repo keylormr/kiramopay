@@ -805,6 +805,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/transactions/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize the user's completed transactions over a date range
+         * @description Aggregates EVERY completed transaction of the authenticated user in a range of Costa Rica calendar days (America/Costa_Rica): one group per (day, type, currency) plus the largest movements of each (type, currency). The analytics screen uses it instead of paging the list, which cannot cover a long range completely. The server does not decide what counts as income or expense: the type carries the direction, as in the list. Only `completed` rows count; a failed or pending movement moved no money. The documented schema is the `data` payload of the usual `{success, data}` envelope.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description First Costa Rica calendar day, inclusive (`YYYY-MM-DD`). */
+                    from: string;
+                    /** @description Exclusive end day (`YYYY-MM-DD`), so August 2026 is `from=2026-08-01&to=2026-09-01`. Must be after `from`; the range may span at most 732 days. */
+                    to: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Aggregates of the range */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TransactionSummary"];
+                    };
+                };
+                /** @description `VALIDATION_ERROR` when a bound is missing, is not a plain date, `to` is not after `from`, or the range is longer than 732 days. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transactions/{id}": {
         parameters: {
             query?: never;
@@ -7349,6 +7402,48 @@ export interface components {
             total?: number;
             limit?: number;
             offset?: number;
+        };
+        TransactionSummaryGroup: {
+            /**
+             * Format: date
+             * @description Costa Rica calendar day
+             */
+            date: string;
+            /** @description Transaction type; it carries the direction */
+            type: string;
+            currency: string;
+            count: number;
+            /**
+             * Format: int64
+             * @description Sum of the magnitudes, in minor units (centimos)
+             */
+            amount: number;
+        };
+        TransactionSummary: {
+            /** Format: date */
+            from: string;
+            /**
+             * Format: date
+             * @description Exclusive
+             */
+            to: string;
+            /** @enum {string} */
+            timezone: "America/Costa_Rica";
+            /**
+             * @description The only status counted
+             * @enum {string}
+             */
+            status: "completed";
+            groups: components["schemas"]["TransactionSummaryGroup"][];
+            /** @description Largest movements of each (type, currency), biggest first */
+            top: components["schemas"]["TransactionRecord"][];
+            /** @description How many movements `top` keeps per (type, currency) */
+            top_per_type: number;
+            /**
+             * Format: date
+             * @description Costa Rica calendar day of the user's first completed movement ever, or null when there is none. A previous period that starts before it is incomplete, so the screen does not compare against it.
+             */
+            first_date: string | null;
         };
         CryptoAssetRecord: {
             /** Format: uuid */
