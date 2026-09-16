@@ -7,7 +7,13 @@ import type {
 } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
-import type { CryptoAsset, CryptoTransaction, StakingPosition, PriceAlert } from '@/types';
+import type {
+  CryptoAsset,
+  CryptoTransaction,
+  StakingPosition,
+  PriceAlert,
+  NuevaAlertaDePrecio,
+} from '@/types';
 import { initialCryptoAssets, initialCryptoTransactions, initialStakingPositions } from './mock-data';
 
 const STORAGE_KEY = 'kiramopay_app_state';
@@ -197,9 +203,20 @@ export class MockCryptoRepository implements ICryptoRepository {
     return apiSuccess(getCryptoState().priceAlerts);
   }
 
-  async addPriceAlert(alert: PriceAlert): Promise<ApiResponse<PriceAlert>> {
+  // El modo demo guarda las alertas pero no las evalua: el barrido que las
+  // cumple vive en el servidor.
+  async addPriceAlert(nueva: NuevaAlertaDePrecio): Promise<ApiResponse<PriceAlert>> {
     const crypto = getCryptoState();
-    crypto.priceAlerts = [...crypto.priceAlerts, alert];
+    const alert: PriceAlert = {
+      id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      asset: nueva.asset,
+      targetPrice: nueva.targetPrice,
+      condition: nueva.condition,
+      active: true,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    crypto.priceAlerts = [alert, ...crypto.priceAlerts];
     saveCryptoState(crypto);
     return apiSuccess(alert);
   }

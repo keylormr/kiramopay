@@ -12,6 +12,8 @@ import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData, SIMBOLOS_SIN_FEED } from '@/services/cryptoPrices';
 import { useUsdToCrcRate } from '@/hooks/useFxRate';
 import { useCryptoPricesWs } from '@/hooks/useCryptoPricesWs';
+import { SIMBOLOS_DEL_CATALOGO } from '@/api/catalogoCripto';
+import { HojaAlertasDePrecio, useAlertasDePrecio } from './AlertasDePrecio';
 
 // Static list of crypto symbols to track
 // La union del catalogo del backend (10 monedas con feed real) y las
@@ -110,7 +112,7 @@ export const CryptoView: React.FC = () => {
   // Single shared USD->CRC rate (same source as the wallet + balance summary).
   const crcRate = useUsdToCrcRate();
 
-  const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail' | 'onramp'>('none');
+  const [activeSheet, setActiveSheet] = useState<'none' | 'assetDetail' | 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'txDetail' | 'onramp' | 'alerts'>('none');
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
   const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
   const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking'>('portfolio');
@@ -135,6 +137,18 @@ export const CryptoView: React.FC = () => {
   const [convertToAsset, setConvertToAsset] = useState('');
   const [sendAddress, setSendAddress] = useState('');
   const [showSendConfirm, setShowSendConfirm] = useState(false);
+
+  // Alertas de precio. La lista se lee al montar para que el conteo de la
+  // pestana Mercado sea un dato del servidor, y se vuelve a leer al abrir la
+  // hoja: el barrido del servidor pudo haber cumplido alguna mientras tanto.
+  const alertas = useAlertasDePrecio();
+  const [alertaActivo, setAlertaActivo] = useState<string | null>(null);
+  const alertasActivas = alertas.cargadas ? alertas.alertas.filter(a => a.status === 'active').length : null;
+  const abrirAlertas = (simbolo?: string) => {
+    alertas.recargar();
+    setAlertaActivo(simbolo ?? null);
+    setActiveSheet('alerts');
+  };
 
   // Real-time price states
   const [isLoading, setIsLoading] = useState(true);
@@ -805,16 +819,31 @@ export const CryptoView: React.FC = () => {
       {/* Market Tab */}
       {activeTab === 'market' && (
         <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('crypto_market_live')}</h3>
-            <button
-              onClick={() => { setIsLoading(true); fetchPrices(); }}
-              aria-label={t('crypto_refresh_prices')}
-              className="flex items-center gap-1 text-sm text-[var(--color-primary)]"
-            >
-              <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-              {t('crypto_refresh')}
-            </button>
+          <div className="flex justify-between items-center gap-3">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white min-w-0 truncate">{t('crypto_market_live')}</h3>
+            <div className="flex items-center gap-4 shrink-0">
+              <button
+                onClick={() => abrirAlertas()}
+                aria-label={alertasActivas !== null ? t('crypto_alerts_open_aria').replace('{n}', String(alertasActivas)) : t('crypto_alerts_title')}
+                className="flex items-center gap-1 text-sm font-bold text-[var(--color-primary)] min-h-11"
+              >
+                <Icons.Bell size={14} aria-hidden="true" />
+                {t('crypto_alerts_open')}
+                {alertasActivas !== null && alertasActivas > 0 && (
+                  <span aria-hidden="true" className="ml-0.5 min-w-5 h-5 px-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs leading-5 text-center tabular-nums">
+                    {alertasActivas}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => { setIsLoading(true); fetchPrices(); }}
+                aria-label={t('crypto_refresh_prices')}
+                className="flex items-center gap-1 text-sm text-[var(--color-primary)] min-h-11"
+              >
+                <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                {t('crypto_refresh')}
+              </button>
+            </div>
           </div>
 
           {(
@@ -1088,6 +1117,16 @@ export const CryptoView: React.FC = () => {
                 <Icons.Receive size={18} /> {t('receive')}
               </button>
             </div>
+
+            {/* Solo los activos que el servidor cotiza admiten alertas. */}
+            {SIMBOLOS_DEL_CATALOGO.includes(selectedAsset.symbol) && (
+              <button
+                onClick={() => abrirAlertas(selectedAsset.symbol)}
+                className="w-full border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <Icons.Bell size={18} aria-hidden="true" /> {t('crypto_alert_from_asset')}
+              </button>
+            )}
 
             {selectedAsset.balance > 0 && (selectedAsset.symbol === 'ETH' || selectedAsset.symbol === 'USDT' || selectedAsset.symbol === 'USDC') && (
               <button
@@ -1519,6 +1558,14 @@ export const CryptoView: React.FC = () => {
           </div>
         </BottomSheet>
       )}
+
+      <HojaAlertasDePrecio
+        isOpen={activeSheet === 'alerts'}
+        onClose={() => setActiveSheet('none')}
+        alertas={alertas}
+        activos={state.crypto.assets}
+        activoInicial={alertaActivo}
+      />
 
       {/* Desafio de MFA para operaciones de monto alto. El backend las rechaza
           con MFA_REQUIRED; al verificar el codigo se reintenta la misma. */}

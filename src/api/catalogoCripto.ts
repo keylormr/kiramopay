@@ -19,6 +19,12 @@ const MONEDAS: ReadonlyArray<Pick<CryptoAsset, 'id' | 'symbol' | 'name' | 'icon'
   { id: 'atom', symbol: 'ATOM', name: 'Cosmos', icon: '◉', color: '#2E3148' },
 ];
 
+/**
+ * Los simbolos que el backend cotiza. Solo sobre ellos se pueden crear alertas
+ * de precio: el servidor rechaza cualquier otro (ALERT_UNSUPPORTED_ASSET).
+ */
+export const SIMBOLOS_DEL_CATALOGO: ReadonlyArray<string> = MONEDAS.map((m) => m.symbol);
+
 /** El catalogo completo con saldo cero; los precios los rellena el feed. */
 export function catalogoCripto(): CryptoAsset[] {
   return MONEDAS.map((m) => ({

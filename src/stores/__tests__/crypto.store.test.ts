@@ -125,6 +125,7 @@ describe('useCryptoStore', () => {
       targetPrice: 50000,
       condition: 'above',
       active: true,
+      status: 'active',
     });
     expect(useCryptoStore.getState().priceAlerts).toHaveLength(1);
 

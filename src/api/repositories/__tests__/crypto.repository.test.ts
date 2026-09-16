@@ -111,33 +111,22 @@ describe('MockCryptoRepository', () => {
 
   describe('price alerts', () => {
     it('should add a price alert', async () => {
-      const alert = {
-        id: 'alert-1',
-        asset: 'BTC',
-        targetPrice: 50000,
-        condition: 'above' as const,
-        active: true,
-      };
-      const result = await repo.addPriceAlert(alert);
+      const result = await repo.addPriceAlert({ asset: 'BTC', targetPrice: 50000, condition: 'above' });
       expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({ asset: 'BTC', status: 'active', active: true });
+      expect(result.data!.id).toBeTruthy();
 
       const alerts = await repo.getPriceAlerts();
       expect(alerts.data!).toHaveLength(1);
     });
 
     it('should remove a price alert', async () => {
-      await repo.addPriceAlert({
-        id: 'alert-2',
-        asset: 'ETH',
-        targetPrice: 3000,
-        condition: 'above',
-        active: true,
-      });
-      const result = await repo.removePriceAlert('alert-2');
+      const creada = await repo.addPriceAlert({ asset: 'ETH', targetPrice: 3000, condition: 'above' });
+      const result = await repo.removePriceAlert(creada.data!.id);
       expect(result.success).toBe(true);
 
       const alerts = await repo.getPriceAlerts();
-      expect(alerts.data!.find((a) => a.id === 'alert-2')).toBeUndefined();
+      expect(alerts.data!.find((a) => a.id === creada.data!.id)).toBeUndefined();
     });
   });
 });

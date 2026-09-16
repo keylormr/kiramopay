@@ -85,6 +85,8 @@ export type AppAction =
   | { type: 'STAKE_CRYPTO'; payload: { asset: string; amount: number; apy: number; locked: boolean; lockDays?: number } }
   | { type: 'UNSTAKE_CRYPTO'; payload: { positionId: string } }
   | { type: 'CLAIM_STAKING_YIELD'; payload: { positionId: string; amount: number } }
-  | { type: 'ADD_PRICE_ALERT'; payload: PriceAlert }
-  | { type: 'REMOVE_PRICE_ALERT'; payload: string }
+  // La lista que devolvio el servidor. Crear y quitar alertas pasan primero
+  // por la API (ver views/crypto/AlertasDePrecio.tsx); el estado solo copia
+  // lo que el servidor confirmo.
+  | { type: 'SET_PRICE_ALERTS'; payload: PriceAlert[] }
   | { type: 'TOGGLE_FAVORITE_ASSET'; payload: string };
