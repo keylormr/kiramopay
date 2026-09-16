@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { SavingsView } from '../SavingsView';
 import { useSavingsStore } from '@/stores/savings.store';
+import { useAuthStore } from '@/stores/auth.store';
+import type { User } from '@/types/auth.types';
 
 const mocks = vi.hoisted(() => ({
   api: {
@@ -57,6 +59,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   useSavingsStore.setState({ goals: [] });
+  useAuthStore.setState({ user: null });
   appState.baseCurrency = 'CRC';
   mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [meta] });
 });
@@ -95,6 +98,94 @@ describe('SavingsView — la hoja de deposito habla en colones', () => {
     await waitFor(() => {
       expect(mocks.api.savings.deposit).toHaveBeenCalledWith('g1', 10000);
     });
+  });
+});
+
+// Decision del dueno (2026-09-13): metas activas 3 / 10 / sin tope segun el
+// plan. Quien ya tiene mas conserva todo; solo no crea mas.
+describe('SavingsView — el tope de metas del plan', () => {
+  const metas = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ ...meta, id: `g${i + 1}`, name: `Meta ${i + 1}` }));
+
+  const conPlan = (plan: User['plan']) =>
+    useAuthStore.setState({
+      user: { id: 'u1', phone: '', firstName: 'K', lastName: 'M', kycLevel: 1, createdAt: '', plan } as User,
+    });
+
+  const montar = (onOpenPlans = vi.fn()) =>
+    render(
+      <LanguageProvider>
+        <SavingsView onClose={vi.fn()} onOpenPlans={onOpenPlans} />
+      </LanguageProvider>,
+    );
+
+  it('con Gratis y 3 metas no abre el formulario: explica el tope y lleva a los planes', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: metas(3) });
+    const onOpenPlans = vi.fn();
+    const user = userEvent.setup();
+    montar(onOpenPlans);
+
+    const mensaje = 'Tu plan Gratis permite 3 metas activas. Plus permitirá hasta 10, muy pronto.';
+    expect(await screen.findByText(mensaje)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Nueva meta' }));
+
+    expect(await screen.findByText('Llegaste al tope de tu plan')).toBeInTheDocument();
+    expect(screen.getAllByText(mensaje)).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Crear meta' })).toBeNull();
+
+    const verPlanes = screen.getAllByRole('button', { name: /Ver planes/ });
+    await user.click(verPlanes[verPlanes.length - 1]);
+    expect(onOpenPlans).toHaveBeenCalledTimes(1);
+    expect(mocks.api.savings.createGoal).not.toHaveBeenCalled();
+  });
+
+  it('con Plus y 3 metas si abre el formulario', async () => {
+    conPlan('plus');
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: metas(3) });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva meta' }));
+
+    expect(await screen.findByRole('button', { name: 'Crear meta' })).toBeInTheDocument();
+    expect(screen.queryByText(/Tu plan Plus permite/)).toBeNull();
+  });
+
+  it('con Pro no hay tope aunque tenga muchas', async () => {
+    conPlan('pro');
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: metas(25) });
+    montar();
+
+    expect(await screen.findByText('Meta 25')).toBeInTheDocument();
+    expect(screen.queryByText(/permite/)).toBeNull();
+  });
+
+  it('cuando el servidor responde SAVINGS_GOAL_LIMIT lo explica con su detalle, no con un error generico', async () => {
+    mocks.api.savings.createGoal.mockResolvedValue({
+      success: false,
+      error: { code: 'SAVINGS_GOAL_LIMIT', message: 'limit', details: { plan: 'free', limite: 3, actuales: 4 } },
+    });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva meta' }));
+    await user.type(await screen.findByPlaceholderText('Ej: Vacaciones, Auto nuevo...'), 'Viaje');
+    await user.type(screen.getByPlaceholderText('0'), '50000');
+    await user.click(screen.getByRole('button', { name: 'Crear meta' }));
+
+    expect(await screen.findByText('Llegaste al tope de tu plan')).toBeInTheDocument();
+    expect(screen.getByText('Tu plan Gratis permite 3 metas activas. Plus permitirá hasta 10, muy pronto.')).toBeInTheDocument();
+    expect(screen.getByText('Hoy tienes 4 y las conservas todas; solo no puedes crear otra.')).toBeInTheDocument();
+    expect(screen.queryByText('No se pudo crear la meta. Intenta de nuevo.')).toBeNull();
+  });
+
+  it('quien ya tiene mas que su tope conserva todas sus metas y se le dice', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: metas(5) });
+    montar();
+
+    expect(await screen.findByText('Hoy tienes 5 y las conservas todas; solo no puedes crear otra.')).toBeInTheDocument();
+    for (let i = 1; i <= 5; i++) expect(screen.getByText(`Meta ${i}`)).toBeInTheDocument();
   });
 });
 

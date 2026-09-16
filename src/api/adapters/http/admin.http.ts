@@ -2,9 +2,12 @@ import type {
   IAdminRepository,
   AdminUser,
   AdminUserStatus,
+  PlanAsignado,
 } from '../../repositories/admin.repository';
+import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
+import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
 
 interface AdminUserDTO {
@@ -24,6 +27,7 @@ interface AdminUserDTO {
   blocked_reason?: string | null;
   blocked_by_name?: string | null;
   expires_at?: string | null;
+  plan?: string;
 }
 
 const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed'];
@@ -50,6 +54,7 @@ function mapAdminUser(d: AdminUserDTO): AdminUser {
     blockedReason: String(d.blocked_reason ?? ''),
     blockedByName: String(d.blocked_by_name ?? ''),
     expiresAt: d.expires_at ?? null,
+    plan: normalizarPlan(d.plan),
   };
 }
 
@@ -131,5 +136,18 @@ export class HttpAdminRepository implements IAdminRepository {
     );
     if (!res.success || !isUserDTO(res.data)) return fail(res);
     return apiSuccess(mapAdminUser(res.data));
+  }
+
+  async setUserPlan(id: string, plan: PlanPersonal): Promise<ApiResponse<PlanAsignado>> {
+    // El cuerpo es exactamente {plan}: el servidor rechaza cualquier campo de mas.
+    const res = await this.client.patch<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}/plan`, { plan });
+    if (!res.success || !isUserDTO(res.data)) return fail(res);
+    const d = res.data as { user_id?: string; plan?: string; plan_anterior?: string; updated_at?: string };
+    return apiSuccess({
+      userId: String(d.user_id ?? id),
+      plan: normalizarPlan(d.plan),
+      planAnterior: normalizarPlan(d.plan_anterior),
+      updatedAt: String(d.updated_at ?? ''),
+    });
   }
 }

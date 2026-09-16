@@ -21,6 +21,24 @@ type Config struct {
 	Anthropic AnthropicConfig
 	Loyalty   LoyaltyConfig
 	Escrow    EscrowConfig
+	Planes    PlanesConfig
+}
+
+// PlanesConfig fija cuantas cosas ACTIVAS puede tener una persona segun su
+// plan (decision del dueno del 13-09-2026). 0 significa sin tope. Un valor
+// negativo es un error de quien edito la variable y se ignora: vale el de
+// fabrica, nunca "sin tope".
+//
+// El tope solo frena la creacion: quien ya tiene mas de lo que su plan permite
+// conserva todo lo que tiene.
+type PlanesConfig struct {
+	MetasFree int // PLAN_METAS_FREE (3)
+	MetasPlus int // PLAN_METAS_PLUS (10)
+	MetasPro  int // PLAN_METAS_PRO  (0 = sin tope)
+
+	TarjetasFree int // PLAN_TARJETAS_FREE (1)
+	TarjetasPlus int // PLAN_TARJETAS_PLUS (3)
+	TarjetasPro  int // PLAN_TARJETAS_PRO  (5)
 }
 
 // EscrowConfig fija los plazos de un acuerdo fondeado. Ver
@@ -260,7 +278,24 @@ func Load() *Config {
 			DiasParaEntregar: max(getEnvInt("ESCROW_DIAS_PARA_ENTREGAR", 14), 1),
 			DiasParaRevisar:  max(getEnvInt("ESCROW_DIAS_PARA_REVISAR", 7), 1),
 		},
+		Planes: PlanesConfig{
+			MetasFree:    getEnvTope("PLAN_METAS_FREE", 3),
+			MetasPlus:    getEnvTope("PLAN_METAS_PLUS", 10),
+			MetasPro:     getEnvTope("PLAN_METAS_PRO", 0),
+			TarjetasFree: getEnvTope("PLAN_TARJETAS_FREE", 1),
+			TarjetasPlus: getEnvTope("PLAN_TARJETAS_PLUS", 3),
+			TarjetasPro:  getEnvTope("PLAN_TARJETAS_PRO", 5),
+		},
 	}
+}
+
+// getEnvTope lee un tope de plan. Un negativo no se recorta a 0, porque 0 es
+// "sin tope": un signo mal puesto regalaria el ilimitado. Se usa el de fabrica.
+func getEnvTope(key string, fallback int) int {
+	if v := getEnvInt(key, fallback); v >= 0 {
+		return v
+	}
+	return fallback
 }
 
 // ValidateForProduction checks that config is safe for production.

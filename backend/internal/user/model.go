@@ -25,6 +25,10 @@ type UserRecord struct {
 	// sola: el servidor exige ademas que DEMO_LOGIN_ENABLED este encendida.
 	// Nunca sale al cliente.
 	DemoLogin        bool       `json:"-"`
+	// Plan es el plan personal (free, plus, pro; migracion 048). Hoy no hay
+	// cobro: solo un administrador lo cambia, para pilotos. Define los topes de
+	// metas de ahorro y tarjetas y la cuota del asistente.
+	Plan             string     `json:"plan"`
 	ReferralCode     string     `json:"referral_code"`
 	ReferredBy       *string    `json:"-"` // atribucion interna; nunca sale al cliente
 	CreatedAt        time.Time  `json:"created_at"`

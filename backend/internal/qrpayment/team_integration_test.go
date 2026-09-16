@@ -89,6 +89,7 @@ func TestStaff_CashierCollectsForShop_WithAttribution(t *testing.T) {
 	svc, pool, payer, owner := setupQR(t)
 	ctx := context.Background()
 	qr := verifiedMerchantQR(t, svc, owner, 1000)
+	terminarPromocion(t, pool, qr.MerchantID)
 	employee := seedEmployee(t, pool, "404440444")
 
 	if _, err := svc.AddStaff(ctx, qr.MerchantID, owner, &qrpayment.AddStaffRequest{Cedula: "404440444", Role: "cashier"}); err != nil {
@@ -252,6 +253,7 @@ func TestMerchantReport_AggregationAndPermissions(t *testing.T) {
 	svc, pool, payer, owner := setupQR(t)
 	ctx := context.Background()
 	qr := verifiedMerchantQR(t, svc, owner, 1000)
+	terminarPromocion(t, pool, qr.MerchantID)
 	employee := seedEmployee(t, pool, "808880888")
 
 	member, err := svc.AddStaff(ctx, qr.MerchantID, owner, &qrpayment.AddStaffRequest{Cedula: "808880888", Role: "cashier"})

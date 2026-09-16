@@ -1,6 +1,15 @@
 import type { ApiResponse } from '../types';
+import type { PlanPersonal } from './plans.repository';
 
 export type AdminUserStatus = 'active' | 'blocked' | 'suspended' | 'closed';
+
+/** Respuesta de asignar un plan a mano. No se cobro nada. */
+export interface PlanAsignado {
+  userId: string;
+  plan: PlanPersonal;
+  planAnterior: PlanPersonal;
+  updatedAt: string;
+}
 
 /**
  * A user as the admin console sees it. The identity fields arrive already
@@ -26,6 +35,8 @@ export interface AdminUser {
   blockedByName: string;
   /** Scheduled expiry (ISO-8601). Null when the account never expires. */
   expiresAt: string | null;
+  /** Plan personal; free si el servidor no lo manda. */
+  plan: PlanPersonal;
 }
 
 /**
@@ -47,6 +58,12 @@ export interface IAdminRepository {
    * the moment passes, through the same path as a manual block.
    */
   setUserExpiry(id: string, expiresAt: string | null): Promise<ApiResponse<AdminUser>>;
+  /**
+   * Asigna el plan personal a mano, para pilotos mientras no exista el cobro.
+   * No cobra nada y queda en la auditoria (admin_user_plan_set, riesgo alto).
+   * Bajar de plan no borra metas ni tarjetas: solo impide crear nuevas.
+   */
+  setUserPlan(id: string, plan: PlanPersonal): Promise<ApiResponse<PlanAsignado>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

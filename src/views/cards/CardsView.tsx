@@ -5,10 +5,18 @@ import { Button } from '../../components/ui';
 import { BottomSheet } from '../../components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { VirtualCard } from '@/api/repositories/cards.repository';
+import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
+import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
 
-export const CardsView: React.FC = () => {
+export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans }) => {
   const { t } = useLanguage();
   const api = getApiLayer().cards;
+  const plan = usePlanPersonal();
+  const tarifas = useTarifas();
+  // La tarjeta que se esta mirando cuando hay mas de una (Plus y Pro permiten varias).
+  const [seleccion, setSeleccion] = useState<string | null>(null);
+  // Lo que respondio el servidor en un 409 CARD_LIMIT: manda sobre el calculo local.
+  const [topeServidor, setTopeServidor] = useState<TopeAlcanzado | null>(null);
 
   const [cards, setCards] = useState<VirtualCard[]>([]);
   // Distinguir "no pude preguntar" de "no hay tarjetas". Sin esto, un fallo de
@@ -61,8 +69,14 @@ export const CardsView: React.FC = () => {
     return () => { cancelled = true; };
   }, [api]);
 
-  const card = cards[0];
+  const card = cards.find((c) => c.id === seleccion) ?? cards[0];
   const frozen = card?.status === 'frozen';
+
+  // Ocupan lugar en el tope las activas y las congeladas, igual que en el
+  // servidor. null es "sin tope".
+  const ocupan = cards.filter((c) => c.status === 'active' || c.status === 'frozen').length;
+  const topeTarjetas = tarifas.planes[plan].topes.tarjetas;
+  const enTope = topeTarjetas !== null && ocupan >= topeTarjetas;
 
   const formatCRC = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(n);
@@ -71,16 +85,56 @@ export const CardsView: React.FC = () => {
     if (!api || busy) return;
     setBusy(true);
     setError('');
+    setTopeServidor(null);
     const res = await api.createCard({ type: 'virtual', currency: 'CRC' });
     setBusy(false);
     if (!res.success || !res.data) {
+      const alTope = topeDelError(res.error, 'CARD_LIMIT');
+      if (alTope) {
+        setTopeServidor(alTope);
+        return;
+      }
       setError(res.error?.message || t('assistant_action_failed'));
       return;
     }
     setRevealed(res.data);
     setShowReveal(true);
+    setSeleccion(res.data.id);
     await load();
   };
+
+  // "Tu plan Gratis permite 1 tarjeta activa. Plus permitira hasta 3, muy
+  // pronto." Con acceso a los planes y la aclaracion de que las congeladas
+  // tambien cuentan, que es lo primero que alguien pregunta.
+  const avisoTope = (datos: TopeAlcanzado, delServidor: boolean) => (
+    <div
+      className="flex gap-3 rounded-2xl uv-surface-1 uv-shadow-soft p-4 text-left"
+      role={delServidor ? 'status' : undefined}
+    >
+      <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold leading-relaxed uv-text-primary">
+          {mensajeDeTope(t, 'cards', datos.plan, datos.limite, tarifas)}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed uv-text-secondary">
+          {datos.limite > 0 && datos.actuales > datos.limite
+            ? `${rellenar(t('plans_limit_keep'), { actuales: datos.actuales })} `
+            : ''}
+          {t('plans_limit_frozen')}
+        </p>
+        {onOpenPlans && (
+          <button
+            type="button"
+            onClick={onOpenPlans}
+            className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] uv-focus-ring"
+          >
+            {t('plans_limit_see_plans')}
+            <Icons.ChevronRight size={16} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   const handleFreeze = async () => {
     if (!api || !card || busy) return;
@@ -159,9 +213,13 @@ export const CardsView: React.FC = () => {
           <h3 className="text-lg font-bold uv-text-primary mb-1">{t('card_no_cards_title')}</h3>
           <p className="uv-text-muted text-sm mb-6">{t('card_no_cards_desc')}</p>
           {error && <p className="text-[var(--color-danger)] text-sm mb-4">{error}</p>}
-          <Button onClick={handleCreate} size="lg" fullWidth disabled={busy}>
-            {busy ? t('processing') : t('card_create')}
-          </Button>
+          {topeServidor ? (
+            avisoTope(topeServidor, true)
+          ) : (
+            <Button onClick={handleCreate} size="lg" fullWidth disabled={busy}>
+              {busy ? t('processing') : t('card_create')}
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -174,6 +232,31 @@ export const CardsView: React.FC = () => {
             <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">
               {error}
             </p>
+          )}
+
+          {cards.length > 1 && (
+            <div
+              className="flex gap-2 overflow-x-auto pb-1 max-w-md mx-auto"
+              role="group"
+              aria-label={t('cards_pick_label')}
+            >
+              {cards.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSeleccion(c.id)}
+                  aria-pressed={c.id === card.id}
+                  className={`shrink-0 h-9 px-3.5 rounded-full inline-flex items-center gap-1.5 text-sm font-bold tabular-nums transition-colors uv-focus-ring ${
+                    c.id === card.id
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'uv-surface-1 uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
+                  }`}
+                >
+                  •••• {c.last4}
+                  {c.status === 'frozen' && <Icons.Lock size={12} aria-label={t('card_frozen_label')} />}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Card Visual */}
@@ -280,6 +363,24 @@ export const CardsView: React.FC = () => {
               <span className="font-semibold uv-text-primary tabular-nums">{formatCRC(card.atmLimit)}</span>
             </div>
           </div>
+
+          {/* Otra tarjeta: solo si el plan la permite. Si no, se dice por que. */}
+          {topeServidor ? (
+            avisoTope(topeServidor, true)
+          ) : enTope && topeTarjetas !== null ? (
+            avisoTope({ plan, limite: topeTarjetas, actuales: ocupan }, false)
+          ) : (
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              onClick={handleCreate}
+              disabled={busy}
+              leftIcon={<Icons.Plus size={18} />}
+            >
+              {busy ? t('processing') : t('cards_create_another')}
+            </Button>
+          )}
         </>
       )}
 

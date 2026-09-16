@@ -7,15 +7,38 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
-type Handler struct {
-	db *pgxpool.Pool
+// PlanesPublicados son los numeros de cada plan que se publican en /fees. Los
+// pasa main con los MISMOS valores que aplican los servicios, para que lo
+// publicado no pueda separarse de lo que se cumple.
+type PlanesPublicados struct {
+	Metas    plans.Topes
+	Tarjetas plans.Topes
+	// Asistente es nil cuando el asistente no esta configurado: sin el, la
+	// cuota diaria no es un beneficio que se entregue y no se publica.
+	Asistente *plans.Topes
 }
 
-func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
+type Handler struct {
+	db     *pgxpool.Pool
+	planes PlanesPublicados
+}
+
+// NewHandler arranca con los topes de fabrica y sin asistente. main los
+// reemplaza con SetPlanes.
+func NewHandler(db *pgxpool.Pool) *Handler {
+	return &Handler{db: db, planes: PlanesPublicados{
+		Metas:    plans.TopesMetasDeAhorro,
+		Tarjetas: plans.TopesTarjetas,
+	}}
+}
+
+// SetPlanes fija los numeros de los planes que publica /fees.
+func (h *Handler) SetPlanes(p PlanesPublicados) { h.planes = p }
 
 // ProofOfReserves returns the total of all user liabilities per currency
 // alongside the matching reserve account balance. Publishing this builds
@@ -112,13 +135,18 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 // que no existe ni se puede cobrar. Y callaba la unica comision que si se
 // cobra: la del comercio.
 //
+// Hasta el 13-09-2026 anunciaba ademas los planes de comercio Negocio y Cima,
+// con umbrales sin comision y tasas rebajadas que el cobro nunca aplico. Se
+// retiraron: los planes que se anuncian ahora son los personales, con los
+// topes que los servicios de verdad hacen cumplir.
+//
 // Al cambiar una tarifa en el codigo hay que cambiarla aqui. Las pruebas de
 // este paquete atan los numeros a las constantes reales para que no se
 // separen en silencio.
 func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"version":        "2.0.0",
-		"effective_from": "2026-09-04",
+		"version":        "2.1.0",
+		"effective_from": "2026-09-13",
 		"note": "Esta es la lista completa de lo que se cobra. Lo que no aparece aqui, " +
 			"no se cobra.",
 
@@ -131,8 +159,23 @@ func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
 			"display": "0.5% del cobro, lo asume el comercio",
 			"applies_to": "Cobros por QR de un comercio verificado. Un QR personal " +
 				"no lleva comision.",
-			"payer_pays_extra": false,
+			"payer_pays_extra":          false,
 			"configurable_per_merchant": true,
+		},
+
+		// La promocion de entrada: las mismas constantes que usa el cobro.
+		"entry_promotion": map[string]any{
+			"bps":    qrpayment.PromoEntradaBps,
+			"pct":    float64(qrpayment.PromoEntradaBps) / 100,
+			"months": qrpayment.PromoEntradaMeses,
+			"display": "0.25% del cobro durante los primeros 3 meses, " +
+				"contados desde que se aprueba la verificacion del comercio",
+			"applies_to": "Comercios cuya verificacion se aprueba por primera vez " +
+				"despues de que la promocion entro en vigor. Los comercios que ya " +
+				"estaban aprobados no la reciben.",
+			"rule": "Durante la promocion se cobra la menor entre 0.25% y la " +
+				"comision fijada al comercio. Al terminar, vuelve su comision.",
+			"existing_merchants": false,
 		},
 
 		// Todo esto se mueve sin cargo.
@@ -158,15 +201,67 @@ func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
 		// hay forma de cobrarlos: registrar interes no cobra ni otorga nada.
 		"plans": map[string]any{
 			"chargeable_today": false,
+			"status":           "coming_soon",
 			"note": "Los planes se anuncian y se puede registrar interes. Nadie " +
-				"tiene un cargo activo.",
+				"tiene un cargo activo y registrar interes no otorga el plan.",
 			"announced": []map[string]any{
-				{"code": "free", "price": 0, "currency": "USD", "commission_pct": 0.5},
-				{"code": "negocio", "price": 34.99, "currency": "USD", "period": "month",
-					"commission_pct": 0.25, "commission_free_monthly_billing": 12000},
-				{"code": "cima", "price": 54.99, "currency": "USD", "period": "month",
-					"commission_pct": 0.1, "commission_free_monthly_billing": 50000},
+				h.planAnunciado(plans.PlanFree, 0),
+				h.planAnunciado(plans.PlanPlus, plans.PrecioPlusUSD),
+				h.planAnunciado(plans.PlanPro, plans.PrecioProUSD),
+			},
+			// Lo que ningun plan incluye se declara con el mismo peso que lo que
+			// si incluye.
+			"not_included": []string{
+				"Tarjeta fisica",
+				"Retiros en cajeros",
+				"Seguros",
+				"Fondo de garantia de depositos",
+				"Rendimiento o intereses sobre el dinero guardado",
+				"Mejor tipo de cambio",
+				"Transferencias a otros bancos",
+				"Limites de tarjeta mas altos",
+			},
+		},
+
+		// La analitica del comercio: se construyo y se habilita comercio por
+		// comercio, pero todavia no se puede cobrar.
+		"merchant_analytics": map[string]any{
+			"code":             qrpayment.PlanComercioAnalitica,
+			"price":            plans.PrecioAnaliticaUSD,
+			"currency":         "USD",
+			"period":           "month",
+			"chargeable_today": false,
+			"status":           "coming_soon",
+			"includes": []string{
+				"Comparacion del reporte contra el periodo anterior de igual longitud",
+				"Exportacion del reporte en CSV",
 			},
 		},
 	})
+}
+
+// planAnunciado arma una fila de plan personal con los topes que se aplican.
+// Un tope 0 es "sin tope" y se publica como null.
+func (h *Handler) planAnunciado(codigo string, precio float64) map[string]any {
+	limites := map[string]any{
+		"savings_goals_active": topePublicado(h.planes.Metas.Para(codigo)),
+		"virtual_cards_active": topePublicado(h.planes.Tarjetas.Para(codigo)),
+	}
+	if h.planes.Asistente != nil {
+		limites["assistant_daily_questions"] = topePublicado(h.planes.Asistente.Para(codigo))
+	}
+	return map[string]any{
+		"code":     codigo,
+		"price":    precio,
+		"currency": "USD",
+		"period":   "month",
+		"limits":   limites,
+	}
+}
+
+func topePublicado(n int) any {
+	if n <= 0 {
+		return nil
+	}
+	return n
 }
