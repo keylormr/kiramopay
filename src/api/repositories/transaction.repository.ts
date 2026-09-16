@@ -25,7 +25,56 @@ export interface TransactionPage {
   total: number;
 }
 
+/** Rango de dias civiles de Costa Rica: from incluido, to EXCLUIDO. */
+export interface TransactionSummaryParams {
+  /** 'YYYY-MM-DD' */
+  from: string;
+  /** 'YYYY-MM-DD', excluido. */
+  to: string;
+}
+
+/**
+ * La suma de los movimientos completados de un dia, en una moneda, de una
+ * categoria y una direccion. La direccion y la categoria las decide el
+ * adaptador, el mismo que clasifica la lista de movimientos: asi las dos
+ * pantallas nunca cuentan el mismo dinero de dos maneras.
+ */
+export interface SummaryGroup {
+  /** Dia civil de Costa Rica, 'YYYY-MM-DD'. */
+  date: string;
+  ccy: string;
+  category: string;
+  direction: 'in' | 'out';
+  count: number;
+  /**
+   * Magnitud positiva en CENTIMOS, como la entrega el servidor. Los grupos se
+   * suman en enteros y se pasan a colones o dolares solo al mostrarlos: sumar
+   * decimales binarios acumula error.
+   */
+  amountMinor: number;
+}
+
+export interface TransactionSummary {
+  from: string;
+  to: string;
+  groups: SummaryGroup[];
+  /** Los movimientos mas grandes de cada tipo, con signo como en la lista. */
+  top: Transaction[];
+  /**
+   * Dia civil de Costa Rica del primer movimiento completado de la persona, en
+   * todo su historial; null si no tiene ninguno. Un periodo anterior que empieza
+   * antes de ese dia esta incompleto y no se compara.
+   */
+  firstDate: string | null;
+}
+
 export interface ITransactionRepository {
   getTransactions(limit?: number): Promise<ApiResponse<Transaction[]>>;
   listTransactions(params: TransactionListParams): Promise<ApiResponse<TransactionPage>>;
+  /**
+   * Resumen COMPLETO de un rango, calculado por el servidor. La pantalla de
+   * analisis lo usa en vez de paginar la lista: con "este año" el techo de
+   * paginas se alcanzaba y los totales describian solo una parte del periodo.
+   */
+  getSummary(params: TransactionSummaryParams): Promise<ApiResponse<TransactionSummary>>;
 }

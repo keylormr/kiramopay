@@ -2,6 +2,8 @@ import type {
   ITransactionRepository,
   TransactionListParams,
   TransactionPage,
+  TransactionSummary,
+  TransactionSummaryParams,
 } from '../../repositories/transaction.repository';
 import type { ApiResponse } from '../../types';
 import type { Transaction } from '@/types';
@@ -75,6 +77,51 @@ export class HttpTransactionRepository implements ITransactionRepository {
     return apiSuccess(res.data.transactions);
   }
 
+  async getSummary(params: TransactionSummaryParams): Promise<ApiResponse<TransactionSummary>> {
+    const qs = new URLSearchParams({ from: params.from, to: params.to });
+    const res = await this.client.get<BackendSummary>(`/api/v1/transactions/summary?${qs.toString()}`);
+    if (!res.success || !res.data) {
+      return apiError('FETCH_FAILED', 'Failed to fetch the transaction summary');
+    }
+    return apiSuccess(mapSummary(res.data));
+  }
+
+}
+
+interface BackendSummaryGroup {
+  date: string;
+  type: string;
+  currency: string;
+  count: number;
+  amount: number;
+}
+
+interface BackendSummary {
+  from: string;
+  to: string;
+  groups: BackendSummaryGroup[] | null;
+  top: BackendTransactionRow[] | null;
+  first_date?: string | null;
+}
+
+// El servidor devuelve el TIPO de cada grupo y no decide que es ingreso o gasto:
+// esa clasificacion vive aqui, la misma que usa mapRow para la lista, y asi las
+// dos pantallas nunca cuentan el mismo dinero de dos maneras.
+export function mapSummary(s: BackendSummary): TransactionSummary {
+  return {
+    from: s.from,
+    to: s.to,
+    groups: (s.groups ?? []).map((g) => ({
+      date: g.date,
+      ccy: g.currency || 'CRC',
+      category: mapCategory(g.type),
+      direction: isIncoming(g.type) ? 'in' : 'out',
+      count: g.count,
+      amountMinor: Math.abs(g.amount),
+    })),
+    top: (s.top ?? []).map(mapRow),
+    firstDate: s.first_date ?? null,
+  };
 }
 
 // Transaction types where money ENTERS the user's wallet (credit / positive amount).
