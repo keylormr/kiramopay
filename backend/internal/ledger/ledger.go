@@ -550,6 +550,16 @@ func applyWalletDelta(ctx context.Context, tx pgx.Tx, userID, currency string, d
 		return fmt.Errorf("apply wallet delta: %w", err)
 	}
 	if res.RowsAffected() == 0 {
+		// Sin fila no hay de donde descontar. Y el INSERT de abajo no sirve
+		// para restar: Postgres evalua los CHECK de saldo no negativo (018)
+		// sobre la fila que PROPONE el INSERT, antes de resolver el ON
+		// CONFLICT, asi que un delta negativo falla aunque otra transaccion
+		// haya creado la fila con saldo en ese instante. Es el mismo defecto
+		// que impedia vender cripto; el aprovisionamiento queda solo para
+		// abonar.
+		if delta < 0 {
+			return fmt.Errorf("%w: no wallet to debit for user %s", ErrInsufficientFunds, userID)
+		}
 		// Auto-provision wallets row for users created before wallets existed.
 		_, err = tx.Exec(ctx,
 			`INSERT INTO wallets (id, user_id, balance_crc, balance_usd)
