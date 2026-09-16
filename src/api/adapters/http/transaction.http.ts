@@ -148,10 +148,16 @@ function mapTxType(backendType: string): 'credit' | 'debit' {
   return isIncoming(backendType) ? 'credit' : 'debit';
 }
 
+// Un tipo que falta aqui cae en "Otros" en la lista y en el grafico de
+// categorias de Analisis.
 function mapCategory(backendType: string): string {
   const map: Record<string, string> = {
     sinpe_send: 'transfers',
     sinpe_receive: 'transfers',
+    // Dividir cuenta: el pago de la parte de cada quien es dinero de una
+    // persona a otra, igual que un SINPE.
+    p2p_send: 'transfers',
+    p2p_receive: 'transfers',
     bill_payment: 'services',
     recharge: 'services',
     qr_payment: 'shopping',
