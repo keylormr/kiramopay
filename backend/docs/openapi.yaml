@@ -4088,6 +4088,8 @@ components:
           type: string
         phone:
           type: string
+        is_favorite:
+          type: boolean
 
     SinpeSendRequest:
       type: object

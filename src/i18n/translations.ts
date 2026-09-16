@@ -235,6 +235,7 @@ export type TranslationKeys = {
   twofa_verify: string;
   mfa_challenge_title: string;
   mfa_challenge_desc: string;
+  mfa_verify_and_send: string;
   twofa_recovery_title: string;
   twofa_recovery_desc: string;
   twofa_copy: string;
@@ -446,6 +447,8 @@ export type TranslationKeys = {
   no_transactions_yet: string;
   sent_to: string;
   received_from: string;
+  sinpe_sent_short: string;
+  sinpe_received_short: string;
   add_sinpe_contact: string;
   scan_contact_cta: string;
   scan_contact_title: string;
@@ -467,6 +470,7 @@ export type TranslationKeys = {
   sinpe_transfer_success: string;
   sinpe_self_send_error: string;
   sinpe_phone_invalid: string;
+  sinpe_invalid_amount: string;
   sinpe_recipient_not_user: string;
   sinpe_external_pending_title: string;
   sinpe_external_pending_desc: string;

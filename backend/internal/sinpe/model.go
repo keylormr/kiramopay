@@ -61,6 +61,13 @@ var (
 	// silently overwrote the existing contact's name and bank; now it refuses
 	// and hands back the record as it stands today (see ContactExistsError).
 	ErrContactExists = errors.New("contact already exists")
+	// ErrInvalidPhone rejects a Send whose recipient phone does not pass
+	// validCRMobile. Its own code (INVALID_PHONE) lets the client show a
+	// translated message instead of this English sentence; SINPE_FAILED stays
+	// the catch-all for the other Send failures (daily limit, wallet, etc.),
+	// which a client-side amount check already filters out before the
+	// request, so mapping THOSE to a phone-specific message would mislead.
+	ErrInvalidPhone = errors.New("invalid SINPE Móvil phone number")
 )
 
 // ContactExistsError carries the EXISTING contact alongside the rejection, so

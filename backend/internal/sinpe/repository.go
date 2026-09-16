@@ -45,7 +45,7 @@ func (r *Repository) GetContacts(ctx context.Context, userID string) ([]ContactR
 	return contacts, nil
 }
 
-func (r *Repository) AddContact(ctx context.Context, userID string, phone, name, bank string) (*ContactRecord, error) {
+func (r *Repository) AddContact(ctx context.Context, userID string, phone, name, bank string, isFavorite bool) (*ContactRecord, error) {
 	id := uuid.New().String()
 	now := time.Now()
 
@@ -53,10 +53,10 @@ func (r *Repository) AddContact(ctx context.Context, userID string, phone, name,
 	// ya NO le pisa el nombre y el banco en silencio. RowsAffected() == 0 es la
 	// unica forma de distinguir "ya estaba" de "se inserto" con esta forma.
 	tag, err := r.db.Exec(ctx,
-		`INSERT INTO sinpe_contacts (id, user_id, phone, name, bank, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO sinpe_contacts (id, user_id, phone, name, bank, is_favorite, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (user_id, phone) DO NOTHING`,
-		id, userID, phone, name, bank, now,
+		id, userID, phone, name, bank, isFavorite, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("add contact: %w", err)
@@ -75,6 +75,7 @@ func (r *Repository) AddContact(ctx context.Context, userID string, phone, name,
 		Phone:     phone,
 		Name:      name,
 		Bank:      bank,
+		IsFav:     isFavorite,
 		CreatedAt: now,
 	}, nil
 }
