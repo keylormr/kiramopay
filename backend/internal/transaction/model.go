@@ -1,6 +1,11 @@
 package transaction
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+)
 
 type TransactionRecord struct {
 	ID                string     `json:"id"`
@@ -73,6 +78,22 @@ type CreateTransactionRequest struct {
 	// afuera; que entre lo decide el servicio que sabe por que entra (vender
 	// cripto, un reembolso), nunca el cliente.
 	Internal bool `json:"-"`
+
+	// EnLaMismaTx, si viene, corre DENTRO de la transaccion que escribe el
+	// asiento, despues de los topes y antes de marcar la fila como completada:
+	// si devuelve error, el dinero no se mueve y la fila queda 'failed'. Recibe
+	// el id de la fila de `transactions` a la que cuelga el asiento.
+	//
+	// Existe para el modulo que entrega a cambio del dinero algo que NO pasa
+	// por el libro —el activo de cripto que se vende—: ese descuento no puede
+	// quedar hecho si el asiento no confirma, ni el asiento confirmado sin el.
+	// Rigen las mismas reglas que ledger.Posting.EnLaMismaTx: escribir solo por
+	// el `tx` que se recibe y nada irreversible adentro, porque un reintento
+	// por conflicto la vuelve a ejecutar. En la repeticion de un movimiento que
+	// ya se hizo NO corre: la llevo el asiento que ya existe.
+	//
+	// Lleva `json:"-"` por lo mismo que Internal.
+	EnLaMismaTx func(ctx context.Context, tx pgx.Tx, txID string) error `json:"-"`
 }
 
 // rutaPropiaDe: para cada tipo que POST /transactions llego a aceptar, cual es

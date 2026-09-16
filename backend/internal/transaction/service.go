@@ -337,10 +337,10 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	if isOutgoing(req.Type) {
 		totalCost := req.Amount + req.Fee
 		if req.Currency == "CRC" && w.BalanceCRC < totalCost {
-			return nil, fmt.Errorf("insufficient balance")
+			return nil, ErrSaldoInsuficiente
 		}
 		if req.Currency == "USD" && w.BalanceUSD < totalCost {
-			return nil, fmt.Errorf("insufficient balance")
+			return nil, ErrSaldoInsuficiente
 		}
 		if err := s.checkDailyLimit(ctx, userID, req.Currency, req.Amount, w); err != nil {
 			return nil, err
@@ -388,18 +388,29 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	// use CreateTransfer instead).
 	posting := s.buildSingleSidedPosting(tx, req)
 	completar := s.completarEnLaMismaTx(tx.ID)
-	posting.EnLaMismaTx = completar
+	var topes func(context.Context, pgx.Tx) error
 	if isOutgoing(req.Type) {
 		// El tope suma y decide DENTRO del asiento. La comprobacion de mas
 		// arriba se queda como cortesia: rechaza rapido y sin abrir un asiento,
 		// pero la que frena bajo concurrencia es esta.
-		topes := s.topesEnLaMismaTx(userID, req.Currency, req.Amount, w)
-		posting.EnLaMismaTx = func(ctx context.Context, dbtx pgx.Tx) error {
+		topes = s.topesEnLaMismaTx(userID, req.Currency, req.Amount, w)
+	}
+	// El mismo orden que en CreateTransfer: el tope primero, para que quien se
+	// pasa del limite reciba ESE motivo; despues lo del modulo; y el estado al
+	// final, para que la suma del tope no cuente el propio movimiento.
+	delModulo, idFila := req.EnLaMismaTx, tx.ID
+	posting.EnLaMismaTx = func(ctx context.Context, dbtx pgx.Tx) error {
+		if topes != nil {
 			if err := topes(ctx, dbtx); err != nil {
 				return err
 			}
-			return completar(ctx, dbtx)
 		}
+		if delModulo != nil {
+			if err := delModulo(ctx, dbtx, idFila); err != nil {
+				return err
+			}
+		}
+		return completar(ctx, dbtx)
 	}
 	if _, err := s.ledger.Post(ctx, posting); err != nil {
 		if !errors.Is(err, ledger.ErrIdempotent) {
@@ -856,6 +867,11 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	}
 	return sender, receiver, nil
 }
+
+// ErrSaldoInsuficiente: la billetera no alcanza para la salida. El texto es el
+// mismo que ya salia al cliente cuando era un fmt.Errorf suelto; el sentinela
+// existe para que un handler lo reconozca sin comparar cadenas.
+var ErrSaldoInsuficiente = errors.New("insufficient balance")
 
 // ErrCreditNotAllowed indica que se pidio un tipo entrante desde fuera del
 // backend. Acreditar dinero lo decide el servicio que sabe de donde viene.
