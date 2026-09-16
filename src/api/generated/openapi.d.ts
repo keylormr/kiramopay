@@ -1264,7 +1264,7 @@ export interface paths {
         put?: never;
         /**
          * Buy cryptocurrency
-         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate.
+         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate. The fiat debit, the asset credit and the purchase record commit in one transaction. Repeating a completed purchase with the same `idempotency_key` returns the recorded purchase and moves nothing.
          */
         post: {
             parameters: {
@@ -1275,19 +1275,39 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["CryptoBuySellRequest"];
+                    "application/json": components["schemas"]["CryptoBuyRequest"];
                 };
             };
             responses: {
                 /** @description Purchase completed */
-                200: {
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"];
+                    };
                 };
-                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. */
+                /** @description CRYPTO_INVALID_AMOUNT, UNSUPPORTED_CURRENCY, INVALID_BODY, or BUY_FAILED when the risk engine blocked the payment. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount, currency or operation. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED. Nothing moved. */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1297,6 +1317,24 @@ export interface paths {
                 };
                 /** @description MFA_REQUIRED — verify a high_value_tx challenge and retry the same request. */
                 428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description BUY_FAILED with a generic message; the detail stays in the server log. Nothing moved. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price right now. */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1323,7 +1361,7 @@ export interface paths {
         put?: never;
         /**
          * Sell cryptocurrency
-         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate.
+         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate. The asset debit, the fiat credit (to the centimo, which is what `total` reports) and the sale record commit in one transaction. Repeating a completed sale with the same `idempotency_key` returns the recorded sale and moves nothing; if the price moved since, the fiat amount differs and the retry gets 409 LLAVE_REUTILIZADA.
          */
         post: {
             parameters: {
@@ -1334,18 +1372,29 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["CryptoBuySellRequest"];
+                    "application/json": components["schemas"]["CryptoSellRequest"];
                 };
             };
             responses: {
                 /** @description Sale completed */
-                200: {
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"];
+                    };
                 };
-                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. */
+                /** @description CRYPTO_INVALID_AMOUNT (not positive, more than 18 decimals, or worth less than one centimo), UNSUPPORTED_CURRENCY, or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount, currency or operation. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1354,8 +1403,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MFA_REQUIRED — verify a high_value_tx challenge and retry the same request. */
-                428: {
+                /** @description CRYPTO_INSUFFICIENT_BALANCE — the asset balance does not cover `amount`. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SELL_FAILED with a generic message; the detail stays in the server log. Nothing moved. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price right now. */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1391,11 +1458,38 @@ export interface paths {
             requestBody?: never;
             responses: {
                 /** @description Conversion completed */
-                200: {
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CRYPTO_INSUFFICIENT_BALANCE — the source asset does not cover the amount. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CONVERT_FAILED with a generic message; the detail stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -1443,11 +1537,38 @@ export interface paths {
             requestBody?: never;
             responses: {
                 /** @description Staking initiated */
-                200: {
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CRYPTO_INSUFFICIENT_BALANCE — the asset does not cover the amount. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description STAKE_FAILED with a generic message; the detail stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -1479,12 +1600,30 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Unstaking initiated */
-                200: {
+                /** @description Unstaked; principal and earnings are back in the asset balance. */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description UNSTAKE_FAILED — the position does not exist, is not active any more, or is still locked (the message carries the unlock date). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description UNSTAKE_FAILED with a generic message; the detail stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -1555,6 +1694,15 @@ export interface paths {
                 };
                 /** @description ALERT_UNSUPPORTED_ASSET (the symbol is not quoted), ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, or INVALID_BODY. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description ALERT_FAILED with a generic message; the detail stays in the server log. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7197,11 +7345,37 @@ export interface components {
             phone_number: string;
             amount: number;
         };
-        CryptoBuySellRequest: {
+        CryptoBuyRequest: {
             /** @example BTC */
-            symbol: string;
-            /** @description Amount in CRC centimos */
-            amount_crc: number;
+            asset: string;
+            /** @description Fiat to spend, in `from_currency` units (not centimos). */
+            from_amount: number;
+            /**
+             * @description Defaults to CRC.
+             * @enum {string}
+             */
+            from_currency?: "CRC" | "USD";
+            /** @description USD unit price the screen showed. Omit it to skip the 2% check. */
+            price?: number;
+            /** @description Ignored; the server computes the quantity. Accepted for older clients. */
+            amount?: number;
+            idempotency_key?: string;
+        };
+        CryptoSellRequest: {
+            /** @example BTC */
+            asset: string;
+            /** @description Crypto quantity to sell, at most 18 decimals. */
+            amount: number;
+            /**
+             * @description Defaults to CRC.
+             * @enum {string}
+             */
+            to_currency?: "CRC" | "USD";
+            /** @description USD unit price the screen showed. Omit it to skip the 2% check. */
+            price?: number;
+            /** @description Ignored; the server computes the fiat credited. Accepted for older clients. */
+            to_amount?: number;
+            idempotency_key?: string;
         };
         NotificationRecord: {
             /** Format: uuid */
@@ -7364,6 +7538,7 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
+        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. */
         CryptoTransactionRecord: {
             /** Format: uuid */
             id?: string;
@@ -7372,11 +7547,15 @@ export interface components {
             /** @enum {string} */
             type?: "buy" | "sell" | "convert" | "send" | "receive" | "stake" | "unstake" | "reward";
             asset?: string;
-            amount?: number;
-            price?: number;
-            total?: number;
+            /** @description decimal */
+            amount?: string;
+            /** @description decimal */
+            price?: string;
+            /** @description decimal */
+            total?: string;
             currency?: string;
-            fee?: number;
+            /** @description decimal */
+            fee?: string;
             status?: string;
             /** Format: date-time */
             created_at?: string;
