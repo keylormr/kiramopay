@@ -373,44 +373,27 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       }
       case 'SEND_CRYPTO': {
-        const { asset, amount, fee } = action.payload;
+        const { asset, amount, fee, price, counterpartyName } = action.payload;
+        // Los numeros son los que devolvio el servidor, no los del telefono: la
+        // comision de KiramoPay la calcula el, y la vista ya espero su respuesta
+        // antes de despachar. Antes esta rama inventaba la comision y un hash de
+        // cadena al azar, y descontaba el saldo sin que nadie hubiera enviado
+        // nada.
         crypto.sendCrypto(asset, amount, fee);
-        const currentAsset = crypto.assets.find((a) => a.symbol === asset);
         const sendTx = {
           id: `ctx-${Date.now()}`,
           type: 'send' as const,
           fromAsset: asset,
           fromAmount: amount,
-          price: currentAsset?.currentPrice || 0,
+          price,
           fee,
           date: new Date().toISOString(),
           status: 'completed' as const,
-          txHash: `0x${Math.random().toString(16).slice(2, 10)}...`,
+          counterpartyName,
         };
         crypto.addTransaction(sendTx);
         if (hasBackend) {
-          refreshAccounts().catch(() => {});
-        }
-        break;
-      }
-      case 'RECEIVE_CRYPTO': {
-        const { asset, amount } = action.payload;
-        crypto.receiveCrypto(asset, amount);
-        const currentAsset = crypto.assets.find((a) => a.symbol === asset);
-        const receiveTx = {
-          id: `ctx-${Date.now()}`,
-          type: 'receive' as const,
-          fromAsset: asset,
-          fromAmount: amount,
-          price: currentAsset?.currentPrice || 0,
-          fee: 0,
-          date: new Date().toISOString(),
-          status: 'completed' as const,
-          txHash: `0x${Math.random().toString(16).slice(2, 10)}...`,
-        };
-        crypto.addTransaction(receiveTx);
-        if (hasBackend) {
-          refreshAccounts().catch(() => {});
+          refreshCrypto().catch(() => {});
         }
         break;
       }

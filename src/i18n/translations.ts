@@ -536,9 +536,6 @@ export type TranslationKeys = {
   yield_rates: string;
   estimated_earnings: string;
   conversion_rate: string;
-  network_fee: string;
-  verify_address: string;
-  irreversible_warning: string;
   scan_qr_receive: string;
   only_send_asset: string;
   start_staking: string;
@@ -548,8 +545,6 @@ export type TranslationKeys = {
   available_balance: string;
   receive_in: string;
   convert_to: string;
-  destination_address: string;
-  tx_hash: string;
   all_assets: string;
   // Crypto View — CryptoView.tsx wiring
   crypto_just_now: string;
@@ -615,13 +610,29 @@ export type TranslationKeys = {
   crypto_available_suffix: string;
   crypto_to_label: string;
   crypto_receive_approx: string;
-  crypto_address_placeholder: string;
-  crypto_irreversible_warning: string;
   crypto_scan_or_copy: string;
   crypto_your_address: string;
   crypto_other_assets_lost: string;
   crypto_deposit_unavailable_title: string;
   crypto_deposit_unavailable_desc: string;
+  // Enviar cripto a otra persona de KiramoPay. No hay direccion de destino
+  // porque esta cripto no vive en ninguna cadena: quien recibe se identifica
+  // escaneando su codigo, y la comision es de KiramoPay, no "de red".
+  crypto_send_scan_hint: string;
+  crypto_send_recipient: string;
+  crypto_send_rescan: string;
+  crypto_send_you_send: string;
+  crypto_send_balance_drops: string;
+  crypto_send_fee_label: string;
+  crypto_send_irreversible: string;
+  crypto_tx_sent_to: string;
+  crypto_tx_received_from: string;
+  crypto_err_qr_invalido: string;
+  crypto_err_qr_revocado: string;
+  crypto_err_qr_de_comercio: string;
+  crypto_err_qr_de_cobro: string;
+  crypto_err_envio_a_si_mismo: string;
+  crypto_err_envio_no_disponible: string;
   crypto_estimated_apy: string;
   crypto_amount_to_stake: string;
   crypto_asset_label: string;
