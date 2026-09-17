@@ -2,10 +2,12 @@ package splitpay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/pkg/identifier"
@@ -167,41 +169,83 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 	if share.Status == "paid" {
 		return nil // idempotent: already settled
 	}
-
-	// Settle the money THROUGH THE LEDGER: the participant pays their share to
-	// the split creator. The creator's own share moves no money. Only mark the
-	// share paid AFTER the transfer succeeds.
-	if userID != group.CreatorID && share.Amount > 0 {
-		// Counterparty names come from the shares already loaded: the creator's
-		// name for the payer's row, the payer's for the creator's row. Optional —
-		// missing names degrade to the frontend's generic title.
-		creatorName := ""
-		for i := range shares {
-			if shares[i].UserID == group.CreatorID {
-				creatorName = shares[i].UserName
-				break
-			}
-		}
-		idem := fmt.Sprintf("split:%s:%s", groupID, userID)
-		if _, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
-			FromUserID:               userID,
-			ToUserID:                 group.CreatorID,
-			Amount:                   share.Amount,
-			Currency:                 group.Currency,
-			Fee:                      0,
-			Description:              "Split: " + group.Title,
-			IdempotencyKey:           idem,
-			TxType:                   transaction.TypeP2PSend,
-			ReceiveType:              transaction.TypeP2PReceive,
-			SenderCounterpartyName:   creatorName,
-			ReceiverCounterpartyName: share.UserName,
-		}); err != nil {
-			return fmt.Errorf("settle split share: %w", err)
-		}
+	// Esta lectura es informativa: la cuota pudo cambiar de estado entre aqui y
+	// el cobro. Sirve para dar el motivo exacto sin ir al libro; quien de verdad
+	// decide es el reclamo de abajo, dentro de la transaccion.
+	if share.Status != "pending" {
+		return ErrCuotaNoReclamable
 	}
 
-	if err := s.repo.PayShare(ctx, groupID, userID); err != nil {
-		return err
+	// La cuota del creador no mueve dinero: es quien puso la cuenta. Tampoco una
+	// de monto cero. En esos casos el reclamo va solo, y ya es atomico por su
+	// propia guarda de estado.
+	if userID == group.CreatorID || share.Amount <= 0 {
+		if err := s.repo.PayShare(ctx, groupID, userID); err != nil {
+			return err
+		}
+		s.liquidarSiNoQuedaNadaPendiente(ctx, groupID)
+		return nil
+	}
+
+	// Settle the money THROUGH THE LEDGER: the participant pays their share to
+	// the split creator.
+	//
+	// La cuota se RECLAMA DENTRO de la transaccion del asiento (EnLaMismaTx),
+	// no despues de mover el dinero. Antes la transferencia iba primero y la
+	// guarda de estado despues: pagar y rechazar la misma cuota a la vez movia
+	// la plata de verdad y dejaba la fila en 'declined', y quien pagaba recibia
+	// ademas un error que sugeria que no se le habia cobrado.
+	//
+	// Counterparty names come from the shares already loaded: the creator's
+	// name for the payer's row, the payer's for the creator's row. Optional —
+	// missing names degrade to the frontend's generic title.
+	creatorName := ""
+	for i := range shares {
+		if shares[i].UserID == group.CreatorID {
+			creatorName = shares[i].UserName
+			break
+		}
+	}
+	reclamada := false
+	idem := fmt.Sprintf("split:%s:%s", groupID, userID)
+	if _, _, err := s.tx.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+		FromUserID:               userID,
+		ToUserID:                 group.CreatorID,
+		Amount:                   share.Amount,
+		Currency:                 group.Currency,
+		Fee:                      0,
+		Description:              "Split: " + group.Title,
+		IdempotencyKey:           idem,
+		TxType:                   transaction.TypeP2PSend,
+		ReceiveType:              transaction.TypeP2PReceive,
+		SenderCounterpartyName:   creatorName,
+		ReceiverCounterpartyName: share.UserName,
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx, _ string) error {
+			if err := ReclamarCuotaEnTx(ctx, tx, groupID, userID); err != nil {
+				return err
+			}
+			reclamada = true
+			return nil
+		},
+	}); err != nil {
+		// El motivo del modulo se devuelve tal cual: envuelto en "settle split
+		// share: post ledger: en la misma tx: ..." la pantalla mostraria las
+		// tripas en vez de "esa cuota ya no esta pendiente".
+		if errors.Is(err, ErrCuotaNoReclamable) {
+			return ErrCuotaNoReclamable
+		}
+		return fmt.Errorf("settle split share: %w", err)
+	}
+
+	// El gancho no corrio: el libro reconocio la llave de idempotencia, o sea
+	// que este pago ya se hizo. Con el codigo de hoy la cuota quedo reclamada en
+	// AQUELLA transaccion; con la de antes el dinero pudo moverse sin que la
+	// fila se marcara. Se intenta marcarla, y que ya no este pendiente es una
+	// respuesta valida, no un fallo.
+	if !reclamada {
+		if err := s.repo.PayShare(ctx, groupID, userID); err != nil && !errors.Is(err, ErrCuotaNoReclamable) {
+			return err
+		}
 	}
 
 	s.liquidarSiNoQuedaNadaPendiente(ctx, groupID)
@@ -225,12 +269,16 @@ func (s *Service) DeclineShare(ctx context.Context, userID, groupID string) erro
 // liquidarSiNoQuedaNadaPendiente marca el grupo como liquidado cuando ya no
 // queda ninguna cuota por pagar. Es best-effort a proposito: es un resumen del
 // estado de las cuotas, no la verdad del dinero, y esa ya quedo en el libro.
+//
+// La escritura lleva su propia guarda (`status = 'active'`): el conteo se lee
+// fuera de toda transaccion, asi que entre contar y escribir el creador pudo
+// cancelar la division, y un UPDATE sin guarda la habria devuelto a "liquidada".
 func (s *Service) liquidarSiNoQuedaNadaPendiente(ctx context.Context, groupID string) {
 	pending, err := s.repo.CountPendingShares(ctx, groupID)
 	if err != nil || pending != 0 {
 		return
 	}
-	_ = s.repo.UpdateGroupStatus(ctx, groupID, "settled")
+	_ = s.repo.MarcarLiquidadaSiSigueActiva(ctx, groupID)
 }
 
 func (s *Service) CancelSplit(ctx context.Context, userID, groupID string) error {

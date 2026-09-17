@@ -90,6 +90,45 @@ func (l *inProcLimiter) allow(key string, limit int, window time.Duration) bool 
 	return w.count <= limit
 }
 
+// guionDeVentana cuenta la peticion y fija el vencimiento de la ventana en UNA
+// sola orden atomica.
+//
+// Eran dos: INCR y, si el contador quedaba en 1, EXPIRE. Entre las dos hay una
+// ventana, y si el proceso muere justo ahi —un despliegue, un reinicio, un
+// OOM— la llave de esa IP queda SIN vencimiento, o sea para siempre. Desde
+// entonces el contador no se reinicia nunca y, al pasar del tope acumulado
+// historico, esa IP —que puede ser una oficina entera detras de un solo
+// NAT— se queda con 429 en login, registro, OTP de registro, "olvide mi
+// contrasena" y "restablecer", hasta que alguien borre la llave a mano en Redis.
+//
+// El `PTTL < 0` no es adorno: repara tambien las llaves que YA quedaron
+// atascadas sin vencimiento, que es lo unico que las despega sin entrar a
+// Redis a mano. PTTL devuelve -1 cuando la llave existe y no vence, y -2
+// cuando no existe.
+var guionDeVentana = redis.NewScript(`
+local n = redis.call('INCR', KEYS[1])
+if n == 1 or redis.call('PTTL', KEYS[1]) < 0 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return n
+`)
+
+// contarEnLaVentana devuelve cuantas peticiones lleva la clave en la ventana.
+//
+// El error se devuelve tal cual para que el llamante mantenga la politica de
+// SIEMPRE: con Redis caido no se cierra el paso a nadie, se degrada al
+// limitador en proceso.
+func contarEnLaVentana(ctx context.Context, redisClient *redis.Client, key string, window time.Duration) (int64, error) {
+	ms := window.Milliseconds()
+	if ms < 1 {
+		// PEXPIRE con 0 es un error de Redis; una ventana mas corta que un
+		// milisegundo no existe en la practica, pero un cero silencioso dejaria
+		// la llave sin vencer, que es justo lo que este guion vino a evitar.
+		ms = 1
+	}
+	return guionDeVentana.Run(ctx, redisClient, []string{key}, ms).Int64()
+}
+
 // RateLimit es el limite GLOBAL por IP. Se registra una sola vez, para toda la
 // API: un grupo de rutas que necesita su propio tope usa RateLimitKeyed con su
 // propio prefijo, nunca RateLimit.
@@ -108,7 +147,7 @@ func RateLimitKeyed(redisClient *redis.Client, prefix string, limit int, window 
 			key := rateLimitKey(prefix, r)
 
 			ctx := context.Background()
-			count, err := redisClient.Incr(ctx, key).Result()
+			count, err := contarEnLaVentana(ctx, redisClient, key, window)
 			if err != nil {
 				// Redis is down: fail DEGRADED to an in-process limiter rather
 				// than open, so the brute-force/abuse backstop survives an outage.
@@ -118,10 +157,6 @@ func RateLimitKeyed(redisClient *redis.Client, prefix string, limit int, window 
 				}
 				next.ServeHTTP(w, r)
 				return
-			}
-
-			if count == 1 {
-				redisClient.Expire(ctx, key, window)
 			}
 
 			if count > int64(limit) {
@@ -176,7 +211,7 @@ func UserRateLimit(redisClient *redis.Client, limit int, window time.Duration) f
 			}
 
 			ctx := context.Background()
-			count, err := redisClient.Incr(ctx, key).Result()
+			count, err := contarEnLaVentana(ctx, redisClient, key, window)
 			if err != nil {
 				// Redis is down: fail DEGRADED to an in-process limiter, not open.
 				if !fallback.allow(key, limit, window) {
@@ -185,10 +220,6 @@ func UserRateLimit(redisClient *redis.Client, limit int, window time.Duration) f
 				}
 				next.ServeHTTP(w, r)
 				return
-			}
-
-			if count == 1 {
-				redisClient.Expire(ctx, key, window)
 			}
 
 			if count > int64(limit) {
