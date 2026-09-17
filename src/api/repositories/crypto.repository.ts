@@ -1,5 +1,11 @@
 import type { ApiResponse } from '../types';
-import type { CryptoAsset, CryptoTransaction, StakingPosition, PriceAlert } from '@/types';
+import type {
+  CryptoAsset,
+  CryptoTransaction,
+  StakingPosition,
+  PriceAlert,
+  NuevaAlertaDePrecio,
+} from '@/types';
 
 export interface BuyCryptoRequest {
   asset: string;
@@ -62,6 +68,7 @@ export interface ICryptoRepository {
   unstake(positionId: string): Promise<ApiResponse<void>>;
   claimYield(positionId: string): Promise<ApiResponse<{ amount: number }>>;
   getPriceAlerts(): Promise<ApiResponse<PriceAlert[]>>;
-  addPriceAlert(alert: PriceAlert): Promise<ApiResponse<PriceAlert>>;
+  /** Devuelve la alerta como la guardo el servidor (id, estado, fecha). */
+  addPriceAlert(alert: NuevaAlertaDePrecio): Promise<ApiResponse<PriceAlert>>;
   removePriceAlert(alertId: string): Promise<ApiResponse<void>>;
 }

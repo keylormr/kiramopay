@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
       stake: vi.fn(),
       unstake: vi.fn(),
       claimYield: vi.fn(),
+      getPriceAlerts: vi.fn(),
+      addPriceAlert: vi.fn(),
+      removePriceAlert: vi.fn(),
     },
   },
   dispatch: vi.fn(),
@@ -41,6 +44,9 @@ const asset = (symbol: string, balance: number, currentPrice: number) => ({
   balance,
   currentPrice,
   change24h: 0,
+  // La pestana Mercado los lee: sin ellos no se puede ni abrir.
+  priceChange24h: 0,
+  avgBuyPrice: currentPrice,
   icon: symbol[0],
   color: '#123456',
   priceHistory: [],
@@ -73,6 +79,13 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
+// La vista copia al estado la lista de alertas que leyo del servidor
+// (SET_PRICE_ALERTS). Eso no es una operacion: las pruebas que afirman que un
+// rechazo no toca el estado miran todo lo demas.
+function operacionesDespachadas() {
+  return mocks.dispatch.mock.calls.filter(([accion]) => accion?.type !== 'SET_PRICE_ALERTS');
+}
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -88,7 +101,64 @@ beforeEach(() => {
   mocks.api.crypto.stake.mockReset();
   mocks.api.crypto.unstake.mockReset();
   mocks.api.crypto.claimYield.mockReset();
+  mocks.api.crypto.getPriceAlerts.mockReset();
+  mocks.api.crypto.getPriceAlerts.mockResolvedValue({ success: true, data: [] });
   mocks.dispatch.mockReset();
+});
+
+// Las alertas de precio existian en el servidor y en el estado, pero ninguna
+// pantalla permitia usarlas (hallazgo QA n=47).
+describe('CryptoView — alertas de precio', () => {
+  const alerta = (id: string, status: 'active' | 'triggered') => ({
+    id,
+    asset: 'BTC',
+    targetPrice: 50000,
+    condition: 'above' as const,
+    active: status === 'active',
+    status,
+  });
+
+  it('Mercado ofrece las alertas con el conteo de activas que dio el servidor', async () => {
+    mocks.api.crypto.getPriceAlerts.mockResolvedValue({
+      success: true,
+      data: [alerta('a', 'active'), alerta('b', 'active'), alerta('c', 'triggered')],
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('button', { name: 'Mercado' }));
+    const boton = await screen.findByRole('button', { name: 'Alertas de precio, activas: 2' });
+    expect(within(boton).getByText('2')).toBeInTheDocument();
+
+    await user.click(boton);
+    const hoja = within(await screen.findByRole('dialog'));
+    expect(hoja.getByRole('heading', { name: 'Alertas de precio' })).toBeInTheDocument();
+    // Abrir la hoja vuelve a leer: el servidor pudo cumplir alguna mientras tanto.
+    await waitFor(() => expect(mocks.api.crypto.getPriceAlerts).toHaveBeenCalledTimes(2));
+  });
+
+  it('sin una lectura buena no inventa un conteo', async () => {
+    mocks.api.crypto.getPriceAlerts.mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED', message: 'x' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('button', { name: 'Mercado' }));
+    const boton = await screen.findByRole('button', { name: 'Alertas de precio' });
+    expect(within(boton).queryByText(/\d/)).not.toBeInTheDocument();
+  });
+
+  it('el detalle de un activo abre la alerta nueva con ese activo', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('button', { name: /ETH.*2 ETH/ }));
+    await user.click(await screen.findByRole('button', { name: 'Crear alerta de precio' }));
+    // La hoja del detalle tarda en irse (su animacion de salida): se busca la
+    // nueva por su titulo.
+    const titulo = await screen.findByRole('heading', { name: 'Nueva alerta' });
+    const hoja = within(titulo.closest('[role="dialog"]') as HTMLElement);
+    expect(hoja.getByLabelText('Activo')).toHaveValue('ETH');
+  });
 });
 
 // Convertir, hacer staking, retirarlo y reclamar rendimiento actualizaban el
@@ -116,7 +186,7 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
     // Traducido por el codigo; el texto del servidor no llega a la pantalla.
     expect(await screen.findByText('No tienes suficiente de esta cripto para esa operación.')).toBeInTheDocument();
     expect(screen.queryByText(/insufficient asset balance/)).not.toBeInTheDocument();
-    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(operacionesDespachadas()).toEqual([]);
   });
 
   // Esta prueba tambien cubre el destino por defecto: la hoja reusaba el estado
@@ -152,7 +222,7 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
 
     expect(await screen.findByText('Esta posición sigue bloqueada hasta que termine su plazo.')).toBeInTheDocument();
     expect(screen.queryByText(/position is locked/)).not.toBeInTheDocument();
-    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(operacionesDespachadas()).toEqual([]);
   });
 
   it('retira el staking cuando el servidor acepta', async () => {
@@ -188,6 +258,6 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
     expect(await screen.findByText(/todavía no se acredita/)).toBeInTheDocument();
     // Y no puede filtrarse el texto crudo del adaptador.
     expect(screen.queryByText(/is not credited yet/)).not.toBeInTheDocument();
-    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(operacionesDespachadas()).toEqual([]);
   });
 });

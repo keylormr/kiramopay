@@ -1718,7 +1718,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get price alerts */
+        /**
+         * Get price alerts
+         * @description Every active alert of the caller (newest first), followed by the 20 most recently triggered ones the caller has not removed (last triggered first). A background sweep checks active alerts about once a minute against the prices the server already has cached: it never calls the price provider on its own, and a stale price decides nothing. When an alert's condition is met (`above`: price >= target; `below`: price <= target) it becomes `triggered` exactly once, keeps the price and time it was met at, and the owner is notified in the app (and by web or native push if enabled) with a text that carries no amounts.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1733,14 +1736,16 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PriceAlertRecord"][];
+                    };
                 };
             };
         };
         put?: never;
         /**
          * Create price alert
-         * @description `asset` must be one of the symbols the system quotes; `direction` is above or below; `target_price` is in USD (the feed currency), must be positive and at most 10,000,000, and — when a current market price is available — between 1/100 and 100 times that price.
+         * @description `asset` must be one of the symbols the system quotes; `direction` is above or below; `target_price` is in USD (the feed currency), must be positive and at most 10,000,000, and — when a current market price is available — between 1/100 and 100 times that price and not already met by it. A person can have at most 20 active alerts (triggered ones do not count). Only asset, target_price and direction are read from the body.
          */
         post: {
             parameters: {
@@ -1754,8 +1759,8 @@ export interface paths {
                     "application/json": {
                         /** @example BTC */
                         asset: string;
-                        /** @description USD */
-                        target_price: number;
+                        /** @description USD, as a JSON number or a decimal string */
+                        target_price: number | string;
                         /** @enum {string} */
                         direction: "above" | "below";
                     };
@@ -1771,13 +1776,22 @@ export interface paths {
                         "application/json": components["schemas"]["PriceAlertRecord"];
                     };
                 };
-                /** @description ALERT_UNSUPPORTED_ASSET (the symbol is not quoted), ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, or INVALID_BODY. */
+                /** @description ALERT_UNSUPPORTED_ASSET (the symbol is not quoted), ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, ALERT_ALREADY_MET (the current price already satisfies the alert), or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description ALERT_LIMIT_REACHED (the person already has 20 active alerts) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PriceAlertLimitError"];
                     };
                 };
                 /** @description ALERT_FAILED with a generic message; the detail stays in the server log. */
@@ -1807,7 +1821,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete price alert */
+        /**
+         * Remove price alert
+         * @description Removes an active or triggered alert from the caller's list. The row is kept (switched off and stamped with when it was removed), not deleted. Removing an alert that does not exist, is not the caller's or was already removed does nothing and still answers 204.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -7871,6 +7888,11 @@ export interface components {
                 last_success_at?: string;
                 cached_assets?: number;
                 breaker_open?: boolean;
+                /**
+                 * Format: date-time
+                 * @description Last time the price-alert sweep compared active alerts against a live price. Absent until it has managed to compare any. A healthy feed with a stale value means the sweep has no fresh prices to work with (see ALERTAS_REFRESCO_HORAS).
+                 */
+                ultima_revision_de_alertas?: string;
             };
         };
         RegisterRequest: {
@@ -8349,14 +8371,47 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
         };
+        /** @description Prices are USD, exact decimals serialized as JSON strings (for example "65000.5"). `triggered_at` and `triggered_price` are present only once the alert has been met. */
         PriceAlertRecord: {
             /** Format: uuid */
-            id?: string;
-            asset?: string;
-            target_price?: number;
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            asset: string;
+            /** @description decimal, USD */
+            target_price: string;
             /** @enum {string} */
-            direction?: "above" | "below";
-            active?: boolean;
+            direction: "above" | "below";
+            active: boolean;
+            /**
+             * @description active while it waits; triggered once the price met it
+             * @enum {string}
+             */
+            status: "active" | "triggered";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            triggered_at?: string;
+            /** @description decimal, the USD price it was met at */
+            triggered_price?: string;
+        };
+        /** @description 409 answer when creating a price alert would go past the limit of active alerts. The limit is the same on every plan and only stops CREATING. */
+        PriceAlertLimitError: {
+            /** @example false */
+            success: boolean;
+            error: {
+                /** @enum {string} */
+                code: "ALERT_LIMIT_REACHED";
+                message: string;
+                details: {
+                    /** @enum {string} */
+                    plan: "free" | "plus" | "pro";
+                    /** @description How many active alerts a person can have */
+                    limite: number;
+                    /** @description How many active alerts the person has now */
+                    actuales: number;
+                };
+            };
         };
         BudgetRecord: {
             /** Format: uuid */

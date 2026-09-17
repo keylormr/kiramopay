@@ -6,9 +6,16 @@ import type {
   StakeCryptoRequest,
 } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
-import type { CryptoAsset, CryptoTransaction, StakingPosition, PriceAlert } from '@/types';
+import type {
+  CryptoAsset,
+  CryptoTransaction,
+  StakingPosition,
+  PriceAlert,
+  NuevaAlertaDePrecio,
+} from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
+import type { Schema } from '../../generated/helpers';
 
 // Backend money/amount fields are decimal.Decimal, which serialize to JSON as
 // quoted strings (e.g. "1.5"). Coerce to a finite number so the UI's arithmetic
@@ -258,53 +265,69 @@ export class HttpCryptoRepository implements ICryptoRepository {
   }
 
   async getPriceAlerts(): Promise<ApiResponse<PriceAlert[]>> {
-    const res = await this.client.get<
-      Array<{
-        id: string;
-        asset: string;
-        target_price: number;
-        direction: string;
-        active: boolean;
-      }>
-    >('/api/v1/crypto/alerts');
+    const res = await this.client.get<AlertaDTO[] | null>('/api/v1/crypto/alerts');
 
+    // El codigo y el texto del servidor pasan tal cual: pisarlos con uno fijo
+    // le quitaba a la pantalla la forma de explicar el rechazo.
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch price alerts');
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch price alerts');
     }
+    // Sin alertas el servidor puede responder data: null. Es una lista vacia,
+    // no un fallo.
     if (!Array.isArray(res.data)) return apiSuccess([]);
-
-    const alerts: PriceAlert[] = res.data.map((a) => ({
-      id: a.id,
-      asset: a.asset,
-      targetPrice: a.target_price,
-      condition: a.direction as 'above' | 'below',
-      active: a.active,
-    }));
-
-    return apiSuccess(alerts);
+    return apiSuccess(res.data.map(aAlerta));
   }
 
-  async addPriceAlert(alert: PriceAlert): Promise<ApiResponse<PriceAlert>> {
-    const res = await this.client.post('/api/v1/crypto/alerts', {
+  async addPriceAlert(alert: NuevaAlertaDePrecio): Promise<ApiResponse<PriceAlert>> {
+    const res = await this.client.post<AlertaDTO>('/api/v1/crypto/alerts', {
       asset: alert.asset,
       target_price: alert.targetPrice,
       direction: alert.condition,
     });
 
-    if (!res.success) {
-      return apiError('ALERT_FAILED', res.error?.message || 'Failed to add alert');
+    if (!res.success || !res.data) {
+      return apiError(
+        res.error?.code || 'ALERT_FAILED',
+        res.error?.message || 'Failed to add alert',
+        undefined,
+        res.error?.details,
+      );
     }
 
-    return apiSuccess(alert);
+    // La alerta que vale es la que guardo el servidor: con su id, su estado y
+    // el activo ya normalizado.
+    return apiSuccess(aAlerta(res.data));
   }
 
   async removePriceAlert(alertId: string): Promise<ApiResponse<void>> {
-    const res = await this.client.del(`/api/v1/crypto/alerts/${alertId}`);
+    const res = await this.client.del(`/api/v1/crypto/alerts/${encodeURIComponent(alertId)}`);
     if (!res.success) {
-      return apiError('REMOVE_FAILED', res.error?.message || 'Failed to remove alert');
+      return apiError(res.error?.code || 'REMOVE_FAILED', res.error?.message || 'Failed to remove alert');
     }
     return apiSuccess(undefined as unknown as void);
   }
+}
+
+// Forma de /crypto/alerts, anclada al contrato: re-generar con `npm run gen:api`
+// si cambia. Los precios son decimales y llegan como texto.
+type AlertaDTO = Schema<'PriceAlertRecord'>;
+
+function aAlerta(a: AlertaDTO): PriceAlert {
+  // Un servidor anterior a la 071 no mandaba `status`: sin el, una inactiva es
+  // cumplida solo si trae la fecha de cumplimiento.
+  const cumplida = a.status ? a.status === 'triggered' : !a.active && !!a.triggered_at;
+  return {
+    id: a.id,
+    asset: a.asset,
+    targetPrice: num(a.target_price),
+    condition: a.direction === 'below' ? 'below' : 'above',
+    active: !cumplida && a.active,
+    status: cumplida ? 'triggered' : 'active',
+    createdAt: a.created_at || undefined,
+    triggeredAt: a.triggered_at || undefined,
+    // != null: un null del JSON no es un precio (num(null) daria 0).
+    triggeredPrice: a.triggered_price != null && a.triggered_price !== '' ? num(a.triggered_price) : undefined,
+  };
 }
 
 function getAssetColor(symbol: string): string {

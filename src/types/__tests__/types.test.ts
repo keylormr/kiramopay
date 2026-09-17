@@ -207,6 +207,7 @@ describe('Types barrel exports', () => {
       targetPrice: 100000,
       condition: 'above',
       active: true,
+      status: 'active',
     };
     const state: CryptoState = {
       assets: [asset],

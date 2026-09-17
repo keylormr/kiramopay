@@ -22,6 +22,26 @@ type Config struct {
 	Loyalty   LoyaltyConfig
 	Escrow    EscrowConfig
 	Planes    PlanesConfig
+	Cripto    CriptoConfig
+}
+
+// CriptoConfig gobierna lo que el modulo cripto puede gastar del proveedor de
+// precios por su cuenta.
+type CriptoConfig struct {
+	// RefrescoDeAlertas: cada cuanto el barrido de alertas de precio puede
+	// gastar UNA llamada al proveedor para traerse precios frescos cuando el
+	// cache esta vencido. 0 lo apaga: el barrido queda como antes, evaluando
+	// solo contra lo que el cache ya tenga.
+	//
+	// Existe porque el cache lo refresca el broadcaster del WebSocket, que solo
+	// corre mientras alguien tiene la app abierta: sin nadie conectado, una
+	// alerta podia no cumplirse nunca.
+	//
+	// El costo es directo: con 1 hora son ~720 llamadas al mes de las 10.000
+	// que da la clave Demo de CoinGecko, y el grueso de la cuota se lo sigue
+	// llevando el broadcaster. Bajarlo cuesta mas cuota; subirlo, retraso en
+	// el aviso.
+	RefrescoDeAlertas time.Duration // ALERTAS_REFRESCO_HORAS
 }
 
 // PlanesConfig fija cuantas cosas ACTIVAS puede tener una persona segun su
@@ -196,7 +216,7 @@ type CORSConfig struct {
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Port:                     getEnvInt("SERVER_PORT", 8080),
+			Port: getEnvInt("SERVER_PORT", 8080),
 			// Fail-safe default: an UNSET ENVIRONMENT is treated as production, so a
 			// deploy that forgets to set it runs the full ValidateForProduction gate
 			// instead of silently booting with development bypasses. Local work opts
@@ -208,13 +228,13 @@ func Load() *Config {
 			DemoLoginEnabled:         getEnv("DEMO_LOGIN_ENABLED", "false") == "true",
 		},
 		Database: DatabaseConfig{
-			Host:        getEnv("DB_HOST", "localhost"),
-			Port:        getEnvInt("DB_PORT", 5432),
-			User:        getEnv("DB_USER", "kiramopay"),
-			Password:    getEnv("DB_PASSWORD", "kiramopay_dev"),
-			DBName:      getEnv("DB_NAME", "kiramopay"),
-			SSLMode:     getEnv("DB_SSL_MODE", "disable"),
-			MaxConns:    getEnvInt("DB_MAX_CONNS", 50),
+			Host:             getEnv("DB_HOST", "localhost"),
+			Port:             getEnvInt("DB_PORT", 5432),
+			User:             getEnv("DB_USER", "kiramopay"),
+			Password:         getEnv("DB_PASSWORD", "kiramopay_dev"),
+			DBName:           getEnv("DB_NAME", "kiramopay"),
+			SSLMode:          getEnv("DB_SSL_MODE", "disable"),
+			MaxConns:         getEnvInt("DB_MAX_CONNS", 50),
 			SSLRootCert:      getEnv("DB_SSL_ROOT_CERT", ""),
 			SSLCert:          getEnv("DB_SSL_CERT", ""),
 			SSLKey:           getEnv("DB_SSL_KEY", ""),
@@ -286,7 +306,22 @@ func Load() *Config {
 			TarjetasPlus: getEnvTope("PLAN_TARJETAS_PLUS", 3),
 			TarjetasPro:  getEnvTope("PLAN_TARJETAS_PRO", 5),
 		},
+		Cripto: CriptoConfig{
+			RefrescoDeAlertas: getEnvHoras("ALERTAS_REFRESCO_HORAS", 1),
+		},
 	}
+}
+
+// getEnvHoras lee un numero de horas. 0 es un valor valido y explicito (apaga
+// la tarea); un negativo es un error de quien edito la variable y se ignora,
+// porque una tarea apagada por accidente no se nota hasta que alguien reclama
+// que su alerta nunca llego.
+func getEnvHoras(key string, fallback int) time.Duration {
+	horas := getEnvInt(key, fallback)
+	if horas < 0 {
+		horas = fallback
+	}
+	return time.Duration(horas) * time.Hour
 }
 
 // getEnvTope lee un tope de plan. Un negativo no se recorta a 0, porque 0 es

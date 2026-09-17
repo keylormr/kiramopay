@@ -38,6 +38,7 @@ interface CryptoStoreState extends CryptoState {
   stakeCrypto: (position: StakingPosition) => void;
   unstakeCrypto: (positionId: string) => void;
   claimYield: (positionId: string, amount: number) => void;
+  setPriceAlerts: (alerts: PriceAlert[]) => void;
   addPriceAlert: (alert: PriceAlert) => void;
   removePriceAlert: (alertId: string) => void;
   toggleFavorite: (symbol: string) => void;
@@ -179,6 +180,8 @@ export const useCryptoStore = create<CryptoStoreState>()(
             ),
           };
         }),
+
+      setPriceAlerts: (alerts) => set({ priceAlerts: alerts }),
 
       addPriceAlert: (alert) =>
         set((s) => ({ priceAlerts: [...s.priceAlerts, alert] })),

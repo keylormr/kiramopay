@@ -51,13 +51,28 @@ export interface StakingPosition {
   lockPeriodDays?: number;
 }
 
+/**
+ * Alerta de precio tal como la guarda el servidor. Los precios van en dolares,
+ * la moneda del feed. `triggeredAt` y `triggeredPrice` existen solo cuando el
+ * barrido del servidor la cumplio: una alerta avisa una sola vez.
+ */
 export interface PriceAlert {
   id: string;
   asset: string;
   targetPrice: number;
   condition: 'above' | 'below';
   active: boolean;
-  triggered?: boolean;
+  status: 'active' | 'triggered';
+  createdAt?: string;
+  triggeredAt?: string;
+  triggeredPrice?: number;
+}
+
+/** Lo unico que la persona decide al crear una alerta. */
+export interface NuevaAlertaDePrecio {
+  asset: string;
+  targetPrice: number;
+  condition: 'above' | 'below';
 }
 
 export interface CryptoState {

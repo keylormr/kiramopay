@@ -353,7 +353,7 @@ func TestPriceAlert_CRUD(t *testing.T) {
 	ctx := context.Background()
 
 	// Add alert
-	alert, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+	alert, err := svc.AddPriceAlert(ctx, userID, &crypto.CrearAlertaRequest{
 		Asset:       "BTC",
 		TargetPrice: d(1500), // el stub cotiza BTC a 1000 dolares
 		Direction:   "above",
@@ -593,19 +593,19 @@ func TestPriceAlert_ContraElPrecioDeMercado(t *testing.T) {
 	svc, userID := setupCryptoService(t)
 	ctx := context.Background()
 
-	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.CrearAlertaRequest{
 		Asset: "BTC", TargetPrice: d(1500), Direction: "above",
 	}); err != nil {
 		t.Fatalf("una meta razonable se rechazo: %v", err)
 	}
 	for _, meta := range []float64{200000, 5} { // 200 veces el precio, y la doscientosava parte
-		if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+		if _, err := svc.AddPriceAlert(ctx, userID, &crypto.CrearAlertaRequest{
 			Asset: "BTC", TargetPrice: d(meta), Direction: "above",
 		}); !errors.Is(err, crypto.ErrAlertaPrecioFueraDeRango) {
 			t.Fatalf("meta %v: err = %v, se esperaba ErrAlertaPrecioFueraDeRango", meta, err)
 		}
 	}
-	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.PriceAlertRecord{
+	if _, err := svc.AddPriceAlert(ctx, userID, &crypto.CrearAlertaRequest{
 		Asset: "NOEXISTE", TargetPrice: d(100), Direction: "above",
 	}); !errors.Is(err, crypto.ErrAlertaActivoNoSoportado) {
 		t.Fatalf("activo inexistente: err = %v, se esperaba ErrAlertaActivoNoSoportado", err)

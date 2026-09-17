@@ -397,17 +397,25 @@ func (s *Service) GetPriceAlerts(ctx context.Context, userID string) ([]PriceAle
 	return s.repo.GetPriceAlerts(ctx, userID)
 }
 
-func (s *Service) AddPriceAlert(ctx context.Context, userID string, alert *PriceAlertRecord) (*PriceAlertRecord, error) {
+// AddPriceAlert crea una alerta activa. Del pedido solo se toman el activo, el
+// precio objetivo y la direccion: el id, el dueno, el estado y las fechas los
+// pone el servidor. Antes se guardaba el cuerpo tal cual, y un id del cliente
+// podia chocar con otra fila o no ser un UUID.
+func (s *Service) AddPriceAlert(ctx context.Context, userID string, req *CrearAlertaRequest) (*PriceAlertRecord, error) {
+	alert := &PriceAlertRecord{
+		Asset:       req.Asset,
+		TargetPrice: req.TargetPrice,
+		Direction:   req.Direction,
+	}
 	if err := s.validarAlerta(ctx, alert); err != nil {
 		return nil, err
 	}
-	// El id lo pone el servidor: uno del cliente podia chocar con otra fila o
-	// no ser un UUID, y salir como un error crudo de la base.
-	alert.ID = ""
 	alert.UserID = userID
 	if err := s.repo.AddPriceAlert(ctx, alert); err != nil {
 		return nil, err
 	}
+	alert.Active = true
+	alert.Status = AlertaActiva
 	return alert, nil
 }
 

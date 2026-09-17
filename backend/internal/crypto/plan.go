@@ -30,6 +30,15 @@ type Diagnostics struct {
 	LastSuccessAt string `json:"last_success_at"`
 	CachedAssets  int    `json:"cached_assets"`
 	BreakerOpen   bool   `json:"breaker_open"`
+	// UltimaRevisionDeAlertas: cuando el barrido de alertas de precio comparo
+	// por ultima vez las alertas activas contra un precio vigente. Vacio
+	// mientras no haya podido comparar ninguna (proceso recien arrancado, o
+	// cache vencido con el refresco propio apagado).
+	//
+	// NO lo llena PriceService: el barrido es otro objeto y no le pertenece.
+	// Lo pone el handler de /health desde el evaluador (ver cmd/api/main.go);
+	// va aqui porque es el unico apartado de cripto que /health publica.
+	UltimaRevisionDeAlertas string `json:"ultima_revision_de_alertas,omitempty"`
 }
 
 func (ps *PriceService) planConfigurado() string {

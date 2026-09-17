@@ -54,6 +54,7 @@ func TestErrorDeAlerta_CodigosPropios(t *testing.T) {
 		{fmt.Errorf("%w: %q", ErrAlertaActivoNoSoportado, "NOEXISTE"), "ALERT_UNSUPPORTED_ASSET"},
 		{ErrAlertaDireccionInvalida, "ALERT_INVALID_DIRECTION"},
 		{ErrAlertaPrecioFueraDeRango, "ALERT_PRICE_OUT_OF_RANGE"},
+		{ErrAlertaYaCumplida, "ALERT_ALREADY_MET"},
 	}
 	for _, c := range casos {
 		codigo, estado, ok := errorDeAlerta(c.err)

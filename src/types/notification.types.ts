@@ -2,7 +2,8 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'transaction' | 'promo' | 'security' | 'warning';
+  // price_alert: el barrido de alertas de precio del servidor.
+  type: 'info' | 'transaction' | 'promo' | 'security' | 'warning' | 'price_alert';
   date: string;
   read: boolean;
   action?: {

@@ -1040,11 +1040,28 @@ paths:
     get:
       tags: [Crypto]
       summary: Get price alerts
+      description: >-
+        Every active alert of the caller (newest first), followed by the 20
+        most recently triggered ones the caller has not removed (last
+        triggered first). A background sweep checks active alerts about once a
+        minute against the prices the server already has cached: it never
+        calls the price provider on its own, and a stale price decides
+        nothing. When an alert's condition is met (`above`: price >= target;
+        `below`: price <= target) it becomes `triggered` exactly once, keeps
+        the price and time it was met at, and the owner is notified in the app
+        (and by web or native push if enabled) with a text that carries no
+        amounts.
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Price alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceAlertRecord'
     post:
       tags: [Crypto]
       summary: Create price alert
@@ -1052,7 +1069,10 @@ paths:
         `asset` must be one of the symbols the system quotes; `direction` is
         above or below; `target_price` is in USD (the feed currency), must be
         positive and at most 10,000,000, and — when a current market price is
-        available — between 1/100 and 100 times that price.
+        available — between 1/100 and 100 times that price and not already
+        met by it. A person can have at most 20 active alerts (triggered ones
+        do not count). Only asset, target_price and direction are read from
+        the body.
       security:
         - bearerAuth: []
       requestBody:
@@ -1064,7 +1084,11 @@ paths:
               required: [asset, target_price, direction]
               properties:
                 asset: { type: string, example: BTC }
-                target_price: { type: number, description: USD }
+                target_price:
+                  description: USD, as a JSON number or a decimal string
+                  oneOf:
+                    - { type: number }
+                    - { type: string }
                 direction: { type: string, enum: [above, below] }
       responses:
         '201':
@@ -1076,11 +1100,19 @@ paths:
         '400':
           description: >-
             ALERT_UNSUPPORTED_ASSET (the symbol is not quoted),
-            ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE, or INVALID_BODY.
+            ALERT_INVALID_DIRECTION, ALERT_PRICE_OUT_OF_RANGE,
+            ALERT_ALREADY_MET (the current price already satisfies the
+            alert), or INVALID_BODY.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: ALERT_LIMIT_REACHED (the person already has 20 active alerts)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceAlertLimitError'
         '500':
           description: ALERT_FAILED with a generic message; the detail stays in the server log.
           content:
@@ -1091,7 +1123,12 @@ paths:
   /api/v1/crypto/alerts/{id}:
     delete:
       tags: [Crypto]
-      summary: Delete price alert
+      summary: Remove price alert
+      description: >-
+        Removes an active or triggered alert from the caller's list. The row
+        is kept (switched off and stamped with when it was removed), not
+        deleted. Removing an alert that does not exist, is not the caller's
+        or was already removed does nothing and still answers 204.
       security:
         - bearerAuth: []
       parameters:
@@ -4410,6 +4447,14 @@ components:
               type: integer
             breaker_open:
               type: boolean
+            ultima_revision_de_alertas:
+              type: string
+              format: date-time
+              description: >-
+                Last time the price-alert sweep compared active alerts against a
+                live price. Absent until it has managed to compare any. A healthy
+                feed with a stale value means the sweep has no fresh prices to
+                work with (see ALERTAS_REFRESCO_HORAS).
 
     RegisterRequest:
       type: object
@@ -5016,12 +5061,55 @@ components:
 
     PriceAlertRecord:
       type: object
+      description: >-
+        Prices are USD, exact decimals serialized as JSON strings (for
+        example "65000.5"). `triggered_at` and `triggered_price` are present
+        only once the alert has been met.
+      required: [id, user_id, asset, target_price, direction, active, status, created_at]
       properties:
         id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
         asset: { type: string }
-        target_price: { type: number }
+        target_price: { type: string, description: 'decimal, USD' }
         direction: { type: string, enum: [above, below] }
         active: { type: boolean }
+        status:
+          type: string
+          enum: [active, triggered]
+          description: active while it waits; triggered once the price met it
+        created_at: { type: string, format: date-time }
+        triggered_at: { type: string, format: date-time }
+        triggered_price: { type: string, description: 'decimal, the USD price it was met at' }
+
+    PriceAlertLimitError:
+      type: object
+      description: >-
+        409 answer when creating a price alert would go past the limit of
+        active alerts. The limit is the same on every plan and only stops
+        CREATING.
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code: { type: string, enum: [ALERT_LIMIT_REACHED] }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: false
+              required: [plan, limite, actuales]
+              properties:
+                plan: { type: string, enum: [free, plus, pro] }
+                limite:
+                  type: integer
+                  minimum: 1
+                  description: How many active alerts a person can have
+                actuales:
+                  type: integer
+                  minimum: 0
+                  description: How many active alerts the person has now
 
     BudgetRecord:
       type: object

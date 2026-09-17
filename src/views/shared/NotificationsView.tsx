@@ -19,6 +19,8 @@ const getNotificationIcon = (type: Notification['type']) => {
       return <Icons.Gift size={20} className="text-[var(--color-accent)]" />;
     case 'warning':
       return <Icons.AlertCircle size={20} className="text-[var(--color-warning)]" />;
+    case 'price_alert':
+      return <Icons.BellRing size={20} className="text-[var(--color-primary)]" />;
     default:
       return <Icons.Info size={20} className="text-[var(--color-primary)]" />;
   }

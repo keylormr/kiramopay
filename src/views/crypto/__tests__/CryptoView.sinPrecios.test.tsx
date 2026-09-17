@@ -26,7 +26,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api', () => ({
-  getApiLayer: () => ({ crypto: { convert: vi.fn(), stake: vi.fn(), unstake: vi.fn(), claimYield: vi.fn() } }),
+  getApiLayer: () => ({
+    crypto: {
+      convert: vi.fn(),
+      stake: vi.fn(),
+      unstake: vi.fn(),
+      claimYield: vi.fn(),
+      getPriceAlerts: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    },
+  }),
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 

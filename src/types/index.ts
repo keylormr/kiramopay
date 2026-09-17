@@ -19,6 +19,7 @@ export type {
   CryptoTransaction,
   StakingPosition,
   PriceAlert,
+  NuevaAlertaDePrecio,
   CryptoState,
 } from './crypto.types';
 export type { Notification } from './notification.types';

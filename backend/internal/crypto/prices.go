@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/kiramopay/backend/internal/observability"
+	"github.com/shopspring/decimal"
 )
 
 // CoinGecko endpoints. Free tier by default; the Pro host is used when an API
@@ -377,6 +379,11 @@ func (ps *PriceService) GetPrice(ctx context.Context, symbol string) (float64, e
 func (ps *PriceService) precioVencido(symbol string) (time.Duration, bool) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
+	return ps.precioVencidoConLock(symbol)
+}
+
+// precioVencidoConLock exige el lock tomado.
+func (ps *PriceService) precioVencidoConLock(symbol string) (time.Duration, bool) {
 	desde, ok := ps.cachedAt[symbol]
 	if !ok {
 		desde = ps.lastSuccess
@@ -388,7 +395,73 @@ func (ps *PriceService) precioVencido(symbol string) (time.Duration, bool) {
 	return edad, edad > ps.edadMaxima()
 }
 
-// edadMaxima exige el lock tomado (lo llama precioVencido, que lo sostiene).
+// SimbolosSoportados devuelve, ordenados, los simbolos que el feed sabe pedir.
+// Ordenados para que la URL sea estable (cache del proveedor, log legible) y
+// las pruebas no dependan del recorrido de un mapa.
+func SimbolosSoportados() []string {
+	simbolos := make([]string, 0, len(coinGeckoIDs))
+	for s := range coinGeckoIDs {
+		simbolos = append(simbolos, s)
+	}
+	sort.Strings(simbolos)
+	return simbolos
+}
+
+// RefrescarPrecios trae los precios de TODO el catalogo en UNA sola llamada al
+// proveedor (/coins/markets acepta la lista entera de ids) y reusa el mismo
+// camino que sirve la pantalla: mismo cache, mismo breaker, mismo sello de
+// edad por simbolo.
+//
+// Existe para el barrido de alertas. El cache lo refresca el broadcaster del
+// WebSocket, que solo corre mientras alguien tiene la app abierta: sin nadie
+// conectado el cache se vence y una alerta podia no cumplirse nunca. Quien la
+// llame es responsable de espaciarla —el barrido lo hace por
+// ALERTAS_REFRESCO_HORAS y bajo el candado de cluster—, porque cada llamada
+// sale de la misma cuota mensual que administra el broadcaster.
+//
+// Devuelve error cuando la vuelta no dejo ningun precio vigente: GetPrices
+// degrada al cache sin error ante un proveedor caido, un 429 o el breaker
+// abierto, asi que el exito se mide por el resultado, no por el err de la
+// llamada.
+func (ps *PriceService) RefrescarPrecios(ctx context.Context) error {
+	if _, err := ps.GetPrices(ctx, SimbolosSoportados()); err != nil {
+		return fmt.Errorf("refrescar precios: %w", err)
+	}
+	if len(ps.PreciosVigentes()) > 0 {
+		return nil
+	}
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	if ps.lastError != "" {
+		return fmt.Errorf("refrescar precios: el proveedor no dejo ningun precio vigente (%s)", ps.lastError)
+	}
+	return fmt.Errorf("refrescar precios: el proveedor no dejo ningun precio vigente (status %d)", ps.lastStatus)
+}
+
+// PreciosVigentes devuelve, en dolares, los precios que el cache tiene al dia,
+// con el mismo corte de edad que GetPrice. NUNCA sale al proveedor: el barrido
+// de alertas la consulta en cada vuelta y solo gasta cuota por el camino
+// aparte de RefrescarPrecios, una vez por intervalo.
+//
+// Un simbolo sin precio, con precio no positivo o con precio vencido
+// simplemente no aparece: con el no se decide nada.
+func (ps *PriceService) PreciosVigentes() map[string]decimal.Decimal {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	vigentes := make(map[string]decimal.Decimal, len(ps.cache))
+	for simbolo, p := range ps.cache {
+		if p == nil || !(p.Price > 0) {
+			continue
+		}
+		if _, vencido := ps.precioVencidoConLock(simbolo); vencido {
+			continue
+		}
+		vigentes[simbolo] = decimal.NewFromFloat(p.Price)
+	}
+	return vigentes
+}
+
+// edadMaxima exige el lock tomado (lo llama precioVencidoConLock).
 func (ps *PriceService) edadMaxima() time.Duration {
 	maxima := factorEdadMaxima * ps.cacheTTL
 	if maxima < edadMaximaMinima {

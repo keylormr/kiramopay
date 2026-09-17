@@ -486,19 +486,12 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         }
         break;
       }
-      case 'ADD_PRICE_ALERT':
-        crypto.addPriceAlert(action.payload);
-        if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.addPriceAlert(action.payload).catch(() => {});
-        }
-        break;
-      case 'REMOVE_PRICE_ALERT':
-        crypto.removePriceAlert(action.payload);
-        if (hasBackend) {
-          const api = getApiLayer();
-          api.crypto.removePriceAlert(action.payload).catch(() => {});
-        }
+      // Antes ADD_PRICE_ALERT y REMOVE_PRICE_ALERT tocaban el estado y
+      // llamaban al servidor con .catch(() => {}): un rechazo se tragaba y la
+      // pantalla mostraba una alerta que no existia. Ahora la pantalla espera
+      // al servidor y solo despues copia su lista aqui.
+      case 'SET_PRICE_ALERTS':
+        crypto.setPriceAlerts(action.payload);
         break;
       case 'TOGGLE_FAVORITE_ASSET':
         crypto.toggleFavorite(action.payload);

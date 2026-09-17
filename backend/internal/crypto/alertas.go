@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kiramopay/backend/internal/plans"
 	"github.com/shopspring/decimal"
 )
 
@@ -27,7 +28,46 @@ var (
 	// ErrAlertaPrecioFueraDeRango: el precio objetivo no es positivo o no
 	// guarda relacion con el mercado.
 	ErrAlertaPrecioFueraDeRango = errors.New("price alert: target price out of range")
+	// ErrAlertaYaCumplida: con el precio de ahora la alerta ya estaria
+	// cumplida ("avisame cuando suba a 50.000" con el activo en 60.000). Se
+	// cumpliria en la siguiente vuelta del barrido y el aviso no le diria nada
+	// nuevo a la persona: mas util decirselo al crearla.
+	ErrAlertaYaCumplida = errors.New("price alert: the current price already meets the target")
 )
+
+// AlertasActivasMaximas es cuantas alertas activas puede tener una persona.
+// Es igual en todos los planes: el tope existe para que el barrido y la lista
+// no crezcan sin limite, no para vender mas alertas. Las cumplidas no cuentan.
+const AlertasActivasMaximas = 20
+
+// topesDeAlertas expresa ese tope unico con la forma que pide
+// plans.CrearConTope, que aporta el bloqueo por persona.
+var topesDeAlertas = plans.Topes{
+	Free: AlertasActivasMaximas,
+	Plus: AlertasActivasMaximas,
+	Pro:  AlertasActivasMaximas,
+}
+
+// recursoAlertas va en la llave del bloqueo de CrearConTope.
+const recursoAlertas = "crypto_price_alerts"
+
+// alertaCumplida dice si un precio cumple la condicion de la alerta. El borde
+// cuenta: "avisame cuando llegue a 100" se cumple con 100 exacto.
+//
+// La consulta de Repository.CumplirAlertas aplica la MISMA regla en SQL; las
+// dos se prueban con los mismos casos.
+func alertaCumplida(direccion string, objetivo, precio decimal.Decimal) bool {
+	if !precio.IsPositive() {
+		return false
+	}
+	switch direccion {
+	case "above":
+		return precio.GreaterThanOrEqual(objetivo)
+	case "below":
+		return precio.LessThanOrEqual(objetivo)
+	}
+	return false
+}
 
 // alertaPrecioMaximoUSD es el techo fijo del precio objetivo, en dolares (la
 // moneda del feed). Rige siempre, tambien cuando no hay precio de mercado con
@@ -67,6 +107,9 @@ func (s *Service) validarAlerta(ctx context.Context, a *PriceAlertRecord) error 
 		a.TargetPrice.LessThan(usd.Div(alertaFactorDeMercado)) {
 		return ErrAlertaPrecioFueraDeRango
 	}
+	if alertaCumplida(a.Direction, a.TargetPrice, usd) {
+		return ErrAlertaYaCumplida
+	}
 	return nil
 }
 
@@ -80,6 +123,8 @@ func errorDeAlerta(err error) (string, int, bool) {
 		return "ALERT_INVALID_DIRECTION", http.StatusBadRequest, true
 	case errors.Is(err, ErrAlertaPrecioFueraDeRango):
 		return "ALERT_PRICE_OUT_OF_RANGE", http.StatusBadRequest, true
+	case errors.Is(err, ErrAlertaYaCumplida):
+		return "ALERT_ALREADY_MET", http.StatusBadRequest, true
 	}
 	return "", 0, false
 }

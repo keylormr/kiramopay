@@ -19,6 +19,12 @@ const MONEDAS: ReadonlyArray<Pick<CryptoAsset, 'id' | 'symbol' | 'name' | 'icon'
   { id: 'atom', symbol: 'ATOM', name: 'Cosmos', icon: '◉', color: '#2E3148' },
 ];
 
+/**
+ * Los simbolos que el backend cotiza. Solo sobre ellos se pueden crear alertas
+ * de precio: el servidor rechaza cualquier otro (ALERT_UNSUPPORTED_ASSET).
+ */
+export const SIMBOLOS_DEL_CATALOGO: ReadonlyArray<string> = MONEDAS.map((m) => m.symbol);
+
 // La cara de monedas que no se compran en la aplicacion pero que una cuenta
 // puede tener: las estables de una posicion de staking vieja, que al retirarse
 // vuelven al saldo. Sin esto el circulo mostraba el simbolo en minusculas.
