@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kiramopay/backend/pkg/ventanaredis"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -94,17 +95,21 @@ func (q *RedisQuota) LimiteDelPlan(plan string) int {
 	return q.planLimits["free"]
 }
 
-// incr bumps a counter and sets its TTL on first creation.
+// incr suma uno al contador y le garantiza vencimiento en la MISMA orden.
+//
+// Eran dos —INCR y, si el contador quedaba en 1, EXPIRE— con una ventana entre
+// ellas: si el proceso moria justo ahi (un despliegue, un reinicio, un OOM) la
+// llave quedaba sin vencimiento. Y una llave de cuota sin vencimiento no es
+// "un dia de mas": el contador del dia sigue subiendo para siempre, asi que en
+// cuanto pasa el tope esa persona se queda sin asistente definitivamente, o
+// —si es la global— se queda sin asistente la aplicacion entera. El comentario
+// viejo decia que un expire perdido solo dejaba la llave un dia de mas; no era
+// cierto, porque la llave que no vence tampoco se recicla al cambiar el dia.
+//
+// El guion repara ademas las llaves que ya hubieran quedado sin vencimiento,
+// incluidas las que crea un Refund que cruza la medianoche (ver Refund).
 func (q *RedisQuota) incr(ctx context.Context, key string) (int64, error) {
-	n, err := q.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return 0, err
-	}
-	if n == 1 {
-		// Best-effort TTL; a lost expire only lets the key linger one extra day.
-		_ = q.rdb.Expire(ctx, key, quotaTTL).Err()
-	}
-	return n, nil
+	return ventanaredis.Contar(ctx, q.rdb, key, quotaTTL)
 }
 
 // Allow consumes one unit from both the per-user (plan-sized) and global daily
@@ -139,8 +144,12 @@ func (q *RedisQuota) Allow(ctx context.Context, userID string) (QuotaResult, err
 
 // Refund returns one unit to both budgets. Best-effort: a lost decrement only
 // makes the day's limit slightly stricter, never looser. Both keys were created
-// (with a TTL) by the matching Allow in the same request, so Decr never orphans
-// a TTL-less key.
+// (with a TTL) by the matching Allow in the same request, so Decr normally
+// never orphans a TTL-less key. La excepcion es un turno que empieza antes de
+// la medianoche UTC y termina despues: el Refund apunta a la llave del dia
+// SIGUIENTE, que todavia no existe, y DECR la crea en -1 y sin vencimiento. El
+// primer incr de ese dia se lo devuelve (ver ventanaredis.Contar), asi que la
+// llave no se queda atascada.
 func (q *RedisQuota) Refund(ctx context.Context, userID string) {
 	q.rdb.Decr(ctx, q.userKey(userID))
 	q.rdb.Decr(ctx, q.globalKey())

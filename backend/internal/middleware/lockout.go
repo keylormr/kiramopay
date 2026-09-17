@@ -9,6 +9,7 @@ import (
 
 	"github.com/kiramopay/backend/pkg/identifier"
 	"github.com/kiramopay/backend/pkg/response"
+	"github.com/kiramopay/backend/pkg/ventanaredis"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -30,14 +31,23 @@ func NewRedisLockoutStore(client *redis.Client, ttl time.Duration) *RedisLockout
 	return &RedisLockoutStore{client: client, ttl: ttl}
 }
 
+// IncrLockout suma un intento fallido y deja la llave SIEMPRE con vencimiento,
+// en una sola orden atomica.
+//
+// Eran dos ordenes —INCR y, si el contador quedaba en 1, EXPIRE— con una
+// ventana entre ellas: si el proceso moria justo ahi (un despliegue, un
+// reinicio, un OOM) la llave quedaba sin vencimiento, o sea para siempre. Desde
+// ese momento el contador de esa cuenta no se reinicia nunca y, al llegar a los
+// 5 intentos acumulados, AccountLockoutCheck responde 423 en cada login: esa
+// persona no puede volver a entrar hasta que alguien borre la llave a mano en
+// Redis. El mismo defecto que el limitador de tasa, en el vecino de al lado.
+//
+// El guion repara ademas las llaves que YA quedaron atascadas sin vencimiento:
+// el siguiente intento fallido les devuelve su TTL y la cuenta se libera sola.
 func (s *RedisLockoutStore) IncrLockout(key string) int64 {
-	ctx := context.Background()
-	count, err := s.client.Incr(ctx, key).Result()
+	count, err := ventanaredis.Contar(context.Background(), s.client, key, s.ttl)
 	if err != nil {
 		return 0
-	}
-	if count == 1 {
-		s.client.Expire(ctx, key, s.ttl)
 	}
 	return count
 }
