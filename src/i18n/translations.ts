@@ -868,6 +868,7 @@ export type TranslationKeys = {
   analytics_cat_income: string;
   analytics_cat_cash: string;
   analytics_cat_other: string;
+  analytics_cat_savings: string;
   tx_title_sinpe_send: string;
   tx_title_sinpe_receive: string;
   tx_title_qr_payment: string;
@@ -880,6 +881,8 @@ export type TranslationKeys = {
   tx_title_p2p_receive: string;
   tx_title_generic_in: string;
   tx_title_generic_out: string;
+  tx_title_savings_deposit: string;
+  tx_title_savings_withdraw: string;
   analytics_no_expenses: string;
   analytics_offline: string;
   other_currency_note: string;
@@ -1019,12 +1022,16 @@ export type TranslationKeys = {
   savings_create_goal: string;
   savings_add_money: string;
   savings_deposit: string;
+  savings_withdraw_money: string;
+  savings_withdraw: string;
   savings_err_load: string;
   savings_err_create: string;
   savings_err_target_invalid: string;
   savings_err_name_required: string;
   savings_err_name_too_long: string;
   savings_err_deposit: string;
+  savings_withdraw_exceeds_saved: string;
+  savings_err_withdraw: string;
   savings_err_delete: string;
   savings_delete_title: string;
   savings_delete_warning: string;

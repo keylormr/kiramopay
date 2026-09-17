@@ -134,10 +134,13 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showDepositSheet, setShowDepositSheet] = useState(false);
+  const [showWithdrawSheet, setShowWithdrawSheet] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isDepositing, setIsDepositing] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // El error de cada hoja se muestra DENTRO de la hoja y la deja abierta: si se
   // cierra igual que cuando sale bien, un deposito rechazado se ve exactamente
@@ -270,6 +273,44 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     }
   };
 
+  const handleWithdraw = async () => {
+    if (isWithdrawing) return;
+    if (!selectedGoal || !withdrawAmount) return;
+    const amount = parseFloat(withdrawAmount);
+    if (amount <= 0) return;
+
+    // El tope aca no es la billetera: es lo que la meta tiene guardado.
+    if (amount > selectedGoal.saved) return;
+
+    const api = getApiLayer();
+    if (!api.savings) return;
+    setIsWithdrawing(true);
+    setErrorHoja(null);
+    try {
+      const res = await api.savings.withdraw(selectedGoal.id, amount);
+      // Mismo criterio que el deposito: un retiro RECHAZADO deja la hoja
+      // abierta, el monto escrito y el motivo a la vista, nunca se ve igual
+      // que uno exitoso.
+      if (!res.success || !res.data) {
+        setErrorHoja(t('savings_err_withdraw'));
+        return;
+      }
+      updateGoal(selectedGoal.id, { saved: res.data.saved });
+      // http: the backend moved the money; sync the real balance.
+      // mock: mirror the wallet credit locally.
+      if (hasBackend) refreshAccounts().catch(() => {});
+      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
+
+      setWithdrawAmount('');
+      setShowWithdrawSheet(false);
+      setSelectedGoal(null);
+    } catch {
+      setErrorHoja(t('savings_err_withdraw'));
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   // Borrar una meta con plata adentro no puede ser un toque sin pregunta. El
   // dinero no se pierde —el servidor lo devuelve a la billetera— pero eso no se
   // veia por ningun lado: desaparecia la meta y el saldo aparecia cambiado sin
@@ -305,7 +346,15 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   const openDeposit = (goal: SavingsGoal) => {
     setSelectedGoal(goal);
     setDepositAmount('');
+    setErrorHoja(null);
     setShowDepositSheet(true);
+  };
+
+  const openWithdraw = (goal: SavingsGoal) => {
+    setSelectedGoal(goal);
+    setWithdrawAmount('');
+    setErrorHoja(null);
+    setShowWithdrawSheet(true);
   };
 
   return (
@@ -500,6 +549,13 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                       {t('savings_add_money')}
                     </button>
                     <button
+                      onClick={() => openWithdraw(goal)}
+                      disabled={goal.saved <= 0}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-50 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary"
+                    >
+                      {t('savings_withdraw_money')}
+                    </button>
+                    <button
                       onClick={() => { setErrorHoja(null); setMetaAEliminar(goal); }}
                       disabled={deletingId !== null}
                       aria-label={t('delete')}
@@ -682,6 +738,83 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                   disabled={isDepositing || !depositAmount || numAmount <= 0 || isInsufficient}
                 >
                   {t('savings_deposit')}
+                </Button>
+              </div>
+            );
+          })()}
+        </BottomSheet>
+      )}
+
+      {/* Withdraw Sheet */}
+      {selectedGoal && (
+        <BottomSheet
+          isOpen={showWithdrawSheet}
+          onClose={() => { setShowWithdrawSheet(false); setSelectedGoal(null); }}
+          title={t('savings_withdraw_money')}
+        >
+          {(() => {
+            // El tope aca no es la billetera (como en el deposito): es lo que
+            // la meta tiene guardado. SYSTEM:SAVINGS no tiene piso propio en
+            // el libro; este limite es el unico que impide sobregirar la meta.
+            const maxRetirable = selectedGoal.saved;
+            const numAmount = parseFloat(withdrawAmount || '0');
+            const excedeLoAhorrado = numAmount > maxRetirable;
+            return (
+              <div className="space-y-5 pb-2">
+                <div className="text-center py-2">
+                  <p className="text-sm text-gray-500 mb-1">{selectedGoal.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {formatCurrency(selectedGoal.saved)} / {formatCurrency(selectedGoal.target)}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-2">
+                  <span className={`text-3xl font-bold ${excedeLoAhorrado ? 'text-red-500' : 'text-gray-400'}`}>₡</span>
+                  <CampoMonto
+                    value={withdrawAmount}
+                    onChange={setWithdrawAmount}
+                    placeholder="0"
+                    autoWidth
+                    className={`text-4xl font-black bg-transparent max-w-full text-center outline-none placeholder-gray-300 ${excedeLoAhorrado ? 'text-red-500' : 'uv-text-primary'}`}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Lo disponible para retirar es lo ahorrado, no el saldo de la billetera. */}
+                <p className={`text-center text-sm font-medium ${excedeLoAhorrado ? 'text-red-500' : 'text-gray-400'}`}>
+                  {excedeLoAhorrado ? t('savings_withdraw_exceeds_saved') : `${t('available')}: ${formatCurrency(maxRetirable)}`}
+                </p>
+
+                {/* Porcentajes de lo ahorrado: los montos fijos del deposito
+                    (₡5K/10K/25K/50K) no sirven aca porque el tope cambia con
+                    cada meta, no es un flujo comun. */}
+                <div className="flex gap-2 justify-center">
+                  {[0.25, 0.5, 1].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setWithdrawAmount(String(Math.round(maxRetirable * pct * 100) / 100))}
+                      disabled={maxRetirable <= 0}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-xs font-bold uv-text-secondary active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {Math.round(pct * 100)}%
+                    </button>
+                  ))}
+                </div>
+
+                {errorHoja && (
+                  <p className="text-sm text-center text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+                )}
+
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  onClick={handleWithdraw}
+                  loading={isWithdrawing}
+                  disabled={isWithdrawing || !withdrawAmount || numAmount <= 0 || excedeLoAhorrado}
+                >
+                  {t('savings_withdraw')}
                 </Button>
               </div>
             );

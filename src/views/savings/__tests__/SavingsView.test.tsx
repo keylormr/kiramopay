@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
       getGoals: vi.fn(),
       createGoal: vi.fn(),
       deposit: vi.fn(),
+      withdraw: vi.fn(),
       deleteGoal: vi.fn(),
     },
   },
@@ -368,5 +369,126 @@ describe('SavingsView — el objetivo de una meta nueva', () => {
     await user.click(screen.getByRole('button', { name: 'Crear meta' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo crear la meta. Intenta de nuevo.');
+  });
+});
+
+// Hallazgo QA (17-09): depositar a una meta ya funcionaba desde el navegador,
+// pero retirar no existia en la pantalla — el backend lo soporta (mismo
+// endpoint, deposit=false) desde antes. Estas pruebas siguen la misma calidad
+// que ya tiene el deposito: tope, error traducido, doble envio y saldo al volver.
+describe('SavingsView — retirar de una meta', () => {
+  it('con nada ahorrado el boton de retirar esta deshabilitado', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 0 }] });
+
+    setup();
+
+    expect(await screen.findByRole('button', { name: 'Retirar fondos' })).toBeDisabled();
+  });
+
+  it('retira el monto escrito y actualiza el saldo de la meta al volver', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
+    mocks.api.savings.withdraw.mockResolvedValue({ success: true, data: { ...meta, saved: 40000 } });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+    await user.type(await screen.findByPlaceholderText('0'), '10000');
+    await user.click(screen.getByRole('button', { name: 'Retirar' }));
+
+    await waitFor(() => {
+      expect(mocks.api.savings.withdraw).toHaveBeenCalledWith('g1', 10000);
+    });
+    // La hoja se cierra y la lista muestra el saldo que devolvio el servidor,
+    // no el que se resto a mano en el cliente.
+    await waitFor(() => {
+      expect(screen.getByText(/₡40,000\.00 \/ ₡100,000\.00/)).toBeInTheDocument();
+    });
+  });
+
+  it('no deja retirar mas de lo ahorrado en la meta', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+    await user.type(await screen.findByPlaceholderText('0'), '60000');
+
+    expect(screen.getByText('Ese monto supera lo que tienes ahorrado en esta meta.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retirar' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Retirar' }));
+    expect(mocks.api.savings.withdraw).not.toHaveBeenCalled();
+  });
+
+  it('en cero o negativo el boton de retirar queda deshabilitado', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+
+    expect(screen.getByRole('button', { name: 'Retirar' })).toBeDisabled();
+    await user.type(await screen.findByPlaceholderText('0'), '0');
+    expect(screen.getByRole('button', { name: 'Retirar' })).toBeDisabled();
+  });
+
+  it('un retiro rechazado deja la hoja abierta, el monto escrito y el motivo a la vista', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
+    mocks.api.savings.withdraw.mockResolvedValue({ success: false, error: { code: 'SAVINGS_FAILED' } });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+    const monto = await screen.findByPlaceholderText('0');
+    await user.type(monto, '10000');
+    await user.click(screen.getByRole('button', { name: 'Retirar' }));
+
+    expect(await screen.findByText('No se pudo retirar. Tu dinero sigue en la meta.')).toBeInTheDocument();
+    expect(monto).toHaveValue('10,000');
+  });
+
+  it('mientras el retiro esta en curso el boton queda bloqueado (sin doble envio)', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
+    let resolver: (v: unknown) => void = () => {};
+    mocks.api.savings.withdraw.mockReturnValue(new Promise((resolve) => { resolver = resolve; }));
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+    await user.type(await screen.findByPlaceholderText('0'), '10000');
+    const retirarBtn = screen.getByRole('button', { name: 'Retirar' });
+    await user.click(retirarBtn);
+
+    expect(retirarBtn).toBeDisabled();
+    await user.click(retirarBtn);
+    expect(mocks.api.savings.withdraw).toHaveBeenCalledTimes(1);
+
+    resolver({ success: true, data: { ...meta, saved: 40000 } });
+    // Se deja resolver dentro de act() para que la asercion de arriba (el
+    // segundo click no duplica la llamada) no arrastre una actualizacion de
+    // estado pendiente al siguiente test.
+    await waitFor(() => {
+      expect(retirarBtn).not.toBeInTheDocument();
+    });
+  });
+
+  // El deposito ya tenia este arreglo (autoWidth): el retiro comparte el
+  // mismo componente y debe compartir el comportamiento.
+  it('el campo de monto del retiro crece con la cifra en vez de quedar en una caja de ancho fijo', async () => {
+    mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 5000000 }] });
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
+    const monto = await screen.findByPlaceholderText('0');
+    await user.type(monto, '1000000');
+
+    expect(monto).toHaveValue('1,000,000');
+    expect((monto as HTMLInputElement).style.width).not.toBe('');
   });
 });
