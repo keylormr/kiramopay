@@ -231,6 +231,25 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
     expect(monto).toHaveValue('10,000');
   });
 
+  // Bug real: la caja del monto tenia un ancho fijo (w-48) sin autoWidth. Con
+  // separador de miles, un deposito de ₡1.000.000 no cabia y el texto se
+  // recortaba mientras la persona escribia, sin poder ver cuanto iba a
+  // depositar.
+  it('el campo de monto crece con la cifra en vez de quedar en una caja de ancho fijo', async () => {
+    const user = userEvent.setup();
+
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar fondos' }));
+    const monto = await screen.findByPlaceholderText('0');
+    await user.type(monto, '1000000');
+
+    expect(monto).toHaveValue('1,000,000');
+    // Antes: className fija "w-48" y sin la prop autoWidth. Con autoWidth el
+    // ancho se deriva del propio texto ya formateado.
+    expect((monto as HTMLInputElement).style.width).not.toBe('');
+  });
+
   // Borrar una meta con plata adentro era un toque sin pregunta.
   it('la X pide confirmacion y avisa que la plata guardada vuelve a la billetera', async () => {
     mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 25000 }] });

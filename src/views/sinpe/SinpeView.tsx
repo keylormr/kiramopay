@@ -11,7 +11,7 @@ import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
-import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
+import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro } from '@/utils/erroresQr';
 
@@ -949,7 +949,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <input
                 type="tel"
                 value={newContactPhone}
-                onChange={(e) => setNewContactPhone(e.target.value.replace(/\D/g, '').slice(-8))}
+                onChange={(e) => setNewContactPhone(digitosLocalesCR(e.target.value))}
                 placeholder="8888-0000"
                 className="flex-1 bg-transparent outline-none"
               />
@@ -1080,7 +1080,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(-8))}
+                  onChange={(e) => setPhone(digitosLocalesCR(e.target.value))}
                   placeholder="8888-0000"
                   className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
                 />

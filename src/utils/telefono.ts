@@ -40,3 +40,26 @@ export function mismoTelefonoCR(a: string, b: string): boolean {
   const na = normalizarTelefonoCR(a);
   return na !== null && na === normalizarTelefonoCR(b);
 }
+
+/**
+ * Para un campo que solo debe llevar los 8 digitos locales (sin +506): toma
+ * el valor crudo que el input ya tiene en el DOM en cada tecla y devuelve lo
+ * que el campo debe mostrar.
+ *
+ * Quita lo que no sea digito. Si lo tecleado o pegado empieza con el codigo
+ * de pais ("506..."), lo deja crecer hasta completar los 11 digitos y ahi le
+ * quita el prefijo (misma regla de normalizarTelefonoCR) — asi pegar
+ * "+50688881234" sigue funcionando. Fuera de ese caso, en cuanto hay 8
+ * digitos completos ignora lo que sobre en vez de desplazar el numero: una
+ * tecla de mas ya no cambia el destinatario en silencio.
+ */
+export function digitosLocalesCR(entrada: string): string {
+  const digitos = entrada.replace(/\D/g, '');
+  if (digitos.length <= 8) return digitos;
+  if (digitos.startsWith('506')) {
+    if (digitos.length < 11) return digitos; // codigo de pais a medio teclear
+    const normalizado = normalizarTelefonoCR(digitos.slice(0, 11));
+    return normalizado ? normalizado.slice(4) : digitos.slice(0, 8);
+  }
+  return digitos.slice(0, 8);
+}

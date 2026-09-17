@@ -1113,7 +1113,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                       value={envioMonto}
                       onChange={(v) => { setEnvioMonto(v); setEnvioError(''); }}
                       placeholder="0"
-                      className="text-4xl font-black uv-text-primary bg-transparent outline-none w-40 text-center tabular-nums placeholder:uv-text-muted"
+                      autoWidth
+                      className="text-4xl font-black uv-text-primary bg-transparent outline-none max-w-full text-center tabular-nums placeholder:uv-text-muted"
                     />
                   </div>
                 </div>

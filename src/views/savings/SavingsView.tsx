@@ -645,7 +645,8 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                     value={depositAmount}
                     onChange={setDepositAmount}
                     placeholder="0"
-                    className={`text-4xl font-black bg-transparent w-48 text-center outline-none placeholder-gray-300 ${isInsufficient ? 'text-red-500' : 'uv-text-primary'}`}
+                    autoWidth
+                    className={`text-4xl font-black bg-transparent max-w-full text-center outline-none placeholder-gray-300 ${isInsufficient ? 'text-red-500' : 'uv-text-primary'}`}
                     autoFocus
                   />
                 </div>
