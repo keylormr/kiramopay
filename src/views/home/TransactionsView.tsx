@@ -296,7 +296,13 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-onboard-slide flex flex-col">
+    // La entrada usa la misma clase que el resto de las pantallas superpuestas
+    // (Ahorros, Analisis, etc.). Antes traia `animate-onboard-slide`, la unica
+    // animacion de la app que de verdad anima la OPACIDAD (0 a 1 en 0.5s): con
+    // Inicio todavia montado detras, esos primeros cientos de milisegundos se
+    // veian los dos a la vez, transparentados uno sobre el otro. Al quedar
+    // opaca desde el primer frame, no hay nada detras que se pueda transparentar.
+    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200 flex flex-col">
       {/* Header */}
       <div className="sticky top-0 z-10 uv-surface-1/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button

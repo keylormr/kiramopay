@@ -1054,6 +1054,7 @@ const hi: TranslationKeys = {
   splitpay_err_percentage_rounds_zero: 'यह प्रतिशत इतना कम है कि शून्य हो जाता है।',
   splitpay_err_invalid_type: 'यह विभाजन प्रकार मान्य नहीं है।',
   loyalty_title: 'पॉइंट्स और रिवॉर्ड्स',
+  loyalty_loading_slow: 'आपके पॉइंट्स और रिवॉर्ड्स लोड हो रहे हैं। इसमें कुछ सेकंड लग सकते हैं।',
   loyalty_tier: 'स्तर',
   loyalty_lifetime: 'कुल पॉइंट्स',
   loyalty_available: 'उपलब्ध',
