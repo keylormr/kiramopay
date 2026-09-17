@@ -23,6 +23,7 @@ import type { AppState, AppAction } from '@/types';
 import { getApiLayer } from '@/api';
 import {
   refreshAccounts,
+  refreshCrypto,
   refreshTransactions,
   refreshSinpe,
   refreshNotifications,
@@ -101,9 +102,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       case 'ADD_TRANSACTION':
         txStore.addTransaction(action.payload);
         accounts.updateAccountBalance(action.payload.ccy, action.payload.amount);
-        break;
-      case 'ADD_ACCOUNT':
-        accounts.addAccount(action.payload);
         break;
       case 'CHANGE_PASSWORD':
         // No-op locally: actual password change goes through auth.changePassword
@@ -299,8 +297,11 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           fromAmount,
           toAmount: amount,
           price,
-          fee: fromAmount * 0.005,
-          date: 'Ahora',
+          priceCurrency: 'USD',
+          // Comprar, vender y convertir no cobran comision en el servidor
+          // (Fee 0). La pantalla anotaba una del 0,5 % que nadie cobraba.
+          fee: 0,
+          date: new Date().toISOString(),
           status: 'completed' as const,
         };
         crypto.addTransaction(buyTx);
@@ -312,6 +313,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         // que nunca ocurrio.
         if (hasBackend) {
           refreshAccounts().catch(() => {});
+          refreshCrypto().catch(() => {});
         }
         break;
       }
@@ -326,8 +328,9 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           fromAmount: amount,
           toAmount,
           price,
-          fee: toAmount * 0.005,
-          date: 'Ahora',
+          priceCurrency: 'USD',
+          fee: 0,
+          date: new Date().toISOString(),
           status: 'completed' as const,
         };
         crypto.addTransaction(sellTx);
@@ -339,6 +342,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         // que nunca ocurrio.
         if (hasBackend) {
           refreshAccounts().catch(() => {});
+          refreshCrypto().catch(() => {});
         }
         break;
       }
@@ -353,8 +357,9 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           fromAmount,
           toAmount,
           price,
-          fee: fromAmount * 0.001,
-          date: 'Ahora',
+          priceCurrency: 'USD',
+          fee: 0,
+          date: new Date().toISOString(),
           status: 'completed' as const,
         };
         crypto.addTransaction(convertTx);
@@ -363,7 +368,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         // llamaba con .catch(() => {}), asi que un rechazo del servidor se
         // tragaba y la pantalla mostraba una conversion que nunca ocurrio.
         if (hasBackend) {
-          refreshAccounts().catch(() => {});
+          refreshCrypto().catch(() => {});
         }
         break;
       }
@@ -378,7 +383,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           fromAmount: amount,
           price: currentAsset?.currentPrice || 0,
           fee,
-          date: 'Ahora',
+          date: new Date().toISOString(),
           status: 'completed' as const,
           txHash: `0x${Math.random().toString(16).slice(2, 10)}...`,
         };
@@ -399,7 +404,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           fromAmount: amount,
           price: currentAsset?.currentPrice || 0,
           fee: 0,
-          date: 'Ahora',
+          date: new Date().toISOString(),
           status: 'completed' as const,
           txHash: `0x${Math.random().toString(16).slice(2, 10)}...`,
         };
@@ -410,24 +415,26 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       }
       case 'STAKE_CRYPTO': {
-        const { asset, amount, apy, locked, lockDays } = action.payload;
-        crypto.stakeCrypto(asset, amount, apy, locked, lockDays);
-        const currentAsset = crypto.assets.find((a) => a.symbol === asset);
+        const { asset, amount } = action.payload;
+        crypto.stakeCrypto(action.payload);
+        // Sin precio, igual que lo anota el servidor: apartar no compra ni
+        // vende nada. Con el precio del momento, la fila mostraba un valor en
+        // dolares que desaparecia en cuanto llegaba la lista del servidor.
         const stakeTx = {
           id: `ctx-${Date.now()}`,
           type: 'stake' as const,
           fromAsset: asset,
           fromAmount: amount,
-          price: currentAsset?.currentPrice || 0,
+          price: 0,
           fee: 0,
-          date: 'Ahora',
+          date: new Date().toISOString(),
           status: 'completed' as const,
         };
         crypto.addTransaction(stakeTx);
         // Igual que en conversion: la vista ya espero la confirmacion del
         // servidor antes de despachar esta accion.
         if (hasBackend) {
-          refreshAccounts().catch(() => {});
+          refreshCrypto().catch(() => {});
         }
         break;
       }
@@ -436,22 +443,23 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           (p) => p.id === action.payload.positionId,
         );
         if (position) {
-          const currentAsset = crypto.assets.find((a) => a.symbol === position.asset);
           crypto.unstakeCrypto(action.payload.positionId);
           const unstakeTx = {
             id: `ctx-${Date.now()}`,
             type: 'unstake' as const,
             fromAsset: position.asset,
             fromAmount: position.amount + position.earned,
-            price: currentAsset?.currentPrice || 0,
+            price: 0,
             fee: 0,
-            date: 'Ahora',
+            date: new Date().toISOString(),
             status: 'completed' as const,
           };
           crypto.addTransaction(unstakeTx);
-          if (hasBackend) {
-            refreshAccounts().catch(() => {});
-          }
+        }
+        // Fuera del if: una posicion que la copia local no conocia tambien se
+        // retiro en el servidor, y lo que vale es lo que el diga.
+        if (hasBackend) {
+          refreshCrypto().catch(() => {});
         }
         break;
       }
@@ -468,7 +476,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
             fromAmount: amount,
             price: currentAsset?.currentPrice || 0,
             fee: 0,
-            date: 'Ahora',
+            date: new Date().toISOString(),
             status: 'completed' as const,
           };
           crypto.addTransaction(yieldTx);

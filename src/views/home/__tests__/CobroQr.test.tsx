@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   cancelCharge: vi.fn(),
   resolveQr: vi.fn(),
   scanAndPay: vi.fn(),
+  totpVerify: vi.fn(),
 }));
 
 vi.mock('@/api', () => ({
@@ -29,6 +30,7 @@ vi.mock('@/api', () => ({
       resolveQr: mocks.resolveQr,
       scanAndPay: mocks.scanAndPay,
     },
+    mfa: { totpVerify: mocks.totpVerify },
   }),
 }));
 
@@ -134,6 +136,7 @@ beforeEach(() => {
     success: true,
     data: { id: 'p1', qrCodeId: 'code-1', payerId: 'u', receiverId: 'o', amount: 1000, fee: 0, currency: 'CRC', status: 'completed', createdAt: '' },
   });
+  mocks.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
 });
 
 describe('Cobrar con QR — el codigo se recicla', () => {
@@ -261,5 +264,113 @@ describe('Pagar un QR — el nonce y el doble cobro', () => {
         expect.objectContaining({ chargeId: 'charge-1', idempotencyKey: undefined }),
       );
     });
+  });
+});
+
+// El estado del cobro llegaba en /qr/resolve y nadie lo leia: la hoja pintaba
+// un cobro ya pagado como vigente, con el boton Pagar habilitado, y el motivo
+// aparecia solo despues de intentarlo.
+describe('Pagar un QR — cobro que ya no se puede pagar', () => {
+  async function escanearCobro(status: string) {
+    mocks.resolveQr.mockResolvedValue({
+      success: true,
+      data: { kind: 'charge', merchantName: 'Super La Esquina', currency: 'CRC', amount: 100, chargeId: 'charge-9', qrCodeId: 'code-1', status },
+    });
+    const user = userEvent.setup();
+    pintar();
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Super La Esquina');
+    return user;
+  }
+
+  it.each([
+    ['paid', 'Ese cobro ya fue pagado.'],
+    ['cancelled', 'Ese cobro fue cancelado.'],
+    ['expired', 'Ese cobro venció.'],
+  ])('un cobro %s se avisa de entrada y no ofrece Pagar', async (status, aviso) => {
+    const user = await escanearCobro(status);
+
+    expect(await screen.findByRole('status')).toHaveTextContent(aviso);
+    expect(screen.getByText('Si todavía debes ese monto, pide a quien te cobra un código nuevo.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pagar' })).toBeNull();
+
+    // La unica salida es cerrar, y cerrar no intenta ningun pago.
+    // Por su texto: la X de la hoja tambien se llama "Cerrar".
+    await user.click(screen.getByText('Cerrar', { selector: 'button' }));
+    expect(mocks.scanAndPay).not.toHaveBeenCalled();
+  });
+
+  it('un cobro reemplazado pide volver a escanear, sin la pista de pedir otro codigo', async () => {
+    await escanearCobro('superseded');
+
+    expect(await screen.findByRole('status')).toHaveTextContent('El cobro cambió. Vuelve a escanear.');
+    expect(screen.queryByText(/pide a quien te cobra/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Pagar' })).toBeNull();
+  });
+
+  it('un cobro pendiente se paga como siempre', async () => {
+    const user = await escanearCobro('pending');
+
+    expect(screen.queryByRole('status')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(1));
+  });
+});
+
+// Desde ₡100.000 el servidor responde 428 MFA_REQUIRED, como en SINPE. La hoja
+// mostraba el motivo y el pago quedaba imposible de completar.
+describe('Pagar un QR — segundo factor en montos altos', () => {
+  const mfa = { success: false, error: { code: 'MFA_REQUIRED', message: 'MFA challenge required for amounts >= 100,000 CRC' } };
+
+  async function pagarMontoAlto(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '150000');
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+  }
+
+  it('pide el codigo y, al verificarlo, reintenta EL MISMO pago', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce(mfa);
+    const user = userEvent.setup();
+    pintar();
+
+    await pagarMontoAlto(user);
+    expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
+    // El texto del servidor, en ingles, no llega a la pantalla.
+    expect(screen.queryByText(/MFA challenge required/)).toBeNull();
+
+    await user.type(screen.getByLabelText(/código/i), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verificar y pagar' }));
+
+    await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
+    expect(mocks.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
+    const primera = mocks.scanAndPay.mock.calls[0][0];
+    const segunda = mocks.scanAndPay.mock.calls[1][0];
+    expect(primera.idempotencyKey).toBeTruthy();
+    expect(segunda.idempotencyKey).toBe(primera.idempotencyKey);
+    expect(segunda.amount).toBe(150000);
+    expect((await screen.findAllByText('Pago realizado')).length).toBeGreaterThan(0);
+  });
+
+  it('cerrar la verificacion no paga, dice por que y suelta el nonce', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce(mfa).mockResolvedValueOnce(mfa);
+    const user = userEvent.setup();
+    pintar();
+
+    await pagarMontoAlto(user);
+    await screen.findByText('Verificación requerida');
+    await user.keyboard('{Escape}');
+
+    expect(
+      await screen.findByText('Este pago necesita tu código de verificación en dos pasos. Toca Pagar para ingresarlo.'),
+    ).toBeInTheDocument();
+    expect(mocks.scanAndPay).toHaveBeenCalledTimes(1);
+
+    // Volver a tocar Pagar es un intento nuevo, con su propia llave.
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
+    expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).not.toBe(mocks.scanAndPay.mock.calls[0][0].idempotencyKey);
   });
 });

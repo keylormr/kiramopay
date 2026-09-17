@@ -14,6 +14,7 @@ import type {
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { useTarifas } from '@/hooks/usePlanes';
 import { diaCorto, rellenar } from '@/utils/planes';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 
 interface Props {
   merchant: QRMerchant;
@@ -77,9 +78,15 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   const money = (v: number) => formatMoney(v, ccy as CurrencyCode, { decimals: 2 });
 
   const [days, setDays] = useState<(typeof RANGES)[number]>(30);
-  const [report, setReport] = useState<BusinessReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // La ultima respuesta buena y el rango al que corresponde. Mientras llega la
+  // de otro rango se sigue viendo, atenuada y rotulada "Actualizando": antes
+  // la pantalla pintaba guiones y un grafico en cero, identico a un comercio
+  // sin ventas (hallazgo QA n=35).
+  const [carga, setCarga] = useState<{ dias: number; reporte: BusinessReport } | null>(null);
+  const [pidiendo, setPidiendo] = useState<number | null>(days);
+  // El error crudo, no el texto: `t` no entra en las dependencias de la carga.
+  const [error, setError] = useState<{ code?: string; message?: string } | null>(null);
+  const [intento, setIntento] = useState(0);
 
   const [exportacion, setExportacion] = useState<EstadoExport>('quieto');
   const exportandoRef = useRef(false);
@@ -90,20 +97,29 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      setPidiendo(days);
+      setError(null);
       const api = getApiLayer().qrPayments;
-      if (!api) return;
-      const res = await api.getMerchantReport(merchant.id, days);
-      if (cancelled) return;
-      if (res.success && res.data) {
-        setReport(res.data);
-        setError('');
-      } else {
-        setError(res.error?.message || t('assistant_action_failed'));
+      try {
+        const res = api ? await api.getMerchantReport(merchant.id, days) : null;
+        if (cancelled) return;
+        if (res?.success && res.data) setCarga({ dias: days, reporte: res.data });
+        else setError(res?.error ?? {});
+      } catch {
+        if (!cancelled) setError({});
+      } finally {
+        if (!cancelled) setPidiendo(null);
       }
-      setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [merchant.id, days, t]);
+  }, [merchant.id, days, intento]);
+
+  const report = carga?.reporte ?? null;
+  const primeraCarga = !carga && !error;
+  const desactualizado = !!carga && (carga.dias !== days || pidiendo !== null);
+  // Un fallo es del rango elegido: no se muestran los numeros de otro rango
+  // como si fueran de este.
+  const fallo = error !== null;
 
   // El plan con el que el servidor armo el reporte manda; el del comercio
   // cargado antes es solo el respaldo mientras llega.
@@ -142,10 +158,13 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     }
   };
 
-  // Zero-fill the window so every day gets a bar, sparse data included.
+  // Zero-fill the window so every day gets a bar, sparse data included. El eje
+  // es el del reporte que se muestra: mientras llega otro rango, los 30 dias
+  // viejos no se dibujan sobre un eje de 90.
+  const diasDelGrafico = carga?.dias ?? days;
   const byDate = new Map((report?.daily ?? []).map((d) => [d.date, d]));
   const series: { date: string; net: number }[] = [];
-  for (let i = days - 1; i >= 0; i--) {
+  for (let i = diasDelGrafico - 1; i >= 0; i--) {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
@@ -154,7 +173,8 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   }
   const maxNet = Math.max(1, ...series.map((s) => s.net));
 
-  const empty = !loading && (report?.totals.count ?? 0) === 0;
+  // "Sin ventas" solo con la respuesta del rango elegido en la mano.
+  const empty = !!carga && !desactualizado && !fallo && carga.reporte.totals.count === 0;
 
   const bucketRows = (buckets: BusinessReportBucket[], title: string) => {
     if (buckets.length === 0) return null;
@@ -215,156 +235,204 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         ))}
       </div>
 
-      {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+      {/* Para el lector de pantalla; lo visible va dentro de cada tarjeta. */}
+      <p aria-live="polite" className="sr-only">
+        {primeraCarga ? t('business_report_loading') : desactualizado && !fallo ? t('business_report_updating') : ''}
+      </p>
 
-      {/* Headline totals */}
-      <div className="uv-surface-1 rounded-3xl p-5 uv-shadow-soft">
-        <span className="text-xs font-semibold uppercase tracking-wider uv-text-muted">
-          {t('business_report_net')}
-        </span>
-        <div className="text-3xl font-black uv-text-primary mt-1 tabular-nums">
-          {report ? money(report.totals.net) : '—'}
-        </div>
-        <div className="flex gap-6 mt-3 text-sm">
-          <div>
-            <span className="uv-text-muted">{t('business_report_sales')}</span>{' '}
-            <span className="font-bold uv-text-primary tabular-nums">{report?.totals.count ?? '—'}</span>
-          </div>
-          <div>
-            <span className="uv-text-muted">{t('business_report_commission')}</span>{' '}
-            <span className="font-bold uv-text-primary tabular-nums">{report ? money(report.totals.fee) : '—'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Analitica: la comparacion y el CSV, o la vista previa honesta ── */}
-      {report && conAnalitica && (
-        <>
-          {report.comparison && (
-            <Comparacion comp={report.comparison} actual={report.totals} money={money} idioma={language} />
-          )}
-          <div>
-            <Button
-              variant="secondary"
-              size="lg"
-              fullWidth
-              onClick={() => void exportar()}
-              loading={exportacion === 'exportando'}
-              leftIcon={<Icons.Download size={18} />}
-            >
-              {exportacion === 'exportando' ? t('business_report_exporting') : t('business_report_export')}
-            </Button>
-            {aviso && (
-              <p
-                role={aviso.tono === 'ok' ? 'status' : 'alert'}
-                className={`mt-2 text-sm ${aviso.tono === 'ok' ? 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' : 'text-[var(--color-danger)]'}`}
-              >
-                {t(aviso.clave)}
-              </p>
-            )}
-          </div>
-        </>
-      )}
-
-      {report && !conAnalitica && tarifas.analitica && (
-        <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="analitica-bloqueada">
-          <div className="flex flex-wrap items-center gap-2">
-            <Icons.Lock size={16} className="uv-text-secondary" aria-hidden="true" />
-            <h3 id="analitica-bloqueada" className="text-base font-black uv-text-primary">
-              {t('business_report_locked_title')}
-            </h3>
-            <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
-              {t('plans_badge_soon')}
-            </span>
-          </div>
-          <p className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black tabular-nums tracking-tight uv-text-primary">
-              {formatMoney(tarifas.analitica.precio, 'USD', { decimals: 2 })}
-            </span>
-            <span className="text-sm font-semibold uv-text-muted">{t('plans_per_month')}</span>
+      {fallo ? (
+        <div className="uv-surface-1 rounded-3xl p-6 uv-shadow-soft flex flex-col items-center text-center">
+          <Icons.AlertCircle size={24} className="mb-2 text-[var(--color-danger)]" aria-hidden="true" />
+          <p role="alert" className="text-sm font-semibold uv-text-primary">
+            {mensajeDeRechazo(error ?? undefined, {}, 'business_report_err_load', t)}
           </p>
-          <p className="mt-2 text-sm leading-relaxed uv-text-secondary">{t('business_report_locked_desc')}</p>
-
-          {/* La forma de lo que traeria, sin un solo numero: nada inventado. */}
-          <div
-            aria-hidden="true"
-            className="mt-4 rounded-2xl border border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] p-4"
-          >
-            <p className="text-xs font-semibold uv-text-muted">{t('business_report_locked_preview')}</p>
-            <div className="mt-3 space-y-3">
-              {[t('business_report_net'), t('business_report_sales')].map((etiqueta) => (
-                <div key={etiqueta} className="flex items-center justify-between gap-3">
-                  <span className="text-sm uv-text-secondary">{etiqueta}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-sm font-bold uv-text-muted">—</span>
-                    <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-muted">
-                      ± —%
-                    </span>
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm uv-text-secondary">{t('business_report_export')}</span>
-                <Icons.Download size={16} className="uv-text-muted" />
+          <Button className="mt-4" variant="secondary" onClick={() => setIntento((n) => n + 1)}>
+            {t('error_retry')}
+          </Button>
+        </div>
+      ) : primeraCarga ? (
+        <div aria-busy="true" className="space-y-5">
+          <div className="uv-surface-1 rounded-3xl p-5 uv-shadow-soft">
+            <p className="flex items-center gap-2 text-xs font-semibold uv-text-muted" aria-hidden="true">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" />
+              {t('business_report_loading')}
+            </p>
+            <div className="animate-pulse motion-reduce:animate-none">
+              <div className="mt-3 h-8 w-44 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
+              <div className="mt-4 flex gap-6">
+                <div className="h-4 w-20 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
+                <div className="h-4 w-24 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
               </div>
             </div>
           </div>
-
-          <p className="mt-4 text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
-          <button
-            type="button"
-            onClick={() => void avisarme()}
-            disabled={interes === 'enviando' || interes === 'anotado'}
-            aria-label={`${t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')} ${t('plans_analytics_name')}`}
-            className={`mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
-              interes === 'anotado'
-                ? 'uv-chip-success'
-                : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
-            }`}
-          >
-            {interes === 'anotado' ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
-            {t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')}
-          </button>
-          {interes === 'error' && (
-            <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">{t('plans_cta_error')}</p>
-          )}
-        </section>
-      )}
-
-      {empty ? (
-        <div className="flex flex-col items-center py-10 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] flex items-center justify-center mb-3">
-            <Icons.TrendingUp size={24} className="uv-text-muted" />
+          <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft animate-pulse motion-reduce:animate-none">
+            <div className="h-3 w-24 rounded bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
+            <div className="mt-3 h-28 rounded-xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]" />
           </div>
-          <p className="text-sm uv-text-muted max-w-[260px]">{t('business_report_empty')}</p>
         </div>
       ) : (
-        <>
-          {/* Daily series — one measure, one hue, recessive frame. */}
-          <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft">
-            <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
-              {t('business_report_daily')}
-            </h3>
-            <div className="flex items-end gap-px h-28">
-              {series.map((s) => (
-                <div key={s.date} className="flex-1 flex flex-col justify-end h-full" title={`${s.date}: ${money(s.net)}`}>
-                  <div
-                    className="w-full rounded-t bg-[var(--color-primary)]"
-                    style={{ height: s.net > 0 ? `${Math.max(3, (s.net / maxNet) * 100)}%` : '0%' }}
-                  />
-                </div>
-              ))}
+        <div
+          aria-busy={desactualizado}
+          className={`space-y-5 transition-opacity duration-200 ${desactualizado ? 'opacity-60' : 'opacity-100'}`}
+        >
+        {/* Headline totals */}
+        <div className="uv-surface-1 rounded-3xl p-5 uv-shadow-soft">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider uv-text-muted">
+              {t('business_report_net')}
+            </span>
+            {desactualizado && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold uv-text-secondary" aria-hidden="true">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" />
+                {t('business_report_updating')}
+              </span>
+            )}
+          </div>
+          <div className="text-3xl font-black uv-text-primary mt-1 tabular-nums">
+            {report ? money(report.totals.net) : '—'}
+          </div>
+          <div className="flex gap-6 mt-3 text-sm">
+            <div>
+              <span className="uv-text-muted">{t('business_report_sales')}</span>{' '}
+              <span className="font-bold uv-text-primary tabular-nums">{report?.totals.count ?? '—'}</span>
             </div>
-            <div className="h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
-            <div className="flex justify-between mt-1.5 text-[10px] uv-text-muted tabular-nums">
-              <span>{series[0]?.date.slice(5)}</span>
-              <span>{series[series.length - 1]?.date.slice(5)}</span>
+            <div>
+              <span className="uv-text-muted">{t('business_report_commission')}</span>{' '}
+              <span className="font-bold uv-text-primary tabular-nums">{report ? money(report.totals.fee) : '—'}</span>
             </div>
           </div>
+        </div>
 
-          {bucketRows(report?.byLocation ?? [], t('business_report_by_location'))}
-          {bucketRows(report?.byCollector ?? [], t('business_report_by_collector'))}
-        </>
+        {/* ── Analitica: la comparacion y el CSV, o la vista previa honesta ── */}
+        {report && conAnalitica && (
+          <>
+            {report.comparison && (
+              <Comparacion comp={report.comparison} actual={report.totals} money={money} idioma={language} />
+            )}
+            <div>
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                onClick={() => void exportar()}
+                loading={exportacion === 'exportando'}
+                leftIcon={<Icons.Download size={18} />}
+              >
+                {exportacion === 'exportando' ? t('business_report_exporting') : t('business_report_export')}
+              </Button>
+              {aviso && (
+                <p
+                  role={aviso.tono === 'ok' ? 'status' : 'alert'}
+                  className={`mt-2 text-sm ${aviso.tono === 'ok' ? 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' : 'text-[var(--color-danger)]'}`}
+                >
+                  {t(aviso.clave)}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {report && !conAnalitica && tarifas.analitica && (
+          <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="analitica-bloqueada">
+            <div className="flex flex-wrap items-center gap-2">
+              <Icons.Lock size={16} className="uv-text-secondary" aria-hidden="true" />
+              <h3 id="analitica-bloqueada" className="text-base font-black uv-text-primary">
+                {t('business_report_locked_title')}
+              </h3>
+              <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
+                {t('plans_badge_soon')}
+              </span>
+            </div>
+            <p className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-2xl font-black tabular-nums tracking-tight uv-text-primary">
+                {formatMoney(tarifas.analitica.precio, 'USD', { decimals: 2 })}
+              </span>
+              <span className="text-sm font-semibold uv-text-muted">{t('plans_per_month')}</span>
+            </p>
+            <p className="mt-2 text-sm leading-relaxed uv-text-secondary">{t('business_report_locked_desc')}</p>
+
+            {/* La forma de lo que traeria, sin un solo numero: nada inventado. */}
+            <div
+              aria-hidden="true"
+              className="mt-4 rounded-2xl border border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] p-4"
+            >
+              <p className="text-xs font-semibold uv-text-muted">{t('business_report_locked_preview')}</p>
+              <div className="mt-3 space-y-3">
+                {[t('business_report_net'), t('business_report_sales')].map((etiqueta) => (
+                  <div key={etiqueta} className="flex items-center justify-between gap-3">
+                    <span className="text-sm uv-text-secondary">{etiqueta}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-bold uv-text-muted">—</span>
+                      <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-muted">
+                        ± —%
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm uv-text-secondary">{t('business_report_export')}</span>
+                  <Icons.Download size={16} className="uv-text-muted" />
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs leading-relaxed uv-text-muted">{t('plans_cta_note')}</p>
+            <button
+              type="button"
+              onClick={() => void avisarme()}
+              disabled={interes === 'enviando' || interes === 'anotado'}
+              aria-label={`${t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')} ${t('plans_analytics_name')}`}
+              className={`mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
+                interes === 'anotado'
+                  ? 'uv-chip-success'
+                  : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
+              }`}
+            >
+              {interes === 'anotado' ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
+              {t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')}
+            </button>
+            {interes === 'error' && (
+              <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">{t('plans_cta_error')}</p>
+            )}
+          </section>
+        )}
+
+        {empty ? (
+          <div className="flex flex-col items-center py-10 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] flex items-center justify-center mb-3">
+              <Icons.TrendingUp size={24} className="uv-text-muted" />
+            </div>
+            <p className="text-sm uv-text-muted max-w-[260px]">{t('business_report_empty')}</p>
+          </div>
+        ) : (
+          <>
+            {/* Daily series — one measure, one hue, recessive frame. */}
+            <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft">
+              <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+                {t('business_report_daily')}
+              </h3>
+              <div className="flex items-end gap-px h-28">
+                {series.map((s) => (
+                  <div key={s.date} className="flex-1 flex flex-col justify-end h-full" title={`${s.date}: ${money(s.net)}`}>
+                    <div
+                      className="w-full rounded-t bg-[var(--color-primary)]"
+                      style={{ height: s.net > 0 ? `${Math.max(3, (s.net / maxNet) * 100)}%` : '0%' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="h-px bg-[var(--color-border)] dark:bg-[var(--color-border-dark)]" />
+              <div className="flex justify-between mt-1.5 text-[10px] uv-text-muted tabular-nums">
+                <span>{series[0]?.date.slice(5)}</span>
+                <span>{series[series.length - 1]?.date.slice(5)}</span>
+              </div>
+            </div>
+
+            {bucketRows(report?.byLocation ?? [], t('business_report_by_location'))}
+            {bucketRows(report?.byCollector ?? [], t('business_report_by_collector'))}
+          </>
+        )}
+        </div>
       )}
     </div>
   );

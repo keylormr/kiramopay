@@ -61,4 +61,18 @@ describe('CardsView — la tarjeta no finge ser de una red de pago', () => {
 
     expect(await screen.findByText(/no pertenece a ninguna red de pago/i)).toBeInTheDocument();
   });
+
+  // El estado vacio prometia "comprar en linea de forma segura" y la hoja de
+  // revelado, un paso despues, decia lo contrario.
+  it('el estado vacio no promete compras', async () => {
+    mocks.getCards.mockResolvedValue({ success: true, data: [] });
+    pintar();
+
+    expect(
+      await screen.findByText(
+        'Crea tu tarjeta virtual de KiramoPay: le pones límites y la congelas cuando quieras. Todavía no sirve para pagar en comercios ni en línea.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/comprar en línea/i)).toBeNull();
+  });
 });

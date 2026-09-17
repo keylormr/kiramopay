@@ -32,7 +32,19 @@ export const useAccountStore = create<AccountState>()(
 
       setBaseCurrency: (ccy) => set({ baseCurrency: ccy }),
 
-      setAccounts: (accounts) => set({ accounts }),
+      // La lista del servidor manda, y la moneda base tiene que ser una de
+      // ella. Antes "Agregar cuenta" creaba una cuenta solo en el telefono y
+      // la dejaba como base; al sincronizar la cuenta desaparecia pero la base
+      // seguia apuntando a ella (el rotulo decia "GBP · Base" sobre un saldo en
+      // colones), guardada en localStorage hasta que alguien tocara otra.
+      setAccounts: (accounts) =>
+        set((s) => {
+          if (accounts.length === 0 || accounts.some((a) => a.ccy === s.baseCurrency)) {
+            return { accounts };
+          }
+          const base = accounts.find((a) => a.ccy === 'CRC') ?? accounts[0];
+          return { accounts, baseCurrency: base.ccy };
+        }),
 
       setBudgets: (budgets) => set({ budgets }),
 

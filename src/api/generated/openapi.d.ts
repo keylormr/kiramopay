@@ -1286,7 +1286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get crypto transaction history */
+        /**
+         * Get crypto transaction history
+         * @description The last 50 movements, newest first: buy, sell, convert, stake and unstake. Staking and withdrawing are recorded here in the same transaction that moves the asset, so this list is the whole history of the crypto balance.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1301,7 +1304,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"][];
+                    };
                 };
             };
         };
@@ -1586,7 +1591,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Stake cryptocurrency */
+        /**
+         * Stake cryptocurrency
+         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1601,9 +1609,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["StakingPositionRecord"];
+                    };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                /** @description STAKING_NOT_AVAILABLE (the asset is not in the staking program), CRYPTO_INVALID_AMOUNT, or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1660,15 +1670,24 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Unstaked; principal and earnings are back in the asset balance. */
+                /** @description Unstaked; principal and earnings are back in the asset balance, and an `unstake` movement with the released quantity is in the crypto history. Both commit together. */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description UNSTAKE_FAILED — the position does not exist, is not active any more, or is still locked (the message carries the unlock date). */
-                400: {
+                /** @description STAKING_POSITION_NOT_FOUND — the position does not exist or belongs to someone else. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description STAKING_POSITION_INACTIVE — the position was already withdrawn. STAKING_POSITION_LOCKED — the lock period has not ended (the message carries the unlock date). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3262,12 +3281,14 @@ export interface paths {
                         "application/json": components["schemas"]["SavingsGoal"];
                     };
                 };
-                /** @description INVALID_BODY | CREATE_FAILED (missing name, non-positive target, unknown currency) */
+                /** @description INVALID_BODY | SAVINGS_NAME_REQUIRED | SAVINGS_NAME_TOO_LONG (more than 120 characters) | SAVINGS_INVALID_TARGET (target_minor is not greater than zero) | SAVINGS_INVALID_CURRENCY | SAVINGS_INVALID_STYLE (icon over 40 characters or color over 20) */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description SAVINGS_GOAL_LIMIT (the plan does not allow another goal) */
                 409: {
@@ -3276,6 +3297,478 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["PlanLimitError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the person's budgets */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Budgets, oldest first (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Budget"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a budget */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BudgetCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Budget created, with amount_spent at zero */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Budget"];
+                    };
+                };
+                /** @description INVALID_BODY | BUDGET_LABEL_REQUIRED | BUDGET_LABEL_TOO_LONG (more than 100 characters) | BUDGET_INVALID_LIMIT (amount_limit is not greater than zero) | BUDGET_INVALID_FIELD (currency other than CRC or USD, period other than monthly, icon over 50 characters or color over 20) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a budget
+         * @description Deletes the budget and what was written down in it. No money moves.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Budget deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description BUDGET_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Change a budget or write down how much was spent
+         * @description Only the fields sent change. amount_spent replaces the stored value (it is the total the person has written down, not an increment).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BudgetUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Budget updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            updated?: boolean;
+                        };
+                    };
+                };
+                /** @description INVALID_BODY | BUDGET_LABEL_REQUIRED | BUDGET_LABEL_TOO_LONG | BUDGET_INVALID_LIMIT | BUDGET_INVALID_SPENT (negative amount_spent) | BUDGET_INVALID_FIELD */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description BUDGET_NOT_FOUND (it does not exist or belongs to someone else) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/budgets/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set amount_spent back to zero in every budget
+         * @description The limits stay as they are.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every budget of the person now has amount_spent at zero */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            reset?: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recurring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the person's recurring payment reminders */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Reminders, soonest next_date first (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RecurringPayment"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a recurring payment reminder
+         * @description Nothing is scheduled to charge or send money on next_date.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RecurringPaymentCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Reminder created and enabled */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RecurringPayment"];
+                    };
+                };
+                /** @description INVALID_BODY | RECURRING_LABEL_REQUIRED | RECURRING_LABEL_TOO_LONG (more than 200 characters) | RECURRING_INVALID_AMOUNT | RECURRING_INVALID_TYPE | RECURRING_INVALID_FREQUENCY | RECURRING_INVALID_DATE (next_date is not a YYYY-MM-DD date) | RECURRING_INVALID_FIELD (currency other than CRC or USD, or a recipient field longer than its column) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recurring/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a reminder
+         * @description Removes it from the list. Nothing is cancelled with any company or person.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Reminder deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RECURRING_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Change a reminder */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RecurringPaymentUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Reminder updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            updated?: boolean;
+                        };
+                    };
+                };
+                /** @description INVALID_BODY | RECURRING_LABEL_REQUIRED | RECURRING_LABEL_TOO_LONG | RECURRING_INVALID_AMOUNT | RECURRING_INVALID_FREQUENCY | RECURRING_INVALID_DATE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECURRING_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/recurring/{id}/toggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause or resume a reminder */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The new state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled?: boolean;
+                        };
+                    };
+                };
+                /** @description RECURRING_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recurring/{id}/mark-paid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record that the person already paid
+         * @description Sets last_paid_date to today and moves next_date one period forward (7 days, 14 days or one month; a month clamps to the last day, as Postgres does). It does not move any money: the person paid on their own (SINPE, services, recharge).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The reminder with its new dates */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RecurringPayment"];
+                    };
+                };
+                /** @description RECURRING_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -7003,6 +7496,132 @@ export interface components {
             icon?: string;
             color?: string;
         };
+        Budget: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            user_id?: string;
+            label?: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount_limit?: number;
+            /**
+             * Format: int64
+             * @description centimos; written by the person, never by a ledger movement
+             */
+            amount_spent?: number;
+            currency?: string;
+            icon?: string;
+            color?: string;
+            /** @example monthly */
+            period?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        BudgetCreateRequest: {
+            label: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount_limit: number;
+            /**
+             * @default CRC
+             * @enum {string}
+             */
+            currency: "CRC" | "USD";
+            icon?: string;
+            color?: string;
+            /**
+             * @default monthly
+             * @enum {string}
+             */
+            period: "monthly";
+        };
+        BudgetUpdateRequest: {
+            label?: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount_limit?: number;
+            /**
+             * Format: int64
+             * @description centimos (the new total)
+             */
+            amount_spent?: number;
+            icon?: string;
+            color?: string;
+        };
+        RecurringPayment: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            user_id?: string;
+            label?: string;
+            /** @enum {string} */
+            type?: "service" | "sinpe" | "recharge";
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount?: number;
+            currency?: string;
+            /** @enum {string} */
+            frequency?: "weekly" | "biweekly" | "monthly";
+            /** Format: date */
+            next_date?: string;
+            /** Format: date */
+            last_paid_date?: string;
+            recipient_phone?: string;
+            recipient_name?: string;
+            service_provider_id?: string;
+            client_id?: string;
+            enabled?: boolean;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        RecurringPaymentCreateRequest: {
+            label: string;
+            /** @enum {string} */
+            type: "service" | "sinpe" | "recharge";
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount: number;
+            /**
+             * @default CRC
+             * @enum {string}
+             */
+            currency: "CRC" | "USD";
+            /** @enum {string} */
+            frequency: "weekly" | "biweekly" | "monthly";
+            /** Format: date */
+            next_date: string;
+            recipient_phone?: string;
+            recipient_name?: string;
+            service_provider_id?: string;
+            client_id?: string;
+        };
+        RecurringPaymentUpdateRequest: {
+            label?: string;
+            /**
+             * Format: int64
+             * @description centimos
+             */
+            amount?: number;
+            /** @enum {string} */
+            frequency?: "weekly" | "biweekly" | "monthly";
+            /** Format: date */
+            next_date?: string;
+        };
         /** @description One line of the paid plan waiting list. PII is masked in SQL, the same way as in AdminUser. */
         PlanInterestAdmin: {
             /** Format: uuid */
@@ -7697,14 +8316,16 @@ export interface components {
             user_id?: string;
             symbol?: string;
             name?: string;
-            balance?: number;
-            avg_cost?: number;
+            /** @description decimal */
+            balance?: string;
+            /** @description Decimal. Average cost per unit, always in USD whatever currency the purchases were paid in. */
+            avg_cost?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
         };
-        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. */
+        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. For stake and unstake, `amount` and `total` are the quantity set aside or released, `currency` is the asset itself and `price` is zero: no price or fiat is involved. No movement charges a fee: `fee` is zero. */
         CryptoTransactionRecord: {
             /** Format: uuid */
             id?: string;
@@ -7732,14 +8353,18 @@ export interface components {
             /** Format: uuid */
             user_id?: string;
             asset?: string;
-            amount?: number;
+            /** @description decimal */
+            amount?: string;
             apy?: number;
             /** Format: date-time */
             start_date?: string;
             locked?: boolean;
             lock_days?: number;
-            earned?: number;
+            /** @description decimal */
+            earned?: string;
             status?: string;
+            /** Format: date-time */
+            created_at?: string;
         };
         /** @description Prices are USD, exact decimals serialized as JSON strings (for example "65000.5"). `triggered_at` and `triggered_price` are present only once the alert has been met. */
         PriceAlertRecord: {

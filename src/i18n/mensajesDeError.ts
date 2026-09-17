@@ -30,7 +30,7 @@ export function traducirFueraDeReact(clave: keyof TranslationKeys): string {
 }
 
 /** Codigos que nacen en el propio cliente: el servidor nunca los escribio. */
-export type CodigoDelCliente = 'NETWORK_ERROR' | 'SESSION_EXPIRED' | 'RATE_LIMITED';
+export type CodigoDelCliente = 'NETWORK_ERROR' | 'SESSION_EXPIRED' | 'SESSION_UNCONFIRMED' | 'RATE_LIMITED';
 
 export function mensajeDelCliente(codigo: CodigoDelCliente): string {
   switch (codigo) {
@@ -38,6 +38,9 @@ export function mensajeDelCliente(codigo: CodigoDelCliente): string {
       return traducirFueraDeReact('err_network');
     case 'SESSION_EXPIRED':
       return traducirFueraDeReact('err_session_expired');
+    // La sesion no se pudo renovar por un fallo pasajero: sigue abierta.
+    case 'SESSION_UNCONFIRMED':
+      return traducirFueraDeReact('err_session_unconfirmed');
     case 'RATE_LIMITED':
       return traducirFueraDeReact('err_rate_limited');
   }
@@ -63,4 +66,39 @@ export function mensajeDelServidor(estadoHttp: number, codigo: string, mensaje?:
   if (CUERPO_ILEGIBLE.has(codigo)) return traducirFueraDeReact('err_invalid_request');
   const limpio = (mensaje ?? '').trim();
   return limpio || traducirFueraDeReact('err_generic');
+}
+
+/**
+ * Codigos cuyo mensaje ya viene traducido desde el cliente HTTP (ver arriba):
+ * los arma el propio cliente o los reemplaza mensajeDelServidor.
+ */
+const CODIGOS_YA_TRADUCIDOS = new Set<string>([
+  'NETWORK_ERROR',
+  'SESSION_EXPIRED',
+  'RATE_LIMITED',
+  ...CUERPO_ILEGIBLE,
+]);
+
+/**
+ * El texto de un rechazo para una pantalla, elegido por codigo.
+ *
+ * Un 4xx conserva el mensaje del servidor, y ese mensaje es para quien integra
+ * la API: esta en ingles ("resource not found", "target must be positive").
+ * Las pantallas que lo pintaban tal cual le mostraban eso a la persona. Aqui:
+ *  1. un codigo que el modulo conoce sale con su clave traducida;
+ *  2. uno que el cliente ya tradujo (sin red, sesion vencida...) se respeta;
+ *  3. cualquier otro, o ninguno, cae al generico del modulo. Nunca al texto
+ *     crudo del servidor.
+ */
+export function mensajeDeRechazo(
+  error: { code?: string; message?: string } | undefined,
+  claves: Readonly<Record<string, string>>,
+  claveGenerica: string,
+  t: (clave: string) => string,
+): string {
+  const codigo = error?.code;
+  if (codigo && Object.prototype.hasOwnProperty.call(claves, codigo)) return t(claves[codigo]);
+  const mensaje = error?.message?.trim();
+  if (codigo && CODIGOS_YA_TRADUCIDOS.has(codigo) && mensaje) return mensaje;
+  return t(claveGenerica);
 }

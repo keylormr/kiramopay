@@ -134,6 +134,10 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		Status:   "completed",
 	}
 	nombre := getAssetName(req.Asset)
+	// El costo promedio del activo va SIEMPRE en dolares, que es como lo lee
+	// la pantalla para la ganancia. `precio` esta en la moneda del pago: una
+	// compra en colones promediaba 500.000 con las de 1.000 en dolares.
+	costoUSD := usd
 	// El saldo, el tope, el segundo factor y la idempotencia del fiat viven en
 	// CreateTransaction; el abono solo ocurre si el cobro confirma.
 	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
@@ -148,7 +152,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 		Internal:         true,
 		EnLaMismaTx: func(ctx context.Context, dbtx pgx.Tx, txID string) error {
 			compra.ID = txID
-			return s.repo.ComprarEnTx(ctx, dbtx, nombre, compra)
+			return s.repo.ComprarEnTx(ctx, dbtx, nombre, compra, costoUSD)
 		},
 	})
 	if err != nil {
@@ -315,14 +319,24 @@ func (s *Service) GetStakingPositions(ctx context.Context, userID string) ([]Sta
 // Server-side staking rates: the client-sent APY is ignored so a caller can
 // never inflate the recorded rate. These are the program's target rates;
 // earnings accrual is not live yet (Earned stays zero until it is).
+//
+// El mapa es tambien la lista de lo que se puede stakear: un activo que no
+// esta aqui se rechaza. USDT y USDC salieron por decision del dueno: anunciar
+// rendimiento sobre monedas atadas al dolar roza la captacion, y ademas nadie
+// podia conseguirlas —no se cotizan ni se venden en la aplicacion—. Antes,
+// cualquier activo fuera del mapa se aceptaba con tasa cero. Las posiciones
+// que ya existan de un activo retirado se siguen listando y retirando: quitar
+// la oferta no es quedarse con lo apartado.
 var stakingAPY = map[string]float64{
-	"ETH":  4.5,
-	"USDT": 8.0,
-	"USDC": 6.5,
-	"SOL":  7.2,
+	"ETH": 4.5,
+	"SOL": 7.2,
 }
 
 func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (*StakingRecord, error) {
+	apy, disponible := stakingAPY[req.Asset]
+	if !disponible {
+		return nil, fmt.Errorf("%w: %s", ErrStakingNoDisponible, req.Asset)
+	}
 	if err := validarCantidad(req.Amount); err != nil {
 		return nil, err
 	}
@@ -335,7 +349,7 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		UserID:    userID,
 		Asset:     req.Asset,
 		Amount:    req.Amount,
-		APY:       stakingAPY[req.Asset],
+		APY:       apy,
 		StartDate: time.Now(),
 		Locked:    req.Locked,
 		LockDays:  req.LockDays,

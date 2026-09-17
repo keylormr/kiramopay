@@ -1,6 +1,9 @@
 import { HttpMarketplaceRepository } from '../marketplace.http';
 import { HttpCryptoRepository } from '../crypto.http';
 import { HttpCountryRepository } from '../country.http';
+import { HttpBudgetRepository } from '../budget.http';
+import { HttpRecurringRepository } from '../recurring.http';
+import { HttpB2BRepository } from '../b2b.http';
 import type { HttpClient } from '../client';
 
 // Estos adaptadores REEMPLAZABAN el codigo de error del servidor por uno
@@ -60,6 +63,27 @@ describe('los adaptadores conservan el codigo de error del servidor', () => {
       const res = await llamar(repo);
       expect(res.error?.code).toBe('MFA_REQUIRED');
     });
+
+    it.each(casos)('%s deja pasar CRYPTO_INSUFFICIENT_BALANCE', async (_nombre, llamar) => {
+      const repo = new HttpCryptoRepository(clienteQueFalla('CRYPTO_INSUFFICIENT_BALANCE'));
+      const res = await llamar(repo);
+      expect(res.error?.code).toBe('CRYPTO_INSUFFICIENT_BALANCE');
+    });
+
+    // Staking y retiro pisaban el codigo con STAKE_FAILED y UNSTAKE_FAILED: la
+    // pantalla solo tenia el texto en ingles para decidir, y lo mostraba.
+    const deStaking: Array<[string, string, (r: HttpCryptoRepository) => Promise<{ error?: { code: string } }>]> = [
+      ['stake', 'STAKING_NOT_AVAILABLE', (r) => r.stake({ asset: 'USDT', amount: 1, locked: false })],
+      ['stake', 'CRYPTO_INSUFFICIENT_BALANCE', (r) => r.stake({ asset: 'ETH', amount: 1, locked: false })],
+      ['unstake', 'STAKING_POSITION_NOT_FOUND', (r) => r.unstake('stake-1789326379706')],
+      ['unstake', 'STAKING_POSITION_LOCKED', (r) => r.unstake('pos-1')],
+    ];
+
+    it.each(deStaking)('%s deja pasar %s', async (_nombre, codigo, llamar) => {
+      const repo = new HttpCryptoRepository(clienteQueFalla(codigo));
+      const res = await llamar(repo);
+      expect(res.error?.code).toBe(codigo);
+    });
   });
 
   // Misma politica en la remesa a otro pais: sin corresponsal que la entregue,
@@ -83,6 +107,75 @@ describe('los adaptadores conservan el codigo de error del servidor', () => {
         receiverPhone: '88887777', toCountry: 'PA', amount: 5000, currency: 'CRC',
       } as never);
       expect(res.error?.code).toBe('TRANSFER_FAILED');
+    });
+  });
+
+  // Presupuestos, pagos fijos y la plataforma de comercios: las pantallas
+  // traducen por codigo; con uno fijo, "ya no existe" y "el nombre es muy
+  // largo" eran el mismo mensaje.
+  const sinCodigo = async () => ({ success: false, error: { message: 'boom' } });
+  const clienteSinCodigo = { get: sinCodigo, post: sinCodigo, put: sinCodigo, patch: sinCodigo, del: sinCodigo } as unknown as HttpClient;
+
+  describe('presupuestos', () => {
+    const casos: Array<[string, (r: HttpBudgetRepository) => Promise<{ error?: { code: string } }>, string]> = [
+      ['getBudgets', (r) => r.getBudgets(), 'FETCH_FAILED'],
+      ['create', (r) => r.create({ label: 'Comida', amount_limit: 1000 }), 'CREATE_FAILED'],
+      ['update', (r) => r.update('b1', { amount_spent: 10 }), 'UPDATE_FAILED'],
+      ['delete', (r) => r.delete('b1'), 'DELETE_FAILED'],
+      ['resetAll', (r) => r.resetAll(), 'RESET_FAILED'],
+    ];
+
+    it.each(casos)('%s deja pasar el codigo del servidor', async (_n, llamar) => {
+      const res = await llamar(new HttpBudgetRepository(clienteQueFalla('BUDGET_NOT_FOUND')));
+      expect(res.error?.code).toBe('BUDGET_NOT_FOUND');
+    });
+
+    it.each(casos)('%s cae a su codigo propio sin codigo del servidor', async (_n, llamar, propio) => {
+      const res = await llamar(new HttpBudgetRepository(clienteSinCodigo));
+      expect(res.error?.code).toBe(propio);
+    });
+  });
+
+  describe('pagos fijos', () => {
+    const casos: Array<[string, (r: HttpRecurringRepository) => Promise<{ error?: { code: string } }>, string]> = [
+      ['getPayments', (r) => r.getPayments(), 'FETCH_FAILED'],
+      ['create', (r) => r.create({ label: 'Luz', type: 'service', amount: 1, frequency: 'monthly', next_date: '2026-10-05' }), 'CREATE_FAILED'],
+      ['update', (r) => r.update('p1', { amount: 10 }), 'UPDATE_FAILED'],
+      ['delete', (r) => r.delete('p1'), 'DELETE_FAILED'],
+      ['toggle', (r) => r.toggle('p1'), 'TOGGLE_FAILED'],
+      ['markPaid', (r) => r.markPaid('p1'), 'MARK_PAID_FAILED'],
+    ];
+
+    it.each(casos)('%s deja pasar el codigo del servidor', async (_n, llamar) => {
+      const res = await llamar(new HttpRecurringRepository(clienteQueFalla('RECURRING_NOT_FOUND')));
+      expect(res.error?.code).toBe('RECURRING_NOT_FOUND');
+    });
+
+    it.each(casos)('%s cae a su codigo propio sin codigo del servidor', async (_n, llamar, propio) => {
+      const res = await llamar(new HttpRecurringRepository(clienteSinCodigo));
+      expect(res.error?.code).toBe(propio);
+    });
+  });
+
+  describe('claves API y webhooks', () => {
+    const casos: Array<[string, (r: HttpB2BRepository) => Promise<{ error?: { code: string } }>]> = [
+      ['listKeys', (r) => r.listKeys()],
+      ['createKey', (r) => r.createKey('Tienda')],
+      ['revokeKey', (r) => r.revokeKey('k1')],
+      ['listWebhooks', (r) => r.listWebhooks()],
+      ['createWebhook', (r) => r.createWebhook('https://example.com/hook', '*')],
+      ['deleteWebhook', (r) => r.deleteWebhook('w1')],
+      ['listDeliveries', (r) => r.listDeliveries('w1')],
+    ];
+
+    it.each(casos)('%s deja pasar B2B_NOT_FOUND', async (_n, llamar) => {
+      const res = await llamar(new HttpB2BRepository(clienteQueFalla('B2B_NOT_FOUND')));
+      expect(res.error?.code).toBe('B2B_NOT_FOUND');
+    });
+
+    it.each(casos)('%s nunca queda sin codigo', async (_n, llamar) => {
+      const res = await llamar(new HttpB2BRepository(clienteSinCodigo));
+      expect(res.error?.code).toMatch(/^B2B_/);
     });
   });
 });

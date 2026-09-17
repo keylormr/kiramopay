@@ -24,8 +24,9 @@ export interface EstiloCategoria {
 }
 
 const ESTILOS: Record<CategoriaMovimiento, EstiloCategoria> = {
-  // Hoy toda transferencia es SINPE (sinpe_send / sinpe_receive): lleva el
-  // mismo telefono que la pestana SINPE.
+  // Las transferencias son dinero de persona a persona: SINPE (sinpe_send /
+  // sinpe_receive) y los pagos de dividir cuenta (p2p_send / p2p_receive).
+  // Lleva el mismo telefono que la pestana SINPE.
   transfers: { icon: Icons.Smartphone, bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300' },
   services: { icon: Icons.Zap, bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300' },
   shopping: { icon: Icons.ShoppingCart, bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-700 dark:text-pink-300' },

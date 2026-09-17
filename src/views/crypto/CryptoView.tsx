@@ -14,6 +14,23 @@ import { useUsdToCrcRate } from '@/hooks/useFxRate';
 import { useCryptoPricesWs } from '@/hooks/useCryptoPricesWs';
 import { SIMBOLOS_DEL_CATALOGO } from '@/api/catalogoCripto';
 import { HojaAlertasDePrecio, useAlertasDePrecio } from './AlertasDePrecio';
+import { refreshAccounts, refreshCrypto } from '@/services/dataSync';
+import { ACTIVOS_CON_STAKING } from '@/api/repositories/crypto.repository';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
+import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
+
+// Un activo se puede stakear si esta en el programa del servidor (ETH y SOL).
+const tieneStaking = (simbolo: string | undefined) =>
+  !!simbolo && Object.prototype.hasOwnProperty.call(ACTIVOS_CON_STAKING, simbolo);
+
+// Llave de idempotencia nueva para un intento de compra o venta.
+const nuevaLlave = (operacion: 'buy' | 'sell') =>
+  `crypto:${operacion}:${
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }`;
 
 // Static list of crypto symbols to track
 // La union del catalogo del backend (10 monedas con feed real) y las
@@ -108,7 +125,7 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
 
 export const CryptoView: React.FC = () => {
   const { state, dispatch } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Single shared USD->CRC rate (same source as the wallet + balance summary).
   const crcRate = useUsdToCrcRate();
 
@@ -159,6 +176,28 @@ export const CryptoView: React.FC = () => {
   const [priceError, setPriceError] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, CryptoPriceData>>({});
 
+  // La llave de idempotencia del intento de compra o venta en curso. Se
+  // conserva mientras la persona reintente LA MISMA operacion (tras el desafio
+  // de MFA, un corte de red o un 5xx): si el primer intento ya se cobro en el
+  // servidor, el reintento devuelve ese mismo movimiento en vez de cobrar otra
+  // vez. Cambiar el activo, el monto o la moneda es otra operacion y otra llave.
+  const intentoRef = useRef<{ firma: string; llave: string } | null>(null);
+  const llaveDelIntento = (operacion: 'buy' | 'sell', firma: string) => {
+    const completa = `${operacion}|${firma}`;
+    if (intentoRef.current?.firma !== completa) {
+      intentoRef.current = { firma: completa, llave: nuevaLlave(operacion) };
+    }
+    return intentoRef.current.llave;
+  };
+
+  // Lo de cripto sale del servidor al abrir la pantalla: tenencias,
+  // movimientos y posiciones de staking. La copia local persistida guardaba
+  // posiciones con un id inventado que ningun retiro podia usar; esta carga
+  // las reemplaza por las reales.
+  useEffect(() => {
+    refreshCrypto().catch(() => {});
+  }, []);
+
   // Calculate totals
   const totalUsdValue = state.crypto.assets.reduce((acc, asset) =>
     acc + (asset.balance * asset.currentPrice), 0
@@ -166,18 +205,13 @@ export const CryptoView: React.FC = () => {
 
   const totalCrcValue = totalUsdValue * crcRate;
 
-  const totalProfitLoss = state.crypto.assets.reduce((acc, asset) => {
-    if (asset.balance > 0) {
-      const currentValue = asset.balance * asset.currentPrice;
-      const costBasis = asset.balance * asset.avgBuyPrice;
-      return acc + (currentValue - costBasis);
-    }
-    return acc;
-  }, 0);
-
-  const totalProfitLossPercent = totalUsdValue > 0
-    ? (totalProfitLoss / (totalUsdValue - totalProfitLoss)) * 100
-    : 0;
+  // La ganancia solo se calcula sobre lo que tiene costo conocido. Un activo
+  // con costo cero (el que vuelve al saldo desde una posicion de staking sin
+  // fila previa) contaba entero como ganancia, y su fila decia "+Infinity%".
+  const conCosto = state.crypto.assets.filter(a => a.balance > 0 && a.avgBuyPrice > 0 && a.currentPrice > 0);
+  const costoTotal = conCosto.reduce((acc, a) => acc + a.balance * a.avgBuyPrice, 0);
+  const totalProfitLoss = conCosto.reduce((acc, a) => acc + a.balance * (a.currentPrice - a.avgBuyPrice), 0);
+  const totalProfitLossPercent = costoTotal > 0 ? (totalProfitLoss / costoTotal) * 100 : 0;
 
   // Assets with balance
   const assetsWithBalance = state.crypto.assets.filter(a => a.balance > 0);
@@ -347,6 +381,29 @@ export const CryptoView: React.FC = () => {
     return () => clearTimeout(timer);
   }, [preciosWs, preciosWsMomento]);
 
+  // Un activo que aparece despues del ultimo sondeo (el USDT que vuelve al
+  // saldo al retirar una posicion vieja) no tiene precio hasta el siguiente,
+  // cinco minutos despues, y mientras tanto el total de la cartera dice "no
+  // disponible". Si el ultimo sondeo ya trajo su precio, se le pone ahora.
+  useEffect(() => {
+    const faltantes = state.crypto.assets.filter(
+      a => !(a.currentPrice > 0) && (marketData[a.symbol]?.price ?? 0) > 0,
+    );
+    if (faltantes.length === 0) return;
+    const timer = setTimeout(() => {
+      dispatchRef.current({
+        type: 'UPDATE_CRYPTO_PRICES',
+        payload: faltantes.map(a => ({
+          symbol: a.symbol,
+          price: marketData[a.symbol].price,
+          change24h: marketData[a.symbol].change24h,
+          priceHistory: marketData[a.symbol].priceHistory,
+        })),
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [state.crypto.assets, marketData]);
+
   const formatUsd = (value: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'USD' }).format(value);
   };
@@ -354,6 +411,33 @@ export const CryptoView: React.FC = () => {
   const formatCrc = (value: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(value);
   };
+
+  // Un monto en colones derivado de un precio en dolares. Por debajo de cien
+  // colones los centimos si importan (una unidad de ADA vale unos 300).
+  const crcDesdeUsd = (usd: number) => {
+    const crc = usd * crcRate;
+    return crc < 100 ? formatMoney(crc, 'CRC', { decimals: 2 }) : formatCrc(crc);
+  };
+
+  // Un monto de un movimiento, con su simbolo si es de una moneda del
+  // monedero, o con el simbolo de la cripto si no.
+  const formatMonto = (monto: number, activo: string) =>
+    MONEDAS_FIAT.has(activo)
+      ? formatMoney(monto, activo as CurrencyCode, { decimals: 2 })
+      : `${formatCrypto(monto)} ${activo}`;
+
+  // Las monedas del programa de staking, en una frase: "Ethereum (ETH) y Solana (SOL)".
+  const activosDeStaking = (() => {
+    const nombres = Object.keys(ACTIVOS_CON_STAKING).map((simbolo) => {
+      const nombre = state.crypto.assets.find(a => a.symbol === simbolo)?.name;
+      return nombre ? `${nombre} (${simbolo})` : simbolo;
+    });
+    try {
+      return new Intl.ListFormat(language === 'zh-cn' ? 'zh-CN' : language, { type: 'conjunction' }).format(nombres);
+    } catch {
+      return nombres.join(', ');
+    }
+  })();
 
   // Mismo criterio que el total de arriba, fila por fila: un precio en cero no
   // es "vale cero", es "no lo pudimos traer". Un monto derivado de un precio
@@ -380,6 +464,18 @@ export const CryptoView: React.FC = () => {
     return n.toFixed(decimals).replace(/\.?0+$/, '');
   };
 
+  // Un rechazo por llave ya usada quiere decir que un intento anterior de esta
+  // misma operacion llego al servidor (y quiza se cobro) con otro precio. La
+  // proxima vez es una operacion nueva, y lo que ya ocurrio se trae del
+  // servidor para que la persona lo vea antes de repetir.
+  const trasRechazoDeCompraOVenta = (code: string | undefined) => {
+    if (code === 'LLAVE_REUTILIZADA') {
+      intentoRef.current = null;
+      refreshCrypto().catch(() => {});
+      refreshAccounts().catch(() => {});
+    }
+  };
+
   // Compra y venta esperan la respuesta del servidor ANTES de tocar el estado
   // local. Antes se despachaba primero y la llamada iba con .catch(() => {}),
   // asi que un rechazo -incluido el de MFA por monto alto- se tragaba en
@@ -399,7 +495,10 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
-    const res = await getApiLayer().crypto.buy(payload);
+    const res = await getApiLayer().crypto.buy({
+      ...payload,
+      idempotencyKey: llaveDelIntento('buy', `${payload.asset}|${fiatAmount}|${payload.fromCurrency}`),
+    });
     setIsTrading(false);
 
     if (!res.success) {
@@ -408,16 +507,12 @@ export const CryptoView: React.FC = () => {
         setShowMfa(true);
         return;
       }
-      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
-      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
-      if (res.error?.code === 'PRICE_STALE') {
-        setTradeError(t('crypto_price_stale'));
-        return;
-      }
-      setTradeError(res.error?.message || t('assistant_action_failed'));
+      trasRechazoDeCompraOVenta(res.error?.code);
+      setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
+    intentoRef.current = null;
     dispatch({ type: 'BUY_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
@@ -438,7 +533,10 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
-    const res = await getApiLayer().crypto.sell(payload);
+    const res = await getApiLayer().crypto.sell({
+      ...payload,
+      idempotencyKey: llaveDelIntento('sell', `${payload.asset}|${cryptoAmount}|${payload.toCurrency}`),
+    });
     setIsTrading(false);
 
     if (!res.success) {
@@ -447,16 +545,12 @@ export const CryptoView: React.FC = () => {
         setShowMfa(true);
         return;
       }
-      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
-      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
-      if (res.error?.code === 'PRICE_STALE') {
-        setTradeError(t('crypto_price_stale'));
-        return;
-      }
-      setTradeError(res.error?.message || t('assistant_action_failed'));
+      trasRechazoDeCompraOVenta(res.error?.code);
+      setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
+    intentoRef.current = null;
     dispatch({ type: 'SELL_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
@@ -489,13 +583,7 @@ export const CryptoView: React.FC = () => {
     setIsTrading(false);
 
     if (!res.success) {
-      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
-      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
-      if (res.error?.code === 'PRICE_STALE') {
-        setTradeError(t('crypto_price_stale'));
-        return;
-      }
-      setTradeError(res.error?.message || t('assistant_action_failed'));
+      setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
@@ -528,27 +616,20 @@ export const CryptoView: React.FC = () => {
     if (!selectedAsset || !amount || isTrading) return;
     const stakeAmount = parseFloat(amount);
     if (!(stakeAmount > 0)) return;
-    const request = { asset: selectedAsset.symbol, amount: stakeAmount, apy: 0, locked: false };
 
     setIsTrading(true);
     setTradeError('');
-    const res = await getApiLayer().crypto.stake(request);
+    const res = await getApiLayer().crypto.stake({ asset: selectedAsset.symbol, amount: stakeAmount, locked: false });
     setIsTrading(false);
 
-    if (!res.success) {
-      // Precio viejo: el servidor se nego a cobrar contra un precio que ya no
-      // vale. No es un fallo del usuario ni de su saldo, y merece su texto.
-      if (res.error?.code === 'PRICE_STALE') {
-        setTradeError(t('crypto_price_stale'));
-        return;
-      }
-      setTradeError(res.error?.message || t('assistant_action_failed'));
+    if (!res.success || !res.data) {
+      setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
-    // El programa lo fija el servidor: mostrar la tasa que devolvio, no un 0
-    // inventado por la pantalla.
-    dispatch({ type: 'STAKE_CRYPTO', payload: { ...request, apy: res.data?.apy ?? 0 } });
+    // La posicion que se guarda es la que devolvio el servidor, con SU id:
+    // es el unico con el que despues se puede retirar.
+    dispatch({ type: 'STAKE_CRYPTO', payload: res.data });
     setActiveSheet('none');
     setAmount('');
   };
@@ -561,7 +642,12 @@ export const CryptoView: React.FC = () => {
     setStakingBusyId(null);
 
     if (!res.success) {
-      setStakingError(res.error?.message || t('assistant_action_failed'));
+      setStakingError(mensajeDeErrorCripto(res.error, t));
+      // La posicion ya no esta en el servidor: la lista local miente, se trae
+      // la real.
+      if (posicionYaNoEsta(res.error?.code)) {
+        refreshCrypto().catch(() => {});
+      }
       return;
     }
     dispatch({ type: 'UNSTAKE_CRYPTO', payload: { positionId } });
@@ -577,11 +663,7 @@ export const CryptoView: React.FC = () => {
     if (!res.success) {
       // El servidor no acredita rendimiento todavia. Antes esto se ignoraba y
       // la pantalla sumaba una ganancia que no existia.
-      setStakingError(
-        res.error?.code === 'CLAIM_NOT_AVAILABLE'
-          ? t('crypto_claim_unavailable')
-          : res.error?.message || t('assistant_action_failed'),
-      );
+      setStakingError(mensajeDeErrorCripto(res.error, t));
       return;
     }
     dispatch({ type: 'CLAIM_STAKING_YIELD', payload: { positionId, amount: earned } });
@@ -768,7 +850,7 @@ export const CryptoView: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
-                        {asset.currentPrice > 0 && (
+                        {asset.currentPrice > 0 && asset.avgBuyPrice > 0 && (
                           <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                             {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
                           </span>
@@ -787,29 +869,41 @@ export const CryptoView: React.FC = () => {
             <>
               <h3 className="text-lg font-bold text-slate-800 dark:text-white mt-6">{t('recent_crypto_tx')}</h3>
               <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
-                {state.crypto.transactions.slice(0, 5).map(tx => (
-                  <button
-                    key={tx.id}
-                    onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
-                    className="w-full flex items-center p-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mr-3">
-                      {getTxIcon(tx.type)}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="font-bold text-sm uv-text-primary">
-                        {getTxLabel(tx.type)} {tx.fromAsset}{tx.toAsset ? ` → ${tx.toAsset}` : ''}
+                {state.crypto.transactions.slice(0, 5).map(tx => {
+                  // Que entra y que sale depende del tipo: en una compra lo
+                  // que sale es el fiat, no la cripto.
+                  const { principal, contraparte } = leerMovimiento(tx);
+                  const valorUsd = (tx.priceCurrency ?? 'USD') === 'USD' && tx.price > 0
+                    ? formatUsd(principal.monto * tx.price)
+                    : '';
+                  return (
+                    <button
+                      key={tx.id}
+                      onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
+                      className="w-full flex items-center gap-3 p-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+                    >
+                      <div className="w-10 h-10 shrink-0 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
+                        {getTxIcon(tx.type)}
                       </div>
-                      <div className="text-xs text-gray-500">{tx.date}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold text-sm ${tx.type === 'buy' || tx.type === 'receive' || tx.type === 'yield' ? 'text-green-500' : 'uv-text-primary'}`}>
-                        {tx.type === 'buy' || tx.type === 'receive' || tx.type === 'yield' ? '+' : '-'}{formatCrypto(tx.fromAmount)} {tx.fromAsset}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="font-bold text-sm uv-text-primary truncate">
+                          {getTxLabel(tx.type)} {tx.fromAsset}{tx.toAsset ? ` → ${tx.toAsset}` : ''}
+                        </div>
+                        <div className="text-xs text-gray-500">{fechaLegible(tx.date, language, t('crypto_just_now'))}</div>
                       </div>
-                      <div className="text-xs text-gray-500">{formatUsd(tx.fromAmount * tx.price)}</div>
-                    </div>
-                  </button>
-                ))}
+                      <div className="text-right shrink-0">
+                        <div className={`font-bold text-sm tabular-nums ${principal.entra ? 'text-green-500' : 'uv-text-primary'}`}>
+                          {principal.entra ? '+' : '-'}{formatCrypto(principal.monto)} {principal.activo}
+                        </div>
+                        <div className="text-xs text-gray-500 tabular-nums">
+                          {contraparte
+                            ? `${contraparte.entra ? '+' : '-'}${formatMonto(contraparte.monto, contraparte.activo)}`
+                            : valorUsd}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
@@ -867,8 +961,13 @@ export const CryptoView: React.FC = () => {
                         <span className="font-bold uv-text-primary">{asset.name}</span>
                         <span className="font-bold uv-text-primary">{montoUsd(asset.currentPrice, asset.currentPrice)}</span>
                       </div>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-sm text-gray-500">{asset.symbol}</span>
+                      <div className="flex justify-between items-center gap-2 mt-1">
+                        {/* El precio de una unidad tambien en colones: la
+                            cartera ya se muestra asi arriba, y cada moneda no. */}
+                        <span className="text-sm text-gray-500 tabular-nums truncate min-w-0">
+                          {asset.symbol}
+                          {asset.currentPrice > 0 && <> · ≈ {crcDesdeUsd(asset.currentPrice)}</>}
+                        </span>
                         {asset.currentPrice > 0 && (
                           <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                             {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
@@ -905,11 +1004,16 @@ export const CryptoView: React.FC = () => {
                 <Icons.Percent size={28} className="text-purple-500" />
               </div>
               <p className="text-gray-500 mb-2">{t('earn_passive')}</p>
-              <p className="text-sm text-gray-400 mb-4">{t('crypto_up_to_apy')}</p>
+              <p className="text-sm text-gray-400 mb-2">{t('crypto_up_to_apy')}</p>
+              {/* Que se puede stakear, dicho antes de tocar el boton: con
+                  saldo solo en BTC el boton no tiene a donde llevar. */}
+              <p className="text-sm text-gray-500 mb-4">
+                {t('crypto_staking_program_assets').replace('{assets}', activosDeStaking)}
+              </p>
               <button
-                onClick={() => { setSelectedAsset(assetsWithBalance.find(a => a.symbol === 'ETH' || a.symbol === 'USDT') || null); setActiveSheet('stake'); }}
-                className="bg-purple-600 text-white px-6 py-2 rounded-xl font-bold"
-                disabled={assetsWithBalance.length === 0}
+                onClick={() => { setSelectedAsset(assetsWithBalance.find(a => tieneStaking(a.symbol)) || null); setTradeError(''); setActiveSheet('stake'); }}
+                className="bg-purple-600 text-white px-6 py-2 rounded-xl font-bold disabled:opacity-50"
+                disabled={!assetsWithBalance.some(a => tieneStaking(a.symbol))}
               >
                 {t('start_staking')}
               </button>
@@ -938,12 +1042,16 @@ export const CryptoView: React.FC = () => {
                       >
                         {asset?.icon}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <span className="font-bold uv-text-primary">{position.asset} {t('staking')}</span>
-                          <span className="text-green-500 font-bold">{position.apy}% APY</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="font-bold uv-text-primary truncate">{position.asset} {t('staking')}</span>
+                          {/* Una tasa en verde anunciaba un rendimiento que el
+                              servidor no acredita: el ganado se queda en cero. */}
+                          <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uv-surface-2 uv-text-secondary">
+                            {t('crypto_staking_no_yield')}
+                          </span>
                         </div>
-                        <div className="text-sm text-gray-500">{t('crypto_since')} {position.startDate}</div>
+                        <div className="text-sm text-gray-500">{t('crypto_since')} {fechaLegible(position.startDate, language, '')}</div>
                       </div>
                     </div>
 
@@ -1019,10 +1127,13 @@ export const CryptoView: React.FC = () => {
                 {selectedAsset.icon}
               </div>
               <div className="min-w-0">
-                <div className="text-2xl font-black uv-text-primary leading-tight">{montoUsd(selectedAsset.currentPrice, selectedAsset.currentPrice)}</div>
+                <div className="text-2xl font-black uv-text-primary leading-tight tabular-nums">{montoUsd(selectedAsset.currentPrice, selectedAsset.currentPrice)}</div>
                 {selectedAsset.currentPrice > 0 ? (
-                  <div className={`text-sm font-medium ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
+                  <div className="text-sm font-medium tabular-nums">
+                    <span className="uv-text-secondary">≈ {crcDesdeUsd(selectedAsset.currentPrice)}</span>
+                    <span className={`ml-2 ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
+                    </span>
                   </div>
                 ) : (
                   <div className="text-sm font-medium uv-text-muted">{t('crypto_prices_unavailable')}</div>
@@ -1045,10 +1156,15 @@ export const CryptoView: React.FC = () => {
                   <p className="text-2xl font-black uv-text-primary leading-tight mt-1">
                     {formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}
                   </p>
-                  <p className="text-lg font-semibold uv-text-primary">≈ {montoUsd(valorActual, selectedAsset.currentPrice)}</p>
+                  <p className="text-lg font-semibold uv-text-primary tabular-nums">
+                    ≈ {montoUsd(valorActual, selectedAsset.currentPrice)}
+                    {selectedAsset.currentPrice > 0 && (
+                      <span className="ml-2 text-sm font-medium uv-text-secondary">{crcDesdeUsd(valorActual)}</span>
+                    )}
+                  </p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]/30">
                     <span className="text-sm uv-text-secondary">{t('crypto_pnl')}</span>
-                    {selectedAsset.currentPrice > 0 ? (
+                    {selectedAsset.currentPrice > 0 && selectedAsset.avgBuyPrice > 0 ? (
                       <span className={`text-sm font-bold ${gano ? 'text-green-500' : 'text-red-500'}`}>
                         {gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))} ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
                       </span>
@@ -1057,7 +1173,7 @@ export const CryptoView: React.FC = () => {
                     )}
                   </div>
                   <p className="text-xs uv-text-muted mt-1">
-                    {t('crypto_avg_price')}: {formatUsd(selectedAsset.avgBuyPrice)}
+                    {t('crypto_avg_price')}: {selectedAsset.avgBuyPrice > 0 ? formatUsd(selectedAsset.avgBuyPrice) : SIN_DATO}
                   </p>
                 </div>
               );
@@ -1128,9 +1244,11 @@ export const CryptoView: React.FC = () => {
               </button>
             )}
 
-            {selectedAsset.balance > 0 && (selectedAsset.symbol === 'ETH' || selectedAsset.symbol === 'USDT' || selectedAsset.symbol === 'USDC') && (
+            {/* Solo los activos del programa de staking del servidor. USDT y
+                USDC salieron del programa; SOL estaba y no tenia el boton. */}
+            {selectedAsset.balance > 0 && tieneStaking(selectedAsset.symbol) && (
               <button
-                onClick={() => setActiveSheet('stake')}
+                onClick={() => { setTradeError(''); setActiveSheet('stake'); }}
                 className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
               >
                 <Icons.Percent size={18} /> {t('crypto_do_staking')}
@@ -1141,7 +1259,7 @@ export const CryptoView: React.FC = () => {
       )}
 
       {/* Buy Sheet */}
-      <BottomSheet isOpen={activeSheet === 'buy'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('buy')} ${selectedAsset?.symbol || t('crypto_generic')}`}>
+      <BottomSheet isOpen={activeSheet === 'buy'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('buy')} ${selectedAsset?.symbol || t('crypto_generic')}`}>
         <div className="space-y-6">
           <div className="uv-surface-2 rounded-xl p-4">
             <label className="text-xs text-gray-500 font-bold">{t('select_crypto')}</label>
@@ -1154,6 +1272,13 @@ export const CryptoView: React.FC = () => {
                 <option key={a.symbol} value={a.symbol}>{a.name} ({a.symbol}) - {montoUsd(a.currentPrice, a.currentPrice)}</option>
               ))}
             </select>
+            {/* Lo que vale una unidad, en las dos monedas: el selector solo
+                la da en dolares. */}
+            {selectedAsset && selectedAsset.currentPrice > 0 && (
+              <p className="text-sm uv-text-secondary mt-1 tabular-nums">
+                1 {selectedAsset.symbol} = {formatUsd(selectedAsset.currentPrice)} ≈ {crcDesdeUsd(selectedAsset.currentPrice)}
+              </p>
+            )}
           </div>
 
           <div className="text-center">
@@ -1238,7 +1363,7 @@ export const CryptoView: React.FC = () => {
       </BottomSheet>
 
       {/* Sell Sheet */}
-      <BottomSheet isOpen={activeSheet === 'sell'} onClose={() => { setActiveSheet('none'); setAmount(''); }} title={`${t('sell')} ${selectedAsset?.symbol || ''}`}>
+      <BottomSheet isOpen={activeSheet === 'sell'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('sell')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           {selectedAsset && (
             <div className="uv-surface-2 rounded-xl p-4">
@@ -1262,9 +1387,13 @@ export const CryptoView: React.FC = () => {
               />
               <span className="text-2xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
             </div>
+            {/* El estimado va en la moneda en que se recibe: con colones
+                marcado (la opcion por defecto) se mostraba en dolares. */}
             {amount && selectedAsset && (
-              <p className="text-sm text-gray-500 mt-2">
-                ≈ {montoUsd(parseFloat(amount) * selectedAsset.currentPrice, selectedAsset.currentPrice)}
+              <p className="text-sm text-gray-500 mt-2 tabular-nums">
+                ≈ {selectedAsset.currentPrice > 0 && convertTo === 'CRC'
+                  ? crcDesdeUsd(parseFloat(amount) * selectedAsset.currentPrice)
+                  : montoUsd(parseFloat(amount) * selectedAsset.currentPrice, selectedAsset.currentPrice)}
               </p>
             )}
           </div>
@@ -1501,7 +1630,7 @@ export const CryptoView: React.FC = () => {
 
           <button
             onClick={handleStake}
-            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0) || !tieneStaking(selectedAsset?.symbol)}
             className="w-full bg-purple-600 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
             {isTrading ? t('processing') : t('start_staking')}
@@ -1510,54 +1639,86 @@ export const CryptoView: React.FC = () => {
       </BottomSheet>
 
       {/* Transaction Detail Sheet */}
-      {selectedTx && (
-        <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
-          <div className="space-y-4">
-            <div className="flex flex-col items-center py-4">
-              <div className="w-16 h-16 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-3">
-                {getTxIcon(selectedTx.type)}
-              </div>
-              <h3 className="text-xl font-bold uv-text-primary">{getTxLabel(selectedTx.type)}</h3>
-              <p className="uv-text-muted">{selectedTx.date}</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">{t('crypto_asset_label')}</span>
-                <span className="font-bold uv-text-primary">{selectedTx.fromAsset}{selectedTx.toAsset ? ` → ${selectedTx.toAsset}` : ''}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">{t('amount')}</span>
-                <span className="font-bold uv-text-primary">{formatCrypto(selectedTx.fromAmount)} {selectedTx.fromAsset}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">{t('crypto_price')}</span>
-                <span className="font-bold uv-text-primary">{formatUsd(selectedTx.price)}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">{t('crypto_fee')}</span>
-                <span className="font-bold uv-text-primary">{formatUsd(selectedTx.fee)}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted">{t('crypto_total_usd')}</span>
-                <span className="font-bold uv-text-primary">{formatUsd(selectedTx.fromAmount * selectedTx.price)}</span>
-              </div>
-              {selectedTx.txHash && (
-                <div className="flex justify-between py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                  <span className="uv-text-muted">{t('tx_hash')}</span>
-                  <span className="font-mono text-xs text-[var(--color-primary)]">{selectedTx.txHash}</span>
+      {selectedTx && (() => {
+        const lectura = leerMovimiento(selectedTx);
+        const monedaPrecio = selectedTx.priceCurrency ?? 'USD';
+        const fila = 'flex justify-between gap-3 py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]';
+        const estado = selectedTx.status === 'completed'
+          ? t('tx_status_completed')
+          : selectedTx.status === 'pending' ? t('pending') : t('crypto_status_failed');
+        return (
+          <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
+            <div className="space-y-4">
+              <div className="flex flex-col items-center py-4">
+                <div className="w-16 h-16 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-3">
+                  {getTxIcon(selectedTx.type)}
                 </div>
-              )}
-              <div className="flex justify-between py-3">
-                <span className="uv-text-muted">{t('status')}</span>
-                <span className="font-bold text-green-500 flex items-center gap-1">
-                  <Icons.Check size={14} /> {selectedTx.status}
-                </span>
+                <h3 className="text-xl font-bold uv-text-primary">{getTxLabel(selectedTx.type)}</h3>
+                <p className="uv-text-muted">{fechaLegible(selectedTx.date, language, '')}</p>
+              </div>
+
+              <div className="space-y-3">
+                <div className={fila}>
+                  <span className="uv-text-muted">{t('crypto_asset_label')}</span>
+                  <span className="font-bold uv-text-primary text-right">{selectedTx.fromAsset}{selectedTx.toAsset ? ` → ${selectedTx.toAsset}` : ''}</span>
+                </div>
+                {/* En un intercambio, las dos patas por separado: lo que se
+                    entrego y lo que se recibio, cada una en su moneda. */}
+                {lectura.entrega && lectura.recibe ? (
+                  <>
+                    <div className={fila}>
+                      <span className="uv-text-muted">{t('crypto_tx_gave')}</span>
+                      <span className="font-bold uv-text-primary tabular-nums text-right">{formatMonto(lectura.entrega.monto, lectura.entrega.activo)}</span>
+                    </div>
+                    <div className={fila}>
+                      <span className="uv-text-muted">{t('crypto_tx_got')}</span>
+                      <span className="font-bold text-green-500 tabular-nums text-right">{formatMonto(lectura.recibe.monto, lectura.recibe.activo)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className={fila}>
+                    <span className="uv-text-muted">{t('amount')}</span>
+                    <span className="font-bold uv-text-primary tabular-nums text-right">{formatCrypto(lectura.principal.monto)} {lectura.principal.activo}</span>
+                  </div>
+                )}
+                {selectedTx.price > 0 && (
+                  <div className={fila}>
+                    <span className="uv-text-muted">{t('crypto_price')}</span>
+                    <span className="font-bold uv-text-primary tabular-nums text-right">
+                      {formatMonto(selectedTx.price, monedaPrecio)}
+                      {selectedTx.type === 'convert' && selectedTx.toAsset ? ` / ${selectedTx.toAsset}` : ''}
+                    </span>
+                  </div>
+                )}
+                <div className={fila}>
+                  <span className="uv-text-muted">{t('crypto_fee')}</span>
+                  <span className="font-bold uv-text-primary tabular-nums text-right">{formatMonto(selectedTx.fee, monedaPrecio)}</span>
+                </div>
+                {/* El total en dolares solo tiene sentido donde el precio va en
+                    dolares y no hay ya una pata en fiat que lo diga. */}
+                {!lectura.entrega && monedaPrecio === 'USD' && selectedTx.price > 0 && (
+                  <div className={fila}>
+                    <span className="uv-text-muted">{t('crypto_total_usd')}</span>
+                    <span className="font-bold uv-text-primary tabular-nums text-right">{formatUsd(lectura.principal.monto * selectedTx.price)}</span>
+                  </div>
+                )}
+                {selectedTx.txHash && (
+                  <div className={fila}>
+                    <span className="uv-text-muted">{t('tx_hash')}</span>
+                    <span className="font-mono text-xs text-[var(--color-primary)] truncate">{selectedTx.txHash}</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-3">
+                  <span className="uv-text-muted">{t('status')}</span>
+                  <span className={`font-bold flex items-center gap-1 ${selectedTx.status === 'completed' ? 'text-green-500' : 'uv-text-secondary'}`}>
+                    {selectedTx.status === 'completed' && <Icons.Check size={14} />} {estado}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </BottomSheet>
-      )}
+          </BottomSheet>
+        );
+      })()}
 
       <HojaAlertasDePrecio
         isOpen={activeSheet === 'alerts'}

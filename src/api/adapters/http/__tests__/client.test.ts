@@ -5,6 +5,9 @@ import {
   registerRefreshHandler,
   registerAuthFailureHandler,
   registerAccountBlockedHandler,
+  ESPERAS_REINTENTO_REFRESCO_MS,
+  PRESUPUESTO_REINTENTO_REFRESCO_MS,
+  type ResultadoRefresco,
 } from '../client';
 import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
@@ -42,7 +45,7 @@ function makeErrResConData(status: number, code: string, data: unknown) {
 describe('HttpClient: el detalle del error y los archivos', () => {
   beforeEach(() => {
     registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
-    registerRefreshHandler(async () => true);
+    registerRefreshHandler(async () => 'renovada');
     registerAuthFailureHandler(() => {});
   });
 
@@ -123,7 +126,7 @@ describe('HttpClient: el detalle del error y los archivos', () => {
       .mockResolvedValueOnce({ status: 401, ok: false, headers: new Headers(), json: async () => ({}) })
       .mockResolvedValueOnce({ status: 200, ok: true, headers: new Headers(), blob: async () => new Blob(['x']) });
     vi.stubGlobal('fetch', fetchMock);
-    const refresh = vi.fn(async () => true);
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => 'renovada');
     registerRefreshHandler(refresh);
 
     const r = await new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv');
@@ -137,7 +140,7 @@ describe('HttpClient: el detalle del error y los archivos', () => {
 describe('HttpClient refresh-on-401', () => {
   beforeEach(() => {
     registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
-    registerRefreshHandler(async () => true);
+    registerRefreshHandler(async () => 'renovada');
     registerAuthFailureHandler(() => {});
   });
 
@@ -147,7 +150,7 @@ describe('HttpClient refresh-on-401', () => {
       .mockResolvedValueOnce(makeRes(401, null))
       .mockResolvedValueOnce(makeRes(200, { ok: 1 }));
     vi.stubGlobal('fetch', fetchMock);
-    const refresh = vi.fn(async () => true);
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => 'renovada');
     registerRefreshHandler(refresh);
 
     const client = new HttpClient('http://x');
@@ -161,7 +164,7 @@ describe('HttpClient refresh-on-401', () => {
   it('forces logout and returns SESSION_EXPIRED when refresh fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeRes(401, null));
     vi.stubGlobal('fetch', fetchMock);
-    registerRefreshHandler(async () => false);
+    registerRefreshHandler(async () => 'rechazada');
     const onFail = vi.fn();
     registerAuthFailureHandler(onFail);
 
@@ -186,7 +189,7 @@ describe('HttpClient refresh-on-401', () => {
     registerRefreshHandler(async () => {
       refreshCalls++;
       await new Promise((res) => setTimeout(res, 10));
-      return true;
+      return 'renovada';
     });
 
     const client = new HttpClient('http://x');
@@ -199,7 +202,7 @@ describe('HttpClient refresh-on-401', () => {
   it('does not attempt refresh for unauthenticated (auth=false) calls', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeRes(401, null));
     vi.stubGlobal('fetch', fetchMock);
-    const refresh = vi.fn(async () => true);
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => 'renovada');
     registerRefreshHandler(refresh);
 
     const client = new HttpClient('http://x');
@@ -210,9 +213,163 @@ describe('HttpClient refresh-on-401', () => {
   });
 });
 
+// Un 401 a mitad de sesion cuya renovacion falla por algo pasajero (sin red, un
+// 429, un 5xx) ya no saca a la persona: se reintenta con esperas acotadas y, si
+// no se recupera, la pantalla recibe un error traducido.
+describe('HttpClient: renovacion con fallo pasajero', () => {
+  const totalEsperas = ESPERAS_REINTENTO_REFRESCO_MS.reduce((a, b) => a + b, 0);
+  const onFail = vi.fn<() => void>();
+  const onBlocked = vi.fn<() => void>();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    registerTokenProvider(() => ({ accessToken: 'tok', refreshToken: 'ref' }));
+    onFail.mockClear();
+    onBlocked.mockClear();
+    registerAuthFailureHandler(onFail);
+    registerAccountBlockedHandler(onBlocked);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reintenta tras la espera y, si se recupera, repite la peticion', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeRes(401, null))
+      .mockResolvedValueOnce(makeRes(200, { ok: 1 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const refresh = vi
+      .fn<() => Promise<ResultadoRefresco>>()
+      .mockResolvedValueOnce('pasajero')
+      .mockResolvedValueOnce('renovada');
+    registerRefreshHandler(refresh);
+
+    const pendiente = new HttpClient('http://x').get('/api/v1/thing');
+    await vi.advanceTimersByTimeAsync(0);
+    // Durante la espera no se reintento todavia.
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(ESPERAS_REINTENTO_REFRESCO_MS[0]);
+    const r = await pendiente;
+
+    expect(r.success).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onFail).not.toHaveBeenCalled();
+  });
+
+  it('si no se recupera, devuelve SESSION_UNCONFIRMED traducido y no cierra la sesion', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeRes(401, null));
+    vi.stubGlobal('fetch', fetchMock);
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => 'pasajero');
+    registerRefreshHandler(refresh);
+
+    const pendiente = new HttpClient('http://x').post('/api/v1/sinpe/send', { monto: 700 });
+    await vi.advanceTimersByTimeAsync(totalEsperas);
+    const r = await pendiente;
+
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('SESSION_UNCONFIRMED');
+    expect(r.error?.message).toBe(traducirFueraDeReact('err_session_unconfirmed'));
+    expect(refresh).toHaveBeenCalledTimes(ESPERAS_REINTENTO_REFRESCO_MS.length + 1);
+    // La peticion original no se repite sin sesion confirmada.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onFail).not.toHaveBeenCalled();
+    expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  it('varios 401 a la vez esperan la misma serie de reintentos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes(401, null)));
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => 'pasajero');
+    registerRefreshHandler(refresh);
+
+    const client = new HttpClient('http://x');
+    const pendientes = Promise.all([client.get('/a'), client.get('/b'), client.get('/c')]);
+    await vi.advanceTimersByTimeAsync(totalEsperas);
+    const respuestas = await pendientes;
+
+    expect(respuestas.map((r) => r.error?.code)).toEqual(['SESSION_UNCONFIRMED', 'SESSION_UNCONFIRMED', 'SESSION_UNCONFIRMED']);
+    expect(refresh).toHaveBeenCalledTimes(ESPERAS_REINTENTO_REFRESCO_MS.length + 1);
+  });
+
+  it('no empieza otro reintento si el intento ya consumio el presupuesto de tiempo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes(401, null)));
+    // Un intento que tarda lo que un corte por tiempo.
+    const refresh = vi.fn(async (): Promise<ResultadoRefresco> => {
+      await new Promise((res) => setTimeout(res, PRESUPUESTO_REINTENTO_REFRESCO_MS));
+      return 'pasajero';
+    });
+    registerRefreshHandler(refresh);
+
+    const pendiente = new HttpClient('http://x').get('/api/v1/thing');
+    await vi.advanceTimersByTimeAsync(PRESUPUESTO_REINTENTO_REFRESCO_MS + totalEsperas);
+    const r = await pendiente;
+
+    expect(r.error?.code).toBe('SESSION_UNCONFIRMED');
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('un rechazo despues de un fallo pasajero si cierra la sesion', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes(401, null)));
+    const refresh = vi
+      .fn<() => Promise<ResultadoRefresco>>()
+      .mockResolvedValueOnce('pasajero')
+      .mockResolvedValueOnce('rechazada');
+    registerRefreshHandler(refresh);
+
+    const pendiente = new HttpClient('http://x').get('/api/v1/thing');
+    await vi.advanceTimersByTimeAsync(totalEsperas);
+    const r = await pendiente;
+
+    expect(r.error?.code).toBe('SESSION_EXPIRED');
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(onFail).toHaveBeenCalledTimes(1);
+  });
+
+  it('una cuenta bloqueada va por el manejador del bloqueo, con su motivo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes(401, null)));
+    registerRefreshHandler(async () => 'bloqueada');
+
+    const r = await new HttpClient('http://x').get('/api/v1/thing');
+
+    expect(r.error?.code).toBe('ACCOUNT_BLOCKED');
+    expect(r.error?.message).toBe(traducirFueraDeReact('login_account_blocked'));
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    expect(onFail).not.toHaveBeenCalled();
+  });
+
+  it('un resultado descartado (cambio la sesion) ni repite la peticion ni cierra la sesion nueva', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeRes(401, null));
+    vi.stubGlobal('fetch', fetchMock);
+    registerRefreshHandler(async () => 'descartada');
+
+    const r = await new HttpClient('http://x').get('/api/v1/thing');
+
+    expect(r.error?.code).toBe('SESSION_EXPIRED');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onFail).not.toHaveBeenCalled();
+    expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  it('getArchivo tampoco cierra la sesion por un fallo pasajero', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ status: 401, ok: false, headers: new Headers(), json: async () => ({}) }),
+    );
+    registerRefreshHandler(async () => 'pasajero');
+
+    const pendiente = new HttpClient('http://x').getArchivo('/api/v1/qr/merchants/m1/report.csv');
+    await vi.advanceTimersByTimeAsync(totalEsperas);
+    const r = await pendiente;
+
+    expect(r.error?.code).toBe('SESSION_UNCONFIRMED');
+    expect(onFail).not.toHaveBeenCalled();
+  });
+});
+
 describe('HttpClient cuenta bloqueada (403 ACCOUNT_BLOCKED)', () => {
   const onBlocked = vi.fn<() => void>();
-  const refresh = vi.fn<() => Promise<boolean>>(async () => true);
+  const refresh = vi.fn<() => Promise<ResultadoRefresco>>(async () => 'renovada');
   const onFail = vi.fn<() => void>();
 
   beforeEach(() => {

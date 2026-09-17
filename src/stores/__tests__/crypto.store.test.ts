@@ -44,11 +44,43 @@ describe('useCryptoStore', () => {
 
   it('should stake crypto', () => {
     const ethBefore = useCryptoStore.getState().assets.find((a) => a.symbol === 'ETH')!;
-    useCryptoStore.getState().stakeCrypto('ETH', 0.5, 4.5, false);
+    useCryptoStore.getState().stakeCrypto({
+      id: 'pos-servidor', asset: 'ETH', amount: 0.5, apy: 4.5, startDate: '2026-09-13T15:00:00Z', earned: 0, locked: false,
+    });
     const ethAfter = useCryptoStore.getState().assets.find((a) => a.symbol === 'ETH')!;
     expect(ethAfter.balance).toBeCloseTo(ethBefore.balance - 0.5, 4);
     const positions = useCryptoStore.getState().stakingPositions;
     expect(positions.length).toBeGreaterThan(initialStakingPositions.length);
+  });
+
+  // El defecto de produccion: el store fabricaba `stake-<fecha>` y el retiro
+  // con ese id fallaba siempre. La posicion guarda el id del servidor.
+  it('la posicion guarda el id que dio el servidor y se retira con el', () => {
+    useCryptoStore.getState().stakeCrypto({
+      id: '099fdd8d-c6df-4ba7-98a2-d60c60149523', asset: 'ETH', amount: 0.1, apy: 4.5,
+      startDate: '2026-09-13T15:00:00Z', earned: 0, locked: false,
+    });
+    const ids = useCryptoStore.getState().stakingPositions.map((p) => p.id);
+    expect(ids).toContain('099fdd8d-c6df-4ba7-98a2-d60c60149523');
+    expect(ids.some((id) => id.startsWith('stake-'))).toBe(false);
+    useCryptoStore.getState().unstakeCrypto('099fdd8d-c6df-4ba7-98a2-d60c60149523');
+    expect(useCryptoStore.getState().stakingPositions.map((p) => p.id)).not.toContain('099fdd8d-c6df-4ba7-98a2-d60c60149523');
+  });
+
+  // Las tenencias del servidor no traen precio: reemplazar la lista entera
+  // dejaba la cartera "sin valor" hasta el siguiente sondeo de precios.
+  it('setAssets conserva el precio y el historial que ya habia', () => {
+    const btcAntes = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!;
+    useCryptoStore.getState().setAssets([
+      { ...btcAntes, balance: 1, currentPrice: 0, priceChange24h: 0, priceHistory: [] },
+    ]);
+    const btc = useCryptoStore.getState().assets.find((a) => a.symbol === 'BTC')!;
+    expect(btc.balance).toBe(1);
+    expect(btc.currentPrice).toBe(btcAntes.currentPrice);
+    expect(btc.priceHistory).toEqual(btcAntes.priceHistory);
+    // Un precio que si llega manda sobre el anterior.
+    useCryptoStore.getState().setAssets([{ ...btc, currentPrice: 99 }]);
+    expect(useCryptoStore.getState().assets[0].currentPrice).toBe(99);
   });
 
   it('should unstake crypto', () => {

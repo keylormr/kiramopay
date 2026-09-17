@@ -3,7 +3,7 @@ import type { Account, Budget } from './account.types';
 import type { Transaction } from './transaction.types';
 import type { SinpeContact, SinpeTransaction } from './sinpe.types';
 import type { SavedService, Bill, Recharge } from './services.types';
-import type { CryptoState, PriceAlert } from './crypto.types';
+import type { CryptoState, PriceAlert, StakingPosition } from './crypto.types';
 import type { Notification } from './notification.types';
 
 export interface AppState {
@@ -57,7 +57,6 @@ export type AppAction =
   | { type: 'TOGGLE_LOCK'; payload: boolean }
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
   | { type: 'SET_BASE_CURRENCY'; payload: string }
-  | { type: 'ADD_ACCOUNT'; payload: Account }
   | { type: 'CHANGE_PASSWORD'; payload: string }
   | { type: 'LOGIN'; payload: User }
   | { type: 'LOGOUT' }
@@ -82,7 +81,9 @@ export type AppAction =
   | { type: 'CONVERT_CRYPTO'; payload: { fromAsset: string; toAsset: string; fromAmount: number; toAmount: number; price: number } }
   | { type: 'SEND_CRYPTO'; payload: { asset: string; amount: number; toAddress: string; fee: number } }
   | { type: 'RECEIVE_CRYPTO'; payload: { asset: string; amount: number; fromAddress: string } }
-  | { type: 'STAKE_CRYPTO'; payload: { asset: string; amount: number; apy: number; locked: boolean; lockDays?: number } }
+  // La posicion tal como la devolvio el servidor: su id es el unico con el que
+  // despues se puede retirar.
+  | { type: 'STAKE_CRYPTO'; payload: StakingPosition }
   | { type: 'UNSTAKE_CRYPTO'; payload: { positionId: string } }
   | { type: 'CLAIM_STAKING_YIELD'; payload: { positionId: string; amount: number } }
   // La lista que devolvio el servidor. Crear y quitar alertas pasan primero

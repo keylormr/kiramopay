@@ -48,7 +48,7 @@ export class HttpRecurringRepository implements IRecurringRepository {
     const res = await this.client.get<RecurringPaymentDTO[]>('/api/v1/recurring');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch recurring payments');
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch recurring payments');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -70,7 +70,9 @@ export class HttpRecurringRepository implements IRecurringRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError('CREATE_FAILED', res.error?.message || 'Failed to create recurring payment');
+      // El codigo del servidor viaja intacto: la pantalla traduce por codigo
+      // (RECURRING_INVALID_DATE, RECURRING_NOT_FOUND...) y uno fijo lo borraba.
+      return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed to create recurring payment');
     }
 
     return apiSuccess(mapToFrontend(res.data));
@@ -85,7 +87,7 @@ export class HttpRecurringRepository implements IRecurringRepository {
 
     const res = await this.client.patch<void>(`/api/v1/recurring/${id}`, body);
     if (!res.success) {
-      return apiError('UPDATE_FAILED', res.error?.message || 'Failed to update');
+      return apiError(res.error?.code || 'UPDATE_FAILED', res.error?.message || 'Failed to update');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -93,7 +95,7 @@ export class HttpRecurringRepository implements IRecurringRepository {
   async delete(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<void>(`/api/v1/recurring/${id}`);
     if (!res.success) {
-      return apiError('DELETE_FAILED', res.error?.message || 'Failed to delete');
+      return apiError(res.error?.code || 'DELETE_FAILED', res.error?.message || 'Failed to delete');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -103,7 +105,7 @@ export class HttpRecurringRepository implements IRecurringRepository {
       `/api/v1/recurring/${id}/toggle`,
     );
     if (!res.success || !res.data) {
-      return apiError('TOGGLE_FAILED', res.error?.message || 'Failed to toggle');
+      return apiError(res.error?.code || 'TOGGLE_FAILED', res.error?.message || 'Failed to toggle');
     }
     return apiSuccess(res.data);
   }
@@ -113,7 +115,7 @@ export class HttpRecurringRepository implements IRecurringRepository {
       `/api/v1/recurring/${id}/mark-paid`,
     );
     if (!res.success || !res.data) {
-      return apiError('MARK_PAID_FAILED', res.error?.message || 'Failed to mark paid');
+      return apiError(res.error?.code || 'MARK_PAID_FAILED', res.error?.message || 'Failed to mark paid');
     }
     return apiSuccess(mapToFrontend(res.data));
   }

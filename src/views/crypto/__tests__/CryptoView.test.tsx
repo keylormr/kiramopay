@@ -174,7 +174,7 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
   it('no registra la conversión si el servidor la rechaza', async () => {
     mocks.api.crypto.convert.mockResolvedValue({
       success: false,
-      error: { code: 'INSUFFICIENT_FUNDS', message: 'Saldo insuficiente' },
+      error: { code: 'CRYPTO_INSUFFICIENT_BALANCE', message: 'insufficient asset balance' },
     });
     const user = userEvent.setup();
     setup();
@@ -183,7 +183,9 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
     await user.type(d.getByPlaceholderText('0.00'), '0.1');
     await user.click(d.getByRole('button', { name: 'Convertir' }));
 
-    expect(await screen.findByText('Saldo insuficiente')).toBeInTheDocument();
+    // Traducido por el codigo; el texto del servidor no llega a la pantalla.
+    expect(await screen.findByText('No tienes suficiente de esta cripto para esa operación.')).toBeInTheDocument();
+    expect(screen.queryByText(/insufficient asset balance/)).not.toBeInTheDocument();
     expect(operacionesDespachadas()).toEqual([]);
   });
 
@@ -210,7 +212,7 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
   it('no retira el staking si el servidor lo rechaza', async () => {
     mocks.api.crypto.unstake.mockResolvedValue({
       success: false,
-      error: { code: 'UNSTAKE_FAILED', message: 'No se pudo retirar' },
+      error: { code: 'STAKING_POSITION_LOCKED', message: 'position is locked until 2026-10-01' },
     });
     const user = userEvent.setup();
     setup();
@@ -218,7 +220,8 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
     await user.click(screen.getByRole('button', { name: 'Staking' }));
     await user.click(await screen.findByRole('button', { name: 'Retirar' }));
 
-    expect(await screen.findByText('No se pudo retirar')).toBeInTheDocument();
+    expect(await screen.findByText('Esta posición sigue bloqueada hasta que termine su plazo.')).toBeInTheDocument();
+    expect(screen.queryByText(/position is locked/)).not.toBeInTheDocument();
     expect(operacionesDespachadas()).toEqual([]);
   });
 

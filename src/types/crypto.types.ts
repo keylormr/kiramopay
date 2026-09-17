@@ -11,6 +11,14 @@ export interface CryptoAsset {
   priceHistory: number[];
 }
 
+/**
+ * Un movimiento de cripto. `from*` es lo que sale y `to*` lo que entra:
+ *  - compra: sale el fiat (fromAsset = USD/CRC, fromAmount = lo pagado) y
+ *    entra la cripto (toAsset, toAmount);
+ *  - venta: sale la cripto y entra el fiat (toAsset = USD/CRC);
+ *  - conversion: sale una cripto y entra la otra;
+ *  - el resto (staking, rendimiento, envio): solo fromAsset/fromAmount.
+ */
 export interface CryptoTransaction {
   id: string;
   type: 'buy' | 'sell' | 'convert' | 'send' | 'receive' | 'stake' | 'unstake' | 'yield';
@@ -18,7 +26,14 @@ export interface CryptoTransaction {
   toAsset?: string;
   fromAmount: number;
   toAmount?: number;
+  /** Precio de una unidad de la cripto, en `priceCurrency`. */
   price: number;
+  /**
+   * Moneda de `price` y de `fee`. El servidor anota compras y ventas en la
+   * moneda del pago (una compra en colones trae el precio en colones); sin el
+   * dato, dolares.
+   */
+  priceCurrency?: string;
   fee: number;
   date: string;
   status: 'completed' | 'pending' | 'failed';

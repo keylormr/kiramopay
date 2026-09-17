@@ -277,10 +277,21 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
               </div>
             )}
 
-            {/* Earn / Cashback Rules */}
+            {/* Reglas para ganar puntos. Ninguna operacion de la app llama a la
+                acreditacion (EarnPoints no tiene llamadores en el servidor), asi
+                que estas reglas son una VISTA PREVIA: se muestran para que se
+                sepa como va a funcionar, sin pintarlas como un beneficio que ya
+                corre. Antes un "1% cashback" verde y en negrita decia lo
+                contrario de lo que pasaba en cada SINPE. */}
             {activeTab === 'earn' && (
               <div className="px-4 py-2 space-y-3">
-                <p className="text-xs text-gray-500 font-medium">{t('loyalty_earn_desc')}</p>
+                <div role="note" className="flex gap-3 rounded-2xl bg-[var(--color-warning-soft)] p-4">
+                  <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold uv-text-primary">{t('loyalty_earn_preview_title')}</p>
+                    <p className="mt-1 text-xs leading-relaxed uv-text-secondary">{t('loyalty_earn_desc')}</p>
+                  </div>
+                </div>
                 {cashbackRules.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-gray-400">
                     <Icons.Percent size={40} className="mb-3 opacity-40" />
@@ -302,20 +313,33 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                       recharge: 'bg-teal-100 dark:bg-teal-900/30',
                       qr_payment: 'bg-purple-100 dark:bg-purple-900/30',
                     };
+                    // El nombre de la categoria venia crudo del servidor
+                    // ("Services", "Qr payment"): en ingles en cualquier idioma.
+                    const catNombres: Record<string, string> = {
+                      sinpe: t('nav_sinpe'),
+                      services: t('nav_services'),
+                      crypto: t('nav_crypto'),
+                      recharge: t('recharges'),
+                      qr_payment: t('tx_title_qr_payment'),
+                    };
+                    const nombre = catNombres[rule.category];
                     return (
                       <div key={rule.id}
-                        className="flex items-center gap-3 p-4 uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] animate-stagger"
+                        className="flex items-center gap-3 p-4 uv-surface-1 rounded-2xl border border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-strong-dark)] animate-stagger"
                         style={{ animationDelay: `${i * 60}ms` }}>
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${catColors[rule.category] || 'bg-gray-100'}`}>
+                        <div className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center opacity-70 ${catColors[rule.category] || 'bg-gray-100'}`}>
                           {catIcons[rule.category] || <Icons.Circle size={20} />}
                         </div>
-                        <div className="flex-1">
-                          <p className="font-bold uv-text-primary text-sm capitalize">{rule.category.replace('_', ' ')}</p>
-                          <p className="text-xs text-gray-400">{t('loyalty_max_per_tx')}: {rule.maxPoints} pts</p>
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-bold uv-text-primary text-sm ${nombre ? '' : 'capitalize'}`}>{nombre || rule.category.replace('_', ' ')}</p>
+                          <p className="text-xs uv-text-muted">{t('loyalty_max_per_tx')}: {rule.maxPoints} pts</p>
                         </div>
-                        <div className="text-right">
-                          <span className="text-lg font-black text-green-600">{rule.percentage}%</span>
-                          <p className="text-[10px] text-gray-400">cashback</p>
+                        <div className="text-right shrink-0">
+                          <span className="text-lg font-bold uv-text-secondary tabular-nums">{rule.percentage}%</span>
+                          <p className="text-[10px] uv-text-muted">cashback</p>
+                          <span className="mt-1 inline-block whitespace-nowrap rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[10px] font-bold uv-text-secondary">
+                            {t('plans_badge_soon')}
+                          </span>
                         </div>
                       </div>
                     );

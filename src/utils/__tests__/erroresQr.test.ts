@@ -1,6 +1,6 @@
 import es from '@/i18n/languages/es';
 import en from '@/i18n/languages/en';
-import { mensajeDeCobro } from '../erroresQr';
+import { codigoDeCobroCerrado, mensajeDeCobro } from '../erroresQr';
 
 // Solo seis codigos se traducian: QR_INVALIDO o NO_PODES_PAGARTE caian al texto
 // del servidor, que existe solo en espanol ("no podes pagarte a vos mismo"), y
@@ -33,5 +33,26 @@ describe('mensajeDeCobro', () => {
   it('un codigo desconocido devuelve vacio para que la vista use su generico', () => {
     expect(mensajeDeCobro(traductor({}), 'OTRA_COSA')).toBe('');
     expect(mensajeDeCobro(traductor({}))).toBe('');
+  });
+});
+
+// La hoja de pago recibe el estado del cobro en /qr/resolve y lo descartaba:
+// un cobro ya pagado se veia vigente hasta tocar Pagar.
+describe('codigoDeCobroCerrado', () => {
+  it.each([
+    ['paid', 'COBRO_YA_PAGADO', 'Ese cobro ya fue pagado.'],
+    ['cancelled', 'COBRO_CANCELADO', 'Ese cobro fue cancelado.'],
+    ['expired', 'COBRO_VENCIDO', 'Ese cobro venció.'],
+    ['superseded', 'COBRO_REEMPLAZADO', 'El cobro cambió. Vuelve a escanear.'],
+  ])('%s se avisa con el mismo codigo que usaria el servidor', (estado, codigo, texto) => {
+    expect(codigoDeCobroCerrado(estado)).toBe(codigo);
+    const t = traductor(es as unknown as Record<string, string>);
+    expect(mensajeDeCobro(t, codigoDeCobroCerrado(estado))).toBe(texto);
+  });
+
+  it('un cobro pendiente o un estado desconocido no se bloquea: decide el servidor', () => {
+    expect(codigoDeCobroCerrado('pending')).toBe('');
+    expect(codigoDeCobroCerrado('otro')).toBe('');
+    expect(codigoDeCobroCerrado(undefined)).toBe('');
   });
 });

@@ -115,3 +115,54 @@ describe('WebhooksSheet — URL rechazada', () => {
     expect(campo).not.toHaveAttribute('aria-invalid');
   });
 });
+
+// La hoja pintaba `res.error.message` crudo (en ingles) y daba por vacias la
+// lista y las entregas cuando la consulta fallaba.
+describe('WebhooksSheet — errores de la lista y de las entregas', () => {
+  const endpoint = { id: 'w1', url: 'https://mi-comercio.example/hook', events: '*', status: 'active', createdAt: '' };
+
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('kiramopay_language', 'es');
+    for (const fn of Object.values(api.b2b)) fn.mockReset();
+  });
+  afterEach(cleanup);
+
+  it('una lista que no se pudo leer no se presenta como vacia', async () => {
+    api.b2b.listWebhooks.mockResolvedValue({ success: false, error: { code: 'B2B_FAILED', message: 'operation failed' } });
+    pintar();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos cargar tus webhooks.');
+    expect(screen.queryByText('No tienes webhooks')).not.toBeInTheDocument();
+    expect(screen.queryByText(/operation failed/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+  });
+
+  it('borrar uno que ya no existe se explica en espanol y la lista se relee', async () => {
+    api.b2b.listWebhooks
+      .mockResolvedValueOnce({ success: true, data: [endpoint] })
+      .mockResolvedValueOnce({ success: true, data: [] });
+    api.b2b.deleteWebhook.mockResolvedValue({ success: false, error: { code: 'B2B_NOT_FOUND', message: 'resource not found' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Eliminar' }));
+    await user.click(screen.getByRole('button', { name: 'Eliminar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ese webhook ya no existe. Actualizamos la lista.');
+    expect(screen.queryByText(/resource not found/)).not.toBeInTheDocument();
+    expect(await screen.findByText('No tienes webhooks')).toBeInTheDocument();
+  });
+
+  it('las entregas que no se pudieron leer no se muestran como "sin entregas"', async () => {
+    api.b2b.listWebhooks.mockResolvedValue({ success: true, data: [endpoint] });
+    api.b2b.listDeliveries.mockResolvedValue({ success: false, error: { code: 'B2B_FAILED', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Entregas recientes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos cargar las entregas.');
+    expect(screen.queryByText('Sin entregas todavía')).not.toBeInTheDocument();
+  });
+});

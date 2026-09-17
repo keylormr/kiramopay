@@ -13,6 +13,7 @@ import { MarcaKiramo } from './components/MarcaKiramo';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { LanguageSheet } from './components/LanguageSheet';
 import { OverlayShell } from './components/OverlayShell';
+import { HelpButton } from './components/HelpSheet';
 import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
@@ -520,11 +521,11 @@ const Layout = () => {
       }
     }
     switch (activeTab) {
-      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} onOpenPlans={() => setOverlayView('plans')} onNavigateToSinpe={(tab) => { setSinpeTab(tab ?? 'send'); setActiveTab('sinpe'); }} />;
+      case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} onOpenPlans={() => setOverlayView('plans')} onOpenCrypto={() => setActiveTab('crypto')} onNavigateToSinpe={(tab) => { setSinpeTab(tab ?? 'send'); setActiveTab('sinpe'); }} />;
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} onOpenBudget={() => setOverlayView('budget')} onOpenRecurring={() => setOverlayView('recurring')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -693,7 +694,7 @@ const Layout = () => {
           </OverlayShell>
         )}
         {overlayView === 'cards' && (
-          <OverlayShell title={t('home_cards')} onClose={() => setOverlayView(null)}>
+          <OverlayShell title={t('home_cards')} onClose={() => setOverlayView(null)} accessory={<HelpButton topic="cards" />}>
             <CardsView onOpenPlans={() => abrirPlanesDesde('cards')} />
           </OverlayShell>
         )}

@@ -2,7 +2,7 @@ import { ApiResponse, apiError, apiErrorConDetalle } from '../../types';
 import type { ArchivoDescargado } from '../../types';
 // Ningun texto visible nace aqui: el cliente pone el CODIGO y el mensaje sale
 // del diccionario del idioma activo (ver i18n/mensajesDeError.ts).
-import { mensajeDelCliente, mensajeDelServidor } from '@/i18n/mensajesDeError';
+import { mensajeDelCliente, mensajeDelServidor, traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 // In-memory token holders. The auth store registers a provider after login
 // so the HttpClient can read the current access token without going through
@@ -26,14 +26,48 @@ export function registerTokenProvider(p: TokenProvider): void {
 // in-memory refresh token for a fresh pair, and a failure handler that forces a
 // logout when refresh is impossible. Both are optional (mock mode leaves them
 // unset, so behaviour is unchanged).
-type RefreshHandler = () => Promise<boolean>;
+
+/**
+ * Lo que paso al intentar renovar la sesion a mitad de uso.
+ * - 'renovada': hay tokens nuevos; la peticion se repite.
+ * - 'rechazada': el servidor dijo que la sesion no sirve (REFRESH_FAILED, sin
+ *   token). Solo esto cierra la sesion.
+ * - 'bloqueada': un administrador bloqueo la cuenta; se cierra y el login dice
+ *   por que.
+ * - 'pasajero': no hubo respuesta definitiva (sin red, 429, 5xx). La sesion
+ *   puede seguir viva: se reintenta y, si no se recupera, la persona sigue
+ *   dentro con un aviso.
+ * - 'descartada': alguien entro o salio mientras tanto; ese resultado ya no
+ *   aplica a la sesion actual.
+ */
+export type ResultadoRefresco = 'renovada' | 'rechazada' | 'bloqueada' | 'pasajero' | 'descartada';
+
+type RefreshHandler = () => Promise<ResultadoRefresco>;
 type AuthFailureHandler = () => void;
 
 let refreshHandler: RefreshHandler | null = null;
 let authFailureHandler: AuthFailureHandler | null = null;
 // A single in-flight refresh shared by all concurrent 401s, so a burst of
-// expired requests triggers exactly ONE refresh call (no rotation storm).
-let refreshInFlight: Promise<boolean> | null = null;
+// expired requests triggers exactly ONE refresh call (no rotation storm). Los
+// reintentos por un fallo pasajero viven DENTRO de esa promesa: diez 401 a la
+// vez esperan la misma serie, no diez series.
+let refreshInFlight: Promise<ResultadoRefresco> | null = null;
+
+/**
+ * Esperas entre reintentos de la renovacion ante un fallo pasajero. Acotadas
+ * para que quien toco un boton no quede colgado: un 429 del limite de refresh
+ * se despeja en su ventana de un minuto, asi que esperar mas no lo arreglaria.
+ */
+export const ESPERAS_REINTENTO_REFRESCO_MS = [1000, 3000] as const;
+
+/**
+ * Tope de tiempo para empezar otro reintento. Cada intento puede tardar hasta
+ * los 20 s del corte de fetch: si el primero ya se fue por tiempo, reintentar
+ * dos veces mas dejaria la pantalla un minuto esperando.
+ */
+export const PRESUPUESTO_REINTENTO_REFRESCO_MS = 10_000;
+
+const esperar = (ms: number) => new Promise<void>((resolver) => setTimeout(resolver, ms));
 
 export function registerRefreshHandler(h: RefreshHandler): void {
   refreshHandler = h;
@@ -68,14 +102,52 @@ function nombreDeDisposicion(valor: string | null): string {
   return m ? m[1].trim() : '';
 }
 
-function dedupedRefresh(): Promise<boolean> {
-  if (!refreshHandler) return Promise.resolve(false);
+function dedupedRefresh(): Promise<ResultadoRefresco> {
+  const handler = refreshHandler;
+  if (!handler) return Promise.resolve('rechazada');
   if (!refreshInFlight) {
-    refreshInFlight = refreshHandler().finally(() => {
+    refreshInFlight = (async () => {
+      const inicio = Date.now();
+      let resultado = await handler();
+      for (const espera of ESPERAS_REINTENTO_REFRESCO_MS) {
+        if (resultado !== 'pasajero') break;
+        if (Date.now() - inicio + espera > PRESUPUESTO_REINTENTO_REFRESCO_MS) break;
+        await esperar(espera);
+        resultado = await handler();
+      }
+      return resultado;
+    })().finally(() => {
       refreshInFlight = null;
     });
   }
   return refreshInFlight;
+}
+
+/**
+ * La respuesta de una peticion cuyo 401 no se pudo resolver renovando.
+ *
+ * Antes cualquier fallo de la renovacion cerraba la sesion: un parpadeo de la
+ * red o un 429 a mitad de uso mandaba a la persona al login sin explicacion.
+ * Ahora solo un rechazo definitivo la cierra; ante uno pasajero la persona
+ * sigue dentro y la pantalla recibe un error que dice que reintente.
+ */
+function sinSesionRenovada<T>(resultado: Exclude<ResultadoRefresco, 'renovada'>): ApiResponse<T> {
+  switch (resultado) {
+    case 'pasajero':
+      return apiError<T>('SESSION_UNCONFIRMED', mensajeDelCliente('SESSION_UNCONFIRMED'));
+    case 'bloqueada':
+      // El mismo camino que un 403 ACCOUNT_BLOCKED: cierre con el motivo.
+      if (accountBlockedHandler) accountBlockedHandler();
+      else if (authFailureHandler) authFailureHandler();
+      return apiError<T>('ACCOUNT_BLOCKED', traducirFueraDeReact('login_account_blocked'));
+    case 'rechazada':
+      if (authFailureHandler) authFailureHandler();
+      return apiError<T>('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
+    case 'descartada':
+      // La sesion que hizo esta peticion ya no es la actual: ni se repite con
+      // los tokens de otra ni se cierra la que esta abierta.
+      return apiError<T>('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
+  }
 }
 
 export class HttpClient {
@@ -139,15 +211,14 @@ export class HttpClient {
       });
 
       // Access token expired/revoked: try ONE silent refresh, then replay the
-      // request. If refresh fails (no/empty/invalid refresh token), force a
-      // logout so the UI stops pretending the user is signed in.
+      // request. Solo un rechazo definitivo de la renovacion cierra la sesion
+      // (ver sinSesionRenovada).
       if (res.status === 401 && auth && !isRetry && refreshHandler) {
-        const refreshed = await dedupedRefresh();
-        if (refreshed) {
+        const resultado = await dedupedRefresh();
+        if (resultado === 'renovada') {
           return this.request<T>(method, path, body, auth, true, extraHeaders);
         }
-        if (authFailureHandler) authFailureHandler();
-        return apiError<T>('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
+        return sinSesionRenovada<T>(resultado);
       }
 
       if (res.status === 204) {
@@ -219,10 +290,9 @@ export class HttpClient {
       });
 
       if (res.status === 401 && !isRetry && refreshHandler) {
-        const refreshed = await dedupedRefresh();
-        if (refreshed) return this.getArchivo(path, true);
-        if (authFailureHandler) authFailureHandler();
-        return apiError('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
+        const resultado = await dedupedRefresh();
+        if (resultado === 'renovada') return this.getArchivo(path, true);
+        return sinSesionRenovada<ArchivoDescargado>(resultado);
       }
       if (res.status === 429) {
         return apiError('RATE_LIMITED', mensajeDelCliente('RATE_LIMITED'));

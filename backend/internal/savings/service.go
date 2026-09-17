@@ -2,7 +2,10 @@ package savings
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -37,27 +40,53 @@ func (s *Service) List(ctx context.Context, userID string) ([]Goal, error) {
 	return s.repo.ListByUser(ctx, userID)
 }
 
+// Rechazos de entrada al crear una meta. Cada uno tiene su codigo en el
+// handler: con un CREATE_FAILED para todos, la pantalla no podia decir que
+// corregir y mostraba "no se pudo crear la meta" ante un objetivo en cero.
+var (
+	ErrNombreRequerido  = errors.New("savings: name is required")
+	ErrNombreMuyLargo   = errors.New("savings: name is too long")
+	ErrObjetivoInvalido = errors.New("savings: target must be positive")
+	ErrMonedaInvalida   = errors.New("savings: invalid currency")
+	ErrEstiloInvalido   = errors.New("savings: invalid icon or color")
+)
+
+// Los largos de la tabla savings_goals (migracion 040). Pasarlos llegaba a la
+// base y volvia como un error de Postgres con el texto crudo en la respuesta.
+const (
+	largoMaximoNombre = 120
+	largoMaximoIcono  = 40
+	largoMaximoColor  = 20
+)
+
 func (s *Service) Create(ctx context.Context, userID string, req *CreateGoalRequest) (*Goal, error) {
-	if req.Name == "" {
-		return nil, fmt.Errorf("name is required")
+	nombre := strings.TrimSpace(req.Name)
+	if nombre == "" {
+		return nil, ErrNombreRequerido
+	}
+	if utf8.RuneCountInString(nombre) > largoMaximoNombre {
+		return nil, ErrNombreMuyLargo
 	}
 	if req.TargetMinor <= 0 {
-		return nil, fmt.Errorf("target must be positive")
+		return nil, ErrObjetivoInvalido
 	}
 	currency := req.Currency
 	if currency == "" {
 		currency = "CRC"
 	}
 	if currency != "CRC" && currency != "USD" {
-		return nil, fmt.Errorf("invalid currency")
+		return nil, ErrMonedaInvalida
 	}
 	icon := req.Icon
 	if icon == "" {
 		icon = "piggy-bank"
 	}
+	if utf8.RuneCountInString(icon) > largoMaximoIcono || utf8.RuneCountInString(req.Color) > largoMaximoColor {
+		return nil, ErrEstiloInvalido
+	}
 	g := &Goal{
 		UserID:      userID,
-		Name:        req.Name,
+		Name:        nombre,
 		TargetMinor: req.TargetMinor,
 		Currency:    currency,
 		Icon:        icon,
