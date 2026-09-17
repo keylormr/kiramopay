@@ -12,7 +12,7 @@ import { Icons } from '@/components/Icons';
  * sufrido y corregido el mismo defecto; este modulo es el lugar comun para que
  * no vuelvan a separarse. Los colores son los de Analisis.
  */
-export const CATEGORIAS_MOVIMIENTO = ['transfers', 'services', 'shopping', 'income', 'cash', 'other'] as const;
+export const CATEGORIAS_MOVIMIENTO = ['transfers', 'services', 'shopping', 'income', 'cash', 'savings', 'other'] as const;
 export type CategoriaMovimiento = (typeof CATEGORIAS_MOVIMIENTO)[number];
 
 export interface EstiloCategoria {
@@ -32,6 +32,8 @@ const ESTILOS: Record<CategoriaMovimiento, EstiloCategoria> = {
   shopping: { icon: Icons.ShoppingCart, bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-700 dark:text-pink-300' },
   income: { icon: Icons.ArrowDownLeft, bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300' },
   cash: { icon: Icons.Banknote, bg: 'bg-teal-100 dark:bg-teal-900/30', text: 'text-teal-700 dark:text-teal-300' },
+  // Depositos y retiros de metas de ahorro (savings_deposit / savings_withdraw).
+  savings: { icon: Icons.PiggyBank, bg: 'bg-violet-100 dark:bg-violet-900/30', text: 'text-violet-700 dark:text-violet-300' },
   other: {
     icon: Icons.Receipt,
     bg: 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]',

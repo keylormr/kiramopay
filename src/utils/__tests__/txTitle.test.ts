@@ -7,6 +7,8 @@ const t = (key: string) => {
     tx_title_sinpe_receive: 'SINPE recibido',
     tx_title_generic_in: 'Dinero recibido',
     tx_title_generic_out: 'Dinero enviado',
+    tx_title_savings_deposit: 'Depósito a ahorro',
+    tx_title_savings_withdraw: 'Retiro de ahorro',
   };
   return claves[key] || key;
 };
@@ -50,5 +52,42 @@ describe('txTitle', () => {
 
   it('sin nada legible usa el tipo del movimiento', () => {
     expect(txTitle({ ...base, kind: 'sinpe_receive', type: 'credit' }, t)).toBe('SINPE recibido');
+  });
+
+  // Hallazgo QA (17-09): el backend escribe la descripcion de los movimientos
+  // de ahorro SIEMPRE en ingles y sin traducir ("savings deposit: <meta>"), y
+  // como nunca viene vacia, la prioridad "propio > tipo" la dejaba pasar tal
+  // cual en cualquier idioma. El tipo del movimiento manda aca, y el nombre de
+  // la meta que trae la descripcion se conserva en el titulo traducido.
+  describe('movimientos de ahorro: el tipo manda sobre la descripcion cruda del backend', () => {
+    it('un deposito a una meta arma el titulo traducido con el nombre de la meta', () => {
+      const tx: Transaction = {
+        ...base,
+        kind: 'savings_deposit',
+        title: 'savings deposit: Meta prueba QA',
+        description: 'savings deposit: Meta prueba QA',
+      };
+      expect(txTitle(tx, t)).toBe('Depósito a ahorro: Meta prueba QA');
+    });
+
+    it('un retiro de una meta arma el titulo traducido con el nombre de la meta', () => {
+      const tx: Transaction = {
+        ...base,
+        kind: 'savings_withdraw',
+        title: 'savings withdraw: Meta prueba QA',
+        description: 'savings withdraw: Meta prueba QA',
+      };
+      expect(txTitle(tx, t)).toBe('Retiro de ahorro: Meta prueba QA');
+    });
+
+    it('sin el nombre de la meta (prefijo sin nada detras) usa solo el titulo generico', () => {
+      const tx: Transaction = {
+        ...base,
+        kind: 'savings_deposit',
+        title: 'savings deposit: ',
+        description: 'savings deposit: ',
+      };
+      expect(txTitle(tx, t)).toBe('Depósito a ahorro');
+    });
   });
 });

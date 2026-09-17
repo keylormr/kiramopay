@@ -164,6 +164,8 @@ function mapCategory(backendType: string): string {
     deposit: 'income',
     loyalty_cashback: 'income',
     withdrawal: 'cash',
+    savings_deposit: 'savings',
+    savings_withdraw: 'savings',
   };
   return map[backendType] || 'other';
 }
