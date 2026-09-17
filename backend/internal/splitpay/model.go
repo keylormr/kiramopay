@@ -96,6 +96,13 @@ var (
 	// handler la responda como 500, no como 400.
 	ErrAccountLookupUnavailable = errors.New("splitpay: account lookup unavailable")
 
+	// ErrCuotaNoReclamable: la cuota ya no estaba pendiente cuando se intento
+	// tomarla —la pagaron, la rechazaron, o el que la rechazo gano la carrera—.
+	// Cuando sale de un pago significa ademas que NO se cobro nada: el reclamo
+	// corre dentro de la transaccion del asiento, asi que si falla el dinero no
+	// se mueve.
+	ErrCuotaNoReclamable = errors.New("splitpay: la cuota ya no esta pendiente")
+
 	ErrGroupNotFound   = errors.New("splitpay: split group not found")
 	ErrNotActive       = errors.New("splitpay: split is no longer active")
 	ErrNoShareForUser  = errors.New("splitpay: no share for this user in the split")

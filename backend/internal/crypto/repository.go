@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,6 +120,42 @@ func descontarActivo(ctx context.Context, q pgxQuerier, userID, symbol string, c
 	return nil
 }
 
+// bloquearActivosEnOrden toma las filas de los activos indicados con
+// SELECT ... FOR UPDATE SIEMPRE en el mismo orden: alfabetico por simbolo.
+//
+// Existe por el abrazo mortal de las conversiones. Cada transaccion tomaba
+// primero la fila del activo de ORIGEN y despues pedia la de destino, asi que
+// dos conversiones de la misma persona en sentidos opuestos —BTC a ETH y ETH a
+// BTC a la vez— se quedaban cada una con la fila que la otra necesitaba.
+// Postgres rompe el empate matando una con 40P01 y a esa persona le salia el
+// error crudo de la base de datos. Tomar los bloqueos en un orden unico es lo
+// que hace imposible el ciclo; es la misma disciplina que el libro aplica sobre
+// las billeteras antes de asentar.
+//
+// Una fila que todavia no existe (el primer abono de ese activo) no se puede
+// bloquear y no hace falta: la crea el INSERT ... ON CONFLICT del abono, que se
+// serializa solo contra el indice unico.
+func bloquearActivosEnOrden(ctx context.Context, q pgxQuerier, userID string, simbolos ...string) error {
+	orden := append([]string(nil), simbolos...)
+	sort.Strings(orden)
+
+	anterior := ""
+	for _, simbolo := range orden {
+		if simbolo == "" || simbolo == anterior {
+			continue
+		}
+		anterior = simbolo
+		var uno int
+		err := q.QueryRow(ctx,
+			`SELECT 1 FROM crypto_assets WHERE user_id = $1 AND symbol = $2 FOR UPDATE`,
+			userID, simbolo).Scan(&uno)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("bloquear activo %s: %w", simbolo, err)
+		}
+	}
+	return nil
+}
+
 // ConvertirEnUnaTx mueve los dos activos de una conversion, y anota el
 // movimiento, DENTRO de una sola transaccion.
 //
@@ -139,6 +176,12 @@ func (r *Repository) ConvertirEnUnaTx(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Los dos activos se toman ANTES de tocar ninguno, y siempre en el mismo
+	// orden: sin esto, dos conversiones en sentidos opuestos se abrazan y
+	// Postgres mata una con 40P01.
+	if err := bloquearActivosEnOrden(ctx, tx, userID, origen, destino); err != nil {
+		return err
+	}
 	if err := descontarActivo(ctx, tx, userID, origen, cantidadOrigen); err != nil {
 		return err
 	}
