@@ -346,6 +346,7 @@ export type TranslationKeys = {
   business_team: string;
   business_team_add: string;
   business_team_cedula_hint: string;
+  business_team_err_cedula: string;
   business_team_empty: string;
   business_role_manager: string;
   business_role_cashier: string;
@@ -905,6 +906,9 @@ export type TranslationKeys = {
   tx_totals_scope: string;
   tx_load_more: string;
   tx_local_only: string;
+  // Un 429 no es "no hay red": el servidor SI respondio. El aviso del
+  // respaldo local tiene que decir cual de las dos cosas paso.
+  tx_local_only_rate: string;
   boot_connecting: string;
   boot_waking: string;
   boot_retrying: string;
