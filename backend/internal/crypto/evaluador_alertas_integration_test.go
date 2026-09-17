@@ -205,7 +205,10 @@ func TestEvaluadorDeAlertas_NoEvaluaCuentasBloqueadas(t *testing.T) {
 	ctx := context.Background()
 	a := m.crear(t, m.beto, "BTC", "above", "1500")
 
-	if _, err := m.pool.Exec(ctx, `UPDATE users SET status = 'blocked' WHERE id = $1`, m.beto); err != nil {
+	// Con su rastro, como lo deja el bloqueo real (chk_users_blocked_coherente).
+	if _, err := m.pool.Exec(ctx,
+		`UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'prueba' WHERE id = $1`,
+		m.beto); err != nil {
 		t.Fatalf("bloquear: %v", err)
 	}
 	m.precio("BTC", 2000)
@@ -214,7 +217,9 @@ func TestEvaluadorDeAlertas_NoEvaluaCuentasBloqueadas(t *testing.T) {
 		t.Fatalf("la alerta de una cuenta bloqueada se cumplio: %+v", f)
 	}
 
-	if _, err := m.pool.Exec(ctx, `UPDATE users SET status = 'active' WHERE id = $1`, m.beto); err != nil {
+	if _, err := m.pool.Exec(ctx,
+		`UPDATE users SET status = 'active', blocked_at = NULL, blocked_reason = NULL WHERE id = $1`,
+		m.beto); err != nil {
 		t.Fatalf("desbloquear: %v", err)
 	}
 	m.vuelta(t, 1)
