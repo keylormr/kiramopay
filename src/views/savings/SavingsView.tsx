@@ -11,6 +11,7 @@ import { refreshAccounts } from '@/services/dataSync';
 import type { Transaction } from '@/types';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
@@ -29,6 +30,27 @@ const GOAL_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#06b6d4', '#f97316',
 ];
+
+// Los rechazos de crear una meta que la pantalla sabe explicar. El tope del
+// plan (SAVINGS_GOAL_LIMIT) no va aqui: tiene su propia hoja.
+const CLAVES_ERROR_CREAR: Record<string, string> = {
+  SAVINGS_INVALID_TARGET: 'savings_err_target_invalid',
+  SAVINGS_NAME_REQUIRED: 'savings_err_name_required',
+  SAVINGS_NAME_TOO_LONG: 'savings_err_name_too_long',
+};
+
+// El largo de la columna (savings_goals.name).
+const LARGO_MAXIMO_NOMBRE = 120;
+
+/**
+ * Un objetivo valido es un numero mayor a cero DESPUES de llevarlo a centimos,
+ * que es lo que viaja al servidor: "0", "0.00" o "0.001" dejaban el boton
+ * habilitado y el servidor respondia con un rechazo que la hoja no explicaba.
+ */
+function objetivoValido(valor: string): boolean {
+  const numero = Number.parseFloat(valor);
+  return Number.isFinite(numero) && Math.round(numero * 100) > 0;
+}
 
 const iconLookup: Record<string, React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   'piggy-bank': Icons.PiggyBank,
@@ -163,16 +185,22 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     }
   };
 
+  const nombreMeta = goalName.trim();
+  const objetivoOk = objetivoValido(goalTarget);
+  // Se avisa en cuanto hay algo escrito que no sirve (un "0"), no antes: un
+  // campo vacio todavia no es un error.
+  const avisoObjetivo = goalTarget !== '' && !objetivoOk;
+
   const handleAddGoal = async () => {
     if (isCreating) return;
-    if (!goalName || !goalTarget) return;
+    if (!nombreMeta || !objetivoOk) return;
     const api = getApiLayer();
     if (!api.savings) return;
     setIsCreating(true);
     setErrorHoja(null);
     try {
       const res = await api.savings.createGoal({
-        name: goalName,
+        name: nombreMeta,
         target: parseFloat(goalTarget),
         icon: goalIcon,
         color: goalColor,
@@ -187,7 +215,8 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           setVerTope(true);
           return;
         }
-        setErrorHoja(t('savings_err_create'));
+        // El motivo, no un "no se pudo" a secas: un objetivo en cero se dice.
+        setErrorHoja(mensajeDeRechazo(res.error, CLAVES_ERROR_CREAR, 'savings_err_create', t));
         return;
       }
       addGoal(res.data);
@@ -498,6 +527,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
               type="text"
               value={goalName}
               onChange={(e) => setGoalName(e.target.value)}
+              maxLength={LARGO_MAXIMO_NOMBRE}
               placeholder={t('savings_goal_name_placeholder')}
               className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-primary/30"
             />
@@ -505,16 +535,28 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
           {/* Target */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_target_amount')}</label>
-            <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
+            <label htmlFor="meta-objetivo" className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_target_amount')}</label>
+            <div
+              className={`flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3 border transition-colors ${
+                avisoObjetivo ? 'border-[var(--color-danger)]' : 'border-transparent'
+              }`}
+            >
               <span className="text-lg font-bold text-gray-400 mr-2">₡</span>
               <CampoMonto
+                id="meta-objetivo"
                 value={goalTarget}
-                onChange={setGoalTarget}
+                onChange={(v) => { setGoalTarget(v); setErrorHoja(null); }}
                 placeholder="0"
+                aria-invalid={avisoObjetivo}
+                aria-describedby={avisoObjetivo ? 'meta-objetivo-aviso' : undefined}
                 className="flex-1 bg-transparent text-lg font-bold outline-none uv-text-primary"
               />
             </div>
+            {avisoObjetivo && (
+              <p id="meta-objetivo-aviso" className="mt-1.5 text-xs font-medium text-[var(--color-danger)]">
+                {t('savings_err_target_invalid')}
+              </p>
+            )}
           </div>
 
           {/* Icon selection */}
@@ -541,12 +583,16 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           {/* Color selection */}
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('color')}</label>
-            <div className="flex gap-2 flex-wrap">
-              {GOAL_COLORS.map((color) => (
+            {/* Ocho en una fila en cualquier telefono; el relleno deja ver el anillo. */}
+            <div className="grid grid-cols-8 gap-1.5 p-1">
+              {GOAL_COLORS.map((color, i) => (
                 <button
                   key={color}
+                  type="button"
                   onClick={() => setGoalColor(color)}
-                  className={`w-9 h-9 rounded-full transition-all ${
+                  aria-pressed={goalColor === color}
+                  aria-label={`${t('color')} ${i + 1}`}
+                  className={`aspect-square w-full max-w-9 justify-self-center rounded-full transition-all ${
                     goalColor === color ? 'ring-2 ring-offset-2 ring-primary scale-110' : ''
                   }`}
                   style={{ backgroundColor: color }}
@@ -566,7 +612,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
             fullWidth
             onClick={handleAddGoal}
             loading={isCreating}
-            disabled={isCreating || !goalName || !goalTarget}
+            disabled={isCreating || !nombreMeta || !objetivoOk}
           >
             {t('savings_create_goal')}
           </Button>

@@ -15,6 +15,8 @@ import { WebhooksSheet } from './WebhooksSheet';
 import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { biometricService } from '../../services/biometric';
+import { Capacitor } from '@capacitor/core';
 
 interface ProfileViewProps {
   onOpenFAQ?: () => void;
@@ -30,9 +32,13 @@ interface ProfileViewProps {
   onOpenAdminPromociones?: () => void;
   onOpenPlans?: () => void;
   onOpenSessions?: () => void;
+  /** Presupuestos: topes por categoria que la persona lleva a mano. */
+  onOpenBudget?: () => void;
+  /** Pagos fijos: recordatorios de pagos que se repiten. */
+  onOpenRecurring?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -65,15 +71,35 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [biometricPassword, setBiometricPassword] = useState('');
-  const [biometricAction, setBiometricAction] = useState<'enable' | 'disable'>('enable');
-  const [biometricError, setBiometricError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
-  const [showBioPwd, setShowBioPwd] = useState(false);
+
+  // Biometria. La hoja pedia una "contrasena actual" que nadie verificaba:
+  // cualquier texto la activaba (hallazgo QA n=62). Ahora activarla pide la
+  // huella o el rostro al propio dispositivo, igual que la oferta del primer
+  // ingreso (App.tsx). Donde no hay sensor (la web) la fila no se ofrece.
+  const [biometriaDisponible, setBiometriaDisponible] = useState(false);
+  const [confirmandoBiometria, setConfirmandoBiometria] = useState(false);
+  const [avisoBiometria, setAvisoBiometria] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    biometricService
+      .checkAvailability()
+      .then((d) => {
+        if (!cancelled) setBiometriaDisponible(d.isAvailable);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // En el telefono, si el sensor dejo de estar disponible con la biometria
+  // encendida, la fila sigue a la vista para poder apagarla. En la web nunca.
+  const ofrecerBiometria =
+    biometriaDisponible || (Capacitor.isNativePlatform() && state.settings.biometricEnabled);
 
   // Load 2FA status once. TOTP always goes through the real backend; in mock
   // mode (no VITE_API_URL) the call simply fails and 2FA shows as off.
@@ -228,22 +254,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     }
   };
 
-  const handleBiometricToggle = () => {
-    setBiometricAction(state.settings.biometricEnabled ? 'disable' : 'enable');
-    setBiometricPassword('');
-    setBiometricError('');
-    setShowBiometricConfirmSheet(true);
+  const handleBiometricToggle = async () => {
+    if (confirmandoBiometria) return;
+    setAvisoBiometria('');
+    if (state.settings.biometricEnabled) {
+      // Apagarla no necesita el sensor (tiene que poder hacerse aunque ya no
+      // lea): se confirma en una hoja que explica que cambia.
+      setShowBiometricConfirmSheet(true);
+      return;
+    }
+    // Encenderla: el sistema operativo confirma que quien la activa es el
+    // dueno del dispositivo y que el sensor responde, antes de guardar nada.
+    setConfirmandoBiometria(true);
+    try {
+      const res = await biometricService.authenticate(t('bio_enable_reason'));
+      if (res.success) dispatch({ type: 'TOGGLE_BIOMETRIC' });
+      else setAvisoBiometria(t('bio_enable_failed'));
+    } catch {
+      setAvisoBiometria(t('bio_enable_failed'));
+    } finally {
+      setConfirmandoBiometria(false);
+    }
   };
 
-  const handleConfirmBiometric = async () => {
-    // Toggling biometric is local-only state inside an already-authenticated
-    // session. We no longer gate it with a client-side password hash check
-    // (that was the old SHA-256 password hash anti-pattern). If a stronger
-    // re-auth is desired here, wire a backend /auth/verify-password endpoint.
-    dispatch({ type: 'TOGGLE_BIOMETRIC' });
+  const handleConfirmDisableBiometric = () => {
+    if (state.settings.biometricEnabled) dispatch({ type: 'TOGGLE_BIOMETRIC' });
     setShowBiometricConfirmSheet(false);
-    setBiometricPassword('');
-    setBiometricError('');
   };
 
   const formatCurrency = (amount: number) => {
@@ -286,7 +322,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/15 backdrop-blur-sm border border-white/20">
                 KYC {kycLevelText[state.user?.kycLevel || 0]}
               </span>
-              {state.settings.biometricEnabled && (
+              {state.settings.biometricEnabled && biometriaDisponible && (
                 <span className="px-2 py-0.5 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                   <Icons.Fingerprint size={11} />
                   {t('biometrics')}
@@ -398,6 +434,50 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           </button>
         </div>
       </div>
+
+      {/* Organiza tu dinero: presupuestos y pagos fijos, que la persona lleva a
+          mano. Existian como pantallas completas sin ninguna entrada. */}
+      {(onOpenBudget || onOpenRecurring) && (
+        <div>
+          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+            {t('profile_finance_section')}
+          </h3>
+          <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+            {onOpenBudget && (
+              <button
+                type="button"
+                onClick={onOpenBudget}
+                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+              >
+                <div className="w-10 h-10 bg-[var(--color-success-soft)] rounded-xl flex items-center justify-center mr-3 shrink-0">
+                  <Icons.PiggyBank size={18} className="text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]" />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="font-semibold uv-text-primary text-sm">{t('budget_title')}</p>
+                  <p className="text-xs uv-text-muted mt-0.5">{t('budget_menu_desc')}</p>
+                </div>
+                <Icons.ChevronRight size={18} className="uv-text-muted shrink-0" />
+              </button>
+            )}
+            {onOpenRecurring && (
+              <button
+                type="button"
+                onClick={onOpenRecurring}
+                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+              >
+                <div className="w-10 h-10 bg-[var(--color-primary-soft)] rounded-xl flex items-center justify-center mr-3 shrink-0">
+                  <Icons.Calendar size={18} className="text-[var(--color-primary)]" />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="font-semibold uv-text-primary text-sm">{t('recurring_title')}</p>
+                  <p className="text-xs uv-text-muted mt-0.5">{t('recurring_menu_desc')}</p>
+                </div>
+                <Icons.ChevronRight size={18} className="uv-text-muted shrink-0" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Invite Section — referral program (points to the referrer only) */}
       <div>
@@ -511,29 +591,42 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
 
-          <button
-            onClick={handleBiometricToggle}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Fingerprint size={18} className="text-cyan-600" />
+          {ofrecerBiometria && (
+            <div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={state.settings.biometricEnabled}
+                aria-busy={confirmandoBiometria}
+                onClick={() => void handleBiometricToggle()}
+                disabled={confirmandoBiometria}
+                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors disabled:cursor-wait"
+              >
+                <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center mr-3">
+                  <Icons.Fingerprint size={18} className="text-cyan-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold uv-text-primary text-sm">{t('biometric_auth')}</p>
+                  <p className="text-xs uv-text-muted mt-0.5">{t('fingerprint_face')}</p>
+                </div>
+                <div
+                  aria-hidden="true"
+                  className={`w-12 h-7 rounded-full p-1 transition-colors ${
+                    state.settings.biometricEnabled ? 'bg-green-500' : 'bg-gray-300'
+                  } ${confirmandoBiometria ? 'opacity-60' : ''}`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    state.settings.biometricEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </div>
+              </button>
+              {avisoBiometria && (
+                <p role="status" className="pl-[4.25rem] pr-4 pb-3 -mt-1.5 text-xs text-[var(--color-danger)]">
+                  {avisoBiometria}
+                </p>
+              )}
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold uv-text-primary text-sm">{t('biometric_auth')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('fingerprint_face')}</p>
-            </div>
-            <div
-              role="switch"
-              aria-checked={state.settings.biometricEnabled}
-              aria-label={t('biometric_auth')}
-              className={`w-12 h-7 rounded-full p-1 transition-colors ${
-              state.settings.biometricEnabled ? 'bg-green-500' : 'bg-gray-300'
-            }`}>
-              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                state.settings.biometricEnabled ? 'translate-x-5' : 'translate-x-0'
-              }`} />
-            </div>
-          </button>
+          )}
 
           <button
             onClick={() => setShowTwoFactorSheet(true)}
@@ -992,76 +1085,37 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
       </BottomSheet>
 
-      {/* Biometric Confirmation Sheet */}
+      {/* Apagar la biometria: explica que cambia. Encenderla no usa hoja: la
+          confirmacion es la del sensor del dispositivo. */}
       <BottomSheet
         isOpen={showBiometricConfirmSheet}
-        onClose={() => {
-          setShowBiometricConfirmSheet(false);
-          setBiometricPassword('');
-          setBiometricError('');
-        }}
-        title={biometricAction === 'enable' ? t('enable_biometrics') : t('disable_biometrics')}
+        onClose={() => setShowBiometricConfirmSheet(false)}
+        title={t('disable_biometrics')}
       >
         <div className="space-y-6">
           <div className="text-center">
-            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
-              biometricAction === 'enable'
-                ? 'bg-green-100 dark:bg-green-900/30'
-                : 'bg-red-100 dark:bg-red-900/30'
-            }`}>
-              <Icons.Fingerprint size={32} className={
-                biometricAction === 'enable' ? 'text-green-600' : 'text-red-600'
-              } />
+            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)]">
+              <Icons.Fingerprint size={32} className="uv-text-secondary" />
             </div>
-            <p className="uv-text-secondary">
-              {biometricAction === 'enable'
-                ? t('enter_password_to_enable')
-                : t('enter_password_to_disable')}
-            </p>
+            <p className="uv-text-secondary leading-relaxed">{t('bio_disable_desc')}</p>
           </div>
-
-          <div>
-            <label className="text-sm text-gray-500 font-medium mb-2 block text-center">
-              {t('current_password')}
-            </label>
-            <div className="relative">
-              <input
-                type={showBioPwd ? 'text' : 'password'}
-                value={biometricPassword}
-                onChange={(e) => {
-                  setBiometricPassword(e.target.value);
-                  setBiometricError('');
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && biometricPassword.length > 0) {
-                    handleConfirmBiometric();
-                  }
-                }}
-                className={`w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border uv-text-primary px-4 py-4 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all ${
-                  biometricError ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
-                }`}
-                placeholder="--------"
-              />
-              <button type="button" onClick={() => setShowBioPwd(!showBioPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 uv-text-muted hover:uv-text-primary">
-                {showBioPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
-              </button>
-            </div>
-            {biometricError && (
-              <p className="text-red-500 text-sm mt-2 text-center">{biometricError}</p>
-            )}
+          {/* Apilados: "Desactivar biometria" no cabe a media anchura en todos los idiomas. */}
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={handleConfirmDisableBiometric}
+              className="w-full min-h-12 px-4 py-3 rounded-xl font-bold bg-[var(--color-danger)] text-white"
+            >
+              {t('disable_biometrics')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBiometricConfirmSheet(false)}
+              className="w-full min-h-12 px-4 py-3 rounded-xl font-bold uv-surface-2 uv-text-primary"
+            >
+              {t('cancel')}
+            </button>
           </div>
-
-          <button
-            onClick={handleConfirmBiometric}
-            disabled={biometricPassword.length === 0}
-            className={`w-full py-4 rounded-xl font-bold text-lg disabled:opacity-50 ${
-              biometricAction === 'enable'
-                ? 'bg-green-500 text-white'
-                : 'bg-red-500 text-white'
-            }`}
-          >
-            {biometricAction === 'enable' ? t('enable_biometrics') : t('disable_biometrics')}
-          </button>
         </div>
       </BottomSheet>
 

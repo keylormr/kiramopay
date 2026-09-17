@@ -41,6 +41,15 @@ tags:
     description: Virtual card management
   - name: Savings
     description: Savings goals (money set aside in SYSTEM:SAVINGS; it earns nothing)
+  - name: Budgets
+    description: >-
+      Spending budgets the person keeps by hand. The limit and the amount spent
+      are both written by the person; no ledger movement updates them and
+      nothing resets them on its own.
+  - name: Recurring
+    description: >-
+      Reminders of payments that repeat. Nothing is ever charged or sent:
+      mark-paid only records today's date and moves next_date forward.
   - name: Fraud
     description: Fraud detection and risk assessment
   - name: Multi-Country
@@ -1698,13 +1707,298 @@ paths:
               schema:
                 $ref: '#/components/schemas/SavingsGoal'
         '400':
-          description: INVALID_BODY | CREATE_FAILED (missing name, non-positive target, unknown currency)
+          description: >-
+            INVALID_BODY | SAVINGS_NAME_REQUIRED | SAVINGS_NAME_TOO_LONG (more
+            than 120 characters) | SAVINGS_INVALID_TARGET (target_minor is not
+            greater than zero) | SAVINGS_INVALID_CURRENCY | SAVINGS_INVALID_STYLE
+            (icon over 40 characters or color over 20)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: SAVINGS_GOAL_LIMIT (the plan does not allow another goal)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanLimitError'
+
+  # ── Budgets ────────────────────────────────────────────────────────────
+  /api/v1/budgets:
+    get:
+      tags: [Budgets]
+      summary: List the person's budgets
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Budgets, oldest first (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Budget'
+    post:
+      tags: [Budgets]
+      summary: Create a budget
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetCreateRequest'
+      responses:
+        '201':
+          description: Budget created, with amount_spent at zero
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+        '400':
+          description: >-
+            INVALID_BODY | BUDGET_LABEL_REQUIRED | BUDGET_LABEL_TOO_LONG (more
+            than 100 characters) | BUDGET_INVALID_LIMIT (amount_limit is not
+            greater than zero) | BUDGET_INVALID_FIELD (currency other than CRC or
+            USD, period other than monthly, icon over 50 characters or color over
+            20)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/budgets/{id}:
+    patch:
+      tags: [Budgets]
+      summary: Change a budget or write down how much was spent
+      description: >-
+        Only the fields sent change. amount_spent replaces the stored value (it
+        is the total the person has written down, not an increment).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetUpdateRequest'
+      responses:
+        '200':
+          description: Budget updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: boolean }
+        '400':
+          description: >-
+            INVALID_BODY | BUDGET_LABEL_REQUIRED | BUDGET_LABEL_TOO_LONG |
+            BUDGET_INVALID_LIMIT | BUDGET_INVALID_SPENT (negative amount_spent) |
+            BUDGET_INVALID_FIELD
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: BUDGET_NOT_FOUND (it does not exist or belongs to someone else)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Budgets]
+      summary: Delete a budget
+      description: Deletes the budget and what was written down in it. No money moves.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Budget deleted
+        '404':
+          description: BUDGET_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/budgets/reset:
+    post:
+      tags: [Budgets]
+      summary: Set amount_spent back to zero in every budget
+      description: The limits stay as they are.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Every budget of the person now has amount_spent at zero
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reset: { type: boolean }
+
+  # ── Recurring payments ─────────────────────────────────────────────────
+  /api/v1/recurring:
+    get:
+      tags: [Recurring]
+      summary: List the person's recurring payment reminders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Reminders, soonest next_date first (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurringPayment'
+    post:
+      tags: [Recurring]
+      summary: Create a recurring payment reminder
+      description: Nothing is scheduled to charge or send money on next_date.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringPaymentCreateRequest'
+      responses:
+        '201':
+          description: Reminder created and enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '400':
+          description: >-
+            INVALID_BODY | RECURRING_LABEL_REQUIRED | RECURRING_LABEL_TOO_LONG
+            (more than 200 characters) | RECURRING_INVALID_AMOUNT |
+            RECURRING_INVALID_TYPE | RECURRING_INVALID_FREQUENCY |
+            RECURRING_INVALID_DATE (next_date is not a YYYY-MM-DD date) |
+            RECURRING_INVALID_FIELD (currency other than CRC or USD, or a
+            recipient field longer than its column)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/recurring/{id}:
+    patch:
+      tags: [Recurring]
+      summary: Change a reminder
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringPaymentUpdateRequest'
+      responses:
+        '200':
+          description: Reminder updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: boolean }
+        '400':
+          description: >-
+            INVALID_BODY | RECURRING_LABEL_REQUIRED | RECURRING_LABEL_TOO_LONG |
+            RECURRING_INVALID_AMOUNT | RECURRING_INVALID_FREQUENCY |
+            RECURRING_INVALID_DATE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RECURRING_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Recurring]
+      summary: Delete a reminder
+      description: Removes it from the list. Nothing is cancelled with any company or person.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Reminder deleted
+        '404':
+          description: RECURRING_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/recurring/{id}/toggle:
+    post:
+      tags: [Recurring]
+      summary: Pause or resume a reminder
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The new state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+        '404':
+          description: RECURRING_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/recurring/{id}/mark-paid:
+    post:
+      tags: [Recurring]
+      summary: Record that the person already paid
+      description: >-
+        Sets last_paid_date to today and moves next_date one period forward
+        (7 days, 14 days or one month; a month clamps to the last day, as
+        Postgres does). It does not move any money: the person paid on their
+        own (SINPE, services, recharge).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The reminder with its new dates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '404':
+          description: RECURRING_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ── Fraud Detection (Phase 5) ──────────────────────────────────────────
   /api/v1/fraud/profile:
@@ -3660,11 +3954,92 @@ components:
       type: object
       required: [name, target_minor]
       properties:
-        name: { type: string }
+        name: { type: string, maxLength: 120 }
         target_minor: { type: integer, format: int64, minimum: 1, description: centimos }
         currency: { type: string, enum: [CRC, USD], default: CRC }
+        icon: { type: string, maxLength: 40 }
+        color: { type: string, maxLength: 20 }
+
+    Budget:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        label: { type: string }
+        amount_limit: { type: integer, format: int64, description: centimos }
+        amount_spent:
+          type: integer
+          format: int64
+          description: centimos; written by the person, never by a ledger movement
+        currency: { type: string }
         icon: { type: string }
         color: { type: string }
+        period: { type: string, example: monthly }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BudgetCreateRequest:
+      type: object
+      required: [label, amount_limit]
+      properties:
+        label: { type: string, maxLength: 100 }
+        amount_limit: { type: integer, format: int64, minimum: 1, description: centimos }
+        currency: { type: string, enum: [CRC, USD], default: CRC }
+        icon: { type: string, maxLength: 50 }
+        color: { type: string, maxLength: 20 }
+        period: { type: string, enum: [monthly], default: monthly }
+
+    BudgetUpdateRequest:
+      type: object
+      properties:
+        label: { type: string, maxLength: 100 }
+        amount_limit: { type: integer, format: int64, minimum: 1, description: centimos }
+        amount_spent: { type: integer, format: int64, minimum: 0, description: centimos (the new total) }
+        icon: { type: string, maxLength: 50 }
+        color: { type: string, maxLength: 20 }
+
+    RecurringPayment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        label: { type: string }
+        type: { type: string, enum: [service, sinpe, recharge] }
+        amount: { type: integer, format: int64, description: centimos }
+        currency: { type: string }
+        frequency: { type: string, enum: [weekly, biweekly, monthly] }
+        next_date: { type: string, format: date }
+        last_paid_date: { type: string, format: date }
+        recipient_phone: { type: string }
+        recipient_name: { type: string }
+        service_provider_id: { type: string }
+        client_id: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RecurringPaymentCreateRequest:
+      type: object
+      required: [label, type, amount, frequency, next_date]
+      properties:
+        label: { type: string, maxLength: 200 }
+        type: { type: string, enum: [service, sinpe, recharge] }
+        amount: { type: integer, format: int64, minimum: 1, description: centimos }
+        currency: { type: string, enum: [CRC, USD], default: CRC }
+        frequency: { type: string, enum: [weekly, biweekly, monthly] }
+        next_date: { type: string, format: date }
+        recipient_phone: { type: string, maxLength: 15 }
+        recipient_name: { type: string, maxLength: 100 }
+        service_provider_id: { type: string, maxLength: 20 }
+        client_id: { type: string, maxLength: 50 }
+
+    RecurringPaymentUpdateRequest:
+      type: object
+      properties:
+        label: { type: string, maxLength: 200 }
+        amount: { type: integer, format: int64, minimum: 1, description: centimos }
+        frequency: { type: string, enum: [weekly, biweekly, monthly] }
+        next_date: { type: string, format: date }
 
     PlanInterestAdmin:
       type: object
