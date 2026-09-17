@@ -26,15 +26,25 @@ type AssetRecord struct {
 type TransactionRecord struct {
 	ID        string          `json:"id"`
 	UserID    string          `json:"user_id"`
-	Type      string          `json:"type"`     // buy, sell, convert, stake, unstake
+	Type      string          `json:"type"`     // buy, sell, convert, stake, unstake, send, receive
 	Asset     string          `json:"asset"`    // Symbol
 	Amount    decimal.Decimal `json:"amount"`   // Crypto amount
-	Price     decimal.Decimal `json:"price"`    // Por unidad: en Currency (compra, venta), en USD (conversion) o cero (staking)
+	Price     decimal.Decimal `json:"price"`    // Por unidad: en Currency (compra, venta), en USD (conversion, envio) o cero (staking)
 	Total     decimal.Decimal `json:"total"`    // Fiat movido al centimo, lo recibido en una conversion o lo apartado/liberado en staking
-	Currency  string          `json:"currency"` // Moneda del Total: USD, CRC o un simbolo (destino de la conversion, activo del staking)
-	Fee       decimal.Decimal `json:"fee"`
+	Currency  string          `json:"currency"` // Moneda del Total: USD, CRC o un simbolo (destino de la conversion, activo del staking o del envio)
+	Fee       decimal.Decimal `json:"fee"`      // En el envio, la comision de KiramoPay, en el MISMO activo
 	Status    string          `json:"status"`
 	CreatedAt time.Time       `json:"created_at"`
+
+	// La contraparte de un envio entre personas: a quien se le envio ('send') o
+	// de quien vino ('receive'). Vacias en el resto de los movimientos, que no
+	// tienen otra persona del otro lado.
+	CounterpartyUserID string `json:"counterparty_user_id,omitempty"`
+	CounterpartyName   string `json:"counterparty_name,omitempty"`
+
+	// IdempotencyKey no sale al cliente: es un detalle del reintento, y el
+	// cliente ya sabe la llave que mando.
+	IdempotencyKey string `json:"-"`
 }
 
 type StakingRecord struct {
@@ -101,6 +111,36 @@ type SellRequest struct {
 	ToCurrency     string          `json:"to_currency"`
 	ToAmount       decimal.Decimal `json:"to_amount"` // fiat received
 	IdempotencyKey string          `json:"idempotency_key,omitempty"`
+}
+
+// SendRequest es un envio de cripto a otra persona de KiramoPay.
+//
+// El destinatario NO se manda como id ni como "direccion": se manda el QR
+// escaneado, tal cual salio de la camara, y el servidor resuelve a quien
+// pertenece. Una direccion de cadena no tendria a donde ir —esta cripto no vive
+// en ninguna cadena— y un id de usuario escrito a mano deja que alguien pruebe
+// ids ajenos hasta acertar.
+type SendRequest struct {
+	Asset  string          `json:"asset"`
+	Amount decimal.Decimal `json:"amount"` // Cuanto RECIBE quien recibe
+	QRData string          `json:"qr_data"`
+	// Price es el precio en USD que la pantalla mostro. Sirve para rechazar el
+	// envio si el mercado se movio desde entonces, igual que en comprar y vender.
+	Price          decimal.Decimal `json:"price"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
+}
+
+// SendPreview es lo que la hoja de confirmacion necesita ANTES de enviar: a
+// quien le va a llegar y cuanto sale de verdad del saldo.
+type SendPreview struct {
+	RecipientName string          `json:"recipient_name"`
+	Asset         string          `json:"asset"`
+	Amount        decimal.Decimal `json:"amount"` // lo que recibe quien recibe
+	Fee           decimal.Decimal `json:"fee"`    // la comision de KiramoPay, en el mismo activo
+	Total         decimal.Decimal `json:"total"`  // Amount + Fee: lo que baja del saldo
+	// FeePercent es el porcentaje de la comision, para que la pantalla lo
+	// escriba una sola vez y no lo lleve escrito a mano.
+	FeePercent decimal.Decimal `json:"fee_percent"`
 }
 
 type ConvertRequest struct {

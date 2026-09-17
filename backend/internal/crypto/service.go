@@ -19,10 +19,31 @@ type Service struct {
 	// rates convierte el precio en dolares del feed a la moneda del monedero.
 	// Nil deja el servicio operando solo en dolares (ver precioEn).
 	rates RateLookup
+
+	// Colaboradores del envio entre personas (ver envio.go y Opciones). Solo
+	// los usa Send: sin ellos el resto de cripto funciona igual.
+	destinatarios Destinatarios
+	mfa           MFAEnforcer
+	uif           UIFReporter
+	avisos        Avisos
+	logger        Logger
 }
 
-func NewService(repo *Repository, prices *PriceService, tx *transaction.Service, rates RateLookup) *Service {
-	return &Service{repo: repo, prices: prices, tx: tx, rates: rates}
+func NewService(repo *Repository, prices *PriceService, tx *transaction.Service, rates RateLookup, opts *Opciones) *Service {
+	if opts == nil {
+		opts = &Opciones{}
+	}
+	return &Service{
+		repo:          repo,
+		prices:        prices,
+		tx:            tx,
+		rates:         rates,
+		destinatarios: opts.Destinatarios,
+		mfa:           opts.MFA,
+		uif:           opts.UIF,
+		avisos:        opts.Avisos,
+		logger:        opts.Logger,
+	}
 }
 
 // toMinor converts a fiat amount (CRC/USD, 2 decimals) to integer centimos,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -90,6 +91,35 @@ func rechazoConocido(err error) (rechazo, bool) {
 	// El plazo sale con su fecha, que la arma el servicio.
 	case errors.Is(err, ErrPosicionBloqueada):
 		return rechazo{http.StatusConflict, "STAKING_POSITION_LOCKED", err.Error()}, true
+
+	// Los rechazos del envio entre personas. Los del QR salen con el MISMO
+	// codigo que usa el pago por QR: es el mismo escaner, y dos codigos para
+	// "ese codigo no sirve" serian dos mensajes distintos para lo mismo.
+	case errors.Is(err, qrpayment.ErrQRInvalido):
+		return rechazo{http.StatusBadRequest, "QR_INVALIDO",
+			"ese codigo no existe o ya no es valido"}, true
+	case errors.Is(err, qrpayment.ErrQRRevocado):
+		return rechazo{http.StatusConflict, "QR_REVOCADO",
+			"ese codigo fue retirado por su dueno"}, true
+	case errors.Is(err, qrpayment.ErrQRDeComercio):
+		return rechazo{http.StatusUnprocessableEntity, "QR_DE_COMERCIO",
+			"ese codigo es de un comercio: los comercios cobran en colones o dolares"}, true
+	case errors.Is(err, qrpayment.ErrQRDeCobro):
+		return rechazo{http.StatusUnprocessableEntity, "QR_DE_COBRO",
+			"ese codigo es un cobro en dinero: pagalo desde Pagar con QR"}, true
+	case errors.Is(err, ErrNoTePodesEnviar):
+		return rechazo{http.StatusBadRequest, "CRYPTO_SEND_SELF",
+			ErrNoTePodesEnviar.Error()}, true
+	// Mismo codigo que la llave reusada del libro: para la pantalla es el mismo
+	// caso —esa llave ya se gasto en otra cosa— y se resuelve igual.
+	case errors.Is(err, ErrLlaveDeOtroEnvio):
+		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
+			"esa operacion ya se hizo con otro monto o para otra persona"}, true
+	// Al servicio no se le dio con que resolver un QR. No es culpa de quien
+	// envia ni algo que reintentar cambie: es la aplicacion, mal armada.
+	case errors.Is(err, ErrEnvioNoDisponible):
+		return rechazo{http.StatusServiceUnavailable, "CRYPTO_SEND_UNAVAILABLE",
+			ErrEnvioNoDisponible.Error()}, true
 	}
 	if codigo, estado, ok := errorDePrecio(err); ok {
 		return rechazo{estado, codigo, err.Error()}, true

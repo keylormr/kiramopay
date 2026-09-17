@@ -254,11 +254,40 @@ func insertarMovimiento(ctx context.Context, q pgxQuerier, tx *TransactionRecord
 		tx.CreatedAt = time.Now()
 	}
 	_, err := q.Exec(ctx,
-		`INSERT INTO crypto_transactions (id, user_id, type, asset, amount, price, total, currency, fee, status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO crypto_transactions (id, user_id, type, asset, amount, price, total, currency, fee, status, created_at,
+		                                  counterparty_user_id, counterparty_name, idempotency_key)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 		tx.ID, tx.UserID, tx.Type, tx.Asset, tx.Amount, tx.Price, tx.Total, tx.Currency, tx.Fee, tx.Status, tx.CreatedAt,
+		textoONulo(tx.CounterpartyUserID), textoONulo(tx.CounterpartyName), textoONulo(tx.IdempotencyKey),
 	)
 	return err
+}
+
+// textoONulo manda NULL en vez de cadena vacia. counterparty_user_id es UUID
+// —una cadena vacia no es un UUID valido— y el indice unico de la llave es
+// parcial (WHERE idempotency_key IS NOT NULL): con "" los movimientos que no
+// llevan llave chocarian todos entre si.
+func textoONulo(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// columnasDeMovimiento: la lista de SELECT que leen escanearMovimiento y todas
+// las consultas de crypto_transactions, en el mismo orden. Agregar una columna
+// en un solo lado es como se llega a un scan desalineado.
+const columnasDeMovimiento = `id, user_id, type, asset, amount, price, total, currency, fee, status, created_at,
+	 COALESCE(counterparty_user_id::text, ''), COALESCE(counterparty_name, ''), COALESCE(idempotency_key, '')`
+
+type filaEscaneable interface {
+	Scan(dest ...interface{}) error
+}
+
+func escanearMovimiento(fila filaEscaneable, tx *TransactionRecord) error {
+	return fila.Scan(&tx.ID, &tx.UserID, &tx.Type, &tx.Asset, &tx.Amount, &tx.Price, &tx.Total,
+		&tx.Currency, &tx.Fee, &tx.Status, &tx.CreatedAt,
+		&tx.CounterpartyUserID, &tx.CounterpartyName, &tx.IdempotencyKey)
 }
 
 // UpsertAsset abona `cantidad` al activo, fuera de cualquier transaccion. Es
@@ -278,12 +307,12 @@ func (r *Repository) AddTransaction(ctx context.Context, tx *TransactionRecord) 
 // GetTransaction lee un movimiento de cripto de la persona por su id.
 func (r *Repository) GetTransaction(ctx context.Context, userID, id string) (*TransactionRecord, error) {
 	var tx TransactionRecord
-	err := r.db.QueryRow(ctx,
-		`SELECT id, user_id, type, asset, amount, price, total, currency, fee, status, created_at
+	fila := r.db.QueryRow(ctx,
+		`SELECT `+columnasDeMovimiento+`
 		 FROM crypto_transactions WHERE id = $1 AND user_id = $2`,
 		id, userID,
-	).Scan(&tx.ID, &tx.UserID, &tx.Type, &tx.Asset, &tx.Amount, &tx.Price, &tx.Total, &tx.Currency, &tx.Fee, &tx.Status, &tx.CreatedAt)
-	if err != nil {
+	)
+	if err := escanearMovimiento(fila, &tx); err != nil {
 		return nil, err
 	}
 	return &tx, nil
@@ -295,7 +324,7 @@ func (r *Repository) GetTransactions(ctx context.Context, userID string, limit i
 	}
 
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, type, asset, amount, price, total, currency, fee, status, created_at
+		`SELECT `+columnasDeMovimiento+`
 		 FROM crypto_transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
 		userID, limit,
 	)
@@ -307,7 +336,7 @@ func (r *Repository) GetTransactions(ctx context.Context, userID string, limit i
 	var txs []TransactionRecord
 	for rows.Next() {
 		var tx TransactionRecord
-		if err := rows.Scan(&tx.ID, &tx.UserID, &tx.Type, &tx.Asset, &tx.Amount, &tx.Price, &tx.Total, &tx.Currency, &tx.Fee, &tx.Status, &tx.CreatedAt); err != nil {
+		if err := escanearMovimiento(rows, &tx); err != nil {
 			return nil, err
 		}
 		txs = append(txs, tx)

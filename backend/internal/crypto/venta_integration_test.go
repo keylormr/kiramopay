@@ -63,7 +63,7 @@ func montarVenta(t *testing.T) *montajeVenta {
 		nil,
 	)
 	svc := crypto.NewService(crypto.NewRepository(pool), precios, txService,
-		func(context.Context, string, string) (float64, error) { return 500, nil })
+		func(context.Context, string, string) (float64, error) { return 500, nil }, nil)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)

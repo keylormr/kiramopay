@@ -468,6 +468,14 @@ func main() {
 	paymentService := payment.NewService(paymentRepo, txService, &payment.Options{
 		ConveniosActivos: cfg.Server.Environment != "production",
 	})
+	// El cobro por QR avisa al cobrador: un mostrador vive de saber "ya entro",
+	// y con un rotulo pegado no hay hoja que cerrar. Es el mismo riel que ya usa
+	// SINPE.
+	qrService := qrpayment.NewService(qrRepo, txService, userRepo, &qrpayment.Options{
+		Notifier: notifService,
+		// Cambiar el plan de un comercio es una accion de administrador.
+		AuditLogger: auditLogger,
+	})
 	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
 	// suelta. Sin tipo de cambio no se puede cotizar en colones, y entonces no
@@ -478,6 +486,11 @@ func main() {
 	// con un 14 % de desvio. Un tipo de cambio que la fuente no confirmo dentro
 	// de country.EdadMaximaTipoDeCambio llega como precio viejo, igual que un
 	// precio de cripto vencido, y la pantalla ya sabe mostrar ese caso.
+	//
+	// Las Opciones son las del envio entre personas. El destinatario no se
+	// escribe: se escanea, y quien sabe leer un codigo QR es qrService — por eso
+	// se construye antes que cripto. Sin el, enviar responde que no esta
+	// disponible en vez de adivinar a quien le llega.
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
 		func(ctx context.Context, from, to string) (float64, error) {
 			tasa, err := countryRepo.TipoDeCambioParaCobrar(ctx, from, to)
@@ -485,6 +498,13 @@ func main() {
 				return 0, fmt.Errorf("%w: %v", crypto.ErrPrecioViejo, err)
 			}
 			return tasa, err
+		},
+		&crypto.Opciones{
+			Destinatarios: qrService,
+			MFA:           mfaSvc,
+			UIF:           uifService,
+			Avisos:        notifService,
+			Logger:        logger,
 		})
 
 	// El tipo de cambio oficial, traido de Hacienda cada hora. Sin esto la
@@ -499,14 +519,6 @@ func main() {
 	// que nadie cotizo. Misma politica que los rieles de payouts.
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService, &marketplace.Options{
 		CobrosActivos: cfg.Server.Environment != "production",
-	})
-	// El cobro por QR avisa al cobrador: un mostrador vive de saber "ya entro",
-	// y con un rotulo pegado no hay hoja que cerrar. Es el mismo riel que ya usa
-	// SINPE.
-	qrService := qrpayment.NewService(qrRepo, txService, userRepo, &qrpayment.Options{
-		Notifier: notifService,
-		// Cambiar el plan de un comercio es una accion de administrador.
-		AuditLogger: auditLogger,
 	})
 	splitService := splitpay.NewService(splitRepo, txService, userRepo)
 	// Topes por plan personal (decision del dueno del 13-09-2026). Solo frenan
@@ -1014,6 +1026,12 @@ func main() {
 			r.Post("/crypto/buy", cryptoHandler.Buy)
 			r.Post("/crypto/sell", cryptoHandler.Sell)
 			r.Post("/crypto/convert", cryptoHandler.Convert)
+			// Enviar cripto a otra persona de KiramoPay. La vista previa va por
+			// POST y no por GET porque lleva el QR escaneado en el cuerpo: un
+			// codigo que identifica a una persona no viaja en la URL, donde
+			// queda escrito en cada log por el que pasa.
+			r.Post("/crypto/send/preview", cryptoHandler.PreviewSend)
+			r.Post("/crypto/send", cryptoHandler.Send)
 			r.Get("/crypto/staking", cryptoHandler.GetStakingPositions)
 			r.Post("/crypto/staking", cryptoHandler.Stake)
 			r.Delete("/crypto/staking/{id}", cryptoHandler.Unstake)
