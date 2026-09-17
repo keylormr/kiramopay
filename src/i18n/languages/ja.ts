@@ -1063,6 +1063,7 @@ const ja: TranslationKeys = {
   splitpay_err_percentage_rounds_zero: 'その割合は小さすぎて0に切り捨てられます。',
   splitpay_err_invalid_type: 'その分割方法は無効です。',
   loyalty_title: 'ポイント＆特典',
+  loyalty_loading_slow: 'ポイントと特典を読み込んでいます。数秒かかることがあります。',
   loyalty_tier: 'ランク',
   loyalty_lifetime: '累計ポイント',
   loyalty_available: '利用可能',

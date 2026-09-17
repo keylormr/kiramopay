@@ -1064,6 +1064,7 @@ const zhCn: TranslationKeys = {
   splitpay_err_percentage_rounds_zero: '这个百分比太小，四舍五入后为零。',
   splitpay_err_invalid_type: '这种分账方式无效。',
   loyalty_title: '积分与奖励',
+  loyalty_loading_slow: '正在加载您的积分与奖励，可能需要几秒钟。',
   loyalty_tier: '等级',
   loyalty_lifetime: '累计积分',
   loyalty_available: '可用',

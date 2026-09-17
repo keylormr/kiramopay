@@ -14,6 +14,59 @@ const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon 
   platinum: { color: '#E5E4E2', bg: 'from-slate-200/30 to-purple-300/10', icon: Icons.Trophy },
 };
 
+const RELLENO = 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]';
+
+// Cuanto se espera antes de decir que el servidor puede estar tardando. Igual
+// que en Analisis: un bloque gris que no cambia de aspecto en segundos parece
+// una pantalla colgada.
+const ESPERA_LARGA_MS = 2500;
+
+// Esqueleto de la primera carga (tarjeta de nivel + pestanas). Solo depende de
+// cuenta y recompensas: son lo unico que hace falta para pintar algo util (la
+// pestana "Recompensas" es la que se ve al abrir).
+const EsqueletoInicial: React.FC = () => {
+  const { t } = useLanguage();
+  const [larga, setLarga] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setLarga(true), ESPERA_LARGA_MS);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div className="px-4 pt-4" aria-busy="true">
+      <p role="status" aria-live="polite" className={`mb-3 min-h-[1.25rem] text-sm uv-text-muted text-center transition-opacity duration-300 ${larga ? 'opacity-100' : 'opacity-0'}`}>
+        {larga ? t('loyalty_loading_slow') : ''}
+      </p>
+      <div className={`rounded-3xl p-6 animate-pulse ${RELLENO}`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 rounded-xl ${RELLENO}`} />
+          <div className="space-y-2">
+            <div className={`h-3 w-20 rounded ${RELLENO}`} />
+            <div className={`h-8 w-24 rounded ${RELLENO}`} />
+          </div>
+        </div>
+      </div>
+      <div className={`mt-2 h-16 rounded-2xl animate-pulse ${RELLENO}`} />
+      <div className="mt-2 space-y-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`h-20 rounded-2xl animate-pulse ${RELLENO}`} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Esqueleto de una pestana que sigue esperando su propia peticion (Historial o
+// Ganar) mientras la cuenta y las recompensas ya contestaron. Sin esto, quien
+// tocara esa pestana antes de que llegara su respuesta veia "sin historial" o
+// "sin reglas" como si de verdad no hubiera nada.
+const EsqueletoPestana: React.FC = () => (
+  <div className="space-y-2" aria-busy="true">
+    {[0, 1, 2].map((i) => (
+      <div key={i} className={`h-16 rounded-2xl animate-pulse ${RELLENO}`} />
+    ))}
+  </div>
+);
+
 export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => void }> = ({ onClose, onOpenPlans }) => {
   const { t } = useLanguage();
   const [account, setAccount] = useState<PointsAccount | null>(null);
@@ -21,7 +74,15 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   const [history, setHistory] = useState<PointsTransaction[]>([]);
   const [cashbackRules, setCashbackRules] = useState<CashbackRule[]>([]);
   const [activeTab, setActiveTab] = useState<'rewards' | 'earn' | 'history'>('rewards');
-  const [loading, setLoading] = useState(true);
+  // Cuatro peticiones, cuatro relojes propios. Antes una sola bandera `loading`
+  // esperaba a las CUATRO (Promise.allSettled) antes de pintar cualquier cosa:
+  // la cuenta y la pestana de Recompensas -lo unico que se ve al abrir- quedaban
+  // rehenes de Historial y Ganar, que ni siquiera estan a la vista todavia.
+  // HALLAZGO 78: eso era el circulo girando "un buen rato" con nada mas.
+  const [loadingAccount, setLoadingAccount] = useState(true);
+  const [loadingRewards, setLoadingRewards] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [loadingEarn, setLoadingEarn] = useState(true);
   // "No pude preguntar" no es lo mismo que "tienes cero puntos". Sin esta
   // distincion, un fallo de red mostraba 0 pts y nivel Bronce con la misma
   // cara que una cuenta recien abierta.
@@ -35,39 +96,64 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      setLoading(true);
+
+    // Las cuatro van en paralelo, como antes, pero YA NO se esperan entre si:
+    // cada una resuelve su propio pedazo de pantalla apenas contesta el
+    // servidor. Antes un solo Promise.allSettled las juntaba, y la cuenta y la
+    // pestana de Recompensas no podian pintarse hasta que TAMBIEN contestaran
+    // Historial y Ganar (dos pestanas que ni siquiera estan a la vista).
+    const cargar = async () => {
       const api = getApiLayer();
-      if (!api.loyalty) { if (!cancelled) setLoading(false); return; }
+      if (!api.loyalty) {
+        setLoadingAccount(false);
+        setLoadingRewards(false);
+        setLoadingHistory(false);
+        setLoadingEarn(false);
+        return;
+      }
+      const loyalty = api.loyalty;
 
-      const [accRes, rewRes, histRes, rulesRes] = await Promise.allSettled([
-        api.loyalty.getAccount(),
-        api.loyalty.getRewards(),
-        api.loyalty.getTransactions(),
-        api.loyalty.getCashbackRules(),
-      ]);
+      setLoadingAccount(true);
+      setLoadingRewards(true);
+      setLoadingHistory(true);
+      setLoadingEarn(true);
 
-      if (cancelled) return;
-      if (accRes.status === 'fulfilled' && accRes.value.success && accRes.value.data) {
-        setAccount(accRes.value.data);
-        setAccountFailed(false);
-      } else {
-        setAccountFailed(true);
-      }
-      if (rewRes.status === 'fulfilled' && rewRes.value.success && rewRes.value.data) {
-        setRewards(rewRes.value.data);
-      }
-      if (histRes.status === 'fulfilled' && histRes.value.success && histRes.value.data) {
-        setHistory(histRes.value.data);
-      }
-      if (rulesRes.status === 'fulfilled' && rulesRes.value.success && rulesRes.value.data) {
-        setCashbackRules(rulesRes.value.data);
-      }
-      setLoading(false);
+      loyalty.getAccount().then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setAccount(res.data);
+          setAccountFailed(false);
+        } else {
+          setAccountFailed(true);
+        }
+      }).catch(() => { if (!cancelled) setAccountFailed(true); })
+        .finally(() => { if (!cancelled) setLoadingAccount(false); });
+
+      loyalty.getRewards().then((res) => {
+        if (!cancelled && res.success && res.data) setRewards(res.data);
+      }).catch(() => {})
+        .finally(() => { if (!cancelled) setLoadingRewards(false); });
+
+      loyalty.getTransactions().then((res) => {
+        if (!cancelled && res.success && res.data) setHistory(res.data);
+      }).catch(() => {})
+        .finally(() => { if (!cancelled) setLoadingHistory(false); });
+
+      loyalty.getCashbackRules().then((res) => {
+        if (!cancelled && res.success && res.data) setCashbackRules(res.data);
+      }).catch(() => {})
+        .finally(() => { if (!cancelled) setLoadingEarn(false); });
     };
-    load();
+    cargar();
+
     return () => { cancelled = true; };
   }, [loadTrigger]);
+
+  // Lo unico que hace falta para pintar algo util: la cuenta (tarjeta de
+  // nivel) y las recompensas (la pestana que se ve al abrir). Historial y
+  // Ganar siguen cargando de fondo y se resuelven solos si el usuario las abre
+  // antes de que lleguen (EsqueletoPestana mas abajo).
+  const contenidoListo = !loadingAccount && !loadingRewards;
 
   const handleRedeem = async (rewardId: string) => {
     const api = getApiLayer();
@@ -114,10 +200,8 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
+        {!contenidoListo ? (
+          <EsqueletoInicial />
         ) : (
           <>
             {/* Points Card */}
@@ -292,7 +376,14 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                     <p className="mt-1 text-xs leading-relaxed uv-text-secondary">{t('loyalty_earn_desc')}</p>
                   </div>
                 </div>
-                {cashbackRules.length === 0 ? (
+                {loadingEarn && cashbackRules.length === 0 ? (
+                  // Su propia peticion (getCashbackRules) puede seguir en
+                  // camino aunque la cuenta y las recompensas ya contestaron:
+                  // sin este esqueleto, tocar "Ganar" apenas se abre la
+                  // pantalla mostraba "sin reglas" cuando en realidad todavia
+                  // no se sabia.
+                  <EsqueletoPestana />
+                ) : cashbackRules.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-gray-400">
                     <Icons.Percent size={40} className="mb-3 opacity-40" />
                     <p className="text-sm font-medium">{t('loyalty_no_rules')}</p>
@@ -351,7 +442,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
             {/* History */}
             {activeTab === 'history' && (
               <div className="px-4 py-2 space-y-2">
-                {history.length === 0 ? (
+                {loadingHistory && history.length === 0 ? (
+                  <EsqueletoPestana />
+                ) : history.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-gray-400">
                     <Icons.History size={40} className="mb-3 opacity-40" />
                     <p className="text-sm font-medium">{t('loyalty_no_history')}</p>

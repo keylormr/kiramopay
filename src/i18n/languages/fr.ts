@@ -1071,6 +1071,7 @@ const fr: TranslationKeys = {
   splitpay_err_percentage_rounds_zero: 'Ce pourcentage est si faible qu’il est arrondi à zéro.',
   splitpay_err_invalid_type: 'Ce type de partage n’est pas valide.',
   loyalty_title: 'Points et récompenses',
+  loyalty_loading_slow: 'Nous chargeons vos points et récompenses. Cela peut prendre quelques secondes.',
   loyalty_tier: 'Niveau',
   loyalty_lifetime: 'Points cumulés',
   loyalty_available: 'Disponibles',

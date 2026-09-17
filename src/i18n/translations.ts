@@ -1213,6 +1213,7 @@ export type TranslationKeys = {
 
   // Loyalty
   loyalty_title: string;
+  loyalty_loading_slow: string;
   loyalty_tier: string;
   loyalty_lifetime: string;
   loyalty_available: string;

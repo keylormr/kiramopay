@@ -1071,6 +1071,7 @@ const en: TranslationKeys = {
   splitpay_err_percentage_rounds_zero: 'That percentage is so small it rounds down to zero.',
   splitpay_err_invalid_type: 'That split type is not valid.',
   loyalty_title: 'Points & Rewards',
+  loyalty_loading_slow: 'Loading your points and rewards. It can take a few seconds.',
   loyalty_tier: 'Tier',
   loyalty_lifetime: 'Lifetime points',
   loyalty_available: 'Available',
