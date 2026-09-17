@@ -767,11 +767,22 @@ paths:
     get:
       tags: [Crypto]
       summary: Get crypto transaction history
+      description: >-
+        The last 50 movements, newest first: buy, sell, convert, stake and
+        unstake. Staking and withdrawing are recorded here in the same
+        transaction that moves the asset, so this list is the whole history
+        of the crypto balance.
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Crypto transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CryptoTransactionRecord'
 
   /api/v1/crypto/buy:
     post:
@@ -951,13 +962,27 @@ paths:
     post:
       tags: [Crypto]
       summary: Stake cryptocurrency
+      description: >-
+        Only the assets in the staking program can be staked (ETH and SOL).
+        USDT and USDC were withdrawn from the program: a new position is
+        rejected with STAKING_NOT_AVAILABLE, while positions opened before
+        stay listed and can still be withdrawn. The rate is set by the server;
+        earnings accrual is not live, so `earned` stays at zero. The asset set
+        aside is recorded as a `stake` movement in the crypto history, in the
+        same transaction; if it cannot be recorded, nothing moves.
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Staking initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingPositionRecord'
         '400':
-          description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          description: >-
+            STAKING_NOT_AVAILABLE (the asset is not in the staking program),
+            CRYPTO_INVALID_AMOUNT, or INVALID_BODY.
           content:
             application/json:
               schema:
@@ -985,11 +1010,21 @@ paths:
         - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
-          description: Unstaked; principal and earnings are back in the asset balance.
-        '400':
           description: >-
-            UNSTAKE_FAILED — the position does not exist, is not active any
-            more, or is still locked (the message carries the unlock date).
+            Unstaked; principal and earnings are back in the asset balance, and
+            an `unstake` movement with the released quantity is in the crypto
+            history. Both commit together.
+        '404':
+          description: STAKING_POSITION_NOT_FOUND — the position does not exist or belongs to someone else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            STAKING_POSITION_INACTIVE — the position was already withdrawn.
+            STAKING_POSITION_LOCKED — the lock period has not ended (the
+            message carries the unlock date).
           content:
             application/json:
               schema:
@@ -4931,8 +4966,10 @@ components:
         user_id: { type: string, format: uuid }
         symbol: { type: string }
         name: { type: string }
-        balance: { type: number }
-        avg_cost: { type: number }
+        balance: { type: string, description: decimal }
+        avg_cost:
+          type: string
+          description: Decimal. Average cost per unit, always in USD whatever currency the purchases were paid in.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -4943,7 +4980,12 @@ components:
         (for example "0.5"), never floats. For buy and sell, `id` is the id of
         the wallet transaction the ledger posting hangs from, `price` is the
         unit price in `currency`, and `total` is the fiat that moved, to the
-        centimo.
+        centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity
+        given, `total` the quantity received, `currency` the destination
+        symbol and `price` the destination's USD unit price. For stake and
+        unstake, `amount` and `total` are the quantity set aside or released,
+        `currency` is the asset itself and `price` is zero: no price or fiat
+        is involved. No movement charges a fee: `fee` is zero.
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -4963,13 +5005,14 @@ components:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
         asset: { type: string }
-        amount: { type: number }
+        amount: { type: string, description: decimal }
         apy: { type: number }
         start_date: { type: string, format: date-time }
         locked: { type: boolean }
         lock_days: { type: integer }
-        earned: { type: number }
+        earned: { type: string, description: decimal }
         status: { type: string }
+        created_at: { type: string, format: date-time }
 
     PriceAlertRecord:
       type: object

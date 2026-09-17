@@ -103,7 +103,13 @@ func TestResponderError_CodigosPropios(t *testing.T) {
 			http.StatusBadRequest, "SELL_FAILED", "this transaction was blocked by the risk engine"},
 		{"posicion que no existe",
 			ErrPosicionNoEncontrada,
-			http.StatusBadRequest, "SELL_FAILED", "staking position not found"},
+			http.StatusNotFound, "STAKING_POSITION_NOT_FOUND", "staking position not found"},
+		{"posicion ya retirada",
+			fmt.Errorf("unstake: %w", ErrPosicionNoActiva),
+			http.StatusConflict, "STAKING_POSITION_INACTIVE", "staking position is not active"},
+		{"activo fuera del programa de staking",
+			fmt.Errorf("%w: USDT", ErrStakingNoDisponible),
+			http.StatusBadRequest, "STAKING_NOT_AVAILABLE", "staking is not available for this asset"},
 	}
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
@@ -118,12 +124,30 @@ func TestResponderError_CodigosPropios(t *testing.T) {
 	}
 }
 
-// El plazo del staking sale con la fecha que arma el servicio.
+// El plazo del staking sale con su codigo y con la fecha que arma el servicio.
 func TestResponderError_PosicionBloqueadaLlevaLaFecha(t *testing.T) {
 	err := fmt.Errorf("%w until %s", ErrPosicionBloqueada, "2026-10-01")
 	estado, codigo, mensaje, _ := cuerpoDeError(t, err, "UNSTAKE_FAILED")
-	if estado != http.StatusBadRequest || codigo != "UNSTAKE_FAILED" || mensaje != "position is locked until 2026-10-01" {
+	if estado != http.StatusConflict || codigo != "STAKING_POSITION_LOCKED" || mensaje != "position is locked until 2026-10-01" {
 		t.Fatalf("estado=%d codigo=%q mensaje=%q", estado, codigo, mensaje)
+	}
+}
+
+// USDT y USDC salieron del programa, y un activo que nunca estuvo tambien se
+// rechaza: antes se aceptaba cualquiera con tasa cero. El rechazo va antes de
+// tocar la base, asi que el servicio sin repositorio alcanza para probarlo.
+func TestStake_SoloLosActivosDelPrograma(t *testing.T) {
+	svc := &Service{}
+	for _, activo := range []string{"USDT", "USDC", "BTC", ""} {
+		_, err := svc.Stake(context.Background(), "u", &StakeRequest{Asset: activo, Amount: decimal.NewFromInt(1)})
+		if !errors.Is(err, ErrStakingNoDisponible) {
+			t.Fatalf("stakear %q = %v, se esperaba ErrStakingNoDisponible", activo, err)
+		}
+	}
+	for _, activo := range []string{"ETH", "SOL"} {
+		if _, ok := stakingAPY[activo]; !ok {
+			t.Fatalf("%s deberia seguir en el programa", activo)
+		}
 	}
 }
 

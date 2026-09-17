@@ -1286,7 +1286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get crypto transaction history */
+        /**
+         * Get crypto transaction history
+         * @description The last 50 movements, newest first: buy, sell, convert, stake and unstake. Staking and withdrawing are recorded here in the same transaction that moves the asset, so this list is the whole history of the crypto balance.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1301,7 +1304,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"][];
+                    };
                 };
             };
         };
@@ -1586,7 +1591,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Stake cryptocurrency */
+        /**
+         * Stake cryptocurrency
+         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1601,9 +1609,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["StakingPositionRecord"];
+                    };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                /** @description STAKING_NOT_AVAILABLE (the asset is not in the staking program), CRYPTO_INVALID_AMOUNT, or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1660,15 +1670,24 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Unstaked; principal and earnings are back in the asset balance. */
+                /** @description Unstaked; principal and earnings are back in the asset balance, and an `unstake` movement with the released quantity is in the crypto history. Both commit together. */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description UNSTAKE_FAILED — the position does not exist, is not active any more, or is still locked (the message carries the unlock date). */
-                400: {
+                /** @description STAKING_POSITION_NOT_FOUND — the position does not exist or belongs to someone else. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description STAKING_POSITION_INACTIVE — the position was already withdrawn. STAKING_POSITION_LOCKED — the lock period has not ended (the message carries the unlock date). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8280,14 +8299,16 @@ export interface components {
             user_id?: string;
             symbol?: string;
             name?: string;
-            balance?: number;
-            avg_cost?: number;
+            /** @description decimal */
+            balance?: string;
+            /** @description Decimal. Average cost per unit, always in USD whatever currency the purchases were paid in. */
+            avg_cost?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
         };
-        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. */
+        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. For stake and unstake, `amount` and `total` are the quantity set aside or released, `currency` is the asset itself and `price` is zero: no price or fiat is involved. No movement charges a fee: `fee` is zero. */
         CryptoTransactionRecord: {
             /** Format: uuid */
             id?: string;
@@ -8315,14 +8336,18 @@ export interface components {
             /** Format: uuid */
             user_id?: string;
             asset?: string;
-            amount?: number;
+            /** @description decimal */
+            amount?: string;
             apy?: number;
             /** Format: date-time */
             start_date?: string;
             locked?: boolean;
             lock_days?: number;
-            earned?: number;
+            /** @description decimal */
+            earned?: string;
             status?: string;
+            /** Format: date-time */
+            created_at?: string;
         };
         PriceAlertRecord: {
             /** Format: uuid */

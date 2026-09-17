@@ -18,7 +18,7 @@ type AssetRecord struct {
 	Symbol    string          `json:"symbol"`   // BTC, ETH, SOL, etc.
 	Name      string          `json:"name"`     // Bitcoin, Ethereum, etc.
 	Balance   decimal.Decimal `json:"balance"`  // Crypto amount
-	AvgCost   decimal.Decimal `json:"avg_cost"` // Average buy price in USD
+	AvgCost   decimal.Decimal `json:"avg_cost"` // Costo promedio por unidad, SIEMPRE en USD
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
@@ -26,12 +26,12 @@ type AssetRecord struct {
 type TransactionRecord struct {
 	ID        string          `json:"id"`
 	UserID    string          `json:"user_id"`
-	Type      string          `json:"type"`     // buy, sell, convert, send, receive
+	Type      string          `json:"type"`     // buy, sell, convert, stake, unstake
 	Asset     string          `json:"asset"`    // Symbol
 	Amount    decimal.Decimal `json:"amount"`   // Crypto amount
-	Price     decimal.Decimal `json:"price"`    // Price per unit in USD at time of tx
-	Total     decimal.Decimal `json:"total"`    // Total fiat amount
-	Currency  string          `json:"currency"` // USD, CRC
+	Price     decimal.Decimal `json:"price"`    // Por unidad: en Currency (compra, venta), en USD (conversion) o cero (staking)
+	Total     decimal.Decimal `json:"total"`    // Fiat movido al centimo, lo recibido en una conversion o lo apartado/liberado en staking
+	Currency  string          `json:"currency"` // Moneda del Total: USD, CRC o un simbolo (destino de la conversion, activo del staking)
 	Fee       decimal.Decimal `json:"fee"`
 	Status    string          `json:"status"`
 	CreatedAt time.Time       `json:"created_at"`

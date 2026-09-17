@@ -19,6 +19,14 @@ const MONEDAS: ReadonlyArray<Pick<CryptoAsset, 'id' | 'symbol' | 'name' | 'icon'
   { id: 'atom', symbol: 'ATOM', name: 'Cosmos', icon: '◉', color: '#2E3148' },
 ];
 
+// La cara de monedas que no se compran en la aplicacion pero que una cuenta
+// puede tener: las estables de una posicion de staking vieja, que al retirarse
+// vuelven al saldo. Sin esto el circulo mostraba el simbolo en minusculas.
+const CARAS_FUERA_DEL_CATALOGO: Readonly<Record<string, Pick<CryptoAsset, 'icon' | 'color' | 'name'>>> = {
+  USDT: { name: 'Tether', icon: '₮', color: '#26A17B' },
+  USDC: { name: 'USD Coin', icon: '$', color: '#2775CA' },
+};
+
 /** El catalogo completo con saldo cero; los precios los rellena el feed. */
 export function catalogoCripto(): CryptoAsset[] {
   return MONEDAS.map((m) => ({
@@ -38,8 +46,16 @@ export function catalogoCripto(): CryptoAsset[] {
  */
 export function fusionarConCatalogo(tenencias: CryptoAsset[]): CryptoAsset[] {
   const porSimbolo = new Map(tenencias.map((t) => [t.symbol, t]));
-  const base = catalogoCripto().map((c) => porSimbolo.get(c.symbol) ?? c);
+  // De la tenencia sale el saldo; la cara (icono, color, nombre) es la del
+  // catalogo. El adaptador HTTP no conoce los iconos y ponia el simbolo en
+  // minusculas ("btc") dentro del circulo.
+  const base = catalogoCripto().map((c) => {
+    const t = porSimbolo.get(c.symbol);
+    return t ? { ...t, icon: c.icon, color: c.color, name: c.name } : c;
+  });
   const conocidos = new Set(base.map((b) => b.symbol));
-  const extras = tenencias.filter((t) => !conocidos.has(t.symbol));
+  const extras = tenencias
+    .filter((t) => !conocidos.has(t.symbol))
+    .map((t) => (CARAS_FUERA_DEL_CATALOGO[t.symbol] ? { ...t, ...CARAS_FUERA_DEL_CATALOGO[t.symbol] } : t));
   return [...base, ...extras];
 }

@@ -46,4 +46,17 @@ describe('fusionarConCatalogo', () => {
     expect(resultado).toHaveLength(11);
     expect(resultado.find((a) => a.symbol === 'DOGE')?.balance).toBe(1000);
   });
+
+  // El adaptador HTTP no conoce los iconos: ponia "btc" dentro del circulo.
+  it('de la tenencia toma el saldo y el costo; la cara es la del catalogo', () => {
+    const btc = fusionarConCatalogo([tenencia('BTC', 0.5)]).find((a) => a.symbol === 'BTC')!;
+    expect(btc).toMatchObject({ balance: 0.5, avgBuyPrice: 100, icon: '₿', color: '#F7931A', name: 'Bitcoin' });
+  });
+
+  it('una estable que vuelve de una posicion vieja de staking tambien tiene cara', () => {
+    const usdt = fusionarConCatalogo([tenencia('USDT', 25)]).find((a) => a.symbol === 'USDT')!;
+    expect(usdt).toMatchObject({ balance: 25, icon: '₮', name: 'Tether' });
+    const doge = fusionarConCatalogo([tenencia('DOGE', 1)]).find((a) => a.symbol === 'DOGE')!;
+    expect(doge.icon).toBe('doge');
+  });
 });
