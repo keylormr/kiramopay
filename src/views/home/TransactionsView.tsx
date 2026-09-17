@@ -80,7 +80,15 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
   const [consulta, setConsulta] = useState('');
   const [pagina, setPagina] = useState<{ clave: string; txs: Transaction[]; total: number } | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [modoLocal, setModoLocal] = useState(false);
+  // Por que se esta buscando solo en lo guardado en este dispositivo.
+  //
+  // Antes era un booleano y el aviso decia siempre "Sin conexion con el
+  // servidor". Un 429 caia ahi: el servidor SI habia respondido —hay demasiado
+  // trafico y hay que esperar un momento— y la pantalla mandaba a revisar la
+  // conexion, que esta perfecta. El respaldo local es el mismo en los dos
+  // casos; lo que cambia es que se dice.
+  const [motivoLocal, setMotivoLocal] = useState<'sin_red' | 'demasiado_trafico' | null>(null);
+  const modoLocal = motivoLocal !== null;
 
   useEffect(() => {
     const id = setTimeout(() => setConsulta(search.trim()), ESPERA_BUSQUEDA_MS);
@@ -98,15 +106,23 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
           search: consulta || undefined,
         });
         if (cancelado) return;
-        if (!res.success || !res.data) throw new Error('sin datos');
-        setModoLocal(false);
+        if (!res.success || !res.data) {
+          // Sin servidor no hay forma de buscar sobre el historial completo. Se
+          // cae a lo que este dispositivo tiene guardado Y SE DICE: un resultado
+          // parcial presentado como completo es peor que no tener buscador.
+          // RATE_LIMITED no es falta de red: el servidor contesto que hay
+          // demasiado trafico, y eso se arregla esperando, no revisando el WiFi.
+          setMotivoLocal(res.error?.code === 'RATE_LIMITED' ? 'demasiado_trafico' : 'sin_red');
+          setPagina(null);
+          return;
+        }
+        setMotivoLocal(null);
         setPagina({ clave: consulta, txs: res.data.transactions, total: res.data.total });
       } catch {
-        // Sin servidor no hay forma de buscar sobre el historial completo. Se
-        // cae a lo que este dispositivo tiene guardado Y SE DICE: un resultado
-        // parcial presentado como completo es peor que no tener buscador.
+        // Una excepcion aqui no la produce un rechazo del servidor (el cliente
+        // HTTP los devuelve en el sobre): es que la peticion no llego.
         if (cancelado) return;
-        setModoLocal(true);
+        setMotivoLocal('sin_red');
         setPagina(null);
       } finally {
         if (!cancelado) setCargando(false);
@@ -405,8 +421,10 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
               {cargando ? t('loading') : t('tx_load_more')}
             </button>
           )}
-          {modoLocal && (
-            <p className="mt-2 px-1 text-xs text-[var(--color-warning)]">{t('tx_local_only')}</p>
+          {motivoLocal && (
+            <p className="mt-2 px-1 text-xs text-[var(--color-warning)]">
+              {t(motivoLocal === 'demasiado_trafico' ? 'tx_local_only_rate' : 'tx_local_only')}
+            </p>
           )}
         </div>
 

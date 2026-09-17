@@ -60,10 +60,16 @@ func responderError(w http.ResponseWriter, err error) {
 // responderErrorDeEquipo traduce los errores de administrar el equipo del
 // comercio. `generico` es el codigo que ya usaba cada ruta, que se conserva
 // para todo lo que no tiene codigo propio.
+//
+// Lo que la persona lee lo escribe la PANTALLA, a partir del codigo. El mensaje
+// de aqui es para quien integra la API y va en ingles, como el resto del
+// backend: este decia "esa cedula no tiene una cuenta de KiramoPay" en espanol
+// fijo, la hoja del equipo lo pintaba tal cual (`res.error.message`) y salia en
+// espanol en medio de una pantalla en ingles, en japones o en frances.
 func responderErrorDeEquipo(w http.ResponseWriter, generico string, err error) {
 	if errors.Is(err, ErrCedulaSinCuenta) {
 		response.Error(w, http.StatusUnprocessableEntity, "STAFF_CEDULA_NOT_FOUND",
-			"esa cedula no tiene una cuenta de KiramoPay")
+			"no KiramoPay account is registered with that cedula")
 		return
 	}
 	response.Error(w, http.StatusBadRequest, generico, err.Error())
