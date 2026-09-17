@@ -62,7 +62,10 @@ func montarAlertas(t *testing.T) *montajeAlertas {
 		ana:       testutil.SeedTestUser(t, pool, "702650930", "sin-uso"),
 		beto:      testutil.SeedTestUser2(t, pool),
 		avisos:    avisos,
-		evaluador: NuevoEvaluadorDeAlertas(repo, ps, avisos, pool, time.Minute, silencio),
+		// Refresco propio apagado: estas pruebas siembran el precio a mano y lo
+		// que verifican es la sentencia SQL de CumplirAlertas. El refresco tiene
+		// sus propias pruebas en evaluador_alertas_test.go.
+		evaluador: NuevoEvaluadorDeAlertas(repo, ps, avisos, pool, time.Minute, 0, silencio),
 	}
 }
 

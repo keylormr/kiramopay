@@ -4447,6 +4447,14 @@ components:
               type: integer
             breaker_open:
               type: boolean
+            ultima_revision_de_alertas:
+              type: string
+              format: date-time
+              description: >-
+                Last time the price-alert sweep compared active alerts against a
+                live price. Absent until it has managed to compare any. A healthy
+                feed with a stale value means the sweep has no fresh prices to
+                work with (see ALERTAS_REFRESCO_HORAS).
 
     RegisterRequest:
       type: object

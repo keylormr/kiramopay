@@ -7888,6 +7888,11 @@ export interface components {
                 last_success_at?: string;
                 cached_assets?: number;
                 breaker_open?: boolean;
+                /**
+                 * Format: date-time
+                 * @description Last time the price-alert sweep compared active alerts against a live price. Absent until it has managed to compare any. A healthy feed with a stale value means the sweep has no fresh prices to work with (see ALERTAS_REFRESCO_HORAS).
+                 */
+                ultima_revision_de_alertas?: string;
             };
         };
         RegisterRequest: {

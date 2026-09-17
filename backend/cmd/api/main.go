@@ -49,8 +49,8 @@ import (
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/reconcile"
-	"github.com/kiramopay/backend/internal/salud"
 	"github.com/kiramopay/backend/internal/recurring"
+	"github.com/kiramopay/backend/internal/salud"
 	"github.com/kiramopay/backend/internal/savings"
 	"github.com/kiramopay/backend/internal/sinpe"
 	"github.com/kiramopay/backend/internal/splitpay"
@@ -698,12 +698,24 @@ func main() {
 	defer qrChargePollerCancel()
 	go qrChargePoller.Run(qrChargePollerCtx)
 
-	// Alertas de precio. Evalua contra los precios que el cache YA tiene (no
-	// gasta cuota del proveedor) y avisa por el mismo servicio de
-	// notificaciones: historial, socket, web push y telefonos. Cada vuelta corre
-	// bajo el lock de cluster, y cada alerta se marca una sola vez.
+	// Alertas de precio. Evalua contra los precios que el cache YA tiene y avisa
+	// por el mismo servicio de notificaciones: historial, socket, web push y
+	// telefonos. Cada vuelta corre bajo el lock de cluster, y cada alerta se
+	// marca una sola vez.
+	//
+	// El cache lo llena el broadcaster del WebSocket, que solo corre mientras
+	// alguien tiene la app abierta: sin nadie conectado el cache se vence y una
+	// alerta no se cumpliria nunca. Por eso, con el cache vencido, el barrido se
+	// permite UNA llamada al proveedor cada ALERTAS_REFRESCO_HORAS (~720 al mes
+	// con el valor de fabrica, de las 10.000 de la clave Demo); 0 lo apaga.
 	evaluadorAlertas := crypto.NuevoEvaluadorDeAlertas(cryptoRepo, priceService, notifService,
-		pool, time.Minute, logger)
+		pool, time.Minute, cfg.Cripto.RefrescoDeAlertas, logger)
+	if refresco := evaluadorAlertas.RefrescoCada(); refresco > 0 {
+		log.Printf("Alertas de precio: barrido cada 1m; refresco propio de precios cada %s (~%d llamadas al mes)",
+			refresco, int64(30*24*time.Hour)/int64(refresco))
+	} else {
+		log.Println("Alertas de precio: barrido cada 1m; refresco propio apagado (ALERTAS_REFRESCO_HORAS=0): sin nadie con la app abierta, una alerta puede no cumplirse")
+	}
 	evaluadorAlertasCtx, evaluadorAlertasCancel := context.WithCancel(context.Background())
 	defer evaluadorAlertasCancel()
 	go evaluadorAlertas.Run(evaluadorAlertasCtx)
@@ -741,6 +753,19 @@ func main() {
 	// la plataforma leia como caido un servicio que estaba sano.
 	r.Use(middleware.RateLimitExcept(middleware.RateLimit(redisClient, 100, time.Minute), "/health"))
 
+	// diagnosticoDeCripto junta la foto del feed de precios con la ultima vez
+	// que el barrido comparo alertas contra un precio vigente. Van juntas
+	// porque una explica a la otra: el feed puede estar sano y el barrido
+	// llevar horas sin poder revisar nada (cache vencido, refresco propio
+	// apagado), y desde afuera eso se veia igual que todo en orden.
+	diagnosticoDeCripto := func() crypto.Diagnostics {
+		d := priceService.Diagnostics()
+		if ultima := evaluadorAlertas.UltimaRevision(); !ultima.IsZero() {
+			d.UltimaRevisionDeAlertas = ultima.UTC().Format(time.RFC3339)
+		}
+		return d
+	}
+
 	// Limite propio y holgado: eximir del global no es abrir la puerta. Cada
 	// consulta hace un ping a la base y a Redis, asi que sigue habiendo techo,
 	// pero en su propia clave (`ratelimit:health:`), sin consumir la del resto.
@@ -777,7 +802,7 @@ func main() {
 			LastDriftCRC:        reconcileSvc.LastDriftCRC(),
 			DiasDeParticiones:   particionesSvc.DiasDeMargen(time.Now()),
 			AuditoriaDescartada: auditLogger.Descartados(),
-			CryptoPrices:        priceService.Diagnostics(),
+			CryptoPrices:        diagnosticoDeCripto(),
 			TipoDeCambio:        tipoDeCambio.Diagnostico(),
 		}.JSON())
 	}

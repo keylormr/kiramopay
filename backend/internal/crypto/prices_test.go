@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -705,5 +706,78 @@ func TestErrorDePrecio_PrecioViejoTieneCodigoPropio(t *testing.T) {
 	}
 	if otro, _, _ := errorDePrecio(ErrSinPrecio); otro == codigo {
 		t.Fatalf("un precio viejo y un activo sin precio no pueden compartir el codigo %q", codigo)
+	}
+}
+
+// ── Refresco a pedido del barrido de alertas ────────────────────────────────
+
+// El barrido no puede pedir un simbolo a la vez: seria una llamada por moneda y
+// la cuota Demo son 10.000 al mes. Una sola peticion trae el catalogo entero.
+func TestRefrescarPrecios_UnaSolaLlamadaParaTodoElCatalogo(t *testing.T) {
+	var llamadas int
+	var pedidos string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		llamadas++
+		pedidos = r.URL.Query().Get("ids")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"bitcoin","current_price":65000},
+			{"id":"ethereum","current_price":3000}]`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+	if err := ps.RefrescarPrecios(context.Background()); err != nil {
+		t.Fatalf("RefrescarPrecios: %v", err)
+	}
+	if llamadas != 1 {
+		t.Fatalf("llamadas al proveedor = %d, se esperaba 1", llamadas)
+	}
+	for _, id := range []string{"bitcoin", "ethereum", "solana"} {
+		if !strings.Contains(pedidos, id) {
+			t.Fatalf("la peticion pidio %q; falta %s, asi que el catalogo no viajo entero", pedidos, id)
+		}
+	}
+	vigentes := ps.PreciosVigentes()
+	if len(vigentes) != 2 || !vigentes["BTC"].Equal(dec("65000")) || !vigentes["ETH"].Equal(dec("3000")) {
+		t.Fatalf("PreciosVigentes = %v, se esperaban BTC y ETH", vigentes)
+	}
+}
+
+// GetPrices degrada al cache SIN error ante un proveedor caido. Si
+// RefrescarPrecios heredara ese silencio, el barrido creeria que refresco y el
+// log no diria nada: el exito se mide por si quedo algun precio vigente.
+func TestRefrescarPrecios_UnProveedorCaidoDevuelveError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+	err := ps.RefrescarPrecios(context.Background())
+	if err == nil {
+		t.Fatal("con el proveedor en 429 RefrescarPrecios devolvio nil")
+	}
+	if !strings.Contains(err.Error(), "429") {
+		t.Fatalf("el error no dice el status del proveedor: %v", err)
+	}
+	if got := ps.PreciosVigentes(); len(got) != 0 {
+		t.Fatalf("PreciosVigentes = %v, se esperaba vacio", got)
+	}
+}
+
+func TestSimbolosSoportados_OrdenadosYCompletos(t *testing.T) {
+	simbolos := SimbolosSoportados()
+	if len(simbolos) != len(coinGeckoIDs) {
+		t.Fatalf("simbolos = %v, el catalogo tiene %d", simbolos, len(coinGeckoIDs))
+	}
+	if !sort.StringsAreSorted(simbolos) {
+		t.Fatalf("simbolos sin ordenar: %v", simbolos)
+	}
+	for _, s := range simbolos {
+		if _, ok := coinGeckoIDs[s]; !ok {
+			t.Fatalf("%s no esta en el catalogo", s)
+		}
 	}
 }

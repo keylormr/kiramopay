@@ -206,7 +206,11 @@ describe('Alertas de precio — crear', () => {
     await user.click(hoja.getByRole('button', { name: 'Crear alerta' }));
 
     expect(mocks.api.crypto.addPriceAlert).toHaveBeenCalledWith({ asset: 'ETH', targetPrice: 2500, condition: 'below' });
-    expect(await screen.findByText('Listo: te avisamos cuando ETH llegue a $2,500.00.')).toBeInTheDocument();
+    // El aviso NO es inmediato: el barrido revisa los precios cada cierto
+    // tiempo, y la confirmacion tiene que decirlo en vez de prometer al instante.
+    expect(
+      await screen.findByText('Listo: revisamos el precio cada cierto tiempo y te avisamos cuando ETH llegue a $2,500.00.'),
+    ).toBeInTheDocument();
     const activas = screen.getByRole('region', { name: 'Activas' });
     expect(within(activas).getByText('Cuando baje a $2,500.00')).toBeInTheDocument();
     expect(within(activas).getByText('1 de 20')).toBeInTheDocument();
