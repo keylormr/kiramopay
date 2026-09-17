@@ -8,7 +8,8 @@ import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { HelpButton } from '../../components/HelpSheet';
 import { GraficoArea } from '../../components/GraficoArea';
 import { CampoMonto } from '../../components/CampoMonto';
-import { Account, Transaction, SinpeContact } from '../../types';
+import { Button } from '../../components/ui';
+import { Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
@@ -16,7 +17,8 @@ import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
-import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { codigoDeCobroCerrado, mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { rellenar } from '@/utils/planes';
 import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
@@ -24,13 +26,6 @@ import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/ut
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 import { BannerInicio } from '@/components/home/BannerInicio';
 import { useGastoDelMes } from './useGastoDelMes';
-
-const AVAILABLE_CURRENCIES: Partial<Account>[] = [
-  { ccy: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound', type: 'fiat', rateToUsd: 1.26 },
-  { ccy: 'JPY', symbol: '¥', flag: '🇯🇵', name: 'Japanese Yen', type: 'fiat', rateToUsd: 0.0067 },
-  { ccy: 'BTC', symbol: '₿', flag: '🟠', name: 'Bitcoin', type: 'crypto', rateToUsd: 43000 },
-  { ccy: 'ETH', symbol: 'Ξ', flag: '🔷', name: 'Ethereum', type: 'crypto', rateToUsd: 2250 },
-];
 
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
 
@@ -44,10 +39,11 @@ interface HomeViewProps {
   onOpenMarketplace?: () => void;
   onOpenCards?: () => void;
   onOpenPlans?: () => void;
+  onOpenCrypto?: () => void;
   onNavigateToSinpe?: (tab?: 'send' | 'receive') => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onNavigateToSinpe }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onOpenCrypto, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
@@ -119,6 +115,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
   const [payResult, setPayResult] = useState<QRPayment | null>(null);
+  // Desde ₡100.000 el servidor pide el segundo factor (428 MFA_REQUIRED), igual
+  // que en SINPE. Antes la hoja solo mostraba el motivo y el pago quedaba
+  // imposible de completar: ahora pide el codigo y reintenta el MISMO pago.
+  const [showPagoMfa, setShowPagoMfa] = useState(false);
+
+  // Un cobro que ya no se puede pagar (pagado, cancelado, vencido o
+  // reemplazado) se avisa al abrir la hoja, con el estado que /qr/resolve ya
+  // trae. Un codigo de monto abierto no tiene estado de cobro: decide el
+  // servidor al pagar.
+  const cobroCerrado = resuelto?.chargeId ? codigoDeCobroCerrado(resuelto.status) : '';
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
@@ -148,22 +154,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     return acc + (curr.balance * rate);
   }, 0);
 
-
-  const handleAddAccount = (curr: Partial<Account>) => {
-    const newAccount: Account = {
-      ccy: curr.ccy!,
-      balance: 0,
-      symbol: curr.symbol!,
-      flag: curr.flag!,
-      iban: `NEW-${curr.ccy}`,
-      name: curr.name!,
-      type: curr.type as Account['type'],
-      rateToUsd: curr.rateToUsd
-    };
-    dispatch({ type: 'ADD_ACCOUNT', payload: newAccount });
-    dispatch({ type: 'SET_BASE_CURRENCY', payload: newAccount.ccy });
-    setActiveSheet('none');
-  };
 
   // Contacto ya guardado bajo ese numero, si lo hay. Mismo criterio que
   // SinpeView (buscarContactoPorTelefono/esMiPropioNumero): esta es una
@@ -322,7 +312,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
   // el ledger). Generar el código no movía dinero; esto sí.
   const handleScannedPayment = async () => {
-    if (!scannedQrData) return;
+    if (!scannedQrData || cobroCerrado) return;
     const amt = parseFloat(paymentAmount);
     const montoAbierto = !resuelto?.chargeId;
     // El nonce se acuna al TOCAR PAGAR, no antes, y solo para el monto abierto:
@@ -360,6 +350,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       // llego (red, timeout, 5xx), porque ahi el pago pudo haberse hecho y
       // soltarlo convierte un reintento en un doble cobro.
       const codigo = res.error?.code ?? '';
+      // Monto alto: se pide el codigo y el nonce se CONSERVA, porque el
+      // reintento tras verificar es este mismo pago (el servidor lo rechazo
+      // antes de mover dinero). Si se cierra la hoja sin verificar, se suelta.
+      if (codigo === MFA_REQUIRED) {
+        setShowPagoMfa(true);
+        return;
+      }
       const sinRespuesta = codigo === 'NETWORK_ERROR' || codigo === 'TIMEOUT' || codigo === 'SERVER_ERROR';
       if (!sinRespuesta) idemPagoRef.current = '';
       setPayError(mensajeDeCobro(t, codigo) || res.error?.message || t('qr_pay_error'));
@@ -838,7 +835,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     value={cobrarAmount}
                     onChange={setCobrarAmount}
                     placeholder="0.00"
-                    className="flex-1 bg-transparent text-xl font-bold outline-none uv-text-primary"
+                    className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none uv-text-primary"
                   />
                 </div>
               </div>
@@ -884,29 +881,33 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Add Account Sheet */}
+      {/* Agregar cuenta. Antes ofrecia libras, yenes, bitcoin y ether, y al
+          elegir una creaba una cuenta SOLO en el telefono (sin servidor) que la
+          siguiente sincronizacion borraba sin aviso. El servidor maneja
+          colones y dolares, y la hoja lo dice en vez de fingir. */}
       <BottomSheet isOpen={activeSheet === 'addAccount'} onClose={() => setActiveSheet('none')} title={t('open_new_account')}>
-        <div className="space-y-2">
-          {AVAILABLE_CURRENCIES.map((curr) => {
-             const exists = state.accounts.some(a => a.ccy === curr.ccy);
-             return (
-              <button
-                key={curr.ccy}
-                onClick={() => !exists && handleAddAccount(curr)}
-                disabled={exists}
-                className={`w-full flex items-center p-4 rounded-xl border transition-all ${exists ? 'opacity-50 border-transparent uv-surface-2' : 'border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+        <div className="flex flex-col items-center text-center py-6 px-2 gap-3">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
+            <Icons.Wallet size={30} className="text-[var(--color-primary)]" aria-hidden="true" />
+          </div>
+          <h3 className="text-lg font-bold uv-text-primary text-balance">{t('accounts_other_ccy_title')}</h3>
+          <p className="text-sm uv-text-secondary max-w-[320px] leading-relaxed">{t('accounts_other_ccy_desc')}</p>
+          {onOpenCrypto && (
+            <div className="w-full max-w-[340px] mt-3 pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] space-y-3">
+              <p className="text-sm uv-text-secondary leading-relaxed">
+                {rellenar(t('accounts_crypto_hint'), { seccion: t('nav_crypto') })}
+              </p>
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                leftIcon={<Icons.Bitcoin size={18} aria-hidden="true" />}
+                onClick={() => { setActiveSheet('none'); onOpenCrypto(); }}
               >
-                <div className="w-12 h-12 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-2xl mr-4">
-                  {curr.flag}
-                </div>
-                <div className="flex-1 text-left">
-                  <div className="font-bold uv-text-primary">{curr.name}</div>
-                  <div className="text-xs text-gray-500">1 {curr.ccy} ≈ ${curr.rateToUsd} USD</div>
-                </div>
-                {exists ? <Icons.Check size={20} className="text-green-500" /> : <Icons.Plus size={20} className="text-[var(--color-primary)]" />}
-              </button>
-             )
-          })}
+                {rellenar(t('accounts_go_crypto'), { seccion: t('nav_crypto') })}
+              </Button>
+            </div>
+          )}
         </div>
       </BottomSheet>
 
@@ -995,7 +996,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   {montoFijo !== null ? (
                     <>
                       <p className="text-sm uv-text-muted mb-1">{t('qr_te_solicitan')}</p>
-                      <p className="text-4xl font-black uv-text-primary tabular-nums">
+                      <p className={`text-4xl font-black tabular-nums ${cobroCerrado ? 'uv-text-muted line-through decoration-2' : 'uv-text-primary'}`}>
                         {formatCurrency(montoFijo, qr?.moneda || 'CRC')}
                       </p>
                     </>
@@ -1006,11 +1007,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                       </label>
                       <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
                         <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
+                        {/* min-w-0: sin el, el ancho propio del input (unos 20
+                            caracteres) desbordaba la caja a 390 px y la hoja
+                            se corria de lado al enfocarlo. */}
                         <CampoMonto
                           value={paymentAmount}
                           onChange={setPaymentAmount}
                           placeholder="0.00"
-                          className="flex-1 bg-transparent text-2xl font-bold outline-none uv-text-primary"
+                          className="flex-1 min-w-0 bg-transparent text-2xl font-bold outline-none uv-text-primary"
                           autoFocus
                         />
                       </div>
@@ -1018,26 +1022,47 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   )}
                 </div>
 
-                {payError && (
+                {cobroCerrado ? (
+                  // El cobro ya no se puede pagar: se dice de entrada y no se
+                  // ofrece un boton que solo puede fallar.
+                  <div role="status" className="flex gap-3 rounded-2xl bg-[var(--color-warning-soft)] p-4 text-left">
+                    <Icons.AlertCircle size={20} className="mt-0.5 shrink-0 text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold uv-text-primary">{mensajeDeCobro(t, cobroCerrado)}</p>
+                      {cobroCerrado !== 'COBRO_REEMPLAZADO' && (
+                        <p className="mt-1 text-xs leading-relaxed uv-text-secondary">{t('qr_cobro_cerrado_hint')}</p>
+                      )}
+                    </div>
+                  </div>
+                ) : payError ? (
                   <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{payError}</p>
-                )}
+                ) : null}
 
-                <div className="flex gap-3">
+                {cobroCerrado ? (
                   <button
                     onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
-                    className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+                    className="w-full py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
                   >
-                    {t('cancel')}
+                    {t('close')}
                   </button>
-                  <button
-                    onClick={handleScannedPayment}
-                    disabled={payLoading || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
-                    className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                    {payLoading ? t('paying') : t('pay')}
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
+                      className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
+                    >
+                      {t('cancel')}
+                    </button>
+                    <button
+                      onClick={handleScannedPayment}
+                      disabled={payLoading || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
+                      className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                      {payLoading ? t('paying') : t('pay')}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1139,6 +1164,22 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           </div>
         )}
       </BottomSheet>
+
+      {/* TOTP para pagar por QR un monto alto. Cerrar sin verificar suelta el
+          nonce (el servidor no movio nada) y deja dicho por que no se pago. */}
+      <MfaChallengeSheet
+        isOpen={showPagoMfa}
+        onClose={() => {
+          setShowPagoMfa(false);
+          idemPagoRef.current = '';
+          setPayError(t('qr_err_mfa'));
+        }}
+        onVerified={() => {
+          setShowPagoMfa(false);
+          handleScannedPayment();
+        }}
+        confirmLabel={t('mfa_verify_and_pay')}
+      />
 
       {/* TOTP para envios de monto alto desde el flujo de escaneo */}
       <MfaChallengeSheet

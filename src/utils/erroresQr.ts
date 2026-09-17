@@ -46,6 +46,30 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
   }
 }
 
+/**
+ * El estado que /qr/resolve informa de un cobro, traducido al mismo codigo con
+ * el que el servidor rechazaria el pago. Sirve para avisar ANTES de ofrecer el
+ * boton de pagar: hasta ahora la hoja pintaba un cobro ya pagado o cancelado
+ * como vigente y el motivo aparecia solo despues del intento.
+ *
+ * Devuelve cadena vacia para 'pending' y para un estado que no conocemos: en
+ * ese caso decide el servidor al pagar.
+ */
+export function codigoDeCobroCerrado(estado?: string): string {
+  switch (estado) {
+    case 'paid':
+      return 'COBRO_YA_PAGADO';
+    case 'cancelled':
+      return 'COBRO_CANCELADO';
+    case 'expired':
+      return 'COBRO_VENCIDO';
+    case 'superseded':
+      return 'COBRO_REEMPLAZADO';
+    default:
+      return '';
+  }
+}
+
 /** Minutos que le quedan a un cobro, para el rotulo "vence en N min". */
 export function minutosParaVencer(expiresAt?: string): number {
   if (!expiresAt) return 0;
