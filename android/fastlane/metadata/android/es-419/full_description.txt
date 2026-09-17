@@ -4,9 +4,9 @@ KiramoPay es la super app financiera de Costa Rica que combina todo lo que neces
 - Crypto: Compra, vende e intercambia Bitcoin, Ethereum y mas
 - Pagos de servicios: Paga recibos de electricidad, agua, internet y telefono
 - Tarjetas virtuales: Crea tarjetas Visa para compras en linea seguras
-- QR Payments: Paga en comercios escaneando un codigo QR
-- Split Pay: Divide cuentas con amigos de forma facil
-- Marketplace: Pide comida, solicita viajes y mas desde la app
+- Pagos con QR: Paga en comercios escaneando un codigo QR
+- Dividir cuenta: Divide cuentas con amigos de forma facil
+- Mercado: Pide comida, solicita viajes y mas desde la app
 - Multi-moneda: Maneja CRC, USD, PAB y GTQ en una sola billetera
 
 Seguridad de primer nivel:
