@@ -127,6 +127,7 @@ export type TranslationKeys = {
   error: string;
   err_network: string;
   err_session_expired: string;
+  err_session_unconfirmed: string;
   err_rate_limited: string;
   err_server: string;
   err_invalid_request: string;
@@ -958,6 +959,7 @@ export type TranslationKeys = {
   // Home insights
   home_spending: string;
   home_spent_month: string;
+  home_spent_failed: string;
   home_vs_last_month: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;

@@ -44,6 +44,7 @@ const fr: TranslationKeys = {
   error: 'Erreur',
   err_network: 'Impossible de joindre KiramoPay. Vérifiez votre connexion et réessayez.',
   err_session_expired: 'Votre session a expiré. Reconnectez-vous.',
+  err_session_unconfirmed: 'Impossible de confirmer votre session. Vérifiez votre connexion et réessayez dans un instant.',
   err_rate_limited: 'Trop de requêtes. Patientez un instant et réessayez.',
   err_server: 'Le serveur a rencontré un problème. Réessayez dans un instant.',
   err_invalid_request: "Nous n'avons pas pu traiter ces informations. Vérifiez-les et réessayez.",
@@ -822,6 +823,7 @@ const fr: TranslationKeys = {
   // Home insights
   home_spending: 'Dépenses',
   home_spent_month: 'Dépensé ce mois-ci',
+  home_spent_failed: 'Impossible de charger vos dépenses de ce mois-ci.',
   home_vs_last_month: 'vs le mois dernier',
   sinpe_contact_saved: 'Contact enregistré',
   qr_te_solicitan: 'On vous demande',

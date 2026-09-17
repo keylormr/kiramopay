@@ -44,6 +44,7 @@ const en: TranslationKeys = {
   error: 'Error',
   err_network: "We couldn't reach KiramoPay. Check your connection and try again.",
   err_session_expired: 'Your session expired. Please sign in again.',
+  err_session_unconfirmed: "We couldn't confirm your session. Check your connection and try again in a moment.",
   err_rate_limited: 'Too many requests. Wait a moment and try again.',
   err_server: 'The server ran into a problem. Try again in a moment.',
   err_invalid_request: "We couldn't process that information. Check it and try again.",
@@ -822,6 +823,7 @@ const en: TranslationKeys = {
   // Home insights
   home_spending: 'Spending',
   home_spent_month: 'Spent this month',
+  home_spent_failed: "We couldn't load this month's spending.",
   home_vs_last_month: 'vs last month',
   sinpe_contact_saved: 'Contact saved',
   qr_te_solicitan: 'Requested from you',

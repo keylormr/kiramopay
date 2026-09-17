@@ -771,7 +771,7 @@ func main() {
 			TipoDeCambio:        tipoDeCambio.Diagnostico(),
 		}.JSON())
 	}
-	r.With(middleware.RateLimitKeyed(redisClient, "ratelimit:health", 600, time.Minute)).Get("/health", healthHandler)
+	r.With(middleware.RateLimitKeyed(redisClient, middleware.PrefijoLimiteSalud, 600, time.Minute)).Get("/health", healthHandler)
 
 	// /metrics exposes internal counters (incl. ledger drift). Optionally gate it
 	// behind METRICS_TOKEN; left open when unset so Prometheus scraping works
@@ -841,7 +841,7 @@ func main() {
 		// Refresh NO es blanco de fuerza bruta: el refresh token es el secreto y
 		// su reuso se detecta y revoca toda la familia. Clave y limite propios.
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RateLimitKeyed(redisClient, "ratelimit:auth_refresh", 120, time.Minute))
+			r.Use(middleware.RateLimitKeyed(redisClient, middleware.PrefijoLimiteRefresh, 120, time.Minute))
 			r.Post("/auth/refresh", authHandler.RefreshToken)
 		})
 
@@ -852,7 +852,12 @@ func main() {
 			// bloqueaba la plataforma entera. La defensa real contra fuerza
 			// bruta es el lockout POR CUENTA (5 intentos); el limite por IP es
 			// solo el tope de abuso masivo.
-			r.Use(middleware.RateLimit(redisClient, 60, time.Minute))
+			//
+			// Con su PROPIO prefijo: con el del limite global (RateLimit) cada
+			// intento contaba dos veces en el mismo contador, y el login se
+			// bloqueaba en cuanto la IP llevaba 60 peticiones de cualquier tipo
+			// en el minuto, aunque nadie hubiera intentado entrar.
+			r.Use(middleware.RateLimitKeyed(redisClient, middleware.PrefijoLimiteAcceso, 60, time.Minute))
 			r.With(middleware.AccountLockoutCheck(lockoutStore, 5)).
 				Post("/auth/login", authHandler.Login)
 			r.Post("/auth/register", authHandler.Register)

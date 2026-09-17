@@ -23,6 +23,27 @@ func limiterIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+// Prefijos de los limitadores por IP. Cada uno es una ventana aparte en Redis:
+// dos limitadores con el mismo prefijo cuentan en el MISMO contador, asi que
+// una peticion que pasa por los dos suma dos veces y el cupo "propio" de una
+// ruta se gasta con el trafico de cualquier otra.
+//
+// Eso le paso al login: su grupo usaba RateLimit, con el prefijo del limite
+// global. Cada intento contaba doble y, en cuanto la IP llevaba 60 peticiones
+// de cualquier tipo en el minuto (varias personas en la misma red, o alguien
+// que navego y volvio a entrar), el login respondia 429.
+const (
+	// PrefijoLimiteGlobal es el del limite que cubre toda la API.
+	PrefijoLimiteGlobal = "ratelimit"
+	// PrefijoLimiteSalud es el de /health, que queda fuera del global.
+	PrefijoLimiteSalud = "ratelimit:health"
+	// PrefijoLimiteRefresh es el de POST /auth/refresh.
+	PrefijoLimiteRefresh = "ratelimit:auth_refresh"
+	// PrefijoLimiteAcceso es el de login, registro, OTP de registro y
+	// recuperacion de contrasena.
+	PrefijoLimiteAcceso = "ratelimit:auth"
+)
+
 // rateLimitKey namespaces a limiter window. Two limiters that must not consume
 // each other's budget have to differ here — same prefix, same window.
 func rateLimitKey(prefix string, r *http.Request) string {
@@ -69,14 +90,17 @@ func (l *inProcLimiter) allow(key string, limit int, window time.Duration) bool 
 	return w.count <= limit
 }
 
-// RateLimit is IP-based rate limiting for public endpoints.
+// RateLimit es el limite GLOBAL por IP. Se registra una sola vez, para toda la
+// API: un grupo de rutas que necesita su propio tope usa RateLimitKeyed con su
+// propio prefijo, nunca RateLimit.
 func RateLimit(redisClient *redis.Client, limit int, window time.Duration) func(http.Handler) http.Handler {
-	return RateLimitKeyed(redisClient, "ratelimit", limit, window)
+	return RateLimitKeyed(redisClient, PrefijoLimiteGlobal, limit, window)
 }
 
 // RateLimitKeyed is RateLimit under its own key namespace. A route that needs
-// its own budget MUST use a distinct prefix: sharing "ratelimit" would make its
-// requests consume the global window it was meant to be independent of.
+// its own budget MUST use a distinct prefix (the Prefijo* constants above):
+// sharing PrefijoLimiteGlobal would make its requests consume the global window
+// it was meant to be independent of.
 func RateLimitKeyed(redisClient *redis.Client, prefix string, limit int, window time.Duration) func(http.Handler) http.Handler {
 	fallback := newInProcLimiter()
 	return func(next http.Handler) http.Handler {

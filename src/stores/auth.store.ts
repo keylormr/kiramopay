@@ -8,6 +8,7 @@ import {
   registerRefreshHandler,
   registerAuthFailureHandler,
   registerAccountBlockedHandler,
+  type ResultadoRefresco,
 } from '@/api/adapters/http/client';
 import { syncAllData } from '@/services/dataSync';
 import { clasificarIdentificador } from '@/utils/identificador';
@@ -97,8 +98,12 @@ interface AuthState {
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string; code?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
-  /** Silently rotate the token pair using the in-memory refresh token. */
-  refresh: () => Promise<boolean>;
+  /**
+   * Silently rotate the token pair using the in-memory refresh token. Dice si
+   * la sesion se renovo, si el servidor la rechazo o si el fallo fue pasajero
+   * (ver ResultadoRefresco en el cliente HTTP).
+   */
+  refresh: () => Promise<ResultadoRefresco>;
   /**
    * Cold-start session restore: exchange the HttpOnly refresh cookie for a fresh
    * access token. Called once on app boot. If there is no valid cookie the
@@ -242,17 +247,29 @@ export const useAuthStore = create<AuthState>()(
 
       refresh: async () => {
         const { refreshToken } = get();
-        if (!refreshToken) return false;
+        if (!refreshToken) return 'rechazada';
+        const generacion = generacionDeSesion;
         const api = getApiLayer();
         const result = await api.auth.refresh(refreshToken);
+        // Alguien salio o entro mientras tanto: estos tokens no son de la
+        // sesion que esta abierta ahora.
+        if (generacion !== generacionDeSesion) return 'descartada';
         if (result.success && result.data?.access_token) {
+          const rotado = result.data.refresh_token ?? refreshToken;
           set({
             accessToken: result.data.access_token,
-            refreshToken: result.data.refresh_token ?? refreshToken,
+            refreshToken: rotado,
           });
-          return true;
+          // En el telefono el token rotado tambien va al almacen seguro: el
+          // servidor ya consumio el anterior, y el proximo arranque que lo
+          // presentara seria tomado por reuso y cerraria la sesion.
+          secureTokenStore.setRefreshToken(rotado);
+          return 'renovada';
         }
-        return false;
+        // Solo un rechazo definitivo cierra la sesion; sin red, un 429 o un 5xx
+        // la dejan abierta (el cliente reintenta y avisa).
+        if (result.error?.code === 'ACCOUNT_BLOCKED') return 'bloqueada';
+        return esRechazoDefinitivo(result.error?.code) ? 'rechazada' : 'pasajero';
       },
 
       forceLogout: (reason) => {
@@ -441,9 +458,10 @@ registerTokenProvider(() => {
   return { accessToken: s.accessToken, refreshToken: s.refreshToken };
 });
 
-// On a 401 the HttpClient asks the store to rotate the token pair; if that
-// fails (no/invalid refresh token, e.g. after a page reload) it forces a
-// logout so the UI stops showing a phantom authenticated session.
+// On a 401 the HttpClient asks the store to rotate the token pair; if the
+// server rejects it for good (no/invalid refresh token) it forces a logout so
+// the UI stops showing a phantom authenticated session. Un fallo pasajero no
+// cierra nada: el cliente reintenta y devuelve un error que se puede leer.
 registerRefreshHandler(() => useAuthStore.getState().refresh());
 registerAuthFailureHandler(() => useAuthStore.getState().forceLogout());
 // 403 ACCOUNT_BLOCKED en una peticion autenticada: la sesion ya no existe en

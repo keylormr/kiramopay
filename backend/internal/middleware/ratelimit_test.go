@@ -67,6 +67,23 @@ func TestRateLimitKeyed_NoCompartaClaveConElGlobal(t *testing.T) {
 	}
 }
 
+// Cada limitador por IP cuenta en su propia ventana: ningun par de prefijos
+// puede producir la misma clave para la misma peticion.
+func TestPrefijosDeLimite_TodosDanClavesDistintas(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+	req.RemoteAddr = "10.0.0.8:1234"
+
+	prefijos := []string{PrefijoLimiteGlobal, PrefijoLimiteSalud, PrefijoLimiteRefresh, PrefijoLimiteAcceso}
+	vistas := make(map[string]string, len(prefijos))
+	for _, p := range prefijos {
+		clave := rateLimitKey(p, req)
+		if otro, repetida := vistas[clave]; repetida {
+			t.Fatalf("los prefijos %q y %q comparten la clave %q", otro, p, clave)
+		}
+		vistas[clave] = p
+	}
+}
+
 func TestUserRateLimit_UsesUserIDAsKey(t *testing.T) {
 	// This test verifies that user rate limiting keys by user ID, not IP.
 	// We use a mock by checking the key pattern.
