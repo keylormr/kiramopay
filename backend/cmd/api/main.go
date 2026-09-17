@@ -745,13 +745,41 @@ func main() {
 	// momento". Ademas cada preflight OPTIONS gastaba cupo del limite global. Las
 	// cabeceras permitidas y por que importan estan en opcionesCORS (cors.go).
 	r.Use(cors.Handler(opcionesCORS(cfg.CORS.Origins)))
+	// El limite global cuenta POR USUARIO cuando la peticion trae sesion, y por
+	// IP solo cuando no la trae.
+	//
+	// Contarlo todo por IP era el defecto: 100 peticiones por minuto por
+	// DIRECCION para TODA la API. Una oficina, el CGNAT de un operador movil o
+	// dos personas en la misma casa comparten una sola direccion, asi que entre
+	// todas agotaban un cupo pensado para una y la app respondia 429 a todas con
+	// uso perfectamente normal.
+	//
+	// 300/min por USUARIO: el arranque de la app dispara ~9 llamadas
+	// autenticadas y navegar entre pantallas suma unas pocas mas; ni la rafaga
+	// mas cargada de una persona se acerca. Ademas el grupo protegido ya lleva
+	// su propio UserRateLimit de 200/min, que es el que de verdad le da forma al
+	// consumo de una sesion: este queda por encima, como red de ultima
+	// instancia, y cubre tambien lo autenticado que no pasa por ese grupo. 5
+	// peticiones por segundo sostenidas desde una sola cuenta ya no las hace
+	// ninguna pantalla.
+	//
+	// 300/min por IP para lo ANONIMO: por cliente son unas 6 peticiones al abrir
+	// la app (renovar sesion, precios, paises, tipos de cambio, version,
+	// transparencia), asi que absorbe a unas 50 personas arrancando en el mismo
+	// minuto detras del mismo NAT. La defensa real de las rutas sensibles no es
+	// esta: login, registro y recuperacion llevan su propia ventana de 60/min y
+	// el bloqueo POR CUENTA a los 5 intentos, y renovar sesion la suya de
+	// 120/min. Esta es solo la red gruesa contra un abuso masivo.
+	//
 	// /health queda fuera del limite global y lleva el suyo propio, abajo. Con
 	// CLIENT_IP_SOURCE=cf-connecting-ip, el trafico que no pasa por Cloudflare
 	// -la sonda de la plataforma, los monitores de uptime, las sondas internas-
 	// no trae esa cabecera y cae al respaldo: todo eso comparte UNA sola clave.
 	// Si esa ventana se llenaba, el propio health check empezaba a recibir 429 y
 	// la plataforma leia como caido un servicio que estaba sano.
-	r.Use(middleware.RateLimitExcept(middleware.RateLimit(redisClient, 100, time.Minute), "/health"))
+	r.Use(middleware.RateLimitExcept(
+		middleware.RateLimitGlobal(redisClient, middleware.UsuarioDelToken(jwtManager), 300, 300, time.Minute),
+		"/health"))
 
 	// diagnosticoDeCripto junta la foto del feed de precios con la ultima vez
 	// que el barrido comparo alertas contra un precio vigente. Van juntas

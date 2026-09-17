@@ -2,15 +2,12 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/kiramopay/backend/internal/testutil"
-	"github.com/redis/go-redis/v9"
 )
 
 // Contar la peticion y fijar el vencimiento de la ventana tienen que ser UNA
@@ -24,87 +21,13 @@ import (
 // "olvide mi contrasena" y "restablecer" hasta que alguien borre la llave a
 // mano en Redis.
 
-// espiaDeRedis responde las ordenes dentro del proceso, antes de que salgan a
-// la red: la prueba no necesita un Redis vivo y ve EXACTAMENTE cuantas ordenes
-// manda el limitador por peticion.
-type espiaDeRedis struct {
-	mu       sync.Mutex
-	ordenes  []string
-	cuenta   map[string]int64
-	conVence map[string]bool
-}
-
-func nuevoEspiaDeRedis() *espiaDeRedis {
-	return &espiaDeRedis{cuenta: map[string]int64{}, conVence: map[string]bool{}}
-}
-
-func (e *espiaDeRedis) DialHook(next redis.DialHook) redis.DialHook { return next }
-
-func (e *espiaDeRedis) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
-	return next
-}
-
-func (e *espiaDeRedis) ProcessHook(_ redis.ProcessHook) redis.ProcessHook {
-	return func(_ context.Context, cmd redis.Cmder) error { return e.responder(cmd) }
-}
-
-func (e *espiaDeRedis) responder(cmd redis.Cmder) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	nombre := cmd.Name()
-	e.ordenes = append(e.ordenes, nombre)
-	args := cmd.Args()
-
-	switch nombre {
-	case "incr":
-		llave := fmt.Sprint(args[1])
-		e.cuenta[llave]++
-		c, ok := cmd.(*redis.IntCmd)
-		if !ok {
-			return fmt.Errorf("incr devolvio %T", cmd)
-		}
-		c.SetVal(e.cuenta[llave])
-	case "expire", "pexpire":
-		llave := fmt.Sprint(args[1])
-		e.conVence[llave] = true
-		c, ok := cmd.(*redis.BoolCmd)
-		if !ok {
-			return fmt.Errorf("%s devolvio %T", nombre, cmd)
-		}
-		c.SetVal(true)
-	case "eval", "evalsha":
-		// EVAL <guion> <cuantas llaves> <llave> ...: el guion cuenta y fija el
-		// vencimiento de una sola vez, asi que aqui se emulan las dos cosas.
-		llave := fmt.Sprint(args[3])
-		e.cuenta[llave]++
-		e.conVence[llave] = true
-		c, ok := cmd.(*redis.Cmd)
-		if !ok {
-			return fmt.Errorf("%s devolvio %T", nombre, cmd)
-		}
-		c.SetVal(e.cuenta[llave])
-	default:
-		return fmt.Errorf("orden no esperada: %s", nombre)
-	}
-	return nil
-}
-
-func clienteEspiado(e *espiaDeRedis) *redis.Client {
-	// La direccion no importa: el espia responde antes de que se abra ninguna
-	// conexion.
-	c := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
-	c.AddHook(e)
-	return c
-}
-
 func siempreOK() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 }
 
 func TestLimitador_CuentaYFijaElVencimientoEnUnaSolaOrden(t *testing.T) {
-	espia := nuevoEspiaDeRedis()
-	h := RateLimit(clienteEspiado(espia), 5, time.Minute)(siempreOK())
+	espia := testutil.NuevoEspiaDeRedis()
+	h := RateLimit(espia.Cliente(), 5, time.Minute)(siempreOK())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/wallets/me", nil)
 	req.RemoteAddr = "203.0.113.70:40000"
@@ -114,12 +37,12 @@ func TestLimitador_CuentaYFijaElVencimientoEnUnaSolaOrden(t *testing.T) {
 		t.Fatalf("la peticion devolvio %d, se esperaba %d", rec.Code, http.StatusOK)
 	}
 
-	if n := len(espia.ordenes); n != 1 {
+	if n := len(espia.Ordenes()); n != 1 {
 		t.Fatalf("el limitador mando %d ordenes a Redis (%v); tiene que ser UNA sola: entre dos, un reinicio deja la llave sin vencimiento para siempre",
-			n, espia.ordenes)
+			n, espia.Ordenes())
 	}
 	llave := rateLimitKey(PrefijoLimiteGlobal, req)
-	if !espia.conVence[llave] {
+	if !espia.TieneVencimiento(llave) {
 		t.Fatalf("la llave %s quedo sin vencimiento", llave)
 	}
 }
@@ -127,8 +50,8 @@ func TestLimitador_CuentaYFijaElVencimientoEnUnaSolaOrden(t *testing.T) {
 // El limitador por usuario cuenta en otra tabla de llaves pero tiene el mismo
 // mecanismo, y por lo tanto tenia la misma ventana.
 func TestLimitadorPorUsuario_CuentaYFijaElVencimientoEnUnaSolaOrden(t *testing.T) {
-	espia := nuevoEspiaDeRedis()
-	h := UserRateLimit(clienteEspiado(espia), 5, time.Minute)(siempreOK())
+	espia := testutil.NuevoEspiaDeRedis()
+	h := UserRateLimit(espia.Cliente(), 5, time.Minute)(siempreOK())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/wallets/me", nil)
 	req.RemoteAddr = "203.0.113.72:40000"
@@ -138,9 +61,9 @@ func TestLimitadorPorUsuario_CuentaYFijaElVencimientoEnUnaSolaOrden(t *testing.T
 		t.Fatalf("la peticion devolvio %d, se esperaba %d", rec.Code, http.StatusOK)
 	}
 
-	if n := len(espia.ordenes); n != 1 {
+	if n := len(espia.Ordenes()); n != 1 {
 		t.Fatalf("el limitador por usuario mando %d ordenes a Redis (%v); tiene que ser UNA sola",
-			n, espia.ordenes)
+			n, espia.Ordenes())
 	}
 }
 
