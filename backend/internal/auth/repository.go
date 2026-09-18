@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/kiramopay/backend/pkg/ventanaredis"
 )
 
 type Repository struct {
@@ -473,7 +475,15 @@ func (r *Repository) VerifyRegistrationOTP(ctx context.Context, phone, codeHash 
 			return false, "", fmt.Errorf("decode otp record: %w", jerr)
 		}
 	}
-	attempts, err := r.redis.Incr(ctx, regOTPAttemptsKey(phone)).Result()
+	// El contador de intentos nace con vencimiento en PutRegistrationOTP, pero
+	// un INCR a secas sobre una llave que ya no esta la recrea SIN vencimiento.
+	// Y puede no estar: el desalojo de Redis elige llave por llave, asi que la
+	// del codigo puede sobrevivir a la de los intentos aunque se hayan escrito
+	// juntas. La llave resultante ademas deja de ser candidata al desalojo por
+	// vencimiento, o sea que se acumula. ventanaredis.Contar solo fija el
+	// vencimiento cuando la llave nace o cuando la encuentra atascada: en el
+	// camino normal no toca el que ya trae.
+	attempts, err := ventanaredis.Contar(ctx, r.redis, regOTPAttemptsKey(phone), regOTPTTL)
 	if err != nil {
 		return false, "", fmt.Errorf("otp attempts: %w", err)
 	}
