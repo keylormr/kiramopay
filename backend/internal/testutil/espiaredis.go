@@ -22,6 +22,10 @@ import (
 // aparece en tres lugares (limitador de tasa, bloqueo de cuenta, cuota del
 // asistente) y la copia del espia era la forma de que la prueba existiera en
 // uno y faltara en los otros dos.
+//
+// Emula los dos guiones de ventanaredis, Contar y Restar, y le responde con un
+// error a cualquier otro: contestarle a un guion desconocido lo que le toca a
+// Contar seria peor que no tener espia, porque la prueba pasaria sola.
 type EspiaDeRedis struct {
 	mu       sync.Mutex
 	ordenes  []string
@@ -61,6 +65,16 @@ func (e *EspiaDeRedis) Cuenta(llave string) int64 {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.cuenta[llave]
+}
+
+// Existe dice si la llave esta puesta. Cuenta no sirve para esto: una llave
+// ausente y una en cero valen lo mismo ahi, y lo que hay que poder comprobar es
+// que una operacion NO haya creado la llave que no encontro.
+func (e *EspiaDeRedis) Existe(llave string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, ok := e.cuenta[llave]
+	return ok
 }
 
 func (e *EspiaDeRedis) DialHook(next redis.DialHook) redis.DialHook { return next }
@@ -112,16 +126,35 @@ func (e *EspiaDeRedis) responder(cmd redis.Cmder) error {
 		}
 		c.SetVal(1)
 	case "eval", "evalsha":
-		// EVAL <guion> <cuantas llaves> <llave> ...: el guion cuenta y fija el
-		// vencimiento de una sola vez, asi que aqui se emulan las dos cosas.
-		llave := fmt.Sprint(args[3])
-		e.cuenta[llave]++
-		e.conVence[llave] = true
+		// EVAL <guion|hash> <cuantas llaves> <llave> [ARGV...]. Cual de los dos
+		// guiones de ventanaredis llego se decide por ARGV, que es lo unico que
+		// se puede mirar desde aqui: EVALSHA manda el hash, no la fuente.
+		// Contar lleva la ventana en milisegundos; Restar no lleva nada.
 		c, ok := cmd.(*redis.Cmd)
 		if !ok {
 			return fmt.Errorf("%s devolvio %T", nombre, cmd)
 		}
-		c.SetVal(e.cuenta[llave])
+		llave := fmt.Sprint(args[3])
+		switch len(args) {
+		case 5:
+			// Contar: suma y deja SIEMPRE vencimiento, de una sola vez.
+			e.cuenta[llave]++
+			e.conVence[llave] = true
+			c.SetVal(e.cuenta[llave])
+		case 4:
+			// Restar: devuelve una unidad, y a la llave que no existe NO la
+			// crea. Es la diferencia con DECR, que la dejaria en -1 y sin
+			// vencimiento; si el espia la creara igual, la prueba que vigila
+			// eso pasaria con el defecto puesto.
+			if _, existe := e.cuenta[llave]; !existe {
+				c.SetVal(int64(0))
+				break
+			}
+			e.cuenta[llave]--
+			c.SetVal(e.cuenta[llave])
+		default:
+			return fmt.Errorf("guion con %d argumentos: no es ninguno de los de ventanaredis", len(args))
+		}
 	default:
 		return fmt.Errorf("orden no esperada: %s", nombre)
 	}

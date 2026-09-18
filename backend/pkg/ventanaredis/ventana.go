@@ -14,6 +14,9 @@
 //
 // Tener el guion en un solo lugar es lo que evita que el arreglo viva en un
 // contador y falte en el vecino, que es exactamente lo que habia pasado.
+//
+// Restar es la operacion espejo, y esta aqui por la misma razon: devolver una
+// unidad con un DECR a secas FABRICA la llave eterna que Contar vino a evitar.
 package ventanaredis
 
 import (
@@ -29,9 +32,13 @@ import (
 // El `PTTL < 0` no es adorno: repara tambien las llaves que YA quedaron
 // atascadas sin vencimiento, que es lo unico que las despega sin entrar a Redis
 // a mano. PTTL devuelve -1 cuando la llave existe y no vence, y -2 cuando no
-// existe. Tambien cubre a un contador que quedo sin TTL por otro camino: en la
-// cuota del asistente, un Refund que cruza la medianoche crea la llave del dia
-// siguiente en -1 y sin vencimiento; el primer Contar de ese dia se lo devuelve.
+// existe. Eso cubre las que dejo el codigo viejo antes de que estas tres
+// operaciones fueran atomicas, y las que pueda dejar cualquier otro camino.
+//
+// Reparar no es lo mismo que no ensuciar: una llave solo se despega si alguien
+// vuelve a contar sobre ella, y a la de una persona que no vuelve no la toca
+// nadie. Por eso Restar no crea llaves, en vez de crearlas y confiar en que
+// algun Contar futuro las arregle.
 var guion = redis.NewScript(`
 local n = redis.call('INCR', KEYS[1])
 if n == 1 or redis.call('PTTL', KEYS[1]) < 0 then
@@ -55,4 +62,35 @@ func Contar(ctx context.Context, rdb redis.Scripter, llave string, ventana time.
 		ms = 1
 	}
 	return guion.Run(ctx, rdb, []string{llave}, ms).Int64()
+}
+
+// guionRestar devuelve una unidad al contador, pero SOLO si la llave existe.
+//
+// DECR a secas crea la llave que no encuentra: la pone en 0 y la baja a -1, sin
+// vencimiento. O sea que devolver una unidad podia fabricar exactamente lo que
+// este paquete existe para evitar —un contador que no vence nunca— y ademas
+// dejarlo arrancando en negativo, o sea con una unidad de cupo regalada.
+//
+// Pasa de verdad en la cuota del asistente: un turno que empieza antes de la
+// medianoche UTC y falla despues devuelve la unidad a la llave del dia
+// SIGUIENTE, que todavia no existe. Tambien cuando la llave se perdio por una
+// eviccion, que en un Redis con tope de memoria es cosa de todos los dias.
+//
+// No crear la llave es ademas lo unico que hace cierta la politica que declara
+// quien llama: una devolucion perdida deja el cupo del dia un poco mas
+// estricto, nunca mas flojo.
+var guionRestar = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+return redis.call('DECR', KEYS[1])
+`)
+
+// Restar devuelve una unidad a la llave y responde cuanto quedo. Si la llave no
+// existe devuelve 0 y no la crea: no hay ventana a la que devolverle nada.
+//
+// El vencimiento no se toca a proposito: DECR sobre una llave que ya existe lo
+// conserva, y toda llave nace con el suyo desde Contar.
+func Restar(ctx context.Context, rdb redis.Scripter, llave string) (int64, error) {
+	return guionRestar.Run(ctx, rdb, []string{llave}).Int64()
 }

@@ -112,6 +112,16 @@ func (q *RedisQuota) incr(ctx context.Context, key string) (int64, error) {
 	return ventanaredis.Contar(ctx, q.rdb, key, quotaTTL)
 }
 
+// restar devuelve una unidad al contador SIN poder crearlo.
+//
+// Era un DECR pelado, que a la llave que no encuentra la crea en -1 y sin
+// vencimiento (ver ventanaredis.Restar): el mismo defecto que se cerro en el
+// camino de contar, entrando por la puerta de atras. El error se ignora a
+// proposito —devolver es best-effort— y por eso el resultado tampoco se mira.
+func (q *RedisQuota) restar(ctx context.Context, key string) {
+	_, _ = ventanaredis.Restar(ctx, q.rdb, key)
+}
+
 // Allow consumes one unit from both the per-user (plan-sized) and global daily
 // budgets. On any over-limit it rolls back its own increments so a blocked
 // attempt doesn't inflate the counters, and reports which budget was hit. A
@@ -125,32 +135,40 @@ func (q *RedisQuota) Allow(ctx context.Context, userID string) (QuotaResult, err
 		return QuotaResult{}, err
 	}
 	if uN > int64(userLimit) {
-		q.rdb.Decr(ctx, uKey)
+		q.restar(ctx, uKey)
 		return QuotaResult{Allowed: false, Scope: "user"}, nil
 	}
 	gKey := q.globalKey()
 	gN, err := q.incr(ctx, gKey)
 	if err != nil {
-		q.rdb.Decr(ctx, uKey) // undo the user increment already made this call
+		q.restar(ctx, uKey) // undo the user increment already made this call
 		return QuotaResult{}, err
 	}
 	if gN > int64(q.globalLimit) {
-		q.rdb.Decr(ctx, gKey)
-		q.rdb.Decr(ctx, uKey)
+		q.restar(ctx, gKey)
+		q.restar(ctx, uKey)
 		return QuotaResult{Allowed: false, Scope: "global"}, nil
 	}
 	return QuotaResult{Allowed: true}, nil
 }
 
-// Refund returns one unit to both budgets. Best-effort: a lost decrement only
-// makes the day's limit slightly stricter, never looser. Both keys were created
-// (with a TTL) by the matching Allow in the same request, so Decr normally
-// never orphans a TTL-less key. La excepcion es un turno que empieza antes de
-// la medianoche UTC y termina despues: el Refund apunta a la llave del dia
-// SIGUIENTE, que todavia no existe, y DECR la crea en -1 y sin vencimiento. El
-// primer incr de ese dia se lo devuelve (ver ventanaredis.Contar), asi que la
-// llave no se queda atascada.
+// Refund devuelve una unidad a los dos presupuestos. Es best-effort: una
+// devolucion perdida deja el cupo del dia un poco mas estricto, nunca mas
+// flojo. Con DECR eso no era cierto, en dos sentidos a la vez.
+//
+// Un turno que empieza antes de la medianoche UTC y falla despues devuelve la
+// unidad a las llaves del dia SIGUIENTE, que todavia no existen —el dia se
+// recalcula aqui, no se hereda del Allow—, y DECR no devuelve nada: las CREA en
+// -1 y sin vencimiento. Lo mismo cuando la llave se perdio por una eviccion.
+// Quedaban entonces una llave eterna en Redis y, al dia siguiente, un contador
+// que arranca en negativo, o sea un turno de regalo por encima del plan.
+//
+// Se confiaba en que el primer Contar del dia le devolviera el vencimiento,
+// pero eso solo pasa si esa persona vuelve a escribirle al asistente ese mismo
+// dia; a la llave de quien no vuelve no la toca nadie. ventanaredis.Restar no
+// crea la llave que no encuentra, asi que la devolucion que no tiene a quien
+// devolverle se pierde — que es justo lo que esta politica declara.
 func (q *RedisQuota) Refund(ctx context.Context, userID string) {
-	q.rdb.Decr(ctx, q.userKey(userID))
-	q.rdb.Decr(ctx, q.globalKey())
+	q.restar(ctx, q.userKey(userID))
+	q.restar(ctx, q.globalKey())
 }
