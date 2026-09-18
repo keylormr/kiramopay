@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,12 +46,15 @@ type avisosDePrueba struct {
 	paraQuien string
 	cuerpo    string
 	veces     int
+	// falla, si no es nil, es lo que devuelve NotifyUser: el envio ya se
+	// confirmo antes de avisar, asi que un aviso que falla no lo puede tumbar.
+	falla error
 }
 
 func (a *avisosDePrueba) NotifyUser(_ context.Context, userID, _, body, _ string) error {
 	a.paraQuien, a.cuerpo = userID, body
 	a.veces++
-	return nil
+	return a.falla
 }
 
 // mfaDePrueba deja decidir a cada prueba si el monto pide segundo factor y si
@@ -643,6 +647,176 @@ func TestEnviarCripto_SinPrecioNoSeEnvia(t *testing.T) {
 	}
 	if !vista.Total.Equal(bajaDelSaldo) {
 		t.Fatalf("la hoja mostro un total de %s sin precio, esperaba %s", vista.Total, bajaDelSaldo)
+	}
+}
+
+// ── Caminos del dinero que faltaban por ejercitar ──────────────────────────
+
+// El precio que la pantalla mostro y el que rige al enviar tienen que seguir
+// cerca: comprar y vender ya lo comprueban, enviar tambien llama a
+// comprobarDesviacion pero ninguna prueba se lo hacia pasar por esta guarda.
+func TestEnviarCripto_PrecioMovidoSeRechaza(t *testing.T) {
+	e := montarEnvio(t)
+
+	_, err := e.svc.Send(context.Background(), e.quienEnvia, &crypto.SendRequest{
+		Asset: "BTC", Amount: seEnvia, QRData: e.qrDelReceptor,
+		Price: d(1), // el mercado dice 1000: nada que ver con lo que vio la pantalla
+	})
+	if !errors.Is(err, crypto.ErrPrecioMovido) {
+		t.Fatalf("error = %v, esperaba ErrPrecioMovido", err)
+	}
+	e.exigirQueNadaSeMovio(t)
+}
+
+// Send llama a validarCantidad antes de tocar la base: cero, negativo o mas
+// decimales de los que la columna admite (18) se rechazan sin abrir ningun
+// asiento.
+func TestEnviarCripto_CantidadInvalidaSeRechazaAntesDeTocarLaBase(t *testing.T) {
+	e := montarEnvio(t)
+
+	casos := map[string]decimal.Decimal{
+		"cero":                decimal.Zero,
+		"negativo":            d(-0.01),
+		"mas de 18 decimales": decimal.RequireFromString("0.1234567890123456789"),
+	}
+	for nombre, monto := range casos {
+		if _, err := e.enviar(monto, ""); !errors.Is(err, crypto.ErrMontoInvalido) {
+			t.Fatalf("%s: error = %v, esperaba ErrMontoInvalido", nombre, err)
+		}
+	}
+	e.exigirQueNadaSeMovio(t)
+}
+
+// La regresion que este PR corrige: con llave del cliente, la comprobacion
+// previa de saldo no corria NUNCA, asi que un envio sin saldo Y por encima del
+// tope diario mostraba "supero el tope" — el rechazo menos util, porque
+// sugiere reintentar manana cuando lo que falta es saldo. Esta prueba tiene
+// que fallar contra el codigo de antes de este PR.
+func TestEnviarCripto_ConLlaveYSinSaldoElErrorEsDeSaldoNoDeTope(t *testing.T) {
+	e := montarEnvio(t)
+
+	// 1 BTC entero: mas de lo que hay (falta lo de la comision) y, a 1000
+	// dolares, muy por encima del tope diario de prueba (190). El error que
+	// describe lo que de verdad paso es el de saldo.
+	_, err := e.enviar(d(1), "envio-con-llave-sin-saldo")
+	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		t.Fatalf("error = %v, esperaba ErrSaldoDeActivoInsuficiente", err)
+	}
+	e.exigirQueNadaSeMovio(t)
+}
+
+// La garantia que la regresion de arriba no puede romper: un reintento con la
+// MISMA llave sigue siendo idempotente aunque el saldo ya no alcance para
+// volver a intentarlo. Si el arreglo del saldo llegara a correr tambien
+// cuando la llave YA tiene un envio escrito, este reintento fallaria por
+// saldo insuficiente en vez de devolver el envio guardado.
+func TestEnviarCripto_ElReintentoSigueSiendoIdempotenteAunqueElSaldoYaNoAlcance(t *testing.T) {
+	e := montarEnvio(t)
+	ctx := context.Background()
+
+	monto := d(0.18)
+	total := d(0.18045) // 0,18 mas su comision de 0,25 %: justo lo que hay
+
+	// Se deja el saldo justo para ESTE envio, para que el primero lo consuma
+	// entero. La base de pruebas se trunca entre pruebas (testutil.TestDB),
+	// asi que este UPDATE no se filtra a ninguna otra.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE crypto_assets SET balance = $2 WHERE user_id = $1::uuid AND symbol = 'BTC'`,
+		e.quienEnvia, total,
+	); err != nil {
+		t.Fatalf("dejar el saldo justo para el envio: %v", err)
+	}
+
+	primero, err := e.enviar(monto, "reintento-con-el-saldo-agotado")
+	if err != nil {
+		t.Fatalf("primer envio: %v", err)
+	}
+	e.exigirSaldos(t, decimal.Zero, monto)
+
+	segundo, err := e.enviar(monto, "reintento-con-el-saldo-agotado")
+	if err != nil {
+		t.Fatalf("reintento con el saldo ya en cero: %v", err)
+	}
+	if segundo.ID != primero.ID {
+		t.Fatalf("el reintento escribio otro envio (%s vs %s)", segundo.ID, primero.ID)
+	}
+	e.exigirSaldos(t, decimal.Zero, monto)
+}
+
+// Dos envios del mismo activo a la vez, sobre un saldo que no les alcanza a
+// los dos juntos: tiene que ganar exactamente uno, el saldo final tiene que
+// quedar correcto al centimo y no puede quedar ni saldo negativo ni una
+// comision de mas. Vender, staking y convertir ya tienen esta prueba de
+// carrera (sync.WaitGroup); enviar no la tenia, y un doble gasto por carrera
+// pasaria con el CI en verde: la comprobacion previa del servicio lee FUERA de
+// la transaccion, y lo unico que de verdad frena es la guarda de
+// descontarActivo (balance >= $3).
+func TestEnviarCripto_DosEnviosSimultaneosNoEnvianMasDeLoQueHay(t *testing.T) {
+	e := montarEnvio(t)
+	ctx := context.Background()
+
+	// Se recorta el saldo a 0,1 BTC: alcanza para UNO de los dos intentos
+	// (cada uno baja 0,06015) pero no para los dos juntos (0,1203). En
+	// dolares cada intento vale 60 y los dos juntos 120, bien por debajo del
+	// tope diario de prueba (190): quien pierda la carrera tiene que perder
+	// por saldo, no por tope.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE crypto_assets SET balance = $2 WHERE user_id = $1::uuid AND symbol = 'BTC'`,
+		e.quienEnvia, d(0.1),
+	); err != nil {
+		t.Fatalf("recortar el saldo para la carrera: %v", err)
+	}
+
+	monto := d(0.06)
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, errs[i] = e.enviar(monto, "")
+		}(i)
+	}
+	wg.Wait()
+
+	exitos := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			exitos++
+		case !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente):
+			t.Fatalf("el envio perdedor fallo por otra causa: %v", err)
+		}
+	}
+	if exitos != 1 {
+		t.Fatalf("envios exitosos = %d, se esperaba 1 (errs=%v)", exitos, errs)
+	}
+
+	e.exigirSaldos(t, d(0.1).Sub(d(0.06015)), monto)
+
+	var comisiones int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM crypto_platform_fees`).Scan(&comisiones); err != nil {
+		t.Fatalf("contar comisiones: %v", err)
+	}
+	if comisiones != 1 {
+		t.Fatalf("se cobraron %d comisiones por un solo envio ganador", comisiones)
+	}
+}
+
+// El aviso es de mejor esfuerzo y corre DESPUES de confirmar: si falla, el
+// envio ya ocurrido no se puede deshacer. Antes de esta prueba, el doble de
+// avisos siempre devolvia nil, asi que esta rama nunca se ejercitaba.
+func TestEnviarCripto_UnAvisoQueFallaNoTumbaElEnvioYaConfirmado(t *testing.T) {
+	e := montarEnvio(t)
+	e.avisos.falla = errors.New("push caido")
+
+	if _, err := e.enviar(seEnvia, ""); err != nil {
+		t.Fatalf("Send con el aviso caido: %v", err)
+	}
+	e.exigirSaldos(t, d(1).Sub(bajaDelSaldo), seEnvia)
+	if e.avisos.veces != 1 {
+		t.Fatalf("se intento avisar %d veces, esperaba 1", e.avisos.veces)
 	}
 }
 
