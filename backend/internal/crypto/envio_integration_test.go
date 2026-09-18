@@ -547,9 +547,28 @@ func TestEnviarCripto_SinSaldoNoLlegaNada(t *testing.T) {
 func TestEnviarCripto_ElSaldoTieneQueCubrirLaComision(t *testing.T) {
 	e := montarEnvio(t)
 
+	// Enviar 1 BTC entero, al precio del stub (1000 USD), vale 1000 dolares:
+	// muy por encima de los 190 del tope diario de prueba. Dentro de la
+	// transaccion el orden es el tope primero (AntesDeMover) y el saldo despues
+	// (moverLosDosSaldos), asi que con el tope de fabrica esta prueba nunca
+	// llegaria a la guarda que dice probar — la frenaria el tope, no el saldo, y
+	// TestEnviarCripto_ElTopeDiarioLoFrena ya cubre ese caso. Se sube el tope
+	// SOLO para el monedero de quien envia, con un UPDATE explicito: la base de
+	// pruebas se trunca entera entre pruebas (testutil.TestDB), asi que esto no
+	// se filtra a ninguna otra.
+	if _, err := e.pool.Exec(context.Background(),
+		`UPDATE wallets SET daily_limit_usd = 200000, monthly_limit_usd = 200000 WHERE user_id = $1::uuid`,
+		e.quienEnvia,
+	); err != nil {
+		t.Fatalf("subir el tope de esta prueba: %v", err)
+	}
+
 	// Con llave del cliente se salta la comprobacion previa a proposito, para
 	// que la prueba llegue hasta la guarda del descuento: esa es la unica
 	// compuerta real, porque la comprobacion previa lee fuera de la transaccion.
+	// Si esa guarda (descontarActivo, "balance >= $3") se quitara, este envio de
+	// 1 BTC contra un saldo de 1 BTC saldria adelante y la linea de abajo
+	// fallaria: la prueba se pone roja igual que hoy prueba que se ponga verde.
 	_, err := e.enviar(d(1), "envio-del-saldo-entero")
 	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
 		t.Fatalf("error = %v, esperaba ErrSaldoDeActivoInsuficiente", err)
