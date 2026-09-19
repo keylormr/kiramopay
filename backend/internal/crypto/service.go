@@ -197,12 +197,34 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	idem := req.IdempotencyKey
 	if idem == "" {
 		idem = "crypto:sell:" + uuid.New().String()
-		// Con llave del cliente no se comprueba antes: el reintento de una venta
-		// que ya se llevo todo el saldo diria "insuficiente" sobre algo que ya
-		// ocurrio, en vez de llegar a la relectura de idempotencia. La guarda
-		// del descuento decide igual.
 		if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
 			return nil, err
+		}
+	} else {
+		// Con llave del cliente la comprobacion de cortesia tampoco se hacia
+		// nunca, y la pantalla manda llave SIEMPRE: la unica guarda que corria
+		// para una persona real era la de dentro del asiento, que llega a la
+		// misma respuesta abriendo una transaccion, escribiendo la fila del
+		// libro y dejandola rotulada 'failed' —visible en el historial— para
+		// una venta que nunca movio nada.
+		//
+		// Lo que esa asimetria protegia es un solo caso: el reintento de una
+		// venta que YA se llevo el saldo no puede recibir "no te alcanza" sobre
+		// algo que ya ocurrio, tiene que llegar a la relectura de idempotencia
+		// y volver la venta guardada. Ese es exactamente el caso que
+		// LlaveYaCompletada reconoce. Una llave con fila 'failed' o 'pending' NO
+		// lo es: su asiento no confirmo, el activo sigue entero y el pedido se
+		// va a reintentar de verdad, asi que ahi la comprobacion dice la verdad
+		// —y saltarsela dejaria a esa llave abriendo y revirtiendo un asiento
+		// entero en cada intento, para siempre.
+		yaPaso, err := s.tx.LlaveYaCompletada(ctx, userID, idem)
+		if err != nil {
+			return nil, err
+		}
+		if !yaPaso {
+			if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
+				return nil, err
+			}
 		}
 	}
 

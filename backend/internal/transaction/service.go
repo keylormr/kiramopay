@@ -274,6 +274,33 @@ func mismoMovimiento(previa *TransactionRecord, req *CreateTransactionRequest) b
 		previa.Type == req.Type
 }
 
+// LlaveYaCompletada dice si esa llave de idempotencia ya tiene un movimiento
+// COMPLETADO de esta persona.
+//
+// La necesita un modulo que, antes de llamar a CreateTransaction, hace una
+// comprobacion de cortesia sobre un saldo que el propio movimiento consume:
+// sobre la repeticion de algo que ya se cobro, esa lectura diria "no alcanza"
+// sobre dinero que ya se movio, en vez de dejar llegar el pedido a la relectura
+// de idempotencia que le devuelve el movimiento viejo.
+//
+// Una fila que existe pero NO completo no cuenta como repeticion, por la misma
+// razon que en CreateTransaction: su asiento no confirmo, el dinero sigue
+// donde estaba y ese pedido se va a reintentar de verdad sobre esa misma fila.
+// Ahi la comprobacion de cortesia sigue diciendo la verdad.
+func (s *Service) LlaveYaCompletada(ctx context.Context, userID, llave string) (bool, error) {
+	if llave == "" {
+		return false, nil
+	}
+	fila, err := s.repo.FindByIdempotencyKey(ctx, userID, llave)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("leer la llave de idempotencia: %w", err)
+	}
+	return fila.Status == StatusCompleted, nil
+}
+
 // CreateTransaction is the public entry point used by HTTP handlers for
 // simple user-initiated transactions. Internal callers (sinpe, qr, splitpay)
 // should prefer CreateTransfer which expresses BOTH legs of a transfer.
