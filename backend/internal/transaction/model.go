@@ -43,10 +43,16 @@ const (
 	// Owner moving money from a shop's balance into their personal wallet.
 	TypeMerchantWithdrawal = "merchant_withdrawal"
 	TypeRefund             = "refund"
-	TypeCryptoBuy          = "crypto_buy"       // fiat leaves the wallet to buy crypto
-	TypeCryptoSell         = "crypto_sell"      // fiat enters the wallet from selling crypto
-	TypeSavingsDeposit     = "savings_deposit"  // wallet -> SYSTEM:SAVINGS
-	TypeSavingsWithdraw    = "savings_withdraw" // SYSTEM:SAVINGS -> wallet
+	TypeCryptoBuy          = "crypto_buy"  // fiat leaves the wallet to buy crypto
+	TypeCryptoSell         = "crypto_sell" // fiat enters the wallet from selling crypto
+	// TypeCryptoSend: se le envio un activo a otra persona de KiramoPay. Es el
+	// unico tipo que NO mueve fiat: el activo sale de crypto_assets, que no pasa
+	// por el libro. La fila existe igual, con el valor en dolares de lo enviado,
+	// porque el tope diario y el monitoreo de la UIF se calculan sobre esta
+	// tabla: sin ella, el envio seria valor saliendo sin que nada lo cuente.
+	TypeCryptoSend      = "crypto_send"
+	TypeSavingsDeposit  = "savings_deposit"  // wallet -> SYSTEM:SAVINGS
+	TypeSavingsWithdraw = "savings_withdraw" // SYSTEM:SAVINGS -> wallet
 )
 
 // Transaction statuses

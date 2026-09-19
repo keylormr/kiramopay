@@ -92,6 +92,41 @@ func (h *Handler) Sell(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, tx)
 }
 
+// PreviewSend cotiza un envio sin hacerlo: a quien le llega, cuanto le llega y
+// cuanto baja del saldo. La hoja de confirmacion no puede mostrar esos numeros
+// calculados en el telefono — el que cobra es el servidor.
+func (h *Handler) PreviewSend(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var req SendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+
+	vista, err := h.service.PreviewSend(r.Context(), userID, &req)
+	if err != nil {
+		responderError(w, err, "SEND_PREVIEW_FAILED")
+		return
+	}
+	response.JSON(w, http.StatusOK, vista)
+}
+
+func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var req SendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+
+	tx, err := h.service.Send(r.Context(), userID, &req)
+	if err != nil {
+		responderError(w, err, "SEND_FAILED")
+		return
+	}
+	response.JSON(w, http.StatusCreated, tx)
+}
+
 func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var req ConvertRequest

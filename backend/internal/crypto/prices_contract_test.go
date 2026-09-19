@@ -34,7 +34,7 @@ func TestGetPricesResponseContract(t *testing.T) {
 
 	ps := crypto.NewPriceService()
 	ps.SetBaseURL(fake.URL)
-	svc := crypto.NewService(nil, ps, nil, nil)
+	svc := crypto.NewService(nil, ps, nil, nil, nil)
 	h := crypto.NewHandler(svc)
 
 	doc, err := contract.LoadSpec("../../docs/openapi.yaml")

@@ -45,6 +45,21 @@ export function mensajeDeErrorCripto(
       return t('crypto_err_position_locked');
     case 'CLAIM_NOT_AVAILABLE':
       return t('crypto_claim_unavailable');
+    // Envio entre personas. El QR dice a quien le llega, asi que cada motivo
+    // por el que un codigo no sirve se explica aparte: "no se pudo" no le dice
+    // a nadie que tiene que pedirle a la otra persona su codigo personal.
+    case 'QR_INVALIDO':
+      return t('crypto_err_qr_invalido');
+    case 'QR_REVOCADO':
+      return t('crypto_err_qr_revocado');
+    case 'QR_DE_COMERCIO':
+      return t('crypto_err_qr_de_comercio');
+    case 'QR_DE_COBRO':
+      return t('crypto_err_qr_de_cobro');
+    case 'CRYPTO_SEND_SELF':
+      return t('crypto_err_envio_a_si_mismo');
+    case 'CRYPTO_SEND_UNAVAILABLE':
+      return t('crypto_err_envio_no_disponible');
     // Los que nacen en el propio cliente.
     case 'NETWORK_ERROR':
       return t('err_network');

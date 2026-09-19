@@ -37,7 +37,12 @@ export interface CryptoTransaction {
   fee: number;
   date: string;
   status: 'completed' | 'pending' | 'failed';
-  txHash?: string;
+  /**
+   * La otra persona de KiramoPay, en un envio: a quien se le envio o de quien
+   * vino. Solo la traen 'send' y 'receive'; el resto de los movimientos no
+   * tiene a nadie del otro lado.
+   */
+  counterpartyName?: string;
 }
 
 export interface StakingPosition {

@@ -922,6 +922,165 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/crypto/send/preview:
+    post:
+      tags: [Crypto]
+      summary: Quote a crypto send to another person
+      description: >-
+        Quotes a send without performing it: who receives it, how much reaches
+        them and how much leaves the balance. The recipient is resolved from
+        the QR code scanned from their profile — `qr_data` is the raw payload
+        the camera read. There is no destination address: this crypto lives on
+        no chain, so the only possible recipient is another KiramoPay person.
+        The fee is KiramoPay's own, never a network fee: `fee_percent` of the
+        amount, charged in the same asset and paid by the sender, so the
+        recipient gets `amount` exactly and the sender's balance drops
+        `total`. The screen must not compute these figures itself.
+        This endpoint does NOT check the balance: `total` can exceed it, and
+        the client is expected to say so before offering to confirm.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoSendRequest'
+      responses:
+        '200':
+          description: Quote for the send
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoSendPreview'
+        '400':
+          description: >-
+            CRYPTO_INVALID_AMOUNT (not positive or more than 18 decimals),
+            QR_INVALIDO (the code does not exist or is not a KiramoPay code),
+            CRYPTO_SEND_SELF (the scanned code is the sender's own), or
+            INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: QR_REVOCADO — the owner of that code withdrew it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            QR_DE_COMERCIO — that code belongs to a business, and businesses
+            charge in colones or dollars. QR_DE_COBRO — that code requests an
+            amount of money, not crypto; it is paid from Pay with QR.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: SEND_PREVIEW_FAILED with a generic message; the detail stays in the server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: >-
+            CRYPTO_SEND_UNAVAILABLE — this deployment has no QR resolver wired,
+            so it cannot know who would receive it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/crypto/send:
+    post:
+      tags: [Crypto]
+      summary: Send crypto to another person
+      description: >-
+        Moves the asset from the sender to the person who owns the scanned QR.
+        `amount` is what the recipient gets; what leaves the sender's balance
+        is `amount` plus KiramoPay's fee, in the same asset. The debit, the
+        credit, the fee and both history rows commit in one transaction.
+        `price` is the USD unit price the screen showed: a deviation above 2%
+        is rejected with 409 PRICE_MOVED. The send is also written to the
+        wallet history in USD even though no fiat moves, because the daily
+        limit and the AML monitoring are computed over that table; without a
+        usable price the send is refused rather than counted as zero.
+        Repeating a completed send with the same `idempotency_key` returns the
+        recorded send and moves nothing; a key that belongs to a different
+        amount or a different recipient gets 409 LLAVE_REUTILIZADA.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoSendRequest'
+      responses:
+        '201':
+          description: >-
+            Send completed. `fee` is KiramoPay's fee in the same asset, `total`
+            is what left the balance, `currency` is the asset itself and
+            `counterparty_name` is who received it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoTransactionRecord'
+        '400':
+          description: >-
+            CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or
+            INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            PRICE_MOVED — the USD price moved more than 2% since it was shown.
+            QR_REVOCADO — the owner of that code withdrew it.
+            LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
+            amount or a different recipient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            CRYPTO_INSUFFICIENT_BALANCE — the asset balance does not cover the
+            amount plus the fee. QR_DE_COMERCIO or QR_DE_COBRO — that code is
+            not a personal one. DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED
+            — the USD value of the send passes the spending limit. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '428':
+          description: >-
+            MFA_REQUIRED — the USD value passes the high-value threshold and
+            there is no verified MFA challenge. Nothing moved: verify the
+            challenge and retry with the SAME `idempotency_key`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: SEND_FAILED with a generic message; the detail stays in the server log. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: >-
+            PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price
+            right now. CRYPTO_SEND_UNAVAILABLE — this deployment has no QR
+            resolver wired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/crypto/convert:
     post:
       tags: [Crypto]
@@ -4773,6 +4932,64 @@ components:
         idempotency_key:
           type: string
 
+    CryptoSendRequest:
+      type: object
+      required: [asset, amount, qr_data]
+      properties:
+        asset:
+          type: string
+          example: "BTC"
+        amount:
+          type: number
+          description: >-
+            Crypto quantity the RECIPIENT gets, at most 18 decimals. The fee is
+            added on top of it and paid by the sender.
+        qr_data:
+          type: string
+          description: >-
+            The QR payload exactly as the camera read it, from the recipient's
+            personal code. The server resolves who owns it. There is no
+            destination address and no user id: an address would have nowhere
+            to go, and a hand-typed id lets someone try other people's ids
+            until one lands.
+          example: "KP:p:1a2b3c4d:0:CRC:iabc123"
+        price:
+          type: number
+          description: >-
+            USD unit price the screen showed. Omit it to skip the 2% check.
+            Required in practice for /send, which values the send in USD for
+            the spending limit and the AML monitoring.
+        idempotency_key:
+          type: string
+          description: >-
+            Ignored by /send/preview. On /send, retrying with the same key
+            returns the recorded send instead of sending again. Keep the same
+            key across an MFA challenge.
+
+    CryptoSendPreview:
+      type: object
+      description: >-
+        What the confirmation sheet shows before sending. Quantities are exact
+        decimals serialized as JSON strings. The fee is KiramoPay's own, in the
+        same asset and paid by the sender, so `amount` is what reaches the
+        recipient and `total` is what leaves the sender's balance.
+      required: [recipient_name, asset, amount, fee, total, fee_percent]
+      properties:
+        recipient_name:
+          type: string
+          description: The name of the person who owns the scanned code.
+          example: "Victor Lobo"
+        asset: { type: string, example: "BTC" }
+        amount: { type: string, description: 'decimal, what the recipient gets' }
+        fee: { type: string, description: 'decimal, KiramoPay fee in the same asset' }
+        total: { type: string, description: 'decimal, amount + fee: what leaves the balance' }
+        fee_percent:
+          type: string
+          description: >-
+            decimal, the fee as a percentage, so the screen writes it once and
+            it cannot drift from the rate actually charged.
+          example: "0.25"
+
     CryptoPriceData:
       type: object
       required: [symbol, price, change_24h, volume_24h, market_cap]
@@ -5030,7 +5247,11 @@ components:
         symbol and `price` the destination's USD unit price. For stake and
         unstake, `amount` and `total` are the quantity set aside or released,
         `currency` is the asset itself and `price` is zero: no price or fiat
-        is involved. No movement charges a fee: `fee` is zero.
+        is involved. For send and receive, `amount` is the quantity that
+        reached the recipient, `currency` is the asset itself, `price` its USD
+        unit price, and `total` is what left the balance (`amount` plus the
+        fee on the sender's row, `amount` alone on the recipient's).
+        Only a send charges a fee; everywhere else `fee` is zero.
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -5043,6 +5264,18 @@ components:
         fee: { type: string, description: decimal }
         status: { type: string }
         created_at: { type: string, format: date-time }
+        counterparty_user_id:
+          type: string
+          format: uuid
+          description: >-
+            Present only on send and receive: the other person of the transfer.
+        counterparty_name:
+          type: string
+          description: >-
+            Present only on send and receive: who it was sent to, or who it
+            came from. There is no transaction hash — this crypto lives on no
+            chain, so the other person is the only identity a transfer has.
+          example: "Victor Lobo"
 
     StakingPositionRecord:
       type: object

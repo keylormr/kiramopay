@@ -503,9 +503,14 @@ func (r *Repository) MarcarFallida(ctx context.Context, id string) error {
 // savings_deposit queda fuera a proposito: mueve el dinero a SYSTEM:SAVINGS, que
 // sigue siendo del usuario y puede retirar cuando quiera. No sale de su control,
 // asi que no es gasto.
+// crypto_send es valor que sale sin que se mueva un centimo de fiat: el activo
+// pasa a otra persona y la fila lleva su equivalente en dolares. Cuenta igual,
+// porque lo que el tope y la UIF miden es valor saliendo, no la moneda en que
+// sale — dejarlo fuera seria el camino abierto para sacar por cripto lo que el
+// tope no deja sacar por transferencia.
 var TiposDeSalida = []string{
 	"sinpe_send", "qr_payment", "bill_payment", "recharge", "withdrawal",
-	"p2p_send", "crypto_buy", "escrow_fund", "payout_sent", "marketplace",
+	"p2p_send", "crypto_buy", "crypto_send", "escrow_fund", "payout_sent", "marketplace",
 }
 
 // ListaSQLDeSalidas arma el `('a','b',...)` de un IN a partir de TiposDeSalida,

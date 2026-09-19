@@ -58,7 +58,7 @@ func montarAlertas(t *testing.T) *montajeAlertas {
 		pool:      pool,
 		repo:      repo,
 		ps:        ps,
-		svc:       NewService(repo, ps, nil, nil),
+		svc:       NewService(repo, ps, nil, nil, nil),
 		ana:       testutil.SeedTestUser(t, pool, "702650930", "sin-uso"),
 		beto:      testutil.SeedTestUser2(t, pool),
 		avisos:    avisos,

@@ -34,7 +34,6 @@ interface CryptoStoreState extends CryptoState {
   sellCrypto: (asset: string, amount: number) => void;
   convertCrypto: (fromAsset: string, toAsset: string, fromAmount: number, toAmount: number, price: number) => void;
   sendCrypto: (asset: string, amount: number, fee: number) => void;
-  receiveCrypto: (asset: string, amount: number) => void;
   stakeCrypto: (position: StakingPosition) => void;
   unstakeCrypto: (positionId: string) => void;
   claimYield: (positionId: string, amount: number) => void;
@@ -125,17 +124,15 @@ export const useCryptoStore = create<CryptoStoreState>()(
           }),
         })),
 
+      // amount es lo que le llega a la otra persona y fee la comision de
+      // KiramoPay: del saldo baja la suma de las dos, que es lo que el servidor
+      // ya descontó. Recibir no tiene su gemelo aqui a proposito: al que recibe
+      // le llega la lista del servidor, y una rama que sume saldo sin que nadie
+      // lo haya mandado solo sirve para inventarlo.
       sendCrypto: (asset, amount, fee) =>
         set((s) => ({
           assets: s.assets.map((a) =>
             a.symbol === asset ? { ...a, balance: a.balance - amount - fee } : a,
-          ),
-        })),
-
-      receiveCrypto: (asset, amount) =>
-        set((s) => ({
-          assets: s.assets.map((a) =>
-            a.symbol === asset ? { ...a, balance: a.balance + amount } : a,
           ),
         })),
 
