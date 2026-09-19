@@ -106,13 +106,19 @@ func (m *montajeVenta) ventasAnotadas(t *testing.T) int {
 		`SELECT COUNT(*) FROM crypto_transactions WHERE user_id = $1::uuid AND type = 'sell'`, m.userID)
 }
 
+// filasDeLaLlave cuenta las filas de `transactions` que cuelgan de la llave.
+func (m *montajeVenta) filasDeLaLlave(t *testing.T, llave string) int {
+	t.Helper()
+	return m.contar(t,
+		`SELECT COUNT(*) FROM transactions WHERE user_id = $1::uuid AND idempotency_key = $2`,
+		m.userID, llave)
+}
+
 // filaDeLaLlave devuelve el id y el estado de la fila de `transactions` que
 // cuelga de la llave, y cuantas hay.
 func (m *montajeVenta) filaDeLaLlave(t *testing.T, llave string) (id, estado string) {
 	t.Helper()
-	if n := m.contar(t,
-		`SELECT COUNT(*) FROM transactions WHERE user_id = $1::uuid AND idempotency_key = $2`,
-		m.userID, llave); n != 1 {
+	if n := m.filasDeLaLlave(t, llave); n != 1 {
 		t.Fatalf("filas con la llave %q = %d, se esperaba 1", llave, n)
 	}
 	if err := m.pool.QueryRow(context.Background(),
@@ -191,6 +197,18 @@ func (m *montajeVenta) venderPorHTTP(t *testing.T, cuerpo string) *httptest.Resp
 	rec := httptest.NewRecorder()
 	m.h.Sell(rec, req)
 	return rec
+}
+
+// delPreChequeo dice si el rechazo por saldo salio de la comprobacion previa y
+// no de la guarda de dentro del asiento.
+//
+// Las dos responden al mismo errors.Is, asi que el texto es lo unico que las
+// separa: el pre-chequeo devuelve el sentinela con el simbolo y nada mas —lo
+// arma el servicio antes de tocar la base—, y la guarda lo trae envuelto en los
+// prefijos del camino que hizo falta abrir para llegar a ella ("sell ETH: post
+// ledger: en la misma tx: ...").
+func delPreChequeo(err error, activo string) bool {
+	return err != nil && err.Error() == fmt.Sprintf("%s: %s", crypto.ErrSaldoDeActivoInsuficiente, activo)
 }
 
 // sinRastroDeLaBase falla si la respuesta deja ver algo de Postgres.
@@ -358,9 +376,14 @@ func TestVender_TodoElSaldoQuedaEnCero(t *testing.T) {
 }
 
 // Vender de mas se rechaza con un codigo propio y no mueve nada: ni el activo,
-// ni la billetera, ni un asiento, ni una venta anotada. Sin llave rechaza la
-// comprobacion de cortesia; con llave, la guarda dentro del asiento, que es la
-// que de verdad frena.
+// ni la billetera, ni un asiento, ni una venta anotada, ni una fila en el
+// historial.
+//
+// Con llave del cliente tambien, que es como llega SIEMPRE desde la pantalla.
+// Antes, con llave, el pre-chequeo se saltaba y frenaba la guarda de dentro del
+// asiento: la misma respuesta, pero despues de abrir una transaccion y dejar
+// una fila rotulada 'failed' —visible en el historial general— de una venta que
+// nunca movio nada.
 func TestVender_DeMasSeRechazaConCodigoPropioYNoMueveNada(t *testing.T) {
 	m := montarVenta(t)
 	ctx := context.Background()
@@ -375,9 +398,17 @@ func TestVender_DeMasSeRechazaConCodigoPropioYNoMueveNada(t *testing.T) {
 		{Asset: "BTC", Amount: d(0.1), ToCurrency: "CRC", IdempotencyKey: "venta-sin-activo"},
 	}
 	for _, p := range pedidos {
-		if _, err := m.svc.Sell(ctx, m.userID, p); !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		_, err := m.svc.Sell(ctx, m.userID, p)
+		if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
 			t.Fatalf("vender %s %s (llave %q) = %v, se esperaba ErrSaldoDeActivoInsuficiente",
 				p.Amount, p.Asset, p.IdempotencyKey, err)
+		}
+		// Traiga llave o no, el rechazo sale del pre-chequeo: es lo que ahorra
+		// el asiento y el rastro. No corta la prueba aca a proposito: si esto
+		// falla, lo que sigue —el rastro que quedo— es justo lo que hay que ver.
+		if !delPreChequeo(err, p.Asset) {
+			t.Errorf("vender %s (llave %q) se rechazo desde dentro del asiento: %v",
+				p.Asset, p.IdempotencyKey, err)
 		}
 		if p.IdempotencyKey == "" {
 			continue
@@ -385,8 +416,9 @@ func TestVender_DeMasSeRechazaConCodigoPropioYNoMueveNada(t *testing.T) {
 		if n := m.asientosDeLaLlave(t, p.IdempotencyKey); n != 0 {
 			t.Fatalf("asientos de %q = %d, se esperaba 0", p.IdempotencyKey, n)
 		}
-		if _, estado := m.filaDeLaLlave(t, p.IdempotencyKey); estado != transaction.StatusFailed {
-			t.Fatalf("fila de %q en %q, se esperaba failed", p.IdempotencyKey, estado)
+		if n := m.filasDeLaLlave(t, p.IdempotencyKey); n != 0 {
+			t.Fatalf("filas de %q = %d, se esperaba 0: quedo en el historial una venta que nunca se intento mover",
+				p.IdempotencyKey, n)
 		}
 	}
 
@@ -404,8 +436,8 @@ func TestVender_DeMasSeRechazaConCodigoPropioYNoMueveNada(t *testing.T) {
 		t.Fatalf("ventas anotadas = %d, se esperaba 0", n)
 	}
 
-	// Por HTTP: 422 con su codigo y ni una palabra de la base, venga el rechazo
-	// de la cortesia o de la guarda.
+	// Por HTTP: 422 con su codigo y ni una palabra de la base, con llave y sin
+	// ella.
 	for _, cuerpo := range []string{
 		`{"asset":"ETH","amount":"7","to_currency":"CRC"}`,
 		`{"asset":"ETH","amount":"7","to_currency":"CRC","idempotency_key":"venta-de-mas-http"}`,
@@ -552,6 +584,55 @@ func TestVender_ReintentoConLaMismaLlave(t *testing.T) {
 	}
 }
 
+// Una llave que quedo con una fila NO completada vuelve a comprobar el saldo.
+//
+// El pre-chequeo se salta unicamente para la llave de una venta ya COMPLETADA,
+// que es el unico caso en que decir "no alcanza" hablaria de dinero que ya se
+// movio. Una fila 'failed' no es eso: su asiento no confirmo, el activo sigue
+// entero y el pedido se va a reintentar de verdad sobre esa misma fila. Si esa
+// llave se saltara el pre-chequeo, se quedaria abriendo y revirtiendo un
+// asiento entero en cada intento para llegar a la misma respuesta.
+func TestVender_LaLlaveConFilaFallidaVuelveAComprobarElSaldo(t *testing.T) {
+	m := montarVenta(t)
+	ctx := context.Background()
+	comprarSeisETH(t, m.svc, m.userID)
+	llave := "venta-que-quedo-fallida"
+	pedido := &crypto.SellRequest{Asset: "ETH", Amount: d(0.5), ToCurrency: "CRC", IdempotencyKey: llave}
+
+	quitar := m.inyectarFallo(t, fallaAlAnotar)
+	if _, err := m.svc.Sell(ctx, m.userID, pedido); err == nil {
+		t.Fatal("la venta se confirmo pese a la falla")
+	}
+	quitar()
+	if _, estado := m.filaDeLaLlave(t, llave); estado != transaction.StatusFailed {
+		t.Fatalf("fila de %q en %q, se esperaba failed", llave, estado)
+	}
+
+	// Otra venta se lleva todo: ahora el reintento de la fallida no alcanza.
+	if _, err := m.svc.Sell(ctx, m.userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(6), ToCurrency: "CRC", IdempotencyKey: "venta-que-vacia-el-saldo",
+	}); err != nil {
+		t.Fatalf("vender todo: %v", err)
+	}
+
+	_, err := m.svc.Sell(ctx, m.userID, pedido)
+	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		t.Fatalf("reintento de la fallida = %v, se esperaba ErrSaldoDeActivoInsuficiente", err)
+	}
+	if !delPreChequeo(err, "ETH") {
+		t.Fatalf("el reintento de la fallida volvio a abrir el asiento para decir lo mismo: %v", err)
+	}
+	if _, estado := m.filaDeLaLlave(t, llave); estado != transaction.StatusFailed {
+		t.Fatalf("fila de %q en %q tras el reintento, se esperaba failed", llave, estado)
+	}
+	if n := m.asientosDeLaLlave(t, llave); n != 0 {
+		t.Fatalf("asientos de %q = %d, se esperaba 0", llave, n)
+	}
+	if n := m.ventasAnotadas(t); n != 1 {
+		t.Fatalf("ventas anotadas = %d, se esperaba 1 (solo la que vacio el saldo)", n)
+	}
+}
+
 // Dos ventas simultaneas que juntas pasan el saldo: las dos pasan la
 // comprobacion de cortesia, pero la guarda dentro del asiento deja pasar una.
 func TestVender_DosVentasSimultaneasNoVendenMasDeLoQueHay(t *testing.T) {
@@ -593,6 +674,39 @@ func TestVender_DosVentasSimultaneasNoVendenMasDeLoQueHay(t *testing.T) {
 	}
 	if n := m.ventasAnotadas(t); n != 1 {
 		t.Fatalf("ventas anotadas = %d, se esperaba 1", n)
+	}
+}
+
+// La compuerta real del descuento, sin el servicio de por medio.
+//
+// Hasta el pre-chequeo con llave, las ventas de mas con llave de
+// TestVender_DeMasSeRechazaConCodigoPropioYNoMueveNada llegaban hasta aqui y
+// era este `balance >= $3` el que las frenaba. Ahora las frena antes el
+// servicio, asi que sin esta prueba la guarda se quedaria cubierta solo por la
+// carrera de dos ventas simultaneas, que por definicion no garantiza tocarla.
+func TestDescuento_LaGuardaFrenaLoQueNoAlcanza(t *testing.T) {
+	m := montarVenta(t)
+	ctx := context.Background()
+	comprarSeisETH(t, m.svc, m.userID)
+
+	tx, err := m.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("abrir la transaccion: %v", err)
+	}
+	err = crypto.NewRepository(m.pool).VenderEnTx(ctx, tx, &crypto.TransactionRecord{
+		UserID: m.userID, Type: "sell", Asset: "ETH", Amount: d(7),
+		Price: d(500000), Total: d(3500000), Currency: "CRC", Status: "completed",
+	})
+	_ = tx.Rollback(ctx)
+	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		t.Fatalf("descontar 7 de 6 = %v, se esperaba ErrSaldoDeActivoInsuficiente", err)
+	}
+
+	if got := saldoDeActivo(t, m.svc, m.userID, "ETH"); !got.Equal(d(6)) {
+		t.Fatalf("saldo ETH = %s, se esperaba 6", got)
+	}
+	if n := m.ventasAnotadas(t); n != 0 {
+		t.Fatalf("ventas anotadas = %d, se esperaba 0", n)
 	}
 }
 
