@@ -166,12 +166,24 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 	llave := req.IdempotencyKey
 	if llave == "" {
 		llave = "crypto:send:" + uuid.New().String()
-		// Con llave del cliente no se comprueba el saldo antes: el reintento de
-		// un envio que ya se llevo el saldo diria "no te alcanza" sobre algo que
-		// ya ocurrio, en vez de llegar a la relectura de idempotencia. La guarda
-		// del descuento decide igual.
 		if err := s.saldoAlcanza(ctx, userID, activo, total); err != nil {
 			return nil, err
+		}
+	} else {
+		// Con llave del cliente, el reintento de un envio que YA se llevo el
+		// saldo no puede decir "no te alcanza" sobre algo que ya ocurrio: tiene
+		// que llegar al indice unico de EnviarEnUnaTx y volver el envio ya
+		// guardado. Por eso la comprobacion de cortesia solo corre si esa llave
+		// todavia no tiene un envio escrito; si ya lo tiene, se sigue igual que
+		// arriba y decide la guarda del descuento (o, aqui, la relectura).
+		previo, err := s.repo.EnvioPorLlave(ctx, userID, llave)
+		if err != nil {
+			return nil, err
+		}
+		if previo == nil {
+			if err := s.saldoAlcanza(ctx, userID, activo, total); err != nil {
+				return nil, err
+			}
 		}
 	}
 
