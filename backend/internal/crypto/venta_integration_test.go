@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/contract"
@@ -40,10 +42,28 @@ import (
 const urlVender = "http://localhost:8080/api/v1/crypto/sell"
 
 type montajeVenta struct {
-	svc    *crypto.Service
-	h      *crypto.Handler
-	pool   *pgxpool.Pool
-	userID string
+	svc        *crypto.Service
+	h          *crypto.Handler
+	pool       *pgxpool.Pool
+	userID     string
+	urlPrecios string
+}
+
+// servicioDeVenta arma el servicio real sobre el pool que se le pase. Esta
+// aparte de montarVenta porque hay una prueba que necesita un SEGUNDO servicio,
+// igual en todo menos en el pool, para mirar por dentro sus consultas.
+func servicioDeVenta(t *testing.T, pool *pgxpool.Pool, urlPrecios string) *crypto.Service {
+	t.Helper()
+	precios := crypto.NewPriceService()
+	precios.SetBaseURL(urlPrecios)
+	txService := transaction.NewService(
+		transaction.NewRepository(pool),
+		wallet.NewRepository(pool),
+		ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil))),
+		nil,
+	)
+	return crypto.NewService(crypto.NewRepository(pool), precios, txService,
+		func(context.Context, string, string) (float64, error) { return 500, nil })
 }
 
 // montarVenta arma el servicio real con acceso al pool. No reusa
@@ -53,17 +73,7 @@ func montarVenta(t *testing.T) *montajeVenta {
 	t.Helper()
 	urlPrecios := startPriceStub(t).URL
 	pool := testutil.TestDB(t)
-
-	precios := crypto.NewPriceService()
-	precios.SetBaseURL(urlPrecios)
-	txService := transaction.NewService(
-		transaction.NewRepository(pool),
-		wallet.NewRepository(pool),
-		ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil))),
-		nil,
-	)
-	svc := crypto.NewService(crypto.NewRepository(pool), precios, txService,
-		func(context.Context, string, string) (float64, error) { return 500, nil })
+	svc := servicioDeVenta(t, pool, urlPrecios)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
@@ -73,7 +83,9 @@ func montarVenta(t *testing.T) *montajeVenta {
 		 WHERE user_id = $1::uuid`, userID); err != nil {
 		t.Fatalf("fondear la billetera: %v", err)
 	}
-	return &montajeVenta{svc: svc, h: crypto.NewHandler(svc), pool: pool, userID: userID}
+	return &montajeVenta{
+		svc: svc, h: crypto.NewHandler(svc), pool: pool, userID: userID, urlPrecios: urlPrecios,
+	}
 }
 
 func (m *montajeVenta) billetera(t *testing.T) (crc, usd int64) {
@@ -796,4 +808,279 @@ func TestComprar_SiLaAnotacionFallaNoSeCobraNiSeAbona(t *testing.T) {
 	if n := m.asientosDeLaLlave(t, "compra-con-falla"); n != 0 {
 		t.Fatalf("asientos = %d, se esperaba 0", n)
 	}
+}
+
+// Una llave que ya tiene OTRO movimiento se responde como llave reutilizada,
+// aunque el saldo tampoco alcance para el movimiento nuevo.
+//
+// La comprobacion de cortesia del saldo corre antes de CreateTransaction, asi
+// que si pregunta por el saldo pase lo que pase tapa el motivo real: quien
+// manda una llave ocupada recibe "no te alcanza" —algo que nadie puede
+// arreglar poniendo mas saldo— en lugar del ErrLlaveReutilizada que le dice que
+// la llave ya describe otra cosa. El orden de los motivos lo decide la
+// relectura de idempotencia; el pre-chequeo no puede adelantarsele.
+func TestVender_LaLlaveOcupadaSeRespondeComoTalAunqueElSaldoNoAlcance(t *testing.T) {
+	m := montarVenta(t)
+	ctx := context.Background()
+	comprarSeisETH(t, m.svc, m.userID)
+	const llave = "venta-con-llave-ocupada"
+
+	// Una venta que deja la fila de la llave sin completar: su asiento no
+	// confirmo, asi que el activo sigue entero y la llave queda ocupada por un
+	// movimiento de 0,5 ETH.
+	quitar := m.inyectarFallo(t, fallaAlAnotar)
+	if _, err := m.svc.Sell(ctx, m.userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(0.5), ToCurrency: "CRC", IdempotencyKey: llave,
+	}); err == nil {
+		t.Fatal("la venta se confirmo pese a la falla")
+	}
+	quitar()
+	if _, estado := m.filaDeLaLlave(t, llave); estado != transaction.StatusFailed {
+		t.Fatalf("fila de %q en %q, se esperaba failed", llave, estado)
+	}
+
+	// Misma llave, otra cantidad, y esa cantidad tampoco cabe en el saldo.
+	_, err := m.svc.Sell(ctx, m.userID, &crypto.SellRequest{
+		Asset: "ETH", Amount: d(100), ToCurrency: "CRC", IdempotencyKey: llave,
+	})
+	if errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		t.Fatalf("la llave ocupada se respondio por saldo: %v", err)
+	}
+	if !errors.Is(err, transaction.ErrLlaveReutilizada) {
+		t.Fatalf("llave ocupada con otra cantidad = %v, se esperaba ErrLlaveReutilizada", err)
+	}
+
+	if got := saldoDeActivo(t, m.svc, m.userID, "ETH"); !got.Equal(d(6)) {
+		t.Fatalf("saldo ETH = %s, se esperaba 6", got)
+	}
+	if n := m.filasDeLaLlave(t, llave); n != 1 {
+		t.Fatalf("filas con la llave %q = %d, se esperaba 1", llave, n)
+	}
+	if n := m.ventasAnotadas(t); n != 0 {
+		t.Fatalf("ventas anotadas = %d, se esperaba 0", n)
+	}
+}
+
+// El reintento no puede rechazar por saldo una venta que SI ocurrio.
+//
+// El pre-chequeo hace DOS lecturas sueltas contra la base, sin transaccion ni
+// candado que las una, y la llave del cliente existe justo para el caso en que
+// el pedido original sigue en vuelo: la red se corto sin traer la respuesta y
+// la pantalla reintenta con la misma llave. Ese pedido original puede confirmar
+// ENTRE una lectura y la otra. Si la llave se lee primero, el reintento la ve
+// "todavia no completada" y un instante despues ve el saldo YA descontado, y
+// contesta "no te alcanza" por una venta que ya se cobro, sin llegar nunca a la
+// relectura de idempotencia que le habria devuelto la venta guardada. Leyendo
+// el saldo primero eso es imposible: el descuento y el rotulo 'completed'
+// confirman en la misma transaccion, asi que un saldo que ya vio el descuento
+// va seguido de una llave que ya responde.
+//
+// Sobre una base quieta los dos ordenes contestan igual, asi que la carrera se
+// fuerza y no se espera: un disparador de restriccion diferido congela la venta
+// original justo en su commit, y un trazador de consultas la descongela —y
+// espera a que confirme— en el hueco entre las dos lecturas del reintento.
+func TestVender_ElReintentoNoRechazaLaVentaQueEstaConfirmando(t *testing.T) {
+	m := montarVenta(t)
+	ctx := context.Background()
+	comprarSeisETH(t, m.svc, m.userID)
+	crc0, _ := m.billetera(t)
+	const llave = "venta-en-vuelo"
+	const candado = int64(918273)
+
+	// Una conexion aparte retiene el candado. Es lo que deja congelada a la
+	// venta original cuando su disparador diferido corre, en el commit.
+	conn, err := m.pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("tomar una conexion: %v", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, candado); err != nil {
+		t.Fatalf("tomar el candado: %v", err)
+	}
+	var unaVez sync.Once
+	soltar := func() {
+		unaVez.Do(func() {
+			if _, err := conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, candado); err != nil {
+				t.Errorf("soltar el candado: %v", err)
+			}
+		})
+	}
+	defer soltar()
+	m.congelarAlConfirmar(t, candado)
+
+	pedido := &crypto.SellRequest{Asset: "ETH", Amount: d(6), ToCurrency: "CRC", IdempotencyKey: llave}
+	var original *crypto.TransactionRecord
+	var errOriginal error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		original, errOriginal = m.svc.Sell(context.Background(), m.userID, pedido)
+	}()
+
+	if !esperar(t, "la venta original llega a su commit", func() bool {
+		return m.esperandoElCandado(t, candado)
+	}) {
+		soltar()
+		wg.Wait()
+		t.FailNow()
+	}
+
+	// El reintento, sobre un servicio igual en todo menos en que su pool avisa
+	// cuando termina la primera lectura del pre-chequeo.
+	trazador := &trazadorDelPreChequeo{hook: func() {
+		soltar()
+		esperar(t, "la venta original confirma", func() bool {
+			return m.estadoDeLaLlave(t, llave) == transaction.StatusCompleted
+		})
+	}}
+	reintento := servicioDeVenta(t, testutil.PoolTrazado(t, trazador), m.urlPrecios)
+	repetida, errRepetida := reintento.Sell(ctx, m.userID, pedido)
+
+	soltar()
+	wg.Wait()
+
+	if !trazador.disparado {
+		t.Fatal("el trazador nunca vio el pre-chequeo: la prueba no probo la carrera")
+	}
+	if errOriginal != nil {
+		t.Fatalf("la venta original: %v", errOriginal)
+	}
+	if errRepetida != nil {
+		t.Fatalf("el reintento de una venta que SI ocurrio = %v", errRepetida)
+	}
+	if repetida.ID != original.ID || !repetida.Amount.Equal(original.Amount) {
+		t.Fatalf("el reintento devolvio %+v, la venta fue %+v", repetida, original)
+	}
+
+	// Y la venta ocurrio una sola vez.
+	if got := saldoDeActivo(t, m.svc, m.userID, "ETH"); !got.IsZero() {
+		t.Fatalf("saldo ETH = %s, se esperaba 0", got)
+	}
+	if crc, _ := m.billetera(t); crc != crc0+300_000_000 {
+		t.Fatalf("billetera CRC = %d, se esperaba %d", crc, crc0+300_000_000)
+	}
+	if n := m.ventasAnotadas(t); n != 1 {
+		t.Fatalf("ventas anotadas = %d, se esperaba 1", n)
+	}
+	if n := m.asientosDeLaLlave(t, llave); n != 1 {
+		t.Fatalf("asientos de %q = %d, se esperaba 1", llave, n)
+	}
+}
+
+// congelarAlConfirmar instala un disparador de restriccion DIFERIDO sobre el
+// descuento del activo. Un disparador diferido corre en el COMMIT, asi que
+// pedir ahi un candado consultivo que otra conexion retiene deja la transaccion
+// entera escrita y sin confirmar: justo el instante que hace falta.
+func (m *montajeVenta) congelarAlConfirmar(t *testing.T, clave int64) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := m.pool.Exec(ctx, fmt.Sprintf(`
+		CREATE OR REPLACE FUNCTION prueba_congela_en_el_commit() RETURNS trigger
+		LANGUAGE plpgsql AS $$
+		BEGIN
+			PERFORM pg_advisory_xact_lock(%d);
+			RETURN NULL;
+		END $$`, clave)); err != nil {
+		t.Fatalf("crear la funcion que congela: %v", err)
+	}
+	if _, err := m.pool.Exec(ctx, `
+		CREATE CONSTRAINT TRIGGER prueba_congela AFTER UPDATE ON crypto_assets
+			DEFERRABLE INITIALLY DEFERRED
+			FOR EACH ROW EXECUTE FUNCTION prueba_congela_en_el_commit()`); err != nil {
+		t.Fatalf("crear el disparador que congela: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx := context.Background()
+		if _, err := m.pool.Exec(ctx, `DROP TRIGGER IF EXISTS prueba_congela ON crypto_assets`); err != nil {
+			t.Errorf("quitar el disparador que congela: %v", err)
+		}
+		if _, err := m.pool.Exec(ctx, `DROP FUNCTION IF EXISTS prueba_congela_en_el_commit()`); err != nil {
+			t.Errorf("quitar la funcion que congela: %v", err)
+		}
+	})
+}
+
+// esperandoElCandado dice si alguien quedo bloqueado pidiendo el candado
+// consultivo: la senal de que la venta original llego a su commit y ahi se
+// quedo. Una clave de 64 bits se reparte en pg_locks entre classid (los 32
+// altos) y objid (los 32 bajos).
+func (m *montajeVenta) esperandoElCandado(t *testing.T, clave int64) bool {
+	t.Helper()
+	var esperando bool
+	if err := m.pool.QueryRow(context.Background(), `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_locks
+			WHERE locktype = 'advisory' AND NOT granted
+			  AND classid = 0 AND objid = $1::bigint::oid)`, clave,
+	).Scan(&esperando); err != nil {
+		t.Fatalf("mirar los candados: %v", err)
+	}
+	return esperando
+}
+
+// estadoDeLaLlave devuelve el estado de la fila del libro que cuelga de la
+// llave, o "" si todavia no hay ninguna. No falla la prueba: se usa dentro de
+// esperas, donde "todavia no" es una respuesta valida.
+func (m *montajeVenta) estadoDeLaLlave(t *testing.T, llave string) string {
+	t.Helper()
+	var estado string
+	if err := m.pool.QueryRow(context.Background(),
+		`SELECT status FROM transactions WHERE user_id = $1::uuid AND idempotency_key = $2`,
+		m.userID, llave,
+	).Scan(&estado); err != nil {
+		return ""
+	}
+	return estado
+}
+
+// esperar bloquea hasta que se cumpla la condicion, con tope. Toda espera de
+// estas pruebas es acotada: una que no terminara dejaria colgado el truncado
+// del cierre, y con el la suite entera.
+func esperar(t *testing.T, que string, cumplido func() bool) bool {
+	t.Helper()
+	limite := time.Now().Add(15 * time.Second)
+	for time.Now().Before(limite) {
+		if cumplido() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Errorf("se agoto la espera de: %s", que)
+	return false
+}
+
+// trazadorDelPreChequeo dispara el gancho UNA vez, apenas termina la primera
+// lectura del pre-chequeo de la venta. pgx cierra la consulta —y con ella llama
+// a TraceQueryEnd— cuando el resultado ya se leyo, asi que el gancho cae
+// exactamente en el hueco entre esa lectura y la siguiente.
+type trazadorDelPreChequeo struct {
+	hook      func()
+	unaVez    sync.Once
+	disparado bool
+}
+
+// claveDelSQL lleva el texto de la consulta del inicio al final del trazado:
+// pgx solo lo entrega en TraceQueryStart, y el contexto que ahi se devuelve es
+// el que recibe TraceQueryEnd.
+type claveDelSQL struct{}
+
+func (tz *trazadorDelPreChequeo) TraceQueryStart(
+	ctx context.Context, _ *pgx.Conn, datos pgx.TraceQueryStartData,
+) context.Context {
+	return context.WithValue(ctx, claveDelSQL{}, datos.SQL)
+}
+
+func (tz *trazadorDelPreChequeo) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	sql, _ := ctx.Value(claveDelSQL{}).(string)
+	// Las dos lecturas del pre-chequeo: la del saldo del activo y la de la
+	// llave. Cual de las dos va primero es justo lo que esta prueba mide, asi
+	// que el trazador reconoce las dos y se dispara con la que llegue.
+	if !strings.Contains(sql, "FROM crypto_assets") && !strings.Contains(sql, "idempotency_key = $2") {
+		return
+	}
+	tz.unaVez.Do(func() {
+		tz.disparado = true
+		tz.hook()
+	})
 }
