@@ -567,17 +567,54 @@ func TestEnviarCripto_ElSaldoTieneQueCubrirLaComision(t *testing.T) {
 		t.Fatalf("subir el tope de esta prueba: %v", err)
 	}
 
-	// Con llave del cliente se salta la comprobacion previa a proposito, para
-	// que la prueba llegue hasta la guarda del descuento: esa es la unica
-	// compuerta real, porque la comprobacion previa lee fuera de la transaccion.
-	// Si esa guarda (descontarActivo, "balance >= $3") se quitara, este envio de
-	// 1 BTC contra un saldo de 1 BTC saldria adelante y la linea de abajo
-	// fallaria: la prueba se pone roja igual que hoy prueba que se ponga verde.
+	// OJO: con llave del cliente, esta prueba YA NO llega a la guarda del
+	// descuento (descontarActivo, "balance >= $3"). "envio-del-saldo-entero" es
+	// una llave nueva, asi que el pre-chequeo de saldoAlcanza —que lee FUERA de
+	// la transaccion— la frena antes de tocar la base. Lo que aqui se prueba es
+	// ese pre-chequeo, no la guarda SQL; quien prueba la guarda en si, llamando
+	// al repositorio sin el servicio de por medio, es
+	// TestEnviarEnUnaTxRespetaLaGuardaDeSaldoSinElPreChequeoDelServicio.
 	_, err := e.enviar(d(1), "envio-del-saldo-entero")
 	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
 		t.Fatalf("error = %v, esperaba ErrSaldoDeActivoInsuficiente", err)
 	}
 	e.exigirQueNadaSeMovio(t)
+}
+
+// La guarda de verdad (descontarActivo, "balance >= $3") dejo de tener una
+// prueba deterministica cuando la llave del cliente empezo a pre-chequear el
+// saldo: para una llave nueva, ese pre-chequeo ahora intercepta el envio antes
+// de llegar a la base, y la unica prueba que todavia toca la guarda es la
+// carrera de mas abajo, que depende de que las dos goroutines de verdad se
+// solapen. Esta prueba llama al repositorio DIRECTO, sin el servicio de por
+// medio, para que la guarda siga probada sin depender de una carrera.
+func TestEnviarEnUnaTxRespetaLaGuardaDeSaldoSinElPreChequeoDelServicio(t *testing.T) {
+	e := montarEnvio(t)
+	ctx := context.Background()
+	repo := crypto.NewRepository(e.pool)
+
+	envio := &crypto.TransactionRecord{
+		UserID: e.quienEnvia, Type: "send", Asset: "BTC",
+		Amount: d(1), Price: d(1000), Total: d(1.0025), Currency: "BTC",
+		Fee: d(0.0025), Status: "completed",
+		CounterpartyUserID: e.quienRecibe, IdempotencyKey: "directo-al-repositorio-sin-saldo",
+	}
+	recibo := &crypto.TransactionRecord{
+		UserID: e.quienRecibe, Type: "receive", Asset: "BTC",
+		Amount: d(1), Price: d(1000), Total: d(1), Currency: "BTC",
+		Fee: decimal.Zero, Status: "completed", CounterpartyUserID: e.quienEnvia,
+	}
+
+	// Saldo de quien envia: 1 BTC (sembrado por montarEnvio). Total pedido:
+	// 1,0025 BTC. Sin ningun pre-chequeo de por medio —AntesDeMover va nil—,
+	// lo unico que puede rechazar este envio es la guarda SQL.
+	_, _, err := repo.EnviarEnUnaTx(ctx, &crypto.DatosDelEnvio{
+		Envio: envio, Recibo: recibo, NombreDelActivo: "Bitcoin", PrecioUSD: d(1000),
+	})
+	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+		t.Fatalf("error = %v, esperaba ErrSaldoDeActivoInsuficiente", err)
+	}
+	e.exigirSaldos(t, d(1), decimal.Zero)
 }
 
 // El tope diario frena el envio igual que frena una transferencia, y el envio
@@ -801,6 +838,68 @@ func TestEnviarCripto_DosEnviosSimultaneosNoEnvianMasDeLoQueHay(t *testing.T) {
 	}
 	if comisiones != 1 {
 		t.Fatalf("se cobraron %d comisiones por un solo envio ganador", comisiones)
+	}
+}
+
+// La misma carrera de arriba, pero con la MISMA llave de idempotencia en las
+// dos llamadas — el caso que el arreglo de la llave del cliente dice proteger
+// y que ninguna prueba ejercitaba: la de arriba usa llave vacia en las dos
+// (cada una genera la suya propia) y la del reintento idempotente las manda
+// una despues de la otra, nunca las dos en vuelo a la vez.
+//
+// Con llave compartida la proteccion no es la guarda de saldo: es el indice
+// unico de EnviarEnUnaTx. La segunda insercion se bloquea contra la primera
+// hasta que esta resuelve, y cae al camino de "repetido" sin haber tocado el
+// saldo — asi que, a diferencia de la carrera con llaves distintas, las DOS
+// llamadas tienen que terminar en err == nil y con el MISMO envio.
+func TestEnviarCripto_DosEnviosSimultaneosConLaMismaLlaveNoDuplicanNiFallan(t *testing.T) {
+	e := montarEnvio(t)
+	ctx := context.Background()
+
+	// Mismo recorte que la carrera de llaves distintas: alcanza para uno de
+	// los dos intentos, no para los dos juntos. Con llave compartida el saldo
+	// nunca baja dos veces, pero el recorte deja la prueba blindada si algun
+	// dia el bloqueo del indice dejara de aplicar.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE crypto_assets SET balance = $2 WHERE user_id = $1::uuid AND symbol = 'BTC'`,
+		e.quienEnvia, d(0.1),
+	); err != nil {
+		t.Fatalf("recortar el saldo para la carrera: %v", err)
+	}
+
+	monto := d(0.06)
+	const llave = "carrera-con-la-misma-llave"
+	var wg sync.WaitGroup
+	resultados := make([]*crypto.TransactionRecord, 2)
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			resultados[i], errs[i] = e.enviar(monto, llave)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("envio %d con llave compartida devolvio error: %v", i, err)
+		}
+	}
+	if resultados[0].ID != resultados[1].ID {
+		t.Fatalf("la misma llave produjo dos envios distintos: %s vs %s", resultados[0].ID, resultados[1].ID)
+	}
+
+	// Un solo debito real: 0,1 BTC menos lo que baja UN envio, no dos.
+	e.exigirSaldos(t, d(0.1).Sub(d(0.06015)), monto)
+
+	var comisiones int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM crypto_platform_fees`).Scan(&comisiones); err != nil {
+		t.Fatalf("contar comisiones: %v", err)
+	}
+	if comisiones != 1 {
+		t.Fatalf("se cobraron %d comisiones por un envio que se repitio", comisiones)
 	}
 }
 
