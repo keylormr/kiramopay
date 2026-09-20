@@ -197,35 +197,6 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	idem := req.IdempotencyKey
 	if idem == "" {
 		idem = "crypto:sell:" + uuid.New().String()
-		if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
-			return nil, err
-		}
-	} else {
-		// Con llave del cliente la comprobacion de cortesia tampoco se hacia
-		// nunca, y la pantalla manda llave SIEMPRE: la unica guarda que corria
-		// para una persona real era la de dentro del asiento, que llega a la
-		// misma respuesta abriendo una transaccion, escribiendo la fila del
-		// libro y dejandola rotulada 'failed' —visible en el historial— para
-		// una venta que nunca movio nada.
-		//
-		// Lo que esa asimetria protegia es un solo caso: el reintento de una
-		// venta que YA se llevo el saldo no puede recibir "no te alcanza" sobre
-		// algo que ya ocurrio, tiene que llegar a la relectura de idempotencia
-		// y volver la venta guardada. Ese es exactamente el caso que
-		// LlaveYaCompletada reconoce. Una llave con fila 'failed' o 'pending' NO
-		// lo es: su asiento no confirmo, el activo sigue entero y el pedido se
-		// va a reintentar de verdad, asi que ahi la comprobacion dice la verdad
-		// —y saltarsela dejaria a esa llave abriendo y revirtiendo un asiento
-		// entero en cada intento, para siempre.
-		yaPaso, err := s.tx.LlaveYaCompletada(ctx, userID, idem)
-		if err != nil {
-			return nil, err
-		}
-		if !yaPaso {
-			if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	venta := &TransactionRecord{
@@ -241,7 +212,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Fee:      decimal.Zero,
 		Status:   "completed",
 	}
-	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+	pedido := &transaction.CreateTransactionRequest{
 		Type:             transaction.TypeCryptoSell,
 		Amount:           fiatMinor,
 		Currency:         currency,
@@ -259,7 +230,44 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 			venta.ID = txID
 			return s.repo.VenderEnTx(ctx, dbtx, venta)
 		},
-	})
+	}
+
+	// Comprobacion de cortesia del saldo. Antes no corria nunca con llave del
+	// cliente —y la pantalla manda llave SIEMPRE—, asi que la unica guarda para
+	// una persona real era la de dentro del asiento, que llega a la misma
+	// respuesta abriendo una transaccion, escribiendo la fila del libro y
+	// dejandola rotulada 'failed' —visible en el historial— para una venta que
+	// nunca movio nada.
+	//
+	// El saldo se lee PRIMERO y la llave DESPUES, solo si el saldo no alcanza.
+	// Son dos lecturas sueltas contra la base y el pedido original puede estar
+	// todavia en vuelo —que es justo para lo que existe la llave del cliente:
+	// la red que se corto sin traer la respuesta—, asi que puede commitear
+	// entre una lectura y la otra. Al reves, la llave se leeria 'todavia no
+	// completada' y un instante despues el saldo YA descontado, y esta
+	// comprobacion contestaria "no te alcanza" a una venta que si ocurrio, sin
+	// llegar nunca a la relectura de idempotencia que devuelve la venta vieja.
+	// En este orden eso no puede pasar: el descuento del activo y el rotulo
+	// 'completed' confirman en la MISMA transaccion, asi que un saldo que ya
+	// vio el descuento va seguido de una llave que ve la respuesta.
+	//
+	// Preguntar por la llave solo cuando el saldo no alcanza tambien conserva
+	// el orden de motivos que decide CreateTransaction: si la llave ya tiene
+	// otro movimiento, lo que corresponde es ErrLlaveReutilizada, no un "no te
+	// alcanza" que nadie puede arreglar poniendo mas saldo. Y una llave sin
+	// fila, o con fila 'failed' o 'pending', no responde nada: su asiento no
+	// confirmo, el activo sigue entero y ahi la comprobacion dice la verdad.
+	if errSaldo := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); errSaldo != nil {
+		responde, err := s.tx.LlaveYaTieneRespuesta(ctx, userID, pedido)
+		if err != nil {
+			return nil, err
+		}
+		if !responde {
+			return nil, errSaldo
+		}
+	}
+
+	fila, err := s.tx.CreateTransaction(ctx, userID, pedido)
 	if err != nil {
 		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
 	}

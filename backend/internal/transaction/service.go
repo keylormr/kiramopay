@@ -274,29 +274,61 @@ func mismoMovimiento(previa *TransactionRecord, req *CreateTransactionRequest) b
 		previa.Type == req.Type
 }
 
-// LlaveYaCompletada dice si esa llave de idempotencia ya tiene un movimiento
-// COMPLETADO de esta persona.
+// normalizarMoneda pone la moneda por defecto. La relectura de idempotencia
+// compara la moneda contra la de la fila que ya existe, asi que quien vaya a
+// predecir esa comparacion tiene que normalizar igual: sin esto, un pedido sin
+// moneda no coincidiria con su propia fila.
+func normalizarMoneda(req *CreateTransactionRequest) {
+	if req.Currency == "" {
+		req.Currency = "CRC"
+	}
+}
+
+// LlaveYaTieneRespuesta dice si CreateTransaction va a contestar ese pedido por
+// la llave sola, sin que el saldo tenga nada que decir: porque la llave ya
+// tiene el MISMO movimiento COMPLETADO —y entonces devuelve aquel— o porque la
+// fila que ya existe describe OTRO movimiento —y entonces devuelve
+// ErrLlaveReutilizada—.
 //
 // La necesita un modulo que, antes de llamar a CreateTransaction, hace una
-// comprobacion de cortesia sobre un saldo que el propio movimiento consume:
-// sobre la repeticion de algo que ya se cobro, esa lectura diria "no alcanza"
-// sobre dinero que ya se movio, en vez de dejar llegar el pedido a la relectura
-// de idempotencia que le devuelve el movimiento viejo.
+// comprobacion de cortesia sobre un saldo que el propio movimiento consume.
+// Esa comprobacion solo puede hablar cuando la respuesta depende de verdad del
+// saldo: sobre la repeticion de algo que ya se cobro diria "no alcanza" sobre
+// dinero que ya se movio, y sobre una llave prestada por otra operacion taparia
+// el motivo real con uno que no se arregla teniendo mas saldo.
 //
-// Una fila que existe pero NO completo no cuenta como repeticion, por la misma
-// razon que en CreateTransaction: su asiento no confirmo, el dinero sigue
-// donde estaba y ese pedido se va a reintentar de verdad sobre esa misma fila.
-// Ahi la comprobacion de cortesia sigue diciendo la verdad.
-func (s *Service) LlaveYaCompletada(ctx context.Context, userID, llave string) (bool, error) {
-	if llave == "" {
+// La fila se busca solo por (persona, llave), sin mirar el tipo, igual que la
+// relectura de CreateTransaction; lo que distingue una repeticion de una llave
+// prestada es mismoMovimiento, que si compara el tipo. Por eso se compara aqui
+// tambien, y no basta con "existe y esta completada": una llave completada bajo
+// OTRA operacion no es la repeticion de esta.
+//
+// Una fila que existe, describe el MISMO movimiento y NO completo no cuenta,
+// por la misma razon que en CreateTransaction: su asiento no confirmo, el
+// dinero sigue donde estaba y ese pedido se va a reintentar de verdad sobre esa
+// misma fila. Ahi la comprobacion de cortesia sigue diciendo la verdad.
+//
+// ORDEN: se pregunta DESPUES de leer el saldo, nunca antes. Son dos lecturas
+// sueltas contra la base, y el pedido original que sigue en vuelo puede
+// commitear entre una y otra; el orden es lo unico que impide que las dos caigan
+// a cada lado de ese commit. El descuento y el rotulo 'completed' confirman en
+// la MISMA transaccion, asi que un saldo que ya vio el descuento va seguido de
+// una llave que ve 'completed' por fuerza. Al reves no: la llave se leeria
+// 'todavia no completada' y, un instante despues, el saldo ya descontado.
+func (s *Service) LlaveYaTieneRespuesta(ctx context.Context, userID string, req *CreateTransactionRequest) (bool, error) {
+	if req.IdempotencyKey == "" {
 		return false, nil
 	}
-	fila, err := s.repo.FindByIdempotencyKey(ctx, userID, llave)
+	normalizarMoneda(req)
+	fila, err := s.repo.FindByIdempotencyKey(ctx, userID, req.IdempotencyKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("leer la llave de idempotencia: %w", err)
+	}
+	if !mismoMovimiento(fila, req) {
+		return true, nil
 	}
 	return fila.Status == StatusCompleted, nil
 }
@@ -308,9 +340,7 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	// La moneda y el monto se normalizan ANTES de la relectura de idempotencia
 	// porque esa relectura compara la fila existente contra estos campos: sin
 	// normalizar, un pedido sin moneda no coincidiria con su propia fila.
-	if req.Currency == "" {
-		req.Currency = "CRC"
-	}
+	normalizarMoneda(req)
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
