@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/ledger"
@@ -100,6 +102,35 @@ type entornoDeEnvio struct {
 	avisos        *avisosDePrueba
 	mfa           *mfaDePrueba
 	uif           *uifDePrueba
+	// urlPrecios recuerda el stub de precios con el que se armo el entorno. La
+	// prueba de la carrera del reintento necesita montar un SEGUNDO servicio,
+	// igual en todo salvo el pool, contra la MISMA base ya sembrada, y sin este
+	// campo no tendria como apuntarlo al mismo stub.
+	urlPrecios string
+}
+
+// servicioDeEnvio arma el servicio de envio de verdad a partir de un pool
+// dado, con los MISMOS colaboradores de prueba (avisos, MFA, UIF) que ya trae
+// el entorno. Existe aparte de montarEnvioCon porque la prueba de la carrera
+// del reintento necesita un SEGUNDO servicio sobre OTRO pool -el que trae el
+// trazador de consultas- contra la base que montarEnvio ya sembro; llamar de
+// nuevo a montarEnvioCon no sirve porque usa testutil.TestDB, que crea el
+// esquema y TRUNCA las tablas, borrando lo que la prueba ya puso.
+func servicioDeEnvio(pool *pgxpool.Pool, urlPrecios string, e *entornoDeEnvio) *crypto.Service {
+	repo := crypto.NewRepository(pool)
+	precios := crypto.NewPriceService()
+	precios.SetBaseURL(urlPrecios)
+	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
+	qrSvc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool), nil)
+	return crypto.NewService(repo, precios, txSvc,
+		func(context.Context, string, string) (float64, error) { return 500, nil },
+		&crypto.Opciones{
+			Destinatarios: qrSvc,
+			MFA:           e.mfa,
+			UIF:           e.uif,
+			Avisos:        e.avisos,
+		})
 }
 
 // montarEnvio arma el servicio con TODOS los colaboradores del envio, incluido
@@ -115,28 +146,19 @@ func montarEnvioCon(t *testing.T, urlPrecios string) *entornoDeEnvio {
 	pool := testutil.TestDB(t)
 	ctx := context.Background()
 
-	repo := crypto.NewRepository(pool)
-	precios := crypto.NewPriceService()
-	precios.SetBaseURL(urlPrecios)
-	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
+	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool),
+		ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil))), nil)
 	qrSvc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool), nil)
 
 	e := &entornoDeEnvio{
-		pool:   pool,
-		qr:     qrSvc,
-		avisos: &avisosDePrueba{},
-		mfa:    &mfaDePrueba{},
-		uif:    &uifDePrueba{},
+		pool:       pool,
+		qr:         qrSvc,
+		urlPrecios: urlPrecios,
+		avisos:     &avisosDePrueba{},
+		mfa:        &mfaDePrueba{},
+		uif:        &uifDePrueba{},
 	}
-	e.svc = crypto.NewService(repo, precios, txSvc,
-		func(context.Context, string, string) (float64, error) { return 500, nil },
-		&crypto.Opciones{
-			Destinatarios: qrSvc,
-			MFA:           e.mfa,
-			UIF:           e.uif,
-			Avisos:        e.avisos,
-		})
+	e.svc = servicioDeEnvio(pool, urlPrecios, e)
 
 	pinHash, _ := hash.HashPin("1234")
 	e.quienEnvia = testutil.SeedTestUser(t, pool, "702650930", pinHash)
@@ -144,6 +166,7 @@ func montarEnvioCon(t *testing.T, urlPrecios string) *entornoDeEnvio {
 
 	// Un bitcoin entero para quien envia. Entra por el mismo camino que una
 	// compra, asi el promedio de costo queda puesto y el saldo es real.
+	repo := crypto.NewRepository(pool)
 	if err := repo.UpsertAsset(ctx, e.quienEnvia, "BTC", "Bitcoin", d(1), d(1000)); err != nil {
 		t.Fatalf("sembrar BTC: %v", err)
 	}
@@ -936,5 +959,257 @@ func TestEnviarCripto_SinLectorDeQRNoSeOfrece(t *testing.T) {
 	})
 	if !errors.Is(err, crypto.ErrEnvioNoDisponible) {
 		t.Fatalf("Send = %v, esperaba ErrEnvioNoDisponible", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// La carrera del reintento contra un envio que esta CONFIRMANDO de verdad.
+//
+// Con llave del cliente, Send hace dos lecturas SUELTAS -la de la llave
+// (EnvioPorLlave) y la del saldo (saldoAlcanza)- las dos fuera de toda
+// transaccion y sin candado. Si el envio ORIGINAL confirma justo entre esas
+// dos lecturas, el reintento lee "esa llave no tiene envio" y despues lee un
+// saldo YA debitado: contesta "no alcanza" por un envio que SI ocurrio. La
+// persona ve un error de saldo insuficiente por una plata que en realidad ya
+// se le fue.
+//
+// Esta prueba fuerza ese entrelazado de verdad, sin dormir a ciegas: congela
+// el envio original a mitad de su propia transaccion (en el MISMO candado de
+// fila que toparElGasto toma en produccion, "wallets ... FOR UPDATE"),
+// arranca el reintento con un trazador que avisa justo cuando termina la
+// PRIMERA de sus dos lecturas del pre-chequeo, y en ese instante suelta el
+// candado y espera a que el original CONFIRME de verdad antes de dejar que el
+// reintento siga. Sin esta prueba, nada en el paquete ejercita ese
+// entrelazado: las carreras que ya existen (mas abajo) sueltan dos goroutines
+// libres, sin ningun punto de sincronizacion, y casi nunca caen justo en la
+// ventana de dos lecturas que este defecto necesita.
+
+// claveDelSQLDeEnvio es la llave del contexto donde trazadorDelPreChequeoDeEnvio
+// guarda el texto de la consulta entre TraceQueryStart y TraceQueryEnd.
+type claveDelSQLDeEnvio struct{}
+
+// trazadorDelPreChequeoDeEnvio avisa UNA SOLA VEZ, justo cuando TERMINA la
+// primera de las dos lecturas sueltas del pre-chequeo del envio: la de
+// crypto_assets (saldoAlcanza) o la de idempotency_key (EnvioPorLlave). Cual
+// de las dos sea la primera depende de si el arreglo ya esta aplicado o no, y
+// por eso el trazador no elige una: vigila las dos, para que la MISMA prueba
+// sirva de guardian antes y despues del arreglo.
+type trazadorDelPreChequeoDeEnvio struct {
+	hook      func()
+	unaVez    sync.Once
+	disparado bool
+}
+
+func (tz *trazadorDelPreChequeoDeEnvio) TraceQueryStart(ctx context.Context, _ *pgx.Conn, datos pgx.TraceQueryStartData) context.Context {
+	return context.WithValue(ctx, claveDelSQLDeEnvio{}, datos.SQL)
+}
+
+func (tz *trazadorDelPreChequeoDeEnvio) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	sql, _ := ctx.Value(claveDelSQLDeEnvio{}).(string)
+	if !strings.Contains(sql, "FROM crypto_assets") && !strings.Contains(sql, "idempotency_key = $2") {
+		return
+	}
+	tz.unaVez.Do(func() {
+		tz.disparado = true
+		tz.hook()
+	})
+}
+
+// esperarEnvio sondea condicion hasta que sea verdadera o pase el plazo.
+// Nunca se cuelga: si la condicion nunca se cumple, marca la prueba en rojo
+// con t.Errorf y devuelve false para que quien llama decida como cortar
+// limpio (soltar candados, esperar goroutines) antes de salir. Un timeout
+// aqui es SIEMPRE un defecto de la prueba o de la carrera, nunca algo que CI
+// deba esperar dormido.
+func esperarEnvio(t *testing.T, descripcion string, condicion func() bool) bool {
+	t.Helper()
+	plazo := time.After(5 * time.Second)
+	pulso := time.NewTicker(5 * time.Millisecond)
+	defer pulso.Stop()
+	for {
+		if condicion() {
+			return true
+		}
+		select {
+		case <-plazo:
+			t.Errorf("nunca ocurrio: %s", descripcion)
+			return false
+		case <-pulso.C:
+		}
+	}
+}
+
+// esperarAlOriginal espera a que termine la goroutine del envio original, pero
+// con plazo propio. Un wg.Wait() pelado se colgaria hasta que se agote el
+// plazo global de `go test` -300 segundos en CI, para TODO ./internal/...- y
+// la falla llegaria como un volcado de goroutines sin decir que paso. Con
+// plazo, si el original se cuelga por algo ajeno a la carrera que esta prueba
+// fuerza, la prueba corta rapido y con su propio mensaje.
+func esperarAlOriginal(t *testing.T, wg *sync.WaitGroup) {
+	t.Helper()
+	listo := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(listo)
+	}()
+	select {
+	case <-listo:
+	case <-time.After(10 * time.Second):
+		t.Fatal("el envio original nunca termino: se colgo por algo ajeno a la carrera que esta prueba fuerza")
+	}
+}
+
+// bloqueadaLaBilleteraDe es la unica forma, desde AFUERA de la transaccion del
+// envio original, de saber que ya escribio su fila (con la llave, sin
+// confirmar) y quedo esperando el candado de wallets -el mismo que esta
+// prueba toma primero, a proposito, para congelarlo ahi. Sin esta espera la
+// prueba soltaria su candado a ciegas: si lo suelta antes de que el original
+// siquiera lo pida, el original nunca se congela y la carrera que se quiere
+// forzar no ocurre.
+func bloqueadaLaBilleteraDe(t *testing.T, pool *pgxpool.Pool) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var bloqueada bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND wait_event_type = 'Lock'
+			  AND query ILIKE '%FROM wallets%FOR UPDATE%'
+		)`).Scan(&bloqueada); err != nil {
+		t.Fatalf("preguntar por el candado de la billetera: %v", err)
+	}
+	return bloqueada
+}
+
+// envioConfirmado pregunta, desde OTRA conexion, si ya hay una fila visible en
+// crypto_transactions para esa llave. Bajo aislamiento read committed -el que
+// usa Postgres por defecto- una fila que otra transaccion inserto solo se
+// vuelve visible DESPUES de que esa transaccion confirma: "existe" aqui ya
+// quiere decir "el envio original confirmo de verdad", sin tener que mirar
+// ninguna columna de estado.
+func envioConfirmado(t *testing.T, pool *pgxpool.Pool, userID, llave string) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var existe bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM crypto_transactions WHERE user_id = $1::uuid AND idempotency_key = $2)`,
+		userID, llave,
+	).Scan(&existe); err != nil {
+		t.Fatalf("preguntar si el envio original ya confirmo: %v", err)
+	}
+	return existe
+}
+
+func TestEnviarCripto_ElReintentoNoRechazaElEnvioQueEstaConfirmando(t *testing.T) {
+	e := montarEnvio(t)
+	ctx := context.Background()
+
+	// El saldo se recorta a EXACTAMENTE lo que baja un envio de 0,18 BTC (el
+	// monto mas su comision de 0,25 %), para que quede en CERO justo cuando
+	// el original confirma. 0,18 BTC al precio del stub (1000 USD) son 180
+	// dolares, bajo el tope diario de 190 del monedero de prueba; 0,19 ya no
+	// entraria, y la prueba fallaria por tope en vez de por lo que quiere
+	// probar.
+	const llave = "envio-que-esta-confirmando"
+	monto := d(0.18)
+	total := d(0.18045) // 0,18 mas su comision de 0,25 %
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE crypto_assets SET balance = $2 WHERE user_id = $1::uuid AND symbol = 'BTC'`,
+		e.quienEnvia, total,
+	); err != nil {
+		t.Fatalf("dejar el saldo justo para el envio: %v", err)
+	}
+
+	// Una conexion PROPIA, con su propia transaccion sin confirmar, toma el
+	// MISMO candado que toparElGasto toma en produccion (CheckLimitsConBloqueoEnTx):
+	// "SELECT 1 FROM wallets WHERE user_id = $1 FOR UPDATE". El envio
+	// original va a insertar su fila (con la llave, sin confirmar) y va a
+	// quedar esperando este candado, congelado a mitad de su propia
+	// transaccion, sin haber movido un solo saldo todavia.
+	conn, err := e.pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("tomar una conexion para el candado: %v", err)
+	}
+	defer conn.Release()
+	txCandado, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatalf("abrir la transaccion que congela el envio: %v", err)
+	}
+	var soltarloUnaVez sync.Once
+	soltar := func() {
+		soltarloUnaVez.Do(func() {
+			_ = txCandado.Rollback(context.Background())
+		})
+	}
+	defer soltar()
+	if _, err := txCandado.Exec(ctx,
+		`SELECT 1 FROM wallets WHERE user_id = $1::uuid FOR UPDATE`, e.quienEnvia,
+	); err != nil {
+		t.Fatalf("tomar el candado de la billetera: %v", err)
+	}
+
+	var original *crypto.TransactionRecord
+	var errOriginal error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		original, errOriginal = e.enviar(monto, llave)
+	}()
+
+	if !esperarEnvio(t, "el envio original queda esperando el candado de la billetera", func() bool {
+		return bloqueadaLaBilleteraDe(t, e.pool)
+	}) {
+		soltar()
+		esperarAlOriginal(t, &wg)
+		t.FailNow()
+	}
+
+	// El reintento corre en un servicio IGUAL al original salvo en el pool:
+	// este trae un trazador que avisa justo cuando termina la PRIMERA de las
+	// dos lecturas sueltas del pre-chequeo -la llave o el saldo, la que sea
+	// que el orden vigente consulte primero-. En ese instante, y solo en ese
+	// instante, se suelta el candado de la billetera y se espera a que el
+	// envio original CONFIRME de verdad, para que lo que el reintento haga
+	// DESPUES de esa lectura encuentre el mundo ya cambiado por el original.
+	trazador := &trazadorDelPreChequeoDeEnvio{hook: func() {
+		soltar()
+		esperarEnvio(t, "el envio original confirma en crypto_transactions", func() bool {
+			return envioConfirmado(t, e.pool, e.quienEnvia, llave)
+		})
+	}}
+	reintento := servicioDeEnvio(testutil.PoolTrazado(t, trazador), e.urlPrecios, e)
+	repetido, errRepetido := reintento.Send(ctx, e.quienEnvia, &crypto.SendRequest{
+		Asset: "BTC", Amount: monto, QRData: e.qrDelReceptor, IdempotencyKey: llave,
+	})
+
+	soltar()
+	esperarAlOriginal(t, &wg)
+
+	if !trazador.disparado {
+		t.Fatal("el trazador nunca vio una consulta del pre-chequeo: la prueba no ejercito la carrera")
+	}
+	if errOriginal != nil {
+		t.Fatalf("el envio original: %v", errOriginal)
+	}
+	if errRepetido != nil {
+		t.Fatalf("el reintento de un envio que SI se confirmo devolvio error: %v", errRepetido)
+	}
+	if repetido.ID != original.ID {
+		t.Fatalf("el reintento devolvio el envio %s, pero el que se confirmo fue %s", repetido.ID, original.ID)
+	}
+
+	e.exigirSaldos(t, decimal.Zero, monto)
+
+	var comisiones int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM crypto_platform_fees`).Scan(&comisiones); err != nil {
+		t.Fatalf("contar comisiones: %v", err)
+	}
+	if comisiones != 1 {
+		t.Fatalf("se cobraron %d comisiones por un envio que se repitio", comisiones)
 	}
 }

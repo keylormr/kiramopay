@@ -19,18 +19,14 @@ import (
 // kiramopay.encryption_key GUC on every connection so pgcrypto fn_pii_* work.
 const testPIIKey = "test-pii-encryption-key-0123456789ab"
 
-// TestDB returns a pgxpool connected to the test database.
-// It creates all tables and truncates them after the test.
-func TestDB(t *testing.T) *pgxpool.Pool {
+// configDePrueba arma la configuracion del pool contra la base de pruebas.
+func configDePrueba(t *testing.T) *pgxpool.Config {
 	t.Helper()
 
 	dsn := os.Getenv("TEST_DB_DSN")
 	if dsn == "" {
 		dsn = "postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable"
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	poolCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -42,6 +38,48 @@ func TestDB(t *testing.T) *pgxpool.Pool {
 		_, err := conn.Exec(ctx, `SELECT set_config('kiramopay.encryption_key', $1, false)`, testPIIKey)
 		return err
 	}
+	return poolCfg
+}
+
+// PoolTrazado devuelve OTRO pool contra la misma base de pruebas, con un
+// trazador de consultas puesto. No crea el esquema ni trunca nada: de eso se
+// encarga TestDB, y volver a llamarlo dentro de la misma prueba borraria lo que
+// ya se monto.
+//
+// Sirve para las pruebas que necesitan meterse ENTRE dos consultas sueltas de
+// un servicio. Cuando el defecto es el ORDEN en que se leen dos cosas, ningun
+// estado inicial lo distingue —los dos ordenes contestan igual sobre una base
+// quieta—; lo unico que lo distingue es que algo confirme justo en el medio, y
+// eso hay que provocarlo desde afuera, sin tocar el codigo de produccion.
+func PoolTrazado(t *testing.T, trazador pgx.QueryTracer) *pgxpool.Pool {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	poolCfg := configDePrueba(t)
+	poolCfg.ConnConfig.Tracer = trazador
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		t.Skipf("Skipping integration test: cannot connect to test DB: %v", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Skipf("Skipping integration test: cannot ping test DB: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// TestDB returns a pgxpool connected to the test database.
+// It creates all tables and truncates them after the test.
+func TestDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	poolCfg := configDePrueba(t)
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		t.Skipf("Skipping integration test: cannot connect to test DB: %v", err)
