@@ -166,24 +166,40 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 	llave := req.IdempotencyKey
 	if llave == "" {
 		llave = "crypto:send:" + uuid.New().String()
-		if err := s.saldoAlcanza(ctx, userID, activo, total); err != nil {
-			return nil, err
-		}
-	} else {
-		// Con llave del cliente, el reintento de un envio que YA se llevo el
-		// saldo no puede decir "no te alcanza" sobre algo que ya ocurrio: tiene
-		// que llegar al indice unico de EnviarEnUnaTx y volver el envio ya
-		// guardado. Por eso la comprobacion de cortesia solo corre si esa llave
-		// todavia no tiene un envio escrito; si ya lo tiene, se sigue igual que
-		// arriba y decide la guarda del descuento (o, aqui, la relectura).
-		previo, err := s.repo.EnvioPorLlave(ctx, userID, llave)
+	}
+
+	// Comprobacion de cortesia del saldo: el saldo se lee PRIMERO y la llave
+	// DESPUES, solo si el saldo no alcanza.
+	//
+	// Son dos lecturas sueltas contra la base, sin transaccion ni candado que
+	// las una, y el envio original puede estar todavia en vuelo —que es justo
+	// para lo que existe la llave del cliente: la red que se corto sin traer la
+	// respuesta—, asi que puede confirmar entre una lectura y la otra. Al
+	// reves, la llave se leeria "todavia no tiene envio" y un instante despues
+	// el saldo YA descontado, y esta comprobacion contestaria "no te alcanza"
+	// por una plata que si se fue, sin llegar nunca a la relectura de
+	// idempotencia que devuelve el envio guardado. En este orden eso no puede
+	// pasar: EnviarEnUnaTx escribe la fila con la llave y descuenta el activo
+	// en la MISMA transaccion, asi que un saldo que ya vio el descuento va
+	// seguido por fuerza de una llave que ya responde.
+	//
+	// Preguntar por la llave solo cuando el saldo no alcanza tambien conserva
+	// el orden de los motivos: si esa llave ya describe OTRO envio, lo que
+	// corresponde es ErrLlaveDeOtroEnvio —que decide mismoEnvio tras el indice
+	// unico—, no un "no te alcanza" que nadie puede arreglar poniendo mas
+	// saldo. Y una llave sin fila no responde nada: aqui no hay estados a
+	// medias, si la transaccion no confirmo no quedo fila, el activo sigue
+	// entero y ahi la comprobacion dice la verdad.
+	if errSaldo := s.saldoAlcanza(ctx, userID, activo, total); errSaldo != nil {
+		// Se pregunta por la llave QUE MANDO EL CLIENTE, no por la de arriba:
+		// si no mando ninguna, la que acabamos de inventar no puede tener un
+		// envio escrito y EnvioPorLlave con cadena vacia ni sale a la base.
+		previo, err := s.repo.EnvioPorLlave(ctx, userID, req.IdempotencyKey)
 		if err != nil {
 			return nil, err
 		}
 		if previo == nil {
-			if err := s.saldoAlcanza(ctx, userID, activo, total); err != nil {
-				return nil, err
-			}
+			return nil, errSaldo
 		}
 	}
 
