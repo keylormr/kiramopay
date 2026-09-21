@@ -22,7 +22,36 @@ function legible(s: string | undefined): string {
   return CON_FORMA_DE_UUID.test(limpio) ? '' : limpio;
 }
 
+/**
+ * Movimientos de una meta de ahorro: backend/internal/savings/service.go
+ * escribe la descripcion SIEMPRE en ingles y sin traducir ("savings deposit:
+ * <nombre de la meta>"), y como nunca viene vacia, la prioridad normal
+ * ("propio > tipo") la dejaba pasar tal cual en cualquier idioma de la app.
+ *
+ * Aca el tipo manda: el titulo se arma traducido a partir de `kind`, y el
+ * nombre de la meta —lo unico que trae la descripcion cruda que vale la
+ * pena conservar— se recorta del otro lado del prefijo conocido.
+ */
+const PREFIJOS_DESCRIPCION_AHORRO: Record<string, string> = {
+  savings_deposit: 'savings deposit:',
+  savings_withdraw: 'savings withdraw:',
+};
+
+function tituloDeAhorro(tx: Transaction, t: (key: string) => string): string | null {
+  const kind = (tx.kind || '').trim();
+  const prefijo = PREFIJOS_DESCRIPCION_AHORRO[kind];
+  if (!prefijo) return null;
+
+  const etiqueta = t(`tx_title_${kind}`);
+  const cruda = (tx.description || tx.title || '').trim();
+  const nombreMeta = cruda.startsWith(prefijo) ? legible(cruda.slice(prefijo.length)) : '';
+  return nombreMeta ? `${etiqueta}: ${nombreMeta}` : etiqueta;
+}
+
 export function txTitle(tx: Transaction, t: (key: string) => string): string {
+  const deAhorro = tituloDeAhorro(tx, t);
+  if (deAhorro) return deAhorro;
+
   const propio = legible(tx.title) || legible(tx.description);
   if (propio) return propio;
 

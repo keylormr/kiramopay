@@ -32,7 +32,7 @@ describe('mapSummary — el resumen del servidor en el idioma de la app', () => 
     expect(r.groups).toEqual([
       { date: '2026-08-01', ccy: 'CRC', category: 'transfers', direction: 'in', count: 2, amountMinor: 1_250_050 },
       { date: '2026-08-01', ccy: 'CRC', category: 'shopping', direction: 'out', count: 1, amountMinor: 99_900 },
-      { date: '2026-08-02', ccy: 'USD', category: 'other', direction: 'out', count: 1, amountMinor: 1_549 },
+      { date: '2026-08-02', ccy: 'USD', category: 'savings', direction: 'out', count: 1, amountMinor: 1_549 },
     ]);
     expect(r.top[0]).toMatchObject({ id: 't1', amount: -999, ccy: 'CRC', title: 'Automercado', kind: 'qr_payment' });
     expect(r.firstDate).toBe('2025-11-03');

@@ -4,7 +4,16 @@ import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import type { StaffMember, MerchantLocation } from '@/api/repositories/qrpayment.repository';
+
+// El motivo viaja como CODIGO y el texto lo pone esta pantalla, en el idioma
+// activo. El backend respondia "esa cedula no tiene una cuenta de KiramoPay" en
+// espanol fijo y aqui se pintaba `res.error.message` tal cual, asi que ese
+// renglon salia en espanol en medio de una pantalla en ingles o en japones.
+const CLAVES_ERROR: Readonly<Record<string, string>> = {
+  STAFF_CEDULA_NOT_FOUND: 'business_team_err_cedula',
+};
 
 interface Props {
   isOpen: boolean;
@@ -75,7 +84,7 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
       setShowAdd(false);
       reload();
     } else {
-      setError(res.error?.message || t('assistant_action_failed'));
+      setError(mensajeDeRechazo(res.error, CLAVES_ERROR, 'assistant_action_failed', t));
     }
   };
 
@@ -87,7 +96,7 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
     try {
       const res = await api.revokeStaff(merchantId, staffId);
       if (res.success) reload();
-      else setError(res.error?.message || t('assistant_action_failed'));
+      else setError(mensajeDeRechazo(res.error, CLAVES_ERROR, 'assistant_action_failed', t));
     } finally {
       setBusyId(null);
     }

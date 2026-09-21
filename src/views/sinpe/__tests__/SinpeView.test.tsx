@@ -239,6 +239,37 @@ describe('SinpeView — send', () => {
     );
   });
 
+  // Bug real: el recorte corría en cada tecla con .slice(-8) sin límite de
+  // longitud. Si el número ya tenía sus 8 dígitos correctos y se colaba una
+  // tecla de más, el primer dígito se caía y el campo quedaba con OTRO
+  // número de 8 dígitos igual de válido en apariencia, sin ningún aviso.
+  it('una tecla de más después de completar el número no lo cambia por otro', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Enviar' })[0]);
+    const dialog = await screen.findByRole('dialog');
+    const d = within(dialog);
+    const campoTelefono = d.getByPlaceholderText('8888-0000');
+    await user.type(campoTelefono, '60000001');
+    expect(campoTelefono).toHaveValue('60000001');
+    // Tecla de más, sin seleccionar ni borrar nada primero.
+    await user.type(campoTelefono, '9');
+    expect(campoTelefono).toHaveValue('60000001');
+
+    await user.type(d.getByPlaceholderText('0'), '100');
+    await user.click(d.getByRole('button', { name: /Enviar/ }));
+    const sheets = await screen.findAllByRole('dialog');
+    await user.click(within(sheets[sheets.length - 1]).getByRole('button', { name: /Enviar/ }));
+
+    await waitFor(() =>
+      expect(mocks.api.sinpe.send).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: '+50660000001' }),
+      ),
+    );
+  });
+
   // Los botones de "Montos rápidos" armaban el texto con
   // formatCurrency(val).replace(',00', ''): String.replace sin regex global
   // borra la PRIMERA coincidencia, que en "₡5,000.00" es la coma de miles,
@@ -353,6 +384,28 @@ describe('SinpeView — agregar contacto escaneando', () => {
     expect(mocks.dispatch).toHaveBeenCalledWith({
       type: 'ADD_SINPE_CONTACT',
       payload: expect.objectContaining({ name: 'Ana Solís', phone: '+50688880005' }),
+    });
+  });
+
+  // Aquí el bug era más grave que en "Enviar": no hay hoja de revisión antes
+  // de guardar, así que un número corrido por una tecla de más se guardaba
+  // TAL CUAL, sin que nadie lo notara hasta el primer envío fallido.
+  it('una tecla de más al agregar un contacto no cambia el número por otro', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Ana Solís');
+    const campoTelefono = dialog.getByPlaceholderText('8888-0000');
+    await user.type(campoTelefono, '600000019');
+    expect(campoTelefono).toHaveValue('60000001');
+
+    await user.click(dialog.getByRole('button', { name: /Guardar contacto/ }));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'ADD_SINPE_CONTACT',
+      payload: expect.objectContaining({ name: 'Ana Solís', phone: '+50660000001' }),
     });
   });
 });
