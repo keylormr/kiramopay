@@ -197,13 +197,6 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	idem := req.IdempotencyKey
 	if idem == "" {
 		idem = "crypto:sell:" + uuid.New().String()
-		// Con llave del cliente no se comprueba antes: el reintento de una venta
-		// que ya se llevo todo el saldo diria "insuficiente" sobre algo que ya
-		// ocurrio, en vez de llegar a la relectura de idempotencia. La guarda
-		// del descuento decide igual.
-		if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
-			return nil, err
-		}
 	}
 
 	venta := &TransactionRecord{
@@ -219,7 +212,7 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		Fee:      decimal.Zero,
 		Status:   "completed",
 	}
-	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+	pedido := &transaction.CreateTransactionRequest{
 		Type:             transaction.TypeCryptoSell,
 		Amount:           fiatMinor,
 		Currency:         currency,
@@ -237,7 +230,44 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 			venta.ID = txID
 			return s.repo.VenderEnTx(ctx, dbtx, venta)
 		},
-	})
+	}
+
+	// Comprobacion de cortesia del saldo. Antes no corria nunca con llave del
+	// cliente —y la pantalla manda llave SIEMPRE—, asi que la unica guarda para
+	// una persona real era la de dentro del asiento, que llega a la misma
+	// respuesta abriendo una transaccion, escribiendo la fila del libro y
+	// dejandola rotulada 'failed' —visible en el historial— para una venta que
+	// nunca movio nada.
+	//
+	// El saldo se lee PRIMERO y la llave DESPUES, solo si el saldo no alcanza.
+	// Son dos lecturas sueltas contra la base y el pedido original puede estar
+	// todavia en vuelo —que es justo para lo que existe la llave del cliente:
+	// la red que se corto sin traer la respuesta—, asi que puede commitear
+	// entre una lectura y la otra. Al reves, la llave se leeria 'todavia no
+	// completada' y un instante despues el saldo YA descontado, y esta
+	// comprobacion contestaria "no te alcanza" a una venta que si ocurrio, sin
+	// llegar nunca a la relectura de idempotencia que devuelve la venta vieja.
+	// En este orden eso no puede pasar: el descuento del activo y el rotulo
+	// 'completed' confirman en la MISMA transaccion, asi que un saldo que ya
+	// vio el descuento va seguido de una llave que ve la respuesta.
+	//
+	// Preguntar por la llave solo cuando el saldo no alcanza tambien conserva
+	// el orden de motivos que decide CreateTransaction: si la llave ya tiene
+	// otro movimiento, lo que corresponde es ErrLlaveReutilizada, no un "no te
+	// alcanza" que nadie puede arreglar poniendo mas saldo. Y una llave sin
+	// fila, o con fila 'failed' o 'pending', no responde nada: su asiento no
+	// confirmo, el activo sigue entero y ahi la comprobacion dice la verdad.
+	if errSaldo := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); errSaldo != nil {
+		responde, err := s.tx.LlaveYaTieneRespuesta(ctx, userID, pedido)
+		if err != nil {
+			return nil, err
+		}
+		if !responde {
+			return nil, errSaldo
+		}
+	}
+
+	fila, err := s.tx.CreateTransaction(ctx, userID, pedido)
 	if err != nil {
 		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
 	}
