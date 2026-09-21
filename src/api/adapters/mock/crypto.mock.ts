@@ -4,6 +4,9 @@ import type {
   SellCryptoRequest,
   ConvertCryptoRequest,
   StakeCryptoRequest,
+  SendCryptoRequest,
+  SendCryptoPreviewRequest,
+  CryptoSendPreview,
 } from '../../repositories/crypto.repository';
 import { ACTIVOS_CON_STAKING } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
@@ -138,6 +141,17 @@ export class MockCryptoRepository implements ICryptoRepository {
     crypto.transactions = [tx, ...crypto.transactions];
     saveCryptoState(crypto);
     return apiSuccess(tx);
+  }
+
+  // Enviar cripto a otra persona NO se simula. Aqui no hay a quien resolver el
+  // QR ni a quien acreditarle el activo: fingir el exito le diria a alguien que
+  // su cripto salio, y en la demo no sale a ningun lado. Decision del dueno.
+  async sendPreview(_request: SendCryptoPreviewRequest): Promise<ApiResponse<CryptoSendPreview>> {
+    return apiError('CRYPTO_SEND_UNAVAILABLE', 'Sending crypto needs the server');
+  }
+
+  async send(_request: SendCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+    return apiError('CRYPTO_SEND_UNAVAILABLE', 'Sending crypto needs the server');
   }
 
   async convert(request: ConvertCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {

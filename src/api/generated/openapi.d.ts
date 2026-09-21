@@ -1503,6 +1503,191 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/crypto/send/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote a crypto send to another person
+         * @description Quotes a send without performing it: who receives it, how much reaches them and how much leaves the balance. The recipient is resolved from the QR code scanned from their profile — `qr_data` is the raw payload the camera read. There is no destination address: this crypto lives on no chain, so the only possible recipient is another KiramoPay person. The fee is KiramoPay's own, never a network fee: `fee_percent` of the amount, charged in the same asset and paid by the sender, so the recipient gets `amount` exactly and the sender's balance drops `total`. The screen must not compute these figures itself. This endpoint does NOT check the balance: `total` can exceed it, and the client is expected to say so before offering to confirm.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CryptoSendRequest"];
+                };
+            };
+            responses: {
+                /** @description Quote for the send */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CryptoSendPreview"];
+                    };
+                };
+                /** @description CRYPTO_INVALID_AMOUNT (not positive or more than 18 decimals), QR_INVALIDO (the code does not exist or is not a KiramoPay code), CRYPTO_SEND_SELF (the scanned code is the sender's own), or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_REVOCADO — the owner of that code withdrew it. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_DE_COMERCIO — that code belongs to a business, and businesses charge in colones or dollars. QR_DE_COBRO — that code requests an amount of money, not crypto; it is paid from Pay with QR. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SEND_PREVIEW_FAILED with a generic message; the detail stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CRYPTO_SEND_UNAVAILABLE — this deployment has no QR resolver wired, so it cannot know who would receive it. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crypto/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send crypto to another person
+         * @description Moves the asset from the sender to the person who owns the scanned QR. `amount` is what the recipient gets; what leaves the sender's balance is `amount` plus KiramoPay's fee, in the same asset. The debit, the credit, the fee and both history rows commit in one transaction. `price` is the USD unit price the screen showed: a deviation above 2% is rejected with 409 PRICE_MOVED. The send is also written to the wallet history in USD even though no fiat moves, because the daily limit and the AML monitoring are computed over that table; without a usable price the send is refused rather than counted as zero. Repeating a completed send with the same `idempotency_key` returns the recorded send and moves nothing; a key that belongs to a different amount or a different recipient gets 409 LLAVE_REUTILIZADA.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CryptoSendRequest"];
+                };
+            };
+            responses: {
+                /** @description Send completed. `fee` is KiramoPay's fee in the same asset, `total` is what left the balance, `currency` is the asset itself and `counterparty_name` is who received it. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"];
+                    };
+                };
+                /** @description CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. QR_REVOCADO — the owner of that code withdrew it. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount or a different recipient. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CRYPTO_INSUFFICIENT_BALANCE — the asset balance does not cover the amount plus the fee. QR_DE_COMERCIO or QR_DE_COBRO — that code is not a personal one. DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED — the USD value of the send passes the spending limit. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — the USD value passes the high-value threshold and there is no verified MFA challenge. Nothing moved: verify the challenge and retry with the SAME `idempotency_key`. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SEND_FAILED with a generic message; the detail stays in the server log. Nothing moved. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price right now. CRYPTO_SEND_UNAVAILABLE — this deployment has no QR resolver wired. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/crypto/convert": {
         parameters: {
             query?: never;
@@ -8106,6 +8291,42 @@ export interface components {
             to_amount?: number;
             idempotency_key?: string;
         };
+        CryptoSendRequest: {
+            /** @example BTC */
+            asset: string;
+            /** @description Crypto quantity the RECIPIENT gets, at most 18 decimals. The fee is added on top of it and paid by the sender. */
+            amount: number;
+            /**
+             * @description The QR payload exactly as the camera read it, from the recipient's personal code. The server resolves who owns it. There is no destination address and no user id: an address would have nowhere to go, and a hand-typed id lets someone try other people's ids until one lands.
+             * @example KP:p:1a2b3c4d:0:CRC:iabc123
+             */
+            qr_data: string;
+            /** @description USD unit price the screen showed. Omit it to skip the 2% check. Required in practice for /send, which values the send in USD for the spending limit and the AML monitoring. */
+            price?: number;
+            /** @description Ignored by /send/preview. On /send, retrying with the same key returns the recorded send instead of sending again. Keep the same key across an MFA challenge. */
+            idempotency_key?: string;
+        };
+        /** @description What the confirmation sheet shows before sending. Quantities are exact decimals serialized as JSON strings. The fee is KiramoPay's own, in the same asset and paid by the sender, so `amount` is what reaches the recipient and `total` is what leaves the sender's balance. */
+        CryptoSendPreview: {
+            /**
+             * @description The name of the person who owns the scanned code.
+             * @example Victor Lobo
+             */
+            recipient_name: string;
+            /** @example BTC */
+            asset: string;
+            /** @description decimal, what the recipient gets */
+            amount: string;
+            /** @description decimal, KiramoPay fee in the same asset */
+            fee: string;
+            /** @description decimal, amount + fee: what leaves the balance */
+            total: string;
+            /**
+             * @description decimal, the fee as a percentage, so the screen writes it once and it cannot drift from the rate actually charged.
+             * @example 0.25
+             */
+            fee_percent: string;
+        };
         CryptoPriceData: {
             /** @example BTC */
             symbol: string;
@@ -8330,7 +8551,7 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
-        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. For stake and unstake, `amount` and `total` are the quantity set aside or released, `currency` is the asset itself and `price` is zero: no price or fiat is involved. No movement charges a fee: `fee` is zero. */
+        /** @description Quantities and prices are exact decimals serialized as JSON strings (for example "0.5"), never floats. For buy and sell, `id` is the id of the wallet transaction the ledger posting hangs from, `price` is the unit price in `currency`, and `total` is the fiat that moved, to the centimo. For convert, `asset` is "FROM→TO", `amount` is the quantity given, `total` the quantity received, `currency` the destination symbol and `price` the destination's USD unit price. For stake and unstake, `amount` and `total` are the quantity set aside or released, `currency` is the asset itself and `price` is zero: no price or fiat is involved. For send and receive, `amount` is the quantity that reached the recipient, `currency` is the asset itself, `price` its USD unit price, and `total` is what left the balance (`amount` plus the fee on the sender's row, `amount` alone on the recipient's). Only a send charges a fee; everywhere else `fee` is zero. */
         CryptoTransactionRecord: {
             /** Format: uuid */
             id?: string;
@@ -8351,6 +8572,16 @@ export interface components {
             status?: string;
             /** Format: date-time */
             created_at?: string;
+            /**
+             * Format: uuid
+             * @description Present only on send and receive: the other person of the transfer.
+             */
+            counterparty_user_id?: string;
+            /**
+             * @description Present only on send and receive: who it was sent to, or who it came from. There is no transaction hash — this crypto lives on no chain, so the other person is the only identity a transfer has.
+             * @example Victor Lobo
+             */
+            counterparty_name?: string;
         };
         StakingPositionRecord: {
             /** Format: uuid */

@@ -63,7 +63,7 @@ func servicioDeVenta(t *testing.T, pool *pgxpool.Pool, urlPrecios string) *crypt
 		nil,
 	)
 	return crypto.NewService(crypto.NewRepository(pool), precios, txService,
-		func(context.Context, string, string) (float64, error) { return 500, nil })
+		func(context.Context, string, string) (float64, error) { return 500, nil }, nil)
 }
 
 // montarVenta arma el servicio real con acceso al pool. No reusa

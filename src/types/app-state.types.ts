@@ -79,8 +79,12 @@ export type AppAction =
   | { type: 'BUY_CRYPTO'; payload: { asset: string; amount: number; price: number; fromCurrency: string; fromAmount: number } }
   | { type: 'SELL_CRYPTO'; payload: { asset: string; amount: number; price: number; toCurrency: string; toAmount: number } }
   | { type: 'CONVERT_CRYPTO'; payload: { fromAsset: string; toAsset: string; fromAmount: number; toAmount: number; price: number } }
-  | { type: 'SEND_CRYPTO'; payload: { asset: string; amount: number; toAddress: string; fee: number } }
-  | { type: 'RECEIVE_CRYPTO'; payload: { asset: string; amount: number; fromAddress: string } }
+  // El envio ya ocurrio en el servidor cuando esto se despacha: `fee` es la
+  // comision de KiramoPay que el cobro y `counterpartyName` la persona a la que
+  // le llego, ambos tal como vinieron en su respuesta. No hay direccion de
+  // destino porque esta cripto no vive en ninguna cadena: el destinatario es
+  // otra persona de KiramoPay, resuelta desde su QR.
+  | { type: 'SEND_CRYPTO'; payload: { asset: string; amount: number; fee: number; price: number; counterpartyName: string } }
   // La posicion tal como la devolvio el servidor: su id es el unico con el que
   // despues se puede retirar.
   | { type: 'STAKE_CRYPTO'; payload: StakingPosition }

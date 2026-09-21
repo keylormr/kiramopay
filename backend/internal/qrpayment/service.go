@@ -33,6 +33,18 @@ func (s *Service) displayName(ctx context.Context, userID string) string {
 	return strings.TrimSpace(u.FirstName + " " + u.LastName)
 }
 
+// NombreDe es displayName para quien esta fuera del paquete: el envio de cripto
+// necesita escribir en la fila de quien RECIBE el nombre de quien envia, y ese
+// nombre tiene que salir de la misma funcion que usa la hoja de pago. Con dos
+// fuentes distintas, la misma persona aparece escrita de dos formas en la misma
+// pantalla.
+//
+// Hereda el mismo trato: devuelve "" si no se pudo leer, porque un nombre nunca
+// puede hacer fallar un movimiento de valor.
+func (s *Service) NombreDe(ctx context.Context, userID string) string {
+	return s.displayName(ctx, userID)
+}
+
 // Notifier avisa al cobrador que le pagaron. Lo satisface
 // *notification.Service, el mismo que ya usa sinpe.
 type Notifier interface {

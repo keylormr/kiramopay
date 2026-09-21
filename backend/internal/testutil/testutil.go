@@ -747,8 +747,22 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		currency VARCHAR(10) NOT NULL,
 		fee NUMERIC(38,18) DEFAULT 0,
 		status VARCHAR(20) DEFAULT 'completed',
-		created_at TIMESTAMPTZ DEFAULT NOW()
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		-- Las tres columnas de la 072, que usa TODA insercion y TODA lectura de
+		-- esta tabla (insertarMovimiento y columnasDeMovimiento las nombran
+		-- siempre, no solo al enviar). Sin ellas aqui, comprar y vender fallan
+		-- en las pruebas por una columna que si existe en produccion.
+		counterparty_user_id UUID,
+		counterparty_name VARCHAR(160),
+		idempotency_key VARCHAR(140)
 	);
+	-- El indice unico parcial de la 072: es lo que hace que un reintento del
+	-- mismo envio no envie dos veces. La idempotencia del envio se prueba
+	-- mandando la misma llave dos veces, asi que sin este indice la prueba
+	-- pasaria en verde contra un esquema que no frena nada.
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_crypto_tx_llave
+		ON crypto_transactions (user_id, idempotency_key)
+		WHERE idempotency_key IS NOT NULL;
 	-- Los otros dos CHECK de la 019. La anotacion de compras y ventas corre
 	-- dentro de la transaccion del asiento: si choca con uno de estos en
 	-- produccion, se cae la operacion entera, asi que aqui tiene que chocar igual.
@@ -759,6 +773,22 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		ALTER TABLE crypto_transactions ADD CONSTRAINT chk_crypto_tx_type CHECK (
 			type IN ('buy','sell','convert','send','receive','stake','unstake','reward'));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+	-- La comision que KiramoPay cobra por un envio, en el MISMO activo (072).
+	-- Las cuentas de comisiones del libro son de fiat y no pueden guardar BTC.
+	CREATE TABLE IF NOT EXISTS crypto_platform_fees (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		crypto_tx_id UUID NOT NULL,
+		asset VARCHAR(20) NOT NULL,
+		amount NUMERIC(38,18) NOT NULL,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	DO $$ BEGIN
+		ALTER TABLE crypto_platform_fees ADD CONSTRAINT chk_crypto_fee_positiva CHECK (amount > 0);
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_crypto_fee_por_movimiento
+		ON crypto_platform_fees (crypto_tx_id);
 
 	CREATE TABLE IF NOT EXISTS crypto_staking (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1312,7 +1342,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	tables := []string{
 		"sinpe_history", "sinpe_contacts",
-		"crypto_price_alerts", "crypto_staking", "crypto_transactions", "crypto_assets",
+		"crypto_price_alerts", "crypto_staking", "crypto_platform_fees", "crypto_transactions", "crypto_assets",
 		"uif_reports",
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",

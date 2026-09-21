@@ -7,6 +7,7 @@ import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { CampoMonto } from '../../components/CampoMonto';
+import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { CryptoAsset, CryptoTransaction } from '../../types';
 import { cryptoPriceService, CryptoPriceData, SIMBOLOS_SIN_FEED } from '@/services/cryptoPrices';
@@ -16,16 +17,21 @@ import { SIMBOLOS_DEL_CATALOGO } from '@/api/catalogoCripto';
 import { HojaAlertasDePrecio, useAlertasDePrecio } from './AlertasDePrecio';
 import { refreshAccounts, refreshCrypto } from '@/services/dataSync';
 import { ACTIVOS_CON_STAKING } from '@/api/repositories/crypto.repository';
+import type { CryptoSendPreview } from '@/api/repositories/crypto.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
+import { parsearQrKiramo } from '@/utils/qrKiramo';
 
 // Un activo se puede stakear si esta en el programa del servidor (ETH y SOL).
 const tieneStaking = (simbolo: string | undefined) =>
   !!simbolo && Object.prototype.hasOwnProperty.call(ACTIVOS_CON_STAKING, simbolo);
 
-// Llave de idempotencia nueva para un intento de compra o venta.
-const nuevaLlave = (operacion: 'buy' | 'sell') =>
+// Las operaciones que se pueden reintentar con la misma llave.
+type OperacionCripto = 'buy' | 'sell' | 'send';
+
+// Llave de idempotencia nueva para un intento de compra, venta o envio.
+const nuevaLlave = (operacion: OperacionCripto) =>
   `crypto:${operacion}:${
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -139,7 +145,7 @@ export const CryptoView: React.FC = () => {
   const [isTrading, setIsTrading] = useState(false);
   const [tradeError, setTradeError] = useState('');
   // Que operacion reintentar cuando se verifique el codigo de MFA.
-  const [pendingTrade, setPendingTrade] = useState<'buy' | 'sell' | null>(null);
+  const [pendingTrade, setPendingTrade] = useState<OperacionCripto | null>(null);
   // Retirar y reclamar viven en la lista de posiciones, fuera de las hojas, asi
   // que necesitan su propio estado de carga y de error.
   const [stakingBusyId, setStakingBusyId] = useState<string | null>(null);
@@ -152,7 +158,26 @@ export const CryptoView: React.FC = () => {
   // primera pero el estado seguia siendo 'CRC', y al presionar "Convertir" la
   // pantalla no hacia absolutamente nada. Se elige al abrir la hoja.
   const [convertToAsset, setConvertToAsset] = useState('');
-  const [sendAddress, setSendAddress] = useState('');
+  // Envio a otra persona de KiramoPay. `sendQr` es el contenido crudo del
+  // codigo escaneado: quien recibe no se escribe, porque esta cripto no vive
+  // en ninguna cadena y no hay direccion a la cual mandarla. `sendPreview` son
+  // los numeros que devolvio el servidor —a quien le llega, cuanto le llega y
+  // cuanto baja del saldo—; la pantalla no calcula ninguno.
+  const [sendQr, setSendQr] = useState('');
+  // La respuesta del servidor viaja junto con la pregunta que la produjo. Sin
+  // eso, cambiar el monto dejaba en pantalla los numeros del monto anterior
+  // hasta que llegara la consulta nueva, y el boton de confirmar seguia
+  // habilitado sobre ellos. Se guarda el codigo del rechazo, no el texto:
+  // traducirlo aqui ataria el efecto a `t`, que cambia en cada render.
+  const [sendPreviewRes, setSendPreviewRes] = useState<{
+    monto: number;
+    qr: string;
+    simbolo: string;
+    datos: CryptoSendPreview | null;
+    error: string;
+  } | null>(null);
+  // El rechazo del propio escaner, que no depende de ningun monto.
+  const [sendQrError, setSendQrError] = useState<string>('');
   const [showSendConfirm, setShowSendConfirm] = useState(false);
 
   // Alertas de precio. La lista se lee al montar para que el conteo de la
@@ -182,7 +207,7 @@ export const CryptoView: React.FC = () => {
   // servidor, el reintento devuelve ese mismo movimiento en vez de cobrar otra
   // vez. Cambiar el activo, el monto o la moneda es otra operacion y otra llave.
   const intentoRef = useRef<{ firma: string; llave: string } | null>(null);
-  const llaveDelIntento = (operacion: 'buy' | 'sell', firma: string) => {
+  const llaveDelIntento = (operacion: OperacionCripto, firma: string) => {
     const completa = `${operacion}|${firma}`;
     if (intentoRef.current?.firma !== completa) {
       intentoRef.current = { firma: completa, llave: nuevaLlave(operacion) };
@@ -467,8 +492,9 @@ export const CryptoView: React.FC = () => {
   // Un rechazo por llave ya usada quiere decir que un intento anterior de esta
   // misma operacion llego al servidor (y quiza se cobro) con otro precio. La
   // proxima vez es una operacion nueva, y lo que ya ocurrio se trae del
-  // servidor para que la persona lo vea antes de repetir.
-  const trasRechazoDeCompraOVenta = (code: string | undefined) => {
+  // servidor para que la persona lo vea antes de repetir. Vale para comprar,
+  // vender y enviar: las tres van con llave.
+  const trasRechazoDeOperacion = (code: string | undefined) => {
     if (code === 'LLAVE_REUTILIZADA') {
       intentoRef.current = null;
       refreshCrypto().catch(() => {});
@@ -507,7 +533,7 @@ export const CryptoView: React.FC = () => {
         setShowMfa(true);
         return;
       }
-      trasRechazoDeCompraOVenta(res.error?.code);
+      trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
@@ -545,7 +571,7 @@ export const CryptoView: React.FC = () => {
         setShowMfa(true);
         return;
       }
-      trasRechazoDeCompraOVenta(res.error?.code);
+      trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
@@ -592,24 +618,139 @@ export const CryptoView: React.FC = () => {
     setAmount('');
   };
 
-  const handleSend = () => {
-    if (!selectedAsset || !amount || !sendAddress) return;
-    const sendAmount = parseFloat(amount);
-    const fee = sendAmount * 0.0001;
+  // Cerrar el envio se lleva todo: el codigo escaneado, los numeros del
+  // servidor y el rechazo. Si quedaran, al reabrir la hoja apareceria el
+  // destinatario de la vez anterior sobre un monto nuevo.
+  const cerrarEnvio = () => {
+    setShowSendConfirm(false);
+    setActiveSheet('none');
+    setAmount('');
+    setSendQr('');
+    setSendPreviewRes(null);
+    setSendQrError('');
+    setTradeError('');
+  };
 
+  // Lo unico que se puede juzgar aqui es si el codigo es de KiramoPay: de quien
+  // es, si sigue vigente y si acepta cripto lo sabe el servidor. Un codigo
+  // ajeno se rechaza devolviendo false, que deja la camara encendida en vez de
+  // congelarla con un error que la persona no causo.
+  const aceptarQrDeEnvio = (raw: string): boolean => {
+    if (!parsearQrKiramo(raw)) {
+      setSendQrError('QR_INVALIDO');
+      return false;
+    }
+    setSendQrError('');
+    setSendPreviewRes(null);
+    setSendQr(raw.trim());
+    return true;
+  };
+
+  // Los numeros del envio los da el servidor: a quien le llega el codigo
+  // escaneado, cuanto le llega y cuanto baja del saldo con la comision de
+  // KiramoPay adentro. La pantalla no deduce ninguno —calcularlos aqui seria
+  // volver a la comision inventada— y el boton de confirmar no se habilita
+  // hasta que lleguen.
+  //
+  // Depende del simbolo y no del objeto del activo: ese cambia de identidad en
+  // cada tic de precio y dispararia una consulta por tic. Tampoco depende de
+  // `t`, que se recrea en cada render; por eso el rechazo se guarda como
+  // codigo y se traduce al pintar.
+  const simboloEnvio = selectedAsset?.symbol;
+  const montoDeEnvio = parseFloat(amount);
+  useEffect(() => {
+    if (activeSheet !== 'send' || !sendQr || !simboloEnvio) return;
+    if (!(montoDeEnvio > 0)) return;
+
+    let vigente = true;
+    // Espera corta: sin ella cada tecla del monto seria una consulta.
+    const espera = setTimeout(async () => {
+      const res = await getApiLayer().crypto.sendPreview({
+        asset: simboloEnvio,
+        amount: montoDeEnvio,
+        qrData: sendQr,
+      });
+      if (!vigente) return;
+      setSendPreviewRes({
+        monto: montoDeEnvio,
+        qr: sendQr,
+        simbolo: simboloEnvio,
+        datos: res.success ? (res.data ?? null) : null,
+        error: res.success && res.data ? '' : res.error?.code || 'SEND_PREVIEW_FAILED',
+      });
+    }, 400);
+
+    return () => {
+      vigente = false;
+      clearTimeout(espera);
+    };
+  }, [activeSheet, sendQr, simboloEnvio, montoDeEnvio]);
+
+  // Solo vale la respuesta que corresponde a lo que hay escrito ahora. Mientras
+  // no llegue, la hoja esta esperando: eso es tener monto y codigo sin respuesta
+  // al dia, y no hace falta una bandera aparte que pueda quedar desfasada.
+  const respuestaAlDia =
+    sendPreviewRes &&
+    sendPreviewRes.monto === montoDeEnvio &&
+    sendPreviewRes.qr === sendQr &&
+    sendPreviewRes.simbolo === simboloEnvio
+      ? sendPreviewRes
+      : null;
+  const sendPreview = respuestaAlDia?.datos ?? null;
+  const sendPreviewError = sendQrError || (respuestaAlDia?.error ?? '');
+  const sendPreviewLoading = !!sendQr && montoDeEnvio > 0 && !respuestaAlDia;
+
+  // Enviar cripto a otra persona de KiramoPay. Antes esta funcion no hablaba
+  // con nadie: descontaba el saldo en el telefono, inventaba una comision de
+  // red del 0,01 % y un hash de cadena al azar, y le decia a la persona que su
+  // cripto habia salido de forma irreversible. No salia a ningun lado, y la
+  // siguiente carga del servidor devolvia el saldo como si nada. Ahora el envio
+  // lo hace el servidor y la pantalla espera su respuesta.
+  const handleSend = async () => {
+    const monto = parseFloat(amount);
+    if (!selectedAsset || !sendQr || !(monto > 0) || isTrading) return;
+    if (sinPrecio(selectedAsset)) return;
+
+    setIsTrading(true);
+    setTradeError('');
+    const res = await getApiLayer().crypto.send({
+      asset: selectedAsset.symbol,
+      amount: monto,
+      qrData: sendQr,
+      price: selectedAsset.currentPrice,
+      // La llave sobrevive al desafio de MFA y a un reintento: si el primer
+      // intento ya se cobro en el servidor, el segundo devuelve ese mismo
+      // envio en vez de enviar dos veces.
+      idempotencyKey: llaveDelIntento('send', `${selectedAsset.symbol}|${monto}|${sendQr}`),
+    });
+    setIsTrading(false);
+
+    if (!res.success) {
+      if (res.error?.code === MFA_REQUIRED) {
+        setPendingTrade('send');
+        setShowMfa(true);
+        return;
+      }
+      trasRechazoDeOperacion(res.error?.code);
+      setShowSendConfirm(false);
+      setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    intentoRef.current = null;
+    // La comision y el nombre son los que devolvio el servidor en la vista
+    // previa que la persona acaba de confirmar, no numeros de la pantalla.
     dispatch({
       type: 'SEND_CRYPTO',
       payload: {
         asset: selectedAsset.symbol,
-        amount: sendAmount,
-        toAddress: sendAddress,
-        fee
-      }
+        amount: monto,
+        fee: sendPreview?.fee ?? 0,
+        price: selectedAsset.currentPrice,
+        counterpartyName: sendPreview?.recipientName ?? '',
+      },
     });
-    setShowSendConfirm(false);
-    setActiveSheet('none');
-    setAmount('');
-    setSendAddress('');
+    cerrarEnvio();
   };
 
   const handleStake = async () => {
@@ -1220,7 +1361,15 @@ export const CryptoView: React.FC = () => {
                 <Icons.Minus size={18} /> {t('sell')}
               </button>
               <button
-                onClick={() => setActiveSheet('send')}
+                onClick={() => {
+                  // La hoja arranca en el escaneo, sin nada de un envio anterior.
+                  setSendQr('');
+                  setSendPreviewRes(null);
+                  setSendQrError('');
+                  setAmount('');
+                  setTradeError('');
+                  setActiveSheet('send');
+                }}
                 disabled={selectedAsset.balance === 0}
                 className="border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
@@ -1520,72 +1669,132 @@ export const CryptoView: React.FC = () => {
         </div>
       </BottomSheet>
 
-      {/* Send Sheet */}
-      <BottomSheet isOpen={activeSheet === 'send'} onClose={() => { setActiveSheet('none'); setAmount(''); setSendAddress(''); }} title={`${t('send')} ${selectedAsset?.symbol || ''}`}>
-        <div className="space-y-6">
-          <div className="uv-surface-2 rounded-xl p-4">
-            <label className="text-xs text-gray-500 font-bold">{t('destination_address')}</label>
-            <input
-              type="text"
-              value={sendAddress}
-              onChange={(e) => setSendAddress(e.target.value)}
-              placeholder={t('crypto_address_placeholder')}
-              className="w-full bg-transparent text-lg font-mono uv-text-primary mt-2 outline-none"
-            />
-          </div>
-
-          <div className="text-center">
-            <label className="text-sm text-gray-500">{t('amount')}</label>
-            <div className="flex items-center justify-center gap-2 mt-2">
-              <CampoMonto
-                decimals={6}
-                thousands={false}
-                value={amount}
-                onChange={setAmount}
-                placeholder="0.00"
-                className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
-              />
-              <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
-            </div>
-            <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
-          </div>
-
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <Icons.AlertTriangle size={20} className="text-yellow-600 mt-0.5" />
-              <div>
-                <p className="font-bold text-yellow-800 dark:text-yellow-200">{t('verify_address')}</p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">{t('irreversible_warning')}</p>
+      {/* Hoja de envio: a otra persona de KiramoPay, escaneando SU codigo.
+          Antes pedia una direccion de cadena escrita a mano; no habia ninguna
+          cadena a la cual mandarla, y lo que se tecleara ahi no cambiaba nada
+          de lo que la pantalla hacia despues. */}
+      <BottomSheet isOpen={activeSheet === 'send'} onClose={cerrarEnvio} title={`${t('send')} ${selectedAsset?.symbol || ''}`}>
+        {!sendQr ? (
+          <QrScannerPanel
+            active={activeSheet === 'send'}
+            onDecode={aceptarQrDeEnvio}
+            hint={t('crypto_send_scan_hint')}
+            error={sendPreviewError ? mensajeDeErrorCripto({ code: sendPreviewError }, t) : ''}
+          />
+        ) : (
+          <div className="space-y-6">
+            {/* A quien le llega va PRIMERO. El nombre lo resuelve el servidor
+                desde el codigo; mientras no conteste no hay a quien nombrar, y
+                la pantalla lo dice en vez de inventarlo. */}
+            <div className="uv-surface-2 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs uv-text-muted uppercase tracking-wider">{t('crypto_send_recipient')}</p>
+                <p className="text-lg font-bold uv-text-primary truncate">
+                  {sendPreview
+                    ? sendPreview.recipientName
+                    : (sendPreviewLoading ? t('qr_verificando') : SIN_DATO)}
+                </p>
               </div>
+              <button
+                onClick={() => { setSendQr(''); setSendPreviewRes(null); setSendQrError(''); }}
+                className="text-sm font-bold text-[var(--color-primary)] flex-shrink-0 uv-focus-ring rounded-lg px-2 py-1"
+              >
+                {t('crypto_send_rescan')}
+              </button>
             </div>
-          </div>
 
-          <button
-            onClick={() => setShowSendConfirm(true)}
-            disabled={!amount || !sendAddress || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0)}
-            className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
-          >
-            {t('send')} {selectedAsset?.symbol}
-          </button>
-        </div>
+            <div className="text-center">
+              <label className="text-sm text-gray-500">{t('amount')}</label>
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <CampoMonto
+                  decimals={8}
+                  thousands={false}
+                  value={amount}
+                  onChange={setAmount}
+                  placeholder="0.00"
+                  className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+                />
+                <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
+              </div>
+              <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
+            </div>
+
+            {/* Los tres numeros son los que devolvio el servidor, el mismo que
+                despues cobra. La comision de KiramoPay se cobra en este mismo
+                activo y la paga quien envia: por eso el saldo baja mas de lo
+                que le llega a la otra persona, y las dos cifras se muestran
+                juntas en vez de una sola. */}
+            {sendPreview && (
+              <div className="uv-surface-2 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+                {[
+                  { label: t('crypto_send_you_send'), value: `${formatCrypto(sendPreview.amount, 8)} ${sendPreview.asset}` },
+                  { label: t('crypto_send_balance_drops'), value: `${formatCrypto(sendPreview.total, 8)} ${sendPreview.asset}` },
+                  { label: `${t('crypto_send_recipient')} ${sendPreview.recipientName}`, value: `${formatCrypto(sendPreview.amount, 8)} ${sendPreview.asset}` },
+                  { label: t('crypto_send_fee_label'), value: `${sendPreview.feePercent.toFixed(2)}%` },
+                ].map(fila => (
+                  <div key={fila.label} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <span className="text-sm uv-text-muted min-w-0 truncate">{fila.label}</span>
+                    <span className="text-sm font-semibold uv-text-primary tabular-nums flex-shrink-0">{fila.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* La vista previa no mira el saldo: con la comision adentro, el
+                monto que cabe justo deja de caber. Se dice aqui y no al
+                confirmar. */}
+            {sendPreview && sendPreview.total > (selectedAsset?.balance ?? 0) && (
+              <p className="text-sm text-[var(--color-danger)] text-center">{t('crypto_err_insufficient_asset')}</p>
+            )}
+
+            {sendPreviewError && (
+              <p className="text-sm text-[var(--color-danger)] text-center" aria-live="polite">
+                {mensajeDeErrorCripto({ code: sendPreviewError }, t)}
+              </p>
+            )}
+
+            {tradeError && (
+              <p className="text-sm text-[var(--color-danger)] text-center" aria-live="polite">{tradeError}</p>
+            )}
+
+            <button
+              onClick={() => setShowSendConfirm(true)}
+              disabled={
+                !sendPreview ||
+                sendPreviewLoading ||
+                isTrading ||
+                sendPreview.total > (selectedAsset?.balance ?? 0)
+              }
+              className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
+            >
+              {sendPreviewLoading ? t('processing') : <>{t('send')} {selectedAsset?.symbol}</>}
+            </button>
+          </div>
+        )}
       </BottomSheet>
 
-      {/* Review-before-send confirmation (crypto is irreversible) */}
+      {/* Confirmacion antes de enviar: un envio no se deshace. Los numeros son
+          los de la vista previa del servidor, no los del telefono. */}
       <ConfirmSendSheet
         isOpen={showSendConfirm}
         onClose={() => setShowSendConfirm(false)}
         onConfirm={handleSend}
-        amountDisplay={`${amount || '0'} ${selectedAsset?.symbol || ''}`}
-        confirmLabel={`${t('send')} ${selectedAsset?.symbol || ''}`}
-        warning={t('crypto_irreversible_warning')}
+        processing={isTrading}
+        amountDisplay={`${formatCrypto(sendPreview?.amount ?? 0, 8)} ${sendPreview?.asset || ''}`}
+        confirmLabel={`${t('send')} ${sendPreview?.asset || ''}`}
+        warning={t('crypto_send_irreversible')}
         rows={[
           {
-            label: t('address'),
-            value: sendAddress ? `${sendAddress.slice(0, 10)}…${sendAddress.slice(-6)}` : '',
+            label: t('crypto_send_recipient'),
+            value: sendPreview?.recipientName || '',
           },
           {
-            label: t('network_fee'),
-            value: `${formatCrypto(parseFloat(amount || '0') * 0.0001)} ${selectedAsset?.symbol || ''}`,
+            label: t('crypto_send_balance_drops'),
+            value: `${formatCrypto(sendPreview?.total ?? 0, 8)} ${sendPreview?.asset || ''}`,
+          },
+          {
+            label: t('crypto_send_fee_label'),
+            value: `${(sendPreview?.feePercent ?? 0).toFixed(2)}%`,
           },
         ]}
       />
@@ -1702,10 +1911,16 @@ export const CryptoView: React.FC = () => {
                     <span className="font-bold uv-text-primary tabular-nums text-right">{formatUsd(lectura.principal.monto * selectedTx.price)}</span>
                   </div>
                 )}
-                {selectedTx.txHash && (
+                {/* La otra persona del envio. Aqui iba un "Hash TX": un hash
+                    de cadena inventado con Math.random() para una cripto que
+                    no esta en ninguna cadena. Lo que si existe del otro lado
+                    de un envio es alguien de KiramoPay. */}
+                {selectedTx.counterpartyName && (
                   <div className={fila}>
-                    <span className="uv-text-muted">{t('tx_hash')}</span>
-                    <span className="font-mono text-xs text-[var(--color-primary)] truncate">{selectedTx.txHash}</span>
+                    <span className="uv-text-muted">
+                      {selectedTx.type === 'send' ? t('crypto_tx_sent_to') : t('crypto_tx_received_from')}
+                    </span>
+                    <span className="font-bold uv-text-primary text-right truncate">{selectedTx.counterpartyName}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-3">
@@ -1742,6 +1957,10 @@ export const CryptoView: React.FC = () => {
           setPendingTrade(null);
           if (operacion === 'buy') handleBuy();
           else if (operacion === 'sell') handleSell();
+          // El envio se reintenta con LA MISMA llave: el primer intento se
+          // rechazo antes de mover nada, y si llegara a haberse cobrado, el
+          // servidor devuelve ese envio en vez de hacer otro.
+          else if (operacion === 'send') handleSend();
         }}
       />
     </div>

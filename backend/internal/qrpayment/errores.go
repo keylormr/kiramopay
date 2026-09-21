@@ -67,6 +67,17 @@ var (
 	// venta escrita. Es inalcanzable con la llave nueva; se defiende igual,
 	// porque la alternativa seria fabricar una venta que nadie hizo.
 	ErrPagoNoRegistrado = errors.New("el pago no quedo registrado")
+
+	// ErrQRDeComercio: se escaneo el codigo de un comercio donde hacia falta el
+	// de una persona. Lo usa el envio de cripto: un comercio cobra en colones o
+	// dolares por el camino del libro, y no tiene donde recibir un activo.
+	ErrQRDeComercio = errors.New("ese codigo es de un comercio")
+
+	// ErrQRDeCobro: se escaneo un cobro —un monto en fiat que alguien pidio— en
+	// vez del codigo personal. Enviar cripto contra el ignoraria en silencio el
+	// monto que esa persona pidio, que es justamente lo que el cobro vino a
+	// evitar.
+	ErrQRDeCobro = errors.New("ese codigo es un cobro en dinero")
 )
 
 // Errores de los planes del comercio.

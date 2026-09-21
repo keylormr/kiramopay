@@ -323,6 +323,44 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 	return res, nil
 }
 
+// PersonaDelQR es a quien pertenece un codigo QR personal.
+type PersonaDelQR struct {
+	UserID string
+	Nombre string
+}
+
+// PersonaDelQR responde de QUIEN es un codigo QR, para lo que no se paga por el
+// libro. Lo usa el envio de cripto, donde el destinatario no se escribe: se
+// escanea.
+//
+// Solo acepta el codigo PERSONAL. Un codigo de comercio se rechaza porque un
+// comercio cobra en dinero y no tiene donde recibir un activo, y un cobro se
+// rechaza porque pide un monto en fiat que un envio de cripto no puede
+// satisfacer: mandarle cripto seria darle algo distinto de lo que pidio sin
+// decirselo a nadie.
+//
+// El nombre sale de la misma funcion que usa la hoja de pago, asi que quien
+// envia ve el mismo nombre que veria pagandole.
+func (s *Service) PersonaDelQR(ctx context.Context, qrData string) (*PersonaDelQR, error) {
+	obj, err := s.resolverQR(ctx, qrData)
+	if err != nil {
+		return nil, err
+	}
+	if obj.code.Status == EstadoCodigoRevocado {
+		return nil, ErrQRRevocado
+	}
+	if obj.charge != nil {
+		return nil, ErrQRDeCobro
+	}
+	if obj.code.MerchantID != "" {
+		return nil, ErrQRDeComercio
+	}
+	return &PersonaDelQR{
+		UserID: obj.code.CreatorID,
+		Nombre: s.displayName(ctx, obj.code.CreatorID),
+	}, nil
+}
+
 // ── El nonce del pagador ────────────────────────────────────────────────────
 
 const nonceMax = 32

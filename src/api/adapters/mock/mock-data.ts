@@ -67,8 +67,8 @@ export const initialCryptoAssets: CryptoAsset[] = [
 ];
 
 export const initialCryptoTransactions: CryptoTransaction[] = [
-  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 0, date: 'Hoy, 10:30 AM', status: 'completed', txHash: '0xabc123...' },
-  { id: 'ctx2', type: 'receive', fromAsset: 'ETH', fromAmount: 0.5, price: 2320, fee: 0, date: 'Ayer, 3:15 PM', status: 'completed', txHash: '0xdef456...' },
+  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 0, date: 'Hoy, 10:30 AM', status: 'completed' },
+  { id: 'ctx2', type: 'receive', fromAsset: 'ETH', fromAmount: 0.5, price: 2320, fee: 0, date: 'Ayer, 3:15 PM', status: 'completed', counterpartyName: 'Victor Lobo' },
   { id: 'ctx3', type: 'convert', fromAsset: 'USDT', toAsset: 'ETH', fromAmount: 200, toAmount: 0.085, price: 2352, fee: 0, date: '28 Dic, 2024', status: 'completed' },
   { id: 'ctx4', type: 'stake', fromAsset: 'ETH', fromAmount: 0.5, price: 0, fee: 0, date: '25 Dic, 2024', status: 'completed' },
   { id: 'ctx5', type: 'yield', fromAsset: 'ETH', fromAmount: 0.0012, price: 2340, fee: 0, date: '30 Dic, 2024', status: 'completed' },

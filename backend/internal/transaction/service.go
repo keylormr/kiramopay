@@ -1064,6 +1064,28 @@ func (s *Service) CheckLimitsEnTx(ctx context.Context, tx pgx.Tx, userID, curren
 	return s.topesEnLaMismaTx(userID, currency, amountMinor, w)(ctx, tx)
 }
 
+// CheckLimitsConBloqueoEnTx es CheckLimitsEnTx para quien mueve valor por una
+// transaccion PROPIA, sin pasar por el libro — hoy, el envio de cripto entre
+// personas, que mueve un activo de crypto_assets y ni toca la billetera.
+//
+// CheckLimitsEnTx no se basta sola ahi. Lo que hace que frene bajo concurrencia
+// no es correr adentro de una transaccion: es que el libro ya bloqueo la
+// billetera del pagador (postOnce, `SELECT ... FOR UPDATE`) antes de llamarla.
+// Sin ese candado, dos salidas simultaneas leen la misma suma del dia y las dos
+// pasan — el tope diario se puede duplicar con solo tocar el boton dos veces.
+//
+// Toma el MISMO candado y en el mismo lugar del orden —la billetera primero,
+// despues lo que el modulo mueva— para que no pueda trabarse cruzado con un
+// asiento del libro.
+func (s *Service) CheckLimitsConBloqueoEnTx(ctx context.Context, tx pgx.Tx, userID, currency string, amountMinor int64) error {
+	if _, err := tx.Exec(ctx,
+		`SELECT 1 FROM wallets WHERE user_id = $1::uuid FOR UPDATE`, userID,
+	); err != nil {
+		return fmt.Errorf("lock wallet %s: %w", userID, err)
+	}
+	return s.CheckLimitsEnTx(ctx, tx, userID, currency, amountMinor)
+}
+
 // topeDiarioDe elige el tope de la MONEDA del movimiento.
 //
 // Antes se pasaba siempre w.DailyLimit, que esta en centimos de COLON, y se

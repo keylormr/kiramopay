@@ -4,6 +4,9 @@ import type {
   SellCryptoRequest,
   ConvertCryptoRequest,
   StakeCryptoRequest,
+  SendCryptoRequest,
+  SendCryptoPreviewRequest,
+  CryptoSendPreview,
 } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import type {
@@ -38,6 +41,19 @@ interface MovimientoDelServidor {
   fee?: number | string;
   status?: string;
   created_at: string;
+  // Solo en un envio entre personas: a quien se le envio o de quien vino.
+  counterparty_name?: string;
+}
+
+// La vista previa de un envio, tal como la calcula el servidor. Los decimales
+// llegan como texto; nada de esto se recalcula en el telefono.
+interface VistaPreviaDelServidor {
+  recipient_name: string;
+  asset: string;
+  amount: number | string;
+  fee: number | string;
+  total: number | string;
+  fee_percent: number | string;
 }
 
 // La posicion de staking tal como la devuelve el servidor.
@@ -77,6 +93,7 @@ export function movimientoDesdeServidor(t: MovimientoDelServidor): CryptoTransac
     status: ESTADOS.includes(t.status as CryptoTransaction['status'])
       ? (t.status as CryptoTransaction['status'])
       : 'completed',
+    ...(t.counterparty_name ? { counterpartyName: t.counterparty_name } : {}),
   };
   switch (t.type) {
     case 'buy':
@@ -201,6 +218,45 @@ export class HttpCryptoRepository implements ICryptoRepository {
     }
 
     return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'sell' }));
+  }
+
+  async sendPreview(request: SendCryptoPreviewRequest): Promise<ApiResponse<CryptoSendPreview>> {
+    const res = await this.client.post<VistaPreviaDelServidor>('/api/v1/crypto/send/preview', {
+      asset: request.asset,
+      amount: request.amount,
+      qr_data: request.qrData,
+    });
+
+    if (!res.success || !res.data) {
+      // El codigo del servidor pasa tal cual: es el que sabe si el QR es de un
+      // comercio, si esta revocado o si la persona se esta enviando a si misma.
+      return apiError(res.error?.code || 'SEND_PREVIEW_FAILED', res.error?.message || 'Send preview failed');
+    }
+
+    return apiSuccess({
+      recipientName: res.data.recipient_name,
+      asset: res.data.asset,
+      amount: num(res.data.amount),
+      fee: num(res.data.fee),
+      total: num(res.data.total),
+      feePercent: num(res.data.fee_percent),
+    });
+  }
+
+  async send(request: SendCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+    const res = await this.client.post<MovimientoDelServidor>('/api/v1/crypto/send', {
+      asset: request.asset,
+      amount: request.amount,
+      qr_data: request.qrData,
+      price: request.price,
+      ...(request.idempotencyKey ? { idempotency_key: request.idempotencyKey } : {}),
+    });
+
+    if (!res.success || !res.data) {
+      return apiError(res.error?.code || 'SEND_FAILED', res.error?.message || 'Send failed');
+    }
+
+    return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'send' }));
   }
 
   async convert(request: ConvertCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {

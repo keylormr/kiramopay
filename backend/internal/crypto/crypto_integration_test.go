@@ -95,7 +95,7 @@ func montarCriptoConTipoDeCambio(t *testing.T, urlPrecios string, tipo crypto.Ra
 	walletRepo := wallet.NewRepository(pool)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txService := transaction.NewService(txRepo, walletRepo, l, nil)
-	svc := crypto.NewService(repo, priceService, txService, tipo)
+	svc := crypto.NewService(repo, priceService, txService, tipo, nil)
 
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
