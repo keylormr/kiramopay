@@ -224,6 +224,45 @@ describe('convertir y apartar van con la llave del intento', () => {
     expect(b).toBe(a);
     expect(c).not.toBe(a);
   });
+
+  // La llave sobrevive a la posicion que abrio: un retiro no la descarta,
+  // porque la pantalla no sabe que posicion abrio el intento cuya respuesta se
+  // perdio. Si esa posicion ya se retiro, el servidor lo dice con su codigo y
+  // la pantalla lo explica; el siguiente toque es un apartado nuevo, con otra
+  // llave.
+  it('un apartado que ya se retiro se explica y el siguiente toque va con otra llave', async () => {
+    const posicion = {
+      id: '5a7e0c4e-0000-4000-8000-000000000003', asset: 'ETH', amount: 0.1, apy: 4.5,
+      startDate: '2026-09-22T15:00:00Z', earned: 0, locked: false,
+    };
+    const crudo = 'staking with this idempotency key was already withdrawn';
+    mocks.api.crypto.stake
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } })
+      .mockResolvedValueOnce({ success: false, error: { code: 'STAKING_ALREADY_WITHDRAWN', message: crudo } })
+      .mockResolvedValue({ success: true, data: posicion });
+    const user = userEvent.setup();
+    montar();
+
+    const hoja = await abrirStaking(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await screen.findByText(/No pudimos conectar con KiramoPay/);
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    expect(await screen.findByText(/ya se había hecho y después se retiró/)).toBeInTheDocument();
+    expect(screen.queryByText(crudo)).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'STAKE_CRYPTO' }));
+
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await waitFor(() =>
+      expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'STAKE_CRYPTO', payload: posicion }),
+    );
+
+    const [a, b, c] = mocks.api.crypto.stake.mock.calls.map(([req]) => req.idempotencyKey as string);
+    // El reintento tras el corte de red va con la misma llave...
+    expect(b).toBe(a);
+    // ...pero la posicion de esa llave ya se retiro: el siguiente es otro apartado.
+    expect(c).not.toBe(a);
+  });
 });
 
 describe('n=44 — la fila de una compra dice lo que entro y lo que salio', () => {

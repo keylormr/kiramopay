@@ -11,6 +11,7 @@ import (
 
 	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/shopspring/decimal"
 )
 
 // Convertir y apartar para staking no tenian llave de idempotencia. Comprar,
@@ -312,5 +313,113 @@ func TestStaking_DosToquesSimultaneosApartanUnaVez(t *testing.T) {
 	m.exigirSaldo(t, "ETH", 2, "los dos toques apartaron")
 	if n := m.posicionesDeStaking(t); n != 1 {
 		t.Fatalf("posiciones = %d, se esperaba 1", n)
+	}
+}
+
+// ── Reintentos que llegan tarde ─────────────────────────────────────────────
+
+// feedConPrecio sirve la misma forma que startPriceStub, con un precio a
+// eleccion para un id del proveedor; los demas, a 1000.
+func feedConPrecio(t *testing.T, id string, precio float64) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var cuerpo []map[string]any
+		for _, pedido := range strings.Split(r.URL.Query().Get("ids"), ",") {
+			if pedido == "" {
+				continue
+			}
+			cotizacion := 1000.0
+			if pedido == id {
+				cotizacion = precio
+			}
+			cuerpo = append(cuerpo, map[string]any{
+				"id":                          pedido,
+				"current_price":               cotizacion,
+				"price_change_percentage_24h": 1.5,
+				"total_volume":                2_000_000,
+				"market_cap":                  3_000_000,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(cuerpo)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// recibidoEnLaConversion lee de la respuesta cuanto llego del activo de
+// destino.
+func recibidoEnLaConversion(t *testing.T, rec *httptest.ResponseRecorder) decimal.Decimal {
+	t.Helper()
+	var cuerpo struct {
+		Data struct {
+			Total decimal.Decimal `json:"total"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &cuerpo); err != nil {
+		t.Fatalf("leer lo recibido: %v: %s", err, rec.Body.String())
+	}
+	return cuerpo.Data.Total
+}
+
+// El reintento legitimo llega con el precio ya movido: la respuesta del primer
+// toque se perdio y el telefono manda lo mismo un rato despues. No se
+// convierte otra vez ni se recalcula: se devuelve lo que llego entonces.
+//
+// Lo atiende un segundo servicio, con el feed cotizando BTC al doble, porque
+// el servicio guarda los precios en cache y el primero no veria el cambio. Es
+// el reintento que cae despues de que el cache se renovo.
+func TestConvertir_ElReintentoConElPrecioMovidoDevuelveLoQueSeRecibio(t *testing.T) {
+	m := montarVenta(t)
+	m.sembrar(t, "BTC", "Bitcoin", 3)
+	primera := idCreado(t, m.convertirPorHTTP(convertirUnBTC))
+
+	conOtroPrecio := servicioDeVenta(t, m.pool, feedConPrecio(t, "bitcoin", 2000))
+	// Sin esto, un feed que no cotizara al doble dejaria pasar la prueba sin
+	// que el precio se hubiera movido.
+	precios, err := conOtroPrecio.GetPrices(context.Background(), []string{"BTC"})
+	if err != nil || precios["BTC"] == nil || precios["BTC"].Price != 2000 {
+		t.Fatalf("el segundo feed no cotiza BTC a 2000 (%v): la prueba no moveria el precio", err)
+	}
+
+	rec := m.porHTTP(urlConvertir, crypto.NewHandler(conOtroPrecio).Convert, convertirUnBTC)
+	if id := idCreado(t, rec); id != primera {
+		t.Fatalf("el reintento devolvio %s, se esperaba la conversion %s", id, primera)
+	}
+	if got := recibidoEnLaConversion(t, rec); !got.Equal(d(1)) {
+		t.Fatalf("el reintento dice que llegaron %s ETH y llego 1: recalculo con el precio nuevo", got)
+	}
+	m.exigirSaldo(t, "BTC", 2, "el reintento no convierte otra vez")
+	m.exigirSaldo(t, "ETH", 1, "lo que llego es lo del primer toque")
+	if n := m.conversionesAnotadas(t); n != 1 {
+		t.Fatalf("conversiones anotadas = %d, se esperaba 1", n)
+	}
+}
+
+// La llave de un apartado sobrevive a su posicion. La pantalla la conserva
+// mientras la persona reintenta, y un retiro no la descarta, porque la
+// pantalla no sabe que posicion abrio el intento cuya respuesta se perdio. Si
+// esa posicion ya se retiro y la persona vuelve a apartar lo mismo, la llave
+// llega con una posicion cerrada detras. Devolverla seria contestar "listo"
+// por algo que ya no esta apartado; el reintento dice que ese apartado ya se
+// retiro, sin apartar ni tocar el saldo.
+func TestStaking_ElReintentoDeUnApartadoYaRetiradoNoContestaListo(t *testing.T) {
+	m := montarVenta(t)
+	m.sembrar(t, "ETH", "Ethereum", 3)
+
+	posicion := idCreado(t, m.apartarPorHTTP(apartarUnETH))
+	if err := m.svc.Unstake(context.Background(), m.userID, posicion); err != nil {
+		t.Fatalf("retirar la posicion: %v", err)
+	}
+	m.exigirSaldo(t, "ETH", 3, "el retiro devuelve lo apartado")
+
+	rec := m.apartarPorHTTP(apartarUnETH)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"STAKING_ALREADY_WITHDRAWN"`) {
+		t.Fatalf("respuesta = %d %s, se esperaba 409 STAKING_ALREADY_WITHDRAWN", rec.Code, rec.Body.String())
+	}
+	sinRastroDeLaBase(t, rec.Body.String())
+	m.exigirSaldo(t, "ETH", 3, "el reintento no aparta otra vez")
+	if n := m.posicionesDeStaking(t); n != 1 {
+		t.Fatalf("posiciones = %d, se esperaba solo la retirada", n)
 	}
 }
