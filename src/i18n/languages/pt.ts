@@ -503,6 +503,7 @@ const pt: TranslationKeys = {
   crypto_err_staking_not_available: 'Esta cripto não faz parte do programa de staking.',
   crypto_err_position_gone: 'Essa posição não está mais ativa. Atualizamos sua lista.',
   crypto_err_position_locked: 'Esta posição continua bloqueada até o fim do prazo.',
+  crypto_err_stake_already_withdrawn: 'Esse staking já tinha sido feito e depois foi retirado, então não foi repetido. Se quiser fazer de novo, tente outra vez.',
   crypto_staking_program_assets: 'Você pode fazer staking com {assets}.',
   crypto_staking_no_yield: 'Sem rendimento ainda',
   crypto_days: 'dias',

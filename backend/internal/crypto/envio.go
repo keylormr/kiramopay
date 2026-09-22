@@ -390,12 +390,15 @@ func (s *Service) nombreDeQuienEnvia(ctx context.Context, userID string) string 
 // mismoEnvio comprueba que el envio ya escrito bajo esa llave sea el que se
 // esta pidiendo. La llave la elige el cliente, asi que dos envios distintos
 // pueden llegar con la misma por un error suyo; con eso, devolver el viejo
-// seria decirle "enviado" a alguien que no recibio nada.
+// seria decirle "enviado" a alguien que no recibio nada. El tipo entra
+// porque el indice de la llave abarca todos los movimientos de la persona, no
+// solo los envios.
 func mismoEnvio(hecho, pedido *TransactionRecord) error {
 	if hecho == nil {
 		return fmt.Errorf("%w: la llave ya se uso", ErrLlaveDeOtroEnvio)
 	}
-	if hecho.Asset != pedido.Asset ||
+	if hecho.Type != pedido.Type ||
+		hecho.Asset != pedido.Asset ||
 		!hecho.Amount.Equal(pedido.Amount) ||
 		hecho.CounterpartyUserID != pedido.CounterpartyUserID {
 		return ErrLlaveDeOtroEnvio

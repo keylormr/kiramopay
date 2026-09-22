@@ -43,6 +43,8 @@ export function mensajeDeErrorCripto(
       return t('crypto_err_position_gone');
     case 'STAKING_POSITION_LOCKED':
       return t('crypto_err_position_locked');
+    case 'STAKING_ALREADY_WITHDRAWN':
+      return t('crypto_err_stake_already_withdrawn');
     case 'CLAIM_NOT_AVAILABLE':
       return t('crypto_claim_unavailable');
     // Envio entre personas. El QR dice a quien le llega, asi que cada motivo
@@ -71,6 +73,15 @@ export function mensajeDeErrorCripto(
     default:
       return t('crypto_err_generic');
   }
+}
+
+/**
+ * La llave del intento ya no sirve para reintentar: se uso para un movimiento
+ * distinto, o el apartado que abrio ya se retiro. El siguiente toque es otra
+ * operacion y necesita otra llave.
+ */
+export function llaveYaGastada(code: string | undefined): boolean {
+  return code === 'LLAVE_REUTILIZADA' || code === 'STAKING_ALREADY_WITHDRAWN';
 }
 
 /** La posicion que se quiso retirar ya no esta activa en el servidor. */

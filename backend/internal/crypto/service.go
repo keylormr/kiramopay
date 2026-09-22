@@ -503,6 +503,12 @@ func (s *Service) posicionYaAbierta(ctx context.Context, userID string, hecho *T
 	if pos.Locked != req.Locked || pos.LockDays != req.LockDays {
 		return nil, ErrLlaveDeOtraOperacion
 	}
+	// La llave sobrevive a su posicion: la pantalla la conserva mientras la
+	// persona reintenta, y un retiro no la descarta. Devolver la posicion
+	// retirada seria contestar "listo" por algo que ya no esta apartado.
+	if pos.Status != "active" {
+		return nil, ErrApartadoYaRetirado
+	}
 	return pos, nil
 }
 

@@ -1,4 +1,4 @@
-import { mensajeDeErrorCripto, posicionYaNoEsta } from '../erroresCripto';
+import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from '../erroresCripto';
 import { leerMovimiento, fechaLegible } from '../movimientoCripto';
 import { defaultTranslations } from '@/i18n/translations';
 import en from '@/i18n/languages/en';
@@ -15,7 +15,8 @@ describe('mensajeDeErrorCripto', () => {
     'CRYPTO_INSUFFICIENT_BALANCE', 'CRYPTO_INVALID_AMOUNT', 'INSUFFICIENT_BALANCE',
     'DAILY_LIMIT_EXCEEDED', 'MONTHLY_LIMIT_EXCEEDED', 'LLAVE_REUTILIZADA',
     'STAKING_NOT_AVAILABLE', 'STAKING_POSITION_NOT_FOUND', 'STAKING_POSITION_INACTIVE',
-    'STAKING_POSITION_LOCKED', 'CLAIM_NOT_AVAILABLE', 'NETWORK_ERROR', 'RATE_LIMITED', 'SESSION_EXPIRED',
+    'STAKING_POSITION_LOCKED', 'STAKING_ALREADY_WITHDRAWN', 'CLAIM_NOT_AVAILABLE',
+    'NETWORK_ERROR', 'RATE_LIMITED', 'SESSION_EXPIRED',
   ])('%s tiene texto propio', (code) => {
     const texto = mensajeDeErrorCripto({ code }, t);
     expect(texto).not.toMatch(/^(crypto|err)_/);
@@ -33,6 +34,16 @@ describe('mensajeDeErrorCripto', () => {
     const conIngles = (clave: string) => ingles[clave] ?? `FALTA:${clave}`;
     expect(mensajeDeErrorCripto({ code: 'LLAVE_REUTILIZADA' }, conIngles)).not.toMatch(/^FALTA/);
     expect(mensajeDeErrorCripto({ code: 'STAKING_NOT_AVAILABLE' }, conIngles)).not.toMatch(/^FALTA/);
+    expect(mensajeDeErrorCripto({ code: 'STAKING_ALREADY_WITHDRAWN' }, conIngles)).not.toMatch(/^FALTA/);
+  });
+
+  it('llaveYaGastada reconoce los dos rechazos tras los que el siguiente toque es otra operacion', () => {
+    expect(llaveYaGastada('LLAVE_REUTILIZADA')).toBe(true);
+    expect(llaveYaGastada('STAKING_ALREADY_WITHDRAWN')).toBe(true);
+    // Tras un corte de red el siguiente toque es el mismo intento.
+    expect(llaveYaGastada('NETWORK_ERROR')).toBe(false);
+    expect(llaveYaGastada('STAKING_POSITION_INACTIVE')).toBe(false);
+    expect(llaveYaGastada(undefined)).toBe(false);
   });
 
   it('posicionYaNoEsta reconoce los dos rechazos que invitan a recargar la lista', () => {

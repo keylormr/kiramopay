@@ -19,7 +19,7 @@ import { refreshAccounts, refreshCrypto } from '@/services/dataSync';
 import { ACTIVOS_CON_STAKING } from '@/api/repositories/crypto.repository';
 import type { CryptoSendPreview } from '@/api/repositories/crypto.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
-import { mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
+import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 
@@ -495,8 +495,10 @@ export const CryptoView: React.FC = () => {
   // proxima vez es una operacion nueva, y lo que ya ocurrio se trae del
   // servidor para que la persona lo vea antes de repetir. Vale para las cinco
   // operaciones que van con llave: comprar, vender, enviar, convertir y apartar.
+  // Lo mismo cuando el apartado de esa llave ya se hizo y despues se retiro: el
+  // siguiente toque es un apartado nuevo.
   const trasRechazoDeOperacion = (code: string | undefined) => {
-    if (code === 'LLAVE_REUTILIZADA') {
+    if (llaveYaGastada(code)) {
       intentoRef.current = null;
       refreshCrypto().catch(() => {});
       refreshAccounts().catch(() => {});

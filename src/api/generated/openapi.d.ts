@@ -1796,7 +1796,7 @@ export interface paths {
         put?: never;
         /**
          * Stake cryptocurrency
-         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves. Repeating a completed stake with the same `idempotency_key` returns the position it opened and sets nothing aside again; a key that belongs to a different asset, amount or term, or to another kind of movement, gets 409 LLAVE_REUTILIZADA.
+         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves. Repeating a completed stake with the same `idempotency_key` returns the position it opened and sets nothing aside again; a key that belongs to a different asset, amount or term, or to another kind of movement, gets 409 LLAVE_REUTILIZADA. If the position that key opened was already withdrawn, the retry gets 409 STAKING_ALREADY_WITHDRAWN and nothing is set aside.
          */
         post: {
             parameters: {
@@ -1829,7 +1829,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different asset, amount or term, or to another kind of movement. Nothing moved. */
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different asset, amount or term, or to another kind of movement. Nothing moved. STAKING_ALREADY_WITHDRAWN — the key already opened a position and it was withdrawn; nothing moved, and staking again needs a new key. */
                 409: {
                     headers: {
                         [name: string]: unknown;

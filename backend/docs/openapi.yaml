@@ -1164,7 +1164,9 @@ paths:
         completed stake with the same `idempotency_key` returns the position
         it opened and sets nothing aside again; a key that belongs to a
         different asset, amount or term, or to another kind of movement, gets
-        409 LLAVE_REUTILIZADA.
+        409 LLAVE_REUTILIZADA. If the position that key opened was already
+        withdrawn, the retry gets 409 STAKING_ALREADY_WITHDRAWN and nothing is
+        set aside.
       security:
         - bearerAuth: []
       requestBody:
@@ -1192,7 +1194,9 @@ paths:
           description: >-
             LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
             asset, amount or term, or to another kind of movement. Nothing
-            moved.
+            moved. STAKING_ALREADY_WITHDRAWN — the key already opened a
+            position and it was withdrawn; nothing moved, and staking again
+            needs a new key.
           content:
             application/json:
               schema:
