@@ -1085,13 +1085,45 @@ paths:
     post:
       tags: [Crypto]
       summary: Convert between cryptocurrencies
+      description: >-
+        Converts `from_amount` of `from_asset` into `to_asset`. How much
+        arrives is decided by the server from the two USD market prices, not
+        by the client. Both balances and the `convert` movement commit in one
+        transaction. Repeating a completed conversion with the same
+        `idempotency_key` returns the recorded conversion, with what arrived
+        then, and moves nothing; a key that belongs to a different pair, a
+        different amount or another kind of movement gets 409
+        LLAVE_REUTILIZADA.
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoConvertRequest'
       responses:
         '201':
-          description: Conversion completed
+          description: >-
+            Conversion completed. `asset` is the pair (for example `BTC→ETH`),
+            `amount` is what left the source asset, `total` is what arrived,
+            in `currency` (the destination asset), and `price` is the
+            destination's USD unit price.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoTransactionRecord'
         '400':
           description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
+            pair, a different amount or another kind of movement. Nothing
+            moved.
           content:
             application/json:
               schema:
@@ -1128,9 +1160,19 @@ paths:
         stay listed and can still be withdrawn. The rate is set by the server;
         earnings accrual is not live, so `earned` stays at zero. The asset set
         aside is recorded as a `stake` movement in the crypto history, in the
-        same transaction; if it cannot be recorded, nothing moves.
+        same transaction; if it cannot be recorded, nothing moves. Repeating a
+        completed stake with the same `idempotency_key` returns the position
+        it opened and sets nothing aside again; a key that belongs to a
+        different asset, amount or term, or to another kind of movement, gets
+        409 LLAVE_REUTILIZADA.
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CryptoStakeRequest'
       responses:
         '201':
           description: Staking initiated
@@ -1142,6 +1184,15 @@ paths:
           description: >-
             STAKING_NOT_AVAILABLE (the asset is not in the staking program),
             CRYPTO_INVALID_AMOUNT, or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
+            asset, amount or term, or to another kind of movement. Nothing
+            moved.
           content:
             application/json:
               schema:
@@ -4931,6 +4982,57 @@ components:
           description: Ignored; the server computes the fiat credited. Accepted for older clients.
         idempotency_key:
           type: string
+
+    CryptoConvertRequest:
+      type: object
+      required: [from_asset, to_asset, from_amount]
+      properties:
+        from_asset:
+          type: string
+          example: "BTC"
+        to_asset:
+          type: string
+          example: "ETH"
+        from_amount:
+          type: number
+          description: Quantity of `from_asset` to convert, at most 18 decimals.
+        to_amount:
+          type: number
+          description: Ignored; the server computes what arrives. Accepted for older clients.
+        price:
+          type: number
+          description: Ignored. Accepted for older clients.
+        idempotency_key:
+          type: string
+          description: >-
+            Retrying with the same key returns the recorded conversion instead
+            of converting again. The key is shared with the other crypto
+            movements: one already spent on a stake or a send is not a retry.
+
+    CryptoStakeRequest:
+      type: object
+      required: [asset, amount]
+      properties:
+        asset:
+          type: string
+          enum: [ETH, SOL]
+        amount:
+          type: number
+          description: Quantity to set aside, at most 18 decimals.
+        apy:
+          type: number
+          description: Ignored; the rate is set by the server.
+        locked:
+          type: boolean
+        lock_days:
+          type: integer
+        idempotency_key:
+          type: string
+          description: >-
+            Retrying with the same key returns the position it opened instead
+            of setting the asset aside again. The key is shared with the other
+            crypto movements: one already spent on a conversion or a send is
+            not a retry.
 
     CryptoSendRequest:
       type: object

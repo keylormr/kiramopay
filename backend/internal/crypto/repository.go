@@ -165,36 +165,50 @@ func bloquearActivosEnOrden(ctx context.Context, q pgxQuerier, userID string, si
 // motor de doble partida, viven en esta tabla, asi que no existe conciliacion
 // que levante el faltante ni asiento que lo explique. Por eso el arreglo es una
 // transaccion propia y no el gancho del libro.
+//
+// Devuelve el movimiento que ya existe (con repetido=true) si la llave de
+// idempotencia de mov describe una conversion que ya se hizo; en ese caso no
+// toca ningun saldo.
 func (r *Repository) ConvertirEnUnaTx(
 	ctx context.Context, userID, origen, destino, nombreDestino string,
 	cantidadOrigen, cantidadDestino, precioDestino decimal.Decimal,
 	mov *TransactionRecord,
-) error {
+) (previo *TransactionRecord, repetido bool, err error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// El movimiento se anota aqui adentro a proposito: se descartaba con `_ =`,
+	// asi que una conversion podia ocurrir sin quedar registrada en ninguna
+	// parte. Si no se puede anotar, no se convierte.
+	//
+	// Y va PRIMERO porque lleva la llave: si la conversion ya se hizo, el indice
+	// unico lo dice aqui, antes de tocar un solo saldo. Al final no serviria
+	// para el doble toque: el segundo toque descontaria detras del primero y
+	// caeria por falta de saldo, con un "no te alcanza" por una conversion que
+	// si se hizo, o convertiria otra vez si el saldo alcanzaba para las dos.
+	if hecho, repetido, err := r.anotarConLlave(ctx, tx, mov); err != nil || repetido {
+		return hecho, repetido, err
+	}
 
 	// Los dos activos se toman ANTES de tocar ninguno, y siempre en el mismo
 	// orden: sin esto, dos conversiones en sentidos opuestos se abrazan y
 	// Postgres mata una con 40P01.
 	if err := bloquearActivosEnOrden(ctx, tx, userID, origen, destino); err != nil {
-		return err
+		return nil, false, err
 	}
 	if err := descontarActivo(ctx, tx, userID, origen, cantidadOrigen); err != nil {
-		return err
+		return nil, false, err
 	}
 	if err := abonarActivo(ctx, tx, userID, destino, nombreDestino, cantidadDestino, precioDestino); err != nil {
-		return err
+		return nil, false, err
 	}
-	// El movimiento se anota aqui adentro a proposito: se descartaba con `_ =`,
-	// asi que una conversion podia ocurrir sin quedar registrada en ninguna
-	// parte. Si no se puede anotar, no se convierte.
-	if err := insertarMovimiento(ctx, tx, mov); err != nil {
-		return err
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
 	}
-	return tx.Commit(ctx)
+	return mov, false, nil
 }
 
 // ApartarParaStakingEnUnaTx descuenta el activo, escribe la posicion y anota el
@@ -205,30 +219,69 @@ func (r *Repository) ConvertirEnUnaTx(
 // El movimiento es lo que la pantalla muestra en "Transacciones recientes", que
 // se arma solo con crypto_transactions. Sin el, el activo salia del saldo y el
 // historial no decia a donde.
-func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRecord) error {
+//
+// El movimiento lleva el MISMO id que la posicion. crypto_staking no tiene
+// columna de llave, y asi la llave del movimiento alcanza para encontrar la
+// posicion que abrio: si la llave ya tiene movimiento, se devuelve ese (con
+// repetido=true) sin tocar el saldo, y quien llama lee la posicion por su id.
+func (r *Repository) ApartarParaStakingEnUnaTx(ctx context.Context, s *StakingRecord, llave string) (previo *TransactionRecord, repetido bool, err error) {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
 	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Primero por la misma razon que en ConvertirEnUnaTx: la llave frena el
+	// reintento antes de que descuente nada.
+	mov := movimientoDeStaking(s.UserID, "stake", s.Asset, s.Amount)
+	mov.ID = s.ID
+	mov.IdempotencyKey = llave
+	if hecho, repetido, err := r.anotarConLlave(ctx, tx, mov); err != nil || repetido {
+		return hecho, repetido, err
+	}
+
 	if err := descontarActivo(ctx, tx, s.UserID, s.Asset, s.Amount); err != nil {
-		return err
+		return nil, false, err
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO crypto_staking (id, user_id, asset, amount, apy, start_date, locked, lock_days, earned, status, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
 		s.ID, s.UserID, s.Asset, s.Amount, s.APY, s.StartDate, s.Locked, s.LockDays, s.Earned, s.Status,
 	); err != nil {
-		return err
+		return nil, false, err
 	}
-	if err := insertarMovimiento(ctx, tx, movimientoDeStaking(s.UserID, "stake", s.Asset, s.Amount)); err != nil {
-		return err
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
 	}
-	return tx.Commit(ctx)
+	return mov, false, nil
+}
+
+// anotarConLlave escribe el movimiento como primera escritura de tx. Si su llave
+// de idempotencia ya tiene movimiento, deshace tx y devuelve el que ya existe,
+// con repetido=true.
+//
+// Dos toques simultaneos con la misma llave no pasan los dos: el INSERT del
+// segundo espera en el indice unico a que el primero confirme, y entonces choca
+// y relee. Si el primero se deshace, el segundo sigue y hace la operacion el.
+func (r *Repository) anotarConLlave(ctx context.Context, tx pgx.Tx, mov *TransactionRecord) (previo *TransactionRecord, repetido bool, err error) {
+	err = insertarMovimiento(ctx, tx, mov)
+	if err == nil {
+		return nil, false, nil
+	}
+	if mov.IdempotencyKey == "" || !esLlaveDuplicada(err) {
+		return nil, false, err
+	}
+	// La transaccion quedo abortada por el error; la relectura va por fuera,
+	// sobre el pool.
+	_ = tx.Rollback(ctx)
+	hecho, err := r.MovimientoPorLlave(ctx, mov.UserID, mov.IdempotencyKey)
+	if err != nil {
+		return nil, false, err
+	}
+	return hecho, true, nil
 }
 
 // movimientoDeStaking arma la anotacion de apartar o liberar un activo.

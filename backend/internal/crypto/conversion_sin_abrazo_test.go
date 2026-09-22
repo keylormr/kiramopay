@@ -68,8 +68,9 @@ func TestConversion_NoSeLlevaElActivoDeOrigenMientrasEsperaElDeDestino(t *testin
 
 	hecho := make(chan error, 1)
 	go func() {
-		hecho <- repo.ConvertirEnUnaTx(ctx, userID, "ETH", "BTC", "Bitcoin",
+		_, _, err := repo.ConvertirEnUnaTx(ctx, userID, "ETH", "BTC", "Bitcoin",
 			d(1), d(1), d(1000), movimiento(userID))
+		hecho <- err
 	}()
 	esperarUnBloqueo(t, pool)
 

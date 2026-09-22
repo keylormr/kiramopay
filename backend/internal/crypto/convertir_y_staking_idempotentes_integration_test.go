@@ -239,6 +239,10 @@ func TestStaking_LaMismaLlaveParaOtraPosicionSeRechaza(t *testing.T) {
 			`{"asset":"ETH","amount":2,"locked":false,"idempotency_key":"crypto:stake:toque-1"}`},
 		{"otro activo",
 			`{"asset":"SOL","amount":1,"locked":false,"idempotency_key":"crypto:stake:toque-1"}`},
+		// El movimiento no guarda el plazo: con el mismo activo y la misma
+		// cantidad, solo la posicion dice que la primera era flexible.
+		{"a plazo en vez de flexible",
+			`{"asset":"ETH","amount":1,"locked":true,"lock_days":30,"idempotency_key":"crypto:stake:toque-1"}`},
 	} {
 		t.Run(c.nombre, func(t *testing.T) {
 			m := montarVenta(t)

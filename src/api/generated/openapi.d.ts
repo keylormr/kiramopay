@@ -1697,7 +1697,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Convert between cryptocurrencies */
+        /**
+         * Convert between cryptocurrencies
+         * @description Converts `from_amount` of `from_asset` into `to_asset`. How much arrives is decided by the server from the two USD market prices, not by the client. Both balances and the `convert` movement commit in one transaction. Repeating a completed conversion with the same `idempotency_key` returns the recorded conversion, with what arrived then, and moves nothing; a key that belongs to a different pair, a different amount or another kind of movement gets 409 LLAVE_REUTILIZADA.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1705,17 +1708,32 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CryptoConvertRequest"];
+                };
+            };
             responses: {
-                /** @description Conversion completed */
+                /** @description Conversion completed. `asset` is the pair (for example `BTC→ETH`), `amount` is what left the source asset, `total` is what arrived, in `currency` (the destination asset), and `price` is the destination's USD unit price. */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoTransactionRecord"];
+                    };
                 };
                 /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different pair, a different amount or another kind of movement. Nothing moved. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1778,7 +1796,7 @@ export interface paths {
         put?: never;
         /**
          * Stake cryptocurrency
-         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves.
+         * @description Only the assets in the staking program can be staked (ETH and SOL). USDT and USDC were withdrawn from the program: a new position is rejected with STAKING_NOT_AVAILABLE, while positions opened before stay listed and can still be withdrawn. The rate is set by the server; earnings accrual is not live, so `earned` stays at zero. The asset set aside is recorded as a `stake` movement in the crypto history, in the same transaction; if it cannot be recorded, nothing moves. Repeating a completed stake with the same `idempotency_key` returns the position it opened and sets nothing aside again; a key that belongs to a different asset, amount or term, or to another kind of movement, gets 409 LLAVE_REUTILIZADA.
          */
         post: {
             parameters: {
@@ -1787,7 +1805,11 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CryptoStakeRequest"];
+                };
+            };
             responses: {
                 /** @description Staking initiated */
                 201: {
@@ -1800,6 +1822,15 @@ export interface paths {
                 };
                 /** @description STAKING_NOT_AVAILABLE (the asset is not in the staking program), CRYPTO_INVALID_AMOUNT, or INVALID_BODY. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different asset, amount or term, or to another kind of movement. Nothing moved. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8289,6 +8320,32 @@ export interface components {
             price?: number;
             /** @description Ignored; the server computes the fiat credited. Accepted for older clients. */
             to_amount?: number;
+            idempotency_key?: string;
+        };
+        CryptoConvertRequest: {
+            /** @example BTC */
+            from_asset: string;
+            /** @example ETH */
+            to_asset: string;
+            /** @description Quantity of `from_asset` to convert, at most 18 decimals. */
+            from_amount: number;
+            /** @description Ignored; the server computes what arrives. Accepted for older clients. */
+            to_amount?: number;
+            /** @description Ignored. Accepted for older clients. */
+            price?: number;
+            /** @description Retrying with the same key returns the recorded conversion instead of converting again. The key is shared with the other crypto movements: one already spent on a stake or a send is not a retry. */
+            idempotency_key?: string;
+        };
+        CryptoStakeRequest: {
+            /** @enum {string} */
+            asset: "ETH" | "SOL";
+            /** @description Quantity to set aside, at most 18 decimals. */
+            amount: number;
+            /** @description Ignored; the rate is set by the server. */
+            apy?: number;
+            locked?: boolean;
+            lock_days?: number;
+            /** @description Retrying with the same key returns the position it opened instead of setting the asset aside again. The key is shared with the other crypto movements: one already spent on a conversion or a send is not a retry. */
             idempotency_key?: string;
         };
         CryptoSendRequest: {

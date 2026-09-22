@@ -144,19 +144,21 @@ type SendPreview struct {
 }
 
 type ConvertRequest struct {
-	FromAsset  string          `json:"from_asset"`
-	ToAsset    string          `json:"to_asset"`
-	FromAmount decimal.Decimal `json:"from_amount"`
-	ToAmount   decimal.Decimal `json:"to_amount"`
-	Price      decimal.Decimal `json:"price"`
+	FromAsset      string          `json:"from_asset"`
+	ToAsset        string          `json:"to_asset"`
+	FromAmount     decimal.Decimal `json:"from_amount"`
+	ToAmount       decimal.Decimal `json:"to_amount"`
+	Price          decimal.Decimal `json:"price"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
 }
 
 type StakeRequest struct {
-	Asset    string          `json:"asset"`
-	Amount   decimal.Decimal `json:"amount"`
-	APY      float64         `json:"apy"` // ignored: the rate is set server-side (see stakingAPY)
-	Locked   bool            `json:"locked"`
-	LockDays int             `json:"lock_days,omitempty"`
+	Asset          string          `json:"asset"`
+	Amount         decimal.Decimal `json:"amount"`
+	APY            float64         `json:"apy"` // ignored: the rate is set server-side (see stakingAPY)
+	Locked         bool            `json:"locked"`
+	LockDays       int             `json:"lock_days,omitempty"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
 }
 
 // Price data from external API (transient; not persisted as NUMERIC).

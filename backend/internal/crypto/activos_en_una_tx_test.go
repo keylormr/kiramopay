@@ -54,7 +54,7 @@ func TestConvertirMueveLosDosActivos(t *testing.T) {
 		t.Fatalf("sembrar BTC: %v", err)
 	}
 
-	if err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+	if _, _, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
 		d(1), d(2), d(500), movimiento(userID)); err != nil {
 		t.Fatalf("ConvertirEnUnaTx: %v", err)
 	}
@@ -69,8 +69,57 @@ func TestConvertirMueveLosDosActivos(t *testing.T) {
 
 // Lo que fallaba: eran escrituras sueltas. Si la ultima se caia, el activo de
 // origen ya estaba descontado y el de destino no habia llegado. Aqui se fuerza
-// ese fallo con un movimiento cuyo id ya existe.
+// que el abono falle DESPUES del descuento —un abono de cero no se acepta—, con
+// el movimiento ya escrito, porque ahora es la primera escritura.
 func TestUnFalloAlFinalNoDejaElActivoADebiendo(t *testing.T) {
+	repo, pool, userID := montarRepo(t)
+	ctx := context.Background()
+
+	if err := repo.UpsertAsset(ctx, userID, "BTC", "Bitcoin", d(2), d(1000)); err != nil {
+		t.Fatalf("sembrar BTC: %v", err)
+	}
+
+	falla := movimiento(userID)
+	falla.IdempotencyKey = "crypto:convert:falla-al-final"
+	if _, _, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+		d(1), decimal.Zero, d(500), falla); err == nil {
+		t.Fatal("se esperaba error: el abono de cero no se acepta")
+	}
+
+	if got := saldoDe(t, repo, userID, "BTC"); !got.Equal(d(2)) {
+		t.Fatalf("BTC = %s, se esperaba 2: el descuento no se revirtio", got)
+	}
+	if got := saldoDe(t, repo, userID, "ETH"); !got.IsZero() {
+		t.Fatalf("ETH = %s, se esperaba 0: se acredito un activo de una conversion que fallo", got)
+	}
+	// El movimiento tampoco puede quedar: con la llave escrita, el reintento
+	// devolveria como hecha una conversion que no ocurrio.
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM crypto_transactions WHERE user_id = $1::uuid`, userID).Scan(&n); err != nil {
+		t.Fatalf("contar movimientos: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("movimientos = %d, se esperaba 0", n)
+	}
+
+	// Y el reintento con esa llave convierte de verdad, no repite.
+	reintento := movimiento(userID)
+	reintento.IdempotencyKey = falla.IdempotencyKey
+	_, repetido, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+		d(1), d(2), d(500), reintento)
+	if err != nil || repetido {
+		t.Fatalf("reintento: repetido=%v err=%v, se esperaba una conversion nueva", repetido, err)
+	}
+	if got := saldoDe(t, repo, userID, "ETH"); !got.Equal(d(2)) {
+		t.Fatalf("ETH = %s, se esperaba 2", got)
+	}
+}
+
+// El indice de la llave no es la unica restriccion que da 23505: la llave
+// primaria tambien. Un id repetido es un error, no el reintento de nada, y no
+// puede devolverse como si la conversion se hubiera hecho.
+func TestUnIdRepetidoNoEsUnReintento(t *testing.T) {
 	repo, _, userID := montarRepo(t)
 	ctx := context.Background()
 
@@ -83,19 +132,19 @@ func TestUnFalloAlFinalNoDejaElActivoADebiendo(t *testing.T) {
 		t.Fatalf("anotar el primer movimiento: %v", err)
 	}
 
-	// Mismo id: el INSERT del final choca con la llave primaria.
 	choca := movimiento(userID)
 	choca.ID = yaExiste.ID
-	if err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
-		d(1), d(2), d(500), choca); err == nil {
-		t.Fatal("se esperaba error: el movimiento no se pudo anotar")
+	choca.IdempotencyKey = "crypto:convert:id-repetido"
+	previo, repetido, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+		d(1), d(2), d(500), choca)
+	if err == nil || repetido || previo != nil {
+		t.Fatalf("previo=%v repetido=%v err=%v, se esperaba el error de la llave primaria", previo, repetido, err)
 	}
-
 	if got := saldoDe(t, repo, userID, "BTC"); !got.Equal(d(2)) {
-		t.Fatalf("BTC = %s, se esperaba 2: el descuento no se revirtio", got)
+		t.Fatalf("BTC = %s, se esperaba 2", got)
 	}
 	if got := saldoDe(t, repo, userID, "ETH"); !got.IsZero() {
-		t.Fatalf("ETH = %s, se esperaba 0: se acredito un activo de una conversion que fallo", got)
+		t.Fatalf("ETH = %s, se esperaba 0", got)
 	}
 }
 
@@ -107,7 +156,7 @@ func TestConvertirSinSaldoNoCreaElActivoDeDestino(t *testing.T) {
 		t.Fatalf("sembrar BTC: %v", err)
 	}
 
-	err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+	_, _, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
 		d(5), d(10), d(500), movimiento(userID))
 	if !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
 		t.Fatalf("error = %v, se esperaba ErrSaldoDeActivoInsuficiente", err)
@@ -137,7 +186,7 @@ func TestDosConversionesSimultaneasNoDejanSaldoNegativo(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+			_, _, errs[i] = repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
 				d(1), d(2), d(500), movimiento(userID))
 		}(i)
 	}
@@ -171,7 +220,7 @@ func TestStakingApartaElActivoYEscribeLaPosicionJuntos(t *testing.T) {
 		UserID: userID, Asset: "ETH", Amount: d(2), APY: 4.5,
 		StartDate: time.Now(), Earned: decimal.Zero, Status: "active",
 	}
-	if err := repo.ApartarParaStakingEnUnaTx(ctx, pos); err != nil {
+	if _, _, err := repo.ApartarParaStakingEnUnaTx(ctx, pos, ""); err != nil {
 		t.Fatalf("ApartarParaStakingEnUnaTx: %v", err)
 	}
 
@@ -199,7 +248,7 @@ func TestStakingSinSaldoNoDejaPosicionNiDescuento(t *testing.T) {
 		UserID: userID, Asset: "ETH", Amount: d(5), APY: 4.5,
 		StartDate: time.Now(), Earned: decimal.Zero, Status: "active",
 	}
-	if err := repo.ApartarParaStakingEnUnaTx(ctx, pos); !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
+	if _, _, err := repo.ApartarParaStakingEnUnaTx(ctx, pos, ""); !errors.Is(err, crypto.ErrSaldoDeActivoInsuficiente) {
 		t.Fatalf("error = %v, se esperaba ErrSaldoDeActivoInsuficiente", err)
 	}
 	if got := saldoDe(t, repo, userID, "ETH"); !got.Equal(d(1)) {

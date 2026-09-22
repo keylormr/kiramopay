@@ -966,7 +966,7 @@ func TestEnviarCripto_SinLectorDeQRNoSeOfrece(t *testing.T) {
 // La carrera del reintento contra un envio que esta CONFIRMANDO de verdad.
 //
 // Con llave del cliente, Send hace dos lecturas SUELTAS -la de la llave
-// (EnvioPorLlave) y la del saldo (saldoAlcanza)- las dos fuera de toda
+// (MovimientoPorLlave) y la del saldo (saldoAlcanza)- las dos fuera de toda
 // transaccion y sin candado. Si el envio ORIGINAL confirma justo entre esas
 // dos lecturas, el reintento lee "esa llave no tiene envio" y despues lee un
 // saldo YA debitado: contesta "no alcanza" por un envio que SI ocurrio. La
@@ -990,7 +990,7 @@ type claveDelSQLDeEnvio struct{}
 
 // trazadorDelPreChequeoDeEnvio avisa UNA SOLA VEZ, justo cuando TERMINA la
 // primera de las dos lecturas sueltas del pre-chequeo del envio: la de
-// crypto_assets (saldoAlcanza) o la de idempotency_key (EnvioPorLlave). Cual
+// crypto_assets (saldoAlcanza) o la de idempotency_key (MovimientoPorLlave). Cual
 // de las dos sea la primera depende de si el arreglo ya esta aplicado o no, y
 // por eso el trazador no elige una: vigila las dos, para que la MISMA prueba
 // sirva de guardian antes y despues del arreglo.

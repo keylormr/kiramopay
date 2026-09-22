@@ -28,9 +28,9 @@ const tieneStaking = (simbolo: string | undefined) =>
   !!simbolo && Object.prototype.hasOwnProperty.call(ACTIVOS_CON_STAKING, simbolo);
 
 // Las operaciones que se pueden reintentar con la misma llave.
-type OperacionCripto = 'buy' | 'sell' | 'send';
+type OperacionCripto = 'buy' | 'sell' | 'send' | 'convert' | 'stake';
 
-// Llave de idempotencia nueva para un intento de compra, venta o envio.
+// Llave de idempotencia nueva para un intento de cualquiera de ellas.
 const nuevaLlave = (operacion: OperacionCripto) =>
   `crypto:${operacion}:${
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -201,11 +201,12 @@ export const CryptoView: React.FC = () => {
   const [priceError, setPriceError] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, CryptoPriceData>>({});
 
-  // La llave de idempotencia del intento de compra o venta en curso. Se
-  // conserva mientras la persona reintente LA MISMA operacion (tras el desafio
-  // de MFA, un corte de red o un 5xx): si el primer intento ya se cobro en el
-  // servidor, el reintento devuelve ese mismo movimiento en vez de cobrar otra
-  // vez. Cambiar el activo, el monto o la moneda es otra operacion y otra llave.
+  // La llave de idempotencia del intento en curso, sea cual sea la operacion.
+  // Se conserva mientras la persona reintente LA MISMA operacion (tras el
+  // desafio de MFA, un corte de red o un 5xx): si el primer intento ya se hizo
+  // en el servidor, el reintento devuelve ese mismo movimiento en vez de
+  // repetirlo. Cambiar el activo, el monto o la moneda es otra operacion y otra
+  // llave.
   const intentoRef = useRef<{ firma: string; llave: string } | null>(null);
   const llaveDelIntento = (operacion: OperacionCripto, firma: string) => {
     const completa = `${operacion}|${firma}`;
@@ -492,8 +493,8 @@ export const CryptoView: React.FC = () => {
   // Un rechazo por llave ya usada quiere decir que un intento anterior de esta
   // misma operacion llego al servidor (y quiza se cobro) con otro precio. La
   // proxima vez es una operacion nueva, y lo que ya ocurrio se trae del
-  // servidor para que la persona lo vea antes de repetir. Vale para comprar,
-  // vender y enviar: las tres van con llave.
+  // servidor para que la persona lo vea antes de repetir. Vale para las cinco
+  // operaciones que van con llave: comprar, vender, enviar, convertir y apartar.
   const trasRechazoDeOperacion = (code: string | undefined) => {
     if (code === 'LLAVE_REUTILIZADA') {
       intentoRef.current = null;
@@ -605,14 +606,22 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
-    const res = await getApiLayer().crypto.convert(payload);
+    const res = await getApiLayer().crypto.convert({
+      ...payload,
+      // Sin llave, el reintento tras un corte de red convertia otra vez aunque
+      // la primera ya se hubiera hecho. Con la misma llave el servidor devuelve
+      // la conversion que ya hizo.
+      idempotencyKey: llaveDelIntento('convert', `${payload.fromAsset}|${payload.toAsset}|${fromAmount}`),
+    });
     setIsTrading(false);
 
     if (!res.success) {
+      trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
+    intentoRef.current = null;
     dispatch({ type: 'CONVERT_CRYPTO', payload });
     setActiveSheet('none');
     setAmount('');
@@ -760,14 +769,22 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
-    const res = await getApiLayer().crypto.stake({ asset: selectedAsset.symbol, amount: stakeAmount, locked: false });
+    const pedido = { asset: selectedAsset.symbol, amount: stakeAmount, locked: false };
+    const res = await getApiLayer().crypto.stake({
+      ...pedido,
+      // Igual que al convertir: el reintento del mismo apartado va con la misma
+      // llave y el servidor devuelve la posicion que ya abrio.
+      idempotencyKey: llaveDelIntento('stake', `${pedido.asset}|${pedido.amount}|${pedido.locked}`),
+    });
     setIsTrading(false);
 
     if (!res.success || !res.data) {
+      trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
+    intentoRef.current = null;
     // La posicion que se guarda es la que devolvio el servidor, con SU id:
     // es el unico con el que despues se puede retirar.
     dispatch({ type: 'STAKE_CRYPTO', payload: res.data });

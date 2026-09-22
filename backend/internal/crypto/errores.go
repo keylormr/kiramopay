@@ -32,6 +32,10 @@ var (
 	ErrPosicionBloqueada = errors.New("position is locked")
 	// ErrStakingNoDisponible: el activo no esta en el programa de staking.
 	ErrStakingNoDisponible = errors.New("staking is not available for this asset")
+	// ErrLlaveDeOtraOperacion: la llave de una conversion o de un apartado ya
+	// tiene un movimiento escrito, pero de otra cosa (otro tipo, otro activo u
+	// otra cantidad). No es un reintento.
+	ErrLlaveDeOtraOperacion = errors.New("idempotency key reused for a different operation")
 )
 
 // rechazo es la respuesta a un error que se reconoce.
@@ -115,6 +119,9 @@ func rechazoConocido(err error) (rechazo, bool) {
 	case errors.Is(err, ErrLlaveDeOtroEnvio):
 		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
 			"esa operacion ya se hizo con otro monto o para otra persona"}, true
+	case errors.Is(err, ErrLlaveDeOtraOperacion):
+		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
+			"esa operacion ya se hizo con otro monto o con otro activo"}, true
 	// Al servicio no se le dio con que resolver un QR. No es culpa de quien
 	// envia ni algo que reintentar cambie: es la aplicacion, mal armada.
 	case errors.Is(err, ErrEnvioNoDisponible):

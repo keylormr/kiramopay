@@ -193,8 +193,8 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 	if errSaldo := s.saldoAlcanza(ctx, userID, activo, total); errSaldo != nil {
 		// Se pregunta por la llave QUE MANDO EL CLIENTE, no por la de arriba:
 		// si no mando ninguna, la que acabamos de inventar no puede tener un
-		// envio escrito y EnvioPorLlave con cadena vacia ni sale a la base.
-		previo, err := s.repo.EnvioPorLlave(ctx, userID, req.IdempotencyKey)
+		// envio escrito y MovimientoPorLlave con cadena vacia ni sale a la base.
+		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
 		if err != nil {
 			return nil, err
 		}
