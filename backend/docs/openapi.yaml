@@ -804,9 +804,10 @@ paths:
         USD/CRC exchange rate. The fiat debit, the asset credit and the
         purchase record commit in one transaction. Repeating a completed
         purchase with the same `idempotency_key` (same asset, `from_amount`
-        and `from_currency`) returns the recorded purchase and moves nothing.
-        The repeat is answered before the price is consulted, so it works
-        while the price feed is down or after the price moved.
+        and `from_currency`) returns the recorded purchase and moves nothing;
+        a key that belongs to a different purchase gets 409
+        LLAVE_REUTILIZADA. Both are answered before the price is consulted,
+        so they work while the price feed is down or after the price moved.
       security:
         - bearerAuth: []
       requestBody:
@@ -834,7 +835,7 @@ paths:
           description: >-
             PRICE_MOVED — the USD price moved more than 2% since it was shown.
             LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
-            amount, currency or operation.
+            asset, amount, currency or operation.
           content:
             application/json:
               schema:
@@ -878,8 +879,9 @@ paths:
         `total` reports) and the sale record commit in one transaction.
         Repeating a completed sale with the same `idempotency_key` (same
         asset, `amount` and `to_currency`) returns the recorded sale, with the
-        fiat credited then, and moves nothing. The repeat is answered before
-        the price is consulted, so it works while the price feed is down or
+        fiat credited then, and moves nothing; a key that belongs to a
+        different sale gets 409 LLAVE_REUTILIZADA. Both are answered before
+        the price is consulted, so they work while the price feed is down or
         after the price moved.
       security:
         - bearerAuth: []
@@ -908,7 +910,7 @@ paths:
           description: >-
             PRICE_MOVED — the USD price moved more than 2% since it was shown.
             LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
-            amount, currency or operation.
+            asset, amount, currency or operation.
           content:
             application/json:
               schema:

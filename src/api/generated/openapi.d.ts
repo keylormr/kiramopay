@@ -1331,7 +1331,7 @@ export interface paths {
         put?: never;
         /**
          * Buy cryptocurrency
-         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate. The fiat debit, the asset credit and the purchase record commit in one transaction. Repeating a completed purchase with the same `idempotency_key` (same asset, `from_amount` and `from_currency`) returns the recorded purchase and moves nothing. The repeat is answered before the price is consulted, so it works while the price feed is down or after the price moved.
+         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate. The fiat debit, the asset credit and the purchase record commit in one transaction. Repeating a completed purchase with the same `idempotency_key` (same asset, `from_amount` and `from_currency`) returns the recorded purchase and moves nothing; a key that belongs to a different purchase gets 409 LLAVE_REUTILIZADA. Both are answered before the price is consulted, so they work while the price feed is down or after the price moved.
          */
         post: {
             parameters: {
@@ -1364,7 +1364,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount, currency or operation. */
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different asset, amount, currency or operation. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1428,7 +1428,7 @@ export interface paths {
         put?: never;
         /**
          * Sell cryptocurrency
-         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate. The asset debit, the fiat credit (to the centimo, which is what `total` reports) and the sale record commit in one transaction. Repeating a completed sale with the same `idempotency_key` (same asset, `amount` and `to_currency`) returns the recorded sale, with the fiat credited then, and moves nothing. The repeat is answered before the price is consulted, so it works while the price feed is down or after the price moved.
+         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate. The asset debit, the fiat credit (to the centimo, which is what `total` reports) and the sale record commit in one transaction. Repeating a completed sale with the same `idempotency_key` (same asset, `amount` and `to_currency`) returns the recorded sale, with the fiat credited then, and moves nothing; a key that belongs to a different sale gets 409 LLAVE_REUTILIZADA. Both are answered before the price is consulted, so they work while the price feed is down or after the price moved.
          */
         post: {
             parameters: {
@@ -1461,7 +1461,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount, currency or operation. */
+                /** @description PRICE_MOVED — the USD price moved more than 2% since it was shown. LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different asset, amount, currency or operation. */
                 409: {
                     headers: {
                         [name: string]: unknown;

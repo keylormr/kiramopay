@@ -124,13 +124,14 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	pagado := decimal.New(fiatMinor, -2)
 
 	// La repeticion de una compra que ya se hizo se contesta antes de pedir el
-	// precio (ver compraOVentaYaHecha). Es la misma compra si pago lo mismo,
-	// en la misma moneda y por el mismo activo.
+	// precio, y la llave de otra compra se rechaza (ver compraOVentaYaHecha).
+	// Es la misma compra si pago lo mismo, en la misma moneda y por el mismo
+	// activo.
 	hecha, err := s.compraOVentaYaHecha(ctx, userID, req.IdempotencyKey, func(m *TransactionRecord) bool {
 		return m.Type == "buy" && m.Asset == req.Asset && m.Currency == currency && m.Total.Equal(pagado)
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("buy %s: %w", req.Asset, err)
 	}
 	if hecha != nil {
 		return hecha, nil
@@ -214,16 +215,17 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	}
 
 	// La repeticion de una venta que ya se hizo se contesta antes de pedir el
-	// precio (ver compraOVentaYaHecha). Es la misma venta si entrego la misma
-	// cantidad del mismo activo, a cambio de la misma moneda. Lo acreditado no
-	// entra, porque lo decide el precio: con el precio ya movido, el monto
-	// recalculado no coincidia con el de la llave y el reintento se rechazaba
-	// —por PRICE_MOVED o por LLAVE_REUTILIZADA— por una venta que si ocurrio.
+	// precio, y la llave de otra venta se rechaza (ver compraOVentaYaHecha). Es
+	// la misma venta si entrego la misma cantidad del mismo activo, a cambio de
+	// la misma moneda. Lo acreditado no entra, porque lo decide el precio: con
+	// el precio ya movido, el monto recalculado no coincidia con el de la llave
+	// y el reintento se rechazaba —por PRICE_MOVED o por LLAVE_REUTILIZADA— por
+	// una venta que si ocurrio.
 	hecha, err := s.compraOVentaYaHecha(ctx, userID, req.IdempotencyKey, func(m *TransactionRecord) bool {
 		return m.Type == "sell" && m.Asset == req.Asset && m.Currency == currency && m.Amount.Equal(req.Amount)
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
 	}
 	if hecha != nil {
 		return hecha, nil
@@ -344,8 +346,8 @@ func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.
 }
 
 // compraOVentaYaHecha busca, SIN pedir el precio, la compra o la venta que la
-// llave del cliente ya completo, y la devuelve si es la que se esta pidiendo
-// (esLaMisma).
+// llave del cliente ya completo. Si es la que se esta pidiendo (esLaMisma), la
+// devuelve; si es otra, rechaza el pedido con ErrLlaveReutilizada.
 //
 // La repeticion de algo que ya se hizo se contesta con lo que se hizo
 // entonces, y para eso el precio no hace falta. Con el precio primero, el
@@ -353,11 +355,14 @@ func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.
 // operacion que si ocurrio, justo cuando la red ya le habia fallado una vez a
 // la persona.
 //
-// esLaMisma compara lo que decide la persona —el fiat que paga al comprar, el
-// cripto que entrega al vender—, nunca lo que decide el precio. Si la llave no
-// tiene nada, o tiene otra cosa, devuelve nil y el pedido sigue su camino: de
-// una llave reusada se ocupa la relectura de CreateTransaction, que es la que
-// decide ErrLlaveReutilizada.
+// esLaMisma compara el activo, la moneda y lo que decide la persona —el fiat
+// que paga al comprar, el cripto que entrega al vender—, nunca lo que decide
+// el precio. La llave de OTRA compra o venta no es un reintento, y se rechaza
+// aqui, como en la conversion y el envio: la relectura de CreateTransaction
+// compara el monto del libro, la moneda y el tipo, pero no el activo, y la
+// misma llave con el mismo monto y otro activo devolvia la compra del primero.
+// Si la llave no tiene nada completado —o lo que tiene no es de cripto—,
+// devuelve nil y el pedido sigue su camino.
 //
 // Va antes de la comprobacion de cortesia del saldo y no la reemplaza: si el
 // pedido original confirma justo despues de esta lectura, es esa comprobacion
@@ -365,8 +370,11 @@ func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.
 // alcanza" a una operacion que si ocurrio.
 func (s *Service) compraOVentaYaHecha(ctx context.Context, userID, llave string, esLaMisma func(*TransactionRecord) bool) (*TransactionRecord, error) {
 	hecha, err := s.repo.MovimientoPorLlaveDelLibro(ctx, userID, llave)
-	if err != nil || hecha == nil || !esLaMisma(hecha) {
+	if err != nil || hecha == nil {
 		return nil, err
+	}
+	if !esLaMisma(hecha) {
+		return nil, fmt.Errorf("%w: %s", transaction.ErrLlaveReutilizada, llave)
 	}
 	return hecha, nil
 }
