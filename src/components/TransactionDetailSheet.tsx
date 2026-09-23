@@ -3,6 +3,7 @@ import { BottomSheet } from './BottomSheet';
 import { Icons } from './Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
+import { fechaYHora } from '@/utils/fechaPlazo';
 import { estiloDeCategoria, etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
 import type { Transaction } from '@/types';
 
@@ -41,7 +42,7 @@ const Fila: React.FC<{ etiqueta: string; children: React.ReactNode }> = ({ etiqu
  * tocarlo, y un boton que no existe no se ofrece.
  */
 export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ tx, isOpen, onClose }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const estilo = estiloDeCategoria(tx?.category);
   const Icono = estilo.icon;
   const entrante = (tx?.amount ?? 0) > 0;
@@ -77,7 +78,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
                 {completado ? t('tx_status_completed') : t('pending')}
               </span>
             </Fila>
-            <Fila etiqueta={t('date')}>{tx.date}</Fila>
+            <Fila etiqueta={t('date')}>{fechaYHora(tx.dateISO, language) || tx.date}</Fila>
             <Fila etiqueta={t('category')}>
               <span className={estilo.text}>{etiquetaDeCategoria(tx.category, t)}</span>
             </Fila>

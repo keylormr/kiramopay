@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
+import { fechaCorta } from '@/utils/fechaPlazo';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
@@ -598,7 +599,7 @@ const TransactionCard: React.FC<{
   formatCurrency: (amount: number, ccy?: string) => string;
   onOpen: () => void;
 }> = ({ tx, formatCurrency, onOpen }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const style = estiloDeCategoria(tx.category);
   const Icon = style.icon;
   const incoming = tx.amount > 0;
@@ -624,7 +625,7 @@ const TransactionCard: React.FC<{
         </span>
         <span className="text-xs uv-text-muted flex items-center gap-1.5 mt-0.5">
           <Icons.Clock size={10} aria-hidden="true" />
-          <span>{tx.date}</span>
+          <span>{fechaCorta(tx.dateISO, language) || tx.date}</span>
           <span className="opacity-40" aria-hidden="true">·</span>
           <span className={style.text}>{etiquetaDeCategoria(tx.category, t)}</span>
         </span>

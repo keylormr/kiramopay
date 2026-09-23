@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { precargarIdioma } from '@/test/idiomas';
-import { fechaYHora } from '@/utils/fechaPlazo';
+import { fechaCorta } from '@/utils/fechaPlazo';
 import { HomeView } from '../HomeView';
 import type { Transaction } from '@/types';
 
@@ -69,7 +69,7 @@ describe('HomeView — la fecha de los movimientos recientes', () => {
       </LanguageProvider>,
     );
 
-    expect(await screen.findByText(fechaYHora(ISO, 'en'))).toBeInTheDocument();
+    expect(await screen.findByText(fechaCorta(ISO, 'en'))).toBeInTheDocument();
     expect(screen.queryByText('4/9/2026')).not.toBeInTheDocument();
   });
 });

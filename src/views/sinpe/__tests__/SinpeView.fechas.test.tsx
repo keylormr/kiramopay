@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { precargarIdioma } from '@/test/idiomas';
-import { fechaYHora } from '@/utils/fechaPlazo';
+import { fechaCorta } from '@/utils/fechaPlazo';
 import { SinpeView } from '../SinpeView';
 
 // El historial de SINPE pintaba la fecha que escribia el adaptador en es-CR
@@ -32,9 +32,8 @@ vi.mock('@/hooks/useApp', () => ({
 const ISO = '2026-09-04T15:30:00Z';
 
 // La fecha comparte linea con el sentido y el telefono ("Sent · <fecha> ·
-// 8888-7777"): se busca el elemento hoja cuyo texto la contiene.
-const lineaCon = (texto: string) => (_: string, el: Element | null) =>
-  !!el && el.children.length === 0 && (el.textContent ?? '').includes(texto);
+// +506 8888-7777"): se busca el elemento cuyo texto propio la contiene.
+const lineaCon = (texto: string) => (propio: string) => propio.includes(texto);
 
 beforeAll(() => precargarIdioma('en'));
 
@@ -63,7 +62,7 @@ describe('SinpeView — la fecha en el idioma de la pantalla', () => {
       </LanguageProvider>,
     );
 
-    expect(await screen.findByText(lineaCon(fechaYHora(ISO, 'en')))).toBeInTheDocument();
+    expect(await screen.findByText(lineaCon(fechaCorta(ISO, 'en')))).toBeInTheDocument();
     expect(screen.queryByText(lineaCon('4/9/2026'))).not.toBeInTheDocument();
   });
 

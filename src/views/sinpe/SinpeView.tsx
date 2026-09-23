@@ -14,6 +14,7 @@ import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro } from '@/utils/erroresQr';
+import { fechaCorta } from '@/utils/fechaPlazo';
 
 /**
  * Viste un cobro con la forma que la pantalla ya sabe pintar. Un pedido de
@@ -55,7 +56,7 @@ interface SinpeViewProps {
 
 export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => {
   const { state, dispatch } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'history'>(initialTab);
   // Follow external navigation (e.g. Home "Enviar"/"Recibir") to the right tab.
   useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
@@ -234,6 +235,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       phone: telefono,
       name: selectedContact?.name || res.data.name || formatearTelefonoCR(telefono),
       date: 'Ahora',
+      dateISO: new Date().toISOString(),
       status: res.data.status,
       reference,
       // Carry `internal` through: the success sheet decides between "sent" and
@@ -761,6 +763,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             ) : (
               state.sinpeHistory.map((tx) => {
                 const incoming = tx.type !== 'sent';
+                const fecha = fechaCorta(tx.dateISO, language) || tx.date;
                 return (
                   <div key={tx.id} className="flex items-center px-4 py-3.5">
                     <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${
@@ -785,10 +788,16 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                         {' · '}
                         {/* Filas recibidas viejas traen un UUID en `phone` (el
                             backend guardaba el id del emisor como relleno):
-                            solo se muestra lo que normaliza como telefono. */}
-                        {normalizarTelefonoCR(tx.phone)
-                          ? `${tx.date} · ${formatearTelefonoCR(tx.phone)}`
-                          : tx.date}
+                            solo se muestra lo que normaliza como telefono.
+                            El telefono no se parte: a 390 px quedaba
+                            "+506 8888-" en una linea y "1234" en la otra. */}
+                        {fecha}
+                        {normalizarTelefonoCR(tx.phone) && (
+                          <>
+                            {' · '}
+                            <span className="whitespace-nowrap">{formatearTelefonoCR(tx.phone)}</span>
+                          </>
+                        )}
                       </div>
                       {tx.reference && (
                         <div className="text-xs uv-text-muted italic mt-1">"{tx.reference}"</div>

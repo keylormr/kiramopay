@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { precargarIdioma } from '@/test/idiomas';
-import { fechaYHora } from '@/utils/fechaPlazo';
+import { fechaCorta, fechaYHora } from '@/utils/fechaPlazo';
 import { TransactionsView } from '../TransactionsView';
 import type { Transaction } from '@/types';
 
@@ -64,14 +64,14 @@ beforeEach(() => {
 });
 
 describe('TransactionsView — la fecha en el idioma de la pantalla', () => {
-  it('en ingles, la fila y el detalle muestran la fecha en formato ingles y no el d/m de es-CR', async () => {
+  it('en ingles, la fila (el dia) y el detalle (dia y hora) salen en formato ingles y no en el d/m de es-CR', async () => {
     localStorage.setItem('kiramopay_language', 'en');
     appState.transactions = [movimiento()];
     const user = userEvent.setup();
 
     await pintar();
 
-    expect(await screen.findByText(fechaYHora(ISO, 'en'))).toBeInTheDocument();
+    expect(await screen.findByText(fechaCorta(ISO, 'en'))).toBeInTheDocument();
     expect(screen.queryByText('4/9/2026')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Pago a Acme/ }));
