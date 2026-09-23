@@ -1073,6 +1073,15 @@ func (tz *trazadorDelPreChequeo) TraceQueryStart(
 
 func (tz *trazadorDelPreChequeo) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
 	sql, _ := ctx.Value(claveDelSQL{}).(string)
+	// La relectura que Sell hace antes de pedir el precio (compraOVentaYaHecha,
+	// sobre crypto_transactions) no es del pre-chequeo: solo contesta una venta
+	// ya COMPLETADA, y aqui la original todavia no confirmo. Si el trazador se
+	// disparara con ella, la venta original confirmaria ANTES de las dos
+	// lecturas que esta prueba mide, y la prueba pasaria igual con esas dos en
+	// el orden equivocado.
+	if strings.Contains(sql, "FROM crypto_transactions") {
+		return
+	}
 	// Las dos lecturas del pre-chequeo: la del saldo del activo y la de la
 	// llave. Cual de las dos va primero es justo lo que esta prueba mide, asi
 	// que el trazador reconoce las dos y se dispara con la que llegue.

@@ -167,9 +167,25 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 	if llave == "" {
 		llave = "crypto:send:" + uuid.New().String()
 	}
+	// El precio se completa abajo: para reconocer el reintento no hace falta
+	// (ver mismoEnvio).
+	envio := &TransactionRecord{
+		ID:                 uuid.New().String(),
+		UserID:             userID,
+		Type:               "send",
+		Asset:              activo,
+		Amount:             req.Amount,
+		Total:              total,
+		Currency:           activo,
+		Fee:                comision,
+		Status:             "completed",
+		CounterpartyUserID: destino.UserID,
+		CounterpartyName:   destino.Nombre,
+		IdempotencyKey:     llave,
+	}
 
-	// Comprobacion de cortesia del saldo: el saldo se lee PRIMERO y la llave
-	// DESPUES, solo si el saldo no alcanza.
+	// Comprobacion de cortesia del saldo y relectura de la llave: el saldo se
+	// lee PRIMERO y la llave DESPUES.
 	//
 	// Son dos lecturas sueltas contra la base, sin transaccion ni candado que
 	// las una, y el envio original puede estar todavia en vuelo —que es justo
@@ -177,30 +193,40 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 	// respuesta—, asi que puede confirmar entre una lectura y la otra. Al
 	// reves, la llave se leeria "todavia no tiene envio" y un instante despues
 	// el saldo YA descontado, y esta comprobacion contestaria "no te alcanza"
-	// por una plata que si se fue, sin llegar nunca a la relectura de
-	// idempotencia que devuelve el envio guardado. En este orden eso no puede
-	// pasar: EnviarEnUnaTx escribe la fila con la llave y descuenta el activo
-	// en la MISMA transaccion, asi que un saldo que ya vio el descuento va
-	// seguido por fuerza de una llave que ya responde.
+	// por una plata que si se fue. En este orden eso no puede pasar:
+	// EnviarEnUnaTx escribe la fila con la llave y descuenta el activo en la
+	// MISMA transaccion, asi que un saldo que ya vio el descuento va seguido
+	// por fuerza de una llave que ya responde.
 	//
-	// Preguntar por la llave solo cuando el saldo no alcanza tambien conserva
-	// el orden de los motivos: si esa llave ya describe OTRO envio, lo que
-	// corresponde es ErrLlaveDeOtroEnvio —que decide mismoEnvio tras el indice
-	// unico—, no un "no te alcanza" que nadie puede arreglar poniendo mas
-	// saldo. Y una llave sin fila no responde nada: aqui no hay estados a
-	// medias, si la transaccion no confirmo no quedo fila, el activo sigue
-	// entero y ahi la comprobacion dice la verdad.
-	if errSaldo := s.saldoAlcanza(ctx, userID, activo, total); errSaldo != nil {
-		// Se pregunta por la llave QUE MANDO EL CLIENTE, no por la de arriba:
-		// si no mando ninguna, la que acabamos de inventar no puede tener un
-		// envio escrito y MovimientoPorLlave con cadena vacia ni sale a la base.
-		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
-		if err != nil {
+	// La llave se mira siempre, alcance o no el saldo, y se contesta aqui,
+	// antes de pedir el precio: el reintento de un envio que ya se hizo
+	// devuelve ese envio, y para eso el precio no hace falta. Mirandola solo
+	// cuando el saldo no alcanzaba, el reintento seguia de largo hasta el
+	// precio, y con el proveedor caido recibia 503 por un envio que si ocurrio.
+	// Contestar aqui lo deja tambien fuera del segundo factor y del tope, que
+	// cuidan un movimiento que ya ocurrio.
+	//
+	// Si la llave describe OTRO envio, lo que corresponde es
+	// ErrLlaveDeOtroEnvio, no un "no te alcanza" que nadie puede arreglar
+	// poniendo mas saldo. Y una llave sin fila no responde nada: aqui no hay
+	// estados a medias, si la transaccion no confirmo no quedo fila, el activo
+	// sigue entero y ahi la comprobacion del saldo dice la verdad.
+	errSaldo := s.saldoAlcanza(ctx, userID, activo, total)
+	// Se pregunta por la llave QUE MANDO EL CLIENTE, no por la de arriba: si no
+	// mando ninguna, la que acabamos de inventar no puede tener un envio
+	// escrito y MovimientoPorLlave con cadena vacia ni sale a la base.
+	previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	if previo != nil {
+		if err := mismoEnvio(previo, envio); err != nil {
 			return nil, err
 		}
-		if previo == nil {
-			return nil, errSaldo
-		}
+		return previo, nil
+	}
+	if errSaldo != nil {
+		return nil, errSaldo
 	}
 
 	// El precio no decide cuanto se envia —eso lo dice la persona, en el propio
@@ -220,21 +246,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		return nil, err
 	}
 
-	envio := &TransactionRecord{
-		ID:                 uuid.New().String(),
-		UserID:             userID,
-		Type:               "send",
-		Asset:              activo,
-		Amount:             req.Amount,
-		Price:              usd,
-		Total:              total,
-		Currency:           activo,
-		Fee:                comision,
-		Status:             "completed",
-		CounterpartyUserID: destino.UserID,
-		CounterpartyName:   destino.Nombre,
-		IdempotencyKey:     llave,
-	}
+	envio.Price = usd
 	recibo := &TransactionRecord{
 		UserID:             destino.UserID,
 		Type:               "receive",
@@ -264,8 +276,10 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		return nil, fmt.Errorf("send %s: %w", activo, err)
 	}
 	if repetido {
-		// La misma llave ya tiene un envio escrito. Si describe otra cosa no es
-		// un reintento: es una llave reusada, y devolver el envio viejo como si
+		// La misma llave ya tiene un envio escrito: aqui llega solo el reintento
+		// que corrio a la par del original, porque el que llega despues ya lo
+		// contesto la relectura de arriba. Si describe otra cosa no es un
+		// reintento: es una llave reusada, y devolver el envio viejo como si
 		// fuera este seria contestar "listo" por algo que nunca se hizo.
 		if err := mismoEnvio(hecho, envio); err != nil {
 			return nil, err

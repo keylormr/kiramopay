@@ -123,6 +123,20 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	// monto pedido: con mas de dos decimales, los dos numeros no coinciden.
 	pagado := decimal.New(fiatMinor, -2)
 
+	// La repeticion de una compra que ya se hizo se contesta antes de pedir el
+	// precio, y la llave de otra compra se rechaza (ver compraOVentaYaHecha).
+	// Es la misma compra si pago lo mismo, en la misma moneda y por el mismo
+	// activo.
+	hecha, err := s.compraOVentaYaHecha(ctx, userID, req.IdempotencyKey, func(m *TransactionRecord) bool {
+		return m.Type == "buy" && m.Asset == req.Asset && m.Currency == currency && m.Total.Equal(pagado)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("buy %s: %w", req.Asset, err)
+	}
+	if hecha != nil {
+		return hecha, nil
+	}
+
 	// El precio y la cantidad de cripto los pone el servidor. Lo que decide el
 	// cliente es cuanto de SU plata gasta, que es lo unico suyo que hay aqui.
 	usd, err := s.precioEnDolares(ctx, req.Asset)
@@ -198,6 +212,23 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 	currency := req.ToCurrency
 	if currency == "" {
 		currency = "CRC"
+	}
+
+	// La repeticion de una venta que ya se hizo se contesta antes de pedir el
+	// precio, y la llave de otra venta se rechaza (ver compraOVentaYaHecha). Es
+	// la misma venta si entrego la misma cantidad del mismo activo, a cambio de
+	// la misma moneda. Lo acreditado no entra, porque lo decide el precio: con
+	// el precio ya movido, el monto recalculado no coincidia con el de la llave
+	// y el reintento se rechazaba —por PRICE_MOVED o por LLAVE_REUTILIZADA— por
+	// una venta que si ocurrio.
+	hecha, err := s.compraOVentaYaHecha(ctx, userID, req.IdempotencyKey, func(m *TransactionRecord) bool {
+		return m.Type == "sell" && m.Asset == req.Asset && m.Currency == currency && m.Amount.Equal(req.Amount)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
+	}
+	if hecha != nil {
+		return hecha, nil
 	}
 
 	// Lo que el cliente decide es cuanto cripto vende; cuanto fiat recibe por
@@ -314,6 +345,40 @@ func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.
 	return calculado
 }
 
+// compraOVentaYaHecha busca, SIN pedir el precio, la compra o la venta que la
+// llave del cliente ya completo. Si es la que se esta pidiendo (esLaMisma), la
+// devuelve; si es otra, rechaza el pedido con ErrLlaveReutilizada.
+//
+// La repeticion de algo que ya se hizo se contesta con lo que se hizo
+// entonces, y para eso el precio no hace falta. Con el precio primero, el
+// reintento que llegaba con el proveedor de precios caido recibia 503 por una
+// operacion que si ocurrio, justo cuando la red ya le habia fallado una vez a
+// la persona.
+//
+// esLaMisma compara el activo, la moneda y lo que decide la persona —el fiat
+// que paga al comprar, el cripto que entrega al vender—, nunca lo que decide
+// el precio. La llave de OTRA compra o venta no es un reintento, y se rechaza
+// aqui, como en la conversion y el envio: la relectura de CreateTransaction
+// compara el monto del libro, la moneda y el tipo, pero no el activo, y la
+// misma llave con el mismo monto y otro activo devolvia la compra del primero.
+// Si la llave no tiene nada completado —o lo que tiene no es de cripto—,
+// devuelve nil y el pedido sigue su camino.
+//
+// Va antes de la comprobacion de cortesia del saldo y no la reemplaza: si el
+// pedido original confirma justo despues de esta lectura, es esa comprobacion
+// —el saldo primero, la llave despues— la que evita contestarle "no te
+// alcanza" a una operacion que si ocurrio.
+func (s *Service) compraOVentaYaHecha(ctx context.Context, userID, llave string, esLaMisma func(*TransactionRecord) bool) (*TransactionRecord, error) {
+	hecha, err := s.repo.MovimientoPorLlaveDelLibro(ctx, userID, llave)
+	if err != nil || hecha == nil {
+		return nil, err
+	}
+	if !esLaMisma(hecha) {
+		return nil, fmt.Errorf("%w: %s", transaction.ErrLlaveReutilizada, llave)
+	}
+	return hecha, nil
+}
+
 func (s *Service) Convert(ctx context.Context, userID string, req *ConvertRequest) (*TransactionRecord, error) {
 	if err := validarCantidad(req.FromAmount); err != nil {
 		return nil, err
@@ -323,21 +388,37 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 	if llave == "" {
 		llave = "crypto:convert:" + uuid.New().String()
 	}
+	// El precio y lo que se recibe se completan abajo: para reconocer el
+	// reintento no hacen falta (ver mismaOperacion).
+	tx := &TransactionRecord{
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		Type:           "convert",
+		Asset:          fmt.Sprintf("%s→%s", req.FromAsset, req.ToAsset),
+		Amount:         req.FromAmount,
+		Currency:       req.ToAsset,
+		Status:         "completed",
+		IdempotencyKey: llave,
+	}
 
-	// La comprobacion de cortesia del saldo, en el mismo orden que la del
-	// envio (ver Send): primero el saldo, y la llave solo si no alcanza. Un
-	// reintento de una conversion que ya se hizo encuentra el saldo gastado; si
-	// su llave ya tiene movimiento, sigue de largo hasta la relectura de
-	// ConvertirEnUnaTx, que devuelve la conversion hecha en vez de un "no te
-	// alcanza".
-	if errSaldo := s.saldoAlcanza(ctx, userID, req.FromAsset, req.FromAmount); errSaldo != nil {
-		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
-		if err != nil {
+	// La comprobacion de cortesia del saldo y la relectura de la llave, en el
+	// mismo orden y por lo mismo que en el envio (ver Send): primero el saldo,
+	// despues la llave, siempre, y las dos antes de pedir los precios. El
+	// reintento de una conversion que ya se hizo devuelve esa conversion, con
+	// lo que se recibio entonces, aunque el proveedor de precios este caido.
+	errSaldo := s.saldoAlcanza(ctx, userID, req.FromAsset, req.FromAmount)
+	previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	if previo != nil {
+		if err := mismaOperacion(previo, tx); err != nil {
 			return nil, err
 		}
-		if previo == nil {
-			return nil, errSaldo
-		}
+		return previo, nil
+	}
+	if errSaldo != nil {
+		return nil, errSaldo
 	}
 
 	// Cuanto se recibe del otro activo lo decide la relacion entre los dos
@@ -355,19 +436,9 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 	if !cantidadDestino.IsPositive() {
 		return nil, fmt.Errorf("%w: from_amount too small to convert into %s", ErrMontoInvalido, req.ToAsset)
 	}
+	tx.Price = precioDestino
+	tx.Total = cantidadDestino
 
-	tx := &TransactionRecord{
-		ID:             uuid.New().String(),
-		UserID:         userID,
-		Type:           "convert",
-		Asset:          fmt.Sprintf("%s→%s", req.FromAsset, req.ToAsset),
-		Amount:         req.FromAmount,
-		Price:          precioDestino,
-		Total:          cantidadDestino,
-		Currency:       req.ToAsset,
-		Status:         "completed",
-		IdempotencyKey: llave,
-	}
 	// Los dos activos y el movimiento, en una sola transaccion. Antes eran tres
 	// escrituras sueltas: si fallaba la del activo de destino, el de origen ya
 	// estaba descontado y no llegaba nada a cambio.
@@ -379,9 +450,11 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		return nil, err
 	}
 	if repetido {
-		// Se devuelve la conversion como se hizo, con lo que se recibio
-		// entonces: si el precio se movio desde el primer toque, recalcular
-		// diria que llego otra cantidad de la que llego.
+		// Aqui llega solo el reintento que corrio a la par del original: el
+		// que llega despues ya lo contesto la relectura de arriba. Se devuelve
+		// la conversion como se hizo, con lo que se recibio entonces: si el
+		// precio se movio desde el primer toque, recalcular diria que llego
+		// otra cantidad de la que llego.
 		if err := mismaOperacion(hecho, tx); err != nil {
 			return nil, err
 		}
@@ -446,7 +519,10 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		llave = "crypto:stake:" + uuid.New().String()
 	}
 
-	// Cortesia del saldo, en el mismo orden que en Convert y en Send.
+	// Cortesia del saldo, en el mismo orden que en Convert y en Send. Aqui la
+	// llave se mira solo si el saldo no alcanza: apartar no pide precio, asi
+	// que el reintento al que le sigue alcanzando llega sin tropiezo a la
+	// relectura de ApartarParaStakingEnUnaTx.
 	if errSaldo := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); errSaldo != nil {
 		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
 		if err != nil {
