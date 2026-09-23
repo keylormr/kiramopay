@@ -82,9 +82,10 @@ export const MONEDAS_FIAT: ReadonlySet<string> = new Set(['USD', 'CRC', 'PAB', '
  * La fecha de un movimiento, en el idioma de la pantalla.
  *
  * Solo se formatea una fecha de maquina (ISO), que es lo que manda el servidor
- * y lo que anota la pantalla desde este cambio. Las fechas ya escritas para
- * leer (los datos del modo demostracion) se muestran tal cual. `recien` es el
- * texto para lo ocurrido hace menos de un minuto; vacio, se muestra la fecha.
+ * y lo que anota la pantalla. Una fecha ya escrita para leer se muestra tal
+ * cual: la demo las traia asi ("Hoy, 10:30 AM") y el navegador que ya la abrio
+ * las conserva guardadas. `recien` es el texto para lo ocurrido hace menos de
+ * un minuto; vacio, se muestra la fecha.
  */
 export function fechaLegible(
   valor: string,

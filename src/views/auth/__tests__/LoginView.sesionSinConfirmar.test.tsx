@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { LoginView } from '../LoginView';
+import { precargarIdioma } from '@/test/idiomas';
 
 // Recargar sin red (o con el cupo de peticiones agotado) mandaba al login sin
 // ninguna explicacion. Ahora la sesion no se cierra por un fallo pasajero, y
@@ -56,6 +57,8 @@ const pintar = () =>
       <LoginView onLogin={vi.fn()} onRegister={vi.fn()} />
     </LanguageProvider>,
   );
+
+beforeAll(() => precargarIdioma('en'));
 
 describe('LoginView: sesion sin confirmar', () => {
   beforeEach(() => {

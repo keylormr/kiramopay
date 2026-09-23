@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { MarketplaceView } from '../MarketplaceView';
+import { precargarIdioma } from '@/test/idiomas';
 
 const mocks = vi.hoisted(() => ({
   api: {
@@ -76,6 +77,8 @@ beforeEach(() => {
   mocks.api.marketplace.getRide.mockResolvedValue({ success: false });
   mocks.api.marketplace.getFoodOrder.mockResolvedValue({ success: false });
 });
+
+beforeAll(() => precargarIdioma('en'));
 
 describe('MarketplaceView — viajes', () => {
   // El precio y el tiempo salian de dos constantes escritas a mano, sin
