@@ -287,25 +287,14 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         crypto.updatePrices(action.payload);
         break;
       case 'BUY_CRYPTO': {
-        const { asset, amount, price, fromCurrency, fromAmount } = action.payload;
-        crypto.buyCrypto(asset, amount, price);
-        const buyTx = {
-          id: `ctx-${Date.now()}`,
-          type: 'buy' as const,
-          fromAsset: fromCurrency,
-          toAsset: asset,
-          fromAmount,
-          toAmount: amount,
-          price,
-          priceCurrency: 'USD',
-          // Comprar, vender y convertir no cobran comision en el servidor
-          // (Fee 0). La pantalla anotaba una del 0,5 % que nadie cobraba.
-          fee: 0,
-          date: new Date().toISOString(),
-          status: 'completed' as const,
-        };
-        crypto.addTransaction(buyTx);
-        accounts.updateAccountBalance(fromCurrency, -fromAmount);
+        // La fila y los saldos salen del movimiento que devolvio el servidor, con
+        // su id: el liquida con su precio, y el reintento con la misma llave trae
+        // la compra de aquella vez. Antes se armaba una fila propia con el
+        // estimado de la pantalla y un id que no existia en ningun lado.
+        const { fromAsset, fromAmount, toAsset = '', toAmount = 0, price } = action.payload;
+        crypto.buyCrypto(toAsset, toAmount, price);
+        crypto.addTransaction(action.payload);
+        accounts.updateAccountBalance(fromAsset, -fromAmount);
         // La llamada al backend NO va aca: la hace la vista y espera la
         // respuesta. Antes se despachaba primero y se llamaba con
         // .catch(() => {}), asi que un rechazo del servidor -incluido el de
@@ -318,23 +307,12 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       }
       case 'SELL_CRYPTO': {
-        const { asset, amount, price, toCurrency, toAmount } = action.payload;
-        crypto.sellCrypto(asset, amount);
-        const sellTx = {
-          id: `ctx-${Date.now()}`,
-          type: 'sell' as const,
-          fromAsset: asset,
-          toAsset: toCurrency,
-          fromAmount: amount,
-          toAmount,
-          price,
-          priceCurrency: 'USD',
-          fee: 0,
-          date: new Date().toISOString(),
-          status: 'completed' as const,
-        };
-        crypto.addTransaction(sellTx);
-        accounts.updateAccountBalance(toCurrency, toAmount);
+        // Lo acreditado es lo que dijo el servidor: una venta en colones se
+        // liquida con SU tipo de cambio, que no es el que tiene la pantalla.
+        const { fromAsset, fromAmount, toAsset = '', toAmount = 0 } = action.payload;
+        crypto.sellCrypto(fromAsset, fromAmount);
+        crypto.addTransaction(action.payload);
+        accounts.updateAccountBalance(toAsset, toAmount);
         // La llamada al backend NO va aca: la hace la vista y espera la
         // respuesta. Antes se despachaba primero y se llamaba con
         // .catch(() => {}), asi que un rechazo del servidor -incluido el de
@@ -347,22 +325,11 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       }
       case 'CONVERT_CRYPTO': {
-        const { fromAsset, toAsset, fromAmount, toAmount, price } = action.payload;
+        // Lo recibido es lo que calculo el servidor con sus precios, no el
+        // estimado de la pantalla.
+        const { fromAsset, fromAmount, toAsset = '', toAmount = 0, price } = action.payload;
         crypto.convertCrypto(fromAsset, toAsset, fromAmount, toAmount, price);
-        const convertTx = {
-          id: `ctx-${Date.now()}`,
-          type: 'convert' as const,
-          fromAsset,
-          toAsset,
-          fromAmount,
-          toAmount,
-          price,
-          priceCurrency: 'USD',
-          fee: 0,
-          date: new Date().toISOString(),
-          status: 'completed' as const,
-        };
-        crypto.addTransaction(convertTx);
+        crypto.addTransaction(action.payload);
         // La llamada al backend NO va aca: la hace la vista y espera la
         // respuesta, igual que compra y venta. Antes se despachaba primero y se
         // llamaba con .catch(() => {}), asi que un rechazo del servidor se

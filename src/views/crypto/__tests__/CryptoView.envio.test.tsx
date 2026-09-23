@@ -339,3 +339,21 @@ describe('envio de cripto — confirmacion y reintento', () => {
     });
   });
 });
+
+// Con la caja de ancho fijo (w-48) y la letra grande de la hoja, una cantidad
+// con sus ocho decimales no cabia y se veia cortada.
+describe('envio de cripto — el campo de monto crece con lo que se escribe', () => {
+  it('una cantidad con ocho decimales se ve entera', async () => {
+    mocks.api.crypto.sendPreview.mockResolvedValue({
+      success: true,
+      data: vistaPrevia(0.12345678, 0.0003086),
+    });
+    const user = userEvent.setup();
+    const hoja = await abrirEnvio(user);
+
+    const campo = hoja.getByPlaceholderText('0.00') as HTMLInputElement;
+    await user.type(campo, '0.12345678');
+    expect(campo).toHaveValue('0.12345678');
+    expect(campo.style.width).toMatch(/^\d+ch$/);
+  });
+});
