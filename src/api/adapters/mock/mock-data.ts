@@ -66,17 +66,27 @@ export const initialCryptoAssets: CryptoAsset[] = [
   { id: 'matic', symbol: 'MATIC', name: 'Polygon', icon: '⬡', color: '#8247E5', balance: 0, avgBuyPrice: 0, currentPrice: 0.89, priceChange24h: -1.25, priceHistory: [0.92, 0.91, 0.90, 0.88, 0.87, 0.88, 0.89] },
 ];
 
+// Las fechas de cripto van en ISO y relativas a hoy: la pantalla las escribe en
+// el idioma de la persona (fechaLegible). Escritas a mano en espanol ("Hoy,
+// 10:30 AM", "28 Dic, 2024") salian en espanol en cualquier idioma. La lista
+// va de la mas nueva a la mas vieja, que es como la pinta la pantalla.
+const haceHoras = (horas: number) => new Date(Date.now() - horas * 3_600_000).toISOString();
+const seAparto = haceHoras(8 * 24);
+
 export const initialCryptoTransactions: CryptoTransaction[] = [
-  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 0, date: 'Hoy, 10:30 AM', status: 'completed' },
-  { id: 'ctx2', type: 'receive', fromAsset: 'ETH', fromAmount: 0.5, price: 2320, fee: 0, date: 'Ayer, 3:15 PM', status: 'completed', counterpartyName: 'Victor Lobo' },
-  { id: 'ctx3', type: 'convert', fromAsset: 'USDT', toAsset: 'ETH', fromAmount: 200, toAmount: 0.085, price: 2352, fee: 0, date: '28 Dic, 2024', status: 'completed' },
-  { id: 'ctx4', type: 'stake', fromAsset: 'ETH', fromAmount: 0.5, price: 0, fee: 0, date: '25 Dic, 2024', status: 'completed' },
-  { id: 'ctx5', type: 'yield', fromAsset: 'ETH', fromAmount: 0.0012, price: 2340, fee: 0, date: '30 Dic, 2024', status: 'completed' },
+  { id: 'ctx1', type: 'buy', fromAsset: 'USD', toAsset: 'BTC', fromAmount: 500, toAmount: 0.0115, price: 43478, fee: 0, date: haceHoras(2), status: 'completed' },
+  { id: 'ctx2', type: 'receive', fromAsset: 'ETH', fromAmount: 0.5, price: 2320, fee: 0, date: haceHoras(26), status: 'completed', counterpartyName: 'Victor Lobo' },
+  { id: 'ctx3', type: 'convert', fromAsset: 'USDT', toAsset: 'ETH', fromAmount: 200, toAmount: 0.085, price: 2352, fee: 0, date: haceHoras(5 * 24), status: 'completed' },
+  { id: 'ctx4', type: 'stake', fromAsset: 'ETH', fromAmount: 0.5, price: 0, fee: 0, date: seAparto, status: 'completed' },
 ];
 
 export const initialStakingPositions: StakingPosition[] = [
   // Sin posiciones en USDT ni USDC: salieron del programa de staking.
-  { id: 'stake1', asset: 'ETH', amount: 0.5, apy: 4.5, startDate: '25 Dic, 2024', earned: 0.0012, locked: false },
+  // Sin ganado ni movimiento de rendimiento: el servidor no lo acredita
+  // (reclamar responde CLAIM_NOT_AVAILABLE) y la tarjeta dice que todavia no
+  // rinde. Con 0.0012 ganado la demo mostraba las dos cosas a la vez, y un
+  // boton de reclamar que la app real no tiene.
+  { id: 'stake1', asset: 'ETH', amount: 0.5, apy: 4.5, startDate: seAparto, earned: 0, locked: false },
 ];
 
 export const initialSavedServices: SavedService[] = [
