@@ -80,8 +80,8 @@ describe('MockCryptoRepository', () => {
 
   // La pantalla anota el movimiento que devuelve el repositorio. El servidor lo
   // fecha en ISO; un texto ya escrito ("Ahora") se mostraria tal cual en la
-  // fila, en espanol aunque la pantalla este en otro idioma, y el detalle se
-  // quedaria sin fecha.
+  // fila y en el detalle, en espanol aunque la pantalla este en otro idioma, y
+  // el detalle diria "Ahora" en vez de la fecha y la hora.
   it('comprar, vender y convertir fechan el movimiento como el servidor', async () => {
     const compra = await repo.buy({ asset: 'BTC', amount: 0.01, price: 42000, fromCurrency: 'USD', fromAmount: 420 });
     const venta = await repo.sell({ asset: 'BTC', amount: 0.01, price: 42000, toCurrency: 'USD', toAmount: 420 });
