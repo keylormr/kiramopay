@@ -4,6 +4,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '../../components/Icons';
 import { Notification } from '../../types';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { fechaYHora } from '@/utils/fechaPlazo';
 
 interface NotificationsViewProps {
   onClose: () => void;
@@ -44,7 +45,7 @@ const getNotificationBg = (type: Notification['type'], read: boolean) => {
 
 export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose }) => {
   const { state, dispatch } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const notifications = state.notifications || [];
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [open, setOpen] = useState(true);
@@ -129,7 +130,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                       {notification.message}
                     </p>
                     <span className="text-xs text-gray-400 mt-2 block">
-                      {notification.date}
+                      {notification.dateISO ? fechaYHora(notification.dateISO, language) : notification.date}
                     </span>
                   </div>
                 </div>

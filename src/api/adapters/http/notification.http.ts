@@ -35,6 +35,7 @@ export class HttpNotificationRepository implements INotificationRepository {
       type: n.type as Notification['type'],
       read: n.read ?? n.read_at != null,
       date: new Date(n.created_at).toLocaleDateString('es-CR'),
+      dateISO: n.created_at,
     }));
 
     return apiSuccess(notifications);
