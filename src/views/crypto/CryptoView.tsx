@@ -530,7 +530,7 @@ export const CryptoView: React.FC = () => {
     });
     setIsTrading(false);
 
-    if (!res.success) {
+    if (!res.success || !res.data) {
       if (res.error?.code === MFA_REQUIRED) {
         setPendingTrade('buy');
         setShowMfa(true);
@@ -542,7 +542,10 @@ export const CryptoView: React.FC = () => {
     }
 
     intentoRef.current = null;
-    dispatch({ type: 'BUY_CRYPTO', payload });
+    // Se anota la compra que devolvio el servidor, no el estimado de arriba:
+    // el liquida con su precio, y el reintento con la misma llave devuelve la
+    // compra de aquella vez, con el precio de entonces.
+    dispatch({ type: 'BUY_CRYPTO', payload: res.data });
     setActiveSheet('none');
     setAmount('');
   };
@@ -568,7 +571,7 @@ export const CryptoView: React.FC = () => {
     });
     setIsTrading(false);
 
-    if (!res.success) {
+    if (!res.success || !res.data) {
       if (res.error?.code === MFA_REQUIRED) {
         setPendingTrade('sell');
         setShowMfa(true);
@@ -580,7 +583,9 @@ export const CryptoView: React.FC = () => {
     }
 
     intentoRef.current = null;
-    dispatch({ type: 'SELL_CRYPTO', payload });
+    // Lo acreditado es lo que dijo el servidor: en colones aplica SU tipo de
+    // cambio, y el de la pantalla es solo el estimado que se mostro.
+    dispatch({ type: 'SELL_CRYPTO', payload: res.data });
     setActiveSheet('none');
     setAmount('');
   };
@@ -617,14 +622,15 @@ export const CryptoView: React.FC = () => {
     });
     setIsTrading(false);
 
-    if (!res.success) {
+    if (!res.success || !res.data) {
       trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
       return;
     }
 
     intentoRef.current = null;
-    dispatch({ type: 'CONVERT_CRYPTO', payload });
+    // Lo recibido es lo que calculo el servidor con sus precios.
+    dispatch({ type: 'CONVERT_CRYPTO', payload: res.data });
     setActiveSheet('none');
     setAmount('');
   };
@@ -1544,6 +1550,9 @@ export const CryptoView: React.FC = () => {
 
           <div className="text-center">
             <label className="text-sm text-gray-500">{t('crypto_amount_to_sell')}</label>
+            {/* min-w-0 en el campo: sin eso no se achica dentro de la fila, y con un
+                monto largo la fila entera se salia de la hoja por los dos lados y
+                cortaba el primer digito y el simbolo. */}
             <div className="flex items-center justify-center gap-2 mt-2">
               <CampoMonto
                 decimals={6}
@@ -1551,7 +1560,8 @@ export const CryptoView: React.FC = () => {
                 value={amount}
                 onChange={setAmount}
                 placeholder="0.00"
-                className="text-5xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+                autoWidth
+                className="text-5xl font-bold bg-transparent max-w-full min-w-0 text-center outline-none uv-text-primary"
               />
               <span className="text-2xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
             </div>
@@ -1637,7 +1647,8 @@ export const CryptoView: React.FC = () => {
               value={amount}
               onChange={setAmount}
               placeholder="0.00"
-              className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+              autoWidth
+              className="text-4xl font-bold bg-transparent max-w-full text-center outline-none uv-text-primary"
             />
           </div>
 
@@ -1731,7 +1742,8 @@ export const CryptoView: React.FC = () => {
                   value={amount}
                   onChange={setAmount}
                   placeholder="0.00"
-                  className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+                  autoWidth
+                  className="text-4xl font-bold bg-transparent max-w-full min-w-0 text-center outline-none uv-text-primary"
                 />
                 <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
               </div>
@@ -1845,7 +1857,8 @@ export const CryptoView: React.FC = () => {
                 value={amount}
                 onChange={setAmount}
                 placeholder="0.00"
-                className="text-4xl font-bold bg-transparent w-48 text-center outline-none uv-text-primary"
+                autoWidth
+                className="text-4xl font-bold bg-transparent max-w-full min-w-0 text-center outline-none uv-text-primary"
               />
               <span className="text-xl font-bold text-gray-400">{selectedAsset?.symbol}</span>
             </div>

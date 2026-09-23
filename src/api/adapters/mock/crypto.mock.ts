@@ -110,7 +110,9 @@ export class MockCryptoRepository implements ICryptoRepository {
       priceCurrency: 'USD',
       // El servidor no cobra comision por comprar, vender ni convertir.
       fee: 0,
-      date: 'Ahora',
+      // Fecha de maquina, como la del servidor: la pantalla anota este
+      // movimiento tal cual y la formatea en el idioma de quien la mira.
+      date: new Date().toISOString(),
       status: 'completed',
     };
     crypto.transactions = [tx, ...crypto.transactions];
@@ -135,7 +137,7 @@ export class MockCryptoRepository implements ICryptoRepository {
       price: request.price,
       priceCurrency: 'USD',
       fee: 0,
-      date: 'Ahora',
+      date: new Date().toISOString(),
       status: 'completed',
     };
     crypto.transactions = [tx, ...crypto.transactions];
@@ -177,7 +179,7 @@ export class MockCryptoRepository implements ICryptoRepository {
       price: request.price,
       priceCurrency: 'USD',
       fee: 0,
-      date: 'Ahora',
+      date: new Date().toISOString(),
       status: 'completed',
     };
     crypto.transactions = [tx, ...crypto.transactions];
