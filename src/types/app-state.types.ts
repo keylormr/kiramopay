@@ -3,7 +3,7 @@ import type { Account, Budget } from './account.types';
 import type { Transaction } from './transaction.types';
 import type { SinpeContact, SinpeTransaction } from './sinpe.types';
 import type { SavedService, Bill, Recharge } from './services.types';
-import type { CryptoState, PriceAlert, StakingPosition } from './crypto.types';
+import type { CryptoState, CryptoTransaction, PriceAlert, StakingPosition } from './crypto.types';
 import type { Notification } from './notification.types';
 
 export interface AppState {
@@ -76,9 +76,12 @@ export type AppAction =
   | { type: 'MARK_ALL_NOTIFICATIONS_READ' }
   | { type: 'DELETE_NOTIFICATION'; payload: string }
   | { type: 'UPDATE_CRYPTO_PRICES'; payload: { symbol: string; price: number; change24h: number; priceHistory?: number[] }[] }
-  | { type: 'BUY_CRYPTO'; payload: { asset: string; amount: number; price: number; fromCurrency: string; fromAmount: number } }
-  | { type: 'SELL_CRYPTO'; payload: { asset: string; amount: number; price: number; toCurrency: string; toAmount: number } }
-  | { type: 'CONVERT_CRYPTO'; payload: { fromAsset: string; toAsset: string; fromAmount: number; toAmount: number; price: number } }
+  // El movimiento tal como lo devolvio el servidor, con su id, su precio y sus
+  // cantidades: el las liquida, y el reintento con la misma llave devuelve la
+  // operacion original. El estimado de la pantalla no sirve para anotarlo.
+  | { type: 'BUY_CRYPTO'; payload: CryptoTransaction }
+  | { type: 'SELL_CRYPTO'; payload: CryptoTransaction }
+  | { type: 'CONVERT_CRYPTO'; payload: CryptoTransaction }
   // El envio ya ocurrio en el servidor cuando esto se despacha: `fee` es la
   // comision de KiramoPay que el cobro y `counterpartyName` la persona a la que
   // le llego, ambos tal como vinieron en su respuesta. No hay direccion de
