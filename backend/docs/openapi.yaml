@@ -1146,6 +1146,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price for one of the two assets right now. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/crypto/staking:
     get:
