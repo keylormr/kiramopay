@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/kiramopay/backend/internal/crypto"
+	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/shopspring/decimal"
 )
 
 // El reintento de una operacion que ya se hizo no necesita el precio: lo que
@@ -77,20 +79,70 @@ func TestComprar_ElReintentoSinPrecioDevuelveLaCompraHecha(t *testing.T) {
 	if segunda.ID != primera.ID || !segunda.Amount.Equal(primera.Amount) {
 		t.Fatalf("el reintento devolvio %+v, la compra fue %+v", segunda, primera)
 	}
+	m.exigirSoloLaPrimeraCompra(t, crc, btc, pedido.IdempotencyKey)
+
+	// La misma llave con otro monto o por otro activo no es este reintento, y
+	// para saberlo no hace falta el precio: la llave ya tiene otra compra.
+	otroMonto := pedido
+	otroMonto.FromAmount = d(60000)
+	otroActivo := pedido
+	otroActivo.Asset = "ETH"
+	for nombre, distinta := range map[string]crypto.BuyRequest{"otro monto": otroMonto, "otro activo": otroActivo} {
+		if _, err := sinPrecio.Buy(ctx, m.userID, &distinta); !errors.Is(err, transaction.ErrLlaveReutilizada) {
+			t.Fatalf("la misma llave con %s dio %v, se esperaba ErrLlaveReutilizada", nombre, err)
+		}
+	}
+	m.exigirSoloLaPrimeraCompra(t, crc, btc, pedido.IdempotencyKey)
+}
+
+// exigirSoloLaPrimeraCompra: la billetera, el BTC, las compras anotadas y los
+// asientos de la llave siguen como los dejo la primera compra.
+func (m *montajeVenta) exigirSoloLaPrimeraCompra(t *testing.T, crc int64, btc decimal.Decimal, llave string) {
+	t.Helper()
 	if ahora, _ := m.billetera(t); ahora != crc {
-		t.Fatalf("billetera CRC = %d, era %d: el reintento cobro otra vez", ahora, crc)
+		t.Fatalf("billetera CRC = %d, era %d: se cobro otra compra", ahora, crc)
 	}
 	if ahora := saldoDelActivo(t, m, "BTC"); !ahora.Equal(btc) {
-		t.Fatalf("BTC = %s, era %s: el reintento abono otra vez", ahora, btc)
+		t.Fatalf("BTC = %s, era %s: se abono otra compra", ahora, btc)
+	}
+	if ahora := saldoDeActivo(t, m.svc, m.userID, "ETH"); !ahora.IsZero() {
+		t.Fatalf("ETH = %s: se abono un activo que nadie compro", ahora)
 	}
 	compras := m.contar(t,
 		`SELECT COUNT(*) FROM crypto_transactions WHERE user_id = $1::uuid AND type = 'buy'`, m.userID)
 	if compras != 1 {
 		t.Fatalf("compras anotadas = %d, se esperaba 1", compras)
 	}
-	if n := m.asientosDeLaLlave(t, pedido.IdempotencyKey); n != 1 {
+	if n := m.asientosDeLaLlave(t, llave); n != 1 {
 		t.Fatalf("asientos de la llave = %d, se esperaba 1", n)
 	}
+}
+
+// La misma llave, el mismo monto y OTRO activo, con el precio disponible. La
+// relectura del libro compara el monto, la moneda y el tipo, pero no el activo,
+// asi que pedir ETH con la llave de una compra de BTC contestaba con la compra
+// de BTC: "listo" por algo que no se compro.
+func TestComprar_LaMismaLlaveConOtroActivoNoDevuelveLaOtraCompra(t *testing.T) {
+	m := montarVenta(t)
+	ctx := context.Background()
+	pedido := crypto.BuyRequest{
+		Asset: "BTC", Price: d(1000), FromCurrency: "CRC", FromAmount: d(50000),
+		IdempotencyKey: "crypto:buy:toque-1",
+	}
+	if _, err := m.svc.Buy(ctx, m.userID, &pedido); err != nil {
+		t.Fatalf("la compra: %v", err)
+	}
+	crc, _ := m.billetera(t)
+	btc := saldoDelActivo(t, m, "BTC")
+
+	otroActivo := pedido
+	otroActivo.Asset = "ETH"
+	hecha, err := m.svc.Buy(ctx, m.userID, &otroActivo)
+	if !errors.Is(err, transaction.ErrLlaveReutilizada) {
+		t.Fatalf("la llave de una compra de BTC, pidiendo ETH, dio %+v y %v; se esperaba ErrLlaveReutilizada",
+			hecha, err)
+	}
+	m.exigirSoloLaPrimeraCompra(t, crc, btc, pedido.IdempotencyKey)
 }
 
 // exigirSoloLaPrimeraVenta: de los 3 BTC se vendio 1, una sola vez.
@@ -142,11 +194,13 @@ func TestVender_ElReintentoSinPrecioDevuelveLaVentaHecha(t *testing.T) {
 	m.exigirSoloLaPrimeraVenta(t, crc, vendeUnBTC.IdempotencyKey)
 
 	// La misma llave con OTRA cantidad no es este reintento: contestarle con la
-	// venta vieja seria decir "vendiste" por algo que no se pidio.
+	// venta vieja seria decir "vendiste" por algo que no se pidio. Y para
+	// saberlo no hace falta el precio: la llave ya tiene otra venta.
 	otraCantidad := vendeUnBTC
 	otraCantidad.Amount = d(0.5)
-	if hecha, err := sinPrecio.Sell(ctx, m.userID, &otraCantidad); err == nil {
-		t.Fatalf("la llave de una venta de 1 BTC contesto a una de 0,5 con %+v", hecha)
+	if hecha, err := sinPrecio.Sell(ctx, m.userID, &otraCantidad); !errors.Is(err, transaction.ErrLlaveReutilizada) {
+		t.Fatalf("la llave de una venta de 1 BTC, pidiendo 0,5, dio %+v y %v; se esperaba ErrLlaveReutilizada",
+			hecha, err)
 	}
 	m.exigirSoloLaPrimeraVenta(t, crc, vendeUnBTC.IdempotencyKey)
 }
