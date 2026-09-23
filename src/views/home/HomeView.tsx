@@ -13,6 +13,7 @@ import { Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
+import { fechaCorta } from '@/utils/fechaPlazo';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -45,7 +46,7 @@ interface HomeViewProps {
 
 export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onOpenCrypto, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
   // Los movimientos se refrescan solos cuando llega una notificación en vivo
@@ -556,7 +557,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
-                  <div className="text-xs uv-text-muted mt-0.5">{tx.date}</div>
+                  <div className="text-xs uv-text-muted mt-0.5">{fechaCorta(tx.dateISO, language) || tx.date}</div>
                 </div>
                 <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
                   {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}

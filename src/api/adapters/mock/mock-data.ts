@@ -44,9 +44,9 @@ export const initialSinpeContacts: SinpeContact[] = [
 ];
 
 export const initialSinpeHistory: SinpeTransaction[] = [
-  { id: '1', type: 'sent', amount: 15000, phone: '8888-1234', name: 'Diego Mora', date: 'Hoy, 2:30 PM', status: 'completed', reference: 'Almuerzo' },
-  { id: '2', type: 'received', amount: 25000, phone: '7777-5678', name: 'María González', date: 'Ayer, 4:20 PM', status: 'completed', reference: 'Pago deuda' },
-  { id: '3', type: 'sent', amount: 50000, phone: '6666-9012', name: 'Carlos Jiménez', date: '22 Dic, 10:15 AM', status: 'completed', reference: 'Regalo' },
+  { id: '1', type: 'sent', amount: 15000, phone: '8888-1234', name: 'Diego Mora', date: 'Hoy, 2:30 PM', dateISO: _txDaysAgo(0.1), status: 'completed', reference: 'Almuerzo' },
+  { id: '2', type: 'received', amount: 25000, phone: '7777-5678', name: 'María González', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), status: 'completed', reference: 'Pago deuda' },
+  { id: '3', type: 'sent', amount: 50000, phone: '6666-9012', name: 'Carlos Jiménez', date: '22 Dic, 10:15 AM', dateISO: _txDaysAgo(8), status: 'completed', reference: 'Regalo' },
 ];
 
 // dateISO es la fecha que escribe la pantalla, en el idioma de la persona;

@@ -95,6 +95,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
       name: h.contact_name,
       amount: h.amount / 100, // centimos → colones
       date: new Date(h.created_at).toLocaleDateString('es-CR'),
+      dateISO: h.created_at,
       type: h.type as 'sent' | 'received',
       status: h.status as 'completed' | 'pending' | 'failed',
       reference: h.description,
