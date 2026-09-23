@@ -24,8 +24,14 @@ import (
 // (otro activo, otro monto u otro destinatario). No es un reintento.
 var ErrLlaveDeOtroEnvio = errors.New("idempotency key reused for a different transfer")
 
-// codigoLlaveDuplicada es el SQLSTATE de unique_violation.
-const codigoLlaveDuplicada = "23505"
+// codigoLlaveDuplicada es el SQLSTATE de unique_violation, e indiceDeLaLlave el
+// indice unico parcial de la 072 que lo levanta cuando la llave ya tiene
+// movimiento. Hacen falta los dos: la llave primaria tambien da 23505, y un id
+// repetido no es un reintento.
+const (
+	codigoLlaveDuplicada = "23505"
+	indiceDeLaLlave      = "uq_crypto_tx_llave"
+)
 
 // DatosDelEnvio es todo lo que una transferencia de cripto escribe.
 type DatosDelEnvio struct {
@@ -71,18 +77,8 @@ func (r *Repository) EnviarEnUnaTx(ctx context.Context, d *DatosDelEnvio) (previ
 	// La pata de quien envia se escribe PRIMERO porque es la que lleva la llave
 	// de idempotencia: si el envio ya se hizo, el indice unico lo dice aqui, y
 	// se sale sin haber tocado un solo saldo.
-	if err := insertarMovimiento(ctx, tx, d.Envio); err != nil {
-		if esLlaveDuplicada(err) {
-			// La transaccion quedo abortada por el error; la relectura va por
-			// fuera, sobre el pool.
-			_ = tx.Rollback(ctx)
-			hecho, err := r.EnvioPorLlave(ctx, d.Envio.UserID, d.Envio.IdempotencyKey)
-			if err != nil {
-				return nil, false, err
-			}
-			return hecho, true, nil
-		}
-		return nil, false, err
+	if hecho, repetido, err := r.anotarConLlave(ctx, tx, d.Envio); err != nil || repetido {
+		return hecho, repetido, err
 	}
 
 	if d.AntesDeMover != nil {
@@ -152,9 +148,14 @@ func moverLosDosSaldos(ctx context.Context, tx pgx.Tx, d *DatosDelEnvio, total d
 	return descontar()
 }
 
-// EnvioPorLlave lee el envio que se escribio bajo una llave de idempotencia.
-// Nil sin error quiere decir que esa llave no tiene envio.
-func (r *Repository) EnvioPorLlave(ctx context.Context, userID, llave string) (*TransactionRecord, error) {
+// MovimientoPorLlave lee el movimiento que se escribio bajo una llave de
+// idempotencia: un envio, una conversion o un apartado para staking. Nil sin
+// error quiere decir que esa llave no tiene movimiento.
+//
+// El indice unico de la llave abarca todos los tipos, asi que lo que vuelve
+// puede ser de otro tipo que el que se pide: quien lo compara tiene que mirar
+// Type tambien.
+func (r *Repository) MovimientoPorLlave(ctx context.Context, userID, llave string) (*TransactionRecord, error) {
 	if llave == "" {
 		return nil, nil
 	}
@@ -168,12 +169,13 @@ func (r *Repository) EnvioPorLlave(ctx context.Context, userID, llave string) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("releer envio por llave: %w", err)
+		return nil, fmt.Errorf("releer movimiento por llave: %w", err)
 	}
 	return &mov, nil
 }
 
 func esLlaveDuplicada(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == codigoLlaveDuplicada
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == codigoLlaveDuplicada && pgErr.ConstraintName == indiceDeLaLlave
 }

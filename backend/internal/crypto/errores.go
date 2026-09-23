@@ -32,6 +32,14 @@ var (
 	ErrPosicionBloqueada = errors.New("position is locked")
 	// ErrStakingNoDisponible: el activo no esta en el programa de staking.
 	ErrStakingNoDisponible = errors.New("staking is not available for this asset")
+	// ErrLlaveDeOtraOperacion: la llave de una conversion o de un apartado ya
+	// tiene un movimiento escrito, pero de otra cosa (otro tipo, otro activo u
+	// otra cantidad). No es un reintento.
+	ErrLlaveDeOtraOperacion = errors.New("idempotency key reused for a different operation")
+	// ErrApartadoYaRetirado: la llave ya abrio su posicion y esa posicion ya
+	// se retiro. El reintento no aparta otra vez ni contesta "listo" por algo
+	// que ya no esta apartado.
+	ErrApartadoYaRetirado = errors.New("staking with this idempotency key was already withdrawn")
 )
 
 // rechazo es la respuesta a un error que se reconoce.
@@ -88,6 +96,11 @@ func rechazoConocido(err error) (rechazo, bool) {
 	case errors.Is(err, ErrPosicionNoActiva):
 		return rechazo{http.StatusConflict, "STAKING_POSITION_INACTIVE",
 			ErrPosicionNoActiva.Error()}, true
+	// No es LLAVE_REUTILIZADA: es la misma operacion, pero lo que abrio ya no
+	// esta. El siguiente apartado necesita otra llave.
+	case errors.Is(err, ErrApartadoYaRetirado):
+		return rechazo{http.StatusConflict, "STAKING_ALREADY_WITHDRAWN",
+			ErrApartadoYaRetirado.Error()}, true
 	// El plazo sale con su fecha, que la arma el servicio.
 	case errors.Is(err, ErrPosicionBloqueada):
 		return rechazo{http.StatusConflict, "STAKING_POSITION_LOCKED", err.Error()}, true
@@ -115,6 +128,9 @@ func rechazoConocido(err error) (rechazo, bool) {
 	case errors.Is(err, ErrLlaveDeOtroEnvio):
 		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
 			"esa operacion ya se hizo con otro monto o para otra persona"}, true
+	case errors.Is(err, ErrLlaveDeOtraOperacion):
+		return rechazo{http.StatusConflict, "LLAVE_REUTILIZADA",
+			"esa operacion ya se hizo con otro monto o con otro activo"}, true
 	// Al servicio no se le dio con que resolver un QR. No es culpa de quien
 	// envia ni algo que reintentar cambie: es la aplicacion, mal armada.
 	case errors.Is(err, ErrEnvioNoDisponible):

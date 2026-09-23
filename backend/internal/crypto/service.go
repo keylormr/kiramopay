@@ -319,8 +319,25 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		return nil, err
 	}
 
-	if err := s.saldoAlcanza(ctx, userID, req.FromAsset, req.FromAmount); err != nil {
-		return nil, err
+	llave := req.IdempotencyKey
+	if llave == "" {
+		llave = "crypto:convert:" + uuid.New().String()
+	}
+
+	// La comprobacion de cortesia del saldo, en el mismo orden que la del
+	// envio (ver Send): primero el saldo, y la llave solo si no alcanza. Un
+	// reintento de una conversion que ya se hizo encuentra el saldo gastado; si
+	// su llave ya tiene movimiento, sigue de largo hasta la relectura de
+	// ConvertirEnUnaTx, que devuelve la conversion hecha en vez de un "no te
+	// alcanza".
+	if errSaldo := s.saldoAlcanza(ctx, userID, req.FromAsset, req.FromAmount); errSaldo != nil {
+		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if previo == nil {
+			return nil, errSaldo
+		}
 	}
 
 	// Cuanto se recibe del otro activo lo decide la relacion entre los dos
@@ -340,27 +357,59 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 	}
 
 	tx := &TransactionRecord{
-		ID:       uuid.New().String(),
-		UserID:   userID,
-		Type:     "convert",
-		Asset:    fmt.Sprintf("%s→%s", req.FromAsset, req.ToAsset),
-		Amount:   req.FromAmount,
-		Price:    precioDestino,
-		Total:    cantidadDestino,
-		Currency: req.ToAsset,
-		Status:   "completed",
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		Type:           "convert",
+		Asset:          fmt.Sprintf("%s→%s", req.FromAsset, req.ToAsset),
+		Amount:         req.FromAmount,
+		Price:          precioDestino,
+		Total:          cantidadDestino,
+		Currency:       req.ToAsset,
+		Status:         "completed",
+		IdempotencyKey: llave,
 	}
 	// Los dos activos y el movimiento, en una sola transaccion. Antes eran tres
 	// escrituras sueltas: si fallaba la del activo de destino, el de origen ya
 	// estaba descontado y no llegaba nada a cambio.
 	toName := getAssetName(req.ToAsset)
-	if err := s.repo.ConvertirEnUnaTx(ctx, userID,
+	hecho, repetido, err := s.repo.ConvertirEnUnaTx(ctx, userID,
 		req.FromAsset, req.ToAsset, toName,
-		req.FromAmount, cantidadDestino, precioDestino, tx); err != nil {
+		req.FromAmount, cantidadDestino, precioDestino, tx)
+	if err != nil {
 		return nil, err
+	}
+	if repetido {
+		// Se devuelve la conversion como se hizo, con lo que se recibio
+		// entonces: si el precio se movio desde el primer toque, recalcular
+		// diria que llego otra cantidad de la que llego.
+		if err := mismaOperacion(hecho, tx); err != nil {
+			return nil, err
+		}
+		return hecho, nil
 	}
 
 	return tx, nil
+}
+
+// mismaOperacion comprueba que el movimiento ya escrito bajo una llave sea el
+// que se esta pidiendo: el mismo tipo, el mismo activo (en la conversion, el
+// par) y la misma cantidad. El precio y lo recibido no entran: un reintento
+// legitimo llega con el precio ya movido.
+//
+// El tipo entra porque el indice unico de la llave abarca todos los
+// movimientos: la llave de una conversion usada para apartar no es un
+// reintento del apartado.
+func mismaOperacion(hecho, pedido *TransactionRecord) error {
+	if hecho == nil {
+		return fmt.Errorf("%w: la llave ya se uso", ErrLlaveDeOtraOperacion)
+	}
+	if hecho.Type != pedido.Type ||
+		hecho.Asset != pedido.Asset ||
+		!hecho.Amount.Equal(pedido.Amount) ||
+		hecho.CounterpartyUserID != pedido.CounterpartyUserID {
+		return ErrLlaveDeOtraOperacion
+	}
+	return nil
 }
 
 func (s *Service) GetStakingPositions(ctx context.Context, userID string) ([]StakingRecord, error) {
@@ -392,8 +441,20 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 		return nil, err
 	}
 
-	if err := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); err != nil {
-		return nil, err
+	llave := req.IdempotencyKey
+	if llave == "" {
+		llave = "crypto:stake:" + uuid.New().String()
+	}
+
+	// Cortesia del saldo, en el mismo orden que en Convert y en Send.
+	if errSaldo := s.saldoAlcanza(ctx, userID, req.Asset, req.Amount); errSaldo != nil {
+		previo, err := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if previo == nil {
+			return nil, errSaldo
+		}
 	}
 
 	record := &StakingRecord{
@@ -409,11 +470,46 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 	}
 	// El descuento del activo y la posicion, juntos: sueltos, un fallo al
 	// escribir la posicion dejaba el saldo apartado sin nada que lo respalde.
-	if err := s.repo.ApartarParaStakingEnUnaTx(ctx, record); err != nil {
+	hecho, repetido, err := s.repo.ApartarParaStakingEnUnaTx(ctx, record, llave)
+	if err != nil {
 		return nil, err
+	}
+	if repetido {
+		return s.posicionYaAbierta(ctx, userID, hecho, req)
 	}
 
 	return record, nil
+}
+
+// posicionYaAbierta resuelve el reintento de un apartado: la llave ya tiene
+// movimiento, y lo que se devuelve es la posicion que ese movimiento abrio
+// (comparten id).
+//
+// El plazo se compara contra la posicion y no contra el movimiento, que no lo
+// guarda: la misma llave con el mismo activo y la misma cantidad, pero a plazo
+// en vez de flexible, es otra posicion, y devolver la flexible seria decir
+// "listo" por algo que nunca se hizo.
+func (s *Service) posicionYaAbierta(ctx context.Context, userID string, hecho *TransactionRecord, req *StakeRequest) (*StakingRecord, error) {
+	if err := mismaOperacion(hecho, movimientoDeStaking(userID, "stake", req.Asset, req.Amount)); err != nil {
+		return nil, err
+	}
+	pos, err := s.repo.GetStakingByID(ctx, hecho.ID, userID)
+	if err != nil {
+		// Un reintento no aparta dos veces aunque esto falle —la llave ya
+		// esta escrita—, asi que el error puede salir tal cual: el proximo
+		// intento vuelve a caer en la relectura.
+		return nil, fmt.Errorf("stake %s: releer la posicion %s: %w", req.Asset, hecho.ID, err)
+	}
+	if pos.Locked != req.Locked || pos.LockDays != req.LockDays {
+		return nil, ErrLlaveDeOtraOperacion
+	}
+	// La llave sobrevive a su posicion: la pantalla la conserva mientras la
+	// persona reintenta, y un retiro no la descarta. Devolver la posicion
+	// retirada seria contestar "listo" por algo que ya no esta apartado.
+	if pos.Status != "active" {
+		return nil, ErrApartadoYaRetirado
+	}
+	return pos, nil
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID string) error {

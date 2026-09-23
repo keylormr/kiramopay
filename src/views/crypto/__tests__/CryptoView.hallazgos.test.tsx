@@ -118,7 +118,9 @@ describe('n=43 — el retiro de staking usa el id del servidor', () => {
       expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'STAKE_CRYPTO', payload: posicion }),
     );
     // La tasa del cliente no viaja: la pone el servidor.
-    expect(mocks.api.crypto.stake).toHaveBeenCalledWith({ asset: 'ETH', amount: 0.1, locked: false });
+    expect(mocks.api.crypto.stake).toHaveBeenCalledWith({
+      asset: 'ETH', amount: 0.1, locked: false, idempotencyKey: expect.stringMatching(/^crypto:stake:/),
+    });
   });
 
   it('un retiro sobre una posicion que ya no existe se explica en espanol', async () => {
@@ -138,6 +140,128 @@ describe('n=43 — el retiro de staking usa el id del servidor', () => {
     expect(await screen.findByText('Esa posición ya no está activa. Actualizamos tu lista.')).toBeInTheDocument();
     expect(screen.queryByText(/staking position not found/)).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+// Convertir y apartar no mandaban llave: el reintento tras un corte de red
+// convertia o apartaba otra vez aunque la primera ya se hubiera hecho. Y
+// despues de un exito la llave tiene que cambiar: si no, la siguiente
+// operacion igual —hecha a proposito— el servidor la tomaria por un reintento
+// y no haria nada.
+describe('convertir y apartar van con la llave del intento', () => {
+  async function abrirConversion(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /Convertir/ }));
+    return within(await screen.findByRole('dialog'));
+  }
+
+  async function abrirStaking(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /Ethereum/ }));
+    await user.click(await screen.findByRole('button', { name: /Hacer Staking/ }));
+    return within(await screen.findByRole('dialog', { name: /Staking ETH/ }));
+  }
+
+  it('el reintento de la misma conversion reusa la llave; la siguiente conversion es otra', async () => {
+    mocks.api.crypto.convert
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } })
+      .mockResolvedValue({ success: true, data: {} });
+    const user = userEvent.setup();
+    montar();
+
+    let hoja = await abrirConversion(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Convertir' }));
+    await screen.findByText(/No pudimos conectar con KiramoPay/);
+    await user.click(hoja.getByRole('button', { name: 'Convertir' }));
+    await waitFor(() =>
+      expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'CONVERT_CRYPTO' })),
+    );
+    // La hoja se desmonta 300 ms despues de cerrarse, y mientras tanto su boton
+    // Convertir tambien esta en pantalla.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    hoja = await abrirConversion(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Convertir' }));
+    await waitFor(() => expect(mocks.api.crypto.convert).toHaveBeenCalledTimes(3));
+
+    const [a, b, c] = mocks.api.crypto.convert.mock.calls.map(([req]) => req.idempotencyKey as string);
+    expect(a).toMatch(/^crypto:convert:/);
+    // Mismo intento tras el corte de red: misma llave, no convierte dos veces.
+    expect(b).toBe(a);
+    // La misma conversion despues de un exito es otra conversion.
+    expect(c).not.toBe(a);
+  });
+
+  it('el reintento del mismo apartado reusa la llave; el siguiente apartado es otro', async () => {
+    const posicion = {
+      id: '5a7e0c4e-0000-4000-8000-000000000002', asset: 'ETH', amount: 0.1, apy: 4.5,
+      startDate: '2026-09-22T15:00:00Z', earned: 0, locked: false,
+    };
+    mocks.api.crypto.stake
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } })
+      .mockResolvedValue({ success: true, data: posicion });
+    const user = userEvent.setup();
+    montar();
+
+    let hoja = await abrirStaking(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await screen.findByText(/No pudimos conectar con KiramoPay/);
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await waitFor(() =>
+      expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'STAKE_CRYPTO', payload: posicion }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    hoja = await abrirStaking(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await waitFor(() => expect(mocks.api.crypto.stake).toHaveBeenCalledTimes(3));
+
+    const [a, b, c] = mocks.api.crypto.stake.mock.calls.map(([req]) => req.idempotencyKey as string);
+    expect(a).toMatch(/^crypto:stake:/);
+    // Mismo intento tras el corte de red: misma llave, no aparta dos veces.
+    expect(b).toBe(a);
+    expect(c).not.toBe(a);
+  });
+
+  // La llave sobrevive a la posicion que abrio: un retiro no la descarta,
+  // porque la pantalla no sabe que posicion abrio el intento cuya respuesta se
+  // perdio. Si esa posicion ya se retiro, el servidor lo dice con su codigo y
+  // la pantalla lo explica; el siguiente toque es un apartado nuevo, con otra
+  // llave.
+  it('un apartado que ya se retiro se explica y el siguiente toque va con otra llave', async () => {
+    const posicion = {
+      id: '5a7e0c4e-0000-4000-8000-000000000003', asset: 'ETH', amount: 0.1, apy: 4.5,
+      startDate: '2026-09-22T15:00:00Z', earned: 0, locked: false,
+    };
+    const crudo = 'staking with this idempotency key was already withdrawn';
+    mocks.api.crypto.stake
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } })
+      .mockResolvedValueOnce({ success: false, error: { code: 'STAKING_ALREADY_WITHDRAWN', message: crudo } })
+      .mockResolvedValue({ success: true, data: posicion });
+    const user = userEvent.setup();
+    montar();
+
+    const hoja = await abrirStaking(user);
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.1');
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await screen.findByText(/No pudimos conectar con KiramoPay/);
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    expect(await screen.findByText(/ya se había hecho y después se retiró/)).toBeInTheDocument();
+    expect(screen.queryByText(crudo)).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'STAKE_CRYPTO' }));
+
+    await user.click(hoja.getByRole('button', { name: 'Comenzar Staking' }));
+    await waitFor(() =>
+      expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'STAKE_CRYPTO', payload: posicion }),
+    );
+
+    const [a, b, c] = mocks.api.crypto.stake.mock.calls.map(([req]) => req.idempotencyKey as string);
+    // El reintento tras el corte de red va con la misma llave...
+    expect(b).toBe(a);
+    // ...pero la posicion de esa llave ya se retiro: el siguiente es otro apartado.
+    expect(c).not.toBe(a);
   });
 });
 

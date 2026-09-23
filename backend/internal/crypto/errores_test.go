@@ -91,6 +91,11 @@ func TestResponderError_CodigosPropios(t *testing.T) {
 		{"llave de otro movimiento",
 			fmt.Errorf("sell BTC: %w: k-1", transaction.ErrLlaveReutilizada),
 			http.StatusConflict, "LLAVE_REUTILIZADA", "idempotency key reused for a different movement"},
+		// La conversion y el apartado no pasan por el libro: su llave reusada
+		// tiene sentinela propio, pero la pantalla la resuelve con el mismo codigo.
+		{"llave de otra conversion o de otro apartado",
+			fmt.Errorf("convert BTC: %w: k-1", ErrLlaveDeOtraOperacion),
+			http.StatusConflict, "LLAVE_REUTILIZADA", "esa operacion ya se hizo con otro monto o con otro activo"},
 		{"precio movido",
 			fmt.Errorf("%w: en pantalla 1.00 USD, ahora 2.00 USD", ErrPrecioMovido),
 			http.StatusConflict, "PRICE_MOVED", "el precio cambio desde que se mostro: en pantalla 1.00 USD, ahora 2.00 USD"},
@@ -107,6 +112,9 @@ func TestResponderError_CodigosPropios(t *testing.T) {
 		{"posicion ya retirada",
 			fmt.Errorf("unstake: %w", ErrPosicionNoActiva),
 			http.StatusConflict, "STAKING_POSITION_INACTIVE", "staking position is not active"},
+		{"apartado cuya posicion ya se retiro",
+			fmt.Errorf("stake ETH: %w", ErrApartadoYaRetirado),
+			http.StatusConflict, "STAKING_ALREADY_WITHDRAWN", "staking with this idempotency key was already withdrawn"},
 		{"activo fuera del programa de staking",
 			fmt.Errorf("%w: USDT", ErrStakingNoDisponible),
 			http.StatusBadRequest, "STAKING_NOT_AVAILABLE", "staking is not available for this asset"},

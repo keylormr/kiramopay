@@ -592,6 +592,7 @@ export type TranslationKeys = {
   crypto_err_staking_not_available: string;
   crypto_err_position_gone: string;
   crypto_err_position_locked: string;
+  crypto_err_stake_already_withdrawn: string;
   crypto_staking_program_assets: string;
   crypto_staking_no_yield: string;
   crypto_days: string;

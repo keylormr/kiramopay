@@ -503,6 +503,7 @@ const en: TranslationKeys = {
   crypto_err_staking_not_available: 'This crypto is not part of the staking program.',
   crypto_err_position_gone: 'That position is no longer active. We refreshed your list.',
   crypto_err_position_locked: 'This position stays locked until its term ends.',
+  crypto_err_stake_already_withdrawn: 'That staking was already made and later withdrawn, so it was not repeated. If you want to stake again, try once more.',
   crypto_staking_program_assets: 'You can stake {assets}.',
   crypto_staking_no_yield: 'No yield yet',
   crypto_days: 'days',

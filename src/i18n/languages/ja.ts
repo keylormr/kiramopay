@@ -503,6 +503,7 @@ const ja: TranslationKeys = {
   crypto_err_staking_not_available: 'この暗号資産はステーキングの対象外です。',
   crypto_err_position_gone: 'このポジションはすでに有効ではありません。一覧を更新しました。',
   crypto_err_position_locked: 'このポジションは期間が終わるまでロックされています。',
+  crypto_err_stake_already_withdrawn: 'このステーキングはすでに行われ、その後引き出されたため、繰り返されませんでした。もう一度行う場合は、再度お試しください。',
   crypto_staking_program_assets: 'ステーキングできるのは {assets} です。',
   crypto_staking_no_yield: '利回りはまだありません',
   crypto_days: '日',

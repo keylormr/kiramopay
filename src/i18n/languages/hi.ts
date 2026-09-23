@@ -503,6 +503,7 @@ const hi: TranslationKeys = {
   crypto_err_staking_not_available: 'यह क्रिप्टो स्टेकिंग कार्यक्रम में शामिल नहीं है।',
   crypto_err_position_gone: 'यह पोज़िशन अब सक्रिय नहीं है। हमने आपकी सूची अपडेट कर दी है।',
   crypto_err_position_locked: 'यह पोज़िशन अपनी अवधि पूरी होने तक लॉक रहेगी।',
+  crypto_err_stake_already_withdrawn: 'यह स्टेकिंग पहले ही हो चुकी थी और बाद में निकाल ली गई, इसलिए इसे दोहराया नहीं गया। फिर से स्टेक करना हो तो दोबारा कोशिश करें।',
   crypto_staking_program_assets: 'आप {assets} की स्टेकिंग कर सकते हैं।',
   crypto_staking_no_yield: 'अभी कोई रिटर्न नहीं',
   crypto_days: 'दिन',

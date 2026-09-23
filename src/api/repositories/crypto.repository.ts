@@ -85,6 +85,11 @@ export interface ConvertCryptoRequest {
   fromAmount: number;
   toAmount: number;
   price: number;
+  /**
+   * Igual que en la compra: repetir la MISMA conversion con la misma llave
+   * (tras un corte de red) no convierte dos veces.
+   */
+  idempotencyKey?: string;
 }
 
 // Sin tasa: la fija el servidor y cualquier valor del cliente se ignora.
@@ -93,6 +98,8 @@ export interface StakeCryptoRequest {
   amount: number;
   locked: boolean;
   lockDays?: number;
+  /** Igual que en la compra: repetir el mismo apartado no aparta dos veces. */
+  idempotencyKey?: string;
 }
 
 /**

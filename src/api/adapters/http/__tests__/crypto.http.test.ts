@@ -223,10 +223,24 @@ describe('HttpCryptoRepository — lo que se manda al servidor', () => {
     expect(llamadas[1].cuerpo.idempotency_key).toBe('crypto:sell:k2');
   });
 
+  // Convertir y apartar no mandaban llave: el reintento tras un corte de red
+  // convertia o apartaba otra vez aunque la primera ya se hubiera hecho.
+  it('convertir y apartar tambien mandan la llave del intento', async () => {
+    const { client, llamadas } = clienteQueAnota();
+    const repo = new HttpCryptoRepository(client);
+    await repo.convert({ fromAsset: 'BTC', toAsset: 'ETH', fromAmount: 0.1, toAmount: 1.6, price: 2500, idempotencyKey: 'crypto:convert:k3' });
+    await repo.stake({ asset: 'ETH', amount: 0.1, locked: false, idempotencyKey: 'crypto:stake:k4' });
+    expect(llamadas[0].cuerpo.idempotency_key).toBe('crypto:convert:k3');
+    expect(llamadas[1].cuerpo.idempotency_key).toBe('crypto:stake:k4');
+  });
+
   it('sin llave no manda el campo', async () => {
     const { client, llamadas } = clienteQueAnota();
-    await new HttpCryptoRepository(client).buy({ asset: 'ETH', amount: 0.1, price: 10, fromCurrency: 'USD', fromAmount: 1 });
-    expect('idempotency_key' in llamadas[0].cuerpo).toBe(false);
+    const repo = new HttpCryptoRepository(client);
+    await repo.buy({ asset: 'ETH', amount: 0.1, price: 10, fromCurrency: 'USD', fromAmount: 1 });
+    await repo.convert({ fromAsset: 'BTC', toAsset: 'ETH', fromAmount: 0.1, toAmount: 1.6, price: 2500 });
+    expect(llamadas).toHaveLength(2);
+    for (const { cuerpo } of llamadas) expect('idempotency_key' in cuerpo).toBe(false);
   });
 
   // El cuerpo iba con `lockDays` en camelCase y el servidor lee `lock_days`.

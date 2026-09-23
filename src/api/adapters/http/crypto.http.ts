@@ -266,6 +266,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
       from_amount: request.fromAmount,
       to_amount: request.toAmount,
       price: request.price,
+      ...(request.idempotencyKey ? { idempotency_key: request.idempotencyKey } : {}),
     });
 
     if (!res.success || !res.data) {
@@ -294,6 +295,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
       amount: request.amount,
       locked: request.locked,
       ...(request.lockDays ? { lock_days: request.lockDays } : {}),
+      ...(request.idempotencyKey ? { idempotency_key: request.idempotencyKey } : {}),
     });
 
     if (!res.success || !res.data) {

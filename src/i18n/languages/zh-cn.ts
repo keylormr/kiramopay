@@ -504,6 +504,7 @@ const zhCn: TranslationKeys = {
   crypto_err_staking_not_available: '该加密货币不在质押计划内。',
   crypto_err_position_gone: '该仓位已不再有效。我们已刷新您的列表。',
   crypto_err_position_locked: '该仓位在期限结束前保持锁定。',
+  crypto_err_stake_already_withdrawn: '该质押此前已完成且已提领，因此没有重复执行。如需再次质押，请重试。',
   crypto_staking_program_assets: '可质押的币种：{assets}。',
   crypto_staking_no_yield: '暂无收益',
   crypto_days: '天',
