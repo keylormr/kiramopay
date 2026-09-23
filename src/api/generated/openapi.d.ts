@@ -1331,7 +1331,7 @@ export interface paths {
         put?: never;
         /**
          * Buy cryptocurrency
-         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate. The fiat debit, the asset credit and the purchase record commit in one transaction. Repeating a completed purchase with the same `idempotency_key` returns the recorded purchase and moves nothing.
+         * @description The client only decides how much of its fiat (`from_amount`, in `from_currency`) it spends; the crypto quantity and the unit price are set by the server. `price` is the USD unit price the screen showed (the feed quotes in USD): it is compared against the server's own USD price, whatever the currency the purchase is paid in, and a deviation above 2% is rejected with 409 PRICE_MOVED. Settlement uses the system USD/CRC exchange rate. The fiat debit, the asset credit and the purchase record commit in one transaction. Repeating a completed purchase with the same `idempotency_key` (same asset, `from_amount` and `from_currency`) returns the recorded purchase and moves nothing. The repeat is answered before the price is consulted, so it works while the price feed is down or after the price moved.
          */
         post: {
             parameters: {
@@ -1428,7 +1428,7 @@ export interface paths {
         put?: never;
         /**
          * Sell cryptocurrency
-         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate. The asset debit, the fiat credit (to the centimo, which is what `total` reports) and the sale record commit in one transaction. Repeating a completed sale with the same `idempotency_key` returns the recorded sale and moves nothing; if the price moved since, the fiat amount differs and the retry gets 409 LLAVE_REUTILIZADA.
+         * @description The client only decides how much crypto it sells; the fiat credited (in `to_currency`) is set by the server. `price` is the USD unit price the screen showed: it is compared against the server's USD price even when `to_currency` is CRC, and a deviation above 2% is rejected with 409 PRICE_MOVED. The CRC credit uses the system USD/CRC exchange rate. The asset debit, the fiat credit (to the centimo, which is what `total` reports) and the sale record commit in one transaction. Repeating a completed sale with the same `idempotency_key` (same asset, `amount` and `to_currency`) returns the recorded sale, with the fiat credited then, and moves nothing. The repeat is answered before the price is consulted, so it works while the price feed is down or after the price moved.
          */
         post: {
             parameters: {
@@ -1604,7 +1604,7 @@ export interface paths {
         put?: never;
         /**
          * Send crypto to another person
-         * @description Moves the asset from the sender to the person who owns the scanned QR. `amount` is what the recipient gets; what leaves the sender's balance is `amount` plus KiramoPay's fee, in the same asset. The debit, the credit, the fee and both history rows commit in one transaction. `price` is the USD unit price the screen showed: a deviation above 2% is rejected with 409 PRICE_MOVED. The send is also written to the wallet history in USD even though no fiat moves, because the daily limit and the AML monitoring are computed over that table; without a usable price the send is refused rather than counted as zero. Repeating a completed send with the same `idempotency_key` returns the recorded send and moves nothing; a key that belongs to a different amount or a different recipient gets 409 LLAVE_REUTILIZADA.
+         * @description Moves the asset from the sender to the person who owns the scanned QR. `amount` is what the recipient gets; what leaves the sender's balance is `amount` plus KiramoPay's fee, in the same asset. The debit, the credit, the fee and both history rows commit in one transaction. `price` is the USD unit price the screen showed: a deviation above 2% is rejected with 409 PRICE_MOVED. The send is also written to the wallet history in USD even though no fiat moves, because the daily limit and the AML monitoring are computed over that table; without a usable price the send is refused rather than counted as zero. Repeating a completed send with the same `idempotency_key` returns the recorded send and moves nothing; a key that belongs to a different amount or a different recipient gets 409 LLAVE_REUTILIZADA. Both are answered before the price is consulted, so they work while the price feed is down.
          */
         post: {
             parameters: {
@@ -1701,7 +1701,7 @@ export interface paths {
         put?: never;
         /**
          * Convert between cryptocurrencies
-         * @description Converts `from_amount` of `from_asset` into `to_asset`. How much arrives is decided by the server from the two USD market prices, not by the client. Both balances and the `convert` movement commit in one transaction. Repeating a completed conversion with the same `idempotency_key` returns the recorded conversion, with what arrived then, and moves nothing; a key that belongs to a different pair, a different amount or another kind of movement gets 409 LLAVE_REUTILIZADA.
+         * @description Converts `from_amount` of `from_asset` into `to_asset`. How much arrives is decided by the server from the two USD market prices, not by the client. Both balances and the `convert` movement commit in one transaction. Repeating a completed conversion with the same `idempotency_key` returns the recorded conversion, with what arrived then, and moves nothing; a key that belongs to a different pair, a different amount or another kind of movement gets 409 LLAVE_REUTILIZADA. Both are answered before the prices are consulted, so they work while the price feed is down.
          */
         post: {
             parameters: {

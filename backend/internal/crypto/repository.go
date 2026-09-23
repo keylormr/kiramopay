@@ -414,6 +414,34 @@ func (r *Repository) GetTransaction(ctx context.Context, userID, id string) (*Tr
 	return &tx, nil
 }
 
+// MovimientoPorLlaveDelLibro devuelve el movimiento de cripto que cuelga de la
+// fila COMPLETADA del libro con esa llave, o nil si no hay ninguna. Es la
+// llave de la compra y de la venta: esas dos la guardan en `transactions`, no
+// en crypto_transactions, y su movimiento toma el id de esa fila (ver Buy).
+//
+// Solo cuenta la fila completada, igual que en la relectura de
+// CreateTransaction: una 'failed' o 'pending' no movio nada, y ese pedido se
+// reintenta de verdad por el camino de siempre.
+func (r *Repository) MovimientoPorLlaveDelLibro(ctx context.Context, userID, llave string) (*TransactionRecord, error) {
+	if llave == "" {
+		return nil, nil
+	}
+	var mov TransactionRecord
+	fila := r.db.QueryRow(ctx, `SELECT `+columnasDeMovimiento+`
+		 FROM crypto_transactions
+		 WHERE user_id = $1 AND id = (
+		     SELECT id FROM transactions
+		     WHERE user_id = $1 AND idempotency_key = $2 AND status = 'completed'
+		     LIMIT 1)`, userID, llave)
+	if err := escanearMovimiento(fila, &mov); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("releer movimiento por la llave del libro: %w", err)
+	}
+	return &mov, nil
+}
+
 func (r *Repository) GetTransactions(ctx context.Context, userID string, limit int) ([]TransactionRecord, error) {
 	if limit <= 0 {
 		limit = 50
