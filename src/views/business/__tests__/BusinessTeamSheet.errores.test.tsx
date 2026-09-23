@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { precargarIdioma } from '@/test/idiomas';
 import { BusinessTeamSheet } from '../BusinessTeamSheet';
 
 // El backend respondia "esa cedula no tiene una cuenta de KiramoPay" en espanol
@@ -34,6 +35,8 @@ async function intentarAgregar() {
   const botones = screen.getAllByRole('button');
   fireEvent.click(botones[botones.length - 1]);
 }
+
+beforeAll(() => precargarIdioma('en'));
 
 beforeEach(() => {
   localStorage.clear();

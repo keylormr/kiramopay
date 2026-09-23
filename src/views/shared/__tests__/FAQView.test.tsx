@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { FAQView } from '../FAQView';
+import { precargarIdioma } from '@/test/idiomas';
 
 function setup() {
   return render(
@@ -15,6 +16,8 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
 });
+
+beforeAll(() => precargarIdioma('en'));
 
 describe('Centro de ayuda', () => {
   // El defecto que arregla esta pantalla: el "?" solo lo ve quien ya llego a la

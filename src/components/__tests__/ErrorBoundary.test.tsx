@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { precargarIdioma } from '@/test/idiomas';
 
 // A helper component that throws on demand
 const ThrowingChild = ({ shouldThrow }: { shouldThrow: boolean }) => {
@@ -9,6 +10,8 @@ const ThrowingChild = ({ shouldThrow }: { shouldThrow: boolean }) => {
   }
   return <div>All good</div>;
 };
+
+beforeAll(() => precargarIdioma('en'));
 
 describe('ErrorBoundary', () => {
   beforeEach(() => {
