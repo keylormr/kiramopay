@@ -55,13 +55,13 @@ func montarAlertas(t *testing.T) *montajeAlertas {
 	repo := NewRepository(pool)
 	avisos := &buzon{}
 	return &montajeAlertas{
-		pool:      pool,
-		repo:      repo,
-		ps:        ps,
-		svc:       NewService(repo, ps, nil, nil, nil),
-		ana:       testutil.SeedTestUser(t, pool, "702650930", "sin-uso"),
-		beto:      testutil.SeedTestUser2(t, pool),
-		avisos:    avisos,
+		pool:   pool,
+		repo:   repo,
+		ps:     ps,
+		svc:    NewService(repo, ps, nil, nil, nil),
+		ana:    testutil.SeedTestUser(t, pool, "702650930", "sin-uso"),
+		beto:   testutil.SeedTestUser2(t, pool),
+		avisos: avisos,
 		// Refresco propio apagado: estas pruebas siembran el precio a mano y lo
 		// que verifican es la sentencia SQL de CumplirAlertas. El refresco tiene
 		// sus propias pruebas en evaluador_alertas_test.go.

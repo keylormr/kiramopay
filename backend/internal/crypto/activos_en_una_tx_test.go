@@ -118,34 +118,118 @@ func TestUnFalloAlFinalNoDejaElActivoADebiendo(t *testing.T) {
 
 // El indice de la llave no es la unica restriccion que da 23505: la llave
 // primaria tambien. Un id repetido es un error, no el reintento de nada, y no
-// puede devolverse como si la conversion se hubiera hecho.
+// puede devolverse como si la operacion se hubiera hecho. Las tres funciones
+// que pasan por anotarConLlave lo tienen que distinguir igual: convertir,
+// apartar para staking y enviar.
 func TestUnIdRepetidoNoEsUnReintento(t *testing.T) {
-	repo, _, userID := montarRepo(t)
-	ctx := context.Background()
+	t.Run("convertir", func(t *testing.T) {
+		repo, _, userID := montarRepo(t)
+		ctx := context.Background()
 
-	if err := repo.UpsertAsset(ctx, userID, "BTC", "Bitcoin", d(2), d(1000)); err != nil {
-		t.Fatalf("sembrar BTC: %v", err)
-	}
-	yaExiste := movimiento(userID)
-	yaExiste.ID = uuid.New().String()
-	if err := repo.AddTransaction(ctx, yaExiste); err != nil {
-		t.Fatalf("anotar el primer movimiento: %v", err)
-	}
+		if err := repo.UpsertAsset(ctx, userID, "BTC", "Bitcoin", d(2), d(1000)); err != nil {
+			t.Fatalf("sembrar BTC: %v", err)
+		}
+		yaExiste := movimiento(userID)
+		yaExiste.ID = uuid.New().String()
+		if err := repo.AddTransaction(ctx, yaExiste); err != nil {
+			t.Fatalf("anotar el primer movimiento: %v", err)
+		}
 
-	choca := movimiento(userID)
-	choca.ID = yaExiste.ID
-	choca.IdempotencyKey = "crypto:convert:id-repetido"
-	previo, repetido, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
-		d(1), d(2), d(500), choca)
-	if err == nil || repetido || previo != nil {
-		t.Fatalf("previo=%v repetido=%v err=%v, se esperaba el error de la llave primaria", previo, repetido, err)
-	}
-	if got := saldoDe(t, repo, userID, "BTC"); !got.Equal(d(2)) {
-		t.Fatalf("BTC = %s, se esperaba 2", got)
-	}
-	if got := saldoDe(t, repo, userID, "ETH"); !got.IsZero() {
-		t.Fatalf("ETH = %s, se esperaba 0", got)
-	}
+		choca := movimiento(userID)
+		choca.ID = yaExiste.ID
+		choca.IdempotencyKey = "crypto:convert:id-repetido"
+		previo, repetido, err := repo.ConvertirEnUnaTx(ctx, userID, "BTC", "ETH", "Ethereum",
+			d(1), d(2), d(500), choca)
+		if err == nil || repetido || previo != nil {
+			t.Fatalf("previo=%v repetido=%v err=%v, se esperaba el error de la llave primaria", previo, repetido, err)
+		}
+		if got := saldoDe(t, repo, userID, "BTC"); !got.Equal(d(2)) {
+			t.Fatalf("BTC = %s, se esperaba 2", got)
+		}
+		if got := saldoDe(t, repo, userID, "ETH"); !got.IsZero() {
+			t.Fatalf("ETH = %s, se esperaba 0", got)
+		}
+	})
+
+	// ApartarParaStakingEnUnaTx le da al movimiento el MISMO id que la posicion
+	// (ver el comentario de la funcion en repository.go): forzar ese id a uno
+	// que ya existe en crypto_transactions choca con la llave primaria, igual
+	// que en convertir.
+	t.Run("apartar", func(t *testing.T) {
+		repo, pool, userID := montarRepo(t)
+		ctx := context.Background()
+
+		if err := repo.UpsertAsset(ctx, userID, "ETH", "Ethereum", d(3), d(2000)); err != nil {
+			t.Fatalf("sembrar ETH: %v", err)
+		}
+		yaExiste := movimiento(userID)
+		yaExiste.ID = uuid.New().String()
+		if err := repo.AddTransaction(ctx, yaExiste); err != nil {
+			t.Fatalf("anotar el primer movimiento: %v", err)
+		}
+
+		pos := &crypto.StakingRecord{
+			ID: yaExiste.ID, UserID: userID, Asset: "ETH", Amount: d(1), APY: 4.5,
+			StartDate: time.Now(), Earned: decimal.Zero, Status: "active",
+		}
+		previo, repetido, err := repo.ApartarParaStakingEnUnaTx(ctx, pos, "crypto:stake:id-repetido")
+		if err == nil || repetido || previo != nil {
+			t.Fatalf("previo=%v repetido=%v err=%v, se esperaba el error de la llave primaria", previo, repetido, err)
+		}
+		if got := saldoDe(t, repo, userID, "ETH"); !got.Equal(d(3)) {
+			t.Fatalf("ETH = %s, se esperaba 3: no se descuenta si el movimiento no se pudo anotar", got)
+		}
+		var n int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM crypto_staking WHERE user_id = $1::uuid`, userID).Scan(&n); err != nil {
+			t.Fatalf("contar posiciones: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("posiciones = %d, se esperaba 0", n)
+		}
+	})
+
+	// EnviarEnUnaTx tambien deja fijar de antemano el id del movimiento de
+	// quien envia (ver repositorio_envio.go); forzarlo al de un movimiento
+	// existente es la misma carrera, ahora entre dos personas.
+	t.Run("enviar", func(t *testing.T) {
+		repo, pool, userID := montarRepo(t)
+		ctx := context.Background()
+		destinatario := testutil.SeedTestUser2(t, pool)
+
+		if err := repo.UpsertAsset(ctx, userID, "BTC", "Bitcoin", d(2), d(1000)); err != nil {
+			t.Fatalf("sembrar BTC: %v", err)
+		}
+		yaExiste := movimiento(userID)
+		yaExiste.ID = uuid.New().String()
+		if err := repo.AddTransaction(ctx, yaExiste); err != nil {
+			t.Fatalf("anotar el primer movimiento: %v", err)
+		}
+
+		envio := &crypto.TransactionRecord{
+			ID: yaExiste.ID, UserID: userID, Type: "send", Asset: "BTC",
+			Amount: d(1), Price: d(1000), Total: d(1), Currency: "BTC",
+			Fee: decimal.Zero, Status: "completed",
+			CounterpartyUserID: destinatario, IdempotencyKey: "crypto:send:id-repetido",
+		}
+		recibo := &crypto.TransactionRecord{
+			UserID: destinatario, Type: "receive", Asset: "BTC",
+			Amount: d(1), Price: d(1000), Total: d(1), Currency: "BTC",
+			Fee: decimal.Zero, Status: "completed", CounterpartyUserID: userID,
+		}
+		previo, repetido, err := repo.EnviarEnUnaTx(ctx, &crypto.DatosDelEnvio{
+			Envio: envio, Recibo: recibo, NombreDelActivo: "Bitcoin", PrecioUSD: d(1000),
+		})
+		if err == nil || repetido || previo != nil {
+			t.Fatalf("previo=%v repetido=%v err=%v, se esperaba el error de la llave primaria", previo, repetido, err)
+		}
+		if got := saldoDe(t, repo, userID, "BTC"); !got.Equal(d(2)) {
+			t.Fatalf("BTC de quien envia = %s, se esperaba 2", got)
+		}
+		if got := saldoDe(t, repo, destinatario, "BTC"); !got.IsZero() {
+			t.Fatalf("BTC de quien recibe = %s, se esperaba 0", got)
+		}
+	})
 }
 
 func TestConvertirSinSaldoNoCreaElActivoDeDestino(t *testing.T) {

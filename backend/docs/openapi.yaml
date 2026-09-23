@@ -762,6 +762,12 @@ paths:
       responses:
         '200':
           description: User's crypto assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CryptoAssetRecord'
 
   /api/v1/crypto/transactions:
     get:
@@ -1140,6 +1146,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: PRICE_UNAVAILABLE or PRICE_STALE — the server has no usable price for one of the two assets right now. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/crypto/staking:
     get:
@@ -1150,6 +1162,12 @@ paths:
       responses:
         '200':
           description: Active staking positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StakingPositionRecord'
     post:
       tags: [Crypto]
       summary: Stake cryptocurrency

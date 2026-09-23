@@ -41,7 +41,10 @@ func NewRouter(doc *openapi3.T) (routers.Router, error) {
 }
 
 // ValidateResponseBody validates a full JSON response body against the schema the
-// spec documents for (method, url, status).
+// spec documents for (method, url, status). A status the spec does not document
+// for that route is an error, as in ValidateData: kin-openapi lets it through
+// by default, and a contract test that accepts any status cannot catch a route
+// that answers one the client was never told about.
 func ValidateResponseBody(router routers.Router, method, url string, status int, body []byte) error {
 	route, pathParams, err := findRoute(router, method, url)
 	if err != nil {
@@ -53,9 +56,10 @@ func ValidateResponseBody(router routers.Router, method, url string, status int,
 			PathParams: pathParams,
 			Route:      route,
 		},
-		Status: status,
-		Header: http.Header{"Content-Type": []string{"application/json"}},
-		Body:   io.NopCloser(bytes.NewReader(body)),
+		Status:  status,
+		Header:  http.Header{"Content-Type": []string{"application/json"}},
+		Body:    io.NopCloser(bytes.NewReader(body)),
+		Options: &openapi3filter.Options{IncludeResponseStatus: true},
 	}
 	return openapi3filter.ValidateResponse(context.Background(), input)
 }
