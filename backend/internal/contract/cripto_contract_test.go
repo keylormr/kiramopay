@@ -18,11 +18,12 @@ import (
 // (internal/crypto/handler.go), nunca con un mapa a mano, para que un campo
 // que el backend agregue o quite y el esquema no rompa aqui.
 //
-// Los codigos y estados de los rechazos salen de la tabla de
-// internal/crypto/errores.go (rechazoConocido), que es unexported y por eso
-// no se puede llamar desde este paquete: se arma la respuesta a mano con
-// response.Error/response.ErrorConDetalle, igual que ya hace
-// TestErroresDeTope_CumplenElContrato en planes_contract_test.go.
+// Los codigos y estados de los rechazos se copian a mano de donde se
+// deciden: rechazoConocido en internal/crypto/errores.go, errorDePrecio en
+// internal/crypto/handler.go y errorDeAlerta en internal/crypto/alertas.go.
+// Los tres son unexported y no se pueden llamar desde este paquete, asi que
+// cada respuesta se arma con response.Error/response.ErrorConDetalle, igual
+// que ya hace TestErroresDeTope_CumplenElContrato en planes_contract_test.go.
 
 func d(s string) decimal.Decimal {
 	dec, err := decimal.NewFromString(s)
@@ -216,11 +217,11 @@ func TestCryptoAlerts_CumpleElContrato(t *testing.T) {
 
 // ── Los rechazos con el sobre generico ErrorResponse ───────────────────────
 //
-// code y message son texto libre en el esquema (ApiError no los acota), asi
-// que lo que prueba esta tabla es que la RUTA y el ESTADO estan documentados
-// para cada codigo real de errores.go: si un handler respondiera un estado
-// que el spec no menciona para esa ruta, ValidateResponseBody no encontraria
-// el esquema y el caso quedaria en rojo.
+// code y message son texto libre en el esquema (ApiError no los acota): lo
+// que prueba esta tabla es que el spec documenta, en cada ruta, el ESTADO de
+// cada rechazo que esa ruta puede responder. ValidateResponseBody falla si el
+// spec no menciona ese estado para esa ruta. La tabla no lee los handlers: si
+// uno empieza a responder un estado nuevo, la fila se agrega a mano.
 //
 // PRICE_UNAVAILABLE, PRICE_STALE y CRYPTO_SEND_UNAVAILABLE van con estado
 // 503: response.Error tapa el mensaje en cualquier 5xx (ver pkg/response) y
@@ -251,11 +252,15 @@ func TestCryptoErrores_CumplenElContrato(t *testing.T) {
 			"INSUFFICIENT_BALANCE", "insufficient balance"},
 		{"comprar: pasa el tope diario", http.MethodPost, "/api/v1/crypto/buy", http.StatusUnprocessableEntity,
 			"DAILY_LIMIT_EXCEEDED", "daily spending limit exceeded"},
+		{"comprar: pasa el tope mensual", http.MethodPost, "/api/v1/crypto/buy", http.StatusUnprocessableEntity,
+			"MONTHLY_LIMIT_EXCEEDED", "monthly spending limit exceeded"},
 		{"comprar: hace falta MFA", http.MethodPost, "/api/v1/crypto/buy", http.StatusPreconditionRequired,
 			"MFA_REQUIRED", "verified MFA challenge required for this amount"},
 		{"comprar: no hay precio", http.MethodPost, "/api/v1/crypto/buy", http.StatusServiceUnavailable,
 			"PRICE_UNAVAILABLE", "no market price available for this asset: BTC"},
 
+		{"vender: monto invalido", http.MethodPost, "/api/v1/crypto/sell", http.StatusBadRequest,
+			"CRYPTO_INVALID_AMOUNT", "invalid amount"},
 		{"vender: no alcanza el activo", http.MethodPost, "/api/v1/crypto/sell", http.StatusUnprocessableEntity,
 			"CRYPTO_INSUFFICIENT_BALANCE", "insufficient asset balance"},
 		{"vender: el precio se movio", http.MethodPost, "/api/v1/crypto/sell", http.StatusConflict,
@@ -269,6 +274,8 @@ func TestCryptoErrores_CumplenElContrato(t *testing.T) {
 			"QR_REVOCADO", "ese codigo fue retirado por su dueno"},
 		{"cotizar envio: codigo de comercio", http.MethodPost, "/api/v1/crypto/send/preview", http.StatusUnprocessableEntity,
 			"QR_DE_COMERCIO", "ese codigo es de un comercio: los comercios cobran en colones o dolares"},
+		{"cotizar envio: codigo de un cobro", http.MethodPost, "/api/v1/crypto/send/preview", http.StatusUnprocessableEntity,
+			"QR_DE_COBRO", "ese codigo es un cobro en dinero: pagalo desde Pagar con QR"},
 		{"cotizar envio: sin resolver QR", http.MethodPost, "/api/v1/crypto/send/preview", http.StatusServiceUnavailable,
 			"CRYPTO_SEND_UNAVAILABLE", "enviar cripto no esta disponible"},
 
@@ -280,6 +287,8 @@ func TestCryptoErrores_CumplenElContrato(t *testing.T) {
 			"CRYPTO_INSUFFICIENT_BALANCE", "insufficient asset balance"},
 		{"enviar: hace falta MFA", http.MethodPost, "/api/v1/crypto/send", http.StatusPreconditionRequired,
 			"MFA_REQUIRED", "verified MFA challenge required for this amount"},
+		{"enviar: no hay precio", http.MethodPost, "/api/v1/crypto/send", http.StatusServiceUnavailable,
+			"PRICE_UNAVAILABLE", "no market price available for this asset: BTC"},
 
 		{"convertir: monto invalido", http.MethodPost, "/api/v1/crypto/convert", http.StatusBadRequest,
 			"CRYPTO_INVALID_AMOUNT", "invalid amount"},
@@ -287,6 +296,10 @@ func TestCryptoErrores_CumplenElContrato(t *testing.T) {
 			"LLAVE_REUTILIZADA", "esa operacion ya se hizo con otro monto o con otro activo"},
 		{"convertir: no alcanza el origen", http.MethodPost, "/api/v1/crypto/convert", http.StatusUnprocessableEntity,
 			"CRYPTO_INSUFFICIENT_BALANCE", "insufficient asset balance"},
+		{"convertir: no hay precio", http.MethodPost, "/api/v1/crypto/convert", http.StatusServiceUnavailable,
+			"PRICE_UNAVAILABLE", "no market price available for this asset: ETH"},
+		{"convertir: precio viejo", http.MethodPost, "/api/v1/crypto/convert", http.StatusServiceUnavailable,
+			"PRICE_STALE", "crypto price is too old to trade on"},
 
 		{"apartar: activo fuera del programa", http.MethodPost, "/api/v1/crypto/staking", http.StatusBadRequest,
 			"STAKING_NOT_AVAILABLE", "staking is not available for this asset"},
