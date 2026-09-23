@@ -119,69 +119,94 @@ func TestService_Broadcast_NoBroadcasterIsNoop(t *testing.T) {
 	svc.broadcast("user-1", &NotificationRecord{ID: "x", CreatedAt: time.Now()})
 }
 
-func TestSubscribeRequest_Validation(t *testing.T) {
-	req := &SubscribeRequest{
-		Endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
-		Auth:     "auth-key",
-		P256dh:   "p256dh-key",
-	}
+// Las cuatro pruebas que habia aca armaban un struct y revisaban lo que
+// acababan de escribir, o copiaban la regla del limite en vez de llamarla:
+// pasaban igual con el codigo roto. Las de abajo prueban el contrato real.
+// La suscripcion se prueba en suscripcion_test.go.
 
-	if req.Endpoint == "" {
-		t.Error("endpoint should not be empty")
+func TestLimiteDeHistorial(t *testing.T) {
+	casos := []struct{ pedido, want int }{
+		{0, 20},
+		{-5, 20},
+		{51, 20},
+		{1000, 20},
+		{1, 1},
+		{20, 20},
+		{50, 50},
 	}
-	if req.Auth == "" {
-		t.Error("auth should not be empty")
+	for _, c := range casos {
+		if got := limiteDeHistorial(c.pedido); got != c.want {
+			t.Errorf("limiteDeHistorial(%d) = %d, want %d", c.pedido, got, c.want)
+		}
 	}
 }
 
-func TestNotificationPayload_Serialization(t *testing.T) {
-	payload := &NotificationPayload{
-		Title: "Transfer received",
-		Body:  "You received 5,000 CRC from Keilor",
+// El service worker (public/sw.js) lee title, body, tag y url del JSON del
+// aviso. Una etiqueta renombrada lo dejaria mostrando "KiramoPay" sin texto,
+// sin que nada fallara.
+func TestNotificationPayload_ClavesQueLeeElServiceWorker(t *testing.T) {
+	crudo, err := json.Marshal(&NotificationPayload{
+		Title: "Transferencia recibida",
+		Body:  "Te enviaron 5.000 colones",
+		URL:   "/sinpe",
 		Tag:   "sinpe_transfer",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-
-	if payload.Title == "" {
-		t.Error("title should not be empty")
+	var m map[string]any
+	if err := json.Unmarshal(crudo, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if payload.Tag != "sinpe_transfer" {
-		t.Errorf("tag = %q, want %q", payload.Tag, "sinpe_transfer")
+	want := map[string]string{
+		"title": "Transferencia recibida",
+		"body":  "Te enviaron 5.000 colones",
+		"url":   "/sinpe",
+		"tag":   "sinpe_transfer",
+	}
+	for clave, valor := range want {
+		if m[clave] != valor {
+			t.Errorf("%s = %v, want %q", clave, m[clave], valor)
+		}
+	}
+	// Vacios no viajan: el service worker pone su propio icono.
+	for _, clave := range []string{"icon", "data"} {
+		if _, esta := m[clave]; esta {
+			t.Errorf("%s vacio no deberia viajar: %s", clave, crudo)
+		}
 	}
 }
 
-func TestNotificationRecord_Fields(t *testing.T) {
-	record := &NotificationRecord{
-		ID:     "notif-1",
-		UserID: "user-1",
-		Title:  "Price Alert",
-		Body:   "BTC reached $100,000",
-		Type:   "price_alert",
+// La pantalla da por leida una notificacion que trae read_at
+// (notification.http.ts): sin leer, read_at no puede viajar con valor.
+func TestNotificationRecord_ReadAtDiceSiEstaLeida(t *testing.T) {
+	creada := time.Date(2026, time.September, 20, 15, 30, 0, 0, time.UTC)
+
+	var sinLeer map[string]any
+	crudo, err := json.Marshal(&NotificationRecord{ID: "n1", Title: "Aviso", CreatedAt: creada})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := json.Unmarshal(crudo, &sinLeer); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v, esta := sinLeer["read_at"]; esta && v != nil {
+		t.Errorf("una notificacion sin leer trae read_at = %v", v)
+	}
+	if sinLeer["created_at"] != "2026-09-20T15:30:00Z" {
+		t.Errorf("created_at = %v, want 2026-09-20T15:30:00Z", sinLeer["created_at"])
 	}
 
-	if record.ReadAt != nil {
-		t.Error("new notification should have nil ReadAt")
+	leidaEn := creada.Add(time.Hour)
+	var leida map[string]any
+	crudo, err = json.Marshal(&NotificationRecord{ID: "n1", Title: "Aviso", ReadAt: &leidaEn, CreatedAt: creada})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-	if record.Type != "price_alert" {
-		t.Errorf("type = %q, want %q", record.Type, "price_alert")
+	if err := json.Unmarshal(crudo, &leida); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-}
-
-func TestService_ListHistoryDefaultLimit(t *testing.T) {
-	// Test that invalid limits are corrected
-	// This tests the limit normalization logic without DB
-	limit := 0
-	if limit <= 0 || limit > 50 {
-		limit = 20
-	}
-	if limit != 20 {
-		t.Errorf("default limit = %d, want 20", limit)
-	}
-
-	limit = 100
-	if limit <= 0 || limit > 50 {
-		limit = 20
-	}
-	if limit != 20 {
-		t.Errorf("capped limit = %d, want 20", limit)
+	if leida["read_at"] != "2026-09-20T16:30:00Z" {
+		t.Errorf("read_at = %v, want 2026-09-20T16:30:00Z", leida["read_at"])
 	}
 }
