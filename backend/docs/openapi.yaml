@@ -762,6 +762,12 @@ paths:
       responses:
         '200':
           description: User's crypto assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CryptoAssetRecord'
 
   /api/v1/crypto/transactions:
     get:
@@ -1150,6 +1156,12 @@ paths:
       responses:
         '200':
           description: Active staking positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StakingPositionRecord'
     post:
       tags: [Crypto]
       summary: Stake cryptocurrency
