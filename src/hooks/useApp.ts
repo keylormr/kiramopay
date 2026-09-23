@@ -80,7 +80,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
       offlineMode: settings.offlineMode,
       isLocked: settings.isLocked,
       biometricEnabled: settings.biometricEnabled,
-      notificationsEnabled: settings.notificationsEnabled,
       language: settings.language,
     },
   };
@@ -242,9 +241,6 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         if (!useSettingsStore.getState().biometricEnabled) {
           void biometricService.deleteCredentials('kiramopay');
         }
-        break;
-      case 'TOGGLE_NOTIFICATIONS':
-        settings.toggleNotifications();
         break;
       case 'SET_LANGUAGE':
         settings.setLanguage(action.payload);

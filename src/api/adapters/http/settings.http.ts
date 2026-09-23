@@ -15,7 +15,6 @@ export class HttpSettingsRepository implements ISettingsRepository {
             darkMode: false,
             offlineMode: false,
             biometricEnabled: false,
-            notificationsEnabled: true,
             language: 'es' as const,
           };
     } catch {
@@ -23,7 +22,6 @@ export class HttpSettingsRepository implements ISettingsRepository {
         darkMode: false,
         offlineMode: false,
         biometricEnabled: false,
-        notificationsEnabled: true,
         language: 'es' as const,
       };
     }

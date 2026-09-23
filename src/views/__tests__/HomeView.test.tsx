@@ -90,7 +90,6 @@ vi.mock('@/hooks/useApp', () => ({
         offlineMode: false,
         isLocked: false,
         biometricEnabled: false,
-        notificationsEnabled: true,
         language: 'es',
       },
     },
