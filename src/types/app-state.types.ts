@@ -46,7 +46,6 @@ export interface AppState {
     offlineMode: boolean;
     isLocked: boolean;
     biometricEnabled: boolean;
-    notificationsEnabled: boolean;
     language: 'es' | 'en';
   };
 }
@@ -69,7 +68,6 @@ export type AppAction =
   | { type: 'DISCONNECT_PARTNER'; payload: string }
   | { type: 'ADD_RECHARGE'; payload: Recharge }
   | { type: 'TOGGLE_BIOMETRIC' }
-  | { type: 'TOGGLE_NOTIFICATIONS' }
   | { type: 'SET_LANGUAGE'; payload: 'es' | 'en' }
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }

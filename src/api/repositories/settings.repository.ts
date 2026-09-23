@@ -4,7 +4,6 @@ export interface AppSettings {
   darkMode: boolean;
   offlineMode: boolean;
   biometricEnabled: boolean;
-  notificationsEnabled: boolean;
   language: 'es' | 'en';
 }
 

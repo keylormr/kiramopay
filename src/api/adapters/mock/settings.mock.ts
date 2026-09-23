@@ -8,7 +8,6 @@ const defaultSettings: AppSettings = {
   darkMode: false,
   offlineMode: false,
   biometricEnabled: true,
-  notificationsEnabled: true,
   language: 'es',
 };
 

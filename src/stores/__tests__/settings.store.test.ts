@@ -8,7 +8,6 @@ describe('useSettingsStore', () => {
       offlineMode: false,
       isLocked: false,
       biometricEnabled: true,
-      notificationsEnabled: true,
       language: 'es',
     });
   });
@@ -19,7 +18,6 @@ describe('useSettingsStore', () => {
     expect(state.offlineMode).toBe(false);
     expect(state.isLocked).toBe(false);
     expect(state.biometricEnabled).toBe(true);
-    expect(state.notificationsEnabled).toBe(true);
     expect(state.language).toBe('es');
   });
 
@@ -68,18 +66,6 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().biometricEnabled).toBe(true);
   });
 
-  it('should toggle notifications off', () => {
-    expect(useSettingsStore.getState().notificationsEnabled).toBe(true);
-    useSettingsStore.getState().toggleNotifications();
-    expect(useSettingsStore.getState().notificationsEnabled).toBe(false);
-  });
-
-  it('should toggle notifications back on', () => {
-    useSettingsStore.getState().toggleNotifications();
-    useSettingsStore.getState().toggleNotifications();
-    expect(useSettingsStore.getState().notificationsEnabled).toBe(true);
-  });
-
   it('should set language to English', () => {
     useSettingsStore.getState().setLanguage('en');
     expect(useSettingsStore.getState().language).toBe('en');
@@ -97,7 +83,6 @@ describe('useSettingsStore', () => {
     expect(state.darkMode).toBe(true);
     expect(state.offlineMode).toBe(false);
     expect(state.biometricEnabled).toBe(true);
-    expect(state.notificationsEnabled).toBe(true);
     expect(state.language).toBe('es');
     expect(state.isLocked).toBe(false);
   });
