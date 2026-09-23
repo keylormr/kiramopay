@@ -97,3 +97,23 @@ describe('HttpSinpeRepository.addContact', () => {
     expect(res.error?.code).toBe('ADD_FAILED');
   });
 });
+
+// La fecha de un SINPE llegaba ya escrita en es-CR (d/m/aaaa) y era lo unico
+// que viajaba: la pantalla no tenia con que mostrarla en otro idioma, y en
+// ingles "4/9/2026" se lee 9 de abril.
+describe('HttpSinpeRepository — la fecha de maquina', () => {
+  it('el historial conserva la fecha del servidor en dateISO', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: [{
+        id: 'h1', phone: '+50688887777', contact_name: 'Acme', amount: 500000, fee: 0,
+        type: 'sent', status: 'completed', description: '', created_at: '2026-09-04T15:30:00Z',
+      }],
+    });
+    const repo = new HttpSinpeRepository(fakeClient({ get }));
+
+    const res = await repo.getHistory();
+
+    expect(res.data?.[0].dateISO).toBe('2026-09-04T15:30:00Z');
+  });
+});

@@ -14,6 +14,10 @@ export interface SinpeTransaction {
   phone: string;
   name: string;
   date: string;
+  // Fecha de maquina (ISO 8601), la que se muestra en el idioma de la app.
+  // `date` es texto ya escrito para leer; queda para las filas guardadas por
+  // una version anterior, que no traen esta.
+  dateISO?: string;
   status: 'completed' | 'pending' | 'failed';
   reference?: string;
   // False when the recipient is not a KiramoPay user: the funds were booked to
