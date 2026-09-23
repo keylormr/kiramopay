@@ -84,7 +84,12 @@ describe('useCryptoStore', () => {
   });
 
   it('should unstake crypto', () => {
-    // Unstake the first position (ETH, 0.5, earned 0.0012)
+    // Retirar devuelve lo apartado mas lo ganado. La semilla de la demo no gana
+    // nada (el servidor no acredita rendimiento): la prueba pone su propio
+    // ganado para que la suma se note.
+    useCryptoStore.setState({
+      stakingPositions: [{ ...initialStakingPositions[0], earned: 0.0012 }],
+    });
     const ethBefore = useCryptoStore.getState().assets.find((a) => a.symbol === 'ETH')!;
     useCryptoStore.getState().unstakeCrypto('stake1');
     const ethAfter = useCryptoStore.getState().assets.find((a) => a.symbol === 'ETH')!;

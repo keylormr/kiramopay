@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { encodeContactQr } from '@/utils/contactQr';
 import { HomeView } from '../home/HomeView';
+import { precargarIdioma } from '@/test/idiomas';
 
 // Sin esto, el banner de Inicio llama al adaptador mock real (getReferrals)
 // y su resolucion asincrona llega despues de que el test ya afirmo, lo que
@@ -128,6 +129,8 @@ function renderHomeView() {
     </LanguageProvider>,
   );
 }
+
+beforeAll(() => precargarIdioma('en'));
 
 describe('HomeView', () => {
   beforeEach(() => {
