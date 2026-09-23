@@ -49,12 +49,14 @@ export const initialSinpeHistory: SinpeTransaction[] = [
   { id: '3', type: 'sent', amount: 50000, phone: '6666-9012', name: 'Carlos Jiménez', date: '22 Dic, 10:15 AM', status: 'completed', reference: 'Regalo' },
 ];
 
+// dateISO es la fecha que escribe la pantalla, en el idioma de la persona;
+// `date` queda como el texto de respaldo que ya traian.
 export const initialNotifications: Notification[] = [
-  { id: '1', title: 'Bienvenido a KiramoPay', message: 'Tu cuenta ha sido creada exitosamente. ¡Comienza a disfrutar de todos los beneficios!', type: 'info', date: 'Hoy, 10:00 AM', read: false },
-  { id: '2', title: 'SINPE recibido', message: 'María González te envió ₡25,000 por SINPE Móvil', type: 'transaction', date: 'Ayer, 4:20 PM', read: false },
-  { id: '3', title: 'Pago exitoso', message: 'Tu pago de ₡32,450 a ICE fue procesado correctamente', type: 'transaction', date: '24 Dic, 2024', read: true },
-  { id: '4', title: 'Promoción especial', message: 'Obtén 5% de cashback en tus compras de supermercado este fin de semana', type: 'promo', date: '22 Dic, 2024', read: true },
-  { id: '5', title: 'Seguridad', message: 'Se detectó un nuevo inicio de sesión desde tu dispositivo', type: 'security', date: '20 Dic, 2024', read: true },
+  { id: '1', title: 'Bienvenido a KiramoPay', message: 'Tu cuenta ha sido creada exitosamente. ¡Comienza a disfrutar de todos los beneficios!', type: 'info', date: 'Hoy, 10:00 AM', dateISO: _txDaysAgo(0.1), read: false },
+  { id: '2', title: 'SINPE recibido', message: 'María González te envió ₡25,000 por SINPE Móvil', type: 'transaction', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), read: false },
+  { id: '3', title: 'Pago exitoso', message: 'Tu pago de ₡32,450 a ICE fue procesado correctamente', type: 'transaction', date: '24 Dic, 2024', dateISO: _txDaysAgo(3), read: true },
+  { id: '4', title: 'Promoción especial', message: 'Obtén 5% de cashback en tus compras de supermercado este fin de semana', type: 'promo', date: '22 Dic, 2024', dateISO: _txDaysAgo(5), read: true },
+  { id: '5', title: 'Seguridad', message: 'Se detectó un nuevo inicio de sesión desde tu dispositivo', type: 'security', date: '20 Dic, 2024', dateISO: _txDaysAgo(7), read: true },
 ];
 
 export const initialCryptoAssets: CryptoAsset[] = [

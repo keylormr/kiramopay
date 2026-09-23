@@ -148,6 +148,9 @@ type realtimeNotification struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
 	Date    string `json:"date"`
+	// DateISO es la fecha de maquina: la pantalla la escribe en el idioma de
+	// la persona. Date queda para las versiones de la app que no la leen.
+	DateISO string `json:"dateISO"`
 	Read    bool   `json:"read"`
 }
 
@@ -174,8 +177,9 @@ func (s *Service) broadcast(userID string, record *NotificationRecord) {
 			Type:    record.Type,
 			// Matches the REST adapter's es-CR short date (d/m/yyyy) so a live
 			// notification renders identically to one synced from history.
-			Date: record.CreatedAt.Format("2/1/2006"),
-			Read: false,
+			Date:    record.CreatedAt.Format("2/1/2006"),
+			DateISO: record.CreatedAt.UTC().Format(time.RFC3339),
+			Read:    false,
 		},
 	})
 }
