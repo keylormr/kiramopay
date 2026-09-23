@@ -21,8 +21,9 @@ func (c *captureBroadcaster) SendToUser(userID string, data any) {
 
 // TestService_Broadcast_MatchesFrontendShape locks the real-time payload to the
 // exact shape the frontend consumes without remapping: an envelope
-// {type:"notification", notification:{id,title,message,type,date,read}} where
-// body maps to message and created_at to an es-CR short date.
+// {type:"notification", notification:{id,title,message,type,date,dateISO,read}}
+// where body maps to message, created_at to an es-CR short date (for older
+// clients) and to dateISO, which the screen writes in the user's language.
 func TestService_Broadcast_MatchesFrontendShape(t *testing.T) {
 	svc := NewService(nil, "", "")
 	cb := &captureBroadcaster{}
@@ -58,6 +59,7 @@ func TestService_Broadcast_MatchesFrontendShape(t *testing.T) {
 			Message string `json:"message"`
 			Type    string `json:"type"`
 			Date    string `json:"date"`
+			DateISO string `json:"dateISO"`
 			Read    bool   `json:"read"`
 		} `json:"notification"`
 	}
@@ -84,18 +86,22 @@ func TestService_Broadcast_MatchesFrontendShape(t *testing.T) {
 	if n.Date != "24/6/2026" {
 		t.Errorf("date = %q, want 24/6/2026 (es-CR d/m/yyyy)", n.Date)
 	}
+	// La fecha de maquina: la pantalla la escribe en el idioma de la persona.
+	if n.DateISO != "2026-06-24T09:30:00Z" {
+		t.Errorf("dateISO = %q, want 2026-06-24T09:30:00Z", n.DateISO)
+	}
 	if n.Read {
 		t.Error("a freshly created notification must be unread")
 	}
 
-	// Exactly the six keys the frontend renders — no extra or missing fields.
+	// Exactly the seven keys the frontend reads — no extra or missing fields.
 	var keyset struct {
 		Notification map[string]json.RawMessage `json:"notification"`
 	}
 	if err := json.Unmarshal(raw, &keyset); err != nil {
 		t.Fatalf("unmarshal keyset: %v", err)
 	}
-	want := map[string]bool{"id": true, "title": true, "message": true, "type": true, "date": true, "read": true}
+	want := map[string]bool{"id": true, "title": true, "message": true, "type": true, "date": true, "dateISO": true, "read": true}
 	if len(keyset.Notification) != len(want) {
 		t.Errorf("notification has %d keys, want %d: %v", len(keyset.Notification), len(want), keyset.Notification)
 	}
