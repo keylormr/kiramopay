@@ -621,9 +621,12 @@ func seedLoyalty(ctx context.Context, pool *pgxpool.Pool, userID string) {
 		// ref_id on purpose: a fixed one would hit uq_loyalty_tx_referral on reseed.
 		{"bonus", "Invitado registrado", "referral", 500},
 		{"earn", "Compra BTC - 0.5% cashback", "crypto", 233},
-		{"redeem", "Canje: Cashback ₡500", "redemption", 500},
+		// Los canjes en negativo, como los escribe el canje real
+		// (loyalty/cashback.go). En positivo escondian que la pantalla les
+		// ponia un segundo signo.
+		{"redeem", "Canje: Cashback ₡500", "redemption", -500},
 		{"earn", "Pago AyA - 1.5% cashback", "services", 150},
-		{"redeem", "Canje: SINPE gratis x5", "redemption", 750},
+		{"redeem", "Canje: SINPE gratis x5", "redemption", -750},
 		{"earn", "Bono actividad mensual", "bonus", 300},
 	}
 	for _, tx := range txs {
