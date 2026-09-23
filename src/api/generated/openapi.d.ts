@@ -1267,7 +1267,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CryptoAssetRecord"][];
+                    };
                 };
             };
         };
@@ -1789,7 +1791,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["StakingPositionRecord"][];
+                    };
                 };
             };
         };
