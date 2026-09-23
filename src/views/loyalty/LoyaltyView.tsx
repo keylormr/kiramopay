@@ -5,6 +5,7 @@ import { HelpButton } from '@/components/HelpSheet';
 import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
+import { fechaYHora } from '@/utils/fechaPlazo';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
 const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
@@ -68,7 +69,7 @@ const EsqueletoPestana: React.FC = () => (
 );
 
 export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => void }> = ({ onClose, onOpenPlans }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [account, setAccount] = useState<PointsAccount | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [history, setHistory] = useState<PointsTransaction[]>([]);
@@ -465,12 +466,15 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold uv-text-primary truncate">{tx.description}</p>
-                        <p className="text-xs text-gray-400">{tx.createdAt}</p>
+                        <p className="text-xs text-gray-400">{fechaYHora(tx.createdAt, language)}</p>
                       </div>
                       <span className={`text-sm font-extrabold ${
                         tx.type === 'earn' || tx.type === 'bonus' ? 'text-green-600' : 'text-red-500'
                       }`}>
-                        {tx.type === 'earn' || tx.type === 'bonus' ? '+' : '-'}{formatPoints(tx.points)}
+                        {/* El signo sale del tipo y el numero va sin el suyo: el
+                            servidor guarda el canje en negativo y con ese "-"
+                            se leia "--3,800". */}
+                        {tx.type === 'earn' || tx.type === 'bonus' ? '+' : '-'}{formatPoints(Math.abs(tx.points))}
                       </span>
                     </div>
                   ))

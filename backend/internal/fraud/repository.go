@@ -122,13 +122,27 @@ func (r *Repository) ResolveAlert(ctx context.Context, alertID, resolvedBy, stat
 
 // ── User Risk Profile ────────────────────────────────────────────────────────
 
+// GetOrCreateProfile devuelve el perfil de riesgo del usuario, y lo crea si no
+// existe.
+//
+// La antiguedad de la cuenta sale de la fecha de alta del usuario, en dias.
+// La columna account_age_days nace en 0 y nada la escribe: leida de ahi, el
+// motor veia nueva a toda cuenta y la regla 4 sumaba 45 puntos a cualquier
+// salida de mas de 100.000 colones. Sin fecha de alta se cuenta como nueva.
 func (r *Repository) GetOrCreateProfile(ctx context.Context, userID string) (*UserRiskProfile, error) {
 	var p UserRiskProfile
 	err := r.db.QueryRow(ctx,
-		`INSERT INTO user_risk_profiles (user_id) VALUES ($1)
-		 ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
-		 RETURNING id, user_id, overall_risk_score, total_transactions, total_flagged,
-		 avg_tx_amount, max_tx_amount, last_activity_at, account_age_days, is_restricted, updated_at`,
+		`WITH perfil AS (
+		   INSERT INTO user_risk_profiles (user_id) VALUES ($1)
+		   ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
+		   RETURNING id, user_id, overall_risk_score, total_transactions, total_flagged,
+		             avg_tx_amount, max_tx_amount, last_activity_at, is_restricted, updated_at
+		 )
+		 SELECT p.id, p.user_id, p.overall_risk_score, p.total_transactions, p.total_flagged,
+		        p.avg_tx_amount, p.max_tx_amount, p.last_activity_at,
+		        COALESCE(GREATEST(CURRENT_DATE - u.created_at::date, 0), 0),
+		        p.is_restricted, p.updated_at
+		 FROM perfil p LEFT JOIN users u ON u.id = p.user_id`,
 		userID).Scan(&p.ID, &p.UserID, &p.OverallRiskScore, &p.TotalTransactions,
 		&p.TotalFlagged, &p.AvgTxAmount, &p.MaxTxAmount, &p.LastActivityAt,
 		&p.AccountAge, &p.IsRestricted, &p.UpdatedAt)

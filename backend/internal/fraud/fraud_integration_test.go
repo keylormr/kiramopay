@@ -2,14 +2,22 @@ package fraud_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/fraud"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/pkg/hash"
 )
 
 func setupFraudService(t *testing.T) (*fraud.Service, string) {
+	t.Helper()
+	svc, _, userID := setupFraudConPool(t)
+	return svc, userID
+}
+
+func setupFraudConPool(t *testing.T) (*fraud.Service, *pgxpool.Pool, string) {
 	t.Helper()
 	pool := testutil.TestDB(t)
 	repo := fraud.NewRepository(pool)
@@ -18,7 +26,18 @@ func setupFraudService(t *testing.T) (*fraud.Service, string) {
 	pinHash, _ := hash.HashPin("1234")
 	userID := testutil.SeedTestUser(t, pool, "702650930", pinHash)
 
-	return svc, userID
+	return svc, pool, userID
+}
+
+// envejecerCuenta corre la fecha de alta de la cuenta tantos dias atras.
+func envejecerCuenta(t *testing.T, pool *pgxpool.Pool, userID string, dias int) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE users SET created_at = NOW() - make_interval(days => $2::int) WHERE id = $1`,
+		userID, dias,
+	); err != nil {
+		t.Fatalf("envejecer cuenta: %v", err)
+	}
 }
 
 func TestAssessTransaction_LowRisk(t *testing.T) {
@@ -42,11 +61,15 @@ func TestAssessTransaction_LowRisk(t *testing.T) {
 	}
 }
 
+// Solo la regla 1: la cuenta tiene 30 dias (la regla 4 no aplica) y no hay
+// movimientos previos (la 2, la 3 y la 5 tampoco). Antes pedia "al menos 25" y
+// pasaba aunque se borrara la regla 1: la cuenta, que el motor veia siempre
+// nueva, ya sumaba 45 por su lado.
 func TestAssessTransaction_HighAmount(t *testing.T) {
-	svc, userID := setupFraudService(t)
-	ctx := context.Background()
+	svc, pool, userID := setupFraudConPool(t)
+	envejecerCuenta(t, pool, userID, 30)
 
-	assessment, err := svc.AssessTransaction(ctx, &fraud.AssessRequest{
+	assessment, err := svc.AssessTransaction(context.Background(), &fraud.AssessRequest{
 		UserID:   userID,
 		TxType:   "sinpe_send",
 		Amount:   75000000, // 750,000 CRC — high amount
@@ -55,9 +78,52 @@ func TestAssessTransaction_HighAmount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AssessTransaction() error: %v", err)
 	}
-	// High amount should increase risk score
-	if assessment.RiskScore < 25 {
-		t.Fatalf("expected risk score >= 25 for high amount, got %d", assessment.RiskScore)
+	if assessment.RiskScore != 30 {
+		t.Fatalf("puntaje = %d, want 30 (solo monto alto); factores: %v", assessment.RiskScore, assessment.Factors)
+	}
+	if len(assessment.Factors) != 1 || assessment.Factors[0] != "High amount: 75000000 centimos" {
+		t.Fatalf("factores = %v, want solo el de monto alto", assessment.Factors)
+	}
+}
+
+// La regla 4 sigue valiendo para una cuenta que de verdad es nueva.
+func TestAssessTransaction_CuentaNuevaConMontoAlto(t *testing.T) {
+	svc, userID := setupFraudService(t)
+
+	assessment, err := svc.AssessTransaction(context.Background(), &fraud.AssessRequest{
+		UserID:   userID,
+		TxType:   "sinpe_send",
+		Amount:   15000000, // 150,000 CRC: mas del tope de cuenta nueva, menos del de monto alto
+		Currency: "CRC",
+	})
+	if err != nil {
+		t.Fatalf("AssessTransaction() error: %v", err)
+	}
+	if assessment.RiskScore != 45 || !slices.Contains(assessment.Factors, "New account with high-value transaction") {
+		t.Fatalf("puntaje = %d, factores = %v; want 45 por cuenta nueva", assessment.RiskScore, assessment.Factors)
+	}
+}
+
+// El caso de produccion: una cuenta de tres meses que suele mover 50.000
+// colones paga 600.000. Monto alto (30) mas fuera de su promedio (25) da 55:
+// se revisa y pasa. Con la antiguedad sin calcular, el motor la veia nueva,
+// sumaba 45 mas, llegaba a 100 y la salida se bloqueaba.
+func TestEvaluarSalida_UnaCuentaViejaNoSeBloqueaPorNueva(t *testing.T) {
+	svc, pool, userID := setupFraudConPool(t)
+	ctx := context.Background()
+	envejecerCuenta(t, pool, userID, 90)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO user_risk_profiles (user_id, avg_tx_amount) VALUES ($1, 5000000)`, userID,
+	); err != nil {
+		t.Fatalf("perfil con promedio: %v", err)
+	}
+
+	accion, err := svc.EvaluarSalida(ctx, userID, "sinpe_send", "", 60000000, "CRC")
+	if err != nil {
+		t.Fatalf("EvaluarSalida() error: %v", err)
+	}
+	if accion != fraud.ActionReview {
+		t.Fatalf("accion = %q, want %q (55 puntos: monto alto y fuera de promedio)", accion, fraud.ActionReview)
 	}
 }
 
