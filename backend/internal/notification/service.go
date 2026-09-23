@@ -252,10 +252,17 @@ func validatePushEndpoint(raw string) error {
 
 // ListHistory returns paginated notifications for a user.
 func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset int) ([]*NotificationRecord, error) {
+	return s.repo.ListNotifications(ctx, userID, limiteDeHistorial(limit), offset)
+}
+
+// limiteDeHistorial acota una pagina del historial: sin pedido o fuera de
+// rango son 20, y nunca mas de 50. Aparte de ListHistory para que la prueba
+// llame a esta regla y no a una copia de ella.
+func limiteDeHistorial(limit int) int {
 	if limit <= 0 || limit > 50 {
-		limit = 20
+		return 20
 	}
-	return s.repo.ListNotifications(ctx, userID, limit, offset)
+	return limit
 }
 
 // MarkRead marks a notification as read.
