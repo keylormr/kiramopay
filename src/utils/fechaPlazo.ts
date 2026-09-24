@@ -3,20 +3,9 @@
 // Los plazos del escrow deciden a quien se le paga, asi que la hora importa
 // tanto como el dia: "hasta el 20/09" no dice si es a las 00:01 o a las 23:59.
 
-const LOCALE: Record<string, string> = {
-  es: 'es-CR',
-  en: 'en-US',
-  fr: 'fr-FR',
-  pt: 'pt-BR',
-  hi: 'hi-IN',
-  ja: 'ja-JP',
-  'zh-cn': 'zh-CN',
-};
-
-/** El locale de Intl para el idioma de la app (es escribe como Costa Rica). */
-export function localeDe(idioma: string): string {
-  return LOCALE[idioma] ?? 'es-CR';
-}
+// El locale de cada idioma vive en un solo lugar (utils/periodos.ts): aqui
+// habia una copia de la misma tabla.
+import { localeDe } from './periodos';
 
 export function fechaYHora(iso: string | undefined, idioma: string): string {
   if (!iso) return '';

@@ -4,7 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import type { QRPayment } from '@/api/repositories/qrpayment.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
-import { localeDe } from '@/utils/fechaPlazo';
+import { localeDe } from '@/utils/periodos';
 
 interface Props {
   payments: QRPayment[];
