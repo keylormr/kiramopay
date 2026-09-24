@@ -215,7 +215,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                     </div>
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider" style={{ color: tierConfig?.color }}>
-                        {accountFailed ? t('loyalty_unavailable') : `${account?.tier || 'Bronze'} ${t('loyalty_tier')}`}
+                        {accountFailed ? t('loyalty_unavailable') : t('loyalty_tier').replace('{nivel}', account?.tier || 'Bronze')}
                       </p>
                       <p className="text-3xl font-black uv-text-primary">
                         {accountFailed ? SIN_DATO : formatPoints(account?.availablePoints || 0)}
@@ -252,7 +252,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                   <span className="text-xs font-bold" style={{ color: tierConfig?.color }}>
                     {account?.tier === 'bronze' ? 'Silver: 5,000 pts' :
                      account?.tier === 'silver' ? 'Gold: 25,000 pts' :
-                     account?.tier === 'gold' ? 'Platinum: 100,000 pts' : 'Max'}
+                     account?.tier === 'gold' ? 'Platinum: 100,000 pts' : t('loyalty_tier_max')}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">

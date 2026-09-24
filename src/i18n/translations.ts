@@ -1227,6 +1227,7 @@ export type TranslationKeys = {
   loyalty_title: string;
   loyalty_loading_slow: string;
   loyalty_tier: string;
+  loyalty_tier_max: string;
   loyalty_lifetime: string;
   loyalty_available: string;
   loyalty_rewards: string;
