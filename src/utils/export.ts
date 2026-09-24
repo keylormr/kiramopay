@@ -199,6 +199,8 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+// El dia local, el mismo de la linea "Generado": con toISOString era el de UTC,
+// y de noche en Costa Rica el archivo salia con la fecha de manana.
 function dateStamp(): string {
-  return new Date().toISOString().split('T')[0];
+  return fechaLocal(new Date().toISOString()).slice(0, 10);
 }
