@@ -17,6 +17,7 @@ import type {
 } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { fechaCorta } from '@/utils/fechaPlazo';
 
 interface Props {
   merchant: QRMerchant;
@@ -38,7 +39,7 @@ const isToday = (iso: string) => {
 };
 
 export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, paymentsFailed = false, onReload }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
   const ccy = base?.ccy ?? 'CRC';
@@ -379,7 +380,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
                 <div className="min-w-0">
                   <p className="text-sm font-bold uv-text-primary tabular-nums">{money(p.amount - p.fee, p.currency)}</p>
                   <p className="text-[11px] uv-text-muted">
-                    {t('merchant_fee_label')} {money(p.fee, p.currency)} · {new Date(p.createdAt).toLocaleDateString()}
+                    {t('merchant_fee_label')} {money(p.fee, p.currency)} · {fechaCorta(p.createdAt, language)}
                   </p>
                 </div>
                 <p className="text-[11px] uv-text-muted shrink-0">{t('merchant_gross')} {money(p.amount, p.currency)}</p>

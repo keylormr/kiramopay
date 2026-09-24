@@ -13,12 +13,17 @@ const LOCALE: Record<string, string> = {
   'zh-cn': 'zh-CN',
 };
 
+/** El locale de Intl para el idioma de la app (es escribe como Costa Rica). */
+export function localeDe(idioma: string): string {
+  return LOCALE[idioma] ?? 'es-CR';
+}
+
 export function fechaYHora(iso: string | undefined, idioma: string): string {
   if (!iso) return '';
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return '';
   try {
-    return new Intl.DateTimeFormat(LOCALE[idioma] ?? 'es-CR', {
+    return new Intl.DateTimeFormat(localeDe(idioma), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -40,7 +45,7 @@ export function fechaCorta(iso: string | undefined, idioma: string): string {
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return '';
   try {
-    return new Intl.DateTimeFormat(LOCALE[idioma] ?? 'es-CR', {
+    return new Intl.DateTimeFormat(localeDe(idioma), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
