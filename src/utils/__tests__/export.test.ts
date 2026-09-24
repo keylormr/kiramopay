@@ -190,3 +190,44 @@ describe('copiar y compartir no mezclan monedas', () => {
     expect(compartido).not.toContain('1050.00');
   });
 });
+
+// El nombre del archivo llevaba el dia de UTC (toISOString) y la linea
+// "Generado" la hora local: de noche en Costa Rica (UTC-6) lo exportado el 24
+// se llamaba ...-25. La zona se fija aqui porque la CI corre en UTC, donde los
+// dos dias coinciden y el defecto no se ve.
+describe('el nombre del archivo lleva el dia local', () => {
+  const zonaOriginal = process.env.TZ;
+  let nombres: string[] = [];
+
+  beforeEach(() => {
+    process.env.TZ = 'America/Costa_Rica';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Las 8 de la noche del 24 de setiembre en Costa Rica; en UTC ya es el 25.
+    vi.setSystemTime(new Date('2026-09-25T02:00:00Z'));
+    nombres = [];
+    globalThis.URL.createObjectURL = () => 'blob:test';
+    globalThis.URL.revokeObjectURL = () => {};
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      nombres.push(this.download);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    if (zonaOriginal === undefined) delete process.env.TZ;
+    else process.env.TZ = zonaOriginal;
+  });
+
+  it('el CSV exportado de noche se llama con el dia de Costa Rica, no con el de UTC', () => {
+    exportTransactionsCSV([conFecha('1', 1000, 'CRC')]);
+
+    expect(nombres).toEqual(['KiramoPay-Transacciones-2026-09-24.csv']);
+  });
+
+  it('el JSON tambien', () => {
+    exportTransactionsJSON([conFecha('1', 1000, 'CRC')]);
+
+    expect(nombres).toEqual(['KiramoPay-Transacciones-2026-09-24.json']);
+  });
+});
