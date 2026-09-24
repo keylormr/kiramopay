@@ -43,8 +43,8 @@ export function exportTransactionsCSV(transactions: Transaction[], filename?: st
 
   const rows = transactions.map((tx) => [
     tx.id,
-    tx.date,
-    `"${(tx.title || '').replace(/"/g, '""')}"`,
+    celda(fechaParaArchivo(tx)),
+    celda(tx.title || ''),
     tx.amount.toFixed(2),
     tx.ccy,
     tx.type === 'credit' ? 'Ingreso' : 'Egreso',
@@ -61,7 +61,7 @@ export function exportTransactionsCSV(transactions: Transaction[], filename?: st
     rows.push(['', '', '"Total Egresos"', r.egresos.toFixed(2), r.moneda, '', '', '']);
     rows.push(['', '', '"Balance Neto"', r.neto.toFixed(2), r.moneda, '', '', '']);
   }
-  rows.push(['', '', `"Generado: ${new Date().toLocaleString()}"`, '', '', '', '', '']);
+  rows.push(['', '', celda(`Generado: ${fechaLocal(new Date().toISOString())}`), '', '', '', '', '']);
 
   const csvContent = sep + [headers.join(','), ...rows.map((r) => (r as string[]).join(','))].join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -86,7 +86,8 @@ export function exportTransactionsJSON(transactions: Transaction[], filename?: s
     })),
     transactions: transactions.map((tx) => ({
       id: tx.id,
-      date: tx.date,
+      // La de maquina: un JSON lo lee un programa, no una persona.
+      date: tx.dateISO || tx.date,
       title: tx.title,
       amount: tx.amount,
       currency: tx.ccy,
@@ -102,24 +103,27 @@ export function exportTransactionsJSON(transactions: Transaction[], filename?: s
 }
 
 // --- Copy to clipboard (formatted table) ---
+// Los totales van por moneda, como en el CSV: sumaban todas las filas y con
+// colones y dolares en la lista escribian un numero que no era ninguno de los
+// dos, sin moneda.
 export async function copyTransactionsToClipboard(transactions: Transaction[]): Promise<boolean> {
   const lines: string[] = [];
-  const totalIncome = transactions.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0);
-  const totalExpenses = transactions.filter((tx) => tx.amount < 0).reduce((s, tx) => s + tx.amount, 0);
 
   lines.push('KiramoPay - Transacciones');
   lines.push('═'.repeat(40));
 
   for (const tx of transactions) {
     const sign = tx.amount > 0 ? '+' : '';
-    lines.push(`${tx.date}  ${tx.title}`);
+    lines.push(`${fechaParaArchivo(tx)}  ${tx.title}`);
     lines.push(`  ${sign}${tx.amount.toFixed(2)} ${tx.ccy}  [${tx.category || 'General'}]`);
   }
 
   lines.push('═'.repeat(40));
-  lines.push(`Ingresos: +${totalIncome.toFixed(2)}`);
-  lines.push(`Egresos:  ${totalExpenses.toFixed(2)}`);
-  lines.push(`Neto:     ${(totalIncome + totalExpenses).toFixed(2)}`);
+  for (const r of resumirPorMoneda(transactions)) {
+    lines.push(`Ingresos: +${r.ingresos.toFixed(2)} ${r.moneda}`);
+    lines.push(`Egresos:  ${r.egresos.toFixed(2)} ${r.moneda}`);
+    lines.push(`Neto:     ${r.neto.toFixed(2)} ${r.moneda}`);
+  }
 
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
@@ -130,17 +134,16 @@ export async function copyTransactionsToClipboard(transactions: Transaction[]): 
 }
 
 // --- Share via Web Share API ---
+// Por moneda, por la misma razon que copiar.
 export async function shareTransactions(transactions: Transaction[]): Promise<boolean> {
-  const totalIncome = transactions.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0);
-  const totalExpenses = transactions.filter((tx) => tx.amount < 0).reduce((s, tx) => s + tx.amount, 0);
-  const net = totalIncome + totalExpenses;
-
   const text = [
     `KiramoPay - Resumen de Transacciones`,
     `${transactions.length} transacciones`,
-    `Ingresos: +${totalIncome.toFixed(2)}`,
-    `Egresos: ${totalExpenses.toFixed(2)}`,
-    `Balance: ${net >= 0 ? '+' : ''}${net.toFixed(2)}`,
+    ...resumirPorMoneda(transactions).flatMap((r) => [
+      `Ingresos: +${r.ingresos.toFixed(2)} ${r.moneda}`,
+      `Egresos: ${r.egresos.toFixed(2)} ${r.moneda}`,
+      `Balance: ${r.neto >= 0 ? '+' : ''}${r.neto.toFixed(2)} ${r.moneda}`,
+    ]),
   ].join('\n');
 
   if (navigator.share) {
@@ -156,6 +159,31 @@ export async function shareTransactions(transactions: Transaction[]): Promise<bo
 }
 
 // --- Helpers ---
+
+/**
+ * La fecha de un movimiento en lo exportado: la de maquina, en hora local y sin
+ * ambiguedad (2026-09-04 09:30), que Excel, Numbers y Google Sheets leen igual
+ * en cualquier idioma. El `date` de la pantalla es texto para leer: "4/9/2026"
+ * del adaptador (es-CR, que una hoja en ingles lee 9 de abril, y sin la hora),
+ * o "Ahora" en lo anotado localmente. Sin fecha de maquina, queda ese texto.
+ */
+function fechaParaArchivo(tx: Transaction): string {
+  return fechaLocal(tx.dateISO) || tx.date;
+}
+
+function fechaLocal(iso: string | undefined): string {
+  if (!iso) return '';
+  const f = new Date(iso);
+  if (Number.isNaN(f.getTime())) return '';
+  const dos = (n: number) => String(n).padStart(2, '0');
+  return `${f.getFullYear()}-${dos(f.getMonth() + 1)}-${dos(f.getDate())} ${dos(f.getHours())}:${dos(f.getMinutes())}`;
+}
+
+/** Un campo de texto del CSV, entre comillas: una coma adentro no parte la fila. */
+function celda(texto: string): string {
+  return `"${texto.replace(/"/g, '""')}"`;
+}
+
 function aCentimos(monto: number): number {
   return Math.round(monto * 100) / 100;
 }
