@@ -6,22 +6,13 @@ import { getApiLayer } from '@/api';
 import type { AdminUser, AdminUserStatus } from '@/api/repositories/admin.repository';
 import type { PlanPersonal } from '@/api/repositories/plans.repository';
 import { PLANES_PERSONALES, rellenar } from '@/utils/planes';
+import { localeDe } from '@/utils/periodos';
 
 type Tab = 'search' | 'blocked';
 type Translate = (key: string) => string;
 
 const MIN_TERM = 3;
 const REASON_MAX = 500;
-
-const LOCALE_BY_LANG: Record<string, string> = {
-  es: 'es-CR',
-  en: 'en-US',
-  fr: 'fr-FR',
-  pt: 'pt-BR',
-  'zh-cn': 'zh-CN',
-  ja: 'ja-JP',
-  hi: 'hi-IN',
-};
 
 const CHIP_BY_STATUS: Record<AdminUserStatus, string> = {
   active: 'uv-chip-success',
@@ -213,7 +204,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
 
 export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t, language } = useLanguage();
-  const locale = LOCALE_BY_LANG[language] || 'es-CR';
+  const locale = localeDe(language);
 
   const [tab, setTab] = useState<Tab>('search');
 

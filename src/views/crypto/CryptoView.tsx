@@ -19,6 +19,7 @@ import { refreshAccounts, refreshCrypto } from '@/services/dataSync';
 import { ACTIVOS_CON_STAKING } from '@/api/repositories/crypto.repository';
 import type { CryptoSendPreview } from '@/api/repositories/crypto.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { localeDe } from '@/utils/periodos';
 import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
@@ -459,7 +460,7 @@ export const CryptoView: React.FC = () => {
       return nombre ? `${nombre} (${simbolo})` : simbolo;
     });
     try {
-      return new Intl.ListFormat(language === 'zh-cn' ? 'zh-CN' : language, { type: 'conjunction' }).format(nombres);
+      return new Intl.ListFormat(localeDe(language), { type: 'conjunction' }).format(nombres);
     } catch {
       return nombres.join(', ');
     }
