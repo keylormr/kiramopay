@@ -9,6 +9,8 @@ const t = (key: string) => {
     tx_title_generic_out: 'Dinero enviado',
     tx_title_savings_deposit: 'Depósito a ahorro',
     tx_title_savings_withdraw: 'Retiro de ahorro',
+    tx_title_p2p_send: 'Pago dividido enviado',
+    tx_title_p2p_receive: 'Pago dividido recibido',
   };
   return claves[key] || key;
 };
@@ -88,6 +90,36 @@ describe('txTitle', () => {
         description: 'savings deposit: ',
       };
       expect(txTitle(tx, t)).toBe('Depósito a ahorro');
+    });
+  });
+
+  // La cuota de un pago dividido: el servidor la describe "Split: <titulo>"
+  // (backend/internal/splitpay/service.go) y la cuota del creador se guarda sin
+  // nombre, asi que la fila de quien paga llega sin contraparte y la
+  // descripcion cruda salia tal cual, con el prefijo en ingles, en cualquier
+  // idioma de la app.
+  describe('cuota de un pago dividido: el prefijo "Split:" del servidor no sale crudo', () => {
+    it('quien paga su parte ve el titulo traducido con el nombre de la division', () => {
+      const tx: Transaction = {
+        ...base,
+        kind: 'p2p_send',
+        title: 'Split: Cena del viernes',
+        description: 'Split: Cena del viernes',
+      };
+      expect(txTitle(tx, t)).toBe('Pago dividido enviado: Cena del viernes');
+    });
+
+    // Guarda: del lado de quien cobra la contraparte (quien pago) si viene, y
+    // un nombre de persona sigue ganando.
+    it('quien cobra sigue viendo el nombre de quien le pago', () => {
+      const tx: Transaction = {
+        ...base,
+        type: 'credit',
+        kind: 'p2p_receive',
+        title: 'Ana Perez',
+        description: 'Ana Perez',
+      };
+      expect(txTitle(tx, t)).toBe('Ana Perez');
     });
   });
 });
