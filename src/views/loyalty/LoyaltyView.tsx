@@ -4,7 +4,7 @@ import { Icons } from '@/components/Icons';
 import { HelpButton } from '@/components/HelpSheet';
 import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
-import { formatMoney } from '@/utils/money';
+import { formatMoney, MONEY_LOCALE } from '@/utils/money';
 import { fechaYHora } from '@/utils/fechaPlazo';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
@@ -183,7 +183,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   const tierConfig = TIER_CONFIG[account?.tier || 'bronze'];
   const TierIcon = tierConfig?.icon || Icons.Award;
 
-  const formatPoints = (pts: number) => pts.toLocaleString();
+  // Miles con coma, como los montos: sin locale, el del telefono (en es-CR,
+  // "12 500").
+  const formatPoints = (pts: number) => pts.toLocaleString(MONEY_LOCALE);
   // Un guion dice "no lo se". Un cero dice "no tienes". No son lo mismo.
   const SIN_DATO = '—';
 

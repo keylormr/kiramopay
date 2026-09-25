@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import type { QRPayment } from '@/api/repositories/qrpayment.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { localeDe } from '@/utils/periodos';
 
 interface Props {
   payments: QRPayment[];
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFailed = false }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
   // Cada cobro trae su moneda: rotular todo con el simbolo de la moneda base
@@ -50,9 +51,10 @@ export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFaile
               </div>
               {/* Con la HORA, no solo la fecha: dos ventas de 2.500 el mismo
                   dia eran dos filas identicas y el cajero no podia reconciliar
-                  a mano cual era cual. */}
+                  a mano cual era cual. En el idioma de la app, no en el del
+                  telefono: con este en ingles, el cajero leia mes/dia. */}
               <p className="text-[11px] uv-text-muted shrink-0 tabular-nums">
-                {new Date(p.createdAt).toLocaleString(undefined, {
+                {new Date(p.createdAt).toLocaleString(localeDe(language), {
                   day: '2-digit',
                   month: '2-digit',
                   hour: '2-digit',
