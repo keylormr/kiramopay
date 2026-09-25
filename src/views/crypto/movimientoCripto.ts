@@ -1,4 +1,5 @@
 import type { CryptoTransaction } from '@/types';
+import { localeDe } from '@/utils/periodos';
 
 /** Una pata del movimiento: cuanto y de que. */
 export interface Pata {
@@ -97,7 +98,9 @@ export function fechaLegible(
   const ms = Date.parse(valor);
   if (Number.isNaN(ms)) return valor;
   if (recien && Math.abs(ahora - ms) < 60_000) return recien;
-  const locale = idioma === 'zh-cn' ? 'zh-CN' : idioma;
+  // El locale de toda la app: armado aqui a mano, con 'es' a secas la hora
+  // salia en 24 horas y en las demas pantallas con a. m. y p. m. (es-CR).
+  const locale = localeDe(idioma);
   try {
     return new Intl.DateTimeFormat(locale, {
       day: 'numeric',

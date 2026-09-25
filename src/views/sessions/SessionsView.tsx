@@ -4,18 +4,9 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { DeviceSession } from '@/api/repositories/sessions.repository';
+import { localeDe } from '@/utils/periodos';
 
 type Translate = (key: string) => string;
-
-const LOCALE_BY_LANG: Record<string, string> = {
-  es: 'es-CR',
-  en: 'en-US',
-  fr: 'fr-FR',
-  pt: 'pt-BR',
-  'zh-cn': 'zh-CN',
-  ja: 'ja-JP',
-  hi: 'hi-IN',
-};
 
 // El servidor manda un codigo; la pantalla elige el texto. El mensaje crudo del
 // backend no se muestra nunca.
@@ -139,7 +130,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, busy, locale, t, onC
 
 export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t, language } = useLanguage();
-  const locale = LOCALE_BY_LANG[language] || 'es-CR';
+  const locale = localeDe(language);
 
   const [sesiones, setSesiones] = useState<DeviceSession[]>([]);
   const [cargando, setCargando] = useState(true);

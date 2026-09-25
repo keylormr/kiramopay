@@ -14,6 +14,7 @@
  */
 import type { ApiError } from '../api/types';
 import type { PlanComercio, PlanPersonal, Tarifas } from '../api/repositories/plans.repository';
+import { localeDe } from './periodos';
 
 export const PLANES_PERSONALES: readonly PlanPersonal[] = ['free', 'plus', 'pro'];
 
@@ -57,20 +58,6 @@ export function rellenar(texto: string, datos: Record<string, string | number>):
   return Object.entries(datos).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(String(v)), texto);
 }
 
-const LOCALE_POR_IDIOMA: Record<string, string> = {
-  es: 'es-CR',
-  en: 'en-US',
-  fr: 'fr-FR',
-  pt: 'pt-BR',
-  'zh-cn': 'zh-CN',
-  ja: 'ja-JP',
-  hi: 'hi-IN',
-};
-
-export function localeDeIdioma(idioma: string): string {
-  return LOCALE_POR_IDIOMA[idioma] || 'es-CR';
-}
-
 /**
  * Un dia YYYY-MM-DD (ya en la zona del cliente, como los manda el reporte) en
  * formato corto. Se arma como fecha LOCAL: new Date('2026-08-14') es medianoche
@@ -80,7 +67,7 @@ export function diaCorto(ymd: string | undefined, idioma: string): string {
   const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd) : null;
   if (!m) return '';
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return new Intl.DateTimeFormat(localeDeIdioma(idioma), { day: 'numeric', month: 'short' }).format(d);
+  return new Intl.DateTimeFormat(localeDe(idioma), { day: 'numeric', month: 'short' }).format(d);
 }
 
 /** "13 de diciembre de 2026" en el idioma de la aplicacion; vacio si no es fecha. */
@@ -88,7 +75,7 @@ export function fechaLarga(iso: string | null | undefined, idioma: string): stri
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat(LOCALE_POR_IDIOMA[idioma] || 'es-CR', {
+  return new Intl.DateTimeFormat(localeDe(idioma), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

@@ -111,6 +111,13 @@ describe('fechaLegible', () => {
     expect(fechaLegible('2026-09-13T15:00:00Z', 'en', '', ahora)).toMatch(/2026/);
   });
 
+  // En espanol el resto de la app escribe la hora como es-CR ("03:00 p. m."):
+  // aqui el locale se armaba a mano, 'es' a secas, y salia en 24 horas
+  // ("15:00"). Dos relojes distintos en la misma app.
+  it('en espanol la hora sale como en el resto de la app, con a. m. o p. m.', () => {
+    expect(fechaLegible('2026-09-10T15:00:00Z', 'es', '', ahora)).toMatch(/[ap]\.\s?m\./);
+  });
+
   it('una fecha ya escrita para leer, o invalida, se deja tal cual', () => {
     expect(fechaLegible('25 Dic, 2024', 'es', 'Ahora', ahora)).toBe('25 Dic, 2024');
     expect(fechaLegible('2026-99-99', 'es', 'Ahora', ahora)).toBe('2026-99-99');

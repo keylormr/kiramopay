@@ -7,7 +7,7 @@
  * mostraria el 4).
  */
 import type { RecurringPayment } from '@/types';
-import { localeDeIdioma } from './planes';
+import { localeDe } from './periodos';
 
 type Frecuencia = RecurringPayment['frequency'];
 
@@ -62,7 +62,7 @@ export function fechaCorta(fecha: string, idioma: string): string {
   if (!p) return fecha;
   const [a, mes, d] = p;
   try {
-    return new Intl.DateTimeFormat(localeDeIdioma(idioma), {
+    return new Intl.DateTimeFormat(localeDe(idioma), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
