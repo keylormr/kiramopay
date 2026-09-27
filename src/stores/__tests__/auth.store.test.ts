@@ -132,8 +132,8 @@ describe('useAuthStore', () => {
 
   it('changes password via backend', async () => {
     await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
-    const ok = await useAuthStore.getState().changePassword('Kiramopay2024!', 'NewPass2024!');
-    expect(ok).toBe(true);
+    const res = await useAuthStore.getState().changePassword('Kiramopay2024!', 'NewPass2024!');
+    expect(res.success).toBe(true);
   });
 
   it('bootstrap restores the session when the refresh cookie is valid', async () => {

@@ -155,7 +155,10 @@ export class HttpAuthRepository implements IAuthRepository {
     });
 
     if (!res.success) {
-      return apiError('CHANGE_PASSWORD_FAILED', res.error?.message || 'Failed to change password');
+      // El codigo pasa: la pantalla elige el texto por codigo, y pisado con el
+      // de aqui decia "contrasena incorrecta" tambien sin red o cuando la
+      // nueva era igual a la actual.
+      return apiError(res.error?.code || 'CHANGE_PASSWORD_FAILED', res.error?.message || 'Failed to change password');
     }
 
     return apiSuccess({ changed: true });

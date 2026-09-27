@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiLayer } from '@/api';
@@ -16,7 +16,26 @@ import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
+import { mensajeDeRechazo } from '../../i18n/mensajesDeError';
 import { Capacitor } from '@capacitor/core';
+
+// Cada rechazo de cambiar la contrasena con su texto. Todo decia "Contraseña
+// incorrecta", tambien cuando la actual era correcta y el problema era otro.
+// Sin red, sesion vencida o demasiadas solicitudes llegan ya traducidos del
+// cliente; un error del servidor cae al generico.
+const CLAVES_ERROR_CONTRASENA: Readonly<Record<string, string>> = {
+  CURRENT_PASSWORD_INVALID: 'incorrect_password',
+  PASSWORD_UNCHANGED: 'password_must_differ',
+  DEMO_ACCOUNT: 'password_demo_account',
+};
+
+// El campo al que se refiere cada rechazo, para avisarlo junto a el. Los demas
+// (cuenta de demostracion, sin red, error del servidor) no son de ningun campo
+// y se avisan junto al boton.
+const CAMPO_DEL_RECHAZO: Readonly<Record<string, 'actual' | 'nueva'>> = {
+  CURRENT_PASSWORD_INVALID: 'actual',
+  PASSWORD_UNCHANGED: 'nueva',
+};
 
 interface ProfileViewProps {
   onOpenFAQ?: () => void;
@@ -71,7 +90,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [passwordError, setPasswordError] = useState<{ texto: string; campo: 'actual' | 'nueva' | null } | null>(null);
+  const idErrorActual = useId();
+  const idErrorNueva = useId();
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
@@ -213,16 +234,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     setIsChangingPassword(true);
     void (async () => {
       try {
-        const ok = await useAuthStore.getState().changePassword(currentPassword, newPassword);
-        if (!ok) {
-          setPasswordError(t('incorrect_password'));
+        const res = await useAuthStore.getState().changePassword(currentPassword, newPassword);
+        if (!res.success) {
+          setPasswordError({
+            texto: mensajeDeRechazo(res.error, CLAVES_ERROR_CONTRASENA, 'password_change_failed', t),
+            campo: CAMPO_DEL_RECHAZO[res.error?.code ?? ''] ?? null,
+          });
           return;
         }
         setShowPasswordSheet(false);
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-        setPasswordError('');
+        setPasswordError(null);
       } finally {
         setIsChangingPassword(false);
       }
@@ -938,7 +962,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       {/* Change Password Sheet */}
       <BottomSheet
         isOpen={showPasswordSheet}
-        onClose={() => { setShowPasswordSheet(false); setCurrentPassword(''); setNewPassword(''); setConfirmPassword(''); setPasswordError(''); }}
+        onClose={() => { setShowPasswordSheet(false); setCurrentPassword(''); setNewPassword(''); setConfirmPassword(''); setPasswordError(null); }}
         title={t('change_password')}
       >
         <div className="space-y-4">
@@ -951,7 +975,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <input
                 type={showCurrentPwd ? 'text' : 'password'}
                 value={currentPassword}
-                onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(''); }}
+                onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(null); }}
+                aria-invalid={passwordError?.campo === 'actual' || undefined}
+                aria-describedby={passwordError?.campo === 'actual' ? idErrorActual : undefined}
                 className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
                 placeholder="--------"
               />
@@ -959,8 +985,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 {showCurrentPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
-            {passwordError && (
-              <p className="text-red-500 text-sm mt-1">{passwordError}</p>
+            {passwordError?.campo === 'actual' && (
+              <p id={idErrorActual} role="alert" className="text-red-500 text-sm mt-1">{passwordError.texto}</p>
             )}
           </div>
 
@@ -973,7 +999,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <input
                 type={showNewPwd ? 'text' : 'password'}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => { setNewPassword(e.target.value); setPasswordError(null); }}
+                aria-invalid={passwordError?.campo === 'nueva' || undefined}
+                aria-describedby={passwordError?.campo === 'nueva' ? idErrorNueva : undefined}
                 className="w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all"
                 placeholder="--------"
               />
@@ -981,6 +1009,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 {showNewPwd ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
               </button>
             </div>
+            {passwordError?.campo === 'nueva' && (
+              <p id={idErrorNueva} role="alert" className="text-red-500 text-sm mt-1">{passwordError.texto}</p>
+            )}
             {/* Password strength indicator */}
             {newPassword && (
               <div className="mt-2">
@@ -1006,7 +1037,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <input
                 type={showConfirmPwd ? 'text' : 'password'}
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(null); }}
                 className={`w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border uv-text-primary px-4 py-3 pr-12 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary-soft)] transition-all ${
                   confirmPassword && newPassword !== confirmPassword ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                 }`}
@@ -1020,6 +1051,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <p className="text-red-500 text-sm mt-1">{t('passwords_dont_match')}</p>
             )}
           </div>
+
+          {passwordError && passwordError.campo === null && (
+            <p role="alert" className="text-red-500 text-sm">{passwordError.texto}</p>
+          )}
 
           <button
             onClick={handleChangePassword}
