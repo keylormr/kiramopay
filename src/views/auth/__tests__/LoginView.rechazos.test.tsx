@@ -128,3 +128,33 @@ describe('LoginView: el sondeo avisa lo que no se arregla con la contrasena', ()
     expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
   });
 });
+
+// La contrasena escrita solo se borra cuando el servidor dijo que era la
+// equivocada. Sin red, con el limitador o con la cuenta en pausa, borrarla
+// obligaba a teclearla de nuevo para reintentar con la misma.
+describe('LoginView: la contrasena escrita', () => {
+  it.each([
+    [
+      'el limitador',
+      (async () => ({ ok: false, status: 429, json: async () => ({}) })) as Respuesta,
+      'Demasiados intentos. Espera un momento e intenta de nuevo.',
+    ],
+    ['sin conexion', RESPUESTAS.sinRed, SIN_RED],
+  ])('se conserva ante %s', async (_caso, respuesta, aviso) => {
+    servidor(pideContrasena, respuesta);
+
+    await entrar();
+
+    await screen.findByText(aviso);
+    expect(screen.getByPlaceholderText('Contraseña')).toHaveValue('Kiramopay2024!');
+  });
+
+  it('se borra si era la equivocada', async () => {
+    servidor(pideContrasena, RESPUESTAS.incorrecta);
+
+    await entrar();
+
+    await screen.findByText(INCORRECTA);
+    expect(screen.getByPlaceholderText('Contraseña')).toHaveValue('');
+  });
+});
