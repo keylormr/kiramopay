@@ -1068,6 +1068,7 @@ const fr: TranslationKeys = {
   splitpay_err_pay: 'Impossible de traiter votre paiement.',
   splitpay_err_decline: 'Impossible de refuser votre part.',
   splitpay_err_cancel: "Impossible d'annuler le partage.",
+  splitpay_err_create: 'Impossible de créer le partage.',
   splitpay_err_title_required: 'Donnez un titre au partage.',
   splitpay_err_invalid_amount: 'Le montant total doit être supérieur à zéro.',
   splitpay_err_participant_required: 'Ajoutez au moins un participant en plus de vous.',

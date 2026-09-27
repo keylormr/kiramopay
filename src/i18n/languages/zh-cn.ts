@@ -1061,6 +1061,7 @@ const zhCn: TranslationKeys = {
   splitpay_err_pay: '无法处理你的付款。',
   splitpay_err_decline: '无法拒绝你的那份。',
   splitpay_err_cancel: '无法取消该分账。',
+  splitpay_err_create: '无法创建该分账。',
   splitpay_err_title_required: '请给分账起个标题。',
   splitpay_err_invalid_amount: '总金额必须大于零。',
   splitpay_err_participant_required: '除了你自己，至少要添加一位参与者。',

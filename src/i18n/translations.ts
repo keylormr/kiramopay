@@ -1211,6 +1211,7 @@ export type TranslationKeys = {
   splitpay_err_pay: string;
   splitpay_err_decline: string;
   splitpay_err_cancel: string;
+  splitpay_err_create: string;
   splitpay_err_title_required: string;
   splitpay_err_invalid_amount: string;
   splitpay_err_participant_required: string;
