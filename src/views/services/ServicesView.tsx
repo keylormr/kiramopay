@@ -553,7 +553,7 @@ export const ServicesView: React.FC = () => {
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              placeholder="Ej: 1234567"
+              placeholder={t('services_client_id_ph')}
               className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-4 rounded-xl outline-none text-lg font-semibold uv-text-primary"
             />
           </div>

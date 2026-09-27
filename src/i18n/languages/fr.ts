@@ -82,6 +82,7 @@ const fr: TranslationKeys = {
   nav_services: 'Services',
   nav_apps: 'Apps',
   nav_profile: 'Profil',
+  nav_main_aria: 'Navigation principale',
 
   // Home
   total_balance: 'Solde total',
@@ -342,6 +343,8 @@ const fr: TranslationKeys = {
   confirm_password: 'Confirmer le mot de passe',
   passwords_dont_match: 'Les mots de passe ne correspondent pas',
   bio_enable_reason: 'Confirmez votre identité pour activer la connexion par empreinte ou visage',
+  bio_dialog_subtitle: 'Vérifiez votre identité',
+  bio_dialog_desc: 'Utilisez votre empreinte digitale ou Face ID pour continuer',
   bio_enable_failed: 'Votre empreinte ou votre visage n’a pas été confirmé. La biométrie reste désactivée.',
   bio_disable_desc: 'À la prochaine connexion, votre mot de passe ou votre code PIN vous sera demandé. Vous pouvez la réactiver quand vous voulez.',
   password_strength: 'Robustesse',
@@ -408,6 +411,7 @@ const fr: TranslationKeys = {
   // Services View
   my_services: 'Mes services',
   search_service: 'Rechercher un service...',
+  services_client_id_ph: 'Ex. : 1234567',
   select_operator: 'Sélectionnez un opérateur',
   recent_recharges: 'Recharges récentes',
   service_payments: 'Paiements de services',

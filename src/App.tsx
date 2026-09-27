@@ -595,7 +595,7 @@ const Layout = () => {
       </main>
 
       {/* Bottom Navigation */}
-      <nav role="navigation" aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
+      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
         <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
           {NAV_ITEMS.map((item) => {
             const active = currentNavId === item.id;

@@ -143,10 +143,10 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         sinpe.addTransaction(action.payload);
         const sinpeTx = {
           id: `sinpe-${action.payload.id}`,
-          title:
-            action.payload.type === 'sent'
-              ? `SINPE a ${action.payload.name}`
-              : `SINPE de ${action.payload.name}`,
+          // El nombre de la contraparte, como la fila del servidor que la
+          // reemplaza. "SINPE a/de" dejaba el conector en espanol en cualquier
+          // idioma; el sentido ya lo dicen el signo y la categoria.
+          title: action.payload.name,
           amount:
             action.payload.type === 'sent'
               ? -action.payload.amount

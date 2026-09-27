@@ -83,6 +83,7 @@ const zhCn: TranslationKeys = {
   nav_services: '服务',
   nav_apps: '应用',
   nav_profile: '个人',
+  nav_main_aria: '主导航',
 
   // Home
   total_balance: '总余额',
@@ -343,6 +344,8 @@ const zhCn: TranslationKeys = {
   confirm_password: '确认密码',
   passwords_dont_match: '密码不匹配',
   bio_enable_reason: '请验证身份以开启指纹或面容登录',
+  bio_dialog_subtitle: '验证您的身份',
+  bio_dialog_desc: '请使用指纹或Face ID继续',
   bio_enable_failed: '未能验证你的指纹或面容，生物识别仍处于关闭状态。',
   bio_disable_desc: '下次登录时需要输入密码或 PIN。你可以随时重新开启。',
   password_strength: '强度',
@@ -409,6 +412,7 @@ const zhCn: TranslationKeys = {
   // Services View
   my_services: '我的服务',
   search_service: '搜索服务...',
+  services_client_id_ph: '例如：1234567',
   select_operator: '选择营运商',
   recent_recharges: '近期储值',
   service_payments: '服务缴费',

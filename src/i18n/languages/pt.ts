@@ -82,6 +82,7 @@ const pt: TranslationKeys = {
   nav_services: 'Serviços',
   nav_apps: 'Apps',
   nav_profile: 'Perfil',
+  nav_main_aria: 'Navegação principal',
 
   // Home
   total_balance: 'Saldo Total',
@@ -342,6 +343,8 @@ const pt: TranslationKeys = {
   confirm_password: 'Confirmar senha',
   passwords_dont_match: 'As senhas não coincidem',
   bio_enable_reason: 'Confirme que é você para ativar o acesso por digital ou rosto',
+  bio_dialog_subtitle: 'Verifique sua identidade',
+  bio_dialog_desc: 'Use sua impressão digital ou Face ID para continuar',
   bio_enable_failed: 'Sua digital ou rosto não foi confirmado. A biometria continua desativada.',
   bio_disable_desc: 'No próximo acesso, será pedida sua senha ou PIN. Você pode reativar quando quiser.',
   password_strength: 'Força',
@@ -408,6 +411,7 @@ const pt: TranslationKeys = {
   // Services View
   my_services: 'Meus serviços',
   search_service: 'Buscar serviço...',
+  services_client_id_ph: 'Ex: 1234567',
   select_operator: 'Selecione a operadora',
   recent_recharges: 'Recargas recentes',
   service_payments: 'Pagamentos de serviços',

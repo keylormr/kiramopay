@@ -7,6 +7,7 @@ import type {
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
 import { HttpClient } from './client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export class HttpSplitPayRepository implements ISplitPayRepository {
   constructor(private client: HttpClient) {}
@@ -44,8 +45,12 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
     // sobrevivir hasta la vista: ahi es donde CLAVES_ERROR_CREAR lo traduce. Si
     // se pisa con un literal generico, la vista nunca matchea nada y muestra el
     // texto crudo del servidor tal cual (hallazgo QA n=52).
-    if (!res.success) return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed');
-    if (!res.data) return apiError('CREATE_FAILED', 'Failed');
+    // Sin un texto que mostrar, el aviso generico en el idioma activo: la vista
+    // pinta este mensaje, y un 'Failed' fijo salia en ingles en cualquier idioma.
+    if (!res.success) {
+      return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || traducirFueraDeReact('err_generic'));
+    }
+    if (!res.data) return apiError('CREATE_FAILED', traducirFueraDeReact('err_generic'));
 
     return apiSuccess({
       group: mapGroup(res.data.group),

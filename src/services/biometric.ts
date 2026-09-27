@@ -1,5 +1,6 @@
 // Servicio de autenticación biométrica
 import { NativeBiometric, BiometryType } from 'capacitor-native-biometric';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export interface BiometricResult {
   success: boolean;
@@ -69,8 +70,10 @@ class BiometricService {
     }
   }
 
-  // Autenticar con biometría
-  async authenticate(reason?: string): Promise<BiometricResult> {
+  // Autenticar con biometría. `reason` lo escribe la pantalla que la pide, ya
+  // traducido; el resto del dialogo sale del diccionario activo: fijo en
+  // espanol, el telefono lo mostraba en espanol con la app en otro idioma.
+  async authenticate(reason: string): Promise<BiometricResult> {
     if (!this.isNative) {
       // En web no se finge exito: un candado que se abre solo no es candado.
       return { success: false, error: 'Biometria no disponible en web' };
@@ -78,11 +81,11 @@ class BiometricService {
 
     try {
       await NativeBiometric.verifyIdentity({
-        reason: reason || 'Autenticación requerida',
+        reason,
         title: 'KiramoPay',
-        subtitle: 'Verifica tu identidad',
-        description: 'Usa tu huella digital o Face ID para continuar',
-        negativeButtonText: 'Cancelar',
+        subtitle: traducirFueraDeReact('bio_dialog_subtitle'),
+        description: traducirFueraDeReact('bio_dialog_desc'),
+        negativeButtonText: traducirFueraDeReact('cancel'),
         // El default del plugin es UN intento: una lectura fallida del sensor
         // cerraba el dialogo sin mas. Tres intentos es el estandar del SO.
         maxAttempts: 3,
@@ -162,20 +165,6 @@ class BiometricService {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  // Obtener nombre legible del tipo de biometría
-  getBiometryTypeName(type: 'fingerprint' | 'face' | 'iris' | 'none'): string {
-    switch (type) {
-      case 'fingerprint':
-        return 'Huella digital';
-      case 'face':
-        return 'Reconocimiento facial';
-      case 'iris':
-        return 'Reconocimiento de iris';
-      default:
-        return 'No disponible';
     }
   }
 }

@@ -82,6 +82,7 @@ const hi: TranslationKeys = {
   nav_services: 'सेवाएं',
   nav_apps: 'ऐप्स',
   nav_profile: 'प्रोफाइल',
+  nav_main_aria: 'मुख्य नेविगेशन',
 
   // Home
   total_balance: 'कुल शेष',
@@ -342,6 +343,8 @@ const hi: TranslationKeys = {
   confirm_password: 'पासवर्ड की पुष्टि करें',
   passwords_dont_match: 'पासवर्ड मेल नहीं खाते',
   bio_enable_reason: 'फ़िंगरप्रिंट या चेहरे से लॉगिन चालू करने के लिए पुष्टि करें कि यह आप हैं',
+  bio_dialog_subtitle: 'अपनी पहचान सत्यापित करें',
+  bio_dialog_desc: 'जारी रखने के लिए फिंगरप्रिंट या Face ID का उपयोग करें',
   bio_enable_failed: 'आपके फ़िंगरप्रिंट या चेहरे की पुष्टि नहीं हुई। बायोमेट्रिक बंद ही रहेगा।',
   bio_disable_desc: 'अगली बार लॉगिन पर पासवर्ड या PIN माँगा जाएगा। आप इसे कभी भी फिर से चालू कर सकते हैं।',
   password_strength: 'मजबूती',
@@ -408,6 +411,7 @@ const hi: TranslationKeys = {
   // Services View
   my_services: 'मेरी सेवाएं',
   search_service: 'सेवा खोजें...',
+  services_client_id_ph: 'उदा: 1234567',
   select_operator: 'ऑपरेटर चुनें',
   recent_recharges: 'हाल के रिचार्ज',
   service_payments: 'सेवा भुगतान',
