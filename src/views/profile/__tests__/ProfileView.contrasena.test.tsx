@@ -94,6 +94,11 @@ describe('ProfileView: cambiar la contrasena', () => {
       { code: 'CHANGE_PASSWORD_FAILED', message: 'internal server error' },
       'No pudimos cambiar tu contraseña. Intenta de nuevo.',
     ],
+    [
+      'el tope de intentos con la actual equivocada',
+      { code: 'PASSWORD_CHANGE_LOCKED', message: 'too many failed attempts; try again later' },
+      'Demasiados intentos con una contraseña actual equivocada. Por seguridad, espera 15 minutos e intenta de nuevo.',
+    ],
   ])('%s no dice "Contraseña incorrecta"', async (_caso, error, esperado) => {
     mocks.changePassword.mockResolvedValue({ success: false, error });
 
