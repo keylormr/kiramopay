@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/kiramopay/backend/internal/auth"
@@ -128,5 +129,41 @@ func TestCambiarContrasena_AcertarLaActualReiniciaElTope(t *testing.T) {
 		if got := codigoDeError(t, rec); got != "CURRENT_PASSWORD_INVALID" {
 			t.Fatalf("intento %d despues de acertar: codigo %q, esperaba CURRENT_PASSWORD_INVALID: %s", i, got, rec.Body.String())
 		}
+	}
+}
+
+// El tope no se esquiva con una rafaga. Si el contador se leyera antes de mirar
+// la contrasena y se sumara despues, las peticiones en paralelo leerian todas el
+// mismo valor mientras Argon2 trabaja, y cada una probaria una contrasena.
+func TestCambiarContrasena_ElTopeNoSeEsquivaConUnaRafaga(t *testing.T) {
+	svc, pool, _ := servicioConDemo(t, true)
+	id := sembrarConUsuario(t, pool, "702650930", "keilor", false)
+	h := auth.NewHandler(svc, auth.CookieConfig{Secure: true}, false)
+
+	// Diez y no mas: cada verificacion de Argon2 usa 128 MiB.
+	const rafaga = 10
+	recs := make([]*httptest.ResponseRecorder, rafaga)
+	var wg sync.WaitGroup
+	for i := range recs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			recs[i] = cambiarContrasenaComo(t, h, id, "NoEsEsta2026!", "NuevaClave2026!")
+		}(i)
+	}
+	wg.Wait()
+
+	probadas := 0
+	for _, rec := range recs {
+		switch got := codigoDeError(t, rec); got {
+		case "CURRENT_PASSWORD_INVALID":
+			probadas++
+		case "PASSWORD_CHANGE_LOCKED":
+		default:
+			t.Errorf("codigo inesperado %q: %s", got, rec.Body.String())
+		}
+	}
+	if probadas > 5 {
+		t.Fatalf("una rafaga de %d probo %d contrasenas; el tope es 5", rafaga, probadas)
 	}
 }
