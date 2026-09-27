@@ -665,6 +665,8 @@ const zhCn: TranslationKeys = {
   login_no_account: '还没有账户？',
   login_wrong_credentials: '用户名或密码不正确',
   login_rate_limited: '尝试次数过多。请稍候再试。',
+  login_locked: '失败次数过多。为了安全，请等待 15 分钟后再试。',
+  login_failed: '无法登录，请稍后再试。',
   login_biometric_failed: '生物识别认证失败',
   login_biometric_prompt: '使用指纹或Face ID登录',
   login_terms: '继续即表示您接受我们的服务条款和隐私政策',
