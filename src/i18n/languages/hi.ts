@@ -1060,6 +1060,7 @@ const hi: TranslationKeys = {
   splitpay_err_pay: 'आपका भुगतान नहीं हो सका।',
   splitpay_err_decline: 'आपका हिस्सा अस्वीकार नहीं हो सका।',
   splitpay_err_cancel: 'बंटवारा रद्द नहीं हो सका।',
+  splitpay_err_create: 'बंटवारा नहीं बनाया जा सका।',
   splitpay_err_title_required: 'बंटवारे के लिए एक शीर्षक डालें।',
   splitpay_err_invalid_amount: 'कुल राशि शून्य से अधिक होनी चाहिए।',
   splitpay_err_participant_required: 'अपने अलावा कम से कम एक सहभागी जोड़ें।',

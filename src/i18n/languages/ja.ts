@@ -1060,6 +1060,7 @@ const ja: TranslationKeys = {
   splitpay_err_pay: 'お支払いを処理できませんでした。',
   splitpay_err_decline: 'あなたの分を辞退できませんでした。',
   splitpay_err_cancel: '割り勘を取り消せませんでした。',
+  splitpay_err_create: '割り勘を作成できませんでした。',
   splitpay_err_title_required: 'タイトルを入力してください。',
   splitpay_err_invalid_amount: '合計金額は0より大きい必要があります。',
   splitpay_err_participant_required: 'あなた以外に少なくとも1人の参加者を追加してください。',

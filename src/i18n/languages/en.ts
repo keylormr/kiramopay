@@ -1068,6 +1068,7 @@ const en: TranslationKeys = {
   splitpay_err_pay: 'We could not process your payment.',
   splitpay_err_decline: 'We could not decline your share.',
   splitpay_err_cancel: 'We could not cancel the split.',
+  splitpay_err_create: 'We could not create the split.',
   splitpay_err_title_required: 'Give the split a title.',
   splitpay_err_invalid_amount: 'The total amount must be greater than zero.',
   splitpay_err_participant_required: 'Add at least one participant besides you.',

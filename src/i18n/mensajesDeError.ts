@@ -30,7 +30,8 @@ export function traducirFueraDeReact(clave: keyof TranslationKeys): string {
 }
 
 /** Codigos que nacen en el propio cliente: el servidor nunca los escribio. */
-export type CodigoDelCliente = 'NETWORK_ERROR' | 'SESSION_EXPIRED' | 'SESSION_UNCONFIRMED' | 'RATE_LIMITED';
+const CODIGOS_DEL_CLIENTE = ['NETWORK_ERROR', 'SESSION_EXPIRED', 'SESSION_UNCONFIRMED', 'RATE_LIMITED'] as const;
+export type CodigoDelCliente = (typeof CODIGOS_DEL_CLIENTE)[number];
 
 export function mensajeDelCliente(codigo: CodigoDelCliente): string {
   switch (codigo) {
@@ -70,14 +71,13 @@ export function mensajeDelServidor(estadoHttp: number, codigo: string, mensaje?:
 
 /**
  * Codigos cuyo mensaje ya viene traducido desde el cliente HTTP (ver arriba):
- * los arma el propio cliente o los reemplaza mensajeDelServidor.
+ * los arma el propio cliente o los reemplaza mensajeDelServidor. Sale de la
+ * misma lista que `CodigoDelCliente`: escrita a mano se habia olvidado de
+ * SESSION_UNCONFIRMED, y las pantallas lo tapaban con su aviso generico.
+ * ACCOUNT_BLOCKED no entra: por el 403 de una peticion autenticada llega con el
+ * texto del servidor.
  */
-const CODIGOS_YA_TRADUCIDOS = new Set<string>([
-  'NETWORK_ERROR',
-  'SESSION_EXPIRED',
-  'RATE_LIMITED',
-  ...CUERPO_ILEGIBLE,
-]);
+const CODIGOS_YA_TRADUCIDOS = new Set<string>([...CODIGOS_DEL_CLIENTE, ...CUERPO_ILEGIBLE]);
 
 /**
  * El texto de un rechazo para una pantalla, elegido por codigo.

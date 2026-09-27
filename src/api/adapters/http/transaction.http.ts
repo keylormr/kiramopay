@@ -60,7 +60,10 @@ export class HttpTransactionRepository implements ITransactionRepository {
     }>(`/api/v1/transactions?${qs.toString()}`);
 
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch transactions');
+      // El codigo del cliente pasa: la busqueda distingue un 429 ("hay
+      // demasiado trafico") de la falta de red, y pisado con FETCH_FAILED
+      // mandaba siempre a revisar la conexion.
+      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch transactions');
     }
 
     return apiSuccess({

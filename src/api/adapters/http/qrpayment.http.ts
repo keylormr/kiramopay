@@ -519,7 +519,10 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.post<StaffDTO>(`/api/v1/qr/merchants/${merchantId}/staff`, {
       cedula, role, location_id: locationId,
     });
-    if (!res.success || !res.data) return apiError('ADD_STAFF_FAILED', res.error?.message || 'Failed');
+    // El codigo del servidor pasa: la hoja del equipo traduce
+    // STAFF_CEDULA_NOT_FOUND por codigo, y pisado con el de aqui decia
+    // "No se pudo completar la accion" a una cedula sin cuenta.
+    if (!res.success || !res.data) return apiError(res.error?.code || 'ADD_STAFF_FAILED', res.error?.message || 'Failed');
     return apiSuccess(mapStaff(res.data));
   }
 
@@ -527,13 +530,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.put<StaffDTO>(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`, {
       role, location_id: locationId,
     });
-    if (!res.success || !res.data) return apiError('UPDATE_STAFF_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return apiError(res.error?.code || 'UPDATE_STAFF_FAILED', res.error?.message || 'Failed');
     return apiSuccess(mapStaff(res.data));
   }
 
   async revokeStaff(merchantId: string, staffId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`);
-    if (!res.success) return apiError('REVOKE_STAFF_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return apiError(res.error?.code || 'REVOKE_STAFF_FAILED', res.error?.message || 'Failed');
     return apiSuccess(undefined as unknown as void);
   }
 

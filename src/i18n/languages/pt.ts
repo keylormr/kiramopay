@@ -1068,6 +1068,7 @@ const pt: TranslationKeys = {
   splitpay_err_pay: 'Não foi possível processar seu pagamento.',
   splitpay_err_decline: 'Não foi possível recusar sua parte.',
   splitpay_err_cancel: 'Não foi possível cancelar a divisão.',
+  splitpay_err_create: 'Não foi possível criar a divisão.',
   splitpay_err_title_required: 'Dê um título à divisão.',
   splitpay_err_invalid_amount: 'O valor total precisa ser maior que zero.',
   splitpay_err_participant_required: 'Adicione pelo menos um participante além de você.',

@@ -8,8 +8,7 @@ import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
 import type { SplitGroup, SplitShare } from '@/api/repositories/splitpay.repository';
 import { useAuthStore } from '@/stores/auth.store';
-
-type RespuestaConError = { error?: { code: string; message: string } };
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 
 // Los nueve rechazos de forma de "Crear division" (backend/internal/splitpay)
 // traian el mismo codigo generico y el texto crudo de fmt.Errorf en ingles y
@@ -37,19 +36,14 @@ const CLAVES_ERROR_CREAR: Record<string, string> = {
 };
 
 // El resto de acciones del modulo (ver detalle, pagar, rechazar, cancelar)
-// solo tienen UN codigo por fallo (nunca lo distinguen mas), y ese codigo
-// viaja con el texto de diagnostico en ingles del backend (`err.Error()`).
-// Para esos, siempre el texto fijo de la pantalla. Cualquier OTRO codigo
-// (RATE_LIMITED, SESSION_EXPIRED, NETWORK_ERROR, INVALID_REQUEST...) ya llega
-// traducido al idioma activo desde el cliente HTTP (src/i18n/mensajesDeError.ts)
-// y se respeta tal cual, en vez de perder ese detalle contra un texto generico.
-const CODIGOS_GENERICOS_DEL_MODULO = new Set(['NOT_FOUND', 'PAY_FAILED', 'DECLINE_FAILED', 'CANCEL_FAILED']);
-
-function mensajeDeAccion(res: RespuestaConError, claveGenerica: string, t: (k: string) => string): string {
-  const codigo = res.error?.code;
-  if (!codigo || CODIGOS_GENERICOS_DEL_MODULO.has(codigo)) return t(claveGenerica);
-  return res.error?.message || t(claveGenerica);
-}
+// solo tienen UN codigo por fallo (NOT_FOUND, PAY_FAILED...), que viaja con el
+// texto de diagnostico en ingles del backend (`err.Error()`): para esos, el
+// texto fijo de la pantalla. Los avisos que el cliente HTTP ya trae traducidos
+// (sin red, sesion vencida, demasiadas solicitudes) se respetan. Lo decide
+// `mensajeDeRechazo`, que nunca pinta el texto crudo de un codigo desconocido:
+// esta pantalla lo hacia, y el 401 del reintento tras renovar la sesion salia
+// como "user not authenticated".
+const SIN_CLAVES_PROPIAS: Readonly<Record<string, string>> = {};
 
 export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
@@ -164,13 +158,11 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             .replace('{suma}', formatMoney(sumaPersonalizada))
             .replace('{total}', formatMoney(amount)),
         );
-      } else if (codigo && CLAVES_ERROR_CREAR[codigo]) {
-        setCreateError(t(CLAVES_ERROR_CREAR[codigo]));
       } else {
-        // Codigos que ya llegan traducidos (red, sesion vencida, limite de
-        // tasa) o cualquier otro no mapeado: se respeta el mensaje del
-        // servidor antes de caer al generico.
-        setCreateError(res.error?.message || t('error'));
+        // Los codigos de la tabla con su texto; los que el cliente ya trae
+        // traducidos (red, sesion vencida, limite), tal cual; cualquier otro,
+        // el generico de crear, nunca el texto crudo del servidor.
+        setCreateError(mensajeDeRechazo(res.error, CLAVES_ERROR_CREAR, 'splitpay_err_create', t));
       }
       return;
     }
@@ -190,7 +182,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const res = await api.splitPay.getSplit(groupId);
     setCargandoDetalle(false);
     if (!res.success || !res.data) {
-      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_detail', t));
+      setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_detail', t));
       return;
     }
     setDetalle(res.data);
@@ -205,7 +197,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     const res = await api.splitPay.payShare(detalle.group.id);
     setPagando(false);
     if (!res.success) {
-      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_pay', t));
+      setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_pay', t));
       return;
     }
     await abrirDetalle(detalle.group.id);
@@ -226,7 +218,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setProcesandoAccion(false);
     setConfirmando(null);
     if (!res.success) {
-      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_decline', t));
+      setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_decline', t));
       return;
     }
     await abrirDetalle(detalle.group.id);
@@ -243,7 +235,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setProcesandoAccion(false);
     setConfirmando(null);
     if (!res.success) {
-      setErrorDetalle(mensajeDeAccion(res, 'splitpay_err_cancel', t));
+      setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_cancel', t));
       return;
     }
     await abrirDetalle(detalle.group.id);

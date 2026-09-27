@@ -113,6 +113,30 @@ describe('SplitPayView', () => {
     expect(screen.queryByText(/does not have a KiramoPay account/i)).not.toBeInTheDocument();
   });
 
+  // Crear respetaba el mensaje de cualquier codigo que no estuviera en su
+  // tabla: un 401 del reintento tras renovar la sesion pintaba "user not
+  // authenticated" tal cual, en ingles.
+  it('un rechazo que nadie tradujo no muestra el texto crudo del servidor', async () => {
+    mocks.createSplit.mockResolvedValue({
+      success: false,
+      error: { code: 'UNAUTHORIZED', message: 'user not authenticated' },
+    });
+    pintar();
+
+    await screen.findByText('Cena');
+    fireEvent.click(screen.getAllByRole('button', { name: /crear divisi/i })[0]);
+
+    fireEvent.change(screen.getByPlaceholderText(/Ej: Cena/i), { target: { value: 'Cena' } });
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '3000' } });
+    fireEvent.change(screen.getAllByPlaceholderText(/nombre/i)[0], { target: { value: 'Ana' } });
+    fireEvent.change(screen.getAllByPlaceholderText(/tel/i)[0], { target: { value: '88880001' } });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /crear divisi/i }).slice(-1)[0]);
+
+    expect(await screen.findByText('No pudimos crear la división.')).toBeInTheDocument();
+    expect(screen.queryByText('user not authenticated')).not.toBeInTheDocument();
+  });
+
   // El caso puntual que reprodujo el QA: montos personalizados que exceden el
   // total. El backend los manda en centimos ('the shares (40000) add up to
   // more than the total (30000)'); la pantalla arma el mensaje con los montos
@@ -171,9 +195,17 @@ describe('SplitPayView', () => {
   // deja pasar el adaptador, sin conexion se lee el aviso del cliente, y el
   // rechazo propio del modulo sigue con el texto de la pantalla, nunca con el
   // ingles del servidor.
+  // Un codigo que nadie traduce (el 401 del reintento tras renovar la sesion
+  // trae el texto crudo del servidor) cae al texto de la pantalla; la sesion
+  // sin confirmar, que el cliente arma traducida, se respeta.
   it.each([
     [{ code: 'NETWORK_ERROR', message: 'Sin conexión. Revisa tu internet.' }, 'Sin conexión. Revisa tu internet.'],
     [{ code: 'PAY_FAILED', message: 'share is not pending' }, 'No pudimos procesar tu pago.'],
+    [{ code: 'UNAUTHORIZED', message: 'user not authenticated' }, 'No pudimos procesar tu pago.'],
+    [
+      { code: 'SESSION_UNCONFIRMED', message: 'No pudimos confirmar tu sesión. Revisa tu conexión e intenta de nuevo en un momento.' },
+      'No pudimos confirmar tu sesión. Revisa tu conexión e intenta de nuevo en un momento.',
+    ],
   ])('un pago que falla con %o dice "%s"', async (error, esperado) => {
     mocks.getSplit.mockResolvedValue({
       success: true,
@@ -190,6 +222,7 @@ describe('SplitPayView', () => {
 
     expect(await screen.findByText(esperado)).toBeInTheDocument();
     expect(screen.queryByText('share is not pending')).not.toBeInTheDocument();
+    expect(screen.queryByText('user not authenticated')).not.toBeInTheDocument();
   });
 
   it('no ofrece pagar una cuota que ya esta pagada', async () => {
