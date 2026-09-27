@@ -42,5 +42,7 @@ export interface Recharge {
   phone: string;
   amount: number;
   date: string;
+  /** Fecha de maquina (ISO 8601); la pantalla la escribe en el idioma de la app. */
+  dateISO?: string;
   status: 'completed' | 'pending' | 'failed';
 }

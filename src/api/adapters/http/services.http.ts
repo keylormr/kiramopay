@@ -148,6 +148,9 @@ export class HttpServicesRepository implements IServicesRepository {
         phone: h.client_id,
         amount: h.amount / 100,
         date: h.created_at,
+        // La pantalla escribe esta en el idioma de la app; `date` tal cual se
+        // pintaba crudo ("2026-09-04T15:30:00Z").
+        dateISO: h.created_at,
         status: h.status as 'completed' | 'pending' | 'failed',
       }));
 
@@ -174,12 +177,14 @@ export class HttpServicesRepository implements IServicesRepository {
       return apiError(code, res.error?.message || 'Recharge failed');
     }
 
+    const ahora = new Date().toISOString();
     const recharge: Recharge = {
       id: res.data.transaction_id,
       operatorId: request.operatorId,
       phone: request.phone,
       amount: request.amount,
-      date: new Date().toISOString(),
+      date: ahora,
+      dateISO: ahora,
       status: 'completed',
     };
 

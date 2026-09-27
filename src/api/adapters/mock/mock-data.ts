@@ -97,5 +97,5 @@ export const initialSavedServices: SavedService[] = [
 ];
 
 export const initialRechargeHistory: Recharge[] = [
-  { id: '1', operatorId: 'kolbi', phone: '8888-0000', amount: 5000, date: '20 Dic, 2024', status: 'completed' },
+  { id: '1', operatorId: 'kolbi', phone: '8888-0000', amount: 5000, date: 'Hace 3 días', dateISO: _txDaysAgo(3), status: 'completed' },
 ];

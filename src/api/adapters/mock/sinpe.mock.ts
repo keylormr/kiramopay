@@ -52,6 +52,7 @@ export class MockSinpeRepository implements ISinpeRepository {
       phone: request.phone,
       name: contact?.name ?? request.phone,
       date: 'Ahora',
+      dateISO: new Date().toISOString(),
       status: 'completed',
       reference: request.description,
       internal: true,
