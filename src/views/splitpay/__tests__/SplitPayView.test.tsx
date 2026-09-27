@@ -167,6 +167,31 @@ describe('SplitPayView', () => {
     await waitFor(() => expect(mocks.payShare).toHaveBeenCalledWith('g1'));
   });
 
+  // El otro extremo de lo que prueba splitpay.http.test.ts: con el codigo que
+  // deja pasar el adaptador, sin conexion se lee el aviso del cliente, y el
+  // rechazo propio del modulo sigue con el texto de la pantalla, nunca con el
+  // ingles del servidor.
+  it.each([
+    [{ code: 'NETWORK_ERROR', message: 'Sin conexión. Revisa tu internet.' }, 'Sin conexión. Revisa tu internet.'],
+    [{ code: 'PAY_FAILED', message: 'share is not pending' }, 'No pudimos procesar tu pago.'],
+  ])('un pago que falla con %o dice "%s"', async (error, esperado) => {
+    mocks.getSplit.mockResolvedValue({
+      success: true,
+      data: {
+        group: grupo,
+        shares: [{ id: 's2', groupId: 'g1', userId: 'yo', userName: 'Yo', amount: 1500, status: 'pending' }],
+      },
+    });
+    mocks.payShare.mockResolvedValue({ success: false, error });
+    pintar();
+
+    fireEvent.click(await screen.findByText('Cena'));
+    fireEvent.click(await screen.findByRole('button', { name: /pagar mi parte/i }));
+
+    expect(await screen.findByText(esperado)).toBeInTheDocument();
+    expect(screen.queryByText('share is not pending')).not.toBeInTheDocument();
+  });
+
   it('no ofrece pagar una cuota que ya esta pagada', async () => {
     mocks.getSplit.mockResolvedValue({
       success: true,

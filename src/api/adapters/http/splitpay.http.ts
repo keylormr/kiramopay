@@ -65,7 +65,7 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       created_at: string;
     }> | null>('/api/v1/splits');
 
-    if (!res.success) return apiError('FETCH_FAILED', res.error?.message || 'Failed to fetch splits');
+    if (!res.success) return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || traducirFueraDeReact('err_generic'));
 
     // Un payload null es "sin divisiones todavia", no una falla: el backend ya
     // normaliza la lista nil a [] (ver listaVaciaSiNil en el propio backend),
@@ -87,7 +87,8 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       }>;
     }>(`/api/v1/splits/${groupId}`);
 
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Split not found');
+    if (!res.success) return falla(res, 'NOT_FOUND');
+    if (!res.data) return apiError('NOT_FOUND', traducirFueraDeReact('err_generic'));
 
     return apiSuccess({
       group: mapGroup(res.data.group),
@@ -97,21 +98,31 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
 
   async payShare(groupId: string): Promise<ApiResponse<void>> {
     const res = await this.client.post(`/api/v1/splits/${groupId}/pay`);
-    if (!res.success) return apiError('PAY_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'PAY_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
   async declineShare(groupId: string): Promise<ApiResponse<void>> {
     const res = await this.client.post(`/api/v1/splits/${groupId}/decline`);
-    if (!res.success) return apiError('DECLINE_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'DECLINE_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
   async cancelSplit(groupId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/splits/${groupId}`);
-    if (!res.success) return apiError('CANCEL_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'CANCEL_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
+}
+
+// Ver el detalle, pagar, rechazar y cancelar pisaban el codigo del cliente con
+// el suyo, y SplitPayView nunca veia NETWORK_ERROR, SESSION_EXPIRED,
+// RATE_LIMITED ni ACCOUNT_BLOCKED, que el cliente ya trae traducidos: a quien
+// estaba sin conexion le decia que no se pudo pagar. El codigo del modulo queda
+// solo para cuando no viene ninguno; los rechazos propios del servidor en estas
+// rutas ya son ese mismo codigo.
+function falla<T>(res: { error?: { code?: string; message?: string } }, codigoDelModulo: string): ApiResponse<T> {
+  return apiError<T>(res.error?.code || codigoDelModulo, res.error?.message || traducirFueraDeReact('err_generic'));
 }
 
 function mapGroup(g: {

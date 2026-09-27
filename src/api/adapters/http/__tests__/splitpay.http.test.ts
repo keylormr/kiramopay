@@ -122,3 +122,39 @@ describe('HttpSplitPayRepository.createSplit', () => {
     expect(res.data?.group.id).toBe('g1');
   });
 });
+
+// Ver el detalle, pagar, rechazar y cancelar pisaban todo codigo con el suyo
+// (NOT_FOUND, PAY_FAILED, DECLINE_FAILED, CANCEL_FAILED). SplitPayView respeta
+// los avisos que el cliente HTTP ya tradujo (sin red, sesion vencida,
+// demasiadas solicitudes, cuenta bloqueada), pero nunca le llegaban: a quien
+// estaba sin conexion le decia que no se pudo pagar.
+describe('HttpSplitPayRepository — acciones sobre una division', () => {
+  type Falla = { code: string; message: string };
+  type Accion = (r: HttpSplitPayRepository) => Promise<{ success: boolean; error?: Falla }>;
+
+  function clienteQueFalla(error: Falla) {
+    const respuesta = async () => ({ success: false, error });
+    return { get: respuesta, post: respuesta, del: respuesta } as unknown as HttpClient;
+  }
+
+  const sinRed: Falla = { code: 'NETWORK_ERROR', message: 'Sin conexión. Revisa tu internet.' };
+  const acciones: Array<[string, Accion]> = [
+    ['ver el detalle', (r) => r.getSplit('g1')],
+    ['pagar la cuota', (r) => r.payShare('g1')],
+    ['rechazar la cuota', (r) => r.declineShare('g1')],
+    ['cancelar la division', (r) => r.cancelSplit('g1')],
+  ];
+
+  it.each(acciones)('%s sin conexion deja pasar el aviso del cliente', async (_accion, llamar) => {
+    const res = await llamar(new HttpSplitPayRepository(clienteQueFalla(sinRed)));
+    expect(res.success).toBe(false);
+    expect(res.error).toEqual(sinRed);
+  });
+
+  it('el codigo propio del servidor sigue llegando igual', async () => {
+    const res = await new HttpSplitPayRepository(
+      clienteQueFalla({ code: 'PAY_FAILED', message: 'share is not pending' }),
+    ).payShare('g1');
+    expect(res.error?.code).toBe('PAY_FAILED');
+  });
+});
