@@ -190,3 +190,31 @@ describe('HttpQRPaymentRepository', () => {
     expect(res.data?.[0].amount).toBe(1000);
   });
 });
+
+// La hoja del equipo traduce STAFF_CEDULA_NOT_FOUND por codigo ("esa cedula no
+// tiene una cuenta de KiramoPay") y respeta los avisos que el cliente ya
+// tradujo (sin red, demasiadas solicitudes). El adaptador pisaba el codigo con
+// el suyo y la pantalla decia siempre "No se pudo completar la accion".
+describe('HttpQRPaymentRepository: el equipo del comercio deja pasar el codigo', () => {
+  const sinCuenta = { code: 'STAFF_CEDULA_NOT_FOUND', message: 'no KiramoPay account is registered with that cedula' };
+  const sinRed = { code: 'NETWORK_ERROR', message: 'Sin conexión.' };
+
+  it('agregar a una cedula sin cuenta llega con su codigo', async () => {
+    const post = vi.fn().mockResolvedValue({ success: false, error: sinCuenta });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).addStaff('m1', '101110111', 'cashier');
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('STAFF_CEDULA_NOT_FOUND');
+  });
+
+  it('cambiar el rol sin conexion llega con el aviso del cliente', async () => {
+    const put = vi.fn().mockResolvedValue({ success: false, error: sinRed });
+    const res = await new HttpQRPaymentRepository(fakeClient({ put })).updateStaff('m1', 's1', 'manager');
+    expect(res.error).toEqual(sinRed);
+  });
+
+  it('quitar el acceso sin conexion llega con el aviso del cliente', async () => {
+    const del = vi.fn().mockResolvedValue({ success: false, error: sinRed });
+    const res = await new HttpQRPaymentRepository(fakeClient({ del })).revokeStaff('m1', 's1');
+    expect(res.error).toEqual(sinRed);
+  });
+});

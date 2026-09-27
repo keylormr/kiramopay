@@ -63,5 +63,14 @@ describe('mensajesDeError', () => {
       );
       expect(mensajeDeRechazo({ code: 'RATE_LIMITED', message: '' }, claves, 'budget_err_save', t)).toBe('[budget_err_save]');
     });
+
+    // La sesion que no se pudo renovar por un fallo pasajero la arma el propio
+    // cliente, traducida, igual que la falta de red. Faltaba en la lista y las
+    // pantallas la tapaban con su aviso generico ("No pudimos guardar...").
+    it('respeta tambien la sesion sin confirmar, que arma el cliente', () => {
+      expect(
+        mensajeDeRechazo({ code: 'SESSION_UNCONFIRMED', message: es.err_session_unconfirmed }, claves, 'budget_err_save', t),
+      ).toBe(es.err_session_unconfirmed);
+    });
   });
 });
