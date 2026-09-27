@@ -167,6 +167,7 @@ export type TranslationKeys = {
   nav_services: string;
   nav_apps: string;
   nav_profile: string;
+  nav_main_aria: string;
 
   // Home
   total_balance: string;
@@ -430,6 +431,8 @@ export type TranslationKeys = {
   confirm_password: string;
   passwords_dont_match: string;
   bio_enable_reason: string;
+  bio_dialog_subtitle: string;
+  bio_dialog_desc: string;
   bio_enable_failed: string;
   bio_disable_desc: string;
   password_strength: string;
@@ -496,6 +499,7 @@ export type TranslationKeys = {
   // Services View
   my_services: string;
   search_service: string;
+  services_client_id_ph: string;
   select_operator: string;
   recent_recharges: string;
   service_payments: string;

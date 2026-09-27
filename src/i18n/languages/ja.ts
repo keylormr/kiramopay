@@ -82,6 +82,7 @@ const ja: TranslationKeys = {
   nav_services: 'サービス',
   nav_apps: 'アプリ',
   nav_profile: 'プロフィール',
+  nav_main_aria: 'メインナビゲーション',
 
   // Home
   total_balance: '合計残高',
@@ -342,6 +343,8 @@ const ja: TranslationKeys = {
   confirm_password: 'パスワードを確認',
   passwords_dont_match: 'パスワードが一致しません',
   bio_enable_reason: '指紋または顔でのログインを有効にするため、本人確認をしてください',
+  bio_dialog_subtitle: '本人確認',
+  bio_dialog_desc: '続行するには指紋またはFace IDを使用してください',
   bio_enable_failed: '指紋または顔を確認できませんでした。生体認証はオフのままです。',
   bio_disable_desc: '次回のログインではパスワードまたは PIN が必要です。いつでも再び有効にできます。',
   password_strength: '強度',
@@ -408,6 +411,7 @@ const ja: TranslationKeys = {
   // Services View
   my_services: 'マイサービス',
   search_service: 'サービスを検索...',
+  services_client_id_ph: '例：1234567',
   select_operator: 'オペレーターを選択',
   recent_recharges: '最近のチャージ',
   service_payments: 'サービス支払い',

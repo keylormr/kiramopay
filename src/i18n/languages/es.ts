@@ -82,6 +82,7 @@ const es: TranslationKeys = {
   nav_services: 'Servicios',
   nav_apps: 'Apps',
   nav_profile: 'Perfil',
+  nav_main_aria: 'Navegación principal',
 
   // Home
   total_balance: 'Balance Total',
@@ -342,6 +343,8 @@ const es: TranslationKeys = {
   confirm_password: 'Confirmar contraseña',
   passwords_dont_match: 'Las contraseñas no coinciden',
   bio_enable_reason: 'Confirma que eres tú para activar el ingreso con huella o rostro',
+  bio_dialog_subtitle: 'Verifica tu identidad',
+  bio_dialog_desc: 'Usa tu huella digital o Face ID para continuar',
   bio_enable_failed: 'No se confirmó tu huella o rostro. La biometría sigue desactivada.',
   bio_disable_desc: 'Tu próximo ingreso te pedirá la contraseña o el PIN. Puedes volver a activarla cuando quieras.',
   password_strength: 'Fortaleza',
@@ -408,6 +411,7 @@ const es: TranslationKeys = {
   // Services View
   my_services: 'Mis servicios',
   search_service: 'Buscar servicio...',
+  services_client_id_ph: 'Ej: 1234567',
   select_operator: 'Selecciona operador',
   recent_recharges: 'Recargas recientes',
   service_payments: 'Pagos de servicios',

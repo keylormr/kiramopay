@@ -82,6 +82,7 @@ const en: TranslationKeys = {
   nav_services: 'Services',
   nav_apps: 'Apps',
   nav_profile: 'Profile',
+  nav_main_aria: 'Main navigation',
 
   // Home
   total_balance: 'Total Balance',
@@ -342,6 +343,8 @@ const en: TranslationKeys = {
   confirm_password: 'Confirm password',
   passwords_dont_match: 'Passwords do not match',
   bio_enable_reason: 'Confirm it is you to turn on fingerprint or face sign-in',
+  bio_dialog_subtitle: 'Verify your identity',
+  bio_dialog_desc: 'Use your fingerprint or Face ID to continue',
   bio_enable_failed: 'Your fingerprint or face was not confirmed. Biometrics stays off.',
   bio_disable_desc: 'Next time you sign in you will be asked for your password or PIN. You can turn it back on anytime.',
   password_strength: 'Strength',
@@ -408,6 +411,7 @@ const en: TranslationKeys = {
   // Services View
   my_services: 'My services',
   search_service: 'Search service...',
+  services_client_id_ph: 'e.g. 1234567',
   select_operator: 'Select operator',
   recent_recharges: 'Recent recharges',
   service_payments: 'Service payments',
