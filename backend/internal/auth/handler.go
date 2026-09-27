@@ -373,12 +373,22 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ChangePassword(r.Context(), userID, &req, loginContext(r)); err != nil {
-		if errors.Is(err, ErrCuentaDeDemostracion) {
+		// Cada rechazo con su codigo: la pantalla elige el texto por codigo, y
+		// con uno solo para todo decia "contrasena incorrecta" tambien cuando
+		// la actual era correcta.
+		switch {
+		case errors.Is(err, ErrCuentaDeDemostracion):
 			response.Error(w, http.StatusForbidden, "DEMO_ACCOUNT",
 				"una cuenta de demostracion no puede cambiar su contrasena")
-			return
+		case errors.Is(err, ErrContrasenaActualIncorrecta):
+			response.Error(w, http.StatusBadRequest, "CURRENT_PASSWORD_INVALID", err.Error())
+		case errors.Is(err, ErrContrasenaNuevaIgual):
+			response.Error(w, http.StatusBadRequest, "PASSWORD_UNCHANGED", err.Error())
+		default:
+			// Lo demas (la cuenta no se pudo leer, el hash, la transaccion) no
+			// es algo que la persona pueda corregir.
+			response.Error(w, http.StatusInternalServerError, "CHANGE_PASSWORD_FAILED", err.Error())
 		}
-		response.Error(w, http.StatusBadRequest, "CHANGE_PASSWORD_FAILED", err.Error())
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]string{"message": "Password changed successfully"})

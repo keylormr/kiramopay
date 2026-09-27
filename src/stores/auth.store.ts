@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
 import { getApiLayer } from '@/api';
+import { apiError, type ApiResponse } from '@/api/types';
+import { mensajeDelCliente } from '@/i18n/mensajesDeError';
 import { soltarAvisosAlSalir } from '@/utils/avisosPush';
 import {
   registerTokenProvider,
@@ -126,7 +128,8 @@ interface AuthState {
   /** Descarta el aviso de expulsion (el usuario lo cerro). */
   clearLogoutReason: () => void;
   completeOnboarding: () => void;
-  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
+  /** La respuesta entera: la pantalla dice por que no se pudo, no solo que no. */
+  changePassword: (oldPassword: string, newPassword: string) => Promise<ApiResponse<{ changed: boolean }>>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -403,14 +406,13 @@ export const useAuthStore = create<AuthState>()(
 
       changePassword: async (oldPassword, newPassword) => {
         const { user } = get();
-        if (!user?.cedula) return false;
+        if (!user?.cedula) return apiError('SESSION_EXPIRED', mensajeDelCliente('SESSION_EXPIRED'));
         const api = getApiLayer();
-        const result = await api.auth.changePassword({
+        return api.auth.changePassword({
           cedula: user.cedula,
           oldPassword,
           newPassword,
         });
-        return Boolean(result.success && result.data?.changed);
       },
     }),
     {

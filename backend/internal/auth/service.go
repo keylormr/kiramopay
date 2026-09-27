@@ -80,6 +80,15 @@ var ErrUsernameTomado = errors.New("username taken")
 // cambia su identidad ni sus credenciales.
 var ErrCuentaDeDemostracion = user.ErrCuentaDeDemostracion
 
+// Los dos rechazos de ChangePassword que dependen de lo que tecleo la persona.
+// Van separados porque la pantalla dice cosas distintas: con el mismo codigo,
+// a quien ponia como nueva la misma contrasena de siempre se le decia que la
+// actual era incorrecta, y volvia a probar una contrasena que si sabia.
+var (
+	ErrContrasenaActualIncorrecta = errors.New("invalid current password")
+	ErrContrasenaNuevaIgual       = errors.New("new password must differ from current")
+)
+
 // ErrUserExists se devuelve en Register cuando la cedula, el telefono o el
 // correo ya pertenecen a una cuenta. El handler lo traduce a 409 USER_EXISTS;
 // que campo choco nunca sale al cliente.
@@ -673,10 +682,10 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	}
 	valid, err := hash.VerifyPin(req.OldPassword, u.PasswordHash)
 	if err != nil || !valid {
-		return fmt.Errorf("invalid current password")
+		return ErrContrasenaActualIncorrecta
 	}
 	if req.OldPassword == req.NewPassword {
-		return fmt.Errorf("new password must differ from current")
+		return ErrContrasenaNuevaIgual
 	}
 	newHash, err := hash.HashPin(req.NewPassword)
 	if err != nil {

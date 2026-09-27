@@ -16,7 +16,18 @@ import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
+import { mensajeDeRechazo } from '../../i18n/mensajesDeError';
 import { Capacitor } from '@capacitor/core';
+
+// Cada rechazo de cambiar la contrasena con su texto. Todo decia "Contraseña
+// incorrecta", tambien cuando la actual era correcta y el problema era otro.
+// Sin red, sesion vencida o demasiadas solicitudes llegan ya traducidos del
+// cliente; un error del servidor cae al generico.
+const CLAVES_ERROR_CONTRASENA: Readonly<Record<string, string>> = {
+  CURRENT_PASSWORD_INVALID: 'incorrect_password',
+  PASSWORD_UNCHANGED: 'password_must_differ',
+  DEMO_ACCOUNT: 'password_demo_account',
+};
 
 interface ProfileViewProps {
   onOpenFAQ?: () => void;
@@ -213,9 +224,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     setIsChangingPassword(true);
     void (async () => {
       try {
-        const ok = await useAuthStore.getState().changePassword(currentPassword, newPassword);
-        if (!ok) {
-          setPasswordError(t('incorrect_password'));
+        const res = await useAuthStore.getState().changePassword(currentPassword, newPassword);
+        if (!res.success) {
+          setPasswordError(mensajeDeRechazo(res.error, CLAVES_ERROR_CONTRASENA, 'password_change_failed', t));
           return;
         }
         setShowPasswordSheet(false);

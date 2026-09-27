@@ -157,6 +157,9 @@ export type TranslationKeys = {
   // Password
   enter_password: string;
   incorrect_password: string;
+  password_must_differ: string;
+  password_demo_account: string;
+  password_change_failed: string;
   current_password: string;
   show_password: string;
   hide_password: string;
