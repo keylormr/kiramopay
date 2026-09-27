@@ -687,15 +687,17 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	}
 	// Tope de intentos, como el login: sin el, con una sesion robada se podia
 	// probar la contrasena actual sin limite y, al acertar, cambiarla y
-	// quedarse con la cuenta. Con el tope alcanzado no se mira la contrasena,
-	// ni siquiera la correcta: si la correcta pasara, el tope seguiria diciendo
-	// cual es.
-	if s.isChangePasswordLockedOut(userID) {
+	// quedarse con la cuenta. El intento se cuenta ANTES de mirar la
+	// contrasena, con el INCR atomico de Redis: si se leyera el contador y se
+	// sumara despues, las peticiones en paralelo leerian todas el mismo valor
+	// mientras Argon2 trabaja, y el tope se esquivaria con una rafaga. Pasado
+	// el tope no se mira la contrasena, ni siquiera la correcta: si la
+	// correcta pasara, el tope seguiria diciendo cual es.
+	if s.countChangePasswordAttempt(userID) > int64(s.maxLoginAttempts) {
 		return ErrCambioDeContrasenaEnPausa
 	}
 	valid, err := hash.VerifyPin(req.OldPassword, u.PasswordHash)
 	if err != nil || !valid {
-		s.incrementChangePasswordLockout(userID)
 		return ErrContrasenaActualIncorrecta
 	}
 	// Acerto la actual: equivocarse de vez en cuando no termina en el tope.
@@ -1085,11 +1087,14 @@ func (s *Service) isUserLockedOut(userID string) bool {
 // cerrar las demas sesiones.
 func changePasswordLockoutKey(userID string) string { return "lockout:chpwd:uid:" + userID }
 
-func (s *Service) incrementChangePasswordLockout(userID string) {
+// countChangePasswordAttempt suma el intento y devuelve cuantos lleva la
+// ventana, en una sola orden atomica. Sin almacen devuelve 0: nunca en pausa,
+// igual que el login.
+func (s *Service) countChangePasswordAttempt(userID string) int64 {
 	if s.lockoutStore == nil || userID == "" {
-		return
+		return 0
 	}
-	s.lockoutStore.IncrLockout(changePasswordLockoutKey(userID))
+	return s.lockoutStore.IncrLockout(changePasswordLockoutKey(userID))
 }
 
 func (s *Service) resetChangePasswordLockout(userID string) {
@@ -1097,13 +1102,6 @@ func (s *Service) resetChangePasswordLockout(userID string) {
 		return
 	}
 	s.lockoutStore.ResetLockout(changePasswordLockoutKey(userID))
-}
-
-func (s *Service) isChangePasswordLockedOut(userID string) bool {
-	if s.lockoutStore == nil || userID == "" {
-		return false
-	}
-	return int(s.lockoutStore.GetLockout(changePasswordLockoutKey(userID))) >= s.maxLoginAttempts
 }
 
 // ─────────────────────────────────────────────────────────────────────────
