@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialSinpeHistory } from '../mock-data';
+import { initialSinpeHistory, initialRechargeHistory } from '../mock-data';
 
 // La demo fechaba sus SINPE solo con texto en espanol ("Hoy, 2:30 PM"): en
 // ingles se leian en espanol. La pantalla muestra la fecha de maquina en el
@@ -7,6 +7,16 @@ import { initialSinpeHistory } from '../mock-data';
 describe('semilla de la demo — SINPE', () => {
   it('cada SINPE de ejemplo trae una fecha de maquina valida', () => {
     for (const fila of initialSinpeHistory) {
+      expect(Number.isNaN(Date.parse(fila.dateISO ?? '')), fila.id).toBe(false);
+    }
+  });
+});
+
+// Lo mismo con las recargas de ejemplo: "20 Dic, 2024" se leia en espanol en
+// cualquier idioma.
+describe('semilla de la demo — recargas', () => {
+  it('cada recarga de ejemplo trae una fecha de maquina valida', () => {
+    for (const fila of initialRechargeHistory) {
       expect(Number.isNaN(Date.parse(fila.dateISO ?? '')), fila.id).toBe(false);
     }
   });
