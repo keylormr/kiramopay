@@ -75,6 +75,7 @@ const hi: TranslationKeys = {
   password_must_differ: 'नया पासवर्ड मौजूदा पासवर्ड से अलग होना चाहिए।',
   password_demo_account: 'यह डेमो खाता बिना पासवर्ड के लॉग इन करता है और पासवर्ड सेट नहीं कर सकता।',
   password_change_failed: 'आपका पासवर्ड नहीं बदला जा सका। फिर से कोशिश करें।',
+  password_change_locked: 'मौजूदा पासवर्ड बहुत बार गलत डाला गया। सुरक्षा के लिए 15 मिनट रुकें और फिर से कोशिश करें।',
   current_password: 'वर्तमान पासवर्ड',
   show_password: 'पासवर्ड दिखाएं',
   hide_password: 'पासवर्ड छुपाएं',

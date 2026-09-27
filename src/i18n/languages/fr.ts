@@ -75,6 +75,7 @@ const fr: TranslationKeys = {
   password_must_differ: 'Le nouveau mot de passe doit être différent de l’actuel.',
   password_demo_account: 'Ce compte de démonstration se connecte sans mot de passe et ne peut pas en définir un.',
   password_change_failed: 'Impossible de modifier votre mot de passe. Réessayez.',
+  password_change_locked: 'Trop de tentatives avec un mot de passe actuel erroné. Par sécurité, attendez 15 minutes et réessayez.',
   current_password: 'Mot de passe actuel',
   show_password: 'Afficher le mot de passe',
   hide_password: 'Masquer le mot de passe',

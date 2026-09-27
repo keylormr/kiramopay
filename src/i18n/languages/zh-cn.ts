@@ -76,6 +76,7 @@ const zhCn: TranslationKeys = {
   password_must_differ: '新密码必须与当前密码不同。',
   password_demo_account: '此演示账户无需密码即可登录，无法设置密码。',
   password_change_failed: '无法更改你的密码，请重试。',
+  password_change_locked: '当前密码输错次数过多。为了安全，请等待 15 分钟后再试。',
   current_password: '当前密码',
   show_password: '显示密码',
   hide_password: '隐藏密码',

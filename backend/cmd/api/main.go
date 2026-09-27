@@ -180,6 +180,9 @@ func main() {
 	auditHandler := audit.NewHandler(auditRepo, auditLogger)
 
 	// ── Lockout store ────────────────────────────────────────────────────
+	// Los 15 minutos los citan los avisos de bloqueo de la app (las claves que
+	// terminan en _locked, en src/i18n/languages): si cambian, cambiar
+	// tambien esos textos.
 	lockoutStore := middleware.NewRedisLockoutStore(redisClient, 15*time.Minute)
 
 	// ── Ledger engine ────────────────────────────────────────────────────

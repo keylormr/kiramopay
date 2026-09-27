@@ -160,6 +160,7 @@ export type TranslationKeys = {
   password_must_differ: string;
   password_demo_account: string;
   password_change_failed: string;
+  password_change_locked: string;
   current_password: string;
   show_password: string;
   hide_password: string;

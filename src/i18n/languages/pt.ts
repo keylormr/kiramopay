@@ -75,6 +75,7 @@ const pt: TranslationKeys = {
   password_must_differ: 'A nova senha precisa ser diferente da atual.',
   password_demo_account: 'Esta conta de demonstração entra sem senha e não pode definir uma.',
   password_change_failed: 'Não foi possível alterar sua senha. Tente novamente.',
+  password_change_locked: 'Muitas tentativas com a senha atual errada. Por segurança, espere 15 minutos e tente novamente.',
   current_password: 'Senha atual',
   show_password: 'Mostrar senha',
   hide_password: 'Ocultar senha',
