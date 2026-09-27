@@ -210,3 +210,17 @@ describe('ServicesView — recarga', () => {
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 });
+
+// El ejemplo del numero de cliente decia "Ej: 1234567" en cualquier idioma.
+describe('ServicesView — el formulario de pago en otro idioma', () => {
+  it('en ingles, el ejemplo del numero de cliente sale en ingles', async () => {
+    localStorage.setItem('kiramopay_language', 'en');
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByText('ICE Electricidad'));
+
+    expect(await screen.findByPlaceholderText('e.g. 1234567')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Ej: 1234567')).not.toBeInTheDocument();
+  });
+});

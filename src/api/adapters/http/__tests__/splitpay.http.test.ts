@@ -1,5 +1,8 @@
 import { HttpSplitPayRepository } from '../splitpay.http';
 import type { HttpClient } from '../client';
+import es from '@/i18n/languages/es';
+import fr from '@/i18n/languages/fr';
+import { fijarDiccionarioActivo } from '@/i18n/mensajesDeError';
 
 // El backend responde 200 {"success":true,"data":null} cuando el usuario no
 // tiene divisiones (Go serializa un slice nil como null). El adaptador
@@ -74,6 +77,32 @@ describe('HttpSplitPayRepository.createSplit', () => {
     const res = await new HttpSplitPayRepository(client).createSplit(pedido);
     expect(res.success).toBe(false);
     expect(res.error?.code).toBe('CREATE_FAILED');
+  });
+
+  // Sin un texto que mostrar, el adaptador inventaba 'Failed' en ingles, y la
+  // pantalla lo pintaba tal cual en cualquier idioma. El respaldo es el aviso
+  // generico en el idioma activo, como el que arma el cliente HTTP.
+  describe('sin un texto que mostrar', () => {
+    afterEach(() => {
+      fijarDiccionarioActivo(es);
+    });
+
+    it('una respuesta exitosa sin datos da el aviso generico en el idioma de la app', async () => {
+      fijarDiccionarioActivo(fr);
+      const client = clienteQueResponde({ success: true, data: null });
+      const res = await new HttpSplitPayRepository(client).createSplit(pedido);
+      expect(res.success).toBe(false);
+      expect(res.error?.code).toBe('CREATE_FAILED');
+      expect(res.error?.message).toBe(fr.err_generic);
+    });
+
+    it('una falla sin codigo ni mensaje, tambien', async () => {
+      fijarDiccionarioActivo(fr);
+      const client = clienteQueResponde({ success: false, error: { message: '' } });
+      const res = await new HttpSplitPayRepository(client).createSplit(pedido);
+      expect(res.error?.code).toBe('CREATE_FAILED');
+      expect(res.error?.message).toBe(fr.err_generic);
+    });
   });
 
   it('un exito se sigue mapeando igual que antes', async () => {
