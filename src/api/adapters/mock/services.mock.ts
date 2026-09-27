@@ -70,6 +70,7 @@ export class MockServicesRepository implements IServicesRepository {
       phone: request.phone,
       amount: request.amount,
       date: 'Ahora',
+      dateISO: new Date().toISOString(),
       status: 'completed',
     };
     const state = getState();

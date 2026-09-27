@@ -13,6 +13,7 @@ import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
+import { fechaCorta } from '@/utils/fechaPlazo';
 
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
@@ -425,7 +426,7 @@ export const ServicesView: React.FC = () => {
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{recharge.phone}</p>
-                        <p className="text-sm text-gray-500">{recharge.date}</p>
+                        <p className="text-sm text-gray-500">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
                       </div>
                       <p className="font-bold uv-text-primary">
                         {formatCurrency(recharge.amount)}
@@ -502,7 +503,7 @@ export const ServicesView: React.FC = () => {
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{op?.name || 'Recarga'}</p>
                         <p className="text-sm text-gray-500">+506 {recharge.phone}</p>
-                        <p className="text-xs text-gray-400">{recharge.date}</p>
+                        <p className="text-xs text-gray-400">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-bold uv-text-primary">
