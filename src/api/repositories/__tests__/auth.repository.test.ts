@@ -136,12 +136,15 @@ describe('HttpAuthRepository', () => {
       expect(result.data?.changed).toBe(true);
     });
 
-    it('should fail with wrong old password', async () => {
+    // El codigo del servidor llega a la pantalla: antes se pisaba con
+    // CHANGE_PASSWORD_FAILED y la pantalla no distinguia "la actual no es esa"
+    // de "la nueva es igual a la actual" ni de la falta de red.
+    it('should fail with wrong old password, keeping the server code', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({
-          error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect' },
+          error: { code: 'CURRENT_PASSWORD_INVALID', message: 'invalid current password' },
         }),
       });
       const result = await repo.changePassword({
@@ -150,7 +153,7 @@ describe('HttpAuthRepository', () => {
         newPassword: 'NewPass2024!',
       });
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('CHANGE_PASSWORD_FAILED');
+      expect(result.error?.code).toBe('CURRENT_PASSWORD_INVALID');
     });
   });
 
