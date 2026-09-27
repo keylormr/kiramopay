@@ -114,3 +114,54 @@ describe('ProfileView: cambiar la contrasena', () => {
     expect(await within(hoja).findByText('Contraseña incorrecta')).toBeInTheDocument();
   });
 });
+
+// Cada aviso va junto al campo al que se refiere. Con un solo lugar, bajo la
+// contrasena actual, "la nueva tiene que ser distinta" pintaba de rojo justo la
+// que la persona tenia bien, y no se borraba al corregir la nueva.
+describe('ProfileView: cada aviso de la contrasena en su lugar', () => {
+  it('la nueva igual a la actual se avisa en la contrasena nueva y se borra al cambiarla', async () => {
+    mocks.changePassword.mockResolvedValue({
+      success: false,
+      error: { code: 'PASSWORD_UNCHANGED', message: 'new password must differ from current' },
+    });
+    const aviso = 'La contraseña nueva tiene que ser distinta de la actual.';
+
+    const hoja = await cambiarContrasena();
+    const [actual, nueva] = within(hoja).getAllByPlaceholderText('--------');
+
+    await within(hoja).findByText(aviso);
+    expect(nueva).toHaveAccessibleDescription(aviso);
+    expect(actual).not.toHaveAccessibleDescription(aviso);
+
+    fireEvent.change(nueva, { target: { value: 'OtraClave2024!' } });
+    expect(within(hoja).queryByText(aviso)).toBeNull();
+  });
+
+  it('la actual equivocada se avisa en la contrasena actual', async () => {
+    mocks.changePassword.mockResolvedValue({
+      success: false,
+      error: { code: 'CURRENT_PASSWORD_INVALID', message: 'invalid current password' },
+    });
+
+    const hoja = await cambiarContrasena();
+    const [actual, nueva] = within(hoja).getAllByPlaceholderText('--------');
+
+    await within(hoja).findByText('Contraseña incorrecta');
+    expect(actual).toHaveAccessibleDescription('Contraseña incorrecta');
+    expect(nueva).not.toHaveAccessibleDescription('Contraseña incorrecta');
+  });
+
+  it('un rechazo que no es de ningun campo se avisa aparte, no bajo la contrasena actual', async () => {
+    mocks.changePassword.mockResolvedValue({
+      success: false,
+      error: { code: 'DEMO_ACCOUNT', message: 'una cuenta de demostracion no puede cambiar su contrasena' },
+    });
+    const aviso = 'Esta cuenta de demostración entra sin contraseña y no puede fijar una.';
+
+    const hoja = await cambiarContrasena();
+    const [actual] = within(hoja).getAllByPlaceholderText('--------');
+
+    expect(await within(hoja).findByRole('alert')).toHaveTextContent(aviso);
+    expect(actual).not.toHaveAccessibleDescription(aviso);
+  });
+});
