@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/middleware"
 )
@@ -120,13 +121,7 @@ func TestLogin_LaQuintaContrasenaTodaviaPuedeSerLaBuena(t *testing.T) {
 func TestLogin_ConLaCuentaEnPausaLaRespuestaNoConfirmaLaContrasena(t *testing.T) {
 	svc, pool, store := servicioConDemo(t, false)
 	id := sembrarConUsuario(t, pool, "702650930", "keilor", false)
-	// Las mismas columnas que pone el bloqueo de un administrador
-	// (BlockUserAndRevokeSessions): chk_users_blocked_coherente las exige.
-	if _, err := pool.Exec(context.Background(),
-		`UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'prueba'
-		  WHERE id = $1::uuid`, id); err != nil {
-		t.Fatalf("bloquear la cuenta: %v", err)
-	}
+	bloquearComoAdmin(t, pool, id)
 	ruta := rutaDeAcceso(svc, store)
 
 	// Cinco equivocadas por la cedula dejan la cuenta en pausa.
@@ -141,5 +136,49 @@ func TestLogin_ConLaCuentaEnPausaLaRespuestaNoConfirmaLaContrasena(t *testing.T)
 	if buena != mala {
 		t.Fatalf("con la cuenta en pausa, la contrasena correcta recibe %q y una equivocada %q: la respuesta dice cual es la buena",
 			buena, mala)
+	}
+}
+
+// Contar el intento antes de probar la contrasena no puede dejar sumando los
+// de quien si la sabe. Una cuenta bloqueada por un administrador nunca llega a
+// emitir la sesion: si los contadores se vaciaran recien ahi, su titular veria
+// "cuenta bloqueada" cinco veces y despues "demasiados intentos", y al
+// desbloquearla seguiria frenada hasta que venciera la ventana de 15 minutos.
+func TestLogin_LaContrasenaCorrectaDeUnaCuentaBloqueadaNoGastaIntentos(t *testing.T) {
+	svc, pool, store := servicioConDemo(t, false)
+	id := sembrarConUsuario(t, pool, "702650930", "keilor", false)
+	bloquearComoAdmin(t, pool, id)
+	ruta := rutaDeAcceso(svc, store)
+
+	for i := 0; i < 7; i++ {
+		if c := codigoDeLaRespuesta(t, intentarEntrar(ruta, "keilor", "Kiramopay2024!")); c != "ACCOUNT_BLOCKED" {
+			t.Fatalf("intento %d con la contrasena correcta: %q, esperaba ACCOUNT_BLOCKED", i+1, c)
+		}
+	}
+
+	desbloquearComoAdmin(t, pool, id)
+	if rec := intentarEntrar(ruta, "keilor", "Kiramopay2024!"); rec.Code != http.StatusOK {
+		t.Fatalf("recien desbloqueada, la contrasena correcta recibio %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// bloquearComoAdmin y desbloquearComoAdmin escriben las mismas columnas que
+// BlockUserAndRevokeSessions y UnblockUser: chk_users_blocked_coherente las
+// exige juntas.
+func bloquearComoAdmin(t *testing.T, pool *pgxpool.Pool, id string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'prueba'
+		  WHERE id = $1::uuid`, id); err != nil {
+		t.Fatalf("bloquear la cuenta: %v", err)
+	}
+}
+
+func desbloquearComoAdmin(t *testing.T, pool *pgxpool.Pool, id string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE users SET status = 'active', blocked_at = NULL, blocked_reason = NULL, blocked_by = NULL
+		  WHERE id = $1::uuid`, id); err != nil {
+		t.Fatalf("desbloquear la cuenta: %v", err)
 	}
 }
