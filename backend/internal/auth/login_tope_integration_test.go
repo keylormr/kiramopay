@@ -120,8 +120,11 @@ func TestLogin_LaQuintaContrasenaTodaviaPuedeSerLaBuena(t *testing.T) {
 func TestLogin_ConLaCuentaEnPausaLaRespuestaNoConfirmaLaContrasena(t *testing.T) {
 	svc, pool, store := servicioConDemo(t, false)
 	id := sembrarConUsuario(t, pool, "702650930", "keilor", false)
+	// Las mismas columnas que pone el bloqueo de un administrador
+	// (BlockUserAndRevokeSessions): chk_users_blocked_coherente las exige.
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE users SET status = 'blocked' WHERE id = $1::uuid`, id); err != nil {
+		`UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'prueba'
+		  WHERE id = $1::uuid`, id); err != nil {
 		t.Fatalf("bloquear la cuenta: %v", err)
 	}
 	ruta := rutaDeAcceso(svc, store)
