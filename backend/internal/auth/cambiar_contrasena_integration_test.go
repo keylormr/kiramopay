@@ -101,7 +101,7 @@ func TestCambiarContrasena_TopeDeIntentosConLaActualEquivocada(t *testing.T) {
 	}
 
 	// El contador es propio: si fuera el del login, quien robo la sesion
-	// dejaria a la duena de la cuenta sin poder entrar a cerrar las demas
+	// dejaria a la persona titular sin poder entrar a cerrar las demas
 	// sesiones. Entrar con la contrasena de siempre prueba ademas que no
 	// cambio.
 	if _, err := svc.Login(context.Background(),

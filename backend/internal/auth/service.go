@@ -1083,8 +1083,8 @@ func (s *Service) isUserLockedOut(userID string) bool {
 
 // Contador propio de cambiar la contrasena, con el umbral y el vencimiento del
 // login. No se comparte con el de la cuenta: quien probara contrasenas con una
-// sesion robada bloquearia tambien el login, y la duena no podria entrar a
-// cerrar las demas sesiones.
+// sesion robada bloquearia tambien el login, y la persona titular no podria
+// entrar a cerrar las demas sesiones.
 func changePasswordLockoutKey(userID string) string { return "lockout:chpwd:uid:" + userID }
 
 // countChangePasswordAttempt suma el intento y devuelve cuantos lleva la
