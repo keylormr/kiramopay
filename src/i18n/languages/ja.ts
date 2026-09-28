@@ -665,6 +665,8 @@ const ja: TranslationKeys = {
   login_no_account: 'アカウントをお持ちでないですか？',
   login_wrong_credentials: 'ユーザー名またはパスワードが違います',
   login_rate_limited: '試行回数が多すぎます。しばらくしてからもう一度お試しください。',
+  login_locked: '失敗した試行が多すぎます。安全のため、15分待ってからもう一度お試しください。',
+  login_failed: 'ログインできませんでした。しばらくしてからもう一度お試しください。',
   login_biometric_failed: '生体認証に失敗しました',
   login_biometric_prompt: '指紋またはFace IDでログイン',
   login_terms: '続けることで、利用規約とプライバシーポリシーに同意します',

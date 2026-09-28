@@ -666,6 +666,8 @@ const en: TranslationKeys = {
   login_no_account: 'Don\'t have an account?',
   login_wrong_credentials: 'Wrong username or password',
   login_rate_limited: 'Too many attempts. Wait a moment and try again.',
+  login_locked: 'Too many failed attempts. For your security, wait 15 minutes and try again.',
+  login_failed: 'We could not sign you in. Please try again in a moment.',
   login_biometric_failed: 'Biometric authentication failed',
   login_biometric_prompt: 'Log in with fingerprint or Face ID',
   login_terms: 'By continuing, you accept our Terms of Service and Privacy Policy',

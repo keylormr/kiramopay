@@ -36,6 +36,11 @@ test.describe('Authentication Flow', () => {
   });
 
   test('advances from cédula to the password stage', async ({ page }) => {
+    // Sin stub el sondeo no tenia servidor y recibia NETWORK_ERROR; avanzaba
+    // porque la pantalla pasaba al campo de contrasena ante cualquier codigo.
+    // Ahora la falta de red se avisa en este paso, asi que se simula lo que
+    // responde el servidor a una cuenta normal: PASSWORD_REQUIRED.
+    await stubBackend(page);
     await page.goto('/');
     await fillCedula(page, '702650930');
     await expect(page.locator('input[type="password"]').first()).toBeVisible({ timeout: 5000 });

@@ -27,6 +27,26 @@ const ANDROID_APK_URL =
 // Only offer the download on the web — pointless inside the installed app.
 const SHOW_APK_DOWNLOAD = !Capacitor.isNativePlatform();
 
+// Cada rechazo del login con su texto. Todo lo que no estaba en la lista decia
+// "Usuario o contraseña incorrecta": sin red, o con la cuenta en pausa por
+// demasiados intentos, la persona volvia a teclear una contrasena que si sabia.
+// Lo que no se reconoce cae a un aviso generico, nunca a la contrasena.
+const CLAVES_ERROR_LOGIN: Readonly<Record<string, string>> = {
+  AUTH_FAILED: 'login_wrong_credentials',
+  ACCOUNT_BLOCKED: 'login_account_blocked',
+  ACCOUNT_LOCKED: 'login_locked',
+  RATE_LIMITED: 'login_rate_limited',
+  NETWORK_ERROR: 'err_network',
+  INVALID_IDENTIFIER: 'login_identifier_invalid',
+  VALIDATION_ERROR: 'login_identifier_invalid',
+};
+
+// Rechazos que el intento con contrasena repetiria igual: el sondeo del
+// identificador los avisa ahi, sin pedir la contrasena. La pausa por intentos
+// no delata cuentas: el servidor cuenta los intentos por identificador, exista
+// o no la cuenta.
+const AVISOS_DEL_SONDEO = new Set(['RATE_LIMITED', 'ACCOUNT_LOCKED', 'NETWORK_ERROR']);
+
 // Cuentas que siembra `SeedDevelopment` del backend cuando ENVIRONMENT=development
 // (backend/internal/database/seeder.go). Fuera de ese entorno el sembrador exige
 // SEED_PASSWORD_<CEDULA> y estas contrasenas no valen, por eso el recuadro solo
@@ -151,11 +171,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       await finalizarLogin(clasificado.canonico, '');
       return;
     }
-    // El limitador si se atiende aqui: el sondeo es una peticion y puede caer
-    // en el, y mandar al usuario al campo de contrasena solo para que falle
-    // otra vez seria hacerle perder el intento.
-    if (res.code === 'RATE_LIMITED') {
-      setError(t('login_rate_limited'));
+    // El limitador, la pausa por intentos y la falta de red si se atienden
+    // aqui: mandar al usuario al campo de contrasena solo para que falle otra
+    // vez seria hacerle perder el intento.
+    if (res.code && AVISOS_DEL_SONDEO.has(res.code)) {
+      setError(t(CLAVES_ERROR_LOGIN[res.code]));
       return;
     }
     // Una cuenta bloqueada NO se distingue aqui a proposito: el servidor solo
@@ -213,16 +233,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     if (res.success) {
       await finalizarLogin(userIdentificador, userPassword);
     } else {
-      setError(
-        res.code === 'ACCOUNT_BLOCKED'
-          ? t('login_account_blocked')
-          : res.code === 'RATE_LIMITED'
-            ? t('login_rate_limited')
-            : res.code === 'INVALID_IDENTIFIER'
-              ? t('login_identifier_invalid')
-              : t('login_wrong_credentials'),
-      );
-      setPassword('');
+      setError(t(CLAVES_ERROR_LOGIN[res.code ?? ''] ?? 'login_failed'));
+      // Solo se borra la que el servidor dijo que era la equivocada: sin red,
+      // con el limitador o en pausa, se reintenta con la misma.
+      if (res.code === 'AUTH_FAILED') setPassword('');
     }
     setIsLoading(false);
   };

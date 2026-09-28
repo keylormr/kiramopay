@@ -666,6 +666,8 @@ const es: TranslationKeys = {
   login_no_account: '¿No tienes cuenta?',
   login_wrong_credentials: 'Usuario o contraseña incorrecta',
   login_rate_limited: 'Demasiados intentos. Espera un momento e intenta de nuevo.',
+  login_locked: 'Demasiados intentos fallidos. Por seguridad, espera 15 minutos e intenta de nuevo.',
+  login_failed: 'No pudimos iniciar sesión. Intenta de nuevo en un momento.',
   login_biometric_failed: 'Autenticación biométrica fallida',
   login_biometric_prompt: 'Ingresa con tu huella o Face ID',
   login_terms: 'Al continuar, aceptas nuestros Términos de Servicio y Política de Privacidad',
