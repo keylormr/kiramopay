@@ -64,6 +64,13 @@ var ErrAccountBlocked = errors.New("account blocked")
 // minutos sin que nadie hubiera escrito una contrasena.
 var ErrPasswordRequired = errors.New("password required")
 
+// ErrAccesoEnPausa: el identificador ya gasto sus intentos en la ventana del
+// bloqueo. Es el mismo 423 que responde el control de la ruta
+// (middleware.AccountLockoutCheck); el servicio lo devuelve cuando varios
+// intentos llegan juntos y pasan ese control antes de que el contador suba.
+// Sale igual exista o no la cuenta: las dos ramas cuentan con el mismo tope.
+var ErrAccesoEnPausa = errors.New("too many failed login attempts")
+
 // ErrUsernameInvalido: el nombre de usuario no calza el formato o esta en la
 // lista de nombres reservados. Tiene codigo propio para que la pantalla lo diga
 // junto al campo, en vez del 409 generico de "ya existe un usuario".
@@ -343,9 +350,14 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 			hash.DummyVerify()
 			return nil, ErrPasswordRequired
 		}
+		// El intento se cuenta ANTES del Argon2 y con el mismo tope que en una
+		// cuenta que existe (ver mas abajo): las dos ramas tienen que responder
+		// lo mismo y tardar lo mismo, tambien cuando se pasan del tope.
+		if s.incrementLockout(kind, canonical) > int64(s.maxLoginAttempts) {
+			return nil, ErrAccesoEnPausa
+		}
 		// Anti-enumeration: spend the Argon2 budget anyway.
 		hash.DummyVerify()
-		s.incrementLockout(kind, canonical)
 		if s.auditLogger != nil {
 			s.auditLogger.LogLogin("", lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
@@ -373,6 +385,15 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 					RiskLevel: "high",
 				})
 			}
+			// Este camino no cuenta intentos, asi que mira los contadores como
+			// estan: una cuenta en pausa no entra ni sin contrasena. Revisa los
+			// DOS, por identificador y por cuenta.
+			if s.lockoutStore != nil {
+				count := s.lockoutStore.GetLockout(identifier.LockoutKey(kind, canonical))
+				if int(count) >= s.maxLoginAttempts || s.isUserLockedOut(u.ID) {
+					return nil, ErrInvalidCredentials
+				}
+			}
 			return s.emitirSesion(ctx, u, kind, canonical, lc)
 		}
 		// La cuenta no abre sin contrasena. Se responde con un codigo PROPIO y,
@@ -386,16 +407,37 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 		return nil, ErrPasswordRequired
 	}
 
+	// Los intentos se cuentan ANTES de probar la contrasena, con una sola orden
+	// atomica que le devuelve a cada uno su numero. Contarlos despues del fallo
+	// dejaba pasar al Argon2 a todos los que llegaran juntos: el control de la
+	// ruta los veia con el contador todavia en cero. Ahora, de los que llegan a
+	// la vez, solo se prueban los que caen dentro del tope. El intento con la
+	// contrasena correcta tambien cuenta; entrar vacia los contadores
+	// (emitirSesion).
+	if s.incrementLockout(kind, canonical) > int64(s.maxLoginAttempts) {
+		return nil, ErrAccesoEnPausa
+	}
+	// Segundo contador, por cuenta resuelta: sin el, una cuenta ganaria
+	// maxLoginAttempts intentos POR CADA identificador (cedula, correo y
+	// telefono llevan contadores distintos). Este no corta antes del Argon2:
+	// una respuesta rapida diria que el identificador es de una cuenta en
+	// pausa, o sea de la misma persona que otro identificador ya agotado.
+	cuentaEnPausa := s.incrementUserLockout(u.ID) > int64(s.maxLoginAttempts)
+
 	valid, err := hash.VerifyPin(req.Password, u.PasswordHash)
 	if err != nil || !valid {
-		s.incrementLockout(kind, canonical)
-		// Segundo contador, por cuenta resuelta: sin el, una cuenta ganaria
-		// maxLoginAttempts intentos POR CADA identificador (cedula, correo y
-		// telefono llevan contadores distintos).
-		s.incrementUserLockout(u.ID)
 		if s.auditLogger != nil {
 			s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, false, string(kind))
 		}
+		return nil, ErrInvalidCredentials
+	}
+
+	// La cuenta ya gasto sus intentos por otras puertas: la contrasena correcta
+	// recibe lo mismo que una equivocada. Va antes del control de cuenta no
+	// activa porque ese responde con codigo propio solo ante la correcta; si
+	// fuera despues, una cuenta bloqueada seguiria confirmando la contrasena
+	// por cada puerta que todavia tuviera intentos.
+	if cuentaEnPausa {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -423,22 +465,14 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 
 // emitirSesion es el tramo final del login, compartido por el camino con
 // contrasena y por el de las cuentas de demostracion. Se extrajo para que los
-// dos pasen EXACTAMENTE por los mismos controles finales y por el mismo
-// registro de sesion: dos copias divergirian.
+// dos pasen por el mismo registro de sesion: dos copias divergirian.
+//
+// Los controles del bloqueo no viven aca. El camino con contrasena decide con
+// el numero que le toco a su propio intento (ver Login): volver a mirar aca el
+// contador rechazaria la quinta contrasena aunque fuera la buena, porque ese
+// intento ya esta contado. El de demostracion no cuenta intentos y mira los
+// contadores antes de llamar.
 func (s *Service) emitirSesion(ctx context.Context, u *user.UserRecord, kind identifier.Kind, canonical string, lc LoginContext) (*LoginResponse, error) {
-	// Block locked accounts AFTER hash verification too (defense in depth —
-	// the middleware should have already blocked, but if it didn't, do not
-	// issue tokens). Checks BOTH counters: per identifier and per account.
-	if s.lockoutStore != nil {
-		count := s.lockoutStore.GetLockout(identifier.LockoutKey(kind, canonical))
-		if int(count) >= s.maxLoginAttempts {
-			return nil, ErrInvalidCredentials
-		}
-		if s.isUserLockedOut(u.ID) {
-			return nil, ErrInvalidCredentials
-		}
-	}
-
 	tokens, err := s.jwt.GenerateTokenPair(u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("generate tokens: %w", err)
@@ -1024,11 +1058,14 @@ func (s *Service) persistTokenRollout(
 	return s.authRepo.CreateSession(ctx, sess)
 }
 
-func (s *Service) incrementLockout(kind identifier.Kind, canonical string) {
+// incrementLockout suma el intento al contador del identificador y devuelve el
+// numero que le toco. Sin almacen devuelve 0 y el tope no frena: lo mismo que
+// hace el control de la ruta cuando Redis no responde.
+func (s *Service) incrementLockout(kind identifier.Kind, canonical string) int64 {
 	if s.lockoutStore == nil || canonical == "" {
-		return
+		return 0
 	}
-	s.lockoutStore.IncrLockout(identifier.LockoutKey(kind, canonical))
+	return s.lockoutStore.IncrLockout(identifier.LockoutKey(kind, canonical))
 }
 
 func (s *Service) resetLockout(kind identifier.Kind, canonical string) {
@@ -1042,11 +1079,11 @@ func (s *Service) resetLockout(kind identifier.Kind, canonical string) {
 // user_id, que no es PII. Comparte umbral y TTL con el contador principal.
 func userLockoutKey(userID string) string { return "lockout:uid:" + userID }
 
-func (s *Service) incrementUserLockout(userID string) {
+func (s *Service) incrementUserLockout(userID string) int64 {
 	if s.lockoutStore == nil || userID == "" {
-		return
+		return 0
 	}
-	s.lockoutStore.IncrLockout(userLockoutKey(userID))
+	return s.lockoutStore.IncrLockout(userLockoutKey(userID))
 }
 
 func (s *Service) resetUserLockout(userID string) {
