@@ -85,6 +85,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusUnauthorized, "PASSWORD_REQUIRED", "password required")
 			return
 		}
+		// El identificador ya gasto sus intentos: el mismo 423, con el mismo
+		// cuerpo, que responde el control de la ruta. El servicio lo devuelve
+		// cuando varios intentos llegaron juntos y pasaron ese control antes de
+		// que el contador subiera. Sale igual exista o no la cuenta.
+		if errors.Is(err, ErrAccesoEnPausa) {
+			response.Error(w, http.StatusLocked, "ACCOUNT_LOCKED",
+				"account temporarily locked due to too many failed attempts")
+			return
+		}
 		// Log the real cause for ops; the client always sees a constant
 		// "invalid credentials" message (constant-time anti-enumeration).
 		if !errors.Is(err, ErrInvalidCredentials) {
