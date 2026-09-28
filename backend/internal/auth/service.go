@@ -394,6 +394,8 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 					return nil, ErrInvalidCredentials
 				}
 			}
+			s.resetLockout(kind, canonical)
+			s.resetUserLockout(u.ID)
 			return s.emitirSesion(ctx, u, kind, canonical, lc)
 		}
 		// La cuenta no abre sin contrasena. Se responde con un codigo PROPIO y,
@@ -412,8 +414,8 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 	// dejaba pasar al Argon2 a todos los que llegaran juntos: el control de la
 	// ruta los veia con el contador todavia en cero. Ahora, de los que llegan a
 	// la vez, solo se prueban los que caen dentro del tope. El intento con la
-	// contrasena correcta tambien cuenta; entrar vacia los contadores
-	// (emitirSesion).
+	// contrasena correcta tambien cuenta, hasta que se confirma: ahi se vacian
+	// los contadores (mas abajo).
 	if s.incrementLockout(kind, canonical) > int64(s.maxLoginAttempts) {
 		return nil, ErrAccesoEnPausa
 	}
@@ -433,13 +435,25 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 	}
 
 	// La cuenta ya gasto sus intentos por otras puertas: la contrasena correcta
-	// recibe lo mismo que una equivocada. Va antes del control de cuenta no
-	// activa porque ese responde con codigo propio solo ante la correcta; si
-	// fuera despues, una cuenta bloqueada seguiria confirmando la contrasena
-	// por cada puerta que todavia tuviera intentos.
+	// recibe lo mismo que una equivocada, y en la auditoria queda como un
+	// intento fallido. Va antes del control de cuenta no activa porque ese
+	// responde con codigo propio solo ante la correcta; si fuera despues, una
+	// cuenta bloqueada seguiria confirmando la contrasena por cada puerta que
+	// todavia tuviera intentos.
 	if cuentaEnPausa {
+		if s.auditLogger != nil {
+			s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, false, string(kind))
+		}
 		return nil, ErrInvalidCredentials
 	}
+
+	// La contrasena es la correcta y el intento cayo dentro del tope: los
+	// contadores se vacian aca y no al emitir la sesion. Una cuenta bloqueada
+	// no llega a emitirla, y un fallo interno tampoco; si se esperara hasta
+	// ahi, los intentos de quien si sabe la contrasena quedarian contando y, al
+	// desbloquear la cuenta, seguiria frenada hasta que venciera la ventana.
+	s.resetLockout(kind, canonical)
+	s.resetUserLockout(u.ID)
 
 	// Cuenta no activa: se rechaza con codigo propio SOLO con la contrasena ya
 	// verificada (antes del hash revelaria que la cuenta existe). Cualquier
@@ -467,11 +481,12 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 // contrasena y por el de las cuentas de demostracion. Se extrajo para que los
 // dos pasen por el mismo registro de sesion: dos copias divergirian.
 //
-// Los controles del bloqueo no viven aca. El camino con contrasena decide con
-// el numero que le toco a su propio intento (ver Login): volver a mirar aca el
-// contador rechazaria la quinta contrasena aunque fuera la buena, porque ese
-// intento ya esta contado. El de demostracion no cuenta intentos y mira los
-// contadores antes de llamar.
+// No toca los contadores del bloqueo: cada camino los resuelve antes de
+// llamarla. El de la contrasena decide con el numero que le toco a su intento y
+// los vacia apenas confirma la contrasena (ver Login); mirarlos aca otra vez
+// rechazaria la quinta contrasena aunque fuera la buena, porque ese intento ya
+// esta contado. El de demostracion no cuenta intentos: los mira y los vacia
+// antes de llamar.
 func (s *Service) emitirSesion(ctx context.Context, u *user.UserRecord, kind identifier.Kind, canonical string, lc LoginContext) (*LoginResponse, error) {
 	tokens, err := s.jwt.GenerateTokenPair(u.ID)
 	if err != nil {
@@ -483,8 +498,6 @@ func (s *Service) emitirSesion(ctx context.Context, u *user.UserRecord, kind ide
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 
-	s.resetLockout(kind, canonical)
-	s.resetUserLockout(u.ID)
 	_ = s.userRepo.UpdateLastLogin(ctx, u.ID)
 	if s.auditLogger != nil {
 		s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, true, string(kind))
