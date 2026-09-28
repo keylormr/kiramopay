@@ -75,6 +75,7 @@ const en: TranslationKeys = {
   password_must_differ: 'The new password must be different from the current one.',
   password_demo_account: 'This demo account signs in without a password and cannot set one.',
   password_change_failed: 'We could not change your password. Please try again.',
+  password_change_locked: 'Too many attempts with a wrong current password. For your security, wait 15 minutes and try again.',
   current_password: 'Current password',
   show_password: 'Show password',
   hide_password: 'Hide password',

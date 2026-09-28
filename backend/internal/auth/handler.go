@@ -384,6 +384,9 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "CURRENT_PASSWORD_INVALID", err.Error())
 		case errors.Is(err, ErrContrasenaNuevaIgual):
 			response.Error(w, http.StatusBadRequest, "PASSWORD_UNCHANGED", err.Error())
+		case errors.Is(err, ErrCambioDeContrasenaEnPausa):
+			response.Error(w, http.StatusLocked, "PASSWORD_CHANGE_LOCKED",
+				"too many failed attempts; try again later")
 		default:
 			// Lo demas (la cuenta no se pudo leer, el hash, la transaccion) no
 			// es algo que la persona pueda corregir.

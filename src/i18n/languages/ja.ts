@@ -75,6 +75,7 @@ const ja: TranslationKeys = {
   password_must_differ: '新しいパスワードは現在のパスワードと異なるものにしてください。',
   password_demo_account: 'このデモアカウントはパスワードなしでログインするため、パスワードを設定できません。',
   password_change_failed: 'パスワードを変更できませんでした。もう一度お試しください。',
+  password_change_locked: '現在のパスワードの入力ミスが多すぎます。安全のため、15分待ってからもう一度お試しください。',
   current_password: '現在のパスワード',
   show_password: 'パスワードを表示',
   hide_password: 'パスワードを非表示',

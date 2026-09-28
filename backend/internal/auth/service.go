@@ -89,6 +89,11 @@ var (
 	ErrContrasenaNuevaIgual       = errors.New("new password must differ from current")
 )
 
+// ErrCambioDeContrasenaEnPausa: la persona se equivoco de contrasena actual
+// tantas veces como permite el login. Hasta que vence el contador no se mira
+// la contrasena, ni siquiera la correcta.
+var ErrCambioDeContrasenaEnPausa = errors.New("too many failed password change attempts")
+
 // ErrUserExists se devuelve en Register cuando la cedula, el telefono o el
 // correo ya pertenecen a una cuenta. El handler lo traduce a 409 USER_EXISTS;
 // que campo choco nunca sale al cliente.
@@ -680,10 +685,23 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	if u.DemoLogin {
 		return ErrCuentaDeDemostracion
 	}
+	// Tope de intentos, como el login: sin el, con una sesion robada se podia
+	// probar la contrasena actual sin limite y, al acertar, cambiarla y
+	// quedarse con la cuenta. El intento se cuenta ANTES de mirar la
+	// contrasena, con el INCR atomico de Redis: si se leyera el contador y se
+	// sumara despues, las peticiones en paralelo leerian todas el mismo valor
+	// mientras Argon2 trabaja, y el tope se esquivaria con una rafaga. Pasado
+	// el tope no se mira la contrasena, ni siquiera la correcta: si la
+	// correcta pasara, el tope seguiria diciendo cual es.
+	if s.countChangePasswordAttempt(userID) > int64(s.maxLoginAttempts) {
+		return ErrCambioDeContrasenaEnPausa
+	}
 	valid, err := hash.VerifyPin(req.OldPassword, u.PasswordHash)
 	if err != nil || !valid {
 		return ErrContrasenaActualIncorrecta
 	}
+	// Acerto la actual: equivocarse de vez en cuando no termina en el tope.
+	s.resetChangePasswordLockout(userID)
 	if req.OldPassword == req.NewPassword {
 		return ErrContrasenaNuevaIgual
 	}
@@ -1061,6 +1079,29 @@ func (s *Service) isUserLockedOut(userID string) bool {
 		return false
 	}
 	return int(s.lockoutStore.GetLockout(userLockoutKey(userID))) >= s.maxLoginAttempts
+}
+
+// Contador propio de cambiar la contrasena, con el umbral y el vencimiento del
+// login. No se comparte con el de la cuenta: quien probara contrasenas con una
+// sesion robada bloquearia tambien el login, y la persona titular no podria
+// entrar a cerrar las demas sesiones.
+func changePasswordLockoutKey(userID string) string { return "lockout:chpwd:uid:" + userID }
+
+// countChangePasswordAttempt suma el intento y devuelve cuantos lleva la
+// ventana, en una sola orden atomica. Sin almacen devuelve 0: nunca en pausa,
+// igual que el login.
+func (s *Service) countChangePasswordAttempt(userID string) int64 {
+	if s.lockoutStore == nil || userID == "" {
+		return 0
+	}
+	return s.lockoutStore.IncrLockout(changePasswordLockoutKey(userID))
+}
+
+func (s *Service) resetChangePasswordLockout(userID string) {
+	if s.lockoutStore == nil || userID == "" {
+		return
+	}
+	s.lockoutStore.ResetLockout(changePasswordLockoutKey(userID))
 }
 
 // ─────────────────────────────────────────────────────────────────────────

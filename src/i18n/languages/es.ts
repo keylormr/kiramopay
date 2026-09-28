@@ -75,6 +75,7 @@ const es: TranslationKeys = {
   password_must_differ: 'La contraseña nueva tiene que ser distinta de la actual.',
   password_demo_account: 'Esta cuenta de demostración entra sin contraseña y no puede fijar una.',
   password_change_failed: 'No pudimos cambiar tu contraseña. Intenta de nuevo.',
+  password_change_locked: 'Demasiados intentos con una contraseña actual equivocada. Por seguridad, espera 15 minutos e intenta de nuevo.',
   current_password: 'Contraseña actual',
   show_password: 'Mostrar contraseña',
   hide_password: 'Ocultar contraseña',

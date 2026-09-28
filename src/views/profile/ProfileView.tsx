@@ -27,6 +27,7 @@ const CLAVES_ERROR_CONTRASENA: Readonly<Record<string, string>> = {
   CURRENT_PASSWORD_INVALID: 'incorrect_password',
   PASSWORD_UNCHANGED: 'password_must_differ',
   DEMO_ACCOUNT: 'password_demo_account',
+  PASSWORD_CHANGE_LOCKED: 'password_change_locked',
 };
 
 // El campo al que se refiere cada rechazo, para avisarlo junto a el. Los demas
