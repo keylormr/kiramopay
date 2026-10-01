@@ -349,6 +349,8 @@ docker compose up -d --build
 | `/api/v1/push/unsubscribe` | DELETE | Eliminar push subscription | Si |
 | `/api/v1/notifications` | GET | Historial de notificaciones (paginado) | Si |
 | `/api/v1/notifications/{id}/read` | PATCH | Marcar notificacion como leida | Si |
+| `/api/v1/notifications/read-all` | POST | Marcar todas como leidas | Si |
+| `/api/v1/notifications/{id}` | DELETE | Ocultar una notificacion (el registro queda) | Si |
 
 Para la lista completa de 80+ endpoints, ver `/api/docs` (Swagger UI) o `backend/docs/openapi.yaml`.
 
