@@ -13,6 +13,9 @@ const { api, refrescar } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api', () => ({ getApiLayer: () => api }));
+// Reimportar useApp volveria a registrar el plugin biometrico de Capacitor,
+// que es global: aqui no se usa.
+vi.mock('@/services/biometric', () => ({ biometricService: {} }));
 vi.mock('@/services/dataSync', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/dataSync')>()),
   refreshNotifications: refrescar,
