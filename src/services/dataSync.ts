@@ -107,19 +107,36 @@ export async function syncAllData(): Promise<void> {
   }
 }
 
+// Numero de la ultima lectura de cuentas pedida, y su promesa (ver
+// refreshAccounts).
+let ultimaCargaCuentas = 0;
+let cargaCuentasMasNueva: Promise<boolean> = Promise.resolve(true);
+
 /**
  * Trae las cuentas del servidor. Dice si quedaron al dia: true solo si
  * llegaron y se escribieron. Quien muestra algo que depende de ellas —el aviso
  * de una operacion repetida, que no anota nada— no puede afirmar que el saldo
  * esta al dia si esta lectura no llego. Sin backend (la demo) no hay nada que
  * traer.
+ *
+ * Como en refreshCrypto, solo escribe la lectura mas reciente: con dos en
+ * vuelo, la vieja que contestaba al final pisaba el saldo nuevo con uno de
+ * antes. La superada no escribe nada, asi que contesta lo que conteste esa.
  */
-export async function refreshAccounts(): Promise<boolean> {
-  if (!hasBackend) return true;
+export function refreshAccounts(): Promise<boolean> {
+  if (!hasBackend) return Promise.resolve(true);
+  const carga = ++ultimaCargaCuentas;
+  const promesa = cargarCuentas(carga);
+  cargaCuentasMasNueva = promesa;
+  return promesa;
+}
+
+async function cargarCuentas(carga: number): Promise<boolean> {
   const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.accounts.getAccounts();
   if (!sigueVigente(generacion)) return false;
+  if (carga !== ultimaCargaCuentas) return cargaCuentasMasNueva;
   if (res.success && res.data) {
     useAccountStore.getState().setAccounts(res.data);
     return true;

@@ -483,7 +483,7 @@ const en: TranslationKeys = {
   crypto_prices_unavailable_hint: 'Values may be out of date. It retries on its own.',
   crypto_already_done: 'That operation was already done',
   crypto_already_done_hint: 'It was not repeated: your balances and activity now show what was recorded.',
-  crypto_already_done_updating: 'It was not repeated. We are bringing your balances up to date.',
+  crypto_already_done_updating: "It was not repeated. We're updating your balances.",
   crypto_already_done_stale: "It was not repeated, but we couldn't update your balances: you may still see the previous ones.",
   crypto_sparkline_sin_datos: 'No price history available',
   crypto_price_stale: 'The price is out of date and we do not charge against a stale price. Try again in a moment.',
