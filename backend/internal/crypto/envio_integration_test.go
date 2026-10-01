@@ -1201,6 +1201,10 @@ func TestEnviarCripto_ElReintentoNoRechazaElEnvioQueEstaConfirmando(t *testing.T
 	if repetido.ID != original.ID {
 		t.Fatalf("el reintento devolvio el envio %s, pero el que se confirmo fue %s", repetido.ID, original.ID)
 	}
+	if marcadaComoRepeticion(t, original) || !marcadaComoRepeticion(t, repetido) {
+		t.Fatalf("marca de repeticion: original=%v reintento=%v, se esperaba false y true",
+			marcadaComoRepeticion(t, original), marcadaComoRepeticion(t, repetido))
+	}
 
 	e.exigirSaldos(t, decimal.Zero, monto)
 

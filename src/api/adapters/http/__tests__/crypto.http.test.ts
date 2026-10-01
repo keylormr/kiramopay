@@ -252,3 +252,56 @@ describe('HttpCryptoRepository — lo que se manda al servidor', () => {
     expect(res.data!.amount).toBe(0.1);
   });
 });
+
+// El servidor marca con `replayed: true` la respuesta que repite una operacion
+// que ya estaba hecha con esa llave, y solo esa. El adaptador se lo pasa a la
+// pantalla como `repetida`; sin la marca, el campo ni aparece.
+describe('HttpCryptoRepository — la respuesta repetida', () => {
+  const movimiento = {
+    id: 't9', type: 'sell', asset: 'BTC', amount: '0.1', price: '40000', total: '4000',
+    currency: 'USD', fee: '0', status: 'completed', created_at: '2026-10-01T13:00:00Z',
+  };
+  const posicion = {
+    id: 'p9', asset: 'ETH', amount: '0.1', apy: 4.5, start_date: '2026-10-01T13:00:00Z',
+    locked: false, earned: '0',
+  };
+  const operaciones = [
+    {
+      nombre: 'comprar', datos: movimiento,
+      operar: (r: HttpCryptoRepository) =>
+        r.buy({ asset: 'BTC', amount: 0.1, price: 40000, fromCurrency: 'USD', fromAmount: 4000, idempotencyKey: 'k' }),
+    },
+    {
+      nombre: 'vender', datos: movimiento,
+      operar: (r: HttpCryptoRepository) =>
+        r.sell({ asset: 'BTC', amount: 0.1, price: 40000, toCurrency: 'USD', toAmount: 4000, idempotencyKey: 'k' }),
+    },
+    {
+      nombre: 'enviar', datos: movimiento,
+      operar: (r: HttpCryptoRepository) =>
+        r.send({ asset: 'BTC', amount: 0.1, qrData: 'q', price: 40000, idempotencyKey: 'k' }),
+    },
+    {
+      nombre: 'convertir', datos: movimiento,
+      operar: (r: HttpCryptoRepository) =>
+        r.convert({ fromAsset: 'BTC', toAsset: 'ETH', fromAmount: 0.1, toAmount: 1.6, price: 2500, idempotencyKey: 'k' }),
+    },
+    {
+      nombre: 'apartar', datos: posicion,
+      operar: (r: HttpCryptoRepository) =>
+        r.stake({ asset: 'ETH', amount: 0.1, locked: false, idempotencyKey: 'k' }),
+    },
+  ];
+
+  it.each(operaciones)('$nombre: con replayed llega repetida', async ({ datos, operar }) => {
+    const res = await operar(new HttpCryptoRepository(clientReturning({ ...datos, replayed: true })));
+    expect(res.success).toBe(true);
+    expect(res.data).toHaveProperty('repetida', true);
+  });
+
+  it.each(operaciones)('$nombre: sin replayed el campo no aparece', async ({ datos, operar }) => {
+    const res = await operar(new HttpCryptoRepository(clientReturning(datos)));
+    expect(res.success).toBe(true);
+    expect(res.data).not.toHaveProperty('repetida');
+  });
+});

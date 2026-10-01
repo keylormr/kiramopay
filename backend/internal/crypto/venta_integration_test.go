@@ -952,6 +952,13 @@ func TestVender_ElReintentoNoRechazaLaVentaQueEstaConfirmando(t *testing.T) {
 	if repetida.ID != original.ID || !repetida.Amount.Equal(original.Amount) {
 		t.Fatalf("el reintento devolvio %+v, la venta fue %+v", repetida, original)
 	}
+	// El reintento llego por la relectura del libro, despues de que la
+	// original confirmo: tiene que decir que es una repeticion, y la original
+	// no.
+	if marcadaComoRepeticion(t, original) || !marcadaComoRepeticion(t, repetida) {
+		t.Fatalf("marca de repeticion: original=%v reintento=%v, se esperaba false y true",
+			marcadaComoRepeticion(t, original), marcadaComoRepeticion(t, repetida))
+	}
 
 	// Y la venta ocurrio una sola vez.
 	if got := saldoDeActivo(t, m.svc, m.userID, "ETH"); !got.IsZero() {

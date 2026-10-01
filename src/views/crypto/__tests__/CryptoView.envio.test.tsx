@@ -307,6 +307,29 @@ describe('envio de cripto — confirmacion y reintento', () => {
     );
   });
 
+  // El envio que ya se habia hecho (la red se corto sin traer la respuesta y
+  // el reintento fue con la misma llave): el servidor devuelve aquel, marcado.
+  // No se anota otra vez —el saldo bajaria dos veces en pantalla— y se dice
+  // que ya estaba hecho.
+  it('un envio que ya estaba hecho no se anota otra vez y se avisa', async () => {
+    mocks.api.crypto.sendPreview.mockResolvedValue({
+      success: true,
+      data: vistaPrevia(0.005, 0.0000125),
+    });
+    mocks.api.crypto.send.mockResolvedValue({ success: true, data: { id: 'tx-1', repetida: true } });
+    const user = userEvent.setup();
+    const hoja = await abrirEnvio(user);
+
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
+    await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
+    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+
+    expect(await screen.findByText('Esa operación ya se había hecho')).toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SEND_CRYPTO' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('el reintento tras el desafio de MFA va con LA MISMA llave', async () => {
     mocks.api.crypto.sendPreview.mockResolvedValue({
       success: true,
