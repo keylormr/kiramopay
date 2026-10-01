@@ -223,6 +223,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		if err := mismoEnvio(previo, envio); err != nil {
 			return nil, err
 		}
+		previo.Replayed = true
 		return previo, nil
 	}
 	if errSaldo != nil {
@@ -284,6 +285,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		if err := mismoEnvio(hecho, envio); err != nil {
 			return nil, err
 		}
+		hecho.Replayed = true
 		return hecho, nil
 	}
 

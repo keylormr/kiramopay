@@ -481,6 +481,8 @@ const en: TranslationKeys = {
   crypto_prices_updated: 'Prices updated',
   crypto_prices_unavailable: 'Prices could not be updated',
   crypto_prices_unavailable_hint: 'Values may be out of date. It retries on its own.',
+  crypto_already_done: 'That operation was already done',
+  crypto_already_done_hint: 'It was not repeated: your balances and activity show what was recorded.',
   crypto_sparkline_sin_datos: 'No price history available',
   crypto_price_stale: 'The price is out of date and we do not charge against a stale price. Try again in a moment.',
   crypto_err_insufficient_asset: "You don't have enough of this crypto for that operation.",

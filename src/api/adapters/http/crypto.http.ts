@@ -7,6 +7,7 @@ import type {
   SendCryptoRequest,
   SendCryptoPreviewRequest,
   CryptoSendPreview,
+  ConMarcaDeRepeticion,
 } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import type {
@@ -43,6 +44,8 @@ interface MovimientoDelServidor {
   created_at: string;
   // Solo en un envio entre personas: a quien se le envio o de quien vino.
   counterparty_name?: string;
+  // Solo en la respuesta a una operacion que ya estaba hecha bajo esa llave.
+  replayed?: true;
 }
 
 // La vista previa de un envio, tal como la calcula el servidor. Los decimales
@@ -66,9 +69,18 @@ interface PosicionDelServidor {
   locked: boolean;
   lock_days?: number;
   earned: number | string;
+  replayed?: true;
 }
 
 const ESTADOS: ReadonlyArray<CryptoTransaction['status']> = ['completed', 'pending', 'failed'];
+
+/**
+ * Le pone a lo traducido la marca de la operacion repetida, solo si el
+ * servidor la mando. Sin la marca, el campo ni aparece.
+ */
+function conMarca<T>(dato: T, servidor: { replayed?: true }): ConMarcaDeRepeticion<T> {
+  return servidor.replayed === true ? { ...dato, repetida: true } : (dato as ConMarcaDeRepeticion<T>);
+}
 
 /**
  * Traduce un movimiento del servidor al de la pantalla, segun su tipo.
@@ -186,7 +198,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     return apiSuccess(res.data.map(movimientoDesdeServidor));
   }
 
-  async buy(request: BuyCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+  async buy(request: BuyCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>> {
     const res = await this.client.post<MovimientoDelServidor>('/api/v1/crypto/buy', {
       asset: request.asset,
       amount: request.amount,
@@ -200,10 +212,10 @@ export class HttpCryptoRepository implements ICryptoRepository {
       return apiError(res.error?.code || 'BUY_FAILED', res.error?.message || 'Buy failed');
     }
 
-    return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'buy' }));
+    return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'buy' }), res.data));
   }
 
-  async sell(request: SellCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+  async sell(request: SellCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>> {
     const res = await this.client.post<MovimientoDelServidor>('/api/v1/crypto/sell', {
       asset: request.asset,
       amount: request.amount,
@@ -217,7 +229,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
       return apiError(res.error?.code || 'SELL_FAILED', res.error?.message || 'Sell failed');
     }
 
-    return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'sell' }));
+    return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'sell' }), res.data));
   }
 
   async sendPreview(request: SendCryptoPreviewRequest): Promise<ApiResponse<CryptoSendPreview>> {
@@ -243,7 +255,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
   }
 
-  async send(request: SendCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+  async send(request: SendCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>> {
     const res = await this.client.post<MovimientoDelServidor>('/api/v1/crypto/send', {
       asset: request.asset,
       amount: request.amount,
@@ -256,10 +268,10 @@ export class HttpCryptoRepository implements ICryptoRepository {
       return apiError(res.error?.code || 'SEND_FAILED', res.error?.message || 'Send failed');
     }
 
-    return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'send' }));
+    return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'send' }), res.data));
   }
 
-  async convert(request: ConvertCryptoRequest): Promise<ApiResponse<CryptoTransaction>> {
+  async convert(request: ConvertCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>> {
     const res = await this.client.post<MovimientoDelServidor>('/api/v1/crypto/convert', {
       from_asset: request.fromAsset,
       to_asset: request.toAsset,
@@ -273,7 +285,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
       return apiError(res.error?.code || 'CONVERT_FAILED', res.error?.message || 'Convert failed');
     }
 
-    return apiSuccess(movimientoDesdeServidor({ ...res.data, type: 'convert' }));
+    return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'convert' }), res.data));
   }
 
   async getStakingPositions(): Promise<ApiResponse<StakingPosition[]>> {
@@ -287,7 +299,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     return apiSuccess(res.data.map(posicionDesdeServidor));
   }
 
-  async stake(request: StakeCryptoRequest): Promise<ApiResponse<StakingPosition>> {
+  async stake(request: StakeCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<StakingPosition>>> {
     // El cuerpo se arma campo por campo: se mandaba el objeto de la pantalla
     // tal cual, con `lockDays` en camelCase, y el servidor lee `lock_days`.
     const res = await this.client.post<PosicionDelServidor>('/api/v1/crypto/staking', {
@@ -304,7 +316,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
       return apiError(res.error?.code || 'STAKE_FAILED', res.error?.message || 'Staking failed');
     }
 
-    return apiSuccess(posicionDesdeServidor(res.data));
+    return apiSuccess(conMarca(posicionDesdeServidor(res.data), res.data));
   }
 
   async unstake(positionId: string): Promise<ApiResponse<void>> {

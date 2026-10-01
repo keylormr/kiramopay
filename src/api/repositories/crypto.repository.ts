@@ -113,17 +113,25 @@ export const ACTIVOS_CON_STAKING: Readonly<Record<string, number>> = {
   SOL: 7.2,
 };
 
+/**
+ * La respuesta de una operacion con llave. `repetida` llega solo cuando el
+ * servidor contesto con una operacion que YA estaba hecha bajo esa llave (su
+ * `replayed`): no se movio nada en este pedido, y la pantalla no la anota ni
+ * la celebra como una nueva.
+ */
+export type ConMarcaDeRepeticion<T> = T & { repetida?: true };
+
 export interface ICryptoRepository {
   getAssets(): Promise<ApiResponse<CryptoAsset[]>>;
   getTransactions(): Promise<ApiResponse<CryptoTransaction[]>>;
-  buy(request: BuyCryptoRequest): Promise<ApiResponse<CryptoTransaction>>;
-  sell(request: SellCryptoRequest): Promise<ApiResponse<CryptoTransaction>>;
+  buy(request: BuyCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;
+  sell(request: SellCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;
   /** Resuelve el QR y devuelve los numeros del envio sin mover nada. */
   sendPreview(request: SendCryptoPreviewRequest): Promise<ApiResponse<CryptoSendPreview>>;
-  send(request: SendCryptoRequest): Promise<ApiResponse<CryptoTransaction>>;
-  convert(request: ConvertCryptoRequest): Promise<ApiResponse<CryptoTransaction>>;
+  send(request: SendCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;
+  convert(request: ConvertCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;
   getStakingPositions(): Promise<ApiResponse<StakingPosition[]>>;
-  stake(request: StakeCryptoRequest): Promise<ApiResponse<StakingPosition>>;
+  stake(request: StakeCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<StakingPosition>>>;
   unstake(positionId: string): Promise<ApiResponse<void>>;
   claimYield(positionId: string): Promise<ApiResponse<{ amount: number }>>;
   getPriceAlerts(): Promise<ApiResponse<PriceAlert[]>>;

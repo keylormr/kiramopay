@@ -337,12 +337,28 @@ func (s *Service) LlaveYaTieneRespuesta(ctx context.Context, userID string, req 
 // simple user-initiated transactions. Internal callers (sinpe, qr, splitpay)
 // should prefer CreateTransfer which expresses BOTH legs of a transfer.
 func (s *Service) CreateTransaction(ctx context.Context, userID string, req *CreateTransactionRequest) (*TransactionRecord, error) {
+	rec, _, err := s.CrearOReconocer(ctx, userID, req)
+	return rec, err
+}
+
+// CrearOReconocer es CreateTransaction con un dato mas: repetido dice si la
+// respuesta es la de un movimiento que ya estaba hecho bajo esa llave, es decir,
+// si esta llamada NO movio dinero. Lo necesita quien le muestra el resultado a
+// una persona: la repeticion que llega despues de un corte de red no es una
+// operacion nueva, y celebrarla como nueva le hace creer que paso dos veces.
+//
+// Repeticion es todo lo que contesta otra llamada: la fila que ya estaba
+// completada, la que estaba sin marcar aunque su asiento confirmo, la insercion
+// que gano un intento simultaneo y ya completo, y el asiento que otro intento ya
+// escribio. La fila 'failed' o 'pending' sin asiento no lo es: ahi el dinero se
+// mueve en esta llamada, por primera vez.
+func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *CreateTransactionRequest) (*TransactionRecord, bool, error) {
 	// La moneda y el monto se normalizan ANTES de la relectura de idempotencia
 	// porque esa relectura compara la fila existente contra estos campos: sin
 	// normalizar, un pedido sin moneda no coincidiria con su propia fila.
 	normalizarMoneda(req)
 	if req.Amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+		return nil, false, fmt.Errorf("amount must be positive")
 	}
 
 	// Un tipo ENTRANTE acredita desde una cuenta de sistema, asi que solo puede
@@ -351,7 +367,7 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 	// acreditaba dinero real saltandose saldo, limite diario y MFA, que viven
 	// todos dentro del `if` de abajo.
 	if !isOutgoing(req.Type) && !req.Internal {
-		return nil, ErrCreditNotAllowed
+		return nil, false, ErrCreditNotAllowed
 	}
 
 	// Relectura de idempotencia, antes de tocar nada mas. Solo un movimiento
@@ -369,18 +385,18 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 			// el movimiento viejo ante un monto nuevo es lo que hacia que
 			// cripto acreditara activo por una cifra que el libro no debito.
 			if !mismoMovimiento(existing, req) {
-				return nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+				return nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
 			}
 			if existing.Status == StatusCompleted {
-				return existing, nil
+				return existing, true, nil
 			}
 			hecho, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, existing.ID, existing.ID)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if hecho {
 				existing.Status = StatusCompleted
-				return existing, nil
+				return existing, true, nil
 			}
 			previa = existing
 		}
@@ -388,35 +404,35 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 
 	w, err := s.walletRepo.FindByUserID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("wallet not found")
+		return nil, false, fmt.Errorf("wallet not found")
 	}
 
 	if isOutgoing(req.Type) {
 		totalCost := req.Amount + req.Fee
 		if req.Currency == "CRC" && w.BalanceCRC < totalCost {
-			return nil, ErrSaldoInsuficiente
+			return nil, false, ErrSaldoInsuficiente
 		}
 		if req.Currency == "USD" && w.BalanceUSD < totalCost {
-			return nil, ErrSaldoInsuficiente
+			return nil, false, ErrSaldoInsuficiente
 		}
 		if err := s.checkDailyLimit(ctx, userID, req.Currency, req.Amount, w); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {
 			ok, err := s.mfa.HasVerifiedMFA(ctx, userID, "high_value_tx")
 			if err != nil {
-				return nil, fmt.Errorf("mfa check: %w", err)
+				return nil, false, fmt.Errorf("mfa check: %w", err)
 			}
 			if !ok {
-				return nil, ErrMFARequired
+				return nil, false, ErrMFARequired
 			}
 		}
 
 		// La reja de riesgo va ANTES de escribir la fila: una salida bloqueada
 		// no deja rastro de un movimiento que nunca se intento mover.
 		if err := s.evaluarRiesgo(ctx, userID, req.Type, req.IdempotencyKey, req.Currency, req.Amount); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
@@ -431,10 +447,10 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 			// mismo movimiento, asi que se sigue sobre ella: la llave del
 			// asiento es la que decide cual de los dos mueve el dinero.
 			if !errors.Is(err, ErrDuplicate) || creada == nil {
-				return nil, fmt.Errorf("create transaction: %w", err)
+				return nil, false, fmt.Errorf("create transaction: %w", err)
 			}
 			if creada.Status == StatusCompleted {
-				return creada, nil
+				return creada, true, nil
 			}
 		}
 		tx = creada
@@ -469,14 +485,18 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		}
 		return completar(ctx, dbtx)
 	}
+	var repetido bool
 	if _, err := s.ledger.Post(ctx, posting); err != nil {
 		if !errors.Is(err, ledger.ErrIdempotent) {
 			s.marcarFallidaSinAsiento(ctx, tx.ID)
-			return nil, fmt.Errorf("post ledger: %w", err)
+			return nil, false, fmt.Errorf("post ledger: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, tx.ID, tx.ID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
+		// El asiento lo escribio otro intento con esta misma llave: el dinero
+		// se movio alla, no aqui.
+		repetido = true
 	}
 	// El estado tambien se refleja en lo que se devuelve: la fila que arma el
 	// repositorio nace 'pending' y el llamante —y el JSON que sale al cliente—
@@ -491,7 +511,7 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 			s.uif.Report(ctx, userID, tx.ID, req.Currency, req.Amount)
 		}
 	}
-	return tx, nil
+	return tx, repetido, nil
 }
 
 // CreateTransferRequest carries both legs of an internal transfer.

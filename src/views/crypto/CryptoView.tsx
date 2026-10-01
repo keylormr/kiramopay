@@ -217,6 +217,10 @@ export const CryptoView: React.FC = () => {
     return intentoRef.current.llave;
   };
 
+  // El aviso de la operacion repetida (ver trasOperacionRepetida). Se queda
+  // hasta que la persona lo cierra o empieza otra operacion.
+  const [yaHecha, setYaHecha] = useState(false);
+
   // Lo de cripto sale del servidor al abrir la pantalla: tenencias,
   // movimientos y posiciones de staking. La copia local persistida guardaba
   // posiciones con un id inventado que ningun retiro podia usar; esta carga
@@ -506,6 +510,19 @@ export const CryptoView: React.FC = () => {
     }
   };
 
+  // La respuesta repetida: el servidor contesto con una operacion que YA estaba
+  // hecha bajo esta llave, sea la que llego tras un corte de red o la misma
+  // operacion repetida a proposito. No se anota: seria la fila doble y el saldo
+  // contado dos veces hasta la siguiente carga. Se trae lo que hay en el
+  // servidor, se avisa, y la llave se suelta: lo siguiente es una operacion
+  // nueva.
+  const trasOperacionRepetida = () => {
+    intentoRef.current = null;
+    refreshCrypto().catch(() => {});
+    refreshAccounts().catch(() => {});
+    setYaHecha(true);
+  };
+
   // Compra y venta esperan la respuesta del servidor ANTES de tocar el estado
   // local. Antes se despachaba primero y la llamada iba con .catch(() => {}),
   // asi que un rechazo -incluido el de MFA por monto alto- se tragaba en
@@ -525,6 +542,7 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
+    setYaHecha(false);
     const res = await getApiLayer().crypto.buy({
       ...payload,
       idempotencyKey: llaveDelIntento('buy', `${payload.asset}|${fiatAmount}|${payload.fromCurrency}`),
@@ -539,6 +557,13 @@ export const CryptoView: React.FC = () => {
       }
       trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    if (res.data.repetida) {
+      trasOperacionRepetida();
+      setActiveSheet('none');
+      setAmount('');
       return;
     }
 
@@ -566,6 +591,7 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
+    setYaHecha(false);
     const res = await getApiLayer().crypto.sell({
       ...payload,
       idempotencyKey: llaveDelIntento('sell', `${payload.asset}|${cryptoAmount}|${payload.toCurrency}`),
@@ -580,6 +606,13 @@ export const CryptoView: React.FC = () => {
       }
       trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    if (res.data.repetida) {
+      trasOperacionRepetida();
+      setActiveSheet('none');
+      setAmount('');
       return;
     }
 
@@ -614,6 +647,7 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
+    setYaHecha(false);
     const res = await getApiLayer().crypto.convert({
       ...payload,
       // Sin llave, el reintento tras un corte de red convertia otra vez aunque
@@ -626,6 +660,13 @@ export const CryptoView: React.FC = () => {
     if (!res.success || !res.data) {
       trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    if (res.data.repetida) {
+      trasOperacionRepetida();
+      setActiveSheet('none');
+      setAmount('');
       return;
     }
 
@@ -731,6 +772,7 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
+    setYaHecha(false);
     const res = await getApiLayer().crypto.send({
       asset: selectedAsset.symbol,
       amount: monto,
@@ -752,6 +794,12 @@ export const CryptoView: React.FC = () => {
       trasRechazoDeOperacion(res.error?.code);
       setShowSendConfirm(false);
       setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    if (res.data?.repetida) {
+      trasOperacionRepetida();
+      cerrarEnvio();
       return;
     }
 
@@ -778,6 +826,7 @@ export const CryptoView: React.FC = () => {
 
     setIsTrading(true);
     setTradeError('');
+    setYaHecha(false);
     const pedido = { asset: selectedAsset.symbol, amount: stakeAmount, locked: false };
     const res = await getApiLayer().crypto.stake({
       ...pedido,
@@ -790,6 +839,13 @@ export const CryptoView: React.FC = () => {
     if (!res.success || !res.data) {
       trasRechazoDeOperacion(res.error?.code);
       setTradeError(mensajeDeErrorCripto(res.error, t));
+      return;
+    }
+
+    if (res.data.repetida) {
+      trasOperacionRepetida();
+      setActiveSheet('none');
+      setAmount('');
       return;
     }
 
@@ -1996,6 +2052,37 @@ export const CryptoView: React.FC = () => {
           else if (operacion === 'send') handleSend();
         }}
       />
+
+      {/* La operacion repetida. Va fija sobre la barra de navegacion y no en el
+          encabezado: a comprar, enviar o apartar se llega tambien desde el
+          detalle de un activo, con la pagina ya desplazada, y ahi el
+          encabezado no se ve. Las hojas se abren por encima. */}
+      {yaHecha && (
+        <div
+          role="status"
+          className="fixed inset-x-0 z-[45] animate-fade-in-scale"
+          style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom) + 0.75rem)' }}
+        >
+          {/* El ancho es el de la columna de contenido, con su mismo margen. */}
+          <div className="max-w-2xl mx-auto px-4">
+            <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--color-navy-900)] text-white p-3 pr-1.5 uv-shadow-floating ring-1 ring-white/10">
+              <Icons.CheckCircle size={18} aria-hidden="true" className="shrink-0 mt-0.5 text-[var(--color-success)]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">{t('crypto_already_done')}</p>
+                <p className="text-xs text-white/80 mt-0.5">{t('crypto_already_done_hint')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setYaHecha(false)}
+                aria-label={t('close')}
+                className="shrink-0 -my-1.5 w-11 h-11 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <Icons.X size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

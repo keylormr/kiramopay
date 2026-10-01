@@ -482,6 +482,8 @@ const zhCn: TranslationKeys = {
   crypto_prices_updated: '价格已更新',
   crypto_prices_unavailable: '价格更新失败',
   crypto_prices_unavailable_hint: '数值可能过期，会自动重试。',
+  crypto_already_done: '此操作此前已完成',
+  crypto_already_done_hint: '没有重复执行：余额和交易记录显示的是已登记的内容。',
   crypto_sparkline_sin_datos: '暂无价格历史数据',
   crypto_price_stale: '价格已过期，我们不会按过期价格扣款。请稍后重试。',
   crypto_err_insufficient_asset: '您持有的该加密货币不足以完成此操作。',

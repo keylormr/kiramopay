@@ -481,6 +481,8 @@ const ja: TranslationKeys = {
   crypto_prices_updated: '価格が更新されました',
   crypto_prices_unavailable: '価格が更新されませんでした',
   crypto_prices_unavailable_hint: '価格が最新でない場合があります。自動で再試行します。',
+  crypto_already_done: 'この操作はすでに完了していました',
+  crypto_already_done_hint: '繰り返されていません。残高と取引履歴には記録された内容が表示されています。',
   crypto_sparkline_sin_datos: '価格履歴がありません',
   crypto_price_stale: '価格が最新ではないため、古い価格での取引は行いません。少し時間をおいて再度お試しください。',
   crypto_err_insufficient_asset: 'この操作に必要な暗号資産が足りません。',

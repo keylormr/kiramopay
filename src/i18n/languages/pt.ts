@@ -481,6 +481,8 @@ const pt: TranslationKeys = {
   crypto_prices_updated: 'Preços atualizados',
   crypto_prices_unavailable: 'Preços não atualizados',
   crypto_prices_unavailable_hint: 'Os valores podem estar desatualizados. Vamos tentar de novo automaticamente.',
+  crypto_already_done: 'Essa operação já tinha sido feita',
+  crypto_already_done_hint: 'Ela não foi repetida: seus saldos e movimentações mostram o que ficou registrado.',
   crypto_sparkline_sin_datos: 'Sem histórico de preços disponível',
   crypto_price_stale: 'O preco esta desatualizado e nao cobramos com base num preco velho. Tente de novo em instantes.',
   crypto_err_insufficient_asset: 'Você não tem o suficiente desta cripto para essa operação.',
