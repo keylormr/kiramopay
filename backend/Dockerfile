@@ -24,6 +24,10 @@ WORKDIR /app
 
 COPY --from=builder /tmp/apibin ./api
 COPY --from=builder /app/migrations ./migrations
+# La especificacion que lee la documentacion de la API. Solo se sirve con
+# ENVIRONMENT=development (docker-compose, k8s base): sin el archivo, la
+# pagina de Swagger de esos entornos no tenia que mostrar.
+COPY --from=builder /app/docs/openapi.yaml ./docs/openapi.yaml
 
 EXPOSE 8080
 

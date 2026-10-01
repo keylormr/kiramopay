@@ -350,7 +350,7 @@ docker compose up -d --build
 | `/api/v1/notifications` | GET | Historial de notificaciones (paginado) | Si |
 | `/api/v1/notifications/{id}/read` | PATCH | Marcar notificacion como leida | Si |
 
-Para la lista completa de 80+ endpoints, ver `/api/docs` (Swagger UI) o `backend/docs/openapi.yaml`.
+Para la lista completa de 80+ endpoints, ver `backend/docs/openapi.yaml` (o `/api/docs`, la Swagger UI, con `ENVIRONMENT=development`).
 
 ### Autenticacion
 
