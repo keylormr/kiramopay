@@ -5894,7 +5894,9 @@ export interface paths {
          * @description The app offers "delete"; the server hides. The row is never deleted: it
          *     keeps the moment it was hidden (hidden_at) and stops appearing in
          *     GET /notifications. Hiding it again keeps the first mark. Another
-         *     account's notification answers the same 404 as an unknown id.
+         *     account's notification answers the same 404 as an unknown id. Hiding
+         *     freezes the row: marking notifications as read, one or all, leaves a
+         *     hidden one as it was.
          */
         delete: {
             parameters: {
@@ -5914,7 +5916,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_ID (the id is not a UUID) */
+                /** @description INVALID_ID (the id is not a UUID in its canonical 36-character form, the one GET /notifications returns) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -5960,7 +5962,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Mark notification as read */
+        /**
+         * Mark notification as read
+         * @description A hidden notification is left as it was (still 204).
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -5999,7 +6004,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark all of the caller's notifications as read */
+        /**
+         * Mark all of the caller's notifications as read
+         * @description Hidden notifications are left as they were.
+         */
         post: {
             parameters: {
                 query?: never;

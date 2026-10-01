@@ -7,9 +7,8 @@
 -- registros: la fila se marca con el momento en que se oculto y nunca se
 -- borra.
 
-ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP;
-
--- La lista que ve la persona solo lee las que no oculto.
-CREATE INDEX IF NOT EXISTS idx_notif_user_visibles
-    ON notification_history (user_id, created_at DESC)
-    WHERE hidden_at IS NULL;
+-- Con zona, como toda fecha desde la 034: sin zona, NOW() guarda la hora local
+-- del servidor y la aplicacion la lee como UTC. La lista sigue usando
+-- idx_notif_user (013); a este volumen no hace falta un indice propio para las
+-- visibles.
+ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ;

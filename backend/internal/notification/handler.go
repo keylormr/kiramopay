@@ -116,12 +116,17 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Ocultar(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	notifID := chi.URLParam(r, "id")
-	if _, err := uuid.Parse(notifID); err != nil {
+	// Solo la forma canonica, la misma con la que la da la lista. uuid.Parse
+	// acepta tambien urn:uuid:..., los 32 hexadecimales sin guiones y otras
+	// envolturas; algunas Postgres las rechaza, y eso era un 500 por un pedido
+	// mal formado.
+	id, err := uuid.Parse(notifID)
+	if err != nil || len(notifID) != 36 {
 		response.Error(w, http.StatusBadRequest, "INVALID_ID", "invalid notification id")
 		return
 	}
 
-	if err := h.service.Ocultar(r.Context(), userID, notifID); err != nil {
+	if err := h.service.Ocultar(r.Context(), userID, id.String()); err != nil {
 		if errors.Is(err, ErrNotificacionNoEncontrada) {
 			response.Error(w, http.StatusNotFound, "NOTIFICATION_NOT_FOUND", "notification not found")
 			return

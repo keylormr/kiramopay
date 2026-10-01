@@ -496,7 +496,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		read_at TIMESTAMP,
 		created_at TIMESTAMP DEFAULT NOW()
 	);
-	ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP;
+	ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ;
 
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

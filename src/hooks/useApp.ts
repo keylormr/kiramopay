@@ -272,21 +272,29 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
             .catch(() => refreshNotifications());
         }
         break;
-      case 'DELETE_NOTIFICATION':
-        // El servidor la oculta (nunca la borra). Igual que marcar como leida:
-        // sale de la lista al instante y, si el servidor no la oculto, se pide
-        // la lista otra vez y vuelve en el acto, en vez de reaparecer sin
-        // explicacion en la siguiente carga.
+      case 'DELETE_NOTIFICATION': {
+        // El servidor la oculta (nunca la borra). Sale de la lista al instante;
+        // si el servidor no la oculto —la rechazo, no hubo red o el adaptador
+        // fallo—, vuelve a su lugar en el acto, sin depender de que la lista se
+        // pueda pedir otra vez, y despues se pide la lista para quedar al dia.
+        const lista = useNotificationStore.getState().notifications;
+        const indice = lista.findIndex((n) => n.id === action.payload);
+        const quitada = lista[indice];
         notifications.deleteNotification(action.payload); // optimistic
         if (hasBackend) {
+          const devolver = () => {
+            if (quitada) useNotificationStore.getState().restoreNotification(quitada, indice);
+            refreshNotifications();
+          };
           getApiLayer()
             .notifications.delete(action.payload)
             .then((res) => {
-              if (!res.success) refreshNotifications();
+              if (!res.success) devolver();
             })
-            .catch(() => refreshNotifications());
+            .catch(devolver);
         }
         break;
+      }
       case 'UPDATE_CRYPTO_PRICES':
         crypto.updatePrices(action.payload);
         break;

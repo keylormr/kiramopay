@@ -58,9 +58,11 @@ export class HttpNotificationRepository implements INotificationRepository {
   }
 
   async delete(id: string): Promise<ApiResponse<void>> {
-    const res = await this.client.del<void>(`/api/v1/notifications/${id}`);
+    const res = await this.client.del<void>(`/api/v1/notifications/${encodeURIComponent(id)}`);
     if (!res.success) {
-      return apiError('DELETE_FAILED', res.error?.message || 'Failed to delete');
+      // El codigo del servidor pasa tal cual (NOTIFICATION_NOT_FOUND,
+      // INVALID_ID, NETWORK_ERROR): pisarlo con uno generico borraba el motivo.
+      return apiError(res.error?.code || 'DELETE_FAILED', res.error?.message || 'Failed to delete');
     }
     return apiSuccess(undefined as unknown as void);
   }
