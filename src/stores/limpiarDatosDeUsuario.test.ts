@@ -54,7 +54,8 @@ function sembrarDatosDeOtroUsuario() {
   useAccountStore.setState({ baseCurrency: 'USD', accounts: [cuentaAjena], budgets: [] });
   useTransactionStore.setState({ transactions: [transaccionAjena] });
   useSinpeStore.setState({ sinpeContacts: [contactoAjeno], sinpeHistory: [] });
-  useNotificationStore.setState({ notifications: [notificacionAjena] });
+  // Las ocultas de la sesion anterior tampoco pasan: son de otra persona.
+  useNotificationStore.setState({ notifications: [notificacionAjena], ocultas: ['n-ajena'] });
   useCryptoStore.setState({ favoriteAssets: ['DOGE'] });
   useBusinessStore.setState({ activeMerchantId: 'm-1' });
 }
@@ -77,6 +78,7 @@ describe('limpiarDatosDeUsuario', () => {
     expect(useTransactionStore.getState().transactions).toEqual([]);
     expect(useSinpeStore.getState().sinpeContacts).toEqual([]);
     expect(useNotificationStore.getState().notifications).toEqual([]);
+    expect(useNotificationStore.getState().ocultas).toEqual([]);
     expect(useCryptoStore.getState().favoriteAssets).toEqual(['BTC', 'ETH', 'USDT']);
     expect(useBusinessStore.getState().activeMerchantId).toBeNull();
   });

@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { Notification } from '@/types';
 
 // Borrar una notificacion la sacaba de la lista sin esperar al servidor y se
 // tragaba cualquier rechazo: si el servidor no la ocultaba, la pantalla seguia
-// sin mostrarla hasta la siguiente carga, cuando volvia sin explicacion. Ahora
-// hace lo mismo que marcar como leida: si el servidor no la oculta, se vuelve a
-// pedir la lista y la notificacion vuelve en el acto.
+// sin mostrarla hasta la siguiente carga, cuando volvia sin explicacion. Ahora,
+// si el servidor no la oculta —la rechaza o no hay red—, vuelve a su lugar en
+// el acto, sin depender de que la lista se pueda pedir otra vez. Y la que si se
+// oculto no vuelve con una lista vieja que llegue despues.
 
 const { api, refrescar } = vi.hoisted(() => ({
   api: { notifications: { delete: vi.fn() } },
@@ -21,6 +23,13 @@ vi.mock('@/services/dataSync', async (importOriginal) => ({
   refreshNotifications: refrescar,
 }));
 
+const aviso = (id: string, title: string): Notification => ({
+  id, title, message: 'x', date: 'Ahora', read: false, type: 'transaction',
+});
+const primera = aviso('n0', 'Pago recibido');
+const segunda = aviso('n1', 'Recarga hecha');
+const tercera = aviso('n2', 'Nuevo inicio de sesion');
+
 let urlOriginal: string | undefined;
 
 // useApp decide al importarse si hay servidor (VITE_API_URL): se importa de
@@ -30,12 +39,9 @@ async function useAppConServidor() {
   import.meta.env.VITE_API_URL = 'http://localhost:8080';
   const { useApp } = await import('../useApp');
   const { useNotificationStore } = await import('@/stores/notification.store');
-  useNotificationStore.setState({
-    notifications: [
-      { id: 'n1', title: 'Pago recibido', message: 'Te pagaron', date: 'Ahora', read: false, type: 'transaction' },
-    ],
-  });
-  return { useApp, useNotificationStore };
+  useNotificationStore.setState({ notifications: [primera, segunda, tercera] });
+  const ids = () => useNotificationStore.getState().notifications.map((n) => n.id);
+  return { useApp, useNotificationStore, ids };
 }
 
 beforeEach(() => {
@@ -53,30 +59,44 @@ afterEach(() => {
 });
 
 describe('useApp — ocultar una notificacion', { timeout: 20_000 }, () => {
-  it('si el servidor la rechaza, se vuelve a pedir la lista', async () => {
+  it('si el servidor la rechaza, vuelve a su lugar y se pide la lista', async () => {
     api.notifications.delete.mockResolvedValue({ success: false, error: { code: 'DELETE_FAILED', message: 'x' } });
-    const { useApp, useNotificationStore } = await useAppConServidor();
+    const { useApp, ids } = await useAppConServidor();
     const { result } = renderHook(() => useApp());
 
     act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
 
-    expect(useNotificationStore.getState().notifications).toHaveLength(0);
-    await waitFor(() => expect(refrescar).toHaveBeenCalled());
+    expect(ids()).toEqual(['n0', 'n2']);
+    await waitFor(() => expect(ids()).toEqual(['n0', 'n1', 'n2']));
+    expect(refrescar).toHaveBeenCalled();
   });
 
-  it('si no hay red, tambien se vuelve a pedir la lista', async () => {
-    api.notifications.delete.mockRejectedValue(new Error('sin red'));
-    const { useApp } = await useAppConServidor();
+  // Sin red el cliente HTTP no lanza: contesta NETWORK_ERROR. Y la lista
+  // tampoco se puede pedir, asi que la notificacion tiene que volver sola.
+  it('sin red tambien vuelve en el acto, aunque la lista no se pueda pedir', async () => {
+    api.notifications.delete.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } });
+    const { useApp, ids } = await useAppConServidor();
     const { result } = renderHook(() => useApp());
 
     act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
 
-    await waitFor(() => expect(refrescar).toHaveBeenCalled());
+    await waitFor(() => expect(ids()).toEqual(['n0', 'n1', 'n2']));
+  });
+
+  it('si el adaptador lanza, tambien vuelve', async () => {
+    api.notifications.delete.mockRejectedValue(new Error('inesperado'));
+    const { useApp, ids } = await useAppConServidor();
+    const { result } = renderHook(() => useApp());
+
+    act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
+
+    await waitFor(() => expect(ids()).toEqual(['n0', 'n1', 'n2']));
+    expect(refrescar).toHaveBeenCalled();
   });
 
   it('si el servidor la oculta, no hace falta pedir la lista', async () => {
     api.notifications.delete.mockResolvedValue({ success: true, data: undefined });
-    const { useApp } = await useAppConServidor();
+    const { useApp, ids } = await useAppConServidor();
     const { result } = renderHook(() => useApp());
 
     act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
@@ -84,5 +104,32 @@ describe('useApp — ocultar una notificacion', { timeout: 20_000 }, () => {
     await waitFor(() => expect(api.notifications.delete).toHaveBeenCalledWith('n1'));
     await Promise.resolve();
     expect(refrescar).not.toHaveBeenCalled();
+    expect(ids()).toEqual(['n0', 'n2']);
+  });
+
+  // Una carga de la lista pedida ANTES de ocultar puede llegar DESPUES, con la
+  // notificacion todavia adentro: no la tiene que traer de vuelta.
+  it('una lista vieja que llega despues no trae de vuelta la que se oculto', async () => {
+    api.notifications.delete.mockResolvedValue({ success: true, data: undefined });
+    const { useApp, useNotificationStore, ids } = await useAppConServidor();
+    const { result } = renderHook(() => useApp());
+
+    act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
+    await waitFor(() => expect(api.notifications.delete).toHaveBeenCalled());
+    act(() => useNotificationStore.getState().setNotifications([primera, segunda, tercera]));
+
+    expect(ids()).toEqual(['n0', 'n2']);
+  });
+
+  it('la que no se pudo ocultar si vuelve con la lista siguiente', async () => {
+    api.notifications.delete.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'x' } });
+    const { useApp, useNotificationStore, ids } = await useAppConServidor();
+    const { result } = renderHook(() => useApp());
+
+    act(() => result.current.dispatch({ type: 'DELETE_NOTIFICATION', payload: 'n1' }));
+    await waitFor(() => expect(ids()).toEqual(['n0', 'n1', 'n2']));
+    act(() => useNotificationStore.getState().setNotifications([segunda]));
+
+    expect(ids()).toEqual(['n1']);
   });
 });

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,20 +157,93 @@ func TestOcultarNotificacion_LaDeOtraPersonaNoSeToca(t *testing.T) {
 	}
 }
 
-func TestOcultarNotificacion_UnIdQueNoEsUnUUID(t *testing.T) {
+// Un id que no existe recibe lo mismo que uno de otra cuenta: la respuesta no
+// dice si la notificacion existe.
+func TestOcultarNotificacion_UnaQueNoExisteRespondeIgualQueUnaAjena(t *testing.T) {
 	pool := testutil.TestDB(t)
 	userID := testutil.SeedTestUser(t, pool, "702650930", "hash-de-prueba")
 	ruta := rutasDelHistorial(pool)
 
-	url := "/api/v1/notifications/no-es-un-id"
+	url := "/api/v1/notifications/" + uuid.NewString()
 	rec := comoUsuario(ruta, userID, http.MethodDelete, url)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("respondio %d, esperaba 400: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("respondio %d, esperaba 404: %s", rec.Code, rec.Body.String())
 	}
-	if c := codigoDelRechazo(t, rec); c != "INVALID_ID" {
-		t.Fatalf("codigo %q, esperaba INVALID_ID", c)
+	if c := codigoDelRechazo(t, rec); c != "NOTIFICATION_NOT_FOUND" {
+		t.Fatalf("codigo %q, esperaba NOTIFICATION_NOT_FOUND", c)
 	}
 	cumpleLaSpec(t, url, rec)
+}
+
+// El id va en la forma canonica, la misma con la que lo da la lista. uuid.Parse
+// acepta tambien `urn:uuid:...` y los 32 hexadecimales sin guiones: la
+// primera forma Postgres la rechaza, y eso era un 500 por un pedido mal
+// formado.
+func TestOcultarNotificacion_UnIdQueNoEsUnUUID(t *testing.T) {
+	pool := testutil.TestDB(t)
+	userID := testutil.SeedTestUser(t, pool, "702650930", "hash-de-prueba")
+	ruta := rutasDelHistorial(pool)
+	id := sembrarNotificacion(t, pool, userID, "Con un id escrito de otra forma")
+
+	for _, malo := range []string{
+		"no-es-un-id",
+		"123",
+		"urn:uuid:" + id,
+		strings.ReplaceAll(id, "-", ""),
+	} {
+		url := "/api/v1/notifications/" + malo
+		rec := comoUsuario(ruta, userID, http.MethodDelete, url)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%q: respondio %d, esperaba 400: %s", malo, rec.Code, rec.Body.String())
+			continue
+		}
+		if c := codigoDelRechazo(t, rec); c != "INVALID_ID" {
+			t.Errorf("%q: codigo %q, esperaba INVALID_ID", malo, c)
+		}
+		cumpleLaSpec(t, url, rec)
+	}
+	if momentoEnQueSeOculto(t, pool, id) != nil {
+		t.Fatal("un id mal escrito oculto la notificacion")
+	}
+}
+
+func momentoEnQueSeLeyo(t *testing.T, pool *pgxpool.Pool, id string) *time.Time {
+	t.Helper()
+	var leida *time.Time
+	if err := pool.QueryRow(context.Background(),
+		`SELECT read_at FROM notification_history WHERE id = $1::uuid`, id).Scan(&leida); err != nil {
+		t.Fatalf("leer la fila: %v", err)
+	}
+	return leida
+}
+
+// Ocultar congela el registro: una notificacion que se oculto sin leer queda
+// como "oculta sin leer". Marcar todas como leidas, o esa sola desde una
+// pantalla que todavia la tenia, la estampaba como leida en una fecha en que
+// la persona ya no la podia ver.
+func TestOcultarNotificacion_MarcarLeidasNoTocaLasOcultas(t *testing.T) {
+	pool := testutil.TestDB(t)
+	userID := testutil.SeedTestUser(t, pool, "702650930", "hash-de-prueba")
+	ruta := rutasDelHistorial(pool)
+	oculta := sembrarNotificacion(t, pool, userID, "Oculta sin leer")
+	visible := sembrarNotificacion(t, pool, userID, "Visible")
+
+	if rec := comoUsuario(ruta, userID, http.MethodDelete, "/api/v1/notifications/"+oculta); rec.Code != http.StatusNoContent {
+		t.Fatalf("ocultar: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := comoUsuario(ruta, userID, http.MethodPatch, "/api/v1/notifications/"+oculta+"/read"); rec.Code != http.StatusNoContent {
+		t.Fatalf("marcar la oculta como leida: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := comoUsuario(ruta, userID, http.MethodPost, "/api/v1/notifications/read-all"); rec.Code != http.StatusNoContent {
+		t.Fatalf("marcar todas como leidas: %d %s", rec.Code, rec.Body.String())
+	}
+
+	if momentoEnQueSeLeyo(t, pool, oculta) != nil {
+		t.Error("la notificacion oculta quedo marcada como leida")
+	}
+	if momentoEnQueSeLeyo(t, pool, visible) == nil {
+		t.Error("marcar todas como leidas no marco la visible")
+	}
 }
 
 // Ocultarla otra vez (doble toque, reintento sin red) no falla ni pisa el
