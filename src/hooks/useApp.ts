@@ -273,10 +273,18 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         }
         break;
       case 'DELETE_NOTIFICATION':
-        notifications.deleteNotification(action.payload);
+        // El servidor la oculta (nunca la borra). Igual que marcar como leida:
+        // sale de la lista al instante y, si el servidor no la oculto, se pide
+        // la lista otra vez y vuelve en el acto, en vez de reaparecer sin
+        // explicacion en la siguiente carga.
+        notifications.deleteNotification(action.payload); // optimistic
         if (hasBackend) {
-          const api = getApiLayer();
-          api.notifications.delete(action.payload).catch(() => {});
+          getApiLayer()
+            .notifications.delete(action.payload)
+            .then((res) => {
+              if (!res.success) refreshNotifications();
+            })
+            .catch(() => refreshNotifications());
         }
         break;
       case 'UPDATE_CRYPTO_PRICES':

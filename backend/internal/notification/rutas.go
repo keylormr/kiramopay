@@ -8,4 +8,6 @@ func MontarHistorial(r chi.Router, h *Handler) {
 	r.Get("/notifications", h.ListNotifications)
 	r.Patch("/notifications/{id}/read", h.MarkRead)
 	r.Post("/notifications/read-all", h.MarkAllRead)
+	// "Borrar" desde la pantalla: oculta, nunca borra (Handler.Ocultar).
+	r.Delete("/notifications/{id}", h.Ocultar)
 }

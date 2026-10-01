@@ -77,7 +77,7 @@ func (r *Repository) ListNotifications(ctx context.Context, userID string, limit
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, title, body, type, read_at, created_at
 		 FROM notification_history
-		 WHERE user_id = $1
+		 WHERE user_id = $1 AND hidden_at IS NULL
 		 ORDER BY created_at DESC
 		 LIMIT $2 OFFSET $3`,
 		userID, limit, offset,
@@ -105,6 +105,21 @@ func (r *Repository) MarkRead(ctx context.Context, userID, notifID string) error
 		notifID, userID,
 	)
 	return err
+}
+
+// OcultarNotificacion marca la notificacion como oculta para su titular. Nunca
+// la borra: la fila queda, con el momento en que se oculto. Ocultarla otra vez
+// conserva la primera marca. Devuelve false si no existe o es de otra cuenta.
+func (r *Repository) OcultarNotificacion(ctx context.Context, userID, notifID string) (bool, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE notification_history SET hidden_at = COALESCE(hidden_at, NOW())
+		 WHERE id = $1 AND user_id = $2`,
+		notifID, userID,
+	)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // MarkAllRead marks every unread notification for the user as read.

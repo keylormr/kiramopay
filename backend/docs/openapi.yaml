@@ -3190,6 +3190,44 @@ paths:
         '401':
           description: Unauthorized
 
+  /api/v1/notifications/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Hide a notification from the caller's list
+      description: |
+        The app offers "delete"; the server hides. The row is never deleted: it
+        keeps the moment it was hidden (hidden_at) and stops appearing in
+        GET /notifications. Hiding it again keeps the first mark. Another
+        account's notification answers the same 404 as an unknown id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Hidden (or already hidden)
+        '400':
+          description: INVALID_ID (the id is not a UUID)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: NOTIFICATION_NOT_FOUND (unknown, or another account's)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: HIDE_FAILED
+
   /api/v1/notifications/{id}/read:
     patch:
       tags: [Notifications]
