@@ -159,4 +159,20 @@ describe('refreshCrypto dice si trajo todo', () => {
     soltar();
     await expect(vieja).resolves.toBe(false);
   });
+
+  // El caso que se da en la pantalla: con el aviso a la vista, un retiro de
+  // staking pide otra carga y deja atras la de la repeticion. Si la nueva trajo
+  // todo, la superada tambien tiene que decir que esta al dia.
+  it('una carga superada cuya mas nueva trajo todo contesta true', async () => {
+    let soltar!: () => void;
+    mocks.esperar = new Promise<void>((r) => {
+      soltar = r;
+    });
+    const vieja = refreshCrypto();
+    mocks.esperar = null;
+    const nueva = refreshCrypto();
+    await expect(nueva).resolves.toBe(true);
+    soltar();
+    await expect(vieja).resolves.toBe(true);
+  });
 });

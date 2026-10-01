@@ -18,12 +18,15 @@ const mocks = vi.hoisted(() => ({
       sell: vi.fn(),
       convert: vi.fn(),
       stake: vi.fn(),
+      unstake: vi.fn(),
+      claimYield: vi.fn(),
     },
   },
   dispatch: vi.fn(),
   refrescarCripto: vi.fn(),
   refrescarCuentas: vi.fn(),
   activos: [] as Array<Record<string, unknown>>,
+  posiciones: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@/api', () => ({
@@ -68,7 +71,7 @@ vi.mock('@/hooks/useApp', () => ({
       crypto: {
         assets: mocks.activos,
         transactions: [],
-        stakingPositions: [],
+        stakingPositions: mocks.posiciones,
         priceAlerts: [],
         favoriteAssets: [],
       },
@@ -80,7 +83,7 @@ vi.mock('@/hooks/useApp', () => ({
 const YA_HECHA = 'Esa operación ya se había hecho';
 // Lo que el aviso dice de los saldos depende de si se pudieron traer: no anota
 // nada, asi que lo que se ve es lo que llego del servidor, o lo de antes.
-const ACTUALIZANDO = 'No se repitió. Estamos trayendo tus saldos al día.';
+const ACTUALIZANDO = 'No se repitió. Estamos actualizando tus saldos.';
 const AL_DIA = 'No se repitió: tus saldos y movimientos ya muestran lo que quedó registrado.';
 const SIN_ACTUALIZAR = 'No se repitió, pero no pudimos actualizar tus saldos: puede que todavía veas los de antes.';
 
@@ -164,6 +167,7 @@ beforeEach(() => {
     activo('BTC', 'Bitcoin', 0.5, 40000),
     activo('ETH', 'Ethereum', 2, 2500),
   ];
+  mocks.posiciones = [];
 });
 
 describe('una operacion que ya estaba hecha no se anota otra vez', () => {
@@ -291,12 +295,14 @@ describe('lo que el aviso dice de los saldos', () => {
 
     await vender(user);
 
-    expect(await screen.findByText(ACTUALIZANDO)).toBeInTheDocument();
+    const aviso = (await screen.findByText(ACTUALIZANDO)).closest('[role="status"]') as HTMLElement;
     expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
+    expect(within(aviso).queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
     cripto.resolver(true);
     cuentas.resolver(true);
     expect(await screen.findByText(AL_DIA)).toBeInTheDocument();
     expect(screen.queryByText(ACTUALIZANDO)).not.toBeInTheDocument();
+    expect(within(aviso).queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
   });
 
   it('si una de las dos lecturas no llega, no promete saldos al dia', async () => {
@@ -343,6 +349,72 @@ describe('lo que el aviso dice de los saldos', () => {
     expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
     expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
   });
+
+  // La segunda reabre la hoja y repite. Si la lectura de la primera contesta
+  // la ultima, y mal, no puede pisar lo que la segunda ya trajo.
+  it('dos repeticiones seguidas: la lectura vieja que llega tarde no pisa el aviso de la nueva', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    const primera = diferido<boolean>();
+    const segunda = diferido<boolean>();
+    mocks.refrescarCripto.mockReturnValueOnce(primera.promesa).mockReturnValueOnce(segunda.promesa);
+
+    await vender(user);
+    await screen.findByText(ACTUALIZANDO);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await vender(user);
+    await screen.findByText(ACTUALIZANDO);
+    segunda.resolver(true);
+    await screen.findByText(AL_DIA);
+    primera.resolver(false);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByText(AL_DIA)).toBeInTheDocument();
+    expect(screen.queryByText(SIN_ACTUALIZAR)).not.toBeInTheDocument();
+  });
+
+  // Sin esto, la unica salida de "no pudimos actualizar" era irse de la
+  // pantalla y volver: nada mas trae los saldos solo.
+  it('si no se pudieron traer, ofrece reintentar, y si al reintentar llegan lo dice', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    mocks.refrescarCuentas.mockResolvedValueOnce(false);
+
+    await vender(user);
+    const aviso = (await screen.findByText(SIN_ACTUALIZAR)).closest('[role="status"]') as HTMLElement;
+    mocks.refrescarCripto.mockClear();
+    mocks.refrescarCuentas.mockClear();
+    await user.click(within(aviso).getByRole('button', { name: 'Reintentar' }));
+
+    expect(await within(aviso).findByText(AL_DIA)).toBeInTheDocument();
+    expect(mocks.refrescarCripto).toHaveBeenCalledTimes(1);
+    expect(mocks.refrescarCuentas).toHaveBeenCalledTimes(1);
+    expect(within(aviso).queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+    // El boton desaparece al tocarlo: el foco no se pierde, va al de cerrar.
+    expect(within(aviso).getByRole('button', { name: 'Cerrar' })).toHaveFocus();
+    // Reintentar no es otra operacion: no se anota nada.
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SELL_CRYPTO' }));
+  });
+
+  it('si al reintentar tampoco llegan, lo sigue diciendo y deja reintentar otra vez', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    mocks.refrescarCripto.mockResolvedValue(false);
+
+    await vender(user);
+    const aviso = (await screen.findByText(SIN_ACTUALIZAR)).closest('[role="status"]') as HTMLElement;
+    await user.click(within(aviso).getByRole('button', { name: 'Reintentar' }));
+
+    expect(await within(aviso).findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(within(aviso).getByText(SIN_ACTUALIZAR)).toBeInTheDocument();
+    expect(within(aviso).queryByText(AL_DIA)).not.toBeInTheDocument();
+  });
 });
 
 describe('el aviso en la pagina', () => {
@@ -373,6 +445,31 @@ describe('el aviso en la pagina', () => {
     await user.click(screen.getAllByRole('button', { name: /Comprar/ })[0]);
     await screen.findByRole('dialog');
 
+    expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
+  });
+
+  // Retirar y reclamar son operaciones nuevas, como las de las hojas: el aviso
+  // ya no hablaria de lo ultimo que se hizo.
+  it.each([
+    ['Retirar', 'unstake'],
+    ['Reclamar', 'claimYield'],
+  ] as const)('%s una posicion de staking se lo lleva', async (boton, metodo) => {
+    mocks.posiciones = [{
+      id: '5a7e0c4e-0000-4000-8000-000000000077', asset: 'ETH', amount: 0.5, apy: 4.5,
+      startDate: '2026-09-01T13:00:00Z', earned: 0.01, locked: false,
+    }];
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    mocks.api.crypto[metodo].mockResolvedValue({ success: true, data: {} });
+    const user = userEvent.setup();
+    montar();
+
+    await vender(user);
+    await screen.findByText(YA_HECHA);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Staking' }));
+    await user.click(await screen.findByRole('button', { name: boton }));
+
+    await waitFor(() => expect(mocks.api.crypto[metodo]).toHaveBeenCalled());
     expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
   });
 
