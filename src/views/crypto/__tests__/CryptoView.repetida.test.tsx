@@ -45,6 +45,12 @@ vi.mock('@/services/cryptoPrices', () => ({
   SIMBOLOS_SIN_FEED: ['USDT', 'USDC'],
 }));
 
+// El desafio de MFA se reduce a su resultado, como en la prueba del envio.
+vi.mock('@/components/MfaChallengeSheet', () => ({
+  MfaChallengeSheet: ({ isOpen, onVerified }: { isOpen: boolean; onVerified: () => void }) =>
+    isOpen ? <button onClick={onVerified}>verificar-mfa</button> : null,
+}));
+
 vi.mock('@/hooks/useCryptoPricesWs', () => ({
   useCryptoPricesWs: () => ({ prices: {}, lastUpdate: null, connected: false }),
 }));
@@ -72,6 +78,21 @@ vi.mock('@/hooks/useApp', () => ({
 }));
 
 const YA_HECHA = 'Esa operación ya se había hecho';
+// Lo que el aviso dice de los saldos depende de si se pudieron traer: no anota
+// nada, asi que lo que se ve es lo que llego del servidor, o lo de antes.
+const ACTUALIZANDO = 'No se repitió. Estamos trayendo tus saldos al día.';
+const AL_DIA = 'No se repitió: tus saldos y movimientos ya muestran lo que quedó registrado.';
+const SIN_ACTUALIZAR = 'No se repitió, pero no pudimos actualizar tus saldos: puede que todavía veas los de antes.';
+
+function diferido<T>() {
+  let resolver!: (valor: T) => void;
+  let rechazar!: (error: unknown) => void;
+  const promesa = new Promise<T>((res, rej) => {
+    resolver = res;
+    rechazar = rej;
+  });
+  return { promesa, resolver, rechazar };
+}
 
 const activo = (symbol: string, name: string, balance: number, currentPrice: number) => ({
   id: symbol.toLowerCase(),
@@ -137,8 +158,8 @@ beforeEach(() => {
   localStorage.setItem('kiramopay_language', 'es');
   Object.values(mocks.api.crypto).forEach((f) => f.mockReset());
   mocks.dispatch.mockReset();
-  mocks.refrescarCripto.mockReset().mockResolvedValue(undefined);
-  mocks.refrescarCuentas.mockReset().mockResolvedValue(undefined);
+  mocks.refrescarCripto.mockReset().mockResolvedValue(true);
+  mocks.refrescarCuentas.mockReset().mockResolvedValue(true);
   mocks.activos = [
     activo('BTC', 'Bitcoin', 0.5, 40000),
     activo('ETH', 'Ethereum', 2, 2500),
@@ -180,10 +201,12 @@ describe('una operacion que ya estaba hecha no se anota otra vez', () => {
     montar();
     await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
     mocks.refrescarCripto.mockClear();
+    mocks.refrescarCuentas.mockClear();
 
     await caso.operar(user);
 
     expect(await screen.findByText(YA_HECHA)).toBeInTheDocument();
+    expect(await screen.findByText(AL_DIA)).toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: caso.accion }));
     expect(mocks.refrescarCripto).toHaveBeenCalled();
     expect(mocks.refrescarCuentas).toHaveBeenCalled();
@@ -247,5 +270,125 @@ describe('la venta repetida tras un corte de red', () => {
     await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
 
     expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
+  });
+});
+
+// Lo que se ve tras la repeticion sale del servidor, porque la pantalla no
+// anota nada. Si esa lectura no llega —la misma red inestable que provoco el
+// reintento—, el aviso no puede decir que los saldos estan al dia: la persona
+// veria la cifra de antes, leeria que todo esta al dia y podria repetir la
+// operacion a mano.
+describe('lo que el aviso dice de los saldos', () => {
+  it('mientras se traen no afirma nada, y cuando llegan lo dice', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    const cripto = diferido<boolean>();
+    const cuentas = diferido<boolean>();
+    mocks.refrescarCripto.mockReturnValue(cripto.promesa);
+    mocks.refrescarCuentas.mockReturnValue(cuentas.promesa);
+
+    await vender(user);
+
+    expect(await screen.findByText(ACTUALIZANDO)).toBeInTheDocument();
+    expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
+    cripto.resolver(true);
+    cuentas.resolver(true);
+    expect(await screen.findByText(AL_DIA)).toBeInTheDocument();
+    expect(screen.queryByText(ACTUALIZANDO)).not.toBeInTheDocument();
+  });
+
+  it('si una de las dos lecturas no llega, no promete saldos al dia', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    mocks.refrescarCuentas.mockResolvedValue(false);
+
+    await vender(user);
+
+    expect(await screen.findByText(SIN_ACTUALIZAR)).toBeInTheDocument();
+    expect(screen.getByText(YA_HECHA)).toBeInTheDocument();
+    expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
+  });
+
+  it('si la lectura lanza, tampoco', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    mocks.refrescarCripto.mockRejectedValue(new Error('sin red'));
+
+    await vender(user);
+
+    expect(await screen.findByText(SIN_ACTUALIZAR)).toBeInTheDocument();
+    expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
+  });
+
+  it('una lectura que llega tarde no vuelve a abrir el aviso cerrado', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    await waitFor(() => expect(mocks.refrescarCripto).toHaveBeenCalled());
+    const cripto = diferido<boolean>();
+    mocks.refrescarCripto.mockReturnValue(cripto.promesa);
+
+    await vender(user);
+    const aviso = (await screen.findByText(YA_HECHA)).closest('[role="status"]') as HTMLElement;
+    await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
+    cripto.resolver(true);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
+    expect(screen.queryByText(AL_DIA)).not.toBeInTheDocument();
+  });
+});
+
+describe('el aviso en la pagina', () => {
+  // Un lector de pantalla solo anuncia los cambios de una region que ya estaba
+  // en el documento: insertada junto con su texto, muchos no dicen nada.
+  it('la region que lo anuncia ya estaba en la pagina', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+    const regionesAntes = screen.getAllByRole('status');
+
+    await vender(user);
+
+    const region = (await screen.findByText(YA_HECHA)).closest('[role="status"]');
+    expect(regionesAntes).toContain(region);
+  });
+
+  // La hoja lo taparia igual, y al cerrarla ya no hablaria de lo ultimo que
+  // se hizo.
+  it('abrir otra hoja se lo lleva', async () => {
+    mocks.api.crypto.sell.mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+
+    await vender(user);
+    await screen.findByText(YA_HECHA);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: /Comprar/ })[0]);
+    await screen.findByRole('dialog');
+
+    expect(screen.queryByText(YA_HECHA)).not.toBeInTheDocument();
+  });
+
+  it('tras el segundo factor, la repetida tampoco se anota', async () => {
+    mocks.api.crypto.sell
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa' } })
+      .mockResolvedValue({ success: true, data: { ...venta, repetida: true } });
+    const user = userEvent.setup();
+    montar();
+
+    await vender(user);
+    await user.click(await screen.findByRole('button', { name: 'verificar-mfa' }));
+
+    expect(await screen.findByText(YA_HECHA)).toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SELL_CRYPTO' }));
+    const [a, b] = mocks.api.crypto.sell.mock.calls.map(([req]) => req.idempotencyKey as string);
+    expect(b).toBe(a);
   });
 });
