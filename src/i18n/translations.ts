@@ -572,6 +572,8 @@ export type TranslationKeys = {
   crypto_prices_unavailable_hint: string;
   crypto_already_done: string;
   crypto_already_done_hint: string;
+  crypto_already_done_updating: string;
+  crypto_already_done_stale: string;
   crypto_sparkline_sin_datos: string;
   crypto_price_stale: string;
   crypto_err_insufficient_asset: string;

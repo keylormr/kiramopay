@@ -443,11 +443,20 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 	if tx == nil {
 		creada, err := s.repo.Create(ctx, userID, w.ID, req)
 		if err != nil {
-			// Un intento simultaneo gano la insercion. Su fila es la de este
-			// mismo movimiento, asi que se sigue sobre ella: la llave del
-			// asiento es la que decide cual de los dos mueve el dinero.
+			// Un intento simultaneo con la misma llave gano la insercion. Si su
+			// fila describe este mismo movimiento, se sigue sobre ella: la llave
+			// del asiento es la que decide cual de los dos mueve el dinero.
 			if !errors.Is(err, ErrDuplicate) || creada == nil {
 				return nil, false, fmt.Errorf("create transaction: %w", err)
+			}
+			// Si describe OTRO, es otra operacion con una llave prestada, y la
+			// regla es la de la relectura de arriba. Seguir sobre esa fila
+			// asentaria el monto de este pedido con el id de una fila que dice
+			// otro: el libro moveria uno y el tope y la UIF contarian el otro.
+			// Y si esa fila ya completo, devolverla seria contestar "ya estaba
+			// hecho" por una operacion que nunca se hizo.
+			if !mismoMovimiento(creada, req) {
+				return nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
 			}
 			if creada.Status == StatusCompleted {
 				return creada, true, nil
