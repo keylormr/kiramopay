@@ -320,8 +320,8 @@ docker compose up -d --build
 | `/metrics` | GET | Metricas Prometheus | No |
 | `/ws/prices` | GET | WebSocket precios crypto en tiempo real | No |
 | `/ws/notifications` | GET | WebSocket notificaciones por usuario (autenticado post-conexion) | Si |
-| `/api/docs` | GET | Swagger UI interactivo | No |
-| `/api/docs/openapi.yaml` | GET | Especificacion OpenAPI 3.0 | No |
+| `/api/docs` | GET | Swagger UI interactivo (solo con `ENVIRONMENT=development`) | No |
+| `/api/docs/openapi.yaml` | GET | Especificacion OpenAPI 3.0 (solo con `ENVIRONMENT=development`) | No |
 | `/api/v1/auth/register` | POST | Registrar usuario | No |
 | `/api/v1/auth/login` | POST | Login (cedula + contraseña) | No |
 | `/api/v1/auth/refresh` | POST | Refrescar token JWT | No |
