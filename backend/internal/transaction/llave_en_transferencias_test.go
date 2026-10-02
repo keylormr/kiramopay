@@ -52,7 +52,7 @@ func lanzarRetiro(svc *transaction.Service, comercio, dueno string, monto int64,
 	r := &resultadoRetiro{listo: make(chan struct{})}
 	go func() {
 		defer close(r.listo)
-		r.rec, r.err = svc.WithdrawMerchantToUser(context.Background(), comercio, "Tienda", dueno, "CRC", monto, llave)
+		r.rec, _, r.err = svc.WithdrawMerchantToUser(context.Background(), comercio, "Tienda", dueno, "CRC", monto, llave)
 	}()
 	return r
 }
@@ -345,7 +345,7 @@ func TestWithdrawMerchantToUser_OtroMontoConLaLlaveDeUnRetiroHechoSeRechaza(t *t
 
 	otro := lanzarRetiro(tarde, comercio, dueno, 120000, llave)
 	esperarCanal(t, freno.llego, "que el segundo llegue a insertar su fila")
-	if _, err := svc.WithdrawMerchantToUser(context.Background(), comercio, "Tienda", dueno, "CRC", 100000, llave); err != nil {
+	if _, _, err := svc.WithdrawMerchantToUser(context.Background(), comercio, "Tienda", dueno, "CRC", 100000, llave); err != nil {
 		t.Fatalf("el primer retiro: %v", err)
 	}
 	close(freno.soltar)
@@ -409,10 +409,10 @@ func TestWithdrawMerchantToUser_DesdeOtroComercioConLaMismaLlaveSeRechaza(t *tes
 	cobrarAlComercio(t, svc, emisor, comercioB, 300000)
 	const llave = "mwithdraw:otro-comercio"
 
-	if _, err := svc.WithdrawMerchantToUser(ctx, comercioA, "Tienda A", dueno, "CRC", 100000, llave); err != nil {
+	if _, _, err := svc.WithdrawMerchantToUser(ctx, comercioA, "Tienda A", dueno, "CRC", 100000, llave); err != nil {
 		t.Fatalf("el retiro del primer comercio: %v", err)
 	}
-	_, err := svc.WithdrawMerchantToUser(ctx, comercioB, "Tienda B", dueno, "CRC", 100000, llave)
+	_, _, err := svc.WithdrawMerchantToUser(ctx, comercioB, "Tienda B", dueno, "CRC", 100000, llave)
 	if !errors.Is(err, transaction.ErrLlaveReutilizada) {
 		t.Fatalf("la misma llave desde otro comercio: err=%v, se esperaba ErrLlaveReutilizada", err)
 	}

@@ -6,6 +6,7 @@ import { useSinpeStore } from './sinpe.store';
 import { useNotificationStore } from './notification.store';
 import { useCryptoStore } from './crypto.store';
 import { useBusinessStore } from './business.store';
+import { llaveDelIntento } from '@/services/intentoPendiente';
 import type { Account, Notification, SinpeContact, Transaction } from '@/types';
 
 // Mismo mecanismo que useCryptoPricesWs.test: el modulo lee VITE_API_URL por
@@ -101,6 +102,13 @@ describe('limpiarDatosDeUsuario', () => {
     expect(localStorage.getItem('kiramopay-sinpe')).toBeNull();
     expect(localStorage.getItem('kiramopay-accounts')).toBeNull();
     expect(localStorage.getItem('kiramopay-transactions')).toBeNull();
+  });
+
+  it('olvida los intentos pendientes de quien sale', () => {
+    llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'llave-de-victor');
+    limpiarDatosDeUsuario();
+    expect(localStorage.getItem('kiramopay-intentos-pendientes')).toBeNull();
+    expect(llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'otra')).toBe('otra');
   });
 
   it('no toca nada en modo demo (sin backend)', () => {

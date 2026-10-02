@@ -89,7 +89,8 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey); err != nil {
+	retiro, err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey)
+	if err != nil {
 		// La llave ya es de otro retiro: la pantalla necesita saberlo para
 		// pedir el siguiente con otra. Con el WITHDRAW_FAILED generico no lo
 		// podia distinguir de un fallo que se arregla reintentando.
@@ -101,7 +102,7 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "WITHDRAW_FAILED", err.Error())
 		return
 	}
-	response.NoContent(w)
+	response.JSON(w, http.StatusOK, retiro)
 }
 
 func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {

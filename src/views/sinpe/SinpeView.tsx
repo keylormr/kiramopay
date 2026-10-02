@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -7,6 +7,8 @@ import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { refreshAccounts, refreshSinpe } from '@/services/dataSync';
 import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -63,6 +65,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showReceiveSheet, setShowReceiveSheet] = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
+  // La hoja del final habla de un envio que ya estaba hecho (la repeticion),
+  // no de uno nuevo.
+  const [envioYaHecho, setEnvioYaHecho] = useState(false);
   const [showAddContactSheet, setShowAddContactSheet] = useState(false);
   const [showMyQrSheet, setShowMyQrSheet] = useState(false);
   const [selectedContact, setSelectedContact] = useState<SinpeContact | null>(null);
@@ -133,22 +138,21 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // MISMA llave para que el servidor conteste con aquel envio en vez de hacer
   // otro. Por eso no se suelta ante un error ni al cerrar la hoja —antes si, y
   // reintentar tras un corte mandaba la plata dos veces—: solo cuando el envio
-  // salio o cuando el servidor dice que la llave es de otro envio. Tambien la
-  // reusa el reintento tras el segundo factor. Corregir el telefono o el monto
-  // es otro envio, y lleva otra llave sola.
-  const intentoRef = useRef<{ firma: string; llave: string } | null>(null);
-  const llaveDelEnvio = (firma: string) => {
-    if (intentoRef.current?.firma !== firma) {
-      intentoRef.current = {
-        firma,
-        llave:
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      };
-    }
-    return intentoRef.current.llave;
-  };
+  // salio, cuando el servidor contesta que ya estaba hecho o cuando dice que la
+  // llave es de otro envio. Tambien la reusa el reintento tras el segundo
+  // factor. Corregir el telefono o el monto es otro envio, y lleva otra llave
+  // sola.
+  //
+  // Vive fuera de la pantalla (ver intentoPendiente): cambiar de pestana,
+  // bloquear la app o recargarla desmonta esta pantalla, y volver a enviar lo
+  // mismo tiene que llevar la misma llave igual.
+  const persona = state.user?.id ?? '';
+  const llaveDelEnvio = (firma: string) =>
+    llaveDelIntento(persona, 'sinpe', firma, () =>
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
 
   const handleSelectContact = (contact: SinpeContact) => {
     setSelectedContact(contact);
@@ -199,11 +203,12 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     // Real transfer through the API layer: the mock adapter records it locally,
     // the HTTP adapter moves money on the backend (and may require MFA). The
     // idempotency key makes a double-submit collapse into one transfer.
+    const llave = llaveDelEnvio(`${telefono}|${numAmount}`);
     const res = await getApiLayer().sinpe.send({
       phone: telefono,
       amount: numAmount,
       description: reference,
-      idempotencyKey: llaveDelEnvio(`${telefono}|${numAmount}`),
+      idempotencyKey: llave,
     });
     setIsProcessing(false);
 
@@ -217,7 +222,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       }
       const code = res.error?.code ?? '';
       // La llave ya es de otro envio: el siguiente intento necesita otra.
-      if (code === 'LLAVE_REUTILIZADA') intentoRef.current = null;
+      if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, 'sinpe', llave);
       setShowConfirm(false);
       // Codes the backend gives their own identity so we can explain them in the
       // user's language. Everything else falls back to the server message.
@@ -237,8 +242,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       setSendError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
       return;
     }
-    // El envio salio: el siguiente es otro y lleva otra llave.
-    intentoRef.current = null;
+    // El envio salio, o ya estaba hecho: el siguiente es otro y lleva otra
+    // llave.
+    soltarIntento(persona, 'sinpe', llave);
 
     const tx: SinpeTransaction = {
       id: res.data.id,
@@ -259,7 +265,19 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       internal: res.data.internal,
     };
 
-    dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
+    // La repeticion: el servidor contesto con un envio que YA estaba hecho bajo
+    // esta llave, sea el reintento tras un corte o un segundo envio igual hecho
+    // a proposito con la llave que se conservaba. No se anota —seria la fila
+    // doble y el saldo contado dos veces hasta la siguiente carga—: se trae lo
+    // que hay en el servidor, y la hoja dice que ya estaba hecho, no "Enviado".
+    const repetido = res.data.repetida === true;
+    if (repetido) {
+      refreshSinpe().catch(() => {});
+      refreshAccounts().catch(() => {});
+    } else {
+      dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
+    }
+    setEnvioYaHecho(repetido);
     setLastTransaction(tx);
     setShowConfirm(false);
     setShowSendSheet(false);
@@ -1069,7 +1087,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           setReference('');
           setSendError('');
           // La llave NO se suelta: si el ultimo intento quedo sin confirmar,
-          // volver a enviar lo mismo tiene que llevarla (ver intentoRef).
+          // volver a enviar lo mismo tiene que llevarla (ver llaveDelEnvio).
         }}
         title={t('send_money')}
       >
@@ -1338,18 +1356,30 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         title=""
       >
         <div className="text-center py-6">
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-glow ${lastTransaction?.internal === false ? 'bg-[var(--color-warning-soft)]' : 'bg-[var(--color-success-soft)]'}`}>
+          {/* El envio que ya estaba hecho no se celebra: sin el brillo, y con su
+              propio titulo. */}
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${envioYaHecho ? '' : 'animate-pulse-glow'} ${lastTransaction?.internal === false ? 'bg-[var(--color-warning-soft)]' : 'bg-[var(--color-success-soft)]'}`}>
             {lastTransaction?.internal === false ? (
               <Icons.History size={40} className="text-[var(--color-warning)]" />
+            ) : envioYaHecho ? (
+              <Icons.CheckCircle size={40} className="text-[var(--color-success)]" />
             ) : (
               <Icons.Check size={40} className="text-[var(--color-success)]" />
             )}
           </div>
           <h2 className="text-2xl font-black uv-text-primary mb-2 tracking-tight">
-            {lastTransaction?.internal === false ? t('sinpe_external_pending_title') : t('sent_success')}
+            {lastTransaction?.internal === false
+              ? t('sinpe_external_pending_title')
+              : envioYaHecho
+                ? t('sinpe_ya_hecho')
+                : t('sent_success')}
           </h2>
           <p className="uv-text-muted mb-6">
-            {lastTransaction?.internal === false ? t('sinpe_external_pending_desc') : t('sinpe_transfer_success')}
+            {lastTransaction?.internal === false
+              ? t('sinpe_external_pending_desc')
+              : envioYaHecho
+                ? t('sinpe_ya_hecho_desc')
+                : t('sinpe_transfer_success')}
           </p>
 
           {lastTransaction && (
@@ -1413,7 +1443,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         isOpen={showMfa}
         // Cancelar el segundo factor deja el intento: el servidor pide el
         // segundo factor despues de mirar la llave, asi que nada salio con ella.
-        onClose={() => { setShowMfa(false); intentoRef.current = null; }}
+        onClose={() => { setShowMfa(false); soltarIntento(persona, 'sinpe'); }}
         onVerified={() => {
           setShowMfa(false);
           handleSendMoney();

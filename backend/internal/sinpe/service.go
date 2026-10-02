@@ -113,7 +113,27 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// transfer could only be debited and parked in SYSTEM:EXTERNAL: never
 	// delivered, and with no refund path to undo it. Taking the money and
 	// showing "pending" forever is worse than saying no up front.
+	//
+	// Salvo que sea el reintento de un envio que ya salio: si la cuenta de
+	// quien lo recibio se cerro entre el envio y el reintento, el telefono ya
+	// no la encuentra, y se contestaba "no es usuario" por un envio hecho. La
+	// llave es la de aquel envio; contestarlo no mueve nada.
 	if peer == nil {
+		hecha, err := s.txService.TransferenciaHecha(ctx, userID, req.IdempotencyKey, req.Amount, "CRC", transaction.TypeSinpeSend)
+		if err != nil {
+			return nil, err
+		}
+		if hecha != nil {
+			return &SendResponse{
+				TransactionID: hecha.ID,
+				Status:        "completed",
+				Amount:        hecha.Amount,
+				Fee:           hecha.Fee,
+				Recipient:     hecha.CounterpartyName,
+				Internal:      true,
+				Replayed:      true,
+			}, nil
+		}
 		return nil, ErrRecipientNotUser
 	}
 
@@ -157,12 +177,17 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// ya se habia hecho escribia otra. El gancho no corre en la repeticion: la
 	// fila de aquella vez es la que vale.
 	//
-	// ganchoCorrio dice si ESTA llamada movio el dinero. Lo que sale hacia
-	// afuera —el aviso a quien recibe, la auditoria— depende de eso: la
-	// repeticion no es otro envio.
+	// Los nombres van recortados al ancho de la columna (VARCHAR(100),
+	// migracion 023). Nombre y apellido pueden sumar 201 caracteres, y dentro
+	// de la transaccion del dinero un nombre que no entra hace fallar el envio
+	// entero, siempre igual: un nombre de pantalla no vale un envio. Los
+	// telefonos si entran (VARCHAR(15)): el de destino lo valida el handler
+	// (+506 y ocho digitos), y el de quien envia tiene el mismo formato porque
+	// se valida al registrarse y ningun otro camino lo cambia.
 	ahora := time.Now()
 	idEnvio, idRecibo := uuid.New().String(), uuid.New().String()
-	var ganchoCorrio bool
+	nombreDelContacto := transaction.RecortarNombre(contactName)
+	nombreDeQuienEnvia := transaction.RecortarNombre(receiverContact)
 	pedido := &transaction.CreateTransferRequest{
 		FromUserID:               userID,
 		ToUserID:                 peer.ID,
@@ -180,7 +205,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 				ID:          idEnvio,
 				UserID:      userID,
 				Phone:       req.Phone,
-				ContactName: contactName,
+				ContactName: nombreDelContacto,
 				Amount:      req.Amount,
 				Fee:         fee,
 				Type:        "sent",
@@ -197,7 +222,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 				// Antes se guardaba su UUID como relleno y el historial del
 				// receptor mostraba ese identificador en vez de un numero.
 				Phone:       senderPhone,
-				ContactName: receiverContact,
+				ContactName: nombreDeQuienEnvia,
 				Amount:      req.Amount,
 				Fee:         0,
 				Type:        "received",
@@ -207,7 +232,6 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			}); err != nil {
 				return fmt.Errorf("historial de quien recibe: %w", err)
 			}
-			ganchoCorrio = true
 			return nil
 		},
 	}
@@ -230,7 +254,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		}
 	}
 
-	senderTx, _, err := s.txService.CreateTransfer(ctx, pedido)
+	senderTx, _, repetido, err := s.txService.TransferirOReconocer(ctx, pedido)
 	if err != nil {
 		if errors.Is(err, transaction.ErrMFARequired) {
 			return nil, err
@@ -238,7 +262,11 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("create transaction: %w", err)
 	}
 
-	if ganchoCorrio {
+	// Lo que sale hacia afuera —el aviso a quien recibe, la auditoria— va solo
+	// cuando ESTA llamada movio el dinero: la repeticion no es otro envio. Lo
+	// dice el libro: una bandera puesta por el gancho mentia cuando el gancho
+	// corria en una pasada que despues se deshacia.
+	if !repetido {
 		// Notify the recipient (best-effort, detached so it never blocks or
 		// fails the transfer).
 		if s.notifier != nil {
@@ -264,6 +292,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		Fee:           fee,
 		Recipient:     contactName,
 		Internal:      true,
+		Replayed:      repetido,
 	}, nil
 }
 

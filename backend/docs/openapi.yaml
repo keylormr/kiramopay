@@ -636,11 +636,12 @@ paths:
       description: >-
         Repeating a completed transfer with the same `idempotency_key` (same
         recipient and amount) returns the recorded transfer, with its
-        `transaction_id`, and moves nothing, even when the balance or the
-        daily SINPE quota no longer cover it: that transfer already consumed
-        them. The repetition writes no second history row and does not notify
-        the recipient again. A key that belongs to a different amount or
-        recipient gets 409 LLAVE_REUTILIZADA.
+        `transaction_id` and `replayed: true`, and moves nothing, even when
+        the balance or the daily SINPE quota no longer cover it (that transfer
+        already consumed them) or the recipient has closed their account since.
+        The repetition writes no second history row and does not notify the
+        recipient again. A key that belongs to a different amount or recipient
+        gets 409 LLAVE_REUTILIZADA.
       security:
         - bearerAuth: []
       requestBody:
@@ -1769,9 +1770,9 @@ paths:
         Moves money from the shop's own balance into the owner's personal
         wallet. Repeating a completed withdrawal with the same
         `idempotency_key` (same amount and currency, from the same shop)
-        answers 204 again and moves nothing, even when the shop balance no
-        longer covers it. A key that belongs to a different withdrawal gets
-        409 LLAVE_REUTILIZADA.
+        returns that withdrawal with `replayed: true` and moves nothing, even
+        when the shop balance no longer covers it. A key that belongs to a
+        different withdrawal gets 409 LLAVE_REUTILIZADA.
       security:
         - bearerAuth: []
       parameters:
@@ -1797,8 +1798,12 @@ paths:
                     retries, so a retry after a lost response does not
                     withdraw twice.
       responses:
-        '204':
-          description: Withdrawn
+        '200':
+          description: Withdrawn, or the repetition of a withdrawal already done
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantWithdrawal'
         '400':
           description: >-
             WITHDRAW_FAILED — unknown merchant or the caller is not its owner,
@@ -4999,7 +5004,9 @@ components:
       properties:
         phone:
           type: string
-          description: Costa Rican mobile number, with or without +506.
+          description: Costa Rican mobile number as +506 followed by its eight digits, with no spaces or dashes.
+          pattern: '^\+506[0-9]{8}$'
+          example: '+50688887777'
         amount:
           type: integer
           description: Amount in centimos
@@ -5011,6 +5018,29 @@ components:
             Chosen by the client for each transfer and kept for its retries,
             so a retry after a lost response returns the same transfer instead
             of sending again.
+
+    MerchantWithdrawal:
+      type: object
+      required: [transaction_id, status, amount, currency]
+      properties:
+        transaction_id:
+          type: string
+          description: The owner's `merchant_withdrawal` transaction.
+        status:
+          type: string
+          example: completed
+        amount:
+          type: integer
+          description: Amount withdrawn, in minor units
+        currency:
+          type: string
+          example: CRC
+        replayed:
+          type: boolean
+          description: >-
+            Present, and true, only when the response repeats a withdrawal
+            that was already done under the same `idempotency_key`: this call
+            moved nothing. A new withdrawal does not carry the field.
 
     SinpeSendResponse:
       type: object
@@ -5038,6 +5068,12 @@ components:
             True when the recipient is a KiramoPay user and the funds were
             credited to their wallet. False for external transfers, whose
             delivery to other banks is not yet enabled.
+        replayed:
+          type: boolean
+          description: >-
+            Present, and true, only when the response repeats a transfer that
+            was already done under the same `idempotency_key`: this call moved
+            nothing. A new transfer does not carry the field.
 
     PayBillRequest:
       type: object

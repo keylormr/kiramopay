@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -7,6 +7,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { CampoMonto } from '@/components/CampoMonto';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiLayer } from '@/api';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 import type {
   QRMerchant,
   QRPayment,
@@ -72,22 +73,23 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   // moneda. Se armaba con la hora de cada toque, asi que cada reintento
   // llevaba una nueva, y si la red se cortaba despues de que el retiro salio,
   // volver a tocar "Retirar" lo hacia otra vez. Ahora se conserva —tambien al
-  // cerrar la hoja— hasta que el retiro sale o el servidor dice que la llave
-  // es de otro retiro. Otro monto es otro retiro, y lleva otra llave sola.
-  const intentoRetiroRef = useRef<{ firma: string; llave: string } | null>(null);
-  const llaveDelRetiro = (firma: string) => {
-    if (intentoRetiroRef.current?.firma !== firma) {
-      intentoRetiroRef.current = {
-        firma,
-        llave: `mwd:${
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-        }`,
-      };
-    }
-    return intentoRetiroRef.current.llave;
-  };
+  // cerrar la hoja— hasta que el retiro sale, el servidor contesta que ya
+  // estaba hecho o dice que la llave es de otro retiro. Otro monto es otro
+  // retiro, y lleva otra llave sola.
+  //
+  // Vive fuera de la pantalla (ver intentoPendiente): ir a Reportes, bloquear
+  // la app o recargarla desmonta este inicio, y volver a retirar lo mismo tiene
+  // que llevar la misma llave igual. Una por comercio.
+  const persona = state.user?.id ?? '';
+  const ambitoDelRetiro = `retiro|${merchant.id}`;
+  const llaveDelRetiro = (firma: string) =>
+    llaveDelIntento(persona, ambitoDelRetiro, firma, () => `mwd:${
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }`);
+  // El retiro que ya estaba hecho (la repeticion): se dice en el inicio.
+  const [retiroYaHecho, setRetiroYaHecho] = useState(false);
 
   useEffect(() => {
     if (!canSeeBalance) return; // the endpoint is owner/manager-only
@@ -263,18 +265,24 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     if (!api || withdrawing || !(val > 0)) return;
     setWithdrawing(true);
     setWdError('');
-    const res = await api.withdrawMerchant(merchant.id, val, ccy, llaveDelRetiro(`${merchant.id}|${val}|${ccy}`));
+    const llave = llaveDelRetiro(`${merchant.id}|${val}|${ccy}`);
+    const res = await api.withdrawMerchant(merchant.id, val, ccy, llave);
     setWithdrawing(false);
     if (res.success) {
-      // El retiro salio: el siguiente es otro y lleva otra llave.
-      intentoRetiroRef.current = null;
+      // El retiro salio, o ya estaba hecho: el siguiente es otro y lleva otra
+      // llave.
+      soltarIntento(persona, ambitoDelRetiro, llave);
       setShowWithdraw(false);
       setWdAmount('');
+      // La repeticion: el servidor contesto con un retiro que YA estaba hecho
+      // bajo esta llave, sea el reintento tras un corte o un segundo retiro
+      // igual hecho a proposito. Esta vez no se movio nada, y se dice.
+      setRetiroYaHecho(res.data?.repetida === true);
       onReload();
     } else {
       const code = res.error?.code ?? '';
       // La llave ya es de otro retiro: el siguiente intento necesita otra.
-      if (code === 'LLAVE_REUTILIZADA') intentoRetiroRef.current = null;
+      if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, ambitoDelRetiro, llave);
       const porCodigo: Record<string, string> = {
         // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y
         // eso es lo que permite decir que reintentar no lo hace dos veces.
@@ -326,7 +334,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             </div>
             {isOwner && (
               <button
-                onClick={() => { setWdError(''); setShowWithdraw(true); }}
+                onClick={() => { setWdError(''); setRetiroYaHecho(false); setShowWithdraw(true); }}
                 disabled={!balance}
                 className="relative mt-4 w-full bg-white/15 text-white h-11 rounded-xl font-bold flex items-center justify-center gap-2 border border-white/20 backdrop-blur-sm active:scale-[0.98] transition-transform disabled:opacity-50"
               >
@@ -345,6 +353,27 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
               {todays.length} · {t('business_cashier_hint')}
             </div>
           </>
+        )}
+      </div>
+
+      {/* El retiro que ya estaba hecho. La region viva existe siempre, vacia o
+          no: un lector de pantalla solo anuncia cambios en una region que ya
+          estaba en el documento. Vacia queda fuera del flujo (sr-only), para
+          no sumar otro hueco entre la tarjeta del saldo y el boton de cobrar. */}
+      <div role="status" aria-live="polite" className={retiroYaHecho ? undefined : 'sr-only'}>
+        {retiroYaHecho && (
+          <div className="flex items-start gap-2.5 rounded-2xl uv-surface-2 p-3 pr-1.5 animate-fade-in-scale">
+            <Icons.CheckCircle size={18} aria-hidden="true" className="shrink-0 mt-0.5 text-[var(--color-success)]" />
+            <p className="min-w-0 flex-1 text-sm uv-text-primary">{t('business_withdraw_ya_hecho')}</p>
+            <button
+              type="button"
+              onClick={() => setRetiroYaHecho(false)}
+              aria-label={t('close')}
+              className="shrink-0 -my-1.5 w-11 h-11 flex items-center justify-center rounded-full uv-text-muted hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+            >
+              <Icons.X size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
       </div>
 

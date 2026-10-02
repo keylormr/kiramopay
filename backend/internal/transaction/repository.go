@@ -46,6 +46,14 @@ const puntosSuspensivos = "..."
 // caracter 100 exacto: la descripcion larga de un escrow aparecia en el
 // historial como "...para ver que hac", a mitad de palabra y sin ninguna senal
 // de que faltaba texto.
+// RecortarNombre es truncateCounterpartyName para otra columna del mismo ancho
+// (VARCHAR(100)): el nombre del historial SINPE (migracion 023), que desde que
+// se escribe dentro de la transaccion del dinero tampoco puede fallar por un
+// nombre largo.
+func RecortarNombre(nombre string) string {
+	return truncateCounterpartyName(nombre)
+}
+
 func truncateCounterpartyName(name string) string {
 	if len(name) <= counterpartyNameMax {
 		return name // fast path: ASCII-length under the cap is always fine
