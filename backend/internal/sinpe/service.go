@@ -102,7 +102,12 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	defer unlock()
 
 	// Resolve the recipient. Only KiramoPay-to-KiramoPay transfers are accepted.
-	peer, _ := s.userRepo.FindByPhone(ctx, req.Phone)
+	// Un fallo de la base no dice que el numero no sea de KiramoPay: se tragaba
+	// el error, y el envio a un usuario se contestaba "no es usuario".
+	peer, err := s.userRepo.FindByPhone(ctx, req.Phone)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("buscar a quien recibe: %w", err)
+	}
 	// Sending to your OWN number used to debit you plus a cross-bank fee with no
 	// credit back — a silent money loss. Reject it outright.
 	if peer != nil && peer.ID == userID {
@@ -117,9 +122,10 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// Salvo que sea el reintento de un envio que ya salio: si la cuenta de
 	// quien lo recibio se cerro entre el envio y el reintento, el telefono ya
 	// no la encuentra, y se contestaba "no es usuario" por un envio hecho. La
-	// llave es la de aquel envio; contestarlo no mueve nada.
+	// llave, el monto y el numero son los de aquel envio; contestarlo no mueve
+	// nada.
 	if peer == nil {
-		hecha, err := s.txService.TransferenciaHecha(ctx, userID, req.IdempotencyKey, req.Amount, "CRC", transaction.TypeSinpeSend)
+		hecha, err := s.txService.TransferenciaHecha(ctx, userID, req.IdempotencyKey, req.Amount, "CRC", transaction.TypeSinpeSend, req.Phone)
 		if err != nil {
 			return nil, err
 		}
@@ -200,6 +206,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		ReceiveType:              transaction.TypeSinpeReceive,
 		SenderCounterpartyName:   contactName,
 		ReceiverCounterpartyName: senderName,
+		SenderCounterpartyPhone:  req.Phone,
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx, _ string) error {
 			if err := s.repo.AddHistoryEnTx(ctx, tx, &HistoryRecord{
 				ID:          idEnvio,

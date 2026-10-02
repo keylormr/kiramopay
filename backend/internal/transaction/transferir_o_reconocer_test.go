@@ -150,47 +150,54 @@ func TestWithdrawMerchantToUser_LaRepeticionLoDice(t *testing.T) {
 }
 
 // TransferenciaHecha es lo que consulta SINPE cuando ya no encuentra a quien
-// recibe por el telefono: si la llave tiene ese mismo envio completado, el
-// reintento lo contesta en vez de decir "no es usuario".
+// recibe por el telefono: si la llave tiene ese mismo envio completado —mismo
+// monto y mismo numero—, el reintento lo contesta en vez de decir "no es
+// usuario".
 func TestTransferenciaHecha(t *testing.T) {
 	svc, pool, emisor, receptor := setupTransferService(t)
 	billeteraHolgada(t, pool, emisor)
 	ctx := context.Background()
 
-	busca := func(llave string, monto int64, tipo string) *transaction.TransactionRecord {
+	busca := func(llave string, monto int64, tipo, telefono string) *transaction.TransactionRecord {
 		t.Helper()
-		fila, err := svc.TransferenciaHecha(ctx, emisor, llave, monto, "CRC", tipo)
+		fila, err := svc.TransferenciaHecha(ctx, emisor, llave, monto, "CRC", tipo, telefono)
 		if err != nil {
 			t.Fatalf("TransferenciaHecha: %v", err)
 		}
 		return fila
 	}
 
-	if busca("", 30000, transaction.TypeP2PSend) != nil {
+	const numero, otroNumero = "+50688885678", "+50677776666"
+	if busca("", 30000, transaction.TypeP2PSend, numero) != nil {
 		t.Fatal("sin llave no hay transferencia que contestar")
 	}
-	if busca("hecha:sin-fila", 30000, transaction.TypeP2PSend) != nil {
+	if busca("hecha:sin-fila", 30000, transaction.TypeP2PSend, numero) != nil {
 		t.Fatal("una llave sin fila no tiene transferencia")
 	}
 
 	const llave = "hecha:completada"
-	hecha, _, err := svc.CreateTransfer(ctx, transferencia(emisor, receptor, 30000, llave))
+	pedido := transferencia(emisor, receptor, 30000, llave)
+	pedido.SenderCounterpartyPhone = numero
+	hecha, _, err := svc.CreateTransfer(ctx, pedido)
 	if err != nil {
 		t.Fatalf("la transferencia: %v", err)
 	}
-	if fila := busca(llave, 30000, transaction.TypeP2PSend); fila == nil || fila.ID != hecha.ID {
+	if fila := busca(llave, 30000, transaction.TypeP2PSend, numero); fila == nil || fila.ID != hecha.ID {
 		t.Fatalf("la misma transferencia completada: %v, se esperaba %s", fila, hecha.ID)
 	}
-	if busca(llave, 50000, transaction.TypeP2PSend) != nil {
+	if busca(llave, 50000, transaction.TypeP2PSend, numero) != nil {
 		t.Fatal("otro monto bajo la llave no es aquella transferencia")
 	}
-	if busca(llave, 30000, transaction.TypeQRPayment) != nil {
+	if busca(llave, 30000, transaction.TypeQRPayment, numero) != nil {
 		t.Fatal("otro tipo bajo la llave no es aquella transferencia")
+	}
+	if busca(llave, 30000, transaction.TypeP2PSend, otroNumero) != nil {
+		t.Fatal("otro numero bajo la llave no es aquella transferencia")
 	}
 
 	const fallida = "hecha:fallida"
 	insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", fallida, transaction.StatusFailed, 30000)
-	if busca(fallida, 30000, transaction.TypeP2PSend) != nil {
+	if busca(fallida, 30000, transaction.TypeP2PSend, "") != nil {
 		t.Fatal("una transferencia fallida no se contesta como hecha: el dinero no se movio")
 	}
 }

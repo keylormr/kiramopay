@@ -975,7 +975,7 @@ export interface paths {
         put?: never;
         /**
          * Send SINPE transfer
-         * @description Repeating a completed transfer with the same `idempotency_key` (same recipient and amount) returns the recorded transfer, with its `transaction_id` and `replayed: true`, and moves nothing, even when the balance or the daily SINPE quota no longer cover it (that transfer already consumed them) or the recipient has closed their account since. The repetition writes no second history row and does not notify the recipient again. A key that belongs to a different amount or recipient gets 409 LLAVE_REUTILIZADA.
+         * @description Repeating a completed transfer with the same `idempotency_key` (same recipient and amount) returns the recorded transfer, with its `transaction_id` and `replayed: true`, and moves nothing, even when the balance or the daily SINPE quota no longer cover it (that transfer already consumed them) or the recipient has closed their account since (then the phone number is what is compared, so the key answers only for that number). The repetition writes no second history row and does not notify the recipient again. A key that belongs to a different amount or recipient gets 409 LLAVE_REUTILIZADA when the number belongs to a KiramoPay user, and 400 RECIPIENT_NOT_USER when it does not.
          */
         post: {
             parameters: {
@@ -999,7 +999,7 @@ export interface paths {
                         "application/json": components["schemas"]["SinpeSendResponse"];
                     };
                 };
-                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount or recipient. Nothing moved; a new transfer needs a new key. */
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount or recipient, and the number belongs to a KiramoPay user. Nothing moved; a new transfer needs a new key. */
                 409: {
                     headers: {
                         [name: string]: unknown;

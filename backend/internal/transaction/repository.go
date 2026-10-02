@@ -46,14 +46,6 @@ const puntosSuspensivos = "..."
 // caracter 100 exacto: la descripcion larga de un escrow aparecia en el
 // historial como "...para ver que hac", a mitad de palabra y sin ninguna senal
 // de que faltaba texto.
-// RecortarNombre es truncateCounterpartyName para otra columna del mismo ancho
-// (VARCHAR(100)): el nombre del historial SINPE (migracion 023), que desde que
-// se escribe dentro de la transaccion del dinero tampoco puede fallar por un
-// nombre largo.
-func RecortarNombre(nombre string) string {
-	return truncateCounterpartyName(nombre)
-}
-
 func truncateCounterpartyName(name string) string {
 	if len(name) <= counterpartyNameMax {
 		return name // fast path: ASCII-length under the cap is always fine
@@ -83,6 +75,14 @@ func truncateCounterpartyName(name string) string {
 		texto = string(runes[:cabe])
 	}
 	return texto + puntosSuspensivos
+}
+
+// RecortarNombre es truncateCounterpartyName para otra columna del mismo ancho
+// (VARCHAR(100)): el nombre del historial SINPE (migracion 023), que desde que
+// se escribe dentro de la transaccion del dinero tampoco puede fallar por un
+// nombre largo.
+func RecortarNombre(nombre string) string {
+	return truncateCounterpartyName(nombre)
 }
 
 // idContraparte deja pasar solo un uuid, en su forma canonica. La columna es
@@ -609,7 +609,7 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key strin
 		`SELECT id, wallet_id, user_id, type, amount, currency, fee, status,
 		        COALESCE(metadata::text, '{}'), created_at, created_date::text,
 		        COALESCE(counterparty_type, ''), COALESCE(counterparty_name, ''),
-		        COALESCE(counterparty_id::text, '')
+		        COALESCE(counterparty_phone, ''), COALESCE(counterparty_id::text, '')
 		 FROM transactions
 		 WHERE user_id = $1 AND idempotency_key = $2
 		 LIMIT 1`,
@@ -617,7 +617,7 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key strin
 	).Scan(
 		&tx.ID, &tx.WalletID, &tx.UserID, &tx.Type, &tx.Amount, &tx.Currency,
 		&tx.Fee, &tx.Status, &tx.Metadata, &tx.CreatedAt, &tx.CreatedDate,
-		&tx.CounterpartyType, &tx.CounterpartyName, &tx.contraparteID,
+		&tx.CounterpartyType, &tx.CounterpartyName, &tx.CounterpartyPhone, &tx.contraparteID,
 	)
 	if err != nil {
 		return nil, err

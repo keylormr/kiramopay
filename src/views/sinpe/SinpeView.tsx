@@ -8,7 +8,7 @@ import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
-import { refreshAccounts, refreshSinpe } from '@/services/dataSync';
+import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -268,12 +268,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     // La repeticion: el servidor contesto con un envio que YA estaba hecho bajo
     // esta llave, sea el reintento tras un corte o un segundo envio igual hecho
     // a proposito con la llave que se conservaba. No se anota —seria la fila
-    // doble y el saldo contado dos veces hasta la siguiente carga—: se trae lo
-    // que hay en el servidor, y la hoja dice que ya estaba hecho, no "Enviado".
+    // doble y el saldo contado dos veces hasta la siguiente carga—: se traen
+    // del servidor el saldo, los movimientos y el historial SINPE, y la hoja
+    // dice que ya estaba hecho, no "Enviado".
     const repetido = res.data.repetida === true;
     if (repetido) {
       refreshSinpe().catch(() => {});
       refreshAccounts().catch(() => {});
+      refreshTransactions().catch(() => {});
     } else {
       dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: tx });
     }

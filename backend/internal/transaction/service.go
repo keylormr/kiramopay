@@ -412,16 +412,19 @@ func (s *Service) TransferenciaYaTieneRespuesta(ctx context.Context, req *Create
 }
 
 // TransferenciaHecha trae la transferencia COMPLETADA que quien envia ya hizo
-// bajo esa llave, si es del mismo monto, moneda y tipo; nil si no la hay.
+// bajo esa llave, si es del mismo monto, moneda y tipo y fue al mismo
+// telefono; nil si no la hay.
 //
-// No compara el destino, y es a proposito: la usa quien ya no puede
-// resolverlo. En SINPE, el reintento de un envio que ya salio busca otra vez a
-// quien recibe por el telefono, y si esa cuenta se cerro entre el envio y el
-// reintento no lo encuentra: contestaba "no es usuario" por un envio que si
-// salio, y la pantalla lo daba por fallido. La llave la eligio quien envia
-// para aquel envio, asi que el mismo monto bajo la misma llave es aquel envio;
-// contestarlo no mueve nada.
-func (s *Service) TransferenciaHecha(ctx context.Context, fromUserID, llave string, monto int64, moneda, tipo string) (*TransactionRecord, error) {
+// La usa quien ya no puede resolver el destino. En SINPE, el reintento de un
+// envio que ya salio busca otra vez a quien recibe por el telefono, y si esa
+// cuenta se cerro entre el envio y el reintento no lo encuentra: contestaba
+// "no es usuario" por un envio que si salio, y la pantalla lo daba por
+// fallido. Por eso compara el telefono que el envio dejo en su fila, y no la
+// cuenta de quien recibio, que ya no esta. Sin comparar el destino, la llave
+// de un envio hecho contestaba por un pedido del mismo monto a OTRO numero:
+// decia que aquel envio ya estaba hecho, con el nombre de quien lo recibio.
+// Contestarlo no mueve nada.
+func (s *Service) TransferenciaHecha(ctx context.Context, fromUserID, llave string, monto int64, moneda, tipo, telefono string) (*TransactionRecord, error) {
 	if llave == "" {
 		return nil, nil
 	}
@@ -432,7 +435,8 @@ func (s *Service) TransferenciaHecha(ctx context.Context, fromUserID, llave stri
 	if err != nil {
 		return nil, fmt.Errorf("leer la llave de idempotencia: %w", err)
 	}
-	if fila.Status != StatusCompleted || fila.Amount != monto || fila.Currency != moneda || fila.Type != tipo {
+	if fila.Status != StatusCompleted || fila.Amount != monto || fila.Currency != moneda || fila.Type != tipo ||
+		fila.CounterpartyPhone != telefono {
 		return nil, nil
 	}
 	return fila, nil
@@ -790,6 +794,12 @@ type CreateTransferRequest struct {
 	SenderCounterpartyName   string
 	ReceiverCounterpartyName string
 
+	// SenderCounterpartyPhone es el telefono de quien recibe, en la fila de
+	// quien envia. Lo pasa SINPE: cuando la cuenta de quien recibio ya no
+	// existe, es lo que distingue el reintento de aquel envio de un pedido del
+	// mismo monto a otro numero (ver TransferenciaHecha).
+	SenderCounterpartyPhone string
+
 	// EnLaMismaTx, si viene, corre DENTRO de la transaccion que escribe el
 	// asiento, junto con el cambio de estado de las dos filas: si devuelve
 	// error, el dinero no se mueve. Recibe el id de la fila del EMISOR, que es
@@ -963,15 +973,16 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 		senderFee, receiverFee = 0, req.Fee
 	}
 	senderReq := &CreateTransactionRequest{
-		Type:             req.TxType,
-		Amount:           req.Amount,
-		Currency:         req.Currency,
-		Fee:              senderFee,
-		CounterpartyType: "user",
-		CounterpartyName: req.SenderCounterpartyName,
-		Description:      req.Description,
-		IdempotencyKey:   req.IdempotencyKey,
-		contraparteID:    destinoDe(req),
+		Type:              req.TxType,
+		Amount:            req.Amount,
+		Currency:          req.Currency,
+		Fee:               senderFee,
+		CounterpartyType:  "user",
+		CounterpartyName:  req.SenderCounterpartyName,
+		CounterpartyPhone: req.SenderCounterpartyPhone,
+		Description:       req.Description,
+		IdempotencyKey:    req.IdempotencyKey,
+		contraparteID:     destinoDe(req),
 	}
 	receiveReq := &CreateTransactionRequest{
 		Type:             req.ReceiveType,
