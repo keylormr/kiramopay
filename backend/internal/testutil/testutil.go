@@ -715,17 +715,23 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		UNIQUE(user_id, phone)
 	);
 
+	-- Los anchos y los controles de produccion (migracion 023). Con columnas
+	-- mas holgadas, las pruebas no veian el nombre que en produccion no entra:
+	-- desde que el historial se escribe dentro de la transaccion del dinero,
+	-- ese INSERT fallido es un envio que no sale.
 	CREATE TABLE IF NOT EXISTS sinpe_history (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL,
-		phone VARCHAR(20) NOT NULL,
-		contact_name VARCHAR(200),
+		phone VARCHAR(15) NOT NULL,
+		contact_name VARCHAR(100) NOT NULL,
 		amount BIGINT NOT NULL,
 		fee BIGINT DEFAULT 0,
-		type VARCHAR(10) NOT NULL,
+		type VARCHAR(20) NOT NULL,
 		status VARCHAR(20) DEFAULT 'completed',
 		description TEXT,
-		created_at TIMESTAMPTZ DEFAULT NOW()
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		CONSTRAINT chk_sinpe_amount_positive CHECK (amount > 0),
+		CONSTRAINT chk_sinpe_type CHECK (type IN ('sent','received'))
 	);
 
 	-- Crypto (NUMERIC precision per migration 019).

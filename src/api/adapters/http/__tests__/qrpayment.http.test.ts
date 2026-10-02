@@ -247,3 +247,28 @@ describe('HttpQRPaymentRepository: el retiro del negocio deja pasar el codigo', 
     expect(res.error?.code).toBe('WITHDRAW_FAILED');
   });
 });
+
+// La repeticion del retiro: el servidor contesta con el retiro que ya estaba
+// hecho bajo la llave y lo marca con `replayed: true`. La pantalla lo necesita
+// para no dar por nuevo un retiro que no hizo.
+describe('HttpQRPaymentRepository: el retiro dice si ya estaba hecho', () => {
+  it('la repeticion llega marcada', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't1', status: 'completed', amount: 30000, currency: 'CRC', replayed: true },
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(true);
+  });
+
+  it('el retiro nuevo no', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't1', status: 'completed', amount: 30000, currency: 'CRC' },
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(false);
+  });
+});

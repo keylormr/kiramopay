@@ -82,6 +82,7 @@ describe('BusinessHomeView — la llave del retiro', () => {
     await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(2));
 
     const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
     expect(segunda).toBe(primera);
   });
 
@@ -100,6 +101,7 @@ describe('BusinessHomeView — la llave del retiro', () => {
     await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(2));
 
     const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
     expect(segunda).toBe(primera);
   });
 
@@ -151,6 +153,57 @@ describe('BusinessHomeView — la llave del retiro', () => {
     await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(2));
     const [primera, segunda] = llaves();
     expect(segunda).not.toBe(primera);
+  });
+
+  // Ir a Reportes, Movimientos o Ajustes desmonta el inicio del negocio, y
+  // bloquear la app o recargarla tambien. La llave vivia en la pantalla: volver
+  // y retirar lo mismo llevaba otra, y el texto acababa de prometer que no se
+  // retiraria dos veces.
+  it('tras un corte de red, salir del inicio y volver a retirar lo mismo lleva la misma llave', async () => {
+    mocks.withdrawMerchant.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: { repetida: false } });
+    const user = userEvent.setup();
+    const pantalla = pintar();
+
+    await retirar(user, await abrirRetiro(user, '300'));
+    await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(1));
+    pantalla.unmount();
+    await unMomento();
+    pintar();
+    await retirar(user, await abrirRetiro(user, '300'));
+    await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
+  });
+
+  // El servidor contesto con un retiro que YA estaba hecho bajo esa llave: el
+  // reintento tras un corte, o un segundo retiro igual hecho a proposito con la
+  // llave que la pantalla conservaba. Se dice, y la llave se suelta para que el
+  // siguiente si sea otro retiro.
+  it('si el retiro ya se habia hecho, lo dice y el siguiente lleva otra llave', async () => {
+    mocks.withdrawMerchant
+      .mockResolvedValueOnce(sinRed)
+      .mockResolvedValueOnce({ success: true, data: { repetida: true } })
+      .mockResolvedValueOnce({ success: true, data: { repetida: false } });
+    const user = userEvent.setup();
+    pintar();
+
+    const hoja = await abrirRetiro(user, '300');
+    await retirar(user, hoja);
+    await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(1));
+    await unMomento();
+    await retirar(user, hoja);
+
+    expect(await screen.findByText(/Ese retiro ya se había hecho/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await unMomento();
+    await retirar(user, await abrirRetiro(user, '300'));
+    await waitFor(() => expect(mocks.withdrawMerchant).toHaveBeenCalledTimes(3));
+
+    const [, segunda, tercera] = llaves();
+    expect(segunda).toMatch(/\S/);
+    expect(tercera).not.toBe(segunda);
   });
 
   it('despues de un retiro que salio, el siguiente lleva otra llave', async () => {

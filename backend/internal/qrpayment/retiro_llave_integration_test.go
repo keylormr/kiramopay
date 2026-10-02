@@ -31,7 +31,7 @@ func TestWithdrawMerchant_LaMismaLlaveConOtroMontoEs409(t *testing.T) {
 		return rec
 	}
 
-	if rec := retirar(`{"amount":30000,"currency":"CRC","idempotency_key":"wd-llave-otro-monto"}`); rec.Code != http.StatusNoContent {
+	if rec := retirar(`{"amount":30000,"currency":"CRC","idempotency_key":"wd-llave-otro-monto"}`); rec.Code != http.StatusOK {
 		t.Fatalf("el retiro = %d: %s", rec.Code, rec.Body.String())
 	}
 	rec := retirar(`{"amount":40000,"currency":"CRC","idempotency_key":"wd-llave-otro-monto"}`)
