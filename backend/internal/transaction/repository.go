@@ -77,6 +77,18 @@ func truncateCounterpartyName(name string) string {
 	return texto + puntosSuspensivos
 }
 
+// idContraparte deja pasar solo un uuid, en su forma canonica. La columna es
+// de ese tipo: un id que no lo fuera haria fallar la insercion —y con ella el
+// movimiento— por un dato que solo sirve para comparar reintentos. Y la forma
+// canonica hace que la comparacion no dependa de mayusculas.
+func idContraparte(id string) string {
+	u, err := uuid.Parse(id)
+	if err != nil {
+		return ""
+	}
+	return u.String()
+}
+
 // Create inserts a transaction in pending status with idempotency_key
 // promoted to its own column (and metadata still preserved for legacy reads).
 // If a row already exists for (user_id, idempotency_key), returns it with
@@ -113,6 +125,7 @@ func (r *Repository) CreateTx(
 		Metadata:          metadata,
 		CreatedAt:         now,
 		CreatedDate:       createdDate,
+		contraparteID:     idContraparte(req.contraparteID),
 	}
 
 	idem := req.IdempotencyKey
@@ -120,13 +133,15 @@ func (r *Repository) CreateTx(
 		`INSERT INTO transactions
 		   (id, wallet_id, user_id, type, amount, currency, fee,
 		    counterparty_type, counterparty_name, counterparty_phone,
-		    status, metadata, idempotency_key, created_at, created_date)
+		    status, metadata, idempotency_key, created_at, created_date,
+		    counterparty_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 		         jsonb_build_object('description', COALESCE($12,'')),
-		         NULLIF($13,''), $14, $15)`,
+		         NULLIF($13,''), $14, $15, NULLIF($16,'')::uuid)`,
 		tx.ID, tx.WalletID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.Fee,
 		tx.CounterpartyType, tx.CounterpartyName, tx.CounterpartyPhone,
 		tx.Status, req.Description, idem, tx.CreatedAt, tx.CreatedDate,
+		tx.contraparteID,
 	)
 	if err != nil {
 		// Unique violation on (user_id, idempotency_key, created_date) → duplicate.
@@ -577,11 +592,16 @@ func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, u
 	return total, err
 }
 
+// FindByIdempotencyKey trae, ademas de lo que la respuesta repite, lo que la
+// relectura compara para saber si el pedido es el mismo movimiento: la
+// contraparte (tipo, nombre e id).
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,
 		`SELECT id, wallet_id, user_id, type, amount, currency, fee, status,
-		        COALESCE(metadata::text, '{}'), created_at, created_date::text
+		        COALESCE(metadata::text, '{}'), created_at, created_date::text,
+		        COALESCE(counterparty_type, ''), COALESCE(counterparty_name, ''),
+		        COALESCE(counterparty_id::text, '')
 		 FROM transactions
 		 WHERE user_id = $1 AND idempotency_key = $2
 		 LIMIT 1`,
@@ -589,6 +609,7 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key strin
 	).Scan(
 		&tx.ID, &tx.WalletID, &tx.UserID, &tx.Type, &tx.Amount, &tx.Currency,
 		&tx.Fee, &tx.Status, &tx.Metadata, &tx.CreatedAt, &tx.CreatedDate,
+		&tx.CounterpartyType, &tx.CounterpartyName, &tx.contraparteID,
 	)
 	if err != nil {
 		return nil, err

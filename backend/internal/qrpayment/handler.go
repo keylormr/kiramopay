@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/plans"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -89,6 +90,14 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey); err != nil {
+		// La llave ya es de otro retiro: la pantalla necesita saberlo para
+		// pedir el siguiente con otra. Con el WITHDRAW_FAILED generico no lo
+		// podia distinguir de un fallo que se arregla reintentando.
+		if errors.Is(err, transaction.ErrLlaveReutilizada) {
+			response.Error(w, http.StatusConflict, "LLAVE_REUTILIZADA",
+				"the idempotency_key belongs to a different withdrawal")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "WITHDRAW_FAILED", err.Error())
 		return
 	}

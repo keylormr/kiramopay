@@ -126,6 +126,7 @@ export type TranslationKeys = {
   loading: string;
   error: string;
   err_network: string;
+  err_llave_reutilizada: string;
   err_session_expired: string;
   err_session_unconfirmed: string;
   err_rate_limited: string;
@@ -336,6 +337,7 @@ export type TranslationKeys = {
   business_balance: string;
   business_withdraw: string;
   business_withdraw_hint: string;
+  business_withdraw_sin_confirmar: string;
   business_edit: string;
   business_edit_identity_note: string;
   business_lookup_searching: string;
@@ -489,6 +491,7 @@ export type TranslationKeys = {
   sinpe_phone_invalid: string;
   sinpe_invalid_amount: string;
   sinpe_recipient_not_user: string;
+  sinpe_err_sin_confirmar: string;
   sinpe_external_pending_title: string;
   sinpe_external_pending_desc: string;
   sent_to_label: string;

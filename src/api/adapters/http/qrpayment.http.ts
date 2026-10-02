@@ -272,7 +272,10 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       currency,
       idempotency_key: idempotencyKey,
     });
-    if (!res.success) return apiError('WITHDRAW_FAILED', res.error?.message || 'Failed');
+    // El codigo pasa tal cual: la pantalla necesita distinguir la red que se
+    // corto (NETWORK_ERROR: el retiro pudo haber salido y el reintento lleva
+    // la misma llave) de la llave que ya es de otro retiro (LLAVE_REUTILIZADA).
+    if (!res.success) return apiError(res.error?.code || 'WITHDRAW_FAILED', res.error?.message || 'Failed');
     return apiSuccess(undefined as unknown as void);
   }
 

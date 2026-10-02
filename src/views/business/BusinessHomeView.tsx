@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -26,11 +26,6 @@ interface Props {
   paymentsFailed?: boolean;
   onReload: () => void;
 }
-
-// Unique per tap, stable across the retries of that one attempt — so a double
-// tap settles once but a deliberate second withdrawal is a new key.
-const withdrawAttemptKey = (merchantId: string, val: number) =>
-  `mwd:${merchantId}:${val}:${Date.now()}`;
 
 const isToday = (iso: string) => {
   const d = new Date(iso);
@@ -73,6 +68,26 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   const [wdAmount, setWdAmount] = useState('');
   const [withdrawing, setWithdrawing] = useState(false);
   const [wdError, setWdError] = useState('');
+  // La llave del retiro, atada a lo que se retira: el comercio, el monto y la
+  // moneda. Se armaba con la hora de cada toque, asi que cada reintento
+  // llevaba una nueva, y si la red se cortaba despues de que el retiro salio,
+  // volver a tocar "Retirar" lo hacia otra vez. Ahora se conserva —tambien al
+  // cerrar la hoja— hasta que el retiro sale o el servidor dice que la llave
+  // es de otro retiro. Otro monto es otro retiro, y lleva otra llave sola.
+  const intentoRetiroRef = useRef<{ firma: string; llave: string } | null>(null);
+  const llaveDelRetiro = (firma: string) => {
+    if (intentoRetiroRef.current?.firma !== firma) {
+      intentoRetiroRef.current = {
+        firma,
+        llave: `mwd:${
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+        }`,
+      };
+    }
+    return intentoRetiroRef.current.llave;
+  };
 
   useEffect(() => {
     if (!canSeeBalance) return; // the endpoint is owner/manager-only
@@ -248,14 +263,25 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     if (!api || withdrawing || !(val > 0)) return;
     setWithdrawing(true);
     setWdError('');
-    const res = await api.withdrawMerchant(merchant.id, val, ccy, withdrawAttemptKey(merchant.id, val));
+    const res = await api.withdrawMerchant(merchant.id, val, ccy, llaveDelRetiro(`${merchant.id}|${val}|${ccy}`));
     setWithdrawing(false);
     if (res.success) {
+      // El retiro salio: el siguiente es otro y lleva otra llave.
+      intentoRetiroRef.current = null;
       setShowWithdraw(false);
       setWdAmount('');
       onReload();
     } else {
-      setWdError(res.error?.message || t('assistant_action_failed'));
+      const code = res.error?.code ?? '';
+      // La llave ya es de otro retiro: el siguiente intento necesita otra.
+      if (code === 'LLAVE_REUTILIZADA') intentoRetiroRef.current = null;
+      const porCodigo: Record<string, string> = {
+        // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y
+        // eso es lo que permite decir que reintentar no lo hace dos veces.
+        NETWORK_ERROR: t('business_withdraw_sin_confirmar'),
+        LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
+      };
+      setWdError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
     }
   };
 

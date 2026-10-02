@@ -127,19 +127,27 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // Last 8 digits of the signed-in user's own number, to block self-sends.
   const ownDigits = (state.user?.phone || '').replace(/\D/g, '').slice(-8);
 
-  // Stable idempotency key for the CURRENT send attempt. Kept in a ref so the
-  // MFA retry (onVerified → handleSendMoney) reuses the same key and the backend
-  // de-duplicates it into a single transfer; cleared whenever a new/edited send
-  // begins so a corrected retry gets a fresh key.
-  const idemRef = useRef('');
-  const genIdemKey = () => {
-    if (!idemRef.current) {
-      idemRef.current =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // La llave de idempotencia del envio, atada a lo que se envia: el telefono y
+  // el monto. Viaja para el caso de la red que se corta sin traer la
+  // respuesta: el envio pudo haber salido, y el reintento tiene que llevar la
+  // MISMA llave para que el servidor conteste con aquel envio en vez de hacer
+  // otro. Por eso no se suelta ante un error ni al cerrar la hoja —antes si, y
+  // reintentar tras un corte mandaba la plata dos veces—: solo cuando el envio
+  // salio o cuando el servidor dice que la llave es de otro envio. Tambien la
+  // reusa el reintento tras el segundo factor. Corregir el telefono o el monto
+  // es otro envio, y lleva otra llave sola.
+  const intentoRef = useRef<{ firma: string; llave: string } | null>(null);
+  const llaveDelEnvio = (firma: string) => {
+    if (intentoRef.current?.firma !== firma) {
+      intentoRef.current = {
+        firma,
+        llave:
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      };
     }
-    return idemRef.current;
+    return intentoRef.current.llave;
   };
 
   const handleSelectContact = (contact: SinpeContact) => {
@@ -195,7 +203,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       phone: telefono,
       amount: numAmount,
       description: reference,
-      idempotencyKey: genIdemKey(),
+      idempotencyKey: llaveDelEnvio(`${telefono}|${numAmount}`),
     });
     setIsProcessing(false);
 
@@ -207,8 +215,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         setShowMfa(true);
         return;
       }
-      // A corrected retry (different amount/recipient) must be a new transfer.
-      idemRef.current = '';
+      const code = res.error?.code ?? '';
+      // La llave ya es de otro envio: el siguiente intento necesita otra.
+      if (code === 'LLAVE_REUTILIZADA') intentoRef.current = null;
       setShowConfirm(false);
       // Codes the backend gives their own identity so we can explain them in the
       // user's language. Everything else falls back to the server message.
@@ -220,13 +229,16 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         // este mapeo se filtraba el "invalid SINPE Móvil phone number" del
         // servidor tal cual, en ingles, en medio de una pantalla en español.
         INVALID_PHONE: t('sinpe_phone_invalid'),
+        // Sin respuesta, el envio pudo haber salido. La llave se conserva, y
+        // eso es lo que permite decir que reintentar no lo manda dos veces.
+        NETWORK_ERROR: t('sinpe_err_sin_confirmar'),
+        LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
       };
-      const code = res.error?.code ?? '';
       setSendError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
       return;
     }
-    // Success: release the key so the next send gets a fresh one.
-    idemRef.current = '';
+    // El envio salio: el siguiente es otro y lleva otra llave.
+    intentoRef.current = null;
 
     const tx: SinpeTransaction = {
       id: res.data.id,
@@ -1056,7 +1068,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           setAmount('');
           setReference('');
           setSendError('');
-          idemRef.current = '';
+          // La llave NO se suelta: si el ultimo intento quedo sin confirmar,
+          // volver a enviar lo mismo tiene que llevarla (ver intentoRef).
         }}
         title={t('send_money')}
       >
@@ -1398,7 +1411,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       {/* High-value MFA challenge → on verify, retry the transfer */}
       <MfaChallengeSheet
         isOpen={showMfa}
-        onClose={() => { setShowMfa(false); idemRef.current = ''; }}
+        // Cancelar el segundo factor deja el intento: el servidor pide el
+        // segundo factor despues de mirar la llave, asi que nada salio con ella.
+        onClose={() => { setShowMfa(false); intentoRef.current = null; }}
         onVerified={() => {
           setShowMfa(false);
           handleSendMoney();
