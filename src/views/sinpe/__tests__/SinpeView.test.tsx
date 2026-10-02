@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { encodeContactQr } from '@/utils/contactQr';
+import { llaveDelIntento } from '@/services/intentoPendiente';
 import { SinpeView } from '../SinpeView';
 
 const mocks = vi.hoisted(() => ({
@@ -18,7 +19,7 @@ const mocks = vi.hoisted(() => ({
     accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
     sinpeContacts: [] as Array<{ id: string; name: string; phone: string; bank?: string; isFavorite?: boolean }>,
     sinpeHistory: [] as unknown[],
-    user: { phone: '+506 8888-0000' },
+    user: { phone: '+506 8888-0000' } as { id?: string; phone: string },
   },
 }));
 
@@ -203,7 +204,9 @@ describe('SinpeView — send', () => {
 
     await openSendSheetAndSubmit(user);
 
-    expect(await screen.findByText('Revisa el número: debe tener 8 dígitos')).toBeInTheDocument();
+    // El servidor solo lo rechaza por esto cuando el número tiene sus 8 dígitos
+    // pero no es un celular: "debe tener 8 dígitos" le hablaba de otra cosa.
+    expect(await screen.findByText('Revisa el número: debe ser un celular de 8 dígitos')).toBeInTheDocument();
     expect(screen.queryByText(/invalid SINPE Móvil phone number/)).not.toBeInTheDocument();
   });
 
@@ -597,7 +600,47 @@ describe('SinpeView — la llave del envío', () => {
 
     expect(await screen.findByText(/No pudimos confirmar el envío/)).toBeInTheDocument();
     expect(screen.getByText(/Si lo intentas de nuevo ahora con los mismos datos, no se enviará dos veces/)).toBeInTheDocument();
-    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus movimientos/)).toBeInTheDocument();
+    // "Transacciones" es el nombre de la pantalla a la que manda.
+    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus transacciones/)).toBeInTheDocument();
+  });
+
+  // Las tres entradas de SINPE —esta pantalla, el contacto escaneado del Inicio
+  // y el asistente— le dan la misma llave al mismo envío: el ámbito 'sinpe' y
+  // la firma teléfono con +506 y monto. Si una cambiara cualquiera de los dos,
+  // el corte en una y el reintento en otra mandarían la plata dos veces.
+  it('el mismo envío lleva la llave que le dieron las otras entradas de SINPE', async () => {
+    mocks.state.user = { id: 'user-001', phone: '+506 8888-0000' };
+    llaveDelIntento('user-001', 'sinpe', '+50688887777|5000', () => 'llave-de-otra-entrada');
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+
+    expect(llaves()).toEqual(['llave-de-otra-entrada']);
+  });
+
+  // El servidor pide el segundo factor antes de crear nada: cancelarlo deja
+  // ese envío sin hacer y suelta su llave. Solo la suya: se soltaba la que
+  // hubiera, y podía ser la de otro envío que seguía sin confirmar.
+  it('cancelar el segundo factor suelta la llave de ese envío y no la de otro pendiente', async () => {
+    mocks.state.user = { id: 'user-001', phone: '+506 8888-0000' };
+    const otra = llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'llave-de-otro-envio');
+    mocks.api.sinpe.send.mockResolvedValue({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    const reto = (await screen.findByText('Verificación requerida')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(reto).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByText('Verificación requerida')).not.toBeInTheDocument());
+
+    expect(llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'nueva')).toBe(otra);
+    await confirmarDeNuevo(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+    const [primera, segunda] = llaves();
+    expect(segunda).not.toBe(primera);
   });
 
   it('corregir el monto tras un corte de red es otro envío y lleva otra llave', async () => {

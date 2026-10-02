@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { encodeContactQr } from '@/utils/contactQr';
+import { llaveDelIntento } from '@/services/intentoPendiente';
 import { HomeView } from '../HomeView';
 
 // La llave del envío al contacto escaneado. Ese envío llama al mismo
@@ -12,9 +13,11 @@ import { HomeView } from '../HomeView';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
+  totpVerify: vi.fn(),
   dataSync: {
     refreshAccounts: vi.fn(() => Promise.resolve(true)),
     refreshTransactions: vi.fn(() => Promise.resolve()),
+    refreshSinpe: vi.fn(() => Promise.resolve()),
   },
 }));
 
@@ -25,7 +28,7 @@ vi.mock('@/api', () => ({
       getMyCode: vi.fn().mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED' } }),
     },
     sinpe: { send: mocks.send },
-    mfa: { totpVerify: vi.fn() },
+    mfa: { totpVerify: mocks.totpVerify },
   }),
 }));
 
@@ -125,8 +128,10 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   mocks.send.mockReset();
+  mocks.totpVerify.mockReset();
   mocks.dataSync.refreshAccounts.mockClear();
   mocks.dataSync.refreshTransactions.mockClear();
+  mocks.dataSync.refreshSinpe.mockClear();
 });
 
 describe('HomeView — la llave del envío al contacto escaneado', () => {
@@ -194,9 +199,11 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
     expect(await screen.findByText('Ese envío ya se había hecho')).toBeInTheDocument();
     expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
     expect(screen.queryByText('Pago realizado')).not.toBeInTheDocument();
-    // La app no se había enterado del envío: trae el saldo y los movimientos.
+    // La app no se había enterado del envío: trae el saldo, los movimientos y
+    // el historial SINPE.
     expect(mocks.dataSync.refreshAccounts).toHaveBeenCalled();
     expect(mocks.dataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
 
     await user.click(within(await hojaDeArriba()).getByRole('button', { name: 'Listo' }));
     await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
@@ -229,8 +236,10 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
   });
 
   // El servidor pide el segundo factor antes de crear nada: cancelarlo deja el
-  // envío sin hacer, y el siguiente es otro intento.
-  it('cancelar el segundo factor suelta la llave', async () => {
+  // envío sin hacer, y el siguiente es otro intento. Suelta solo su llave: la
+  // de otro envío que sigue sin confirmar se queda.
+  it('cancelar el segundo factor suelta la llave de ese envío y no la de otro pendiente', async () => {
+    const otra = llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'llave-de-otro-envio');
     mocks.send
       .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
       .mockResolvedValueOnce(enviado);
@@ -241,12 +250,50 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
     expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
     await user.click(within(await hojaDeArriba()).getByRole('button', { name: 'Cerrar' }));
     await waitFor(() => expect(screen.queryByText('Verificación requerida')).not.toBeInTheDocument());
+
+    expect(llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'nueva')).toBe(otra);
     await enviarOtraVez(user);
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).not.toBe(primera);
+  });
+
+  // Verificar el segundo factor reintenta el MISMO envío: la misma llave. Y el
+  // botón dice lo que hace, como en la pantalla SINPE ("Verificar y activar"
+  // es el de activar el segundo factor en el perfil).
+  it('el reintento tras verificar el segundo factor lleva la misma llave', async () => {
+    mocks.send
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
+      .mockResolvedValueOnce(enviado);
+    mocks.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+    expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByText('Verificar y enviar'));
     await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
 
     const [primera, segunda] = llaves();
     expect(primera).toMatch(/\S/);
-    expect(segunda).not.toBe(primera);
+    expect(segunda).toBe(primera);
+  });
+
+  // Las tres entradas de SINPE le dan la misma llave al mismo envío (ámbito
+  // 'sinpe', firma teléfono con +506 y monto): el corte en una y el reintento
+  // en otra no lo mandan dos veces.
+  it('el mismo envío lleva la llave que le dieron las otras entradas de SINPE', async () => {
+    llaveDelIntento('user-001', 'sinpe', '+50688887777|5000', () => 'llave-de-otra-entrada');
+    mocks.send.mockResolvedValue(enviado);
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+
+    expect(llaves()).toEqual(['llave-de-otra-entrada']);
   });
 
   it('después de un envío que salió, el siguiente lleva otra llave', async () => {

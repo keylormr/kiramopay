@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,8 +14,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/contract"
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/sinpe"
+	"github.com/kiramopay/backend/internal/testutil"
+	"github.com/kiramopay/backend/internal/transaction"
+	"github.com/kiramopay/backend/internal/user"
+	"github.com/kiramopay/backend/internal/wallet"
+	"github.com/kiramopay/backend/pkg/hash"
 )
 
 // Tras un corte de red la pantalla reintenta el SINPE con la misma llave, y si
@@ -220,6 +228,46 @@ func TestSend_LaLlaveDeUnEnvioHechoNoContestaPorOtroNumero(t *testing.T) {
 	}, "")
 	if !errors.Is(err, sinpe.ErrRecipientNotUser) {
 		t.Fatalf("la llave de un envio hecho, hacia otro numero: err = %v, se esperaba ErrRecipientNotUser", err)
+	}
+}
+
+// sinpeConUsuariosCaidos arma el servicio como sinpeConAvisos, pero con el
+// repositorio de usuarios sobre un pool cerrado: buscar a quien recibe falla
+// con un error de la base, no con "sin filas".
+func sinpeConUsuariosCaidos(t *testing.T) (*sinpe.Handler, string) {
+	t.Helper()
+	pool := testutil.TestDB(t)
+	caido := testutil.PoolTrazado(t, nil)
+	caido.Close()
+	l := ledger.NewEngine(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	walletRepo := wallet.NewRepository(pool)
+	txService := transaction.NewService(transaction.NewRepository(pool), walletRepo, l, nil)
+	svc := sinpe.NewService(sinpe.NewRepository(pool), txService, walletRepo, user.NewRepository(caido),
+		&sinpe.Options{})
+	pinHash, _ := hash.HashPin("Kiramopay2024!")
+	emisor := testutil.SeedTestUser(t, pool, "702650930", pinHash)
+	testutil.SeedTestUser2(t, pool)
+	return sinpe.NewHandler(svc), emisor
+}
+
+// Si la base falla al buscar a quien recibe, el envio no se hizo y no es culpa
+// del pedido: es un 500, y el texto del driver se queda en el log. Antes se
+// tragaba el error y se contestaba "no es usuario"; despues salia como un 400
+// con "find user by phone: ..." tal cual, que la pantalla pintaba.
+func TestHandlerSend_UnFalloAlBuscarAQuienRecibeEsUn500SinElDetalle(t *testing.T) {
+	h, emisor := sinpeConUsuariosCaidos(t)
+
+	rec := enviarPorElHandler(t, h, emisor,
+		`{"phone":"`+destinoSinpe+`","amount":1000000,"idempotency_key":"sinpe:usuarios-caidos"}`)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("respuesta = %d, se esperaba 500: %s", rec.Code, rec.Body.String())
+	}
+	cuerpo := rec.Body.String()
+	for _, detalle := range []string{"find user", "closed pool", "buscar a quien recibe"} {
+		if strings.Contains(cuerpo, detalle) {
+			t.Errorf("la respuesta trae el detalle interno %q: %s", detalle, cuerpo)
+		}
 	}
 }
 

@@ -23,15 +23,29 @@ afterEach(() => {
 });
 
 describe('intentoPendiente', () => {
-  it('reintentar lo mismo da la misma llave; otra firma da otra y la reemplaza', () => {
+  it('reintentar lo mismo da la misma llave; otra firma da otra', () => {
     const primera = m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva);
     expect(primera).toMatch(/\S/);
     expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).toBe(primera);
+    expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|6000', nueva)).not.toBe(primera);
+  });
 
-    const otra = m.llaveDelIntento('ana', 'sinpe', '+50688887777|6000', nueva);
-    expect(otra).not.toBe(primera);
-    // La primera ya no esta: volver a ella es otro intento.
-    expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).not.toBe(primera);
+  // Había una sola casilla por ámbito: otro envío en medio —otra tarjeta del
+  // asistente, un SINPE desde otra pantalla— reemplazaba la llave del que se
+  // cortó, y reintentar ese con los mismos datos lo mandaba dos veces.
+  it('otro intento en medio no pisa el pendiente: volver a él da su llave', () => {
+    const deAna = m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva);
+    const deBeto = m.llaveDelIntento('ana', 'sinpe', '+50677776666|3000', nueva);
+    m.soltarIntento('ana', 'sinpe', deBeto);
+    expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).toBe(deAna);
+  });
+
+  it('guarda unos pocos por ámbito: pasado el tope se olvida el más viejo', () => {
+    const primera = m.llaveDelIntento('ana', 'sinpe', 'firma-0', nueva);
+    let ultima = '';
+    for (let i = 1; i <= 30; i++) ultima = m.llaveDelIntento('ana', 'sinpe', `firma-${i}`, nueva);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'firma-30', nueva)).toBe(ultima);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'firma-0', nueva)).not.toBe(primera);
   });
 
   it('va por persona: otra persona con la misma firma no recibe la llave', () => {
@@ -58,12 +72,6 @@ describe('intentoPendiente', () => {
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
 
     m.soltarIntento('ana', 'sinpe', llave);
-    expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).not.toBe(llave);
-  });
-
-  it('soltar sin llave suelta el que haya', () => {
-    const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
-    m.soltarIntento('ana', 'sinpe');
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).not.toBe(llave);
   });
 
@@ -95,6 +103,13 @@ describe('intentoPendiente', () => {
 
   it('un valor ilegible cuenta como vacio y se pisa', () => {
     localStorage.setItem('kiramopay-intentos-pendientes', '{roto');
+    const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
+    expect(llave).toMatch(/\S/);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
+  });
+
+  it('una forma que no se entiende cuenta como vacía y se pisa', () => {
+    localStorage.setItem('kiramopay-intentos-pendientes', JSON.stringify({ 'ana|sinpe': 42 }));
     const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
     expect(llave).toMatch(/\S/);
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);

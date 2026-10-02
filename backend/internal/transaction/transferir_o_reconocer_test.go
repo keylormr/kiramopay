@@ -195,6 +195,16 @@ func TestTransferenciaHecha(t *testing.T) {
 		t.Fatal("otro numero bajo la llave no es aquella transferencia")
 	}
 
+	// Una transferencia completada que no guardo el telefono no contesta por
+	// un pedido sin telefono: vacio contra vacio no es el mismo destino.
+	const sinTelefono = "hecha:sin-telefono"
+	if _, _, err := svc.CreateTransfer(ctx, transferencia(emisor, receptor, 30000, sinTelefono)); err != nil {
+		t.Fatalf("la transferencia sin telefono: %v", err)
+	}
+	if busca(sinTelefono, 30000, transaction.TypeP2PSend, "") != nil {
+		t.Fatal("sin telefono no hay destino que comparar: no es aquella transferencia")
+	}
+
 	const fallida = "hecha:fallida"
 	insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", fallida, transaction.StatusFailed, 30000)
 	if busca(fallida, 30000, transaction.TypeP2PSend, "") != nil {

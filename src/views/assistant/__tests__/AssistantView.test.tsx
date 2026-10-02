@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { llaveDelIntento } from '@/services/intentoPendiente';
 import { AssistantView } from '../AssistantView';
 
 const mockApi = vi.hoisted(() => ({
@@ -23,7 +24,11 @@ vi.mock('@/api', () => ({
 }));
 
 // Spy the global-balance refetch the view fires after a confirmed proposal succeeds.
-const mockDataSync = vi.hoisted(() => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+const mockDataSync = vi.hoisted(() => ({
+  refreshAccounts: vi.fn(() => Promise.resolve()),
+  refreshTransactions: vi.fn(() => Promise.resolve()),
+  refreshSinpe: vi.fn(() => Promise.resolve()),
+}));
 vi.mock('@/services/dataSync', () => mockDataSync);
 
 function setup() {
@@ -61,6 +66,8 @@ beforeEach(() => {
   mockApi.sinpe.send.mockReset();
   mockApi.mfa.totpVerify.mockReset();
   mockDataSync.refreshAccounts.mockClear();
+  mockDataSync.refreshTransactions.mockClear();
+  mockDataSync.refreshSinpe.mockClear();
 });
 
 describe('AssistantView — confirming a high-value proposal', () => {
@@ -142,7 +149,7 @@ describe('AssistantView — la llave del envío SINPE', () => {
 
     await pedirYConfirmar(user);
 
-    expect(await screen.findByText('Revisa el número: debe tener 8 dígitos')).toBeInTheDocument();
+    expect(await screen.findByText('Revisa el número: debe ser un celular de 8 dígitos')).toBeInTheDocument();
     expect(mockApi.sinpe.send).not.toHaveBeenCalled();
   });
 
@@ -192,5 +199,117 @@ describe('AssistantView — la llave del envío SINPE', () => {
     expect(await screen.findByText('Ese envío ya se había hecho')).toBeInTheDocument();
     expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
     expect(screen.queryByText('Confirmado')).not.toBeInTheDocument();
+    // La app no se había enterado del envío: trae el saldo, los movimientos y
+    // el historial SINPE.
+    expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
+    expect(mockDataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mockDataSync.refreshSinpe).toHaveBeenCalled();
+  });
+
+  // El asistente propone varias transferencias en una respuesta. Con una sola
+  // llave pendiente por ámbito, confirmar la de Beto después del corte en la
+  // de Ana reemplazaba la llave de Ana, y volver a confirmar la de Ana —los
+  // mismos datos, en seguida— la mandaba dos veces.
+  it('otra tarjeta enviada en medio no le quita la llave a la que se cortó', async () => {
+    const ana = { ...sinpeProposal, summary: 'SINPE a Ana', amountMinor: 500000, phone: '88887777' };
+    const beto = { ...sinpeProposal, summary: 'SINPE a Beto', amountMinor: 300000, phone: '77776666' };
+    mockApi.assistant.chat.mockResolvedValueOnce({
+      success: true,
+      data: { reply: 'Preparé las dos.', toolsUsed: [], proposals: [ana, beto] },
+    });
+    mockApi.sinpe.send
+      .mockResolvedValueOnce(sinRed)
+      .mockResolvedValueOnce({ success: true, data: { id: 't-beto' } })
+      .mockResolvedValueOnce({ success: true, data: { id: 't-ana' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.type(await screen.findByPlaceholderText(/Escribe tu pregunta/), 'paga a Ana y a Beto{Enter}');
+    const tarjeta = async (titulo: string) =>
+      (await screen.findByText(titulo)).closest('.shadow-sm') as HTMLElement;
+    await user.click(within(await tarjeta('SINPE a Ana')).getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
+    await user.click(within(await tarjeta('SINPE a Beto')).getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2));
+    await user.click(within(await tarjeta('SINPE a Ana')).getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(3));
+
+    const [primero, , tercero] = pedidos();
+    expect(primero.idempotencyKey).toMatch(/\S/);
+    expect(tercero.idempotencyKey).toBe(primero.idempotencyKey);
+  });
+
+  it('después de un envío que salió, el siguiente igual lleva otra llave', async () => {
+    mockApi.assistant.chat.mockResolvedValueOnce({
+      success: true,
+      data: { reply: 'Dos iguales.', toolsUsed: [], proposals: [sinpeProposal, sinpeProposal] },
+    });
+    mockApi.sinpe.send.mockResolvedValue({ success: true, data: { id: 't1' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.type(await screen.findByPlaceholderText(/Escribe tu pregunta/), 'dos veces{Enter}');
+    const [primera] = await screen.findAllByText('Confirmar');
+    await user.click(primera);
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
+    await user.click(await screen.findByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [uno, dos] = pedidos();
+    expect(dos.idempotencyKey).not.toBe(uno.idempotencyKey);
+  });
+
+  it('la llave de otro envío lo explica y el siguiente intento lleva otra llave', async () => {
+    mockApi.sinpe.send
+      .mockResolvedValueOnce({
+        success: false,
+        error: { code: 'LLAVE_REUTILIZADA', message: 'the idempotency_key belongs to a different transfer' },
+      })
+      .mockResolvedValueOnce({ success: true, data: { id: 't1' } });
+    const user = userEvent.setup();
+    setup();
+
+    await pedirYConfirmar(user);
+    expect(await screen.findByText(/ya se hizo con otros datos/)).toBeInTheDocument();
+    await user.click(screen.getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primero, segundo] = pedidos();
+    expect(segundo.idempotencyKey).not.toBe(primero.idempotencyKey);
+  });
+
+  // Cancelar el segundo factor deja la propuesta sin enviar (el servidor lo
+  // pide antes de crear nada) y suelta su llave, como en las otras dos
+  // entradas de SINPE. Solo la suya: la de otro envío pendiente se queda.
+  it('cancelar el segundo factor suelta la llave de ese envío y no la de otro pendiente', async () => {
+    const otra = llaveDelIntento('', 'sinpe', '+50677776666|1000', () => 'llave-de-otro-envio');
+    mockApi.sinpe.send.mockResolvedValue({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } });
+    const user = userEvent.setup();
+    setup();
+
+    await pedirYConfirmar(user);
+    const reto = (await screen.findByText('Verificación requerida')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(reto).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByText('Verificación requerida')).not.toBeInTheDocument());
+
+    expect(llaveDelIntento('', 'sinpe', '+50677776666|1000', () => 'nueva')).toBe(otra);
+    await user.click(screen.getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2));
+    const [primero, segundo] = pedidos();
+    expect(segundo.idempotencyKey).not.toBe(primero.idempotencyKey);
+  });
+
+  // Las tres entradas de SINPE le dan la misma llave al mismo envío (ámbito
+  // 'sinpe', firma teléfono con +506 y monto).
+  it('el mismo envío lleva la llave que le dieron las otras entradas de SINPE', async () => {
+    llaveDelIntento('', 'sinpe', '+50688887777|200000', () => 'llave-de-otra-entrada');
+    mockApi.sinpe.send.mockResolvedValue({ success: true, data: { id: 't1' } });
+    const user = userEvent.setup();
+    setup();
+
+    await pedirYConfirmar(user);
+    await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
+
+    expect(pedidos().map((p) => p.idempotencyKey)).toEqual(['llave-de-otra-entrada']);
   });
 });
