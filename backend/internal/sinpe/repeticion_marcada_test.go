@@ -202,6 +202,27 @@ func TestSend_LaLlaveDeOtroMontoNoContestaPorUnaCuentaCerrada(t *testing.T) {
 	}
 }
 
+// Ni la llave de un envio hecho, con el MISMO monto, hacia otro numero que no
+// es de KiramoPay: la repeticion se reconocia sin mirar a quien iba, y el
+// servidor contestaba que aquel envio ya estaba hecho —con el nombre de quien
+// lo recibio— por un pedido a otra persona. La pantalla no lo provoca, porque
+// su llave cambia con el numero; un cliente que reutilice llaves si.
+func TestSend_LaLlaveDeUnEnvioHechoNoContestaPorOtroNumero(t *testing.T) {
+	svc, emisor, _, _ := sinpeConAvisos(t, nil)
+	const llave = "sinpe:otro-numero"
+
+	if _, err := enviarSinpe(svc, emisor, montoSinpe, llave); err != nil {
+		t.Fatalf("el envio: %v", err)
+	}
+
+	_, err := svc.Send(context.Background(), emisor, &sinpe.SendRequest{
+		Phone: telefonoSinCuenta, Amount: montoSinpe, IdempotencyKey: llave,
+	}, "")
+	if !errors.Is(err, sinpe.ErrRecipientNotUser) {
+		t.Fatalf("la llave de un envio hecho, hacia otro numero: err = %v, se esperaba ErrRecipientNotUser", err)
+	}
+}
+
 // alargarNombre deja a la persona con nombre y apellido de 80 caracteres cada
 // uno: juntos, 161.
 func alargarNombre(t *testing.T, pool *pgxpool.Pool, userID, letra string) {

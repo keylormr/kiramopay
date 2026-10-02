@@ -7,6 +7,11 @@ import { SinpeView } from '../SinpeView';
 const mocks = vi.hoisted(() => ({
   api: { sinpe: { send: vi.fn() }, mfa: { totpVerify: vi.fn() } },
   dispatch: vi.fn(),
+  dataSync: {
+    refreshAccounts: vi.fn(() => Promise.resolve(true)),
+    refreshSinpe: vi.fn(() => Promise.resolve()),
+    refreshTransactions: vi.fn(() => Promise.resolve()),
+  },
   // Mutable a propósito: algunas pruebas necesitan contactos ya guardados
   // (para ejercitar la detección de duplicados) sin reescribir el mock entero.
   state: {
@@ -28,6 +33,8 @@ vi.mock('@/hooks/useApp', () => ({
     dispatch: mocks.dispatch,
   }),
 }));
+
+vi.mock('@/services/dataSync', () => mocks.dataSync);
 
 function setup() {
   return render(
@@ -66,6 +73,9 @@ beforeEach(() => {
   mocks.api.sinpe.send.mockReset();
   mocks.api.mfa.totpVerify.mockReset();
   mocks.dispatch.mockReset();
+  mocks.dataSync.refreshAccounts.mockClear();
+  mocks.dataSync.refreshSinpe.mockClear();
+  mocks.dataSync.refreshTransactions.mockClear();
   mocks.state.sinpeContacts = [];
   mocks.state.user = { phone: '+506 8888-0000' };
   // jsdom no tiene cámara. Una promesa que nunca resuelve deja el escáner en su
@@ -575,7 +585,10 @@ describe('SinpeView — la llave del envío', () => {
     expect(segunda).toBe(primera);
   });
 
-  it('un corte de red avisa que reintentar no envía dos veces', async () => {
+  // La promesa vale para el reintento de ahora: la llave se olvida al cerrar
+  // sesión, y la sesión se cierra sola tras un rato sin uso. Más tarde lo
+  // seguro es mirar los movimientos antes.
+  it('un corte de red avisa que reintentar ahora no envía dos veces, y que más tarde conviene revisar', async () => {
     mocks.api.sinpe.send.mockResolvedValue(sinRed);
     const user = userEvent.setup();
     setup();
@@ -583,7 +596,8 @@ describe('SinpeView — la llave del envío', () => {
     await openSendSheetAndSubmit(user);
 
     expect(await screen.findByText(/No pudimos confirmar el envío/)).toBeInTheDocument();
-    expect(screen.getByText(/no se enviará dos veces/)).toBeInTheDocument();
+    expect(screen.getByText(/Si lo intentas de nuevo ahora con los mismos datos, no se enviará dos veces/)).toBeInTheDocument();
+    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus movimientos/)).toBeInTheDocument();
   });
 
   it('corregir el monto tras un corte de red es otro envío y lleva otra llave', async () => {
@@ -665,6 +679,11 @@ describe('SinpeView — la llave del envío', () => {
     expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
     expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ADD_SINPE_TRANSACTION' }));
+    // La app no se había enterado del envío: trae del servidor el saldo, los
+    // movimientos y el historial SINPE.
+    expect(mocks.dataSync.refreshAccounts).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
 
     const aviso = titulo.closest('[role="dialog"]') as HTMLElement;
     await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
