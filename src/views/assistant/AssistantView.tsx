@@ -3,7 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
-import { refreshAccounts } from '@/services/dataSync';
+import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 import { useAuthStore } from '@/stores/auth.store';
 import { normalizarTelefonoCR } from '@/utils/telefono';
@@ -66,8 +66,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   >({});
   const persona = useAuthStore((s) => s.user?.id ?? '');
   const [showMfa, setShowMfa] = useState(false);
-  // The proposal whose confirmation hit the high-value MFA gate, retried after verify.
-  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal } | null>(null);
+  // The proposal whose confirmation hit the high-value MFA gate, retried after
+  // verify. Lleva la llave del envio: cancelar el segundo factor suelta esa.
+  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -200,7 +201,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     }
     // High-value action: prompt for a TOTP code, then retry this same proposal.
     if (!res.success && res.error?.code === MFA_REQUIRED) {
-      mfaRetryRef.current = { key, p };
+      mfaRetryRef.current = { key, p, llave };
       setShowMfa(true);
       setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
       return;
@@ -214,6 +215,12 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       // The confirmed proposal moved money (SINPE / recharge / bill payment):
       // refetch the global wallet balance so it is not left stale.
       refreshAccounts().catch(() => {});
+      // El envio —o el que ya estaba hecho, que la app no conocia— va a los
+      // movimientos y al historial SINPE.
+      if (p.kind === 'sinpe_transfer') {
+        refreshTransactions().catch(() => {});
+        refreshSinpe().catch(() => {});
+      }
     }
     const porCodigo: Record<string, string> =
       p.kind === 'sinpe_transfer'
@@ -456,7 +463,14 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       {/* High-value MFA challenge → on verify, retry the pending proposal */}
       <MfaChallengeSheet
         isOpen={showMfa}
-        onClose={() => setShowMfa(false)}
+        onClose={() => {
+          setShowMfa(false);
+          // Sin verificar, la propuesta no salio: el servidor pide el segundo
+          // factor antes de crear nada. Se suelta su llave, y no otra.
+          const pendiente = mfaRetryRef.current;
+          mfaRetryRef.current = null;
+          if (pendiente?.llave) soltarIntento(persona, 'sinpe', pendiente.llave);
+        }}
         onVerified={() => {
           setShowMfa(false);
           const pending = mfaRetryRef.current;

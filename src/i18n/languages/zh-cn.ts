@@ -402,7 +402,7 @@ const zhCn: TranslationKeys = {
   sent_success: '已发送！',
   sinpe_transfer_success: '您的SINPE转账已成功',
   sinpe_self_send_error: '不能向自己的号码转账',
-  sinpe_phone_invalid: '请检查号码：必须为8位数字',
+  sinpe_phone_invalid: '请检查号码：必须是8位手机号码',
   sinpe_invalid_amount: '请输入大于 ₡0 的有效金额',
   sinpe_recipient_not_user: '该号码没有 KiramoPay 账户。目前您只能向已经使用本应用的人转账。',
   sinpe_err_sin_confirmar: '无法确认这笔转账。如果您现在用相同的信息再试一次，不会重复转出。如果稍后再试，请先查看交易记录。',

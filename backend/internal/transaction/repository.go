@@ -602,7 +602,8 @@ func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, u
 
 // FindByIdempotencyKey trae, ademas de lo que la respuesta repite, lo que la
 // relectura compara para saber si el pedido es el mismo movimiento: la
-// contraparte (tipo, nombre e id).
+// contraparte (tipo, nombre, telefono e id). El telefono solo lo compara
+// TransferenciaHecha.
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,

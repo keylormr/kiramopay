@@ -75,6 +75,11 @@ var (
 	// which a client-side amount check already filters out before the
 	// request, so mapping THOSE to a phone-specific message would mislead.
 	ErrInvalidPhone = errors.New("invalid SINPE Móvil phone number")
+	// ErrBuscarDestino envuelve un fallo de la base al buscar a quien recibe.
+	// No dice nada del numero ni lo arregla quien envia: el handler contesta
+	// 500, con el detalle solo en el log. Antes se tragaba y se contestaba "no
+	// es usuario", y despues salia como un 400 con el texto del driver.
+	ErrBuscarDestino = errors.New("no se pudo buscar a quien recibe")
 )
 
 // ContactExistsError carries the EXISTING contact alongside the rejection, so

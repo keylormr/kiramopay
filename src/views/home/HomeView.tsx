@@ -15,7 +15,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
-import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
+import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
@@ -86,6 +86,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [envioYaHecho, setEnvioYaHecho] = useState(false);
   const [contactoGuardado, setContactoGuardado] = useState(false);
   const [showEnvioMfa, setShowEnvioMfa] = useState(false);
+  // La llave del envio que espera el segundo factor: cancelarlo suelta esa y
+  // no otra que siga pendiente.
+  const [llaveDelMfa, setLlaveDelMfa] = useState('');
 
   // "Cobrar con QR" — genera un QR de cobro REAL via la API (riel QR del backend,
   // contabilizado en el ledger). Generar el codigo no mueve dinero; el pago
@@ -274,6 +277,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       if (!res.success || !res.data) {
         const code = res.error?.code ?? '';
         if (code === MFA_REQUIRED) {
+          setLlaveDelMfa(llave);
           setShowEnvioMfa(true);
           return;
         }
@@ -294,12 +298,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       }
       // El envio salio, o ya estaba hecho: el siguiente es otro y lleva otra
       // llave. En la repeticion la app no se habia enterado del envio; en los
-      // dos casos el saldo y los movimientos se traen del servidor.
+      // dos casos el saldo, los movimientos y el historial SINPE se traen del
+      // servidor.
       soltarIntento(persona, 'sinpe', llave);
       setEnvioYaHecho(res.data.repetida === true);
       setEnvioListo(true);
       refreshAccounts().catch(() => {});
       refreshTransactions().catch(() => {});
+      refreshSinpe().catch(() => {});
     } finally {
       setEnviando(false);
     }
@@ -1221,13 +1227,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         isOpen={showEnvioMfa}
         onClose={() => {
           setShowEnvioMfa(false);
-          // Sin verificar, el envio no salio: el siguiente es otro intento.
-          soltarIntento(persona, 'sinpe');
+          // Sin verificar, el envio no salio: el siguiente es otro intento. Se
+          // suelta esa llave, y no otra que siga pendiente.
+          soltarIntento(persona, 'sinpe', llaveDelMfa);
         }}
         onVerified={() => {
           setShowEnvioMfa(false);
           handleEnviarAEscaneado();
         }}
+        confirmLabel={t('mfa_verify_and_send')}
       />
 
     </div>

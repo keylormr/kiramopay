@@ -150,6 +150,13 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 				"the idempotency_key belongs to a different transfer")
 			return
 		}
+		// La base fallo al buscar a quien recibe: nada se movio y el pedido
+		// no tiene nada que corregir. Un 500 se lleva el detalle al log y le
+		// deja a la pantalla un "intenta de nuevo en un momento".
+		if errors.Is(err, ErrBuscarDestino) {
+			response.Error(w, http.StatusInternalServerError, "SINPE_FAILED", err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SINPE_FAILED", err.Error())
 		return
 	}

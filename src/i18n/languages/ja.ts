@@ -401,7 +401,7 @@ const ja: TranslationKeys = {
   sent_success: '送金完了！',
   sinpe_transfer_success: 'SINPE送金が完了しました',
   sinpe_self_send_error: '自分の番号には送金できません',
-  sinpe_phone_invalid: '番号を確認してください（8桁で入力）',
+  sinpe_phone_invalid: '番号を確認してください（8桁の携帯電話番号）',
   sinpe_invalid_amount: '₡0より大きい、有効な金額を入力してください',
   sinpe_recipient_not_user: 'この番号のKiramoPayアカウントはありません。現在は、すでにアプリを利用している方にのみ送金できます。',
   sinpe_err_sin_confirmar: '送金を確認できませんでした。今すぐ同じ内容でもう一度お試しいただければ、二重に送金されることはありません。後でお試しになる場合は、先に取引履歴をご確認ください。',

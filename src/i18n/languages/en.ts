@@ -401,7 +401,7 @@ const en: TranslationKeys = {
   sent_success: 'Sent!',
   sinpe_transfer_success: 'Your SINPE transfer was successful',
   sinpe_self_send_error: 'You cannot send money to your own number',
-  sinpe_phone_invalid: 'Check the number: it must have 8 digits',
+  sinpe_phone_invalid: 'Check the number: it must be an 8-digit mobile number',
   sinpe_invalid_amount: 'Enter a valid amount, greater than ₡0',
   sinpe_recipient_not_user: 'That number has no KiramoPay account. For now you can only send money to people who already use the app.',
   sinpe_err_sin_confirmar: "We couldn't confirm the transfer. If you try again now with the same details, it won't be sent twice. If you try later, check your transactions first.",

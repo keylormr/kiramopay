@@ -423,9 +423,11 @@ func (s *Service) TransferenciaYaTieneRespuesta(ctx context.Context, req *Create
 // cuenta de quien recibio, que ya no esta. Sin comparar el destino, la llave
 // de un envio hecho contestaba por un pedido del mismo monto a OTRO numero:
 // decia que aquel envio ya estaba hecho, con el nombre de quien lo recibio.
-// Contestarlo no mueve nada.
+// Sin telefono no hay destino que comparar, y no contesta nada: las filas que
+// no lo guardaron (las de antes de guardarlo) tampoco. Contestarlo no mueve
+// nada.
 func (s *Service) TransferenciaHecha(ctx context.Context, fromUserID, llave string, monto int64, moneda, tipo, telefono string) (*TransactionRecord, error) {
-	if llave == "" {
+	if llave == "" || telefono == "" {
 		return nil, nil
 	}
 	fila, err := s.repo.FindByIdempotencyKey(ctx, fromUserID, llave)

@@ -68,6 +68,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // La hoja del final habla de un envio que ya estaba hecho (la repeticion),
   // no de uno nuevo.
   const [envioYaHecho, setEnvioYaHecho] = useState(false);
+  // La llave del envio que espera el segundo factor: cancelarlo suelta esa y
+  // no otra que siga pendiente.
+  const [llaveDelMfa, setLlaveDelMfa] = useState('');
   const [showAddContactSheet, setShowAddContactSheet] = useState(false);
   const [showMyQrSheet, setShowMyQrSheet] = useState(false);
   const [selectedContact, setSelectedContact] = useState<SinpeContact | null>(null);
@@ -216,6 +219,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       // High-value transfer: prompt for a TOTP code, then retry (form persists).
       // Keep the idempotency key so the post-MFA retry is the same transfer.
       if (res.error?.code === MFA_REQUIRED) {
+        setLlaveDelMfa(llave);
         setShowConfirm(false);
         setShowMfa(true);
         return;
@@ -1443,9 +1447,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       {/* High-value MFA challenge → on verify, retry the transfer */}
       <MfaChallengeSheet
         isOpen={showMfa}
-        // Cancelar el segundo factor deja el intento: el servidor pide el
-        // segundo factor despues de mirar la llave, asi que nada salio con ella.
-        onClose={() => { setShowMfa(false); soltarIntento(persona, 'sinpe'); }}
+        // Cancelar el segundo factor abandona el envio: el servidor lo pide
+        // despues de mirar la llave y antes de crear nada, asi que nada salio
+        // con ella. Se suelta esa llave, y no otra que siga pendiente.
+        onClose={() => { setShowMfa(false); soltarIntento(persona, 'sinpe', llaveDelMfa); }}
         onVerified={() => {
           setShowMfa(false);
           handleSendMoney();

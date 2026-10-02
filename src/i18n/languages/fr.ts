@@ -401,7 +401,7 @@ const fr: TranslationKeys = {
   sent_success: 'Envoyé !',
   sinpe_transfer_success: 'Votre virement SINPE a réussi',
   sinpe_self_send_error: 'Vous ne pouvez pas envoyer de l\'argent à votre propre numéro',
-  sinpe_phone_invalid: 'Vérifiez le numéro : il doit comporter 8 chiffres',
+  sinpe_phone_invalid: "Vérifiez le numéro : il doit s'agir d'un mobile à 8 chiffres",
   sinpe_invalid_amount: 'Saisissez un montant valide, supérieur à ₡0',
   sinpe_recipient_not_user: 'Ce numéro n\'a pas de compte KiramoPay. Pour l\'instant, vous ne pouvez envoyer de l\'argent qu\'à des personnes qui utilisent déjà l\'application.',
   sinpe_err_sin_confirmar: "Impossible de confirmer l'envoi. Si vous réessayez maintenant avec les mêmes informations, il ne sera pas envoyé deux fois. Si vous réessayez plus tard, vérifiez d'abord vos transactions.",

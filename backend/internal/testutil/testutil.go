@@ -404,7 +404,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		-- while production is VARCHAR(100), so an over-long name passed the
 		-- tests and only failed in production.
 		counterparty_name VARCHAR(100),
-		counterparty_phone VARCHAR(20),
+		-- Igual que la 001: VARCHAR(15). SINPE guarda aqui el telefono de
+		-- destino, y con 20 una forma mas larga pasaria las pruebas.
+		counterparty_phone VARCHAR(15),
 		status VARCHAR(20) DEFAULT 'pending',
 		external_reference VARCHAR(100),
 		metadata JSONB DEFAULT '{}',
