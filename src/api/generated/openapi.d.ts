@@ -5879,6 +5879,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Hide a notification from the caller's list
+         * @description The app offers "delete"; the server hides. The row is never deleted: it
+         *     keeps the moment it was hidden (hidden_at) and stops appearing in
+         *     GET /notifications. Hiding it again keeps the first mark. Another
+         *     account's notification answers the same 404 as an unknown id. Hiding
+         *     freezes the row: marking notifications as read, one or all, leaves a
+         *     hidden one as it was.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Hidden (or already hidden) */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_ID (the id is not a UUID in its canonical 36-character form, the one GET /notifications returns) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description NOTIFICATION_NOT_FOUND (unknown, or another account's) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description HIDE_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/{id}/read": {
         parameters: {
             query?: never;
@@ -5892,7 +5962,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Mark notification as read */
+        /**
+         * Mark notification as read
+         * @description A hidden notification is left as it was (still 204).
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -5931,7 +6004,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark all of the caller's notifications as read */
+        /**
+         * Mark all of the caller's notifications as read
+         * @description Hidden notifications are left as they were.
+         */
         post: {
             parameters: {
                 query?: never;

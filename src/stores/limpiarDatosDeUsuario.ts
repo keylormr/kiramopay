@@ -55,7 +55,7 @@ export function limpiarDatosDeUsuario(): void {
     rechargeHistory: [],
     connectedPartners: ['uber', 'ubereats'],
   });
-  useNotificationStore.setState({ notifications: [] });
+  useNotificationStore.setState({ notifications: [], ocultas: [] });
   useSavingsStore.setState({ goals: [] });
   useRecurringStore.setState({ payments: [] });
   useBusinessStore.setState({ activeMerchantId: null });

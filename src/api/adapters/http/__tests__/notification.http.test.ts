@@ -22,3 +22,29 @@ describe('HttpNotificationRepository.getAll', () => {
     expect((res.data?.[0] as { dateISO?: string } | undefined)?.dateISO).toBe('2026-09-04T15:30:00Z');
   });
 });
+
+// Ocultar una notificacion (la pantalla dice "eliminar"; el servidor la oculta
+// y el registro queda). La ruta lleva el id escapado, y el codigo del rechazo
+// es el del servidor: antes se pisaba con DELETE_FAILED.
+describe('HttpNotificationRepository.delete', () => {
+  it('pide DELETE sobre esa notificacion, con el id escapado', async () => {
+    const del = vi.fn().mockResolvedValue({ success: true });
+
+    const res = await new HttpNotificationRepository({ del } as unknown as HttpClient).delete('n 1/x');
+
+    expect(del).toHaveBeenCalledWith('/api/v1/notifications/n%201%2Fx');
+    expect(res.success).toBe(true);
+  });
+
+  it('el codigo del rechazo es el del servidor', async () => {
+    const del = vi.fn().mockResolvedValue({
+      success: false,
+      error: { code: 'NOTIFICATION_NOT_FOUND', message: 'notification not found' },
+    });
+
+    const res = await new HttpNotificationRepository({ del } as unknown as HttpClient).delete('n1');
+
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('NOTIFICATION_NOT_FOUND');
+  });
+});

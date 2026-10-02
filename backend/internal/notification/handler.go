@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -104,6 +105,33 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.MarkRead(r.Context(), userID, notifID); err != nil {
 		response.Error(w, http.StatusInternalServerError, "MARK_READ_FAILED", err.Error())
+		return
+	}
+
+	response.NoContent(w)
+}
+
+// Ocultar saca una notificacion de la lista de quien la pide. El registro queda
+// (Service.Ocultar): la pantalla ofrece "borrar", el servidor oculta.
+func (h *Handler) Ocultar(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	notifID := chi.URLParam(r, "id")
+	// Solo la forma canonica, la misma con la que la da la lista. uuid.Parse
+	// acepta tambien urn:uuid:..., los 32 hexadecimales sin guiones y otras
+	// envolturas; algunas Postgres las rechaza, y eso era un 500 por un pedido
+	// mal formado.
+	id, err := uuid.Parse(notifID)
+	if err != nil || len(notifID) != 36 {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "invalid notification id")
+		return
+	}
+
+	if err := h.service.Ocultar(r.Context(), userID, id.String()); err != nil {
+		if errors.Is(err, ErrNotificacionNoEncontrada) {
+			response.Error(w, http.StatusNotFound, "NOTIFICATION_NOT_FOUND", "notification not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "HIDE_FAILED", err.Error())
 		return
 	}
 

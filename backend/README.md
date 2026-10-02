@@ -340,6 +340,8 @@ Endpoints protegidos para gestion de push notifications via VAPID/web-push:
 | DELETE | `/api/v1/push/unsubscribe` | Eliminar subscription |
 | GET | `/api/v1/notifications` | Listar notificaciones (paginado: `?limit=20&offset=0`) |
 | PATCH | `/api/v1/notifications/{id}/read` | Marcar notificacion como leida |
+| POST | `/api/v1/notifications/read-all` | Marcar todas como leidas |
+| DELETE | `/api/v1/notifications/{id}` | Ocultar una notificacion (el registro queda) |
 
 Generar claves VAPID:
 ```bash

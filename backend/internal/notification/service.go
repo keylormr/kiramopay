@@ -274,6 +274,23 @@ func (s *Service) MarkRead(ctx context.Context, userID, notifID string) error {
 	return s.repo.MarkRead(ctx, userID, notifID)
 }
 
+// ErrNotificacionNoEncontrada: no existe o es de otra cuenta. Las dos se
+// responden igual, para no confirmar que el id existe.
+var ErrNotificacionNoEncontrada = errors.New("notification not found")
+
+// Ocultar saca la notificacion de la lista de su titular sin borrar el
+// registro (ver OcultarNotificacion).
+func (s *Service) Ocultar(ctx context.Context, userID, notifID string) error {
+	ok, err := s.repo.OcultarNotificacion(ctx, userID, notifID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotificacionNoEncontrada
+	}
+	return nil
+}
+
 // MarkAllRead marks all of the user's unread notifications as read.
 func (s *Service) MarkAllRead(ctx context.Context, userID string) error {
 	return s.repo.MarkAllRead(ctx, userID)

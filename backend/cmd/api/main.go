@@ -1181,9 +1181,7 @@ func main() {
 			r.Get("/push/nativo", notifHandler.EstadoNativo)
 			r.Post("/push/dispositivos", notifHandler.RegistrarDispositivo)
 			r.Post("/push/dispositivos/baja", notifHandler.OlvidarDispositivo)
-			r.Get("/notifications", notifHandler.ListNotifications)
-			r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
-			r.Post("/notifications/read-all", notifHandler.MarkAllRead)
+			notification.MontarHistorial(r, notifHandler)
 
 			// Budgets
 			r.Get("/budgets", budgetHandler.List)
