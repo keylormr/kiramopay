@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
@@ -100,17 +101,13 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	}
 	defer unlock()
 
-	// Daily SINPE quota check — now race-free under the per-user lock.
-	dailySpent, err := s.repo.GetDailySinpeSpent(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("check daily limit: %w", err)
-	}
-	if dailySpent+req.Amount > DailyLimitCRC {
-		return nil, fmt.Errorf("SINPE daily limit exceeded")
-	}
-
 	// Resolve the recipient. Only KiramoPay-to-KiramoPay transfers are accepted.
-	peer, _ := s.userRepo.FindByPhone(ctx, req.Phone)
+	// Un fallo de la base no dice que el numero no sea de KiramoPay (ver
+	// ErrBuscarDestino).
+	peer, err := s.userRepo.FindByPhone(ctx, req.Phone)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %w", ErrBuscarDestino, err)
+	}
 	// Sending to your OWN number used to debit you plus a cross-bank fee with no
 	// credit back — a silent money loss. Reject it outright.
 	if peer != nil && peer.ID == userID {
@@ -121,7 +118,28 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	// transfer could only be debited and parked in SYSTEM:EXTERNAL: never
 	// delivered, and with no refund path to undo it. Taking the money and
 	// showing "pending" forever is worse than saying no up front.
+	//
+	// Salvo que sea el reintento de un envio que ya salio: si la cuenta de
+	// quien lo recibio se cerro entre el envio y el reintento, el telefono ya
+	// no la encuentra, y se contestaba "no es usuario" por un envio hecho. La
+	// llave, el monto y el numero son los de aquel envio; contestarlo no mueve
+	// nada.
 	if peer == nil {
+		hecha, err := s.txService.TransferenciaHecha(ctx, userID, req.IdempotencyKey, req.Amount, "CRC", transaction.TypeSinpeSend, req.Phone)
+		if err != nil {
+			return nil, err
+		}
+		if hecha != nil {
+			return &SendResponse{
+				TransactionID: hecha.ID,
+				Status:        "completed",
+				Amount:        hecha.Amount,
+				Fee:           hecha.Fee,
+				Recipient:     hecha.CounterpartyName,
+				Internal:      true,
+				Replayed:      true,
+			}, nil
+		}
 		return nil, ErrRecipientNotUser
 	}
 
@@ -139,9 +157,6 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	if err != nil {
 		return nil, fmt.Errorf("wallet not found")
 	}
-	if w.BalanceCRC < req.Amount+fee {
-		return nil, fmt.Errorf("insufficient balance")
-	}
 
 	idem := req.IdempotencyKey
 	if idem == "" {
@@ -157,8 +172,29 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		senderName = strings.TrimSpace(sender.FirstName + " " + sender.LastName)
 		senderPhone = sender.Phone
 	}
+	receiverContact := senderName
+	if receiverContact == "" {
+		receiverContact = "KiramoPay user"
+	}
 
-	senderTx, receiverTx, err := s.txService.CreateTransfer(ctx, &transaction.CreateTransferRequest{
+	// El historial de los dos lados se escribe DENTRO de la transaccion del
+	// asiento. Antes se escribia despues, aparte: un envio podia quedar sin su
+	// fila —y sin contar para el cupo del dia—, y la repeticion de un envio que
+	// ya se habia hecho escribia otra. El gancho no corre en la repeticion: la
+	// fila de aquella vez es la que vale.
+	//
+	// Los nombres van recortados al ancho de la columna (VARCHAR(100),
+	// migracion 023). Nombre y apellido pueden sumar 201 caracteres, y dentro
+	// de la transaccion del dinero un nombre que no entra hace fallar el envio
+	// entero, siempre igual: un nombre de pantalla no vale un envio. Los
+	// telefonos si entran (VARCHAR(15)): el de destino lo valida el handler
+	// (+506 y ocho digitos), y el de quien envia tiene el mismo formato porque
+	// se valida al registrarse y ningun otro camino lo cambia.
+	ahora := time.Now()
+	idEnvio, idRecibo := uuid.New().String(), uuid.New().String()
+	nombreDelContacto := transaction.RecortarNombre(contactName)
+	nombreDeQuienEnvia := transaction.RecortarNombre(receiverContact)
+	pedido := &transaction.CreateTransferRequest{
 		FromUserID:               userID,
 		ToUserID:                 peer.ID,
 		Amount:                   req.Amount,
@@ -170,7 +206,62 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		ReceiveType:              transaction.TypeSinpeReceive,
 		SenderCounterpartyName:   contactName,
 		ReceiverCounterpartyName: senderName,
-	})
+		SenderCounterpartyPhone:  req.Phone,
+		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx, _ string) error {
+			if err := s.repo.AddHistoryEnTx(ctx, tx, &HistoryRecord{
+				ID:          idEnvio,
+				UserID:      userID,
+				Phone:       req.Phone,
+				ContactName: nombreDelContacto,
+				Amount:      req.Amount,
+				Fee:         fee,
+				Type:        "sent",
+				Status:      "completed",
+				Description: req.Description,
+				CreatedAt:   ahora,
+			}); err != nil {
+				return fmt.Errorf("historial de quien envia: %w", err)
+			}
+			if err := s.repo.AddHistoryEnTx(ctx, tx, &HistoryRecord{
+				ID:     idRecibo,
+				UserID: peer.ID,
+				// El telefono REAL del emisor (ya se trajo para senderName).
+				// Antes se guardaba su UUID como relleno y el historial del
+				// receptor mostraba ese identificador en vez de un numero.
+				Phone:       senderPhone,
+				ContactName: nombreDeQuienEnvia,
+				Amount:      req.Amount,
+				Fee:         0,
+				Type:        "received",
+				Status:      "completed",
+				Description: req.Description,
+				CreatedAt:   ahora,
+			}); err != nil {
+				return fmt.Errorf("historial de quien recibe: %w", err)
+			}
+			return nil
+		},
+	}
+
+	// Comprobaciones de cortesia: el cupo SINPE del dia y el saldo. Las dos
+	// miden algo que el propio envio consume, asi que sobre el reintento de un
+	// envio que ya salio dirian "no alcanza" por la plata que ya se movio, y
+	// la pantalla lo daria por fallido. Se leen PRIMERO y la llave DESPUES,
+	// solo si alguna no alcanza: si la llave ya tiene respuesta —este envio
+	// hecho, o la llave de otro—, contesta CreateTransfer. Bajo el candado de
+	// arriba ningun otro envio de esta persona puede confirmar entre una
+	// lectura y la otra.
+	if errCortesia := s.cortesia(ctx, userID, req.Amount, fee, w.BalanceCRC); errCortesia != nil {
+		responde, err := s.txService.TransferenciaYaTieneRespuesta(ctx, pedido)
+		if err != nil {
+			return nil, err
+		}
+		if !responde {
+			return nil, errCortesia
+		}
+	}
+
+	senderTx, _, repetido, err := s.txService.TransferirOReconocer(ctx, pedido)
 	if err != nil {
 		if errors.Is(err, transaction.ErrMFARequired) {
 			return nil, err
@@ -178,51 +269,13 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("create transaction: %w", err)
 	}
 
-	// Sender side of sinpe_history. This row feeds GetDailySinpeSpent, so a
-	// silent failure would let the user undercount toward the daily ceiling —
-	// surface it as a high-risk audit event instead of swallowing it.
-	if err := s.repo.AddHistory(ctx, &HistoryRecord{
-		ID:          uuid.New().String(),
-		UserID:      userID,
-		Phone:       req.Phone,
-		ContactName: contactName,
-		Amount:      req.Amount,
-		Fee:         fee,
-		Type:        "sent",
-		Status:      "completed",
-		Description: req.Description,
-		CreatedAt:   time.Now(),
-	}); err != nil && s.auditLogger != nil {
-		s.auditLogger.Log(audit.Event{
-			UserID:    userID,
-			Action:    "sinpe_history_write_failed",
-			RiskLevel: "high",
-			IPAddress: ipAddr,
-		})
-	}
-	// Receiver side.
-	if receiverTx != nil {
-		receiverContact := senderName
-		if receiverContact == "" {
-			receiverContact = "KiramoPay user"
-		}
-		_ = s.repo.AddHistory(ctx, &HistoryRecord{
-			ID:     uuid.New().String(),
-			UserID: peer.ID,
-			// El telefono REAL del emisor (ya se trajo para senderName). Antes
-			// se guardaba su UUID como relleno y el historial del receptor
-			// mostraba ese identificador en vez de un numero.
-			Phone:       senderPhone,
-			ContactName: receiverContact,
-			Amount:      req.Amount,
-			Fee:         0,
-			Type:        "received",
-			Status:      "completed",
-			Description: req.Description,
-			CreatedAt:   time.Now(),
-		})
+	// Lo que sale hacia afuera —el aviso a quien recibe, la auditoria— va solo
+	// cuando ESTA llamada movio el dinero: la repeticion no es otro envio. Lo
+	// dice el libro: una bandera puesta por el gancho mentia cuando el gancho
+	// corria en una pasada que despues se deshacia.
+	if !repetido {
 		// Notify the recipient (best-effort, detached so it never blocks or
-		// fails the transfer). This is the first real notification trigger.
+		// fails the transfer).
 		if s.notifier != nil {
 			body := fmt.Sprintf("Recibiste ₡%d.%02d por SINPE Móvil", req.Amount/100, req.Amount%100)
 			// #nosec G118 -- intentionally detached: the request context is
@@ -231,10 +284,9 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 			// bounded context).
 			go s.notifyReceiver(peer.ID, body)
 		}
-	}
-
-	if s.auditLogger != nil {
-		s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)
+		if s.auditLogger != nil {
+			s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)
+		}
 	}
 	// Every accepted transfer is now KiramoPay-to-KiramoPay and settles inside
 	// our ledger, so it is genuinely completed. Internal stays in the response:
@@ -247,7 +299,26 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		Fee:           fee,
 		Recipient:     contactName,
 		Internal:      true,
+		Replayed:      repetido,
 	}, nil
+}
+
+// cortesia es la comprobacion previa del cupo SINPE del dia y del saldo. Es de
+// cortesia: lo que de verdad impide gastar de mas es el asiento, con su
+// comprobacion de saldo adentro de la transaccion. El cupo cuenta lo enviado;
+// el saldo tiene que cubrir ademas la comision.
+func (s *Service) cortesia(ctx context.Context, userID string, monto, comision, saldo int64) error {
+	dailySpent, err := s.repo.GetDailySinpeSpent(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check daily limit: %w", err)
+	}
+	if dailySpent+monto > DailyLimitCRC {
+		return fmt.Errorf("SINPE daily limit exceeded")
+	}
+	if saldo < monto+comision {
+		return fmt.Errorf("insufficient balance")
+	}
+	return nil
 }
 
 // validCRMobile reports whether p is a valid Costa Rican mobile number for

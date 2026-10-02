@@ -183,10 +183,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
               </h2>
               {titleAccessory}
             </div>
+            {/* Como el fondo, Escape y Atras: con una operacion en vuelo no
+                cierra. Cerrar por aca a mitad de un envio y volver a abrir la
+                hoja dejaba que la respuesta tardia pintara sobre la nueva. */}
             <button
               onClick={onClose}
+              disabled={!dismissable}
               aria-label={t('close')}
-              className="w-11 h-11 flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full uv-text-secondary hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors text-base"
+              className="w-11 h-11 flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full uv-text-secondary hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors text-base disabled:opacity-40 disabled:cursor-not-allowed"
             >
               ✕
             </button>

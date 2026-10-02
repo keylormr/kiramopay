@@ -24,4 +24,7 @@ export interface SinpeTransaction {
   // the external rail (delivery to other banks is not yet enabled), so the UI
   // must not present the transfer as delivered.
   internal?: boolean;
+  // Solo en la respuesta de un envio: el servidor contesto con un envio que ya
+  // estaba hecho bajo la misma llave, y esta vez no se movio nada.
+  repetida?: boolean;
 }

@@ -436,7 +436,7 @@ func TestRetiroDeNegocioFallidoSeReintenta(t *testing.T) {
 	insertarFilaCruda(t, pool, dueno, transaction.TypeMerchantWithdrawal, "CRC", llave, transaction.StatusFailed, retiro)
 	saldo0 := crcWallet(t, pool, dueno)
 
-	rec, err := svc.WithdrawMerchantToUser(ctx, comercio, "Tienda", dueno, "CRC", retiro, llave)
+	rec, _, err := svc.WithdrawMerchantToUser(ctx, comercio, "Tienda", dueno, "CRC", retiro, llave)
 	if err != nil {
 		t.Fatalf("WithdrawMerchantToUser: %v", err)
 	}

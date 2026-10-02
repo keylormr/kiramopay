@@ -112,6 +112,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
       fee: number;
       recipient: string;
       internal: boolean;
+      replayed?: boolean;
     }>('/api/v1/sinpe/send', {
       phone: request.phone,
       amount: Math.round(request.amount * 100), // colones → centimos
@@ -140,6 +141,9 @@ export class HttpSinpeRepository implements ISinpeRepository {
       status: res.data.status as 'completed' | 'pending' | 'failed',
       reference: request.description || '',
       internal: res.data.internal,
+      // El servidor contesto con un envio que ya estaba hecho bajo la llave: la
+      // pantalla no lo anota ni lo celebra como nuevo.
+      repetida: res.data.replayed === true,
     };
 
     return apiSuccess(tx);

@@ -150,6 +150,20 @@ type QRCharge struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+// Retiro es lo que contesta el retiro del saldo del negocio: que retiro fue y,
+// con Replayed, si ya estaba hecho bajo esa llave y esta llamada no movio nada.
+// Antes contestaba 204 sin cuerpo, el retiro nuevo y la repeticion por igual,
+// y la pantalla —que conserva la llave mientras no sabe que paso— le decia
+// "listo" al dueño que retiraba otra vez el mismo monto, por un retiro que el
+// servidor no hizo.
+type Retiro struct {
+	TransactionID string `json:"transaction_id"`
+	Status        string `json:"status"`
+	Amount        int64  `json:"amount"`
+	Currency      string `json:"currency"`
+	Replayed      bool   `json:"replayed,omitempty"`
+}
+
 // ── QR Payment Transaction ───────────────────────────────────────────────────
 
 type QRPaymentRecord struct {

@@ -141,6 +141,22 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "INVALID_PHONE", err.Error())
 			return
 		}
+		// La llave ya es de otro envio: es lo unico que le dice a la pantalla
+		// que esa llave no sirve y que el envio nuevo necesita otra. Con el
+		// SINPE_FAILED generico no lo podia distinguir de un fallo que se
+		// arregla reintentando con la misma.
+		if errors.Is(err, transaction.ErrLlaveReutilizada) {
+			response.Error(w, http.StatusConflict, "LLAVE_REUTILIZADA",
+				"the idempotency_key belongs to a different transfer")
+			return
+		}
+		// La base fallo al buscar a quien recibe: nada se movio y el pedido
+		// no tiene nada que corregir. Un 500 se lleva el detalle al log y le
+		// deja a la pantalla un "intenta de nuevo en un momento".
+		if errors.Is(err, ErrBuscarDestino) {
+			response.Error(w, http.StatusInternalServerError, "SINPE_FAILED", err.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SINPE_FAILED", err.Error())
 		return
 	}
