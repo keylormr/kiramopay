@@ -65,7 +65,7 @@ Ver `.env.example` para todas las variables. Las mas importantes:
 
 | Variable | Default | Descripcion |
 |----------|---------|-------------|
-| `ENVIRONMENT` | `development` | Entorno (`development`, `staging`, `production`) |
+| `ENVIRONMENT` | `production` | Entorno (`development`, `staging`, `production`). Sin definir vale `production`; `.env.example` trae `development` |
 | `SERVER_PORT` | `8080` | Puerto del servidor |
 | `DB_HOST` | `localhost` | Host de PostgreSQL |
 | `DB_PORT` | `5432` | Puerto de PostgreSQL |
@@ -177,8 +177,8 @@ dominio/
 | GET | `/health` | Estado del sistema (DB, Redis, WebSocket) |
 | GET | `/metrics` | Metricas Prometheus |
 | GET | `/ws/prices` | WebSocket precios crypto (5s interval) |
-| GET | `/api/docs` | Swagger UI |
-| GET | `/api/docs/openapi.yaml` | Especificacion OpenAPI |
+| GET | `/api/docs` | Swagger UI (solo con `ENVIRONMENT=development`) |
+| GET | `/api/docs/openapi.yaml` | Especificacion OpenAPI (solo con `ENVIRONMENT=development`) |
 | POST | `/api/v1/auth/login` | Login con cedula + PIN |
 | POST | `/api/v1/auth/register` | Registrar usuario |
 | POST | `/api/v1/auth/refresh` | Refrescar JWT |
@@ -188,7 +188,7 @@ dominio/
 
 ### Protegidos (requieren `Authorization: Bearer <token>`)
 
-80+ endpoints organizados por dominio. Ver la especificacion completa en `/api/docs` o en `docs/openapi.yaml`.
+80+ endpoints organizados por dominio. Ver la especificacion completa en `docs/openapi.yaml` (o en `/api/docs` con `ENVIRONMENT=development`).
 
 ## Base de Datos
 

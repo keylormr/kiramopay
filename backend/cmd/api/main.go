@@ -874,8 +874,7 @@ func main() {
 			"resolved_ip":      middleware.RequestIP(r),
 		})
 	}))
-	r.Get("/api/docs", docs.ServeSwaggerUI)
-	r.Get("/api/docs/openapi.yaml", docs.ServeOpenAPISpec)
+	docs.Montar(r, cfg.Server.Environment)
 
 	r.Get("/ws/prices", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWs(wsHub, logger, w, r)

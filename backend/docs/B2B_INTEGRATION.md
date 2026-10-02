@@ -2,8 +2,7 @@
 
 Cómo integrar tu comercio con el API de KiramoPay: crear depósitos en
 garantía (escrow) programáticamente y recibir notificaciones firmadas por
-webhook. Referencia completa de endpoints en `openapi.yaml` (Swagger UI en
-`/api/docs`).
+webhook. Referencia completa de endpoints en `openapi.yaml`.
 
 ## 1. Credenciales
 
