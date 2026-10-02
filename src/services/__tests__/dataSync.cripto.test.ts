@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => {
     tenencias: [] as CryptoAsset[],
     esperar: null as null | Promise<void>,
     esperarMovimientos: null as null | Promise<void>,
+    fallaMovimientos: false,
   };
 });
 
@@ -28,6 +29,7 @@ vi.mock('@/api', () => ({
         return { success: true, data: mocks.tenencias };
       },
       getTransactions: async () => {
+        if (mocks.fallaMovimientos) return { success: false, error: { code: 'FETCH_FAILED', message: 'x' } };
         // La foto es la del momento de la peticion, como en el servidor.
         const data = mocks.movimientos;
         const espera = mocks.esperarMovimientos;
@@ -52,6 +54,7 @@ function activo(symbol: string, extra: Partial<CryptoAsset> = {}): CryptoAsset {
 beforeEach(() => {
   mocks.esperar = null;
   mocks.esperarMovimientos = null;
+  mocks.fallaMovimientos = false;
   mocks.tenencias = [activo('ETH', { balance: 0.5, avgBuyPrice: 2400 })];
   mocks.movimientos = [{
     id: 'm1', type: 'buy', fromAsset: 'USD', fromAmount: 1, toAsset: 'ETH', toAmount: 0.0004,
@@ -125,5 +128,51 @@ describe('refreshCrypto', () => {
     expect(s.assets).toEqual([]);
     expect(s.stakingPositions).toEqual([]);
     expect(s.transactions).toEqual([]);
+  });
+});
+
+// La pantalla que avisa de una operacion repetida no anota nada: lo que se ve
+// sale de esta carga, y el aviso solo puede decir que los saldos estan al dia
+// si de verdad llegaron.
+describe('refreshCrypto dice si trajo todo', () => {
+  it('con las tres lecturas, true', async () => {
+    await expect(refreshCrypto()).resolves.toBe(true);
+  });
+
+  it('si una lectura falla, false', async () => {
+    mocks.fallaMovimientos = true;
+    await expect(refreshCrypto()).resolves.toBe(false);
+  });
+
+  // La carga superada no escribe nada: lo que la pantalla termina mostrando es
+  // lo de la mas nueva, asi que su respuesta es la de esa.
+  it('una carga superada contesta lo que contesto la mas nueva', async () => {
+    let soltar!: () => void;
+    mocks.esperar = new Promise<void>((r) => {
+      soltar = r;
+    });
+    const vieja = refreshCrypto();
+    mocks.esperar = null;
+    mocks.fallaMovimientos = true;
+    const nueva = refreshCrypto();
+    await expect(nueva).resolves.toBe(false);
+    soltar();
+    await expect(vieja).resolves.toBe(false);
+  });
+
+  // El caso que se da en la pantalla: con el aviso a la vista, un retiro de
+  // staking pide otra carga y deja atras la de la repeticion. Si la nueva trajo
+  // todo, la superada tambien tiene que decir que esta al dia.
+  it('una carga superada cuya mas nueva trajo todo contesta true', async () => {
+    let soltar!: () => void;
+    mocks.esperar = new Promise<void>((r) => {
+      soltar = r;
+    });
+    const vieja = refreshCrypto();
+    mocks.esperar = null;
+    const nueva = refreshCrypto();
+    await expect(nueva).resolves.toBe(true);
+    soltar();
+    await expect(vieja).resolves.toBe(true);
   });
 });

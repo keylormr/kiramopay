@@ -45,6 +45,12 @@ type TransactionRecord struct {
 	// IdempotencyKey no sale al cliente: es un detalle del reintento, y el
 	// cliente ya sabe la llave que mando.
 	IdempotencyKey string `json:"-"`
+
+	// Replayed dice que la respuesta repite un movimiento que ya estaba hecho
+	// bajo la misma llave: en esta llamada no se movio nada. Sale solo cuando
+	// es cierto, y es lo que le permite a la pantalla no anotarlo ni
+	// celebrarlo como si fuera otro.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 type StakingRecord struct {
@@ -59,6 +65,10 @@ type StakingRecord struct {
 	Earned    decimal.Decimal `json:"earned"`
 	Status    string          `json:"status"` // active, completed, cancelled
 	CreatedAt time.Time       `json:"created_at"`
+
+	// Replayed: la posicion ya estaba abierta bajo esa llave y esta llamada no
+	// aparto nada (ver TransactionRecord.Replayed).
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 // Estados de una alerta de precio, tal como los ve el cliente. Ver la

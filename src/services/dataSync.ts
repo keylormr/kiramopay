@@ -107,19 +107,46 @@ export async function syncAllData(): Promise<void> {
   }
 }
 
-export async function refreshAccounts(): Promise<void> {
-  if (!hasBackend) return;
+// Numero de la ultima lectura de cuentas pedida, y su promesa (ver
+// refreshAccounts).
+let ultimaCargaCuentas = 0;
+let cargaCuentasMasNueva: Promise<boolean> = Promise.resolve(true);
+
+/**
+ * Trae las cuentas del servidor. Dice si quedaron al dia: true solo si
+ * llegaron y se escribieron. Quien muestra algo que depende de ellas —el aviso
+ * de una operacion repetida, que no anota nada— no puede afirmar que el saldo
+ * esta al dia si esta lectura no llego. Sin backend (la demo) no hay nada que
+ * traer.
+ *
+ * Como en refreshCrypto, solo escribe la lectura mas reciente: con dos en
+ * vuelo, la vieja que contestaba al final pisaba el saldo nuevo con uno de
+ * antes. La superada no escribe nada, asi que contesta lo que conteste esa.
+ */
+export function refreshAccounts(): Promise<boolean> {
+  if (!hasBackend) return Promise.resolve(true);
+  const carga = ++ultimaCargaCuentas;
+  const promesa = cargarCuentas(carga);
+  cargaCuentasMasNueva = promesa;
+  return promesa;
+}
+
+async function cargarCuentas(carga: number): Promise<boolean> {
   const generacion = generacionActual();
   const api = getApiLayer();
   const res = await api.accounts.getAccounts();
-  if (!sigueVigente(generacion)) return;
+  if (!sigueVigente(generacion)) return false;
+  if (carga !== ultimaCargaCuentas) return cargaCuentasMasNueva;
   if (res.success && res.data) {
     useAccountStore.getState().setAccounts(res.data);
+    return true;
   }
+  return false;
 }
 
-// Numero de la ultima carga de cripto pedida (ver refreshCrypto).
+// Numero de la ultima carga de cripto pedida, y su promesa (ver refreshCrypto).
 let ultimaCargaCripto = 0;
+let cargaCriptoMasNueva: Promise<boolean> = Promise.resolve(true);
 
 /**
  * Trae del servidor todo lo de cripto: tenencias, movimientos y posiciones de
@@ -138,32 +165,50 @@ let ultimaCargaCripto = 0;
  * mueve cripto de verdad. Lo que la lista local tenga ademas (un envio, que no
  * tiene servidor detras) no ocurrio en ningun lado, y conservarlo seria
  * mostrar un movimiento que nadie respalda.
+ *
+ * Dice si lo que se ve quedo al dia: true solo si llegaron las tres cosas y se
+ * escribieron. Una carga que otra mas nueva dejo atras no escribe nada, asi que
+ * contesta lo que conteste esa.
  */
-export async function refreshCrypto(): Promise<void> {
-  if (!hasBackend) return;
-  const generacion = generacionActual();
+export function refreshCrypto(): Promise<boolean> {
+  if (!hasBackend) return Promise.resolve(true);
   const carga = ++ultimaCargaCripto;
+  const promesa = cargarCripto(carga);
+  cargaCriptoMasNueva = promesa;
+  return promesa;
+}
+
+async function cargarCripto(carga: number): Promise<boolean> {
+  const generacion = generacionActual();
   const api = getApiLayer();
   const [activos, movimientos, posiciones] = await Promise.allSettled([
     api.crypto.getAssets(),
     api.crypto.getTransactions(),
     api.crypto.getStakingPositions(),
   ]);
-  if (!sigueVigente(generacion)) return;
+  if (!sigueVigente(generacion)) return false;
   // Solo escribe la carga mas reciente. La pantalla pide una al abrir y otra
   // tras cada operacion: si la primera contestaba al final, pisaba la lista
   // con una foto de antes de la operacion y el movimiento nuevo desaparecia.
-  if (carga !== ultimaCargaCripto) return;
+  if (carga !== ultimaCargaCripto) return cargaCriptoMasNueva;
   const store = useCryptoStore.getState();
+  let todo = true;
   if (activos.status === 'fulfilled' && activos.value.success && activos.value.data) {
     store.setAssets(fusionarConCatalogo(activos.value.data));
+  } else {
+    todo = false;
   }
   if (movimientos.status === 'fulfilled' && movimientos.value.success && movimientos.value.data) {
     store.setCryptoTransactions(movimientos.value.data);
+  } else {
+    todo = false;
   }
   if (posiciones.status === 'fulfilled' && posiciones.value.success && posiciones.value.data) {
     store.setStakingPositions(posiciones.value.data);
+  } else {
+    todo = false;
   }
+  return todo;
 }
 
 export async function refreshTransactions(): Promise<void> {

@@ -175,7 +175,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	costoUSD := usd
 	// El saldo, el tope, el segundo factor y la idempotencia del fiat viven en
 	// CreateTransaction; el abono solo ocurre si el cobro confirma.
-	fila, err := s.tx.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
+	fila, repetida, err := s.tx.CrearOReconocer(ctx, userID, &transaction.CreateTransactionRequest{
 		Type:             transaction.TypeCryptoBuy,
 		Amount:           fiatMinor,
 		Currency:         currency,
@@ -193,7 +193,7 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	if err != nil {
 		return nil, fmt.Errorf("buy %s: %w", req.Asset, err)
 	}
-	return s.anotado(ctx, userID, fila, compra), nil
+	return s.anotado(ctx, userID, fila, compra, repetida), nil
 }
 
 // Sell vende cripto a cambio de fiat.
@@ -319,11 +319,11 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 		}
 	}
 
-	fila, err := s.tx.CreateTransaction(ctx, userID, pedido)
+	fila, repetida, err := s.tx.CrearOReconocer(ctx, userID, pedido)
 	if err != nil {
 		return nil, fmt.Errorf("sell %s: %w", req.Asset, err)
 	}
-	return s.anotado(ctx, userID, fila, venta), nil
+	return s.anotado(ctx, userID, fila, venta, repetida), nil
 }
 
 // anotado devuelve el movimiento de cripto que cuelga de la fila `fila` del
@@ -334,20 +334,26 @@ func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*T
 // que vale es lo que se anoto aquella vez, con su precio. Si la lectura falla,
 // el dinero igual ya se movio: se responde exito con lo calculado y el id de la
 // fila, no un error que invite a reintentar.
-func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.TransactionRecord, calculado *TransactionRecord) *TransactionRecord {
+//
+// repetida es lo que dijo el libro: que esta llamada no movio nada. Viaja en la
+// respuesta para que la pantalla no la anote como una operacion nueva.
+func (s *Service) anotado(ctx context.Context, userID string, fila *transaction.TransactionRecord, calculado *TransactionRecord, repetida bool) *TransactionRecord {
 	if mov, err := s.repo.GetTransaction(ctx, userID, fila.ID); err == nil {
+		mov.Replayed = repetida
 		return mov
 	}
 	calculado.ID = fila.ID
 	if calculado.CreatedAt.IsZero() {
 		calculado.CreatedAt = fila.CreatedAt
 	}
+	calculado.Replayed = repetida
 	return calculado
 }
 
 // compraOVentaYaHecha busca, SIN pedir el precio, la compra o la venta que la
 // llave del cliente ya completo. Si es la que se esta pidiendo (esLaMisma), la
-// devuelve; si es otra, rechaza el pedido con ErrLlaveReutilizada.
+// devuelve marcada como repeticion; si es otra, rechaza el pedido con
+// ErrLlaveReutilizada.
 //
 // La repeticion de algo que ya se hizo se contesta con lo que se hizo
 // entonces, y para eso el precio no hace falta. Con el precio primero, el
@@ -376,6 +382,7 @@ func (s *Service) compraOVentaYaHecha(ctx context.Context, userID, llave string,
 	if !esLaMisma(hecha) {
 		return nil, fmt.Errorf("%w: %s", transaction.ErrLlaveReutilizada, llave)
 	}
+	hecha.Replayed = true
 	return hecha, nil
 }
 
@@ -415,6 +422,7 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		if err := mismaOperacion(previo, tx); err != nil {
 			return nil, err
 		}
+		previo.Replayed = true
 		return previo, nil
 	}
 	if errSaldo != nil {
@@ -458,6 +466,7 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		if err := mismaOperacion(hecho, tx); err != nil {
 			return nil, err
 		}
+		hecho.Replayed = true
 		return hecho, nil
 	}
 
@@ -585,6 +594,7 @@ func (s *Service) posicionYaAbierta(ctx context.Context, userID string, hecho *T
 	if pos.Status != "active" {
 		return nil, ErrApartadoYaRetirado
 	}
+	pos.Replayed = true
 	return pos, nil
 }
 
