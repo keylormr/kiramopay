@@ -107,8 +107,9 @@ describe('BusinessHomeView — la llave del retiro', () => {
 
   // La promesa vale para el reintento de ahora: la llave se olvida al cerrar
   // sesión, y la sesión se cierra sola tras un rato sin uso. Y remite a las
-  // transacciones: el retiro llega a la cuenta personal, y los movimientos del
-  // negocio solo traen los cobros.
+  // transacciones de la cuenta personal, que es donde llega el retiro: los
+  // movimientos del negocio solo traen los cobros, y en el modo negocio no hay
+  // lista de transacciones.
   it('un corte de red avisa que reintentar ahora no retira dos veces, y que más tarde conviene revisar', async () => {
     mocks.withdrawMerchant.mockResolvedValue(sinRed);
     const user = userEvent.setup();
@@ -118,7 +119,9 @@ describe('BusinessHomeView — la llave del retiro', () => {
 
     expect(await screen.findByText(/No pudimos confirmar el retiro/)).toBeInTheDocument();
     expect(screen.getByText(/Si lo intentas de nuevo ahora con el mismo monto, no se retirará dos veces/)).toBeInTheDocument();
-    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus transacciones/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Si lo intentas más tarde, revisa antes las transacciones de tu cuenta personal/),
+    ).toBeInTheDocument();
   });
 
   it('otro monto es otro retiro y lleva otra llave', async () => {

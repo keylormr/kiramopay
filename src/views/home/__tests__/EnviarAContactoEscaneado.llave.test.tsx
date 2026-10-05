@@ -282,7 +282,8 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
   });
 
   // La X de la hoja respeta el envío en vuelo, como tocar afuera: cerrarla a
-  // mitad del envío escondía la respuesta.
+  // mitad del envío escondía la respuesta. Escanea, espera dos animaciones y
+  // duerme: con la máquina cargada pasa el límite de 5 s de vitest.
   it('con el envío en vuelo, la X de la hoja está deshabilitada y no la cierra', async () => {
     let responder!: (valor: unknown) => void;
     mocks.send.mockReturnValueOnce(
@@ -308,7 +309,7 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
 
     responder(enviado);
     expect(await within(hoja).findByText('Pago realizado')).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('un envío nuevo, que no es repetición, trae el saldo, las transacciones y el historial SINPE', async () => {
     mocks.send.mockResolvedValue(enviado);

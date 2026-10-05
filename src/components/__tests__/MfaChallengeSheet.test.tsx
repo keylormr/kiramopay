@@ -57,6 +57,25 @@ describe('MfaChallengeSheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // El cliente de hoy convierte todo fallo en una respuesta, pero si la
+  // verificación lanzara, la hoja (que no se cierra mientras verifica) quedaría
+  // trabada hasta recargar la app.
+  it('si la verificación lanza, lo dice y la X vuelve a cerrar', async () => {
+    mocks.totpVerify.mockRejectedValue(new Error('se cayó'));
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<MfaChallengeSheet isOpen onClose={onClose} onVerified={vi.fn()} confirmLabel="Verificar y enviar" />, {
+      wrapper: Wrapper,
+    });
+
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verificar y enviar' }));
+    expect(await screen.findByText('Algo salió mal. Intenta de nuevo.')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/cerrar/i));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('si el código no sirvió, la X vuelve a cerrar', async () => {
     mocks.totpVerify.mockResolvedValue({ success: false, error: { code: 'INVALID_CODE', message: 'Código inválido' } });
     const onClose = vi.fn();
