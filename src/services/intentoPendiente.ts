@@ -15,7 +15,8 @@
  * comercio) y por firma. Era uno por ambito, y otro envio en medio —otra
  * tarjeta del asistente, un SINPE desde otra pantalla— reemplazaba la llave
  * del que se corto: reintentarlo con los mismos datos lo mandaba dos veces.
- * Cada ambito guarda los ultimos TOPE; pasado el tope se olvida el mas viejo.
+ * Cada ambito guarda los TOPE usados mas recientemente: reintentar uno lo
+ * renueva, y pasado el tope se olvida el que lleva mas sin usarse.
  * Se suelta cuando la operacion salio, cuando el servidor contesta que ya
  * estaba hecha o que la llave es de otra, cuando se cancela el segundo factor
  * (el servidor lo pide antes de crear nada), y al cerrar sesion. Que una llave
@@ -32,15 +33,18 @@
 
 const CLAVE = 'kiramopay-intentos-pendientes';
 
-// Los pendientes que guarda cada ambito. Un pendiente es una operacion que no
-// se sabe si salio: varios a la vez ya es raro.
+// Los pendientes que guarda cada ambito. Ademas de lo que se corto quedan las
+// llaves de los rechazos (saldo, tope diario, un numero que no es de
+// KiramoPay): no se sueltan porque la pantalla no sabe si el servidor llego a
+// hacer algo. Se van al salir bien, al cerrar sesion o, pasado el tope, la que
+// lleva mas sin usarse.
 const TOPE = 10;
 
 interface Intento {
   firma: string;
   llave: string;
 }
-// Por ambito, del mas viejo al mas nuevo.
+// Por ambito, del que lleva mas sin usarse al ultimo usado.
 type Intentos = Record<string, Intento[]>;
 
 // Lo que se lee del almacenamiento puede venir de otra version de la app o
@@ -106,12 +110,25 @@ const idDe = (persona: string, ambito: string) => `${persona}|${ambito}`;
  * firma), aunque en medio haya habido otros; una nueva si no hay pendiente
  * con esa firma.
  */
-export function llaveDelIntento(persona: string, ambito: string, firma: string, nueva: () => string): string {
+export function llaveDelIntento(
+  persona: string,
+  ambito: string,
+  firma: string,
+  nueva: () => string,
+): string {
   const intentos = leer();
   const id = idDe(persona, ambito);
   const lista = intentos[id] ?? [];
   const actual = lista.find((i) => i.firma === firma);
-  if (actual) return actual.llave;
+  if (actual) {
+    // Reintentarlo lo renueva: el tope olvida el que lleva mas sin usarse, no
+    // el mas viejo. Si no, diez intentos distintos despues se llevaban la
+    // llave del envio cortado aunque se acabara de reintentar.
+    if (lista[lista.length - 1] !== actual) {
+      escribir({ ...intentos, [id]: [...lista.filter((i) => i !== actual), actual] });
+    }
+    return actual.llave;
+  }
   const llave = nueva();
   escribir({ ...intentos, [id]: [...lista, { firma, llave }].slice(-TOPE) });
   return llave;

@@ -66,6 +66,11 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   >({});
   const persona = useAuthStore((s) => s.user?.id ?? '');
   const [showMfa, setShowMfa] = useState(false);
+  // Lo que autoriza el segundo factor, para su boton: un SINPE se envia, una
+  // recarga o un recibo se pagan. Sin esto decia "Verificar y activar", el de
+  // activar el segundo factor en Perfil. No se borra al cerrar: la hoja se va
+  // con su texto.
+  const [mfaPaga, setMfaPaga] = useState(false);
   // The proposal whose confirmation hit the high-value MFA gate, retried after
   // verify. Lleva la llave del envio: cancelar el segundo factor suelta esa.
   const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string } | null>(null);
@@ -202,6 +207,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     // High-value action: prompt for a TOTP code, then retry this same proposal.
     if (!res.success && res.error?.code === MFA_REQUIRED) {
       mfaRetryRef.current = { key, p, llave };
+      setMfaPaga(p.kind !== 'sinpe_transfer');
       setShowMfa(true);
       setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
       return;
@@ -463,6 +469,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       {/* High-value MFA challenge → on verify, retry the pending proposal */}
       <MfaChallengeSheet
         isOpen={showMfa}
+        confirmLabel={mfaPaga ? t('mfa_verify_and_pay') : t('mfa_verify_and_send')}
         onClose={() => {
           setShowMfa(false);
           // Sin verificar, la propuesta no salio: el servidor pide el segundo

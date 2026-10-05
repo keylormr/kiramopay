@@ -295,13 +295,19 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
 
     await escanearYEnviar(user);
     await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
-    const equis = within(await hojaDeArriba()).getByRole('button', { name: 'Cerrar' });
+    // La hoja del escáner termina de salir: una hoja cerrada sigue 300 ms en
+    // pantalla, lo que dura su animación.
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(1));
+    const hoja = screen.getByRole('dialog');
+    const equis = within(hoja).getByRole('button', { name: 'Cerrar' });
     expect(equis).toBeDisabled();
     await user.click(equis);
-    expect(screen.queryAllByRole('dialog')).toHaveLength(1);
+    // Si la X la hubiera cerrado, pasada esa animación ya no estaría.
+    await new Promise((r) => setTimeout(r, 350));
+    expect(screen.getByRole('dialog')).toBe(hoja);
 
     responder(enviado);
-    expect(await screen.findByText('Pago realizado')).toBeInTheDocument();
+    expect(await within(hoja).findByText('Pago realizado')).toBeInTheDocument();
   });
 
   it('un envío nuevo, que no es repetición, trae el saldo, las transacciones y el historial SINPE', async () => {

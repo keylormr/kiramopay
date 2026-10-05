@@ -68,7 +68,16 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
   };
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={handleClose} title={t('mfa_challenge_title')}>
+    // Con el codigo en vuelo no se cierra (ni la X, ni el fondo, ni Escape, ni
+    // Atras): cerrar no detenia la verificacion, y si el servidor la daba por
+    // buena la operacion salia igual, despues de que la persona la cancelo. La
+    // peticion tiene su limite de espera; al volver, se puede cerrar.
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={handleClose}
+      dismissable={!loading}
+      title={t('mfa_challenge_title')}
+    >
       <div className="space-y-5">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3">

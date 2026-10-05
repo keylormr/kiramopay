@@ -16,9 +16,10 @@ interface BottomSheetProps {
    */
   titleAccessory?: React.ReactNode;
   /**
-   * Cuando es false, ni el click en el fondo, ni Escape, ni el boton Atras del
-   * navegador cierran la hoja: una operacion en vuelo (p.ej. una transferencia)
-   * no debe perder su hoja por un toque accidental. Por defecto true.
+   * Cuando es false, ni la X (que se ve deshabilitada), ni el click en el
+   * fondo, ni Escape, ni el boton Atras del navegador cierran la hoja: una
+   * operacion en vuelo (p.ej. una transferencia) no debe perder su hoja por un
+   * toque accidental. Por defecto true.
    */
   dismissable?: boolean;
 }

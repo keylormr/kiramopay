@@ -79,7 +79,8 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   //
   // Vive fuera de la pantalla (ver intentoPendiente): ir a Reportes, bloquear
   // la app o recargarla desmonta este inicio, y volver a retirar lo mismo tiene
-  // que llevar la misma llave igual. Una por comercio.
+  // que llevar la misma llave igual. Una por retiro pendiente (monto y
+  // moneda), hasta diez por comercio.
   const persona = state.user?.id ?? '';
   const ambitoDelRetiro = `retiro|${merchant.id}`;
   const llaveDelRetiro = (firma: string) =>
