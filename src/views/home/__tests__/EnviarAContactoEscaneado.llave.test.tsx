@@ -281,6 +281,41 @@ describe('HomeView — la llave del envío al contacto escaneado', () => {
     expect(segunda).toBe(primera);
   });
 
+  // La X de la hoja respeta el envío en vuelo, como tocar afuera: cerrarla a
+  // mitad del envío escondía la respuesta.
+  it('con el envío en vuelo, la X de la hoja está deshabilitada y no la cierra', async () => {
+    let responder!: (valor: unknown) => void;
+    mocks.send.mockReturnValueOnce(
+      new Promise((r) => {
+        responder = r;
+      }),
+    );
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    const equis = within(await hojaDeArriba()).getByRole('button', { name: 'Cerrar' });
+    expect(equis).toBeDisabled();
+    await user.click(equis);
+    expect(screen.queryAllByRole('dialog')).toHaveLength(1);
+
+    responder(enviado);
+    expect(await screen.findByText('Pago realizado')).toBeInTheDocument();
+  });
+
+  it('un envío nuevo, que no es repetición, trae el saldo, las transacciones y el historial SINPE', async () => {
+    mocks.send.mockResolvedValue(enviado);
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+    expect(await screen.findByText('Pago realizado')).toBeInTheDocument();
+    expect(mocks.dataSync.refreshAccounts).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
+  });
+
   // Las tres entradas de SINPE le dan la misma llave al mismo envío (ámbito
   // 'sinpe', firma teléfono con +506 y monto): el corte en una y el reintento
   // en otra no lo mandan dos veces.

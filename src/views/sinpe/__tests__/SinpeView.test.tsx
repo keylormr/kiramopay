@@ -672,13 +672,35 @@ describe('SinpeView — la llave del envío', () => {
     setup();
 
     await openSendSheetAndSubmit(user);
-    expect(await screen.findByText(/ya se hizo con otros datos/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ya se hizo con otros datos\. Revisa tus transacciones antes de intentar de nuevo/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/idempotency key reused/)).not.toBeInTheDocument();
 
     await confirmarDeNuevo(user);
     await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
     const [primera, segunda] = llaves();
     expect(segunda).not.toBe(primera);
+  });
+
+  // Verificar el segundo factor reintenta el MISMO envío: la misma llave.
+  it('el reintento tras verificar el segundo factor lleva la misma llave', async () => {
+    mocks.api.sinpe.send
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
+      .mockResolvedValueOnce({ success: true, data: sentTx });
+    mocks.api.mfa.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByText('Verificar y enviar'));
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
   });
 
   // Cambiar de pestaña desmonta la pantalla, y bloquear la app o recargarla

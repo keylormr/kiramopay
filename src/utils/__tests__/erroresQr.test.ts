@@ -30,6 +30,13 @@ describe('mensajeDeCobro', () => {
     expect(mensajeDeCobro(t, 'NO_PODES_PAGARTE')).toBe('No puedes pagarte a ti mismo.');
   });
 
+  // La lista de quien paga se llama "Transacciones recientes", y los otros
+  // seis idiomas ya decían transacciones.
+  it('en espanol, la llave de otro cobro remite a las transacciones', () => {
+    const t = traductor(es as unknown as Record<string, string>);
+    expect(mensajeDeCobro(t, 'LLAVE_REUTILIZADA')).toMatch(/Revisa tus transacciones antes de intentar de nuevo/);
+  });
+
   it('un codigo desconocido devuelve vacio para que la vista use su generico', () => {
     expect(mensajeDeCobro(traductor({}), 'OTRA_COSA')).toBe('');
     expect(mensajeDeCobro(traductor({}))).toBe('');

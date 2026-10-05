@@ -205,9 +205,23 @@ func TestTransferenciaHecha(t *testing.T) {
 		t.Fatal("sin telefono no hay destino que comparar: no es aquella transferencia")
 	}
 
-	const fallida = "hecha:fallida"
-	insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", fallida, transaction.StatusFailed, 30000)
-	if busca(fallida, 30000, transaction.TypeP2PSend, "") != nil {
-		t.Fatal("una transferencia fallida no se contesta como hecha: el dinero no se movio")
+	// El estado se mira aunque el telefono, el monto, la moneda y el tipo
+	// coincidan: una fila de ese envio que no quedo completada no se contesta
+	// como hecha.
+	const noCompletada = "hecha:no-completada"
+	pedidoNoCompletado := transferencia(emisor, receptor, 30000, noCompletada)
+	pedidoNoCompletado.SenderCounterpartyPhone = numero
+	noHecha, _, err := svc.CreateTransfer(ctx, pedidoNoCompletado)
+	if err != nil {
+		t.Fatalf("la transferencia que se va a marcar: %v", err)
+	}
+	if fila := busca(noCompletada, 30000, transaction.TypeP2PSend, numero); fila == nil || fila.ID != noHecha.ID {
+		t.Fatalf("antes de cambiarle el estado es la misma transferencia: %v", fila)
+	}
+	for _, estado := range []string{transaction.StatusFailed, transaction.StatusPending} {
+		forzarEstado(t, pool, noHecha.ID, estado)
+		if busca(noCompletada, 30000, transaction.TypeP2PSend, numero) != nil {
+			t.Fatalf("una transferencia %s no se contesta como hecha: el dinero no se movio", estado)
+		}
 	}
 }

@@ -87,7 +87,7 @@ describe('AssistantView — confirming a high-value proposal', () => {
     // The confirmation hits the high-value gate → challenge sheet, not an error.
     expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('000000'), '123456');
-    await user.click(screen.getByText('Verificar y activar'));
+    await user.click(screen.getByText('Verificar y enviar'));
 
     await waitFor(() => {
       expect(mockApi.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
@@ -108,6 +108,62 @@ describe('AssistantView — confirming a high-value proposal', () => {
     await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
     expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
     expect(await screen.findByText('Confirmado')).toBeInTheDocument();
+  });
+
+  // Un envío nuevo va a las transacciones y al historial SINPE: sin traerlos,
+  // las dos listas quedaban sin él hasta volver a entrar.
+  it('un envío nuevo trae las transacciones y el historial SINPE, no solo el saldo', async () => {
+    mockApi.sinpe.send.mockResolvedValue({ success: true, data: { id: 't1' } });
+    const user = userEvent.setup();
+    setup();
+
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'envía 200000 a 8888-7777{Enter}');
+    await user.click(await screen.findByText('Confirmar'));
+    expect(await screen.findByText('Confirmado')).toBeInTheDocument();
+
+    expect(mockDataSync.refreshAccounts).toHaveBeenCalled();
+    expect(mockDataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mockDataSync.refreshSinpe).toHaveBeenCalled();
+  });
+
+  // El segundo factor autoriza esta operación: "Verificar y activar" es el
+  // botón de activar el segundo factor en Perfil. Una recarga se paga.
+  it('el segundo factor de una recarga dice "Verificar y pagar"', async () => {
+    mockApi.assistant.chat.mockResolvedValue({
+      success: true,
+      data: {
+        reply: 'Preparé la recarga.',
+        toolsUsed: ['propose_recharge'],
+        proposals: [
+          {
+            kind: 'recharge',
+            summary: 'Recarga ₡200,000 a 8888-7777',
+            amountMinor: 20000000,
+            currency: 'CRC',
+            phone: '88887777',
+            operator: 'kolbi',
+            description: '',
+          },
+        ],
+      },
+    });
+    mockApi.services.recharge.mockReset();
+    mockApi.services.recharge
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
+      .mockResolvedValueOnce({ success: true, data: { id: 'r1' } });
+    mockApi.mfa.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
+    const user = userEvent.setup();
+    setup();
+
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'recarga 200000 al 8888-7777{Enter}');
+    await user.click(await screen.findByText('Confirmar'));
+
+    expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByText('Verificar y pagar'));
+    await waitFor(() => expect(mockApi.services.recharge).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -179,7 +235,7 @@ describe('AssistantView — la llave del envío SINPE', () => {
     await pedirYConfirmar(user);
     expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('000000'), '123456');
-    await user.click(screen.getByText('Verificar y activar'));
+    await user.click(screen.getByText('Verificar y enviar'));
     await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(2));
 
     const [primero, segundo] = pedidos();

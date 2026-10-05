@@ -106,7 +106,9 @@ describe('BusinessHomeView — la llave del retiro', () => {
   });
 
   // La promesa vale para el reintento de ahora: la llave se olvida al cerrar
-  // sesión, y la sesión se cierra sola tras un rato sin uso.
+  // sesión, y la sesión se cierra sola tras un rato sin uso. Y remite a las
+  // transacciones: el retiro llega a la cuenta personal, y los movimientos del
+  // negocio solo traen los cobros.
   it('un corte de red avisa que reintentar ahora no retira dos veces, y que más tarde conviene revisar', async () => {
     mocks.withdrawMerchant.mockResolvedValue(sinRed);
     const user = userEvent.setup();
@@ -116,7 +118,7 @@ describe('BusinessHomeView — la llave del retiro', () => {
 
     expect(await screen.findByText(/No pudimos confirmar el retiro/)).toBeInTheDocument();
     expect(screen.getByText(/Si lo intentas de nuevo ahora con el mismo monto, no se retirará dos veces/)).toBeInTheDocument();
-    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus movimientos/)).toBeInTheDocument();
+    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus transacciones/)).toBeInTheDocument();
   });
 
   it('otro monto es otro retiro y lleva otra llave', async () => {
@@ -149,7 +151,9 @@ describe('BusinessHomeView — la llave del retiro', () => {
 
     const hoja = await abrirRetiro(user, '300');
     await retirar(user, hoja);
-    expect(await screen.findByText(/ya se hizo con otros datos/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ya se hizo con otros datos\. Revisa tus transacciones antes de intentar de nuevo/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/idempotency key reused/)).toBeNull();
 
     await retirar(user, hoja);

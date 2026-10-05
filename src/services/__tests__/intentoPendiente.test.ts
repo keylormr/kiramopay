@@ -40,12 +40,29 @@ describe('intentoPendiente', () => {
     expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).toBe(deAna);
   });
 
-  it('guarda unos pocos por ámbito: pasado el tope se olvida el más viejo', () => {
+  it('guarda unos pocos por ámbito: pasado el tope se olvida el que lleva más sin usarse', () => {
     const primera = m.llaveDelIntento('ana', 'sinpe', 'firma-0', nueva);
     let ultima = '';
     for (let i = 1; i <= 30; i++) ultima = m.llaveDelIntento('ana', 'sinpe', `firma-${i}`, nueva);
     expect(m.llaveDelIntento('ana', 'sinpe', 'firma-30', nueva)).toBe(ultima);
     expect(m.llaveDelIntento('ana', 'sinpe', 'firma-0', nueva)).not.toBe(primera);
+  });
+
+  // El desalojo era por creación: una llave reintentada seguía siendo la más
+  // vieja, y con diez intentos distintos después se olvidaba aunque se acabara
+  // de reintentar. El siguiente reintento llevaba otra llave y mandaba la
+  // plata dos veces.
+  it('reintentar un pendiente lo renueva: no es el primero en olvidarse', () => {
+    const cortado = m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva);
+    for (let i = 0; i < 5; i++) m.llaveDelIntento('ana', 'sinpe', `+5067777000${i}|1000`, nueva);
+    expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).toBe(cortado);
+    for (let i = 5; i < 10; i++) m.llaveDelIntento('ana', 'sinpe', `+5067777000${i}|1000`, nueva);
+    expect(m.llaveDelIntento('ana', 'sinpe', '+50688887777|5000', nueva)).toBe(cortado);
+  });
+
+  it('guarda varios pendientes a la vez: los cinco siguen', () => {
+    const llaves = Array.from({ length: 5 }, (_, i) => m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva));
+    llaves.forEach((llave, i) => expect(m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva)).toBe(llave));
   });
 
   it('va por persona: otra persona con la misma firma no recibe la llave', () => {
