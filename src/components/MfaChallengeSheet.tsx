@@ -56,7 +56,15 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
     if (code.length < 6) return;
     setLoading(true);
     setError('');
-    const res = await getApiLayer().mfa.totpVerify(code, purpose);
+    // La hoja no se cierra mientras verifica: si la verificacion lanzara en vez
+    // de contestar (el cliente de hoy no lo hace), quedaria trabada hasta
+    // recargar la app. Se trata como un fallo mas.
+    let res;
+    try {
+      res = await getApiLayer().mfa.totpVerify(code, purpose);
+    } catch {
+      res = { success: false, error: { code: 'ERROR', message: t('err_generic') } };
+    }
     setLoading(false);
     if (!res.success) {
       setError(res.error?.message || t('twofa_invalid_code'));
