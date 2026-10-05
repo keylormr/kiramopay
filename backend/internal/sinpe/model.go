@@ -33,6 +33,13 @@ type SendResponse struct {
 	// against the external rail, whose settlement to other banks is not yet
 	// enabled — so the client must not present it as delivered.
 	Internal bool `json:"internal"`
+	// Replayed dice que la respuesta repite un envio que ya estaba hecho bajo
+	// la misma llave: en esta llamada no se movio nada. Sale solo cuando es
+	// cierto, y es lo que le permite a la pantalla no anotarlo ni celebrarlo
+	// como si fuera otro. Sin la marca, a quien repetia a proposito un envio
+	// identico con la llave que la pantalla conservaba se le decia "Enviado"
+	// por un envio que no se hizo.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 // SINPE Móvil limits (per BCCR public reference; kept independently here).
@@ -68,6 +75,11 @@ var (
 	// which a client-side amount check already filters out before the
 	// request, so mapping THOSE to a phone-specific message would mislead.
 	ErrInvalidPhone = errors.New("invalid SINPE Móvil phone number")
+	// ErrBuscarDestino envuelve un fallo de la base al buscar a quien recibe.
+	// No dice nada del numero ni lo arregla quien envia: el handler contesta
+	// 500, con el detalle solo en el log. Antes se tragaba y se contestaba "no
+	// es usuario", y despues salia como un 400 con el texto del driver.
+	ErrBuscarDestino = errors.New("no se pudo buscar a quien recibe")
 )
 
 // ContactExistsError carries the EXISTING contact alongside the rejection, so

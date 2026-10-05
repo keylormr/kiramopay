@@ -263,13 +263,17 @@ export interface IQRPaymentRepository {
   updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>>;
   /** The shop's own balance, in major units (business money, not the owner's). */
   getMerchantBalance(merchantId: string, currency?: string): Promise<ApiResponse<number>>;
-  /** Move part of the shop's balance into the owner's personal wallet. */
+  /**
+   * Move part of the shop's balance into the owner's personal wallet.
+   * `repetida`: el servidor contesto con un retiro que ya estaba hecho bajo esa
+   * llave, y esta vez no se movio nada.
+   */
   withdrawMerchant(
     merchantId: string,
     amount: number,
     currency: string,
     idempotencyKey: string,
-  ): Promise<ApiResponse<void>>;
+  ): Promise<ApiResponse<{ repetida: boolean }>>;
   createQRCode(request: CreateQRCodeRequest): Promise<ApiResponse<QRPaymentCode>>;
   getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>>;
   /** El codigo permanente propio; se crea la primera vez que se pide. */

@@ -70,3 +70,16 @@ func TestResponderErrorDeEquipo_CedulaSinCuenta(t *testing.T) {
 		t.Fatalf("%d %s %q, se esperaba 400 ADD_STAFF_FAILED invalid role", rec.Code, codigo, msg)
 	}
 }
+
+// El motor de transferencias rechaza con su propio ErrLlaveReutilizada la
+// llave de un pago que describe otro monto. Caia al PAYMENT_FAILED generico,
+// mientras que el mismo caso detectado por el modulo respondia 409
+// LLAVE_REUTILIZADA: dos respuestas para una sola situacion.
+func TestResponderError_LlaveDeOtraTransferenciaEs409(t *testing.T) {
+	rec := httptest.NewRecorder()
+	responderError(rec, fmt.Errorf("qr payment transfer: %w", transaction.ErrLlaveReutilizada))
+	codigo, _ := codigoDe(t, rec)
+	if rec.Code != http.StatusConflict || codigo != "LLAVE_REUTILIZADA" {
+		t.Fatalf("%d %s, se esperaba 409 LLAVE_REUTILIZADA", rec.Code, codigo)
+	}
+}
