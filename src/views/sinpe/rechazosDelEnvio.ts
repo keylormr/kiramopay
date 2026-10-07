@@ -14,6 +14,9 @@ export const CLAVES_DEL_RECHAZO_SINPE: Readonly<Record<string, string>> = {
   // Sin respuesta, el envio pudo haber salido. La llave se conserva, y eso es
   // lo que permite decir que reintentar ahora no lo manda dos veces.
   NETWORK_ERROR: 'sinpe_err_sin_confirmar',
+  // El 500 es lo mismo: el servidor fallo y el envio pudo haber salido (un
+  // commit que se corta termina aqui). Un rechazo tiene su propio codigo.
+  SINPE_FAILED: 'sinpe_err_sin_confirmar',
   LLAVE_REUTILIZADA: 'err_llave_reutilizada',
   INSUFFICIENT_BALANCE: 'insufficient_funds',
   SINGLE_PAYMENT_LIMIT_EXCEEDED: 'sinpe_err_maximo_por_envio',

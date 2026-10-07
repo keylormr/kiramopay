@@ -39,6 +39,8 @@ const CLAVES_DEL_RECHAZO_DEL_RETIRO: Readonly<Record<string, string>> = {
   // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y eso es
   // lo que permite decir que reintentar no lo hace dos veces.
   NETWORK_ERROR: 'business_withdraw_sin_confirmar',
+  // El 500 es lo mismo: el servidor fallo y el retiro pudo haber salido.
+  WITHDRAW_FAILED: 'business_withdraw_sin_confirmar',
   LLAVE_REUTILIZADA: 'err_llave_reutilizada',
   MERCHANT_INSUFFICIENT_BALANCE: 'business_err_saldo_insuficiente',
 };

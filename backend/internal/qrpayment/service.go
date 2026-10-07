@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
@@ -601,9 +603,15 @@ func (s *Service) WithdrawToOwner(
 	if currency == "" {
 		currency = "CRC"
 	}
+	// Solo un comercio que no existe, o que no es de quien retira, es "no
+	// encontrado". Una caida de la base salia igual, como un 404 sin nada en
+	// el log.
 	m, err := s.repo.GetMerchant(ctx, merchantID)
-	if err != nil || m.UserID != userID {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && m.UserID != userID) {
 		return nil, ErrComercioNoEncontrado
+	}
+	if err != nil {
+		return nil, fmt.Errorf("leer el comercio: %w", err)
 	}
 	// No balance pre-check here: the transaction service replays idempotent
 	// retries first, and the ledger enforces the funds atomically — a read

@@ -80,6 +80,13 @@ func (h *Handler) GetMerchantBalance(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
+	// Un id que ni siquiera tiene la forma del de un comercio es un comercio
+	// que no existe. Sin esto la base fallaba al compararlo y, ahora que una
+	// falla de la base es un 500, saldria como tal.
+	if _, err := uuid.Parse(merchantID); err != nil {
+		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		return
+	}
 	var req struct {
 		Amount         int64  `json:"amount"`
 		Currency       string `json:"currency"`
@@ -114,7 +121,9 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrComercioNoEncontrado):
 			response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
 		default:
-			// La base, el libro: el detalle queda en el log.
+			// La base, el libro: el detalle queda en el log. Un commit que se
+			// corta tambien cae aqui, asi que la pantalla lo dice como un
+			// retiro sin confirmar.
 			response.Error(w, http.StatusInternalServerError, "WITHDRAW_FAILED", err.Error())
 		}
 		return

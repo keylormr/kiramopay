@@ -999,7 +999,7 @@ export interface paths {
                         "application/json": components["schemas"]["SinpeSendResponse"];
                     };
                 };
-                /** @description VALIDATION_ERROR (phone format, amount not positive), RECIPIENT_NOT_USER, SELF_SEND, INVALID_PHONE, INVALID_BODY, or SINPE_FAILED when the risk engine blocks the transfer. */
+                /** @description VALIDATION_ERROR (phone format, amount not positive), RECIPIENT_NOT_USER, SELF_SEND, INVALID_PHONE, INVALID_BODY, or TRANSFER_BLOCKED when the risk engine blocks the transfer. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1035,7 +1035,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description SINPE_FAILED — a server failure; the detail is only logged. */
+                /** @description SINPE_FAILED — a server failure; the detail is only logged. The transfer may have gone through (a commit that is cut off ends here too): retrying with the same `idempotency_key` does not send twice. */
                 500: {
                     headers: {
                         [name: string]: unknown;
@@ -2991,7 +2991,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_NOT_FOUND — unknown merchant, or the caller is not its owner (not told apart). */
+                /** @description MERCHANT_NOT_FOUND — unknown merchant (including an id that is not a UUID), or the caller is not its owner (not told apart). */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -3018,7 +3018,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description WITHDRAW_FAILED — a server failure; the detail is only logged. */
+                /** @description WITHDRAW_FAILED — a server failure, such as the database failing to read the merchant; the detail is only logged. The withdrawal may have gone through: retrying with the same `idempotency_key` does not withdraw twice. */
                 500: {
                     headers: {
                         [name: string]: unknown;

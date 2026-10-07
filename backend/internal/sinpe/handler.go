@@ -139,12 +139,16 @@ func respuestaDelRechazo(err error) (int, string, string) {
 	case errors.Is(err, transaction.ErrMonthlyLimitExceeded):
 		return http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
 			transaction.ErrMonthlyLimitExceeded.Error()
-	// Sin codigo propio, como en cripto: la pantalla dice el generico.
+	// Con codigo propio: SINPE_FAILED queda solo para el 500, y la pantalla
+	// no puede decirle "no se pudo, intenta de nuevo" a un envio que pudo
+	// haber salido ni "no pudimos confirmar" a uno que se rechazo.
 	case errors.Is(err, transaction.ErrBloqueadoPorRiesgo):
-		return http.StatusBadRequest, "SINPE_FAILED", transaction.ErrBloqueadoPorRiesgo.Error()
+		return http.StatusBadRequest, "TRANSFER_BLOCKED", transaction.ErrBloqueadoPorRiesgo.Error()
 	}
 	// ErrBuscarDestino —la base fallo al buscar a quien recibe— y cualquier
-	// otro: nada que corregir en el pedido.
+	// otro: nada que corregir en el pedido. Un commit que se corta tambien
+	// cae aqui, asi que el envio pudo haber salido: la pantalla lo dice como
+	// algo sin confirmar.
 	return http.StatusInternalServerError, "SINPE_FAILED", err.Error()
 }
 

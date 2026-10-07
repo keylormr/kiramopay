@@ -663,7 +663,7 @@ paths:
           description: >-
             VALIDATION_ERROR (phone format, amount not positive),
             RECIPIENT_NOT_USER, SELF_SEND, INVALID_PHONE, INVALID_BODY, or
-            SINPE_FAILED when the risk engine blocks the transfer.
+            TRANSFER_BLOCKED when the risk engine blocks the transfer.
           content:
             application/json:
               schema:
@@ -694,7 +694,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: SINPE_FAILED — a server failure; the detail is only logged.
+          description: >-
+            SINPE_FAILED — a server failure; the detail is only logged. The
+            transfer may have gone through (a commit that is cut off ends here
+            too): retrying with the same `idempotency_key` does not send twice.
           content:
             application/json:
               schema:
@@ -1846,8 +1849,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >-
-            MERCHANT_NOT_FOUND — unknown merchant, or the caller is not its
-            owner (not told apart).
+            MERCHANT_NOT_FOUND — unknown merchant (including an id that is not
+            a UUID), or the caller is not its owner (not told apart).
           content:
             application/json:
               schema:
@@ -1861,7 +1864,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: WITHDRAW_FAILED — a server failure; the detail is only logged.
+          description: >-
+            WITHDRAW_FAILED — a server failure, such as the database failing to
+            read the merchant; the detail is only logged. The withdrawal may
+            have gone through: retrying with the same `idempotency_key` does
+            not withdraw twice.
           content:
             application/json:
               schema:
