@@ -23,6 +23,7 @@ import { useSavingsStore } from './savings.store';
 import { useRecurringStore } from './recurring.store';
 import { useBusinessStore } from './business.store';
 import { nuevaGeneracion } from '@/services/generacionDeSesion';
+import { podarIntentos } from '@/services/intentoPendiente';
 
 export function limpiarDatosDeUsuario(): void {
   // PRIMERO, y fuera del early-return de abajo: invalidar el trabajo
@@ -59,7 +60,9 @@ export function limpiarDatosDeUsuario(): void {
   // Los intentos pendientes —la llave que se conserva cuando no se sabe si un
   // envio salio— NO se olvidan aqui: la sesion puede vencer antes del
   // reintento, y sin la llave volver a entrar y reintentar mandaria la plata
-  // otra vez. Lo guardado no dice de quien es (ver intentoPendiente).
+  // otra vez. Lo guardado no dice de quien es (ver intentoPendiente). Solo se
+  // poda lo vencido y la forma de antes, que si lo decia.
+  podarIntentos();
   useSavingsStore.setState({ goals: [] });
   useRecurringStore.setState({ payments: [] });
   useBusinessStore.setState({ activeMerchantId: null });

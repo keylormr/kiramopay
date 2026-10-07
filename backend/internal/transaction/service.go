@@ -213,6 +213,26 @@ func (s *Service) soloDeHoy(ctx context.Context, rec *TransactionRecord) *Transa
 	return nil
 }
 
+// hermanaQueGano: la llave tiene asiento, pero de OTRA fila de esta misma
+// persona bajo esta misma llave. Es la carrera que abre soloDeHoy: el intento
+// de otro dia seguia en vuelo —esperando el candado de la billetera,
+// reintentando un conflicto— cuando este abrio su fila, y gano el asiento. El
+// dinero se movio una vez; si esa fila describe el mismo movimiento (lo
+// compara quien llama, como en la relectura), esto es su repeticion y no un
+// error. Al reves tambien: si gano este, el otro la encuentra aqui. Devuelve
+// nil si el asiento no es de una fila de esta persona con esta llave.
+func (s *Service) hermanaQueGano(ctx context.Context, userID, llave, propia string) *TransactionRecord {
+	hermana, err := s.repo.FindByIdempotencyKey(ctx, userID, llave)
+	if err != nil || hermana == nil || hermana.ID == propia || hermana.Status != StatusCompleted {
+		return nil
+	}
+	txID, existe, err := s.ledger.PostingTxID(ctx, llave)
+	if err != nil || !existe || txID != hermana.ID {
+		return nil
+	}
+	return hermana
+}
+
 // ErrLlaveDeOtroMovimiento: la llave de idempotencia ya tiene un asiento
 // escrito, pero de OTRO movimiento. No se puede dar por hecho el actual.
 var ErrLlaveDeOtroMovimiento = errors.New("idempotency key already belongs to another movement")
@@ -266,6 +286,11 @@ func (s *Service) repararFilaConAsiento(ctx context.Context, llave, esperado str
 		return false, nil
 	}
 	if txID != "" && txID != esperado {
+		// El asiento es de otra fila: las de esta llamada no movieron nada.
+		// Sin marcarlas quedaban 'pending' para siempre, y en una
+		// transferencia lo recibido aparecia pendiente en el historial de
+		// otra persona. Una que ya completo no se toca (ver MarcarFallida).
+		s.marcarFallidaSinAsiento(ctx, ids...)
 		return false, fmt.Errorf("%w: %s", ErrLlaveDeOtroMovimiento, llave)
 	}
 	for _, id := range ids {
@@ -627,6 +652,9 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 			return nil, false, fmt.Errorf("post ledger: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, tx.ID, tx.ID); err != nil {
+			if h := s.hermanaQueGano(ctx, userID, req.IdempotencyKey, tx.ID); h != nil && mismoMovimiento(h, req) {
+				return h, true, nil
+			}
 			return nil, false, err
 		}
 		// El asiento lo escribio otro intento con esta misma llave: el dinero
@@ -777,6 +805,9 @@ func (s *Service) WithdrawMerchantToUser(
 			return nil, false, fmt.Errorf("post withdrawal: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, idempotencyKey, rec.ID, rec.ID); err != nil {
+			if h := s.hermanaQueGano(ctx, userID, idempotencyKey, rec.ID); h != nil && mismoRetiro(h, merchantID, currency, amount) {
+				return h, true, nil
+			}
 			return nil, false, err
 		}
 		// El asiento lo escribio otro intento con esta misma llave.
@@ -1147,6 +1178,13 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 			return nil, nil, false, fmt.Errorf("post ledger: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, sender.ID, sender.ID, idReceptor); err != nil {
+			if h := s.hermanaQueGano(ctx, req.FromUserID, req.IdempotencyKey, sender.ID); h != nil && mismaTransferencia(h, req) {
+				var recv *TransactionRecord
+				if !toMerchant {
+					recv = s.recepcionDe(ctx, req)
+				}
+				return h, recv, true, nil
+			}
 			return nil, nil, false, err
 		}
 		// El asiento lo escribio otro intento con esta misma llave: el dinero

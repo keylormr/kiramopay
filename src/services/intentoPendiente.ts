@@ -30,12 +30,14 @@
  * trague una operacion nueva identica lo resuelve el servidor, que marca la
  * repeticion: la pantalla lo dice y suelta la llave.
  *
- * Como queda en el aparato despues de salir, lo guardado no dice nada: la
- * persona, el ambito y la firma (en SINPE, el telefono y el monto) van como un
- * resumen, y solo la llave, que es al azar, va tal cual. No es cifrado —el
- * resumen se calcula en la app y cualquiera puede repetirlo—: alcanza para que
- * no se lean a simple vista, y como la persona va adentro, probar numeros y
- * montos exige conocer su id.
+ * Como queda en el aparato despues de salir, lo guardado no dice de quien es,
+ * a que numero ni cuanto: la persona, el ambito y la firma (en SINPE, el
+ * telefono y el monto) van como un resumen. La llave va tal cual: es al azar,
+ * aunque algunas pantallas le ponen un prefijo con el tipo de operacion (el
+ * retiro del comercio, `mwd:`). El resumen no es cifrado —se calcula en la app
+ * y cualquiera puede repetirlo—: alcanza para que no se lea a simple vista, y
+ * como la persona va adentro, probar numeros y montos exige conocer su id. Al
+ * cerrar sesion se poda lo vencido y la forma de antes (ver podarIntentos).
  *
  * No importa ningun store. Quien lo usa le pasa la persona.
  */
@@ -105,12 +107,15 @@ function sanear(datos: unknown): Intentos {
   return limpios;
 }
 
-// Sin los vencidos. Tambien se va uno fechado mas de un dia en el futuro: con
-// el reloj del aparato atrasado despues, no venceria nunca.
+// Sin los vencidos. Uno fechado en el futuro —el reloj del aparato se atraso
+// despues— se fecha de nuevo en el ahora: descartarlo perdia la llave de un
+// envio cortado, y con su fecha vieja no venceria nunca.
 function vigentes(intentos: Intentos, ahora: number): Intentos {
   const quedan: Intentos = {};
   for (const [id, lista] of Object.entries(intentos)) {
-    const validos = lista.filter((i) => Math.abs(ahora - i.t) <= VIGENCIA);
+    const validos = lista
+      .filter((i) => ahora - i.t <= VIGENCIA)
+      .map((i) => (i.t > ahora ? { ...i, t: ahora } : i));
     if (validos.length) quedan[id] = validos;
   }
   return quedan;
@@ -181,6 +186,16 @@ export function llaveDelIntento(
   const otros = lista.filter((i) => i !== actual);
   escribir({ ...intentos, [id]: [...otros, { f, k: llave, t: ahora }].slice(-TOPE) });
   return llave;
+}
+
+/**
+ * Deja en el aparato solo lo vigente, con la forma de ahora. Lo vencido y la
+ * forma de antes, con la persona y la firma legibles, se iban recien con la
+ * siguiente escritura; al cerrar sesion no tienen por que esperar a que alguien
+ * vuelva a enviar algo.
+ */
+export function podarIntentos(): void {
+  escribir(leer(Date.now()));
 }
 
 /**

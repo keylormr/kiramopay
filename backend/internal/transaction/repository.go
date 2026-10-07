@@ -617,12 +617,14 @@ func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, u
 // La llave es unica por dia, no para siempre, asi que puede haber mas de una
 // fila: la de un intento sin asiento de otro dia, que quedo fallida, y la de
 // hoy. Se lee primero la completada y, si no hay, la mas reciente: la
-// repeticion tiene que contestar con el movimiento que si ocurrio.
+// repeticion tiene que contestar con el movimiento que si ocurrio. La fecha
+// sale con formato fijo, y no con ::text, que depende del DateStyle de la
+// sesion: deOtroDia la compara con fechaDe.
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,
 		`SELECT id, wallet_id, user_id, type, amount, currency, fee, status,
-		        COALESCE(metadata::text, '{}'), created_at, created_date::text,
+		        COALESCE(metadata::text, '{}'), created_at, to_char(created_date, 'YYYY-MM-DD'),
 		        COALESCE(counterparty_type, ''), COALESCE(counterparty_name, ''),
 		        COALESCE(counterparty_phone, ''), COALESCE(counterparty_id::text, '')
 		 FROM transactions

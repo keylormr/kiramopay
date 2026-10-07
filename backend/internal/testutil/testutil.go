@@ -420,6 +420,21 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		-- pasa en produccion cuando una llave vuelve otro dia.
 		UNIQUE (user_id, idempotency_key, created_date)
 	);
+	-- En una base local persistida el CREATE de arriba es un no-op y la tabla
+	-- conserva la llave unica para siempre: las pruebas de la fila de otro dia
+	-- chocaban (23505) sin que el codigo estuviera mal.
+	DO $$
+	BEGIN
+		IF EXISTS (SELECT 1 FROM pg_constraint
+		            WHERE conname = 'transactions_user_id_idempotency_key_key') THEN
+			ALTER TABLE transactions DROP CONSTRAINT transactions_user_id_idempotency_key_key;
+		END IF;
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint
+		                WHERE conname = 'transactions_user_id_idempotency_key_created_date_key') THEN
+			ALTER TABLE transactions ADD CONSTRAINT transactions_user_id_idempotency_key_created_date_key
+				UNIQUE (user_id, idempotency_key, created_date);
+		END IF;
+	END $$;
 
 	-- ── Ledger ──────────────────────────────────────────────────────────
 	CREATE TABLE IF NOT EXISTS ledger_accounts (
