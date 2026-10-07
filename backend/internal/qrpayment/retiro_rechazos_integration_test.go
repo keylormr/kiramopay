@@ -11,6 +11,40 @@ import (
 	"github.com/kiramopay/backend/internal/qrpayment"
 )
 
+// Una caida de la base al leer el comercio no es "ese comercio no existe": es
+// un 500, con el detalle en el log, y la pantalla lo trata como un retiro sin
+// confirmar. Salia 404 MERCHANT_NOT_FOUND, sin nada en el log. Se simula con
+// el contexto ya cancelado.
+func TestWithdrawMerchant_UnaFallaAlLeerElComercioEsUn500(t *testing.T) {
+	svc, _, _, owner := setupQR(t)
+	qr := verifiedMerchantQR(t, svc, owner, 100000)
+
+	req := peticion(http.MethodPost, "/api/v1/qr/merchants/"+qr.MerchantID+"/withdraw",
+		`{"amount":1000,"currency":"CRC","idempotency_key":"wd-base-caida"}`, owner, qr.MerchantID)
+	ctx, cancelar := context.WithCancel(req.Context())
+	cancelar()
+	rec := httptest.NewRecorder()
+	qrpayment.NewHandler(svc).WithdrawMerchant(rec, req.WithContext(ctx))
+
+	if rec.Code != http.StatusInternalServerError || codigoDeError(t, rec) != "WITHDRAW_FAILED" {
+		t.Fatalf("= %d %s, se esperaba 500 WITHDRAW_FAILED", rec.Code, rec.Body.String())
+	}
+}
+
+// Un id que ni siquiera tiene la forma del de un comercio es lo mismo que un
+// comercio que no existe: 404, no el error de la base al compararlo.
+func TestWithdrawMerchant_UnIdQueNoEsDeUnComercioEs404(t *testing.T) {
+	svc, _, _, owner := setupQR(t)
+	rec := httptest.NewRecorder()
+	qrpayment.NewHandler(svc).WithdrawMerchant(rec, peticion(http.MethodPost,
+		"/api/v1/qr/merchants/no-es-un-id/withdraw",
+		`{"amount":1000,"currency":"CRC","idempotency_key":"wd-id-raro"}`, owner, "no-es-un-id"))
+
+	if rec.Code != http.StatusNotFound || codigoDeError(t, rec) != "MERCHANT_NOT_FOUND" {
+		t.Fatalf("= %d %s, se esperaba 404 MERCHANT_NOT_FOUND", rec.Code, rec.Body.String())
+	}
+}
+
 // Cada rechazo del retiro del saldo del negocio sale con su propio codigo. Salian
 // como 400 WITHDRAW_FAILED con el texto del error tal cual ("insufficient
 // business balance", "merchant not found"), y la pantalla lo mostraba en ingles.

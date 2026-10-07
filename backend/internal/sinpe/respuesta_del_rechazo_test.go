@@ -30,8 +30,10 @@ func TestRespuestaDelRechazo(t *testing.T) {
 			http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
 		{"el tope mensual", envuelto(transaction.ErrMonthlyLimitExceeded),
 			http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED"},
+		// Con codigo propio: SINPE_FAILED queda para el 500, que la pantalla
+		// trata como un envio sin confirmar.
 		{"el motor de riesgo", envuelto(transaction.ErrBloqueadoPorRiesgo),
-			http.StatusBadRequest, "SINPE_FAILED"},
+			http.StatusBadRequest, "TRANSFER_BLOCKED"},
 		{"la base fallo al buscar a quien recibe", ErrBuscarDestino,
 			http.StatusInternalServerError, "SINPE_FAILED"},
 		{"cualquier otro", envuelto(errors.New("conn reset")),

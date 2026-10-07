@@ -235,9 +235,14 @@ describe('SinpeView — send', () => {
       'monthly spending limit exceeded',
       'Este envío supera tu límite mensual.',
     ],
+    // El 500: el servidor fallo y el envio pudo haber salido (un commit que se
+    // corta). La llave se conserva, asi que reintentar ahora no lo manda dos
+    // veces: es lo que dice el texto del envio sin confirmar.
+    ['SINPE_FAILED', 'internal server error', /^No pudimos confirmar el envío/],
+    // El motor de riesgo, como cualquier codigo que la pantalla no conoce.
     [
-      'SINPE_FAILED',
-      'create transaction: post ledger: conn reset',
+      'TRANSFER_BLOCKED',
+      'this transaction was blocked by the risk engine',
       'No se pudo hacer el envío. Intenta de nuevo.',
     ],
   ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {

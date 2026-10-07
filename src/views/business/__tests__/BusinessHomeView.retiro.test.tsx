@@ -151,11 +151,10 @@ describe('BusinessHomeView — la llave del retiro', () => {
       'insufficient business balance',
       'El saldo del negocio no alcanza para ese monto.',
     ],
-    [
-      'WITHDRAW_FAILED',
-      'post withdrawal: conn reset',
-      'No se pudo hacer el retiro. Intenta de nuevo.',
-    ],
+    // El 500: el retiro pudo haber salido. La llave se conserva, asi que
+    // reintentar ahora no lo hace dos veces.
+    ['WITHDRAW_FAILED', 'internal server error', /^No pudimos confirmar el retiro/],
+    ['MERCHANT_NOT_FOUND', 'merchant not found', 'No se pudo hacer el retiro. Intenta de nuevo.'],
   ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {
     mocks.withdrawMerchant.mockResolvedValueOnce({ success: false, error: { code, message } });
     const user = userEvent.setup();
