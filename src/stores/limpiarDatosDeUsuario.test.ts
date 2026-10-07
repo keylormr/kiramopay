@@ -104,11 +104,18 @@ describe('limpiarDatosDeUsuario', () => {
     expect(localStorage.getItem('kiramopay-transactions')).toBeNull();
   });
 
-  it('olvida los intentos pendientes de quien sale', () => {
+  // Tras un corte, la llave es lo que evita que el reintento mande la plata
+  // dos veces, y la sesión puede vencer (30 minutos sin uso) antes de ese
+  // reintento. Se olvidaba al salir: volver a entrar y reintentar lo mandaba
+  // otra vez. Se conserva para la misma persona, y lo guardado no dice nada
+  // de ella (ver intentoPendiente).
+  it('conserva los intentos pendientes de quien sale: al volver a entrar, la misma llave', () => {
     llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'llave-de-victor');
     limpiarDatosDeUsuario();
-    expect(localStorage.getItem('kiramopay-intentos-pendientes')).toBeNull();
-    expect(llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'otra')).toBe('otra');
+    expect(llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'otra')).toBe(
+      'llave-de-victor',
+    );
+    expect(llaveDelIntento('ana', 'sinpe', '+50610101010|5000', () => 'de-ana')).toBe('de-ana');
   });
 
   it('no toca nada en modo demo (sin backend)', () => {

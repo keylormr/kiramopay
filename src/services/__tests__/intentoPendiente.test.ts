@@ -61,8 +61,12 @@ describe('intentoPendiente', () => {
   });
 
   it('guarda varios pendientes a la vez: los cinco siguen', () => {
-    const llaves = Array.from({ length: 5 }, (_, i) => m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva));
-    llaves.forEach((llave, i) => expect(m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva)).toBe(llave));
+    const llaves = Array.from({ length: 5 }, (_, i) =>
+      m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva),
+    );
+    llaves.forEach((llave, i) =>
+      expect(m.llaveDelIntento('ana', 'sinpe', `f-${i}`, nueva)).toBe(llave),
+    );
   });
 
   it('va por persona: otra persona con la misma firma no recibe la llave', () => {
@@ -92,11 +96,36 @@ describe('intentoPendiente', () => {
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).not.toBe(llave);
   });
 
-  it('cerrar sesion los olvida todos', () => {
+  // La llave sobrevive a cerrar sesión (ver limpiarDatosDeUsuario), así que
+  // lo que queda en el aparato no puede decir nada: ni quién, ni a qué número,
+  // ni cuánto. Antes se borraba al salir porque guardaba todo eso tal cual.
+  it('no guarda nada legible: ni la persona, ni el número, ni el monto', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    m.llaveDelIntento('persona-7f3a', 'sinpe', '+50688881234|73519', nueva);
+    m.llaveDelIntento('persona-7f3a', 'retiro|comercio-9c1', 'comercio-9c1|300|CRC', nueva);
+    const guardado = localStorage.getItem('kiramopay-intentos-pendientes') ?? '';
+    expect(guardado).not.toBe('');
+    for (const rastro of ['persona-7f3a', '88881234', '73519', 'comercio-9c1', 'sinpe', 'retiro']) {
+      expect(guardado).not.toContain(rastro);
+    }
+  });
+
+  // Dura un día desde su último uso: alcanza para reintentar después de
+  // volver a entrar, y no se queda para siempre en el aparato.
+  it('vence: un día sin usarse, la misma firma lleva otra llave', () => {
+    const ahora = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
-    m.olvidarIntentos();
-    expect(localStorage.getItem('kiramopay-intentos-pendientes')).toBeNull();
+    ahora.mockReturnValue(1_700_000_000_000 + 24 * 3_600_000 + 1);
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).not.toBe(llave);
+  });
+
+  it('reintentar renueva el plazo', () => {
+    const ahora = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
+    ahora.mockReturnValue(1_700_000_000_000 + 23 * 3_600_000);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
+    ahora.mockReturnValue(1_700_000_000_000 + 46 * 3_600_000);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
   });
 
   it('sin almacenamiento sigue funcionando en memoria', () => {
@@ -130,5 +159,18 @@ describe('intentoPendiente', () => {
     const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
     expect(llave).toMatch(/\S/);
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
+  });
+
+  // La forma de antes guardaba la persona y la firma tal cual. Si una version
+  // la dejo escrita, no se usa y la siguiente escritura la borra.
+  it('la forma de antes, legible, no se usa y desaparece al escribir', () => {
+    localStorage.setItem(
+      'kiramopay-intentos-pendientes',
+      JSON.stringify({ 'ana|sinpe': [{ firma: '+50688881234|73519', llave: 'vieja' }] }),
+    );
+    expect(m.llaveDelIntento('ana', 'sinpe', '+50688881234|73519', nueva)).not.toBe('vieja');
+    const guardado = localStorage.getItem('kiramopay-intentos-pendientes') ?? '';
+    expect(guardado).not.toContain('88881234');
+    expect(guardado).not.toContain('ana');
   });
 });

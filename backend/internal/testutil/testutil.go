@@ -415,7 +415,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		processed_at TIMESTAMPTZ,
 		completed_at TIMESTAMPTZ,
 		created_date DATE DEFAULT CURRENT_DATE,
-		UNIQUE (user_id, idempotency_key)
+		-- Como uq_tx_user_idempotency (018): la llave es unica por dia, no para
+		-- siempre. Con (user_id, idempotency_key) las pruebas no veian lo que
+		-- pasa en produccion cuando una llave vuelve otro dia.
+		UNIQUE (user_id, idempotency_key, created_date)
 	);
 
 	-- ── Ledger ──────────────────────────────────────────────────────────
