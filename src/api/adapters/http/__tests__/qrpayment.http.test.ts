@@ -218,3 +218,57 @@ describe('HttpQRPaymentRepository: el equipo del comercio deja pasar el codigo',
     expect(res.error).toEqual(sinRed);
   });
 });
+
+// El retiro del saldo del negocio pisaba el codigo con WITHDRAW_FAILED. La
+// pantalla necesita distinguir la red que se corto —el retiro pudo haber
+// salido, y el reintento tiene que llevar la misma llave— de la llave que ya es
+// de otro retiro, con la que el siguiente intento necesita otra.
+describe('HttpQRPaymentRepository: el retiro del negocio deja pasar el codigo', () => {
+  it('sin conexion llega con el aviso del cliente', async () => {
+    const sinRed = { code: 'NETWORK_ERROR', message: 'Sin conexión.' };
+    const post = vi.fn().mockResolvedValue({ success: false, error: sinRed });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.success).toBe(false);
+    expect(res.error).toEqual(sinRed);
+  });
+
+  it('la llave de otro retiro llega con su codigo', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: false,
+      error: { code: 'LLAVE_REUTILIZADA', message: 'idempotency key reused for a different movement' },
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.error?.code).toBe('LLAVE_REUTILIZADA');
+  });
+
+  it('sin codigo del servidor cae al generico del retiro', async () => {
+    const post = vi.fn().mockResolvedValue({ success: false, error: { message: 'Failed' } });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.error?.code).toBe('WITHDRAW_FAILED');
+  });
+});
+
+// La repeticion del retiro: el servidor contesta con el retiro que ya estaba
+// hecho bajo la llave y lo marca con `replayed: true`. La pantalla lo necesita
+// para no dar por nuevo un retiro que no hizo.
+describe('HttpQRPaymentRepository: el retiro dice si ya estaba hecho', () => {
+  it('la repeticion llega marcada', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't1', status: 'completed', amount: 30000, currency: 'CRC', replayed: true },
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(true);
+  });
+
+  it('el retiro nuevo no', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't1', status: 'completed', amount: 30000, currency: 'CRC' },
+    });
+    const res = await new HttpQRPaymentRepository(fakeClient({ post })).withdrawMerchant('m1', 300, 'CRC', 'k1');
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(false);
+  });
+});

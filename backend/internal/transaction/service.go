@@ -198,6 +198,41 @@ func (s *Service) marcarFallidaSinAsiento(ctx context.Context, ids ...string) {
 	}
 }
 
+// soloDeHoy decide si la fila sin completar y sin asiento que dejo un intento
+// anterior se reusa. Si es de otro dia no: completarla le dejaria su fecha
+// vieja al dinero que se mueve hoy, y el tope diario suma por created_date, asi
+// que ese dinero no contaria para el tope de hoy. Queda fallida —no movio
+// nada, el libro acaba de confirmar que la llave no tiene asiento— y el
+// movimiento va en una fila de hoy, que la llave unica por dia admite.
+// Devuelve la fila a reusar, o nil.
+func (s *Service) soloDeHoy(ctx context.Context, rec *TransactionRecord) *TransactionRecord {
+	if rec == nil || !deOtroDia(rec) {
+		return rec
+	}
+	s.marcarFallidaSinAsiento(ctx, rec.ID)
+	return nil
+}
+
+// hermanaQueGano: la llave tiene asiento, pero de OTRA fila de esta misma
+// persona bajo esta misma llave. Es la carrera que abre soloDeHoy: el intento
+// de otro dia seguia en vuelo —esperando el candado de la billetera,
+// reintentando un conflicto— cuando este abrio su fila, y gano el asiento. El
+// dinero se movio una vez; si esa fila describe el mismo movimiento (lo
+// compara quien llama, como en la relectura), esto es su repeticion y no un
+// error. Al reves tambien: si gano este, el otro la encuentra aqui. Devuelve
+// nil si el asiento no es de una fila de esta persona con esta llave.
+func (s *Service) hermanaQueGano(ctx context.Context, userID, llave, propia string) *TransactionRecord {
+	hermana, err := s.repo.FindByIdempotencyKey(ctx, userID, llave)
+	if err != nil || hermana == nil || hermana.ID == propia || hermana.Status != StatusCompleted {
+		return nil
+	}
+	txID, existe, err := s.ledger.PostingTxID(ctx, llave)
+	if err != nil || !existe || txID != hermana.ID {
+		return nil
+	}
+	return hermana
+}
+
 // ErrLlaveDeOtroMovimiento: la llave de idempotencia ya tiene un asiento
 // escrito, pero de OTRO movimiento. No se puede dar por hecho el actual.
 var ErrLlaveDeOtroMovimiento = errors.New("idempotency key already belongs to another movement")
@@ -251,6 +286,11 @@ func (s *Service) repararFilaConAsiento(ctx context.Context, llave, esperado str
 		return false, nil
 	}
 	if txID != "" && txID != esperado {
+		// El asiento es de otra fila: las de esta llamada no movieron nada.
+		// Sin marcarlas quedaban 'pending' para siempre, y en una
+		// transferencia lo recibido aparecia pendiente en el historial de
+		// otra persona. Una que ya completo no se toca (ver MarcarFallida).
+		s.marcarFallidaSinAsiento(ctx, ids...)
 		return false, fmt.Errorf("%w: %s", ErrLlaveDeOtroMovimiento, llave)
 	}
 	for _, id := range ids {
@@ -268,10 +308,62 @@ func (s *Service) repararFilaConAsiento(ctx context.Context, llave, esperado str
 // la MISMA operacion que se esta pidiendo. Una llave repetida con otro monto no
 // es un reintento: es otra operacion pidiendo prestada una llave usada, y
 // seguirla escribiria un asiento por un importe que la fila no dice.
+//
+// La contraparte tambien cuenta. En cripto es el activo: la misma llave y el
+// mismo monto en colones para comprar otro activo es otra compra. El nombre se
+// compara recortado como lo guarda la fila; sin eso, el reintento identico de
+// un movimiento con un nombre largo pasaria por otro.
 func mismoMovimiento(previa *TransactionRecord, req *CreateTransactionRequest) bool {
 	return previa.Amount == req.Amount &&
 		previa.Currency == req.Currency &&
-		previa.Type == req.Type
+		previa.Type == req.Type &&
+		previa.CounterpartyType == req.CounterpartyType &&
+		previa.CounterpartyName == truncateCounterpartyName(req.CounterpartyName)
+}
+
+// mismaContraparte compara a quien iba la plata. Las filas escritas antes de
+// guardarlo no lo dicen: con ellas se compara lo de siempre, y el reintento
+// sigue siendo reintento.
+func mismaContraparte(previa *TransactionRecord, id string) bool {
+	return previa.contraparteID == "" || previa.contraparteID == idContraparte(id)
+}
+
+// destinoDe es a quien va la plata de una transferencia: la persona o el
+// comercio.
+func destinoDe(req *CreateTransferRequest) string {
+	if req.ToMerchantID != "" {
+		return req.ToMerchantID
+	}
+	return req.ToUserID
+}
+
+// mismaTransferencia es mismoMovimiento para la fila de quien envia: monto,
+// moneda, tipo y a quien va. El nombre no se compara: es el que quien envia
+// tiene guardado para su contacto, y cambiarlo entre el intento y su reintento
+// no hace otra transferencia.
+func mismaTransferencia(previa *TransactionRecord, req *CreateTransferRequest) bool {
+	return previa.Amount == req.Amount &&
+		previa.Currency == req.Currency &&
+		previa.Type == req.TxType &&
+		mismaContraparte(previa, destinoDe(req))
+}
+
+// mismaRecepcion es lo mismo para la fila de quien recibe: de quien viene.
+func mismaRecepcion(previa *TransactionRecord, req *CreateTransferRequest) bool {
+	return previa.Amount == req.Amount &&
+		previa.Currency == req.Currency &&
+		previa.Type == req.ReceiveType &&
+		mismaContraparte(previa, req.FromUserID)
+}
+
+// mismoRetiro, para el retiro del saldo del negocio: monto, moneda y de que
+// comercio sale. El nombre del comercio tampoco: puede cambiar entre el intento
+// y su reintento sin que el retiro sea otro.
+func mismoRetiro(previa *TransactionRecord, merchantID, currency string, amount int64) bool {
+	return previa.Amount == amount &&
+		previa.Currency == currency &&
+		previa.Type == TypeMerchantWithdrawal &&
+		mismaContraparte(previa, merchantID)
 }
 
 // normalizarMoneda pone la moneda por defecto. La relectura de idempotencia
@@ -331,6 +423,65 @@ func (s *Service) LlaveYaTieneRespuesta(ctx context.Context, userID string, req 
 		return true, nil
 	}
 	return fila.Status == StatusCompleted, nil
+}
+
+// TransferenciaYaTieneRespuesta es LlaveYaTieneRespuesta para CreateTransfer:
+// dice si la transferencia va a contestar por la llave sola —porque ya tiene
+// ESTA transferencia completada, o porque la llave es de otra—, sin que el
+// saldo ni el cupo tengan nada que decir. Rigen las mismas reglas, incluida la
+// del orden: se pregunta DESPUES de leer lo que la comprobacion de cortesia
+// compara, nunca antes.
+func (s *Service) TransferenciaYaTieneRespuesta(ctx context.Context, req *CreateTransferRequest) (bool, error) {
+	if req.IdempotencyKey == "" {
+		return false, nil
+	}
+	if req.Currency == "" {
+		req.Currency = "CRC"
+	}
+	fila, err := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("leer la llave de idempotencia: %w", err)
+	}
+	if !mismaTransferencia(fila, req) {
+		return true, nil
+	}
+	return fila.Status == StatusCompleted, nil
+}
+
+// TransferenciaHecha trae la transferencia COMPLETADA que quien envia ya hizo
+// bajo esa llave, si es del mismo monto, moneda y tipo y fue al mismo
+// telefono; nil si no la hay.
+//
+// La usa quien ya no puede resolver el destino. En SINPE, el reintento de un
+// envio que ya salio busca otra vez a quien recibe por el telefono, y si esa
+// cuenta se cerro entre el envio y el reintento no lo encuentra: contestaba
+// "no es usuario" por un envio que si salio, y la pantalla lo daba por
+// fallido. Por eso compara el telefono que el envio dejo en su fila, y no la
+// cuenta de quien recibio, que ya no esta. Sin comparar el destino, la llave
+// de un envio hecho contestaba por un pedido del mismo monto a OTRO numero:
+// decia que aquel envio ya estaba hecho, con el nombre de quien lo recibio.
+// Sin telefono no hay destino que comparar, y no contesta nada: las filas que
+// no lo guardaron (las de antes de guardarlo) tampoco. Contestarlo no mueve
+// nada.
+func (s *Service) TransferenciaHecha(ctx context.Context, fromUserID, llave string, monto int64, moneda, tipo, telefono string) (*TransactionRecord, error) {
+	if llave == "" || telefono == "" {
+		return nil, nil
+	}
+	fila, err := s.repo.FindByIdempotencyKey(ctx, fromUserID, llave)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("leer la llave de idempotencia: %w", err)
+	}
+	if fila.Status != StatusCompleted || fila.Amount != monto || fila.Currency != moneda || fila.Type != tipo ||
+		fila.CounterpartyPhone != telefono {
+		return nil, nil
+	}
+	return fila, nil
 }
 
 // CreateTransaction is the public entry point used by HTTP handlers for
@@ -398,7 +549,7 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 				existing.Status = StatusCompleted
 				return existing, true, nil
 			}
-			previa = existing
+			previa = s.soloDeHoy(ctx, existing)
 		}
 	}
 
@@ -501,6 +652,9 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 			return nil, false, fmt.Errorf("post ledger: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, tx.ID, tx.ID); err != nil {
+			if h := s.hermanaQueGano(ctx, userID, req.IdempotencyKey, tx.ID); h != nil && mismoMovimiento(h, req) {
+				return h, true, nil
+			}
 			return nil, false, err
 		}
 		// El asiento lo escribio otro intento con esta misma llave: el dinero
@@ -544,15 +698,19 @@ func (s *Service) MerchantBalance(ctx context.Context, merchantID, currency stri
 // no merchant repository, and the caller already loaded the merchant to check
 // ownership. Empty is fine (the frontend falls back to a generic title) — it
 // used to store the merchant UUID, which surfaced raw in the history.
+//
+// repetido dice si el retiro ya estaba hecho bajo esa llave y esta llamada no
+// movio nada, con la misma regla que TransferirOReconocer: la pantalla lo
+// necesita para no darle al dueño por nuevo un retiro que no hizo.
 func (s *Service) WithdrawMerchantToUser(
 	ctx context.Context, merchantID, merchantName, userID, currency string, amount int64, idempotencyKey string,
-) (*TransactionRecord, error) {
+) (*TransactionRecord, bool, error) {
 	if amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+		return nil, false, fmt.Errorf("amount must be positive")
 	}
 	w, err := s.walletRepo.FindByUserID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("wallet not found")
+		return nil, false, fmt.Errorf("wallet not found")
 	}
 	if idempotencyKey == "" {
 		idempotencyKey = "mwithdraw:" + uuid.New().String()
@@ -564,11 +722,11 @@ func (s *Service) WithdrawMerchantToUser(
 	// dueño convencido de que ya lo saco.
 	var previa *TransactionRecord
 	if existing, _ := s.repo.FindByIdempotencyKey(ctx, userID, idempotencyKey); existing != nil {
-		if existing.Amount != amount || existing.Currency != currency || existing.Type != TypeMerchantWithdrawal {
-			return nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, idempotencyKey)
+		if !mismoRetiro(existing, merchantID, currency, amount) {
+			return nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, idempotencyKey)
 		}
 		if existing.Status == StatusCompleted {
-			return existing, nil
+			return existing, true, nil
 		}
 		// La reparacion va antes de leer el saldo del negocio, y por la razon
 		// que ya explicaba el comentario de arriba: un retiro que ya salio
@@ -576,20 +734,20 @@ func (s *Service) WithdrawMerchantToUser(
 		// algo que ya ocurrio.
 		hecho, err := s.repararFilaConAsiento(ctx, idempotencyKey, existing.ID, existing.ID)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if hecho {
 			existing.Status = StatusCompleted
-			return existing, nil
+			return existing, true, nil
 		}
-		previa = existing
+		previa = s.soloDeHoy(ctx, existing)
 	}
 	bal, err := s.ledger.MerchantBalance(ctx, merchantID, currency)
 	if err != nil {
-		return nil, fmt.Errorf("read merchant balance: %w", err)
+		return nil, false, fmt.Errorf("read merchant balance: %w", err)
 	}
 	if bal < amount {
-		return nil, ErrInsufficientMerchantBalance
+		return nil, false, ErrInsufficientMerchantBalance
 	}
 
 	rec := previa
@@ -602,21 +760,30 @@ func (s *Service) WithdrawMerchantToUser(
 			CounterpartyName: merchantName,
 			Description:      "Retiro del saldo del negocio",
 			IdempotencyKey:   idempotencyKey,
+			contraparteID:    merchantID,
 		})
 		if err != nil {
 			// A concurrent retry won the insert; it owns the posting. Se sigue
 			// sobre su fila en vez de devolverla: si ese intento se cayo antes
 			// de postear, abandonar aqui dejaria el retiro sin hacerse.
 			if !errors.Is(err, ErrDuplicate) || creada == nil {
-				return nil, fmt.Errorf("create withdrawal tx: %w", err)
+				return nil, false, fmt.Errorf("create withdrawal tx: %w", err)
+			}
+			// Pero solo si es ESTE retiro. Con otro monto, seguir sobre esa
+			// fila asentaria este monto con el id de una fila que dice otro; y
+			// si ya completo, devolverla seria contestar "ya estaba hecho" por
+			// un retiro que nunca se hizo.
+			if !mismoRetiro(creada, merchantID, currency, amount) {
+				return nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, idempotencyKey)
 			}
 			if creada.Status == StatusCompleted {
-				return creada, nil
+				return creada, true, nil
 			}
 		}
 		rec = creada
 	}
 
+	var repetido bool
 	_, err = s.ledger.Post(ctx, &ledger.Posting{
 		Description:    fmt.Sprintf("merchant withdrawal %d %s", amount, currency),
 		IdempotencyKey: idempotencyKey,
@@ -633,16 +800,21 @@ func (s *Service) WithdrawMerchantToUser(
 		if !errors.Is(err, ledger.ErrIdempotent) {
 			s.marcarFallidaSinAsiento(ctx, rec.ID)
 			if errors.Is(err, ledger.ErrInsufficientFunds) {
-				return nil, ErrInsufficientMerchantBalance
+				return nil, false, ErrInsufficientMerchantBalance
 			}
-			return nil, fmt.Errorf("post withdrawal: %w", err)
+			return nil, false, fmt.Errorf("post withdrawal: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, idempotencyKey, rec.ID, rec.ID); err != nil {
-			return nil, err
+			if h := s.hermanaQueGano(ctx, userID, idempotencyKey, rec.ID); h != nil && mismoRetiro(h, merchantID, currency, amount) {
+				return h, true, nil
+			}
+			return nil, false, err
 		}
+		// El asiento lo escribio otro intento con esta misma llave.
+		repetido = true
 	}
 	rec.Status = StatusCompleted
-	return rec, nil
+	return rec, repetido, nil
 }
 
 type CreateTransferRequest struct {
@@ -670,6 +842,12 @@ type CreateTransferRequest struct {
 	SenderCounterpartyName   string
 	ReceiverCounterpartyName string
 
+	// SenderCounterpartyPhone es el telefono de quien recibe, en la fila de
+	// quien envia. Lo pasa SINPE: cuando la cuenta de quien recibio ya no
+	// existe, es lo que distingue el reintento de aquel envio de un pedido del
+	// mismo monto a otro numero (ver TransferenciaHecha).
+	SenderCounterpartyPhone string
+
 	// EnLaMismaTx, si viene, corre DENTRO de la transaccion que escribe el
 	// asiento, junto con el cambio de estado de las dos filas: si devuelve
 	// error, el dinero no se mueve. Recibe el id de la fila del EMISOR, que es
@@ -692,29 +870,57 @@ type CreateTransferRequest struct {
 	FeeFromReceiver bool
 }
 
+// recepcionDe trae la fila de quien recibe que cuelga de la llave. Una fila
+// que describe otro movimiento —la llave choco con la de otra persona— no es
+// de esta transferencia: no se devuelve, no se repara ni se reusa.
+func (s *Service) recepcionDe(ctx context.Context, req *CreateTransferRequest) *TransactionRecord {
+	recv, _ := s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
+	if recv != nil && !mismaRecepcion(recv, req) {
+		return nil
+	}
+	return recv
+}
+
 // CreateTransfer atomically debits sender, credits receiver, books fee to
 // SYSTEM:FEES, and writes 2 transactions rows (one each). All in one tx.
 func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest) (sender, receiver *TransactionRecord, err error) {
+	sender, receiver, _, err = s.TransferirOReconocer(ctx, req)
+	return sender, receiver, err
+}
+
+// TransferirOReconocer es CreateTransfer con un dato mas: repetido dice si la
+// respuesta es la de una transferencia que ya estaba hecha bajo esa llave, es
+// decir, si esta llamada NO movio dinero. Lo necesita quien se lo muestra a una
+// persona —la repeticion no es otro envio, y celebrarla como nuevo le hace
+// creer que salio dos veces— y quien hace algo hacia afuera solo cuando la
+// plata se mueve, como avisarle a quien recibe.
+//
+// Repeticion es lo mismo que en CrearOReconocer: la fila que ya estaba
+// completada, la que estaba sin marcar aunque su asiento confirmo, la insercion
+// que gano un intento simultaneo y ya completo, y el asiento que otro intento
+// ya escribio. Las filas 'failed' o 'pending' sin asiento no lo son: ahi el
+// dinero se mueve en esta llamada, por primera vez.
+func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferRequest) (sender, receiver *TransactionRecord, repetido bool, err error) {
 	if req.Amount <= 0 {
-		return nil, nil, fmt.Errorf("amount must be positive")
+		return nil, nil, false, fmt.Errorf("amount must be positive")
 	}
 	toMerchant := req.ToMerchantID != ""
 	if toMerchant && req.ToUserID != "" {
-		return nil, nil, fmt.Errorf("only one of ToUserID/ToMerchantID allowed")
+		return nil, nil, false, fmt.Errorf("only one of ToUserID/ToMerchantID allowed")
 	}
 	if !toMerchant && req.ToUserID == "" {
-		return nil, nil, fmt.Errorf("receiver required")
+		return nil, nil, false, fmt.Errorf("receiver required")
 	}
 	if !toMerchant && req.FromUserID == req.ToUserID {
-		return nil, nil, fmt.Errorf("sender and receiver must differ")
+		return nil, nil, false, fmt.Errorf("sender and receiver must differ")
 	}
 	if req.Fee < 0 {
-		return nil, nil, fmt.Errorf("fee must not be negative")
+		return nil, nil, false, fmt.Errorf("fee must not be negative")
 	}
 	// In the merchant model the fee is carved out of the amount, so it must leave
 	// a positive credit for the receiver (the ledger rejects non-positive entries).
 	if req.FeeFromReceiver && req.Fee >= req.Amount {
-		return nil, nil, fmt.Errorf("fee must be less than amount")
+		return nil, nil, false, fmt.Errorf("fee must be less than amount")
 	}
 	if req.Currency == "" {
 		req.Currency = "CRC"
@@ -731,16 +937,19 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	var previaEmisor, previaReceptor *TransactionRecord
 	if req.IdempotencyKey != "" {
 		if existing, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey); existing != nil {
+			// La misma llave con otro monto, hacia otra persona o a otro
+			// comercio no es el reintento de aquella transferencia: devolverla
+			// le diria a quien envia que la plata llego a donde nunca la mando.
+			if !mismaTransferencia(existing, req) {
+				return nil, nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+			}
 			// A merchant collection has no receiver row to replay.
 			var recv *TransactionRecord
 			if !toMerchant {
-				recv, _ = s.repo.FindByIdempotencyKey(ctx, req.ToUserID, pairKey(req.IdempotencyKey, "recv"))
-			}
-			if existing.Amount != req.Amount || existing.Currency != req.Currency || existing.Type != req.TxType {
-				return nil, nil, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+				recv = s.recepcionDe(ctx, req)
 			}
 			if existing.Status == StatusCompleted {
-				return existing, recv, nil
+				return existing, recv, true, nil
 			}
 			var idRecv string
 			if recv != nil {
@@ -748,28 +957,31 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 			}
 			hecho, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, existing.ID, existing.ID, idRecv)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, false, err
 			}
 			if hecho {
 				existing.Status = StatusCompleted
 				if recv != nil {
 					recv.Status = StatusCompleted
 				}
-				return existing, recv, nil
+				return existing, recv, true, nil
 			}
-			previaEmisor, previaReceptor = existing, recv
+			// Cada fila por su lado: la de quien envia y la de quien recibe
+			// se crean juntas, pero un intento que cruzo la medianoche puede
+			// haberlas dejado en dias distintos.
+			previaEmisor, previaReceptor = s.soloDeHoy(ctx, existing), s.soloDeHoy(ctx, recv)
 		}
 	}
 
 	senderWallet, err := s.walletRepo.FindByUserID(ctx, req.FromUserID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("sender wallet not found")
+		return nil, nil, false, fmt.Errorf("sender wallet not found")
 	}
 	var receiverWallet *wallet.WalletRecord
 	if !toMerchant {
 		receiverWallet, err = s.walletRepo.FindByUserID(ctx, req.ToUserID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("receiver wallet not found")
+			return nil, nil, false, fmt.Errorf("receiver wallet not found")
 		}
 	}
 
@@ -780,28 +992,28 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		senderTotal += req.Fee
 	}
 	if req.Currency == "CRC" && senderWallet.BalanceCRC < senderTotal {
-		return nil, nil, fmt.Errorf("insufficient balance")
+		return nil, nil, false, fmt.Errorf("insufficient balance")
 	}
 	if req.Currency == "USD" && senderWallet.BalanceUSD < senderTotal {
-		return nil, nil, fmt.Errorf("insufficient balance")
+		return nil, nil, false, fmt.Errorf("insufficient balance")
 	}
 	if err := s.checkDailyLimit(ctx, req.FromUserID, req.Currency, req.Amount, senderWallet); err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	if s.mfa != nil && s.mfa.IsMFARequired(req.Amount, req.Currency) {
 		ok, err := s.mfa.HasVerifiedMFA(ctx, req.FromUserID, "high_value_tx")
 		if err != nil {
-			return nil, nil, fmt.Errorf("mfa check: %w", err)
+			return nil, nil, false, fmt.Errorf("mfa check: %w", err)
 		}
 		if !ok {
-			return nil, nil, ErrMFARequired
+			return nil, nil, false, ErrMFARequired
 		}
 	}
 
 	// La reja de riesgo, antes de escribir las filas.
 	if err := s.evaluarRiesgo(ctx, req.FromUserID, req.TxType, req.IdempotencyKey, req.Currency, req.Amount); err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	// The fee shows on whichever party absorbs it: the payer's row in the classic
@@ -812,14 +1024,16 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		senderFee, receiverFee = 0, req.Fee
 	}
 	senderReq := &CreateTransactionRequest{
-		Type:             req.TxType,
-		Amount:           req.Amount,
-		Currency:         req.Currency,
-		Fee:              senderFee,
-		CounterpartyType: "user",
-		CounterpartyName: req.SenderCounterpartyName,
-		Description:      req.Description,
-		IdempotencyKey:   req.IdempotencyKey,
+		Type:              req.TxType,
+		Amount:            req.Amount,
+		Currency:          req.Currency,
+		Fee:               senderFee,
+		CounterpartyType:  "user",
+		CounterpartyName:  req.SenderCounterpartyName,
+		CounterpartyPhone: req.SenderCounterpartyPhone,
+		Description:       req.Description,
+		IdempotencyKey:    req.IdempotencyKey,
+		contraparteID:     destinoDe(req),
 	}
 	receiveReq := &CreateTransactionRequest{
 		Type:             req.ReceiveType,
@@ -831,20 +1045,39 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		Description:      req.Description,
 		// Receiver idempotency: derive deterministically to avoid double-credit.
 		IdempotencyKey: pairKey(req.IdempotencyKey, "recv"),
+		contraparteID:  req.FromUserID,
 	}
 
 	sender = previaEmisor
 	if sender == nil {
 		sender, err = s.repo.Create(ctx, req.FromUserID, senderWallet.ID, senderReq)
 		if err != nil && !errors.Is(err, ErrDuplicate) {
-			return nil, nil, fmt.Errorf("create sender tx: %w", err)
+			return nil, nil, false, fmt.Errorf("create sender tx: %w", err)
+		}
+		// Un intento simultaneo con la misma llave gano la insercion. Se sigue
+		// sobre su fila solo si es ESTA transferencia: con otro monto se
+		// asentaria este monto con el id de una fila que dice otro, y con otro
+		// destino se le dejaria a otra persona un recibido sin plata.
+		if errors.Is(err, ErrDuplicate) && sender != nil {
+			if !mismaTransferencia(sender, req) {
+				return nil, nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
+			}
+			// Y si ya completo, es la repeticion de esta transferencia, igual
+			// que en la relectura de arriba.
+			if sender.Status == StatusCompleted {
+				var recv *TransactionRecord
+				if !toMerchant {
+					recv = s.recepcionDe(ctx, req)
+				}
+				return sender, recv, true, nil
+			}
 		}
 	}
 	// Sin fila del emisor no hay a que colgar el asiento: `sender.ID` es el
 	// TxID del posteo. Puede venir nil cuando la insercion choco por llave
 	// duplicada y la relectura de esa fila tambien fallo.
 	if sender == nil {
-		return nil, nil, fmt.Errorf("create sender tx: fila no disponible")
+		return nil, nil, false, fmt.Errorf("create sender tx: fila no disponible")
 	}
 	// A shop is not a user: its side of the collection is the qr_payments row
 	// plus the journal entry, so there is no receiver `transactions` row.
@@ -853,11 +1086,19 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 		if receiver == nil {
 			receiver, err = s.repo.Create(ctx, req.ToUserID, receiverWallet.ID, receiveReq)
 			if err != nil && !errors.Is(err, ErrDuplicate) {
-				return nil, nil, fmt.Errorf("create receiver tx: %w", err)
+				return nil, nil, false, fmt.Errorf("create receiver tx: %w", err)
+			}
+			// La fila de quien recibe ya es de otro movimiento: la llave choco
+			// con la de otra persona. Esta transferencia no se puede asentar
+			// sobre ella, y la fila propia de quien envia se cierra como
+			// fallida para que no quede 'pending' para siempre.
+			if errors.Is(err, ErrDuplicate) && receiver != nil && !mismaRecepcion(receiver, req) {
+				s.marcarFallidaSinAsiento(ctx, sender.ID)
+				return nil, nil, false, fmt.Errorf("%w: %s", ErrLlaveReutilizada, req.IdempotencyKey)
 			}
 		}
 		if receiver == nil {
-			return nil, nil, fmt.Errorf("create receiver tx: fila no disponible")
+			return nil, nil, false, fmt.Errorf("create receiver tx: fila no disponible")
 		}
 	}
 
@@ -934,11 +1175,23 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if _, err := s.ledger.Post(ctx, p); err != nil {
 		if !errors.Is(err, ledger.ErrIdempotent) {
 			s.marcarFallidaSinAsiento(ctx, sender.ID, idReceptor)
-			return nil, nil, fmt.Errorf("post ledger: %w", err)
+			return nil, nil, false, fmt.Errorf("post ledger: %w", err)
 		}
 		if err := s.completarAsientoRepetido(ctx, req.IdempotencyKey, sender.ID, sender.ID, idReceptor); err != nil {
-			return nil, nil, err
+			if h := s.hermanaQueGano(ctx, req.FromUserID, req.IdempotencyKey, sender.ID); h != nil && mismaTransferencia(h, req) {
+				var recv *TransactionRecord
+				if !toMerchant {
+					recv = s.recepcionDe(ctx, req)
+				}
+				return h, recv, true, nil
+			}
+			return nil, nil, false, err
 		}
+		// El asiento lo escribio otro intento con esta misma llave: el dinero
+		// se movio alla, no aqui. Lo dice el libro, y no si el gancho del
+		// llamante corrio: el gancho pudo correr en una pasada que despues se
+		// deshizo.
+		repetido = true
 	}
 	sender.Status = StatusCompleted
 	if receiver != nil {
@@ -951,7 +1204,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if s.uif != nil {
 		s.uif.Report(ctx, req.FromUserID, sender.ID, req.Currency, req.Amount)
 	}
-	return sender, receiver, nil
+	return sender, receiver, repetido, nil
 }
 
 // ErrSaldoInsuficiente: la billetera no alcanza para la salida. El texto es el

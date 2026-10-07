@@ -973,7 +973,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send SINPE transfer */
+        /**
+         * Send SINPE transfer
+         * @description Repeating a completed transfer with the same `idempotency_key` (same recipient and amount) returns the recorded transfer, with its `transaction_id` and `replayed: true`, and moves nothing, even when the balance or the daily SINPE quota no longer cover it (that transfer already consumed them) or the recipient has closed their account since (then the phone number is what is compared, so the key answers only for that number). The repetition writes no second history row and does not notify the recipient again. A key that belongs to a different amount or recipient gets 409 LLAVE_REUTILIZADA when the number belongs to a KiramoPay user, and 400 RECIPIENT_NOT_USER when it does not.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -994,6 +997,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["SinpeSendResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount or recipient, and the number belongs to a KiramoPay user. Nothing moved; a new transfer needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -2884,6 +2896,76 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw the shop balance to the owner's wallet (owner only)
+         * @description Moves money from the shop's own balance into the owner's personal wallet. Repeating a completed withdrawal with the same `idempotency_key` (same amount and currency, from the same shop) returns that withdrawal with `replayed: true` and moves nothing, even when the shop balance no longer covers it. A key that belongs to a different withdrawal gets 409 LLAVE_REUTILIZADA.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Amount in minor units */
+                        amount: number;
+                        /** @default CRC */
+                        currency?: string;
+                        /** @description Chosen by the client for each withdrawal and kept for its retries, so a retry after a lost response does not withdraw twice. */
+                        idempotency_key?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Withdrawn, or the repetition of a withdrawal already done */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantWithdrawal"];
+                    };
+                };
+                /** @description WITHDRAW_FAILED — unknown merchant or the caller is not its owner, the shop balance does not cover the amount, or the amount is not positive. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -8329,10 +8411,28 @@ export interface components {
             is_favorite?: boolean;
         };
         SinpeSendRequest: {
-            to_phone: string;
+            /**
+             * @description Costa Rican mobile number as +506 followed by its eight digits, with no spaces or dashes.
+             * @example +50688887777
+             */
+            phone: string;
             /** @description Amount in centimos */
             amount: number;
             description?: string;
+            /** @description Chosen by the client for each transfer and kept for its retries, so a retry after a lost response returns the same transfer instead of sending again. */
+            idempotency_key?: string;
+        };
+        MerchantWithdrawal: {
+            /** @description The owner's `merchant_withdrawal` transaction. */
+            transaction_id: string;
+            /** @example completed */
+            status: string;
+            /** @description Amount withdrawn, in minor units */
+            amount: number;
+            /** @example CRC */
+            currency: string;
+            /** @description Present, and true, only when the response repeats a withdrawal that was already done under the same `idempotency_key`: this call moved nothing. A new withdrawal does not carry the field. */
+            replayed?: boolean;
         };
         SinpeSendResponse: {
             transaction_id: string;
@@ -8348,6 +8448,8 @@ export interface components {
             recipient: string;
             /** @description True when the recipient is a KiramoPay user and the funds were credited to their wallet. False for external transfers, whose delivery to other banks is not yet enabled. */
             internal: boolean;
+            /** @description Present, and true, only when the response repeats a transfer that was already done under the same `idempotency_key`: this call moved nothing. A new transfer does not carry the field. */
+            replayed?: boolean;
         };
         PayBillRequest: {
             /** @example ICE */

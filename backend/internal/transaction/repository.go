@@ -77,10 +77,30 @@ func truncateCounterpartyName(name string) string {
 	return texto + puntosSuspensivos
 }
 
+// RecortarNombre es truncateCounterpartyName para otra columna del mismo ancho
+// (VARCHAR(100)): el nombre del historial SINPE (migracion 023), que desde que
+// se escribe dentro de la transaccion del dinero tampoco puede fallar por un
+// nombre largo.
+func RecortarNombre(nombre string) string {
+	return truncateCounterpartyName(nombre)
+}
+
+// idContraparte deja pasar solo un uuid, en su forma canonica. La columna es
+// de ese tipo: un id que no lo fuera haria fallar la insercion —y con ella el
+// movimiento— por un dato que solo sirve para comparar reintentos. Y la forma
+// canonica hace que la comparacion no dependa de mayusculas.
+func idContraparte(id string) string {
+	u, err := uuid.Parse(id)
+	if err != nil {
+		return ""
+	}
+	return u.String()
+}
+
 // Create inserts a transaction in pending status with idempotency_key
 // promoted to its own column (and metadata still preserved for legacy reads).
-// If a row already exists for (user_id, idempotency_key), returns it with
-// ErrDuplicate so the caller can short-circuit.
+// If a row already exists for (user_id, idempotency_key) on the same
+// created_date, returns it with ErrDuplicate so the caller can short-circuit.
 func (r *Repository) Create(ctx context.Context, userID, walletID string, req *CreateTransactionRequest) (*TransactionRecord, error) {
 	return r.CreateTx(ctx, r.db, userID, walletID, req)
 }
@@ -94,7 +114,7 @@ func (r *Repository) CreateTx(
 ) (*TransactionRecord, error) {
 	id := uuid.New().String()
 	now := time.Now()
-	createdDate := now.Format("2006-01-02")
+	createdDate := fechaDe(now)
 
 	metadata := "{}"
 
@@ -113,6 +133,7 @@ func (r *Repository) CreateTx(
 		Metadata:          metadata,
 		CreatedAt:         now,
 		CreatedDate:       createdDate,
+		contraparteID:     idContraparte(req.contraparteID),
 	}
 
 	idem := req.IdempotencyKey
@@ -120,13 +141,15 @@ func (r *Repository) CreateTx(
 		`INSERT INTO transactions
 		   (id, wallet_id, user_id, type, amount, currency, fee,
 		    counterparty_type, counterparty_name, counterparty_phone,
-		    status, metadata, idempotency_key, created_at, created_date)
+		    status, metadata, idempotency_key, created_at, created_date,
+		    counterparty_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 		         jsonb_build_object('description', COALESCE($12,'')),
-		         NULLIF($13,''), $14, $15)`,
+		         NULLIF($13,''), $14, $15, NULLIF($16,'')::uuid)`,
 		tx.ID, tx.WalletID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.Fee,
 		tx.CounterpartyType, tx.CounterpartyName, tx.CounterpartyPhone,
 		tx.Status, req.Description, idem, tx.CreatedAt, tx.CreatedDate,
+		tx.contraparteID,
 	)
 	if err != nil {
 		// Unique violation on (user_id, idempotency_key, created_date) → duplicate.
@@ -141,6 +164,15 @@ func (r *Repository) CreateTx(
 	}
 	return tx, nil
 }
+
+// fechaDe es el created_date que CreateTx escribe para ese instante. deOtroDia
+// compara con esta misma cuenta: con otra, una fila que el indice unico
+// (user_id, idempotency_key, created_date) da por de hoy podria pasar por
+// vieja, y la fila nueva chocaria con ella.
+func fechaDe(t time.Time) string { return t.Format("2006-01-02") }
+
+// deOtroDia dice si la fila no es de hoy.
+func deOtroDia(rec *TransactionRecord) bool { return rec.CreatedDate != fechaDe(time.Now()) }
 
 // ErrDuplicate signals that an idempotent retry hit an existing row.
 var ErrDuplicate = errors.New("transaction with this idempotency key already exists")
@@ -577,18 +609,33 @@ func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, u
 	return total, err
 }
 
+// FindByIdempotencyKey trae, ademas de lo que la respuesta repite, lo que la
+// relectura compara para saber si el pedido es el mismo movimiento: la
+// contraparte (tipo, nombre, telefono e id). El telefono solo lo compara
+// TransferenciaHecha.
+//
+// La llave es unica por dia, no para siempre, asi que puede haber mas de una
+// fila: la de un intento sin asiento de otro dia, que quedo fallida, y la de
+// hoy. Se lee primero la completada y, si no hay, la mas reciente: la
+// repeticion tiene que contestar con el movimiento que si ocurrio. La fecha
+// sale con formato fijo, y no con ::text, que depende del DateStyle de la
+// sesion: deOtroDia la compara con fechaDe.
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,
 		`SELECT id, wallet_id, user_id, type, amount, currency, fee, status,
-		        COALESCE(metadata::text, '{}'), created_at, created_date::text
+		        COALESCE(metadata::text, '{}'), created_at, to_char(created_date, 'YYYY-MM-DD'),
+		        COALESCE(counterparty_type, ''), COALESCE(counterparty_name, ''),
+		        COALESCE(counterparty_phone, ''), COALESCE(counterparty_id::text, '')
 		 FROM transactions
 		 WHERE user_id = $1 AND idempotency_key = $2
+		 ORDER BY (status = 'completed') DESC, created_date DESC, created_at DESC
 		 LIMIT 1`,
 		userID, key,
 	).Scan(
 		&tx.ID, &tx.WalletID, &tx.UserID, &tx.Type, &tx.Amount, &tx.Currency,
 		&tx.Fee, &tx.Status, &tx.Metadata, &tx.CreatedAt, &tx.CreatedDate,
+		&tx.CounterpartyType, &tx.CounterpartyName, &tx.CounterpartyPhone, &tx.contraparteID,
 	)
 	if err != nil {
 		return nil, err

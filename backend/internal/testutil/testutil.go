@@ -404,7 +404,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		-- while production is VARCHAR(100), so an over-long name passed the
 		-- tests and only failed in production.
 		counterparty_name VARCHAR(100),
-		counterparty_phone VARCHAR(20),
+		-- Igual que la 001: VARCHAR(15). SINPE guarda aqui el telefono de
+		-- destino, y con 20 una forma mas larga pasaria las pruebas.
+		counterparty_phone VARCHAR(15),
 		status VARCHAR(20) DEFAULT 'pending',
 		external_reference VARCHAR(100),
 		metadata JSONB DEFAULT '{}',
@@ -413,8 +415,26 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		processed_at TIMESTAMPTZ,
 		completed_at TIMESTAMPTZ,
 		created_date DATE DEFAULT CURRENT_DATE,
-		UNIQUE (user_id, idempotency_key)
+		-- Como uq_tx_user_idempotency (018): la llave es unica por dia, no para
+		-- siempre. Con (user_id, idempotency_key) las pruebas no veian lo que
+		-- pasa en produccion cuando una llave vuelve otro dia.
+		UNIQUE (user_id, idempotency_key, created_date)
 	);
+	-- En una base local persistida el CREATE de arriba es un no-op y la tabla
+	-- conserva la llave unica para siempre: las pruebas de la fila de otro dia
+	-- chocaban (23505) sin que el codigo estuviera mal.
+	DO $$
+	BEGIN
+		IF EXISTS (SELECT 1 FROM pg_constraint
+		            WHERE conname = 'transactions_user_id_idempotency_key_key') THEN
+			ALTER TABLE transactions DROP CONSTRAINT transactions_user_id_idempotency_key_key;
+		END IF;
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint
+		                WHERE conname = 'transactions_user_id_idempotency_key_created_date_key') THEN
+			ALTER TABLE transactions ADD CONSTRAINT transactions_user_id_idempotency_key_created_date_key
+				UNIQUE (user_id, idempotency_key, created_date);
+		END IF;
+	END $$;
 
 	-- ── Ledger ──────────────────────────────────────────────────────────
 	CREATE TABLE IF NOT EXISTS ledger_accounts (
@@ -715,17 +735,23 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		UNIQUE(user_id, phone)
 	);
 
+	-- Los anchos y los controles de produccion (migracion 023). Con columnas
+	-- mas holgadas, las pruebas no veian el nombre que en produccion no entra:
+	-- desde que el historial se escribe dentro de la transaccion del dinero,
+	-- ese INSERT fallido es un envio que no sale.
 	CREATE TABLE IF NOT EXISTS sinpe_history (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL,
-		phone VARCHAR(20) NOT NULL,
-		contact_name VARCHAR(200),
+		phone VARCHAR(15) NOT NULL,
+		contact_name VARCHAR(100) NOT NULL,
 		amount BIGINT NOT NULL,
 		fee BIGINT DEFAULT 0,
-		type VARCHAR(10) NOT NULL,
+		type VARCHAR(20) NOT NULL,
 		status VARCHAR(20) DEFAULT 'completed',
 		description TEXT,
-		created_at TIMESTAMPTZ DEFAULT NOW()
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		CONSTRAINT chk_sinpe_amount_positive CHECK (amount > 0),
+		CONSTRAINT chk_sinpe_type CHECK (type IN ('sent','received'))
 	);
 
 	-- Crypto (NUMERIC precision per migration 019).

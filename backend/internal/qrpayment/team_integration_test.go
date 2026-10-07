@@ -150,7 +150,7 @@ func TestStaff_CashierCollectsForShop_WithAttribution(t *testing.T) {
 	if _, err := svc.MerchantBalance(ctx, qr.MerchantID, employee, "CRC"); err == nil {
 		t.Fatal("a cashier must not read the business balance")
 	}
-	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, employee, "CRC", 100, "wd-cashier-try"); err == nil {
+	if _, err := svc.WithdrawToOwner(ctx, qr.MerchantID, employee, "CRC", 100, "wd-cashier-try"); err == nil {
 		t.Fatal("a cashier must not withdraw the business balance")
 	}
 	if _, err := svc.AddStaff(ctx, qr.MerchantID, employee, &qrpayment.AddStaffRequest{Cedula: "702650930", Role: "cashier"}); err == nil {
@@ -197,7 +197,7 @@ func TestStaff_RevokeAndReactivateAsManager(t *testing.T) {
 	if _, err := svc.MerchantBalance(ctx, qr.MerchantID, again.UserID, "CRC"); err != nil {
 		t.Fatalf("a manager must read the business balance: %v", err)
 	}
-	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, again.UserID, "CRC", 100, "wd-manager-try"); err == nil {
+	if _, err := svc.WithdrawToOwner(ctx, qr.MerchantID, again.UserID, "CRC", 100, "wd-manager-try"); err == nil {
 		t.Fatal("withdrawing stays owner-only, even for a manager")
 	}
 }

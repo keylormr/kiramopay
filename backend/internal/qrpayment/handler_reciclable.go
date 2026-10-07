@@ -34,6 +34,9 @@ func responderError(w http.ResponseWriter, err error) {
 		{ErrNoPodesPagarte, "NO_PODES_PAGARTE", http.StatusBadRequest, "no podes pagarte a vos mismo"},
 		{ErrMontoRequerido, "MONTO_REQUERIDO", http.StatusBadRequest, "indica cuanto queres pagar"},
 		{ErrLlaveReutilizada, "LLAVE_REUTILIZADA", http.StatusConflict, "esa operacion ya se hizo con otro monto"},
+		// El mismo caso detectado por el motor de transferencias, que compara
+		// la llave antes que el modulo: caia al PAYMENT_FAILED generico.
+		{transaction.ErrLlaveReutilizada, "LLAVE_REUTILIZADA", http.StatusConflict, "esa operacion ya se hizo con otro monto"},
 		{ErrNonceInvalido, "LLAVE_INVALIDA", http.StatusBadRequest, "idempotency_key invalida"},
 		{ErrCobroDuplicadoAppVieja, "COBRO_DUPLICADO_APP_VIEJA", http.StatusConflict,
 			"actualiza la aplicacion para volver a pagar este codigo"},
