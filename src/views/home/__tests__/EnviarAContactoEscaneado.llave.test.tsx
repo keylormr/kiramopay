@@ -134,6 +134,29 @@ beforeEach(() => {
   mocks.dataSync.refreshSinpe.mockClear();
 });
 
+// Los rechazos del envío se dicen en el idioma de la persona, como en la
+// pantalla SINPE: el texto del servidor está en inglés y arrastra los prefijos
+// internos.
+describe('HomeView — los rechazos del envío al contacto escaneado', () => {
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    [
+      'SINPE_FAILED',
+      'create transaction: post ledger: conn reset',
+      'No se pudo hacer el envío. Intenta de nuevo.',
+    ],
+  ])('traduce %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mocks.send.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+});
+
 describe('HomeView — la llave del envío al contacto escaneado', () => {
   it('tras un corte de red lo explica, y reintentar lleva la misma llave', async () => {
     mocks.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce(enviado);

@@ -195,6 +195,26 @@ describe('AssistantView — la llave del envío SINPE', () => {
     expect(pedido.idempotencyKey).toMatch(/\S/);
   });
 
+  // Los rechazos del envío se dicen en el idioma de la persona, como en la
+  // pantalla SINPE.
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    [
+      'SINPE_FAILED',
+      'create transaction: post ledger: conn reset',
+      'No se pudo hacer el envío. Intenta de nuevo.',
+    ],
+  ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mockApi.sinpe.send.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    await pedirYConfirmar(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
   it('un número que no se entiende no se envía y lo explica', async () => {
     mockApi.assistant.chat.mockResolvedValueOnce({
       success: true,

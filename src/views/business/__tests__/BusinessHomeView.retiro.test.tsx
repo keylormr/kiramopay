@@ -142,6 +142,32 @@ describe('BusinessHomeView — la llave del retiro', () => {
     expect(segunda).not.toBe(primera);
   });
 
+  // Cada rechazo del retiro se dice en el idioma de la persona. El texto del
+  // servidor está en inglés ("insufficient business balance") o arrastra los
+  // prefijos internos.
+  it.each([
+    [
+      'MERCHANT_INSUFFICIENT_BALANCE',
+      'insufficient business balance',
+      'El saldo del negocio no alcanza para ese monto.',
+    ],
+    [
+      'WITHDRAW_FAILED',
+      'post withdrawal: conn reset',
+      'No se pudo hacer el retiro. Intenta de nuevo.',
+    ],
+  ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mocks.withdrawMerchant.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    pintar();
+
+    const hoja = await abrirRetiro(user, '300');
+    await retirar(user, hoja);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
   it('la llave de otro retiro lo explica y el siguiente intento lleva otra llave', async () => {
     mocks.withdrawMerchant
       .mockResolvedValueOnce({

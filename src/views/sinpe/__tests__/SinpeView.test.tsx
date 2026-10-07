@@ -210,6 +210,47 @@ describe('SinpeView — send', () => {
     expect(screen.queryByText(/invalid SINPE Móvil phone number/)).not.toBeInTheDocument();
   });
 
+  // Cada rechazo del envío llega con su código y se dice en el idioma de la
+  // persona. El texto del servidor es para quien integra la API: está en
+  // inglés y arrastra los prefijos internos ("create transaction: ...").
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    [
+      'SINGLE_PAYMENT_LIMIT_EXCEEDED',
+      'amount exceeds single-payment ceiling',
+      'Ese monto supera el máximo por envío SINPE.',
+    ],
+    [
+      'SINPE_DAILY_LIMIT_EXCEEDED',
+      'SINPE daily limit exceeded',
+      'Con este envío superarías tu límite diario de SINPE.',
+    ],
+    [
+      'DAILY_LIMIT_EXCEEDED',
+      'daily spending limit exceeded',
+      'Este envío supera tu límite diario.',
+    ],
+    [
+      'MONTHLY_LIMIT_EXCEEDED',
+      'monthly spending limit exceeded',
+      'Este envío supera tu límite mensual.',
+    ],
+    [
+      'SINPE_FAILED',
+      'create transaction: post ledger: conn reset',
+      'No se pudo hacer el envío. Intenta de nuevo.',
+    ],
+  ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mocks.api.sinpe.send.mockResolvedValue({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+
   // Un monto de ₡0 dejaba la hoja de confirmar "muerta": el botón de enviar
   // nunca se deshabilitaba y tocar "Enviar" ahí adentro no hacía nada, sin
   // ningún aviso.
