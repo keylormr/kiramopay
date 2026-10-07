@@ -198,6 +198,21 @@ func (s *Service) marcarFallidaSinAsiento(ctx context.Context, ids ...string) {
 	}
 }
 
+// soloDeHoy decide si la fila sin completar y sin asiento que dejo un intento
+// anterior se reusa. Si es de otro dia no: completarla le dejaria su fecha
+// vieja al dinero que se mueve hoy, y el tope diario suma por created_date, asi
+// que ese dinero no contaria para el tope de hoy. Queda fallida —no movio
+// nada, el libro acaba de confirmar que la llave no tiene asiento— y el
+// movimiento va en una fila de hoy, que la llave unica por dia admite.
+// Devuelve la fila a reusar, o nil.
+func (s *Service) soloDeHoy(ctx context.Context, rec *TransactionRecord) *TransactionRecord {
+	if rec == nil || !deOtroDia(rec) {
+		return rec
+	}
+	s.marcarFallidaSinAsiento(ctx, rec.ID)
+	return nil
+}
+
 // ErrLlaveDeOtroMovimiento: la llave de idempotencia ya tiene un asiento
 // escrito, pero de OTRO movimiento. No se puede dar por hecho el actual.
 var ErrLlaveDeOtroMovimiento = errors.New("idempotency key already belongs to another movement")
@@ -509,7 +524,7 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 				existing.Status = StatusCompleted
 				return existing, true, nil
 			}
-			previa = existing
+			previa = s.soloDeHoy(ctx, existing)
 		}
 	}
 
@@ -697,7 +712,7 @@ func (s *Service) WithdrawMerchantToUser(
 			existing.Status = StatusCompleted
 			return existing, true, nil
 		}
-		previa = existing
+		previa = s.soloDeHoy(ctx, existing)
 	}
 	bal, err := s.ledger.MerchantBalance(ctx, merchantID, currency)
 	if err != nil {
@@ -920,7 +935,10 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 				}
 				return existing, recv, true, nil
 			}
-			previaEmisor, previaReceptor = existing, recv
+			// Cada fila por su lado: la de quien envia y la de quien recibe
+			// se crean juntas, pero un intento que cruzo la medianoche puede
+			// haberlas dejado en dias distintos.
+			previaEmisor, previaReceptor = s.soloDeHoy(ctx, existing), s.soloDeHoy(ctx, recv)
 		}
 	}
 

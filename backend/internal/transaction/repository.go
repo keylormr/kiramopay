@@ -99,8 +99,8 @@ func idContraparte(id string) string {
 
 // Create inserts a transaction in pending status with idempotency_key
 // promoted to its own column (and metadata still preserved for legacy reads).
-// If a row already exists for (user_id, idempotency_key), returns it with
-// ErrDuplicate so the caller can short-circuit.
+// If a row already exists for (user_id, idempotency_key) on the same
+// created_date, returns it with ErrDuplicate so the caller can short-circuit.
 func (r *Repository) Create(ctx context.Context, userID, walletID string, req *CreateTransactionRequest) (*TransactionRecord, error) {
 	return r.CreateTx(ctx, r.db, userID, walletID, req)
 }
@@ -114,7 +114,7 @@ func (r *Repository) CreateTx(
 ) (*TransactionRecord, error) {
 	id := uuid.New().String()
 	now := time.Now()
-	createdDate := now.Format("2006-01-02")
+	createdDate := fechaDe(now)
 
 	metadata := "{}"
 
@@ -164,6 +164,15 @@ func (r *Repository) CreateTx(
 	}
 	return tx, nil
 }
+
+// fechaDe es el created_date que CreateTx escribe para ese instante. deOtroDia
+// compara con esta misma cuenta: con otra, una fila que el indice unico
+// (user_id, idempotency_key, created_date) da por de hoy podria pasar por
+// vieja, y la fila nueva chocaria con ella.
+func fechaDe(t time.Time) string { return t.Format("2006-01-02") }
+
+// deOtroDia dice si la fila no es de hoy.
+func deOtroDia(rec *TransactionRecord) bool { return rec.CreatedDate != fechaDe(time.Now()) }
 
 // ErrDuplicate signals that an idempotent retry hit an existing row.
 var ErrDuplicate = errors.New("transaction with this idempotency key already exists")
@@ -604,6 +613,11 @@ func (r *Repository) MonthlyOutgoingMinorTx(ctx context.Context, q pgxQuerier, u
 // relectura compara para saber si el pedido es el mismo movimiento: la
 // contraparte (tipo, nombre, telefono e id). El telefono solo lo compara
 // TransferenciaHecha.
+//
+// La llave es unica por dia, no para siempre, asi que puede haber mas de una
+// fila: la de un intento sin asiento de otro dia, que quedo fallida, y la de
+// hoy. Se lee primero la completada y, si no hay, la mas reciente: la
+// repeticion tiene que contestar con el movimiento que si ocurrio.
 func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key string) (*TransactionRecord, error) {
 	tx := &TransactionRecord{}
 	err := r.db.QueryRow(ctx,
@@ -613,6 +627,7 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, userID, key strin
 		        COALESCE(counterparty_phone, ''), COALESCE(counterparty_id::text, '')
 		 FROM transactions
 		 WHERE user_id = $1 AND idempotency_key = $2
+		 ORDER BY (status = 'completed') DESC, created_date DESC, created_at DESC
 		 LIMIT 1`,
 		userID, key,
 	).Scan(
