@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/plans"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -79,6 +80,13 @@ func (h *Handler) GetMerchantBalance(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
+	// Un id que ni siquiera tiene la forma del de un comercio es un comercio
+	// que no existe. Sin esto la base fallaba al compararlo y, ahora que una
+	// falla de la base es un 500, saldria como tal.
+	if _, err := uuid.Parse(merchantID); err != nil {
+		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		return
+	}
 	var req struct {
 		Amount         int64  `json:"amount"`
 		Currency       string `json:"currency"`
@@ -88,11 +96,39 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey); err != nil {
-		response.Error(w, http.StatusBadRequest, "WITHDRAW_FAILED", err.Error())
+	if req.Amount <= 0 {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "amount must be positive")
 		return
 	}
-	response.NoContent(w)
+	retiro, err := h.service.WithdrawToOwner(r.Context(), merchantID, userID, req.Currency, req.Amount, req.IdempotencyKey)
+	if err != nil {
+		// Cada rechazo con su codigo y su texto, no err.Error(): salian como
+		// 400 WITHDRAW_FAILED con el texto tal cual ("insufficient business
+		// balance"), y la pantalla lo mostraba en ingles.
+		switch {
+		// La llave ya es de otro retiro: la pantalla necesita saberlo para
+		// pedir el siguiente con otra. Con el WITHDRAW_FAILED generico no lo
+		// podia distinguir de un fallo que se arregla reintentando.
+		case errors.Is(err, transaction.ErrLlaveReutilizada),
+			errors.Is(err, transaction.ErrLlaveDeOtroMovimiento):
+			response.Error(w, http.StatusConflict, "LLAVE_REUTILIZADA",
+				"the idempotency_key belongs to a different withdrawal")
+		case errors.Is(err, transaction.ErrInsufficientMerchantBalance):
+			response.Error(w, http.StatusUnprocessableEntity, "MERCHANT_INSUFFICIENT_BALANCE",
+				transaction.ErrInsufficientMerchantBalance.Error())
+		// Un comercio que no existe y uno que no es de quien retira: no se
+		// distinguen, para no decirle a nadie que comercios existen.
+		case errors.Is(err, ErrComercioNoEncontrado):
+			response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		default:
+			// La base, el libro: el detalle queda en el log. Un commit que se
+			// corta tambien cae aqui, asi que la pantalla lo dice como un
+			// retiro sin confirmar.
+			response.Error(w, http.StatusInternalServerError, "WITHDRAW_FAILED", err.Error())
+		}
+		return
+	}
+	response.JSON(w, http.StatusOK, retiro)
 }
 
 func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {

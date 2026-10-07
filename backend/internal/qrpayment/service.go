@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
@@ -594,22 +596,37 @@ func (s *Service) MerchantPayments(ctx context.Context, merchantID, userID strin
 // the whole point of keeping the two apart.
 func (s *Service) WithdrawToOwner(
 	ctx context.Context, merchantID, userID, currency string, amount int64, idempotencyKey string,
-) error {
+) (*Retiro, error) {
 	if amount <= 0 {
-		return fmt.Errorf("amount must be positive")
+		return nil, fmt.Errorf("amount must be positive")
 	}
 	if currency == "" {
 		currency = "CRC"
 	}
+	// Solo un comercio que no existe, o que no es de quien retira, es "no
+	// encontrado". Una caida de la base salia igual, como un 404 sin nada en
+	// el log.
 	m, err := s.repo.GetMerchant(ctx, merchantID)
-	if err != nil || m.UserID != userID {
-		return fmt.Errorf("merchant not found")
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && m.UserID != userID) {
+		return nil, ErrComercioNoEncontrado
+	}
+	if err != nil {
+		return nil, fmt.Errorf("leer el comercio: %w", err)
 	}
 	// No balance pre-check here: the transaction service replays idempotent
 	// retries first, and the ledger enforces the funds atomically — a read
 	// here would just reintroduce the check-then-post race.
-	_, err = s.tx.WithdrawMerchantToUser(ctx, merchantID, m.Name, userID, currency, amount, idempotencyKey)
-	return err
+	rec, repetido, err := s.tx.WithdrawMerchantToUser(ctx, merchantID, m.Name, userID, currency, amount, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	return &Retiro{
+		TransactionID: rec.ID,
+		Status:        rec.Status,
+		Amount:        rec.Amount,
+		Currency:      rec.Currency,
+		Replayed:      repetido,
+	}, nil
 }
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────

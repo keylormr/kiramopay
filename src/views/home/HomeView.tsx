@@ -15,7 +15,10 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
-import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
+import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
 import { codigoDeCobroCerrado, mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
@@ -80,11 +83,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [enviando, setEnviando] = useState(false);
   const [envioError, setEnvioError] = useState('');
   const [envioListo, setEnvioListo] = useState(false);
+  // El servidor contesto con un envio que ya estaba hecho bajo la llave: la
+  // hoja no lo celebra como uno nuevo.
+  const [envioYaHecho, setEnvioYaHecho] = useState(false);
   const [contactoGuardado, setContactoGuardado] = useState(false);
   const [showEnvioMfa, setShowEnvioMfa] = useState(false);
-  // Una misma intencion de envio conserva su clave de idempotencia (el
-  // reintento post-MFA no debe duplicar la transferencia).
-  const idemEnvioRef = useRef('');
+  // La llave del envio que espera el segundo factor: cancelarlo suelta esa y
+  // no otra que siga pendiente.
+  const [llaveDelMfa, setLlaveDelMfa] = useState('');
 
   // "Cobrar con QR" — genera un QR de cobro REAL via la API (riel QR del backend,
   // contabilizado en el ledger). Generar el codigo no mueve dinero; el pago
@@ -197,8 +203,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       setEnvioNota('');
       setEnvioError('');
       setEnvioListo(false);
+      setEnvioYaHecho(false);
       setContactoGuardado(false);
-      idemEnvioRef.current = '';
       setActiveSheet('enviarA'); // cerrar la hoja apaga la cámara
       return;
     }
@@ -234,6 +240,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     setContactoGuardado(true);
   };
 
+  // La llave del envio es la que la pantalla SINPE le da al mismo envio: el
+  // telefono y el monto, por persona (ver intentoPendiente). Viaja para el caso
+  // de la red que se corta sin traer la respuesta: el envio pudo haber salido,
+  // y el reintento tiene que llevar la MISMA llave para que el servidor
+  // conteste con aquel envio en vez de hacer otro. Antes se soltaba ante
+  // cualquier error —el corte incluido— y se acunaba otra al volver a
+  // escanear: reintentar tras un corte mandaba la plata dos veces. Ahora se
+  // suelta cuando el envio salio, cuando el servidor contesta que ya estaba
+  // hecho, cuando dice que la llave es de otro envio y cuando se cancela el
+  // segundo factor, que el servidor pide antes de crear nada.
+  const persona = state.user?.id ?? '';
+
   // Transferencia real por el riel SINPE al usuario escaneado.
   const handleEnviarAEscaneado = async () => {
     if (!scannedContact || enviando) return;
@@ -244,12 +262,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       setEnvioError(t('sinpe_phone_invalid'));
       return;
     }
-    if (!idemEnvioRef.current) {
-      idemEnvioRef.current =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `scan-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    }
+    const llave = llaveDelIntento(persona, 'sinpe', `${telefono}|${monto}`, () =>
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `scan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     setEnviando(true);
     setEnvioError('');
     try {
@@ -257,26 +274,33 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         phone: telefono,
         amount: monto,
         description: envioNota,
-        idempotencyKey: idemEnvioRef.current,
+        idempotencyKey: llave,
       });
       if (!res.success || !res.data) {
-        if (res.error?.code === MFA_REQUIRED) {
+        const code = res.error?.code ?? '';
+        if (code === MFA_REQUIRED) {
+          setLlaveDelMfa(llave);
           setShowEnvioMfa(true);
           return;
         }
-        // Un reintento corregido debe ser una transferencia nueva.
-        idemEnvioRef.current = '';
-        const porCodigo: Record<string, string> = {
-          RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
-          SELF_SEND: t('sinpe_self_send_error'),
-        };
-        setEnvioError(porCodigo[res.error?.code ?? ''] || res.error?.message || t('assistant_action_failed'));
+        // La llave ya es de otro envio: el siguiente intento necesita otra.
+        if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, 'sinpe', llave);
+        // Los mismos textos que la pantalla SINPE: es el mismo envio.
+        setEnvioError(
+          mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO, t),
+        );
         return;
       }
-      idemEnvioRef.current = '';
+      // El envio salio, o ya estaba hecho: el siguiente es otro y lleva otra
+      // llave. En la repeticion la app no se habia enterado del envio; en los
+      // dos casos el saldo, los movimientos y el historial SINPE se traen del
+      // servidor.
+      soltarIntento(persona, 'sinpe', llave);
+      setEnvioYaHecho(res.data.repetida === true);
       setEnvioListo(true);
       refreshAccounts().catch(() => {});
       refreshTransactions().catch(() => {});
+      refreshSinpe().catch(() => {});
     } finally {
       setEnviando(false);
     }
@@ -1076,7 +1100,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         isOpen={activeSheet === 'enviarA'}
         onClose={() => { setActiveSheet('none'); setScannedContact(null); }}
         dismissable={!enviando}
-        title={envioListo ? t('payment_done') : t('send_money')}
+        title={envioListo && !envioYaHecho ? t('payment_done') : t('send_money')}
       >
         {scannedContact && (
           <div className="space-y-5">
@@ -1093,9 +1117,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             {envioListo ? (
               <div className="flex flex-col items-center py-4 gap-3">
                 <div className="w-14 h-14 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] flex items-center justify-center">
-                  <Icons.Check size={28} />
+                  {envioYaHecho ? <Icons.CheckCircle size={28} /> : <Icons.Check size={28} />}
                 </div>
+                {/* La repeticion lo dice en el cuerpo y no en el titulo de la
+                    hoja, que va en una sola linea y se recortaria. */}
+                {envioYaHecho && (
+                  <p className="text-lg font-bold uv-text-primary text-center text-balance">{t('sinpe_ya_hecho')}</p>
+                )}
                 <p className="text-2xl font-black uv-text-primary tabular-nums">{formatCurrency(parseFloat(envioMonto), 'CRC')}</p>
+                {envioYaHecho && (
+                  <p className="text-sm uv-text-muted text-center">{t('sinpe_ya_hecho_desc')}</p>
+                )}
                 <button
                   onClick={() => { setActiveSheet('none'); setScannedContact(null); }}
                   className="mt-2 w-full py-3.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
@@ -1130,8 +1162,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 />
 
                 {envioError && (
-                  <p className="text-[var(--color-danger)] text-sm flex items-center gap-1">
-                    <Icons.AlertCircle size={14} /> {envioError}
+                  <p className="text-[var(--color-danger)] text-sm flex items-start gap-1.5">
+                    {/* Con un texto de varias lineas, items-center dejaba el
+                        icono a media altura y el flex lo encogia a un punto. */}
+                    <Icons.AlertCircle size={14} className="shrink-0 mt-0.5" /> {envioError}
                   </p>
                 )}
 
@@ -1186,11 +1220,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       {/* TOTP para envios de monto alto desde el flujo de escaneo */}
       <MfaChallengeSheet
         isOpen={showEnvioMfa}
-        onClose={() => setShowEnvioMfa(false)}
+        onClose={() => {
+          setShowEnvioMfa(false);
+          // Sin verificar, el envio no salio: el siguiente es otro intento. Se
+          // suelta esa llave, y no otra que siga pendiente.
+          soltarIntento(persona, 'sinpe', llaveDelMfa);
+        }}
         onVerified={() => {
           setShowEnvioMfa(false);
           handleEnviarAEscaneado();
         }}
+        confirmLabel={t('mfa_verify_and_send')}
       />
 
     </div>
