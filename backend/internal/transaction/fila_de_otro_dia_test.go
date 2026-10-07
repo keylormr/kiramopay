@@ -10,7 +10,8 @@ import (
 )
 
 // Una fila sin completar y sin asiento que es de OTRO dia no se completa con
-// su fecha vieja. El tope diario suma por created_date: el dinero que se movia
+// su fecha vieja. Se siembran 'pending', que es lo que deja un intento caido:
+// sembradas 'failed', "quedo fallida" pasaba aunque nadie las marcara. El tope diario suma por created_date: el dinero que se movia
 // hoy sobre la fila de ayer no contaba para el tope de hoy. Mientras la llave
 // moria con la sesion, hacia falta un reintento que cruzara la medianoche; al
 // conservarla entre sesiones, deja de ser raro.
@@ -57,7 +58,7 @@ func TestOperacion_LaFilaSinAsientoDeOtroDiaNoSeCompletaConSuFecha(t *testing.T)
 		}
 	}
 
-	ayer := insertarFilaCruda(t, pool, userID, transaction.TypeCryptoBuy, "CRC", llave, transaction.StatusFailed, monto)
+	ayer := insertarFilaCruda(t, pool, userID, transaction.TypeCryptoBuy, "CRC", llave, transaction.StatusPending, monto)
 	alDiaAnterior(t, pool, ayer)
 	antes := salidaDeHoy(t, pool, userID)
 
@@ -105,8 +106,8 @@ func TestTransferencia_LasFilasSinAsientoDeOtroDiaNoSeCompletanConSuFecha(t *tes
 		return p
 	}
 
-	envioAyer := insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", llave, transaction.StatusFailed, monto)
-	recepcionAyer := insertarFilaCruda(t, pool, receptor, transaction.TypeP2PReceive, "CRC", llave+":recv", transaction.StatusFailed, monto)
+	envioAyer := insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", llave, transaction.StatusPending, monto)
+	recepcionAyer := insertarFilaCruda(t, pool, receptor, transaction.TypeP2PReceive, "CRC", llave+":recv", transaction.StatusPending, monto)
 	alDiaAnterior(t, pool, envioAyer)
 	alDiaAnterior(t, pool, recepcionAyer)
 	antes := salidaDeHoy(t, pool, emisor)
@@ -148,6 +149,41 @@ func TestTransferencia_LasFilasSinAsientoDeOtroDiaNoSeCompletanConSuFecha(t *tes
 	}
 }
 
+// Lo que quedo de ayer puede ser solo lo de quien recibe: las dos filas se
+// abren por separado, y un intento que cruzo la medianoche entre una y otra
+// deja la de quien envia hoy y la de quien recibe ayer. Cada una se decide por
+// su lado: la de hoy se reusa, la de ayer queda fallida.
+func TestTransferencia_SoloLoRecibidoEsDeOtroDia(t *testing.T) {
+	svc, pool, emisor, receptor := setupTransferService(t)
+	billeteraHolgada(t, pool, emisor)
+	const llave = "otro-dia:solo-lo-recibido"
+	const monto int64 = 30000
+
+	envioHoy := insertarFilaCruda(t, pool, emisor, transaction.TypeP2PSend, "CRC", llave, transaction.StatusPending, monto)
+	recepcionAyer := insertarFilaCruda(t, pool, receptor, transaction.TypeP2PReceive, "CRC", llave+":recv", transaction.StatusPending, monto)
+	alDiaAnterior(t, pool, recepcionAyer)
+
+	envio, recepcion, repetido, err := svc.TransferirOReconocer(context.Background(), transferencia(emisor, receptor, monto, llave))
+	if err != nil || repetido {
+		t.Fatalf("TransferirOReconocer: repetido=%v err=%v", repetido, err)
+	}
+	if envio.ID != envioHoy {
+		t.Fatalf("el envio fue %s: la fila de hoy de quien envia (%s) no se reuso", envio.ID, envioHoy)
+	}
+	if recepcion == nil || recepcion.ID == recepcionAyer || !esDeHoy(t, pool, recepcion.ID) {
+		t.Fatalf("lo recibido quedo en la fila de ayer: %v", recepcion)
+	}
+	if got := estadoDeFila(t, pool, recepcionAyer); got != transaction.StatusFailed {
+		t.Fatalf("lo recibido de ayer quedo %q, se esperaba %q", got, transaction.StatusFailed)
+	}
+	if got := estadoDeFila(t, pool, envioHoy); got != transaction.StatusCompleted {
+		t.Fatalf("el envio de hoy quedo %q, se esperaba %q", got, transaction.StatusCompleted)
+	}
+	if n := asientosConLlave(t, pool, llave); n != 1 {
+		t.Fatalf("asientos con la llave = %d, se esperaba 1", n)
+	}
+}
+
 func TestRetiro_LaFilaSinAsientoDeOtroDiaNoSeCompletaConSuFecha(t *testing.T) {
 	svc, pool, emisor, dueno := setupTransferService(t)
 	ctx := context.Background()
@@ -165,7 +201,7 @@ func TestRetiro_LaFilaSinAsientoDeOtroDiaNoSeCompletaConSuFecha(t *testing.T) {
 	}
 
 	const llave = "otro-dia:retiro"
-	ayer := insertarFilaCruda(t, pool, dueno, transaction.TypeMerchantWithdrawal, "CRC", llave, transaction.StatusFailed, retiro)
+	ayer := insertarFilaCruda(t, pool, dueno, transaction.TypeMerchantWithdrawal, "CRC", llave, transaction.StatusPending, retiro)
 	alDiaAnterior(t, pool, ayer)
 
 	rec, repetido, err := svc.WithdrawMerchantToUser(ctx, comercio, "Tienda", dueno, "CRC", retiro, llave)

@@ -119,6 +119,16 @@ describe('intentoPendiente', () => {
     expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).not.toBe(llave);
   });
 
+  // Un reloj que se atrasa no borra lo pendiente: se fecha de nuevo en el
+  // ahora del aparato. Descartarlo perdía la llave de un envío cortado, y el
+  // reintento lo mandaba dos veces.
+  it('con el reloj atrasado más de un día, la llave se conserva', () => {
+    const ahora = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);
+    ahora.mockReturnValue(1_700_000_000_000 - 3 * 24 * 3_600_000);
+    expect(m.llaveDelIntento('ana', 'sinpe', 'x', nueva)).toBe(llave);
+  });
+
   it('reintentar renueva el plazo', () => {
     const ahora = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const llave = m.llaveDelIntento('ana', 'sinpe', 'x', nueva);

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { limpiarDatosDeUsuario } from './limpiarDatosDeUsuario';
 import { useAccountStore } from './account.store';
 import { useTransactionStore } from './transaction.store';
@@ -69,6 +69,7 @@ describe('limpiarDatosDeUsuario', () => {
 
   afterEach(() => {
     import.meta.env.VITE_API_URL = envOriginal;
+    vi.restoreAllMocks();
   });
 
   it('vacia los stores por usuario y vuelve a los valores iniciales', () => {
@@ -116,6 +117,31 @@ describe('limpiarDatosDeUsuario', () => {
       'llave-de-victor',
     );
     expect(llaveDelIntento('ana', 'sinpe', '+50610101010|5000', () => 'de-ana')).toBe('de-ana');
+  });
+
+  // Lo que ya no sirve no espera a otro envío para irse del aparato: la forma
+  // de antes, con el número y el monto legibles, y lo vencido se podan al
+  // salir. Sin esto quedaban hasta que alguien volviera a enviar algo.
+  it('al salir poda la forma de antes, legible, y lo vencido', () => {
+    localStorage.removeItem('kiramopay-intentos-pendientes');
+    const ahora = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    llaveDelIntento('victor', 'sinpe', '+50610101010|5000', () => 'llave-vencida');
+    ahora.mockReturnValue(1_700_000_000_000 + 25 * 3_600_000);
+    const guardado = JSON.parse(localStorage.getItem('kiramopay-intentos-pendientes') ?? '{}');
+    localStorage.setItem(
+      'kiramopay-intentos-pendientes',
+      JSON.stringify({
+        ...guardado,
+        'victor|sinpe': [{ firma: '+50620202020|7000', llave: 'llave-vieja' }],
+      }),
+    );
+
+    limpiarDatosDeUsuario();
+
+    const queda = localStorage.getItem('kiramopay-intentos-pendientes') ?? '';
+    for (const rastro of ['llave-vencida', 'llave-vieja', '20202020', 'victor']) {
+      expect(queda).not.toContain(rastro);
+    }
   });
 
   it('no toca nada en modo demo (sin backend)', () => {
