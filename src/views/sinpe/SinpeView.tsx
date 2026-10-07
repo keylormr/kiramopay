@@ -8,6 +8,8 @@ import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
 import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
@@ -228,22 +230,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       // La llave ya es de otro envio: el siguiente intento necesita otra.
       if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, 'sinpe', llave);
       setShowConfirm(false);
-      // Codes the backend gives their own identity so we can explain them in the
-      // user's language. Everything else falls back to the server message.
-      const porCodigo: Record<string, string> = {
-        RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
-        SELF_SEND: t('sinpe_self_send_error'),
-        // El backend distingue este rechazo (numero mal formado tras la
-        // validacion del servidor) del resto de fallos de SINPE_FAILED; sin
-        // este mapeo se filtraba el "invalid SINPE Móvil phone number" del
-        // servidor tal cual, en ingles, en medio de una pantalla en español.
-        INVALID_PHONE: t('sinpe_phone_invalid'),
-        // Sin respuesta, el envio pudo haber salido. La llave se conserva, y
-        // eso es lo que permite decir que reintentar no lo manda dos veces.
-        NETWORK_ERROR: t('sinpe_err_sin_confirmar'),
-        LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
-      };
-      setSendError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
+      // Cada rechazo por su codigo, en el idioma de la persona; uno que no se
+      // conoce cae al generico, nunca al texto del servidor.
+      setSendError(
+        mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO, t),
+      );
       return;
     }
     // El envio salio, o ya estaba hecho: el siguiente es otro y lleva otra

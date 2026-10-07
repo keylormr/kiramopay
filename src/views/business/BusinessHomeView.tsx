@@ -8,6 +8,7 @@ import { CampoMonto } from '@/components/CampoMonto';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiLayer } from '@/api';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import type {
   QRMerchant,
   QRPayment,
@@ -32,6 +33,14 @@ const isToday = (iso: string) => {
   const d = new Date(iso);
   const now = new Date();
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+};
+
+const CLAVES_DEL_RECHAZO_DEL_RETIRO: Readonly<Record<string, string>> = {
+  // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y eso es
+  // lo que permite decir que reintentar no lo hace dos veces.
+  NETWORK_ERROR: 'business_withdraw_sin_confirmar',
+  LLAVE_REUTILIZADA: 'err_llave_reutilizada',
+  MERCHANT_INSUFFICIENT_BALANCE: 'business_err_saldo_insuficiente',
 };
 
 export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, paymentsFailed = false, onReload }) => {
@@ -284,13 +293,16 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       const code = res.error?.code ?? '';
       // La llave ya es de otro retiro: el siguiente intento necesita otra.
       if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, ambitoDelRetiro, llave);
-      const porCodigo: Record<string, string> = {
-        // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y
-        // eso es lo que permite decir que reintentar no lo hace dos veces.
-        NETWORK_ERROR: t('business_withdraw_sin_confirmar'),
-        LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
-      };
-      setWdError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
+      // Cada rechazo por su codigo; uno que no se conoce cae al generico,
+      // nunca al texto del servidor.
+      setWdError(
+        mensajeDeRechazo(
+          res.error,
+          CLAVES_DEL_RECHAZO_DEL_RETIRO,
+          'business_err_retiro_fallido',
+          t,
+        ),
+      );
     }
   };
 

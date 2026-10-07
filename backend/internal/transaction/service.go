@@ -943,10 +943,10 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 		senderTotal += req.Fee
 	}
 	if req.Currency == "CRC" && senderWallet.BalanceCRC < senderTotal {
-		return nil, nil, false, fmt.Errorf("insufficient balance")
+		return nil, nil, false, ErrSaldoInsuficiente
 	}
 	if req.Currency == "USD" && senderWallet.BalanceUSD < senderTotal {
-		return nil, nil, false, fmt.Errorf("insufficient balance")
+		return nil, nil, false, ErrSaldoInsuficiente
 	}
 	if err := s.checkDailyLimit(ctx, req.FromUserID, req.Currency, req.Amount, senderWallet); err != nil {
 		return nil, nil, false, err

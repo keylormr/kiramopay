@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
@@ -95,6 +96,58 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, history)
 }
 
+// respuestaDelRechazo traduce el error del envio a la respuesta. Cada rechazo
+// tiene su codigo, para que la pantalla lo diga en el idioma de la persona y
+// explique que hacer. El texto es el del rechazo y no err.Error(): el error
+// sube envuelto en prefijos internos ("create transaction: ...") y un 4xx sale
+// tal cual, asi que la pantalla mostraba esa frase en ingles. Lo que no se
+// reconoce es un 500: el detalle queda en el log (response.Error no lo deja
+// salir).
+func respuestaDelRechazo(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, transaction.ErrMFARequired):
+		return http.StatusPreconditionRequired, "MFA_REQUIRED",
+			"MFA challenge required for amounts >= 100,000 CRC"
+	case errors.Is(err, ErrRecipientNotUser):
+		return http.StatusBadRequest, "RECIPIENT_NOT_USER", ErrRecipientNotUser.Error()
+	case errors.Is(err, ErrSelfSend):
+		return http.StatusBadRequest, "SELF_SEND", ErrSelfSend.Error()
+	case errors.Is(err, ErrInvalidPhone):
+		return http.StatusBadRequest, "INVALID_PHONE", ErrInvalidPhone.Error()
+	// La llave ya es de otro envio: es lo unico que le dice a la pantalla que
+	// esa llave no sirve y que el envio nuevo necesita otra. Con el
+	// SINPE_FAILED generico no lo podia distinguir de un fallo que se arregla
+	// reintentando con la misma. El asiento de otro movimiento bajo la llave es
+	// el mismo caso visto desde el libro.
+	case errors.Is(err, transaction.ErrLlaveReutilizada),
+		errors.Is(err, transaction.ErrLlaveDeOtroMovimiento):
+		return http.StatusConflict, "LLAVE_REUTILIZADA",
+			"the idempotency_key belongs to a different transfer"
+	// El saldo: el de la comprobacion previa y el del asiento, que es el que
+	// frena bajo concurrencia.
+	case errors.Is(err, transaction.ErrSaldoInsuficiente),
+		errors.Is(err, ledger.ErrInsufficientFunds):
+		return http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
+			transaction.ErrSaldoInsuficiente.Error()
+	case errors.Is(err, ErrMaximoPorEnvio):
+		return http.StatusUnprocessableEntity, "SINGLE_PAYMENT_LIMIT_EXCEEDED", ErrMaximoPorEnvio.Error()
+	case errors.Is(err, ErrCupoDiarioSinpe):
+		return http.StatusUnprocessableEntity, "SINPE_DAILY_LIMIT_EXCEEDED", ErrCupoDiarioSinpe.Error()
+	case errors.Is(err, transaction.ErrDailyLimitExceeded):
+		return http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED",
+			transaction.ErrDailyLimitExceeded.Error()
+	case errors.Is(err, transaction.ErrMonthlyLimitExceeded):
+		return http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
+			transaction.ErrMonthlyLimitExceeded.Error()
+	// Sin codigo propio, como en cripto: la pantalla dice el generico.
+	case errors.Is(err, transaction.ErrBloqueadoPorRiesgo):
+		return http.StatusBadRequest, "SINPE_FAILED", transaction.ErrBloqueadoPorRiesgo.Error()
+	}
+	// ErrBuscarDestino —la base fallo al buscar a quien recibe— y cualquier
+	// otro: nada que corregir en el pedido.
+	return http.StatusInternalServerError, "SINPE_FAILED", err.Error()
+}
+
 func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
@@ -122,42 +175,8 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Send(r.Context(), userID, &req, ip)
 	if err != nil {
-		if errors.Is(err, transaction.ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"MFA challenge required for amounts >= 100,000 CRC")
-			return
-		}
-		// These get their own codes so the client can translate them and
-		// explain what to do, instead of surfacing an English sentence.
-		if errors.Is(err, ErrRecipientNotUser) {
-			response.Error(w, http.StatusBadRequest, "RECIPIENT_NOT_USER", err.Error())
-			return
-		}
-		if errors.Is(err, ErrSelfSend) {
-			response.Error(w, http.StatusBadRequest, "SELF_SEND", err.Error())
-			return
-		}
-		if errors.Is(err, ErrInvalidPhone) {
-			response.Error(w, http.StatusBadRequest, "INVALID_PHONE", err.Error())
-			return
-		}
-		// La llave ya es de otro envio: es lo unico que le dice a la pantalla
-		// que esa llave no sirve y que el envio nuevo necesita otra. Con el
-		// SINPE_FAILED generico no lo podia distinguir de un fallo que se
-		// arregla reintentando con la misma.
-		if errors.Is(err, transaction.ErrLlaveReutilizada) {
-			response.Error(w, http.StatusConflict, "LLAVE_REUTILIZADA",
-				"the idempotency_key belongs to a different transfer")
-			return
-		}
-		// La base fallo al buscar a quien recibe: nada se movio y el pedido
-		// no tiene nada que corregir. Un 500 se lleva el detalle al log y le
-		// deja a la pantalla un "intenta de nuevo en un momento".
-		if errors.Is(err, ErrBuscarDestino) {
-			response.Error(w, http.StatusInternalServerError, "SINPE_FAILED", err.Error())
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "SINPE_FAILED", err.Error())
+		estado, codigo, mensaje := respuestaDelRechazo(err)
+		response.Error(w, estado, codigo, mensaje)
 		return
 	}
 

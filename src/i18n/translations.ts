@@ -339,6 +339,8 @@ export type TranslationKeys = {
   business_withdraw_hint: string;
   business_withdraw_sin_confirmar: string;
   business_withdraw_ya_hecho: string;
+  business_err_saldo_insuficiente: string;
+  business_err_retiro_fallido: string;
   business_edit: string;
   business_edit_identity_note: string;
   business_lookup_searching: string;
@@ -494,6 +496,11 @@ export type TranslationKeys = {
   sinpe_recipient_not_user: string;
   sinpe_err_sin_confirmar: string;
   sinpe_ya_hecho: string;
+  sinpe_err_no_salio: string;
+  sinpe_err_maximo_por_envio: string;
+  sinpe_err_cupo_diario: string;
+  sinpe_err_tope_diario: string;
+  sinpe_err_tope_mensual: string;
   sinpe_ya_hecho_desc: string;
   sinpe_external_pending_title: string;
   sinpe_external_pending_desc: string;

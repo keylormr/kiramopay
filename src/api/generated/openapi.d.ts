@@ -999,8 +999,44 @@ export interface paths {
                         "application/json": components["schemas"]["SinpeSendResponse"];
                     };
                 };
+                /** @description VALIDATION_ERROR (phone format, amount not positive), RECIPIENT_NOT_USER, SELF_SEND, INVALID_PHONE, INVALID_BODY, or SINPE_FAILED when the risk engine blocks the transfer. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different amount or recipient, and the number belongs to a KiramoPay user. Nothing moved; a new transfer needs a new key. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — a verified MFA challenge is required for this amount. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SINPE_FAILED — a server failure; the detail is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2946,8 +2982,17 @@ export interface paths {
                         "application/json": components["schemas"]["MerchantWithdrawal"];
                     };
                 };
-                /** @description WITHDRAW_FAILED — unknown merchant or the caller is not its owner, the shop balance does not cover the amount, or the amount is not positive. */
+                /** @description VALIDATION_ERROR — the amount is not positive; or INVALID_BODY. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND — unknown merchant, or the caller is not its owner (not told apart). */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2957,6 +3002,24 @@ export interface paths {
                 };
                 /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_INSUFFICIENT_BALANCE — the shop balance does not cover the amount. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description WITHDRAW_FAILED — a server failure; the detail is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };

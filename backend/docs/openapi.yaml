@@ -659,11 +659,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SinpeSendResponse'
+        '400':
+          description: >-
+            VALIDATION_ERROR (phone format, amount not positive),
+            RECIPIENT_NOT_USER, SELF_SEND, INVALID_PHONE, INVALID_BODY, or
+            SINPE_FAILED when the risk engine blocks the transfer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >-
             LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
             amount or recipient, and the number belongs to a KiramoPay user.
             Nothing moved; a new transfer needs a new key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the
+            maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE
+            quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the
+            wallet's limits). Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '428':
+          description: MFA_REQUIRED — a verified MFA challenge is required for this amount.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: SINPE_FAILED — a server failure; the detail is only logged.
           content:
             application/json:
               schema:
@@ -1808,10 +1839,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/MerchantWithdrawal'
         '400':
+          description: VALIDATION_ERROR — the amount is not positive; or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
           description: >-
-            WITHDRAW_FAILED — unknown merchant or the caller is not its owner,
-            the shop balance does not cover the amount, or the amount is not
-            positive.
+            MERCHANT_NOT_FOUND — unknown merchant, or the caller is not its
+            owner (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            MERCHANT_INSUFFICIENT_BALANCE — the shop balance does not cover the
+            amount. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: WITHDRAW_FAILED — a server failure; the detail is only logged.
           content:
             application/json:
               schema:

@@ -603,7 +603,7 @@ func (s *Service) WithdrawToOwner(
 	}
 	m, err := s.repo.GetMerchant(ctx, merchantID)
 	if err != nil || m.UserID != userID {
-		return nil, fmt.Errorf("merchant not found")
+		return nil, ErrComercioNoEncontrado
 	}
 	// No balance pre-check here: the transaction service replays idempotent
 	// retries first, and the ledger enforces the funds atomically — a read

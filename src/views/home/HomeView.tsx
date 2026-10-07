@@ -17,6 +17,8 @@ import { fechaCorta } from '@/utils/fechaPlazo';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
 import { codigoDeCobroCerrado, mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
@@ -283,17 +285,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         }
         // La llave ya es de otro envio: el siguiente intento necesita otra.
         if (code === 'LLAVE_REUTILIZADA') soltarIntento(persona, 'sinpe', llave);
-        const porCodigo: Record<string, string> = {
-          RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
-          SELF_SEND: t('sinpe_self_send_error'),
-          INVALID_PHONE: t('sinpe_phone_invalid'),
-          // Sin respuesta, el envio pudo haber salido. La llave se conserva, y
-          // eso es lo que permite decir que reintentar ahora no lo manda dos
-          // veces.
-          NETWORK_ERROR: t('sinpe_err_sin_confirmar'),
-          LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
-        };
-        setEnvioError(porCodigo[code] || res.error?.message || t('assistant_action_failed'));
+        // Los mismos textos que la pantalla SINPE: es el mismo envio.
+        setEnvioError(
+          mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO, t),
+        );
         return;
       }
       // El envio salio, o ya estaba hecho: el siguiente es otro y lleva otra
