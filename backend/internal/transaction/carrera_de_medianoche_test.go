@@ -82,6 +82,10 @@ func TestOperacion_SiElIntentoDeAyerGanaElAsientoElDeHoyEsSuRepeticion(t *testin
 	if got := estadoDeFila(t, pool, filaB); got != transaction.StatusFailed {
 		t.Fatalf("la fila de B quedo %q, se esperaba %q", got, transaction.StatusFailed)
 	}
+	// La de A es la que movio el dinero: la marca de B no la deja fallida.
+	if got := estadoDeFila(t, pool, filaA); got != transaction.StatusCompleted {
+		t.Fatalf("la fila de A quedo %q, se esperaba %q", got, transaction.StatusCompleted)
+	}
 	if n := asientosConLlave(t, pool, llave); n != 1 {
 		t.Fatalf("asientos con la llave = %d, se esperaba 1", n)
 	}
@@ -145,6 +149,10 @@ func TestTransferencia_SiElIntentoDeAyerGanaElAsientoElDeHoyEsSuRepeticion(t *te
 	if got := estadoDeFila(t, pool, envioB); got != transaction.StatusFailed {
 		t.Fatalf("el envio de B quedo %q, se esperaba %q", got, transaction.StatusFailed)
 	}
+	// El de A es el que movio el dinero: la marca de B no lo deja fallido.
+	if got := estadoDeFila(t, pool, envioA); got != transaction.StatusCompleted {
+		t.Fatalf("el envio de A quedo %q, se esperaba %q", got, transaction.StatusCompleted)
+	}
 	if n := asientosConLlave(t, pool, llave); n != 1 {
 		t.Fatalf("asientos con la llave = %d, se esperaba 1", n)
 	}
@@ -204,6 +212,10 @@ func TestRetiro_SiElIntentoDeAyerGanaElAsientoElDeHoyEsSuRepeticion(t *testing.T
 	}
 	if got := estadoDeFila(t, pool, filaB); got != transaction.StatusFailed {
 		t.Fatalf("la fila de B quedo %q, se esperaba %q", got, transaction.StatusFailed)
+	}
+	// La de A es la que movio el dinero: la marca de B no la deja fallida.
+	if got := estadoDeFila(t, pool, filaA); got != transaction.StatusCompleted {
+		t.Fatalf("la fila de A quedo %q, se esperaba %q", got, transaction.StatusCompleted)
 	}
 	if n := asientosConLlave(t, pool, llave); n != 1 {
 		t.Fatalf("asientos con la llave = %d, se esperaba 1", n)
