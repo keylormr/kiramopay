@@ -52,7 +52,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # v3 instala el paquete `tools`, que Google retiro: el sdkmanager del
+      # runner ya no lo encuentra y el paso falla antes de compilar. v4 instala
+      # solo `platform-tools` (corregido en v4.0.2).
+      - uses: android-actions/setup-android@v4
 
       - name: Capacitor sync (android)
         run: npx cap sync android
