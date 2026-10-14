@@ -39,7 +39,7 @@ Super app financiera para Costa Rica, inspirada en Alipay. Permite pagos SINPE, 
 - **Helm 3** ([instalar](https://helm.sh/docs/intro/install/))
 
 ### Opcional
-- **Go 1.22+** si quieres compilar el backend sin Docker
+- **Go 1.26+** si quieres compilar el backend sin Docker
 - **Playwright** se instala automaticamente con `npm install`
 
 ---
