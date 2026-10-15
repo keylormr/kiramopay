@@ -222,8 +222,13 @@ function fechaLocal(iso: string | undefined): string {
 }
 
 /** Un campo de texto del CSV, entre comillas: una coma adentro no parte la fila. */
+// Comillas dobladas, y un apostrofo delante de lo que la hoja de calculo
+// ejecutaria como formula (= + - @, tabulador, retorno): el titulo puede ser el
+// nombre que escribio otra persona. Mismo criterio que celdaSegura del reporte
+// del comercio (backend/internal/qrpayment/reporte.go).
 function celda(texto: string): string {
-  return `"${texto.replace(/"/g, '""')}"`;
+  const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto;
+  return `"${seguro.replace(/"/g, '""')}"`;
 }
 
 function aCentimos(monto: number): number {
