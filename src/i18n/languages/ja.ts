@@ -1064,6 +1064,7 @@ const ja: TranslationKeys = {
   splitpay_phone_hint: '参加者全員の電話番号が必要です。割り勘は KiramoPay のアカウントにのみ請求できます。',
   splitpay_pay_share: '自分の分を支払う',
   splitpay_your_share: 'あなたの分',
+  splitpay_creator_share: '割り勘の作成者',
   splitpay_share_paid: '支払い済み',
   splitpay_share_pending: '未払い',
   splitpay_share_declined: '辞退',

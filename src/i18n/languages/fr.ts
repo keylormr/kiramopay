@@ -1072,6 +1072,7 @@ const fr: TranslationKeys = {
   splitpay_phone_hint: 'Chaque participant a besoin de son numéro : un partage ne peut être facturé qu’à des comptes KiramoPay.',
   splitpay_pay_share: 'Payer ma part',
   splitpay_your_share: 'Votre part',
+  splitpay_creator_share: 'Créateur du partage',
   splitpay_share_paid: 'Payée',
   splitpay_share_pending: 'En attente',
   splitpay_share_declined: 'Refusée',
