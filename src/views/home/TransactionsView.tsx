@@ -292,23 +292,23 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
   // nombre, mientras la lista lo mostraba como "Transferencia SINPE enviada".
   const conTitulos = () => filtered.map((tx) => ({ ...tx, title: txTitle(tx, t) }));
   const handleExportCSV = () => {
-    exportTransactionsCSV(conTitulos());
+    exportTransactionsCSV(conTitulos(), t);
     setShowExportSheet(false);
     showToast(t('export_success'));
   };
   const handleExportJSON = () => {
-    exportTransactionsJSON(conTitulos());
+    exportTransactionsJSON(conTitulos(), t);
     setShowExportSheet(false);
     showToast(t('export_success'));
   };
   const handleCopy = async () => {
-    const ok = await copyTransactionsToClipboard(conTitulos());
+    const ok = await copyTransactionsToClipboard(conTitulos(), t);
     setShowExportSheet(false);
     if (ok) showToast(t('copied_to_clipboard'));
     else showToast(t('export_copy_failed'), 'error');
   };
   const handleShare = async () => {
-    await shareTransactions(conTitulos());
+    await shareTransactions(conTitulos(), t);
     setShowExportSheet(false);
   };
 

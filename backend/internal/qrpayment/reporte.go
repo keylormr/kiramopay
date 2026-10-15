@@ -67,6 +67,71 @@ const formatoDia = "2006-01-02"
 // el archivo fuente no la contenga literal.
 const bomUTF8 = "\xef\xbb\xbf"
 
+// rotulosCSV son los textos del CSV del reporte en un idioma de la app: el
+// encabezado, el nombre de cada seccion, el balde sin sucursal o sin cobrador
+// y el nombre del archivo. Salian en espanol en cualquier idioma.
+type rotulosCSV struct {
+	encabezado                                      [9]string
+	dia, sucursal, cobrador, total, anterior, vacio string
+	// archivo arma el nombre del archivo con las dos fechas. Solo ASCII: va en
+	// la cabecera Content-Disposition.
+	archivo string
+}
+
+// rotulosPorIdioma tiene los siete idiomas de la app (src/i18n/translations.ts).
+// El espanol es el de siempre: un CSV sin lang sale igual que antes.
+var rotulosPorIdioma = map[string]rotulosCSV{
+	"es": {
+		encabezado: [9]string{"seccion", "desde", "hasta", "clave", "nombre", "bruto", "comision", "neto", "cobros"},
+		dia:        "dia", sucursal: "sucursal", cobrador: "cobrador", total: "total", anterior: "periodo_anterior",
+		vacio: "(sin asignar)", archivo: "reporte-%s-a-%s.csv",
+	},
+	"en": {
+		encabezado: [9]string{"section", "from", "to", "key", "name", "gross", "fee", "net", "payments"},
+		dia:        "day", sucursal: "location", cobrador: "collector", total: "total", anterior: "previous_period",
+		vacio: "(unassigned)", archivo: "report-%s-to-%s.csv",
+	},
+	"fr": {
+		encabezado: [9]string{"section", "du", "au", "cle", "nom", "brut", "commission", "net", "encaissements"},
+		dia:        "jour", sucursal: "succursale", cobrador: "encaisseur", total: "total", anterior: "periode_precedente",
+		vacio: "(non attribué)", archivo: "rapport-%s-au-%s.csv",
+	},
+	"pt": {
+		encabezado: [9]string{"secao", "de", "ate", "chave", "nome", "bruto", "comissao", "liquido", "cobrancas"},
+		dia:        "dia", sucursal: "filial", cobrador: "cobrador", total: "total", anterior: "periodo_anterior",
+		vacio: "(não atribuído)", archivo: "relatorio-%s-a-%s.csv",
+	},
+	"zh-cn": {
+		encabezado: [9]string{"分组", "开始", "结束", "标识", "名称", "总额", "手续费", "净额", "笔数"},
+		dia:        "日", sucursal: "门店", cobrador: "收款员", total: "合计", anterior: "上一周期",
+		vacio: "(未分配)", archivo: "report-%s-to-%s.csv",
+	},
+	"ja": {
+		encabezado: [9]string{"区分", "開始", "終了", "キー", "名前", "総額", "手数料", "純額", "件数"},
+		dia:        "日", sucursal: "店舗", cobrador: "担当者", total: "合計", anterior: "前の期間",
+		vacio: "(未割り当て)", archivo: "report-%s-to-%s.csv",
+	},
+	"hi": {
+		encabezado: [9]string{"खंड", "से", "तक", "कुंजी", "नाम", "सकल", "शुल्क", "शुद्ध", "भुगतान"},
+		dia:        "दिन", sucursal: "शाखा", cobrador: "संग्रहकर्ता", total: "कुल", anterior: "पिछली_अवधि",
+		vacio: "(असाइन नहीं)", archivo: "report-%s-to-%s.csv",
+	},
+}
+
+// rotulosDe devuelve los rotulos del idioma pedido; uno vacio o que la app no
+// tiene, los de espanol.
+func rotulosDe(idioma string) rotulosCSV {
+	if r, ok := rotulosPorIdioma[idioma]; ok {
+		return r
+	}
+	return rotulosPorIdioma["es"]
+}
+
+// NombreDelReporteCSV es el nombre del archivo del reporte en el idioma pedido.
+func NombreDelReporteCSV(rep *MerchantReport, idioma string) string {
+	return fmt.Sprintf(rotulosDe(idioma).archivo, rep.From, rep.To)
+}
+
 // compararTotales arma la comparacion entre la ventana actual y la anterior.
 func compararTotales(v ventanaReporte, actual, anterior ReportBucket) *ReportComparison {
 	return &ReportComparison{
@@ -110,6 +175,14 @@ func variacionPct(actual, anterior int64) *float64 {
 // que empieza con = + - @, tabulador o retorno de carro. Toda celda pasa por
 // celdaSegura antes de escribirse.
 func EscribirReporteCSV(w io.Writer, rep *MerchantReport) error {
+	return EscribirReporteCSVEnIdioma(w, rep, "es")
+}
+
+// EscribirReporteCSVEnIdioma escribe el mismo CSV con los rotulos del idioma
+// de la app (ver rotulosPorIdioma). Las columnas, su orden y los montos no
+// cambian.
+func EscribirReporteCSVEnIdioma(w io.Writer, rep *MerchantReport, idioma string) error {
+	rot := rotulosDe(idioma)
 	if _, err := io.WriteString(w, bomUTF8); err != nil {
 		return err
 	}
@@ -124,20 +197,20 @@ func EscribirReporteCSV(w io.Writer, rep *MerchantReport) error {
 		return []string{monto(b.Gross), monto(b.Fee), monto(b.Net), strconv.Itoa(b.Count)}
 	}
 
-	fila("seccion", "desde", "hasta", "clave", "nombre", "bruto", "comision", "neto", "cobros")
+	fila(rot.encabezado[:]...)
 	for _, d := range rep.Daily {
-		fila(append([]string{"dia", d.Date, d.Date, "", ""},
+		fila(append([]string{rot.dia, d.Date, d.Date, "", ""},
 			monto(d.Gross), monto(d.Fee), monto(d.Net), strconv.Itoa(d.Count))...)
 	}
 	for _, b := range rep.ByLocation {
-		fila(append([]string{"sucursal", rep.From, rep.To, b.Key, nombreOSinAsignar(b.Label)}, montos(b)...)...)
+		fila(append([]string{rot.sucursal, rep.From, rep.To, b.Key, nombreOVacio(b.Label, rot)}, montos(b)...)...)
 	}
 	for _, b := range rep.ByCollector {
-		fila(append([]string{"cobrador", rep.From, rep.To, b.Key, nombreOSinAsignar(b.Label)}, montos(b)...)...)
+		fila(append([]string{rot.cobrador, rep.From, rep.To, b.Key, nombreOVacio(b.Label, rot)}, montos(b)...)...)
 	}
-	fila(append([]string{"total", rep.From, rep.To, "", ""}, montos(rep.Totals)...)...)
+	fila(append([]string{rot.total, rep.From, rep.To, "", ""}, montos(rep.Totals)...)...)
 	if c := rep.Comparison; c != nil {
-		fila(append([]string{"periodo_anterior", c.PreviousFrom, c.PreviousTo, "", ""}, montos(c.PreviousTotals)...)...)
+		fila(append([]string{rot.anterior, c.PreviousFrom, c.PreviousTo, "", ""}, montos(c.PreviousTotals)...)...)
 	}
 
 	cw.Flush()
@@ -169,10 +242,10 @@ func monto(centimos int64) string {
 	return fmt.Sprintf("%s%d.%02d", signo, centimos/100, centimos%100)
 }
 
-// nombreOSinAsignar rotula el balde de ventas sin sucursal o sin cobrador.
-func nombreOSinAsignar(nombre string) string {
+// nombreOVacio rotula el balde de ventas sin sucursal o sin cobrador.
+func nombreOVacio(nombre string, rot rotulosCSV) string {
 	if nombre == "" {
-		return "(sin asignar)"
+		return rot.vacio
 	}
 	return nombre
 }

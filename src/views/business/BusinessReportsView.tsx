@@ -131,7 +131,8 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     exportandoRef.current = true;
     setExportacion('exportando');
     try {
-      const res = await api.exportMerchantReportCsv(merchant.id, days);
+      // En el idioma de la app: el servidor escribe el reporte en ese idioma.
+      const res = await api.exportMerchantReportCsv(merchant.id, days, language);
       if (!res.success || !res.data) {
         setExportacion(res.error?.code === 'PLAN_REQUIRED' ? 'plan' : 'error');
         return;

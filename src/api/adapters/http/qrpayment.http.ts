@@ -494,12 +494,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     });
   }
 
-  async exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>> {
+  async exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>> {
     const tz = new Date().getTimezoneOffset();
+    const lang = idioma ? `&lang=${encodeURIComponent(idioma)}` : '';
     // Se pide como archivo: un 200 es el CSV tal cual; un 403 PLAN_REQUIRED o
     // un 404 llegan como el sobre de error de siempre, con su codigo.
     const res = await this.client.getArchivo(
-      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?days=${days}&tz=${tz}`,
+      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?days=${days}&tz=${tz}${lang}`,
     );
     if (!res.success || !res.data) {
       return apiErrorConDetalle(res.error?.code || 'EXPORT_FAILED', res.error?.message || 'Failed', res.error?.details);

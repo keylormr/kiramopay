@@ -2838,6 +2838,8 @@ export interface paths {
                     days?: number;
                     /** @description Client offset in minutes WEST of UTC (Costa Rica = 360) */
                     tz?: number;
+                    /** @description App language for the header, the section names, the label of the unassigned bucket and the file name. Missing or unknown: Spanish. */
+                    lang?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
                 };
                 header?: never;
                 path: {
@@ -2847,7 +2849,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description UTF-8 CSV with byte order mark, served as an attachment with Cache-Control no-store. Columns: seccion, desde, hasta, clave, nombre, bruto, comision, neto, cobros. seccion is dia, sucursal, cobrador, total or periodo_anterior. Amounts are units with two decimals, not centimos. Every cell that starts with = + - @, a tab or a carriage return is prefixed with an apostrophe, so a spreadsheet shows it as text instead of running it as a formula. */
+                /** @description UTF-8 CSV with byte order mark, served as an attachment with Cache-Control no-store. Columns (in Spanish): seccion, desde, hasta, clave, nombre, bruto, comision, neto, cobros. seccion is dia, sucursal, cobrador, total or periodo_anterior. With lang the same columns and sections come in that language (en: section, from, to, key, name, gross, fee, net, payments; day, location, collector, total, previous_period). Amounts are units with two decimals, not centimos. Every cell that starts with = + - @, a tab or a carriage return is prefixed with an apostrophe, so a spreadsheet shows it as text instead of running it as a formula. */
                 200: {
                     headers: {
                         "Content-Disposition"?: string;
