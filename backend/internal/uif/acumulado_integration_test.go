@@ -57,7 +57,8 @@ func casosDe(t *testing.T, pool *pgxpool.Pool, userID, tipo string) []int64 {
 func TestUnMesRepartidoEnDiasLlegaALaCola(t *testing.T) {
 	svc, _, pool, userID := setupUIF(t)
 	ctx := context.Background()
-	umbral := uif.DefaultThresholds().Acumulado30["CRC"]
+	// En colones, al tipo de cambio de setupUIF (550): ₡5.500.000.
+	umbral := uif.DefaultThresholds().Acumulado30USD * 550
 
 	// Veinte dias de ₡250.000 (₡5.000.000): ningun dia llega a nada, y el
 	// acumulado queda por debajo del umbral de ₡5.500.000.

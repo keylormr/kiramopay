@@ -8,33 +8,39 @@ import (
 )
 
 // El diagnostico tiene que decir la verdad en los dos sentidos: marcar
-// inalcanzable cuando el tope corta antes del umbral, y alcanzable cuando no.
+// inalcanzable cuando los topes cortan antes del umbral, y alcanzable cuando no.
 // Si solo probara el caso de hoy, el dia que alguien suba los topes nadie sabria
 // si el detector sigue sirviendo.
+//
+// El agregado del dia junta todas las monedas por su equivalente en dolares, asi
+// que lo que se compara con el umbral es la SUMA de los topes de cada moneda.
 func TestDiagnostico(t *testing.T) {
-	umbrales := uif.Thresholds{Daily: map[string]int64{"CRC": 1000, "USD": 1000}}
+	umbrales := uif.Thresholds{DailyUSD: 1000}
+	porDolar := map[string]float64{"CRC": 500}
 
-	d := uif.Diagnostico(umbrales, map[string]int64{"CRC": 999, "USD": 1000})
-	if len(d) != 2 {
-		t.Fatalf("esperaba dos monedas, hubo %d", len(d))
+	// 250_000 centimos a 500 por dolar = 500 centavos; mas 500 = 1000: llega al
+	// umbral pero no lo SUPERA, y el agregado solo puede cruzarlo si lo supera.
+	if a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 250_000, "USD": 500}, porDolar); a.Alcanzable {
+		t.Fatalf("un tope que no SUPERA el umbral no puede cruzarlo: %s", a)
 	}
-	for _, a := range d {
-		if a.Alcanzable {
-			t.Fatalf("%s: un tope que no SUPERA el umbral no puede cruzarlo", a.Moneda)
-		}
+	// Ninguna moneda sola llega; juntas si.
+	a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 300_000, "USD": 600}, porDolar)
+	if !a.Alcanzable {
+		t.Fatalf("600 + 600 centavos superan el umbral de 1000: %s", a)
 	}
-
-	d = uif.Diagnostico(umbrales, map[string]int64{"CRC": 1001, "USD": 5000})
-	for _, a := range d {
-		if !a.Alcanzable {
-			t.Fatalf("%s: con el tope por encima del umbral si se puede cruzar", a.Moneda)
-		}
+	if a.MaximoUSDMinor != 1200 {
+		t.Fatalf("maximo = %d, se esperaba 1200", a.MaximoUSDMinor)
+	}
+	// Una moneda sin tipo de cambio no se suma en silencio: se nombra.
+	a = uif.Diagnostico(umbrales, map[string]int64{"CRC": 300_000, "USD": 600}, map[string]float64{})
+	if len(a.SinTipoDeCambio) != 1 || a.SinTipoDeCambio[0] != "CRC" {
+		t.Fatalf("sin tipo de cambio para el colon: %+v", a)
 	}
 }
 
-// Y el hecho que hay que tener delante: HOY, con los umbrales por defecto y los
-// topes de KYC de la aplicacion, la cola de cumplimiento no puede recibir un
-// solo caso.
+// Y el hecho que hay que tener delante: HOY, con el umbral por defecto y los
+// topes de KYC de la aplicacion, ni sumando las dos monedas un dia llega al
+// umbral (₡2.000.000 + US$3.800 dan unos US$8.200 con el colon a 455,6).
 //
 // Esta prueba no dice que eso este mal —es la consecuencia de tener topes
 // bajos, y mover el umbral es una decision regulatoria, no tecnica—. Dice que el
@@ -42,15 +48,13 @@ func TestDiagnostico(t *testing.T) {
 // esta prueba se cae y obliga a mirar el otro.
 func TestHoyElUmbralEsInalcanzable(t *testing.T) {
 	max := kyc.LevelLimits[kyc.LevelComplete]
-	d := uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
+	a := uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
 		"CRC": max.DailyMinor,
 		"USD": max.DailyMinorUSD,
-	})
-	for _, a := range d {
-		if a.Alcanzable {
-			t.Fatalf("%s cambio: %s.\n"+
-				"Si ahora SI se puede alcanzar el umbral, esta prueba sobra y hay que "+
-				"borrarla; si el cambio fue accidental, revisar el otro numero.", a.Moneda, a)
-		}
+	}, map[string]float64{"CRC": 455.6})
+	if a.Alcanzable {
+		t.Fatalf("cambio: %s.\n"+
+			"Si ahora SI se puede alcanzar el umbral, esta prueba sobra y hay que "+
+			"borrarla; si el cambio fue accidental, revisar el otro numero.", a)
 	}
 }
