@@ -42,7 +42,7 @@ export const APP_VERSION: AppVersion = {
   current: {
     version: '2.6.0',
     buildNumber: 16,
-    releaseDate: '2026-09-17',
+    releaseDate: '2026-10-14',
     changes: [
       'Ahorro: ya puedes retirar de una meta desde la aplicacion, y depositar funciona de nuevo en el navegador',
       'Dividir cuenta funciona: puedes crear una division, rechazar tu parte y cancelar la que creaste',
@@ -56,6 +56,14 @@ export const APP_VERSION: AppVersion = {
       'Si escaneas a alguien que ya tienes en contactos, la aplicacion te lo dice en vez de repetirlo',
       'El catalogo de premios volvio a tener recompensas, y si el fondo no alcanza te lo decimos sin descontarte puntos',
       'Que otra persona use mucho la aplicacion desde tu misma red ya no te deja sin poder entrar',
+      'Enviar cripto a otra persona de KiramoPay es real: le llega a su cuenta',
+      'Si una compra, venta o conversion de cripto se repite por un corte de conexion, no se cobra dos veces y la aplicacion te avisa que ya estaba hecha',
+      'Tus compras, ventas y conversiones de cripto aparecen en tus movimientos con el monto completo',
+      'Fechas, horas y numeros salen en el idioma que elegiste en toda la aplicacion: movimientos, SINPE, notificaciones, puntos, recargas y cripto',
+      'Si no puedes entrar o cambiar tu contrasena, la aplicacion te dice el motivo, y los dos tienen un tope de intentos que protege tu cuenta',
+      'Las notificaciones que quitas de tu lista ya no vuelven a aparecer',
+      'Copiar y compartir tus movimientos ya no suma colones con dolares',
+      'En tus movimientos, la parte de un pago dividido se ve con su nombre',
     ],
   },
   history: [
