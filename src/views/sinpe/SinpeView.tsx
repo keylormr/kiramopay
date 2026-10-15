@@ -19,6 +19,7 @@ import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLoca
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDeCobro } from '@/utils/erroresQr';
 import { fechaCorta } from '@/utils/fechaPlazo';
+import { ErrorALaVista } from '@/components/ErrorALaVista';
 
 /**
  * Viste un cobro con la forma que la pantalla ya sabe pintar. Un pedido de
@@ -1171,7 +1172,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             />
           </div>
 
-          {sendError && <p className="text-red-500 text-sm text-center">{sendError}</p>}
+          <ErrorALaVista mensaje={sendError} className="text-red-500 text-sm text-center" />
 
           {/* Boton enviar */}
           <button

@@ -50,6 +50,8 @@ for (const [ancho, alto] of [
       await enviar.click();
       const confirmar = page.getByRole('dialog').last();
       await confirmar.getByRole('button', { name: /^Enviar/ }).click();
+      // La hoja de confirmar se cierra y queda la de enviar, con su aviso.
+      await expect(page.getByRole('dialog')).toHaveCount(1);
 
       const aviso = page.getByRole('alert').filter({ hasText: 'Fondos insuficientes' });
       await expect(aviso).toBeVisible();
