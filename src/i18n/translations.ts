@@ -1191,6 +1191,10 @@ export type TranslationKeys = {
   qr_err_llave_invalida: string;
   qr_err_pago_no_registrado: string;
   qr_err_mfa: string;
+  pago_err_tope_diario: string;
+  pago_err_tope_mensual: string;
+  qr_err_comercio_no_disponible: string;
+  qr_err_sin_confirmar: string;
   home_top_cat: string;
   home_savings: string;
   home_savings_view: string;

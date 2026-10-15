@@ -354,12 +354,18 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	payeeName := ""
 	var merchant *Merchant
 	if obj.code.MerchantID != "" {
+		// Solo un comercio que no existe es "no encontrado": una caida de la
+		// base al leerlo es un fallo del servidor, y el handler la responde
+		// como tal.
 		merchant, err = s.repo.GetMerchant(ctx, obj.code.MerchantID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrComercioNoEncontrado
+		}
 		if err != nil {
-			return nil, fmt.Errorf("merchant not found")
+			return nil, fmt.Errorf("leer el comercio: %w", err)
 		}
 		if merchant.VerificationStatus != "verified" {
-			return nil, fmt.Errorf("merchant is not available")
+			return nil, ErrComercioNoDisponible
 		}
 		// La efectiva, no commission_bps: durante la promocion de entrada se
 		// cobra la menor entre las dos. GetMerchant la calculo al leer la fila.

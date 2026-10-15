@@ -340,7 +340,8 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     try {
       qrInfo = JSON.parse(request.qrData);
     } catch {
-      return apiError('INVALID_QR', 'Codigo QR invalido');
+      // El mismo codigo que el servidor, para que la pantalla lo traduzca.
+      return apiError('QR_INVALIDO', 'Codigo QR invalido');
     }
 
     const amount = request.amount ?? qrInfo.amount ?? 0;

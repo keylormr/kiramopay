@@ -39,6 +39,11 @@ var (
 	ErrNoPodesPagarte = errors.New("no podes pagarte a vos mismo")
 	ErrMontoRequerido = errors.New("este codigo necesita que indiques el monto")
 
+	// ErrComercioNoDisponible: el codigo es de un comercio que todavia no esta
+	// aprobado (o ya no lo esta). Salia como 400 PAYMENT_FAILED con la frase
+	// en ingles, que la pantalla mostraba tal cual.
+	ErrComercioNoDisponible = errors.New("merchant is not available")
+
 	// ErrMontoInvalido: un cobro con monto cero o negativo. La pantalla ya no
 	// deja llegar aca, pero otro cliente si, y recibia "amount must be
 	// positive" en ingles bajo el PAYMENT_FAILED generico.

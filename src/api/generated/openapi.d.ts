@@ -3116,8 +3116,53 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description The request or the code cannot be paid as sent: QR_INVALIDO, NO_PODES_PAGARTE (paying your own code), MONTO_REQUERIDO (open-amount code without an amount), MONTO_INVALIDO, LLAVE_INVALIDA (malformed idempotency_key), TRANSFER_BLOCKED (the risk engine stopped the transfer) or INVALID_BODY. No money moves. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND — the code belongs to a business that no longer exists. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or MERCHANT_UNAVAILABLE (the business is not approved). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. No money moves. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MFA_REQUIRED — verify the second factor and retry the same request. */
                 428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed and the payment may have gone through. Retrying the same request (same idempotency_key on an open-amount code) never charges twice. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
