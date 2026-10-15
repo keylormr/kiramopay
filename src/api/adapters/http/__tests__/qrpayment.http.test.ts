@@ -88,6 +88,17 @@ describe('HttpQRPaymentRepository: planes del comercio', () => {
     expect(res.error).toEqual({ code: 'PLAN_REQUIRED', message: 'plan', details: { plan_requerido: 'analitica' } });
   });
 
+  // El reporte salia en espanol en cualquier idioma: el servidor lo escribe en
+  // el que le pide la app.
+  it('pide el CSV en el idioma de la app', async () => {
+    const getArchivo = vi.fn().mockResolvedValue({ success: true, data: { blob: new Blob(['x']), nombre: 'report-a-to-b.csv' } });
+    const repo = new HttpQRPaymentRepository(fakeClient({ getArchivo } as Partial<HttpClient>));
+
+    await repo.exportMerchantReportCsv('m1', 7, 'zh-cn');
+
+    expect(getArchivo.mock.calls[0][0]).toMatch(/^\/api\/v1\/qr\/merchants\/m1\/report\.csv\?days=7&tz=-?\d+&lang=zh-cn$/);
+  });
+
   it('asigna el plan del comercio con exactamente {plan} y conserva MERCHANT_NOT_FOUND', async () => {
     const patch = vi
       .fn()
