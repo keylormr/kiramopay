@@ -18,10 +18,15 @@ func TestDiagnostico(t *testing.T) {
 	umbrales := uif.Thresholds{DailyUSD: 1000}
 	porDolar := map[string]float64{"CRC": 500}
 
-	// 250_000 centimos a 500 por dolar = 500 centavos; mas 500 = 1000: llega al
-	// umbral pero no lo SUPERA, y el agregado solo puede cruzarlo si lo supera.
-	if a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 250_000, "USD": 500}, porDolar); a.Alcanzable {
-		t.Fatalf("un tope que no SUPERA el umbral no puede cruzarlo: %s", a)
+	// 250_000 centimos a 500 por dolar = 500 centavos; mas 500 = 1000: los topes
+	// dejan llegar justo al umbral (el tope rechaza solo lo que lo PASA), y la
+	// regla del dia dispara al llegar (>=). El diagnostico decia INALCANZABLE.
+	if a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 250_000, "USD": 500}, porDolar); !a.Alcanzable {
+		t.Fatalf("un tope que llega justo al umbral lo alcanza: %s", a)
+	}
+	// Un centavo menos ya no llega.
+	if a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 250_000, "USD": 499}, porDolar); a.Alcanzable {
+		t.Fatalf("un tope que no llega al umbral no puede cruzarlo: %s", a)
 	}
 	// Ninguna moneda sola llega; juntas si.
 	a := uif.Diagnostico(umbrales, map[string]int64{"CRC": 300_000, "USD": 600}, porDolar)
