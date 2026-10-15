@@ -262,23 +262,26 @@ func main() {
 		// El aviso solo se da si ninguna de las reglas de una moneda puede
 		// dispararse: antes gritaba siempre, y un aviso que no cambia deja de
 		// leerse.
+		//
+		// El umbral es uno, en dolares, y los agregados juntan las monedas: los
+		// topes de cada moneda se suman por su equivalente con el tipo de cambio
+		// oficial guardado. Sin el, el colon no se suma y el aviso lo dice.
 		maxKYC := kyc.LevelLimits[kyc.LevelComplete]
-		mensual := map[string]bool{}
-		for _, a := range uif.DiagnosticoAcumulado(uif.DefaultThresholds(), map[string]int64{
+		porDolar := map[string]float64{}
+		if tasa, _, err := country.NewRepository(pool).TipoDeCambioConEdad(context.Background(), "USD", "CRC"); err == nil {
+			porDolar["CRC"] = tasa
+		}
+		mensual := uif.DiagnosticoAcumulado(uif.DefaultThresholds(), map[string]int64{
 			"CRC": maxKYC.MonthlyMinor,
 			"USD": maxKYC.MonthlyMinorUSD,
-		}) {
-			mensual[a.Moneda] = a.Alcanzable
-		}
-		for _, a := range uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
+		}, porDolar)
+		diario := uif.Diagnostico(uif.DefaultThresholds(), map[string]int64{
 			"CRC": maxKYC.DailyMinor,
 			"USD": maxKYC.DailyMinorUSD,
-		}) {
-			if !a.Alcanzable && !mensual[a.Moneda] {
-				log.Printf("AVISO UIF: %s, y el acumulado de 30 dias tampoco llega con el tope "+
-					"mensual de KYC: la cola de cumplimiento no puede recibir un caso en %s. "+
-					"Revisar con el area de cumplimiento.", a, a.Moneda)
-			}
+		}, porDolar)
+		if !diario.Alcanzable && !mensual.Alcanzable {
+			log.Printf("AVISO UIF: diario %s; 30 dias %s: la cola de cumplimiento no puede recibir un caso. "+
+				"Revisar con el area de cumplimiento.", diario, mensual)
 		}
 	}
 
@@ -346,7 +349,18 @@ func main() {
 		// (public endpoints by default; fail-open when unreachable).
 		Hacienda: kyc.NewHaciendaClient("", ""),
 	})
-	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
+	// La UIF compara cada movimiento por su equivalente en dolares (la ley fija
+	// US$10.000 o su equivalente) con el ultimo tipo de cambio oficial, aunque la
+	// fuente no lo haya confirmado en las ultimas horas: para comparar con el
+	// umbral, el ultimo oficial es mejor que ninguno. Sin ninguno, abre un caso
+	// manual.
+	uifService := uif.NewService(uifRepo, &uif.Options{
+		AuditLogger: auditLogger,
+		TipoDeCambio: func(ctx context.Context, moneda string) (float64, error) {
+			tasa, _, err := countryRepo.TipoDeCambioConEdad(ctx, "USD", moneda)
+			return tasa, err
+		},
+	})
 	adminUsersService := adminusers.NewService(userRepo, authRepo, &adminusers.Options{AuditLogger: auditLogger})
 	// Loyalty nace ANTES que auth: el registro con codigo de invitacion le
 	// acredita el bono al referidor a traves de Referrals. Si se construyera
