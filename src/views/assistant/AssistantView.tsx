@@ -5,6 +5,8 @@ import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
 import { useAuthStore } from '@/stores/auth.store';
 import { normalizarTelefonoCR } from '@/utils/telefono';
 import type { AssistantTurn, AssistantProposal, AssistantConversationSummary } from '@/api';
@@ -228,21 +230,15 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         refreshSinpe().catch(() => {});
       }
     }
-    const porCodigo: Record<string, string> =
-      p.kind === 'sinpe_transfer'
-        ? {
-            RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
-            SELF_SEND: t('sinpe_self_send_error'),
-            INVALID_PHONE: t('sinpe_phone_invalid'),
-            NETWORK_ERROR: t('sinpe_err_sin_confirmar'),
-            LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
-          }
-        : {};
+    // El SINPE con los mismos textos que la pantalla SINPE: es el mismo envio.
+    const error = res.success
+      ? ''
+      : p.kind === 'sinpe_transfer'
+        ? mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO, t)
+        : res.error?.message || t('assistant_action_failed');
     setPstate((s) => ({
       ...s,
-      [key]: res.success
-        ? { status: 'done', repetida }
-        : { status: 'error', error: porCodigo[code] || res.error?.message || t('assistant_action_failed') },
+      [key]: res.success ? { status: 'done', repetida } : { status: 'error', error },
     }));
   };
 

@@ -86,7 +86,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		return nil, fmt.Errorf("amount must be positive")
 	}
 	if req.Amount > MaxSinglePaymentCRC {
-		return nil, fmt.Errorf("amount exceeds single-payment ceiling")
+		return nil, ErrMaximoPorEnvio
 	}
 	if !validCRMobile(req.Phone) {
 		return nil, ErrInvalidPhone
@@ -313,10 +313,10 @@ func (s *Service) cortesia(ctx context.Context, userID string, monto, comision, 
 		return fmt.Errorf("check daily limit: %w", err)
 	}
 	if dailySpent+monto > DailyLimitCRC {
-		return fmt.Errorf("SINPE daily limit exceeded")
+		return ErrCupoDiarioSinpe
 	}
 	if saldo < monto+comision {
-		return fmt.Errorf("insufficient balance")
+		return transaction.ErrSaldoInsuficiente
 	}
 	return nil
 }

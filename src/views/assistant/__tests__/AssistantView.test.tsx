@@ -195,6 +195,31 @@ describe('AssistantView — la llave del envío SINPE', () => {
     expect(pedido.idempotencyKey).toMatch(/\S/);
   });
 
+  // Los rechazos del envío se dicen en el idioma de la persona, como en la
+  // pantalla SINPE.
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    // El 500: el servidor fallo y el envio pudo haber salido (un commit que se
+    // corta). La llave se conserva, asi que reintentar ahora no lo manda dos
+    // veces: es lo que dice el texto del envio sin confirmar.
+    ['SINPE_FAILED', 'internal server error', /^No pudimos confirmar el envío/],
+    // El motor de riesgo, como cualquier codigo que la pantalla no conoce.
+    [
+      'TRANSFER_BLOCKED',
+      'this transaction was blocked by the risk engine',
+      'No se pudo hacer el envío. Intenta de nuevo.',
+    ],
+  ])('traduce el rechazo %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mockApi.sinpe.send.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    await pedirYConfirmar(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
   it('un número que no se entiende no se envía y lo explica', async () => {
     mockApi.assistant.chat.mockResolvedValueOnce({
       success: true,

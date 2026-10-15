@@ -80,6 +80,13 @@ var (
 	// 500, con el detalle solo en el log. Antes se tragaba y se contestaba "no
 	// es usuario", y despues salia como un 400 con el texto del driver.
 	ErrBuscarDestino = errors.New("no se pudo buscar a quien recibe")
+	// ErrMaximoPorEnvio: el monto pasa el maximo de un solo envio
+	// (MaxSinglePaymentCRC).
+	ErrMaximoPorEnvio = errors.New("amount exceeds single-payment ceiling")
+	// ErrCupoDiarioSinpe: con este envio, lo enviado hoy por SINPE pasaria
+	// DailyLimitCRC. No es el tope diario de la billetera
+	// (transaction.ErrDailyLimitExceeded), que cuenta toda salida.
+	ErrCupoDiarioSinpe = errors.New("SINPE daily limit exceeded")
 )
 
 // ContactExistsError carries the EXISTING contact alongside the rejection, so

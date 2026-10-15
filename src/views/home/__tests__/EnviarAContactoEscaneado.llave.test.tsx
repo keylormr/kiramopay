@@ -134,6 +134,34 @@ beforeEach(() => {
   mocks.dataSync.refreshSinpe.mockClear();
 });
 
+// Los rechazos del envío se dicen en el idioma de la persona, como en la
+// pantalla SINPE: el texto del servidor está en inglés y arrastra los prefijos
+// internos.
+describe('HomeView — los rechazos del envío al contacto escaneado', () => {
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    // El 500: el servidor fallo y el envio pudo haber salido (un commit que se
+    // corta). La llave se conserva, asi que reintentar ahora no lo manda dos
+    // veces: es lo que dice el texto del envio sin confirmar.
+    ['SINPE_FAILED', 'internal server error', /^No pudimos confirmar el envío/],
+    // El motor de riesgo, como cualquier codigo que la pantalla no conoce.
+    [
+      'TRANSFER_BLOCKED',
+      'this transaction was blocked by the risk engine',
+      'No se pudo hacer el envío. Intenta de nuevo.',
+    ],
+  ])('traduce %s y no muestra el texto del servidor', async (code, message, texto) => {
+    mocks.send.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanearYEnviar(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+});
+
 describe('HomeView — la llave del envío al contacto escaneado', () => {
   it('tras un corte de red lo explica, y reintentar lleva la misma llave', async () => {
     mocks.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce(enviado);
