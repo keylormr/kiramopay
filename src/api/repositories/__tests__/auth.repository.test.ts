@@ -340,4 +340,47 @@ describe('HttpAuthRepository', () => {
       expect((await repo.refresh('')).error?.code).toBe('ACCOUNT_BLOCKED');
     });
   });
+
+  // El servidor escribe los avisos y los push en el idioma guardado de la
+  // cuenta: la app lo guarda y lo lee del perfil y del login.
+  describe('idioma de la cuenta', () => {
+    it('lo guarda con PUT /users/me/language', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) });
+      const result = await repo.setLanguage('zh-cn');
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/api/v1/users/me/language',
+        expect.objectContaining({ method: 'PUT', body: JSON.stringify({ language: 'zh-cn' }) }),
+      );
+    });
+
+    it('conserva el codigo de un rechazo', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { code: 'INVALID_LANGUAGE', message: 'idioma no soportado' } }),
+      });
+      expect((await repo.setLanguage('xx')).error?.code).toBe('INVALID_LANGUAGE');
+    });
+
+    it('lo lee del perfil', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { id: 'u1', cedula: '1', phone: '+50688880000', first_name: 'A', last_name: 'B', email: '', kyc_level: 1, language: 'ja' },
+        }),
+      });
+      expect((await repo.getProfile()).data?.language).toBe('ja');
+    });
+
+    it('lo lee del login', async () => {
+      mockLoginSuccess({
+        id: 'user-001', cedula: '702650930', phone: '+506 8888-0000', first_name: 'Keilor',
+        last_name: 'Martinez', email: 'keilor@kiramopay.com', kyc_level: 2, status: 'active', language: 'fr',
+      } as Parameters<typeof mockLoginSuccess>[0]);
+      const result = await repo.login({ identifier: '702650930', cedula: '702650930', password: 'x' });
+      expect(result.data?.user.language).toBe('fr');
+    });
+  });
 });
