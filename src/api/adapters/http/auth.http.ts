@@ -14,6 +14,7 @@ import type { User } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export class HttpAuthRepository implements IAuthRepository {
   constructor(private client: HttpClient) {}
@@ -272,7 +273,20 @@ export class HttpAuthRepository implements IAuthRepository {
   async setLanguage(language: string): Promise<ApiResponse<void>> {
     const res = await this.client.put<void>('/api/v1/users/me/language', { language });
     if (!res.success) {
-      return apiError(res.error?.code || 'LANGUAGE_FAILED', res.error?.message || 'Failed to save the language');
+      // El codigo, el texto y los detalles que trajo el cliente pasan enteros
+      // (sin red, sesion vencida, un rechazo del servidor): el cliente ya los
+      // deja en el idioma activo. Sin ninguno, el codigo propio con el texto
+      // generico del idioma activo, nunca una frase fija en ingles.
+      const e = res.error;
+      return {
+        success: false,
+        error: {
+          code: e?.code || 'LANGUAGE_FAILED',
+          message: e?.message?.trim() || traducirFueraDeReact('err_generic'),
+          ...(e?.data !== undefined ? { data: e.data } : {}),
+          ...(e?.details ? { details: e.details } : {}),
+        },
+      };
     }
     return apiSuccess(undefined as unknown as void);
   }
