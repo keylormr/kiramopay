@@ -314,4 +314,43 @@ describe('SplitPayView', () => {
     await screen.findByRole('button', { name: /rechazar mi parte/i });
     expect(screen.queryByRole('button', { name: /cancelar división/i })).toBeNull();
   });
+
+  // La cuota de quien creo la division llegaba sin nombre ni telefono y la
+  // fila salia en blanco: quien tenia que pagar no sabia a quien. El servidor
+  // ahora manda el nombre; si aun asi no llega, la fila dice quien es.
+  it('la cuota de quien creo la division nunca sale en blanco', async () => {
+    mocks.getSplit.mockResolvedValue({
+      success: true,
+      data: {
+        group: grupo, // creatorId: 'otro'
+        shares: [
+          { id: 's1', groupId: 'g1', userId: 'otro', userName: '', amount: 1500, status: 'paid' },
+          { id: 's2', groupId: 'g1', userId: 'yo', userName: 'Yo', amount: 1500, status: 'pending' },
+        ],
+      },
+    });
+    pintar();
+
+    fireEvent.click(await screen.findByText('Cena'));
+    await screen.findByText(/Tu parte/i);
+    expect(screen.getByText('Quien creó la división')).toBeTruthy();
+  });
+
+  it('con nombre, la cuota de quien creo la division lleva su nombre', async () => {
+    mocks.getSplit.mockResolvedValue({
+      success: true,
+      data: {
+        group: grupo,
+        shares: [
+          { id: 's1', groupId: 'g1', userId: 'otro', userName: 'Test User', amount: 1500, status: 'paid' },
+          { id: 's2', groupId: 'g1', userId: 'yo', userName: 'Yo', amount: 1500, status: 'pending' },
+        ],
+      },
+    });
+    pintar();
+
+    fireEvent.click(await screen.findByText('Cena'));
+    expect(await screen.findByText('Test User')).toBeTruthy();
+    expect(screen.queryByText('Quien creó la división')).toBeNull();
+  });
 });
