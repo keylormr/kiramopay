@@ -67,9 +67,10 @@ func Diagnostico(t Thresholds, maximosDiarios map[string]int64, porDolar map[str
 	return Alcance{
 		UmbralUSDMinor: t.DailyUSD,
 		MaximoUSDMinor: max,
-		// El agregado del dia llega como mucho a la suma de los topes. Solo
-		// puede CRUZAR el umbral si esa suma lo supera.
-		Alcanzable:      max > t.DailyUSD,
+		// El agregado del dia llega como mucho a la suma de los topes: el tope
+		// rechaza solo lo que lo PASA, asi que llegar justo es posible, y la
+		// regla dispara al llegar (>=, ver Evaluate).
+		Alcanzable:      max >= t.DailyUSD,
 		SinTipoDeCambio: sinTasa,
 	}
 }

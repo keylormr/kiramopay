@@ -33,6 +33,23 @@ func DefaultThresholds() Thresholds {
 	}
 }
 
+// conLosDeLey reemplaza por el de la ley todo umbral que no sea positivo. Un
+// umbral en cero no es "sin umbral": todo movimiento lo iguala y cada uno
+// abriria un caso.
+func (t Thresholds) conLosDeLey() Thresholds {
+	ley := DefaultThresholds()
+	if t.SingleUSD <= 0 {
+		t.SingleUSD = ley.SingleUSD
+	}
+	if t.DailyUSD <= 0 {
+		t.DailyUSD = ley.DailyUSD
+	}
+	if t.Acumulado30USD <= 0 {
+		t.Acumulado30USD = ley.Acumulado30USD
+	}
+	return t
+}
+
 // EvaluateAcumulado decide si el acumulado de 30 dias CRUZA el umbral con este
 // movimiento: antes estaba por debajo y ahora no. Solo en el cruce, igual que la
 // estructuracion diaria: si disparara con cada movimiento posterior, la cola
