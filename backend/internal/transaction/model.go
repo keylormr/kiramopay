@@ -26,6 +26,13 @@ type TransactionRecord struct {
 	ProcessedAt       *time.Time `json:"processed_at,omitempty"`
 	CompletedAt       *time.Time `json:"completed_at,omitempty"`
 	CreatedDate       string     `json:"created_date"`
+
+	// contraparteID es a quien iba la plata —la persona o el comercio—, tal
+	// como quedo en la columna counterparty_id. Lo lee solo la relectura de
+	// idempotencia, para distinguir el reintento de una transferencia de otra
+	// que pide prestada su llave. No se exporta para que nunca viaje en una
+	// respuesta: es el id interno de otra persona.
+	contraparteID string
 }
 
 // Transaction types
@@ -100,6 +107,11 @@ type CreateTransactionRequest struct {
 	//
 	// Lleva `json:"-"` por lo mismo que Internal.
 	EnLaMismaTx func(ctx context.Context, tx pgx.Tx, txID string) error `json:"-"`
+
+	// contraparteID es a quien va la plata, para guardarlo en la fila. Lo
+	// ponen solo las transferencias y el retiro del negocio, de este paquete:
+	// sin exportar, ni un cliente ni otro modulo pueden escribirlo.
+	contraparteID string
 }
 
 // rutaPropiaDe: para cada tipo que POST /transactions llego a aceptar, cual es

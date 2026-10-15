@@ -23,6 +23,7 @@ import { useSavingsStore } from './savings.store';
 import { useRecurringStore } from './recurring.store';
 import { useBusinessStore } from './business.store';
 import { nuevaGeneracion } from '@/services/generacionDeSesion';
+import { olvidarIntentos } from '@/services/intentoPendiente';
 
 export function limpiarDatosDeUsuario(): void {
   // PRIMERO, y fuera del early-return de abajo: invalidar el trabajo
@@ -56,6 +57,9 @@ export function limpiarDatosDeUsuario(): void {
     connectedPartners: ['uber', 'ubereats'],
   });
   useNotificationStore.setState({ notifications: [], ocultas: [] });
+  // Los intentos pendientes —la llave que se conserva cuando no se sabe si un
+  // envio salio— son de quien sale, como su historial SINPE.
+  olvidarIntentos();
   useSavingsStore.setState({ goals: [] });
   useRecurringStore.setState({ payments: [] });
   useBusinessStore.setState({ activeMerchantId: null });

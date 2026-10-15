@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -125,8 +126,13 @@ func (r *Repository) GetHistory(ctx context.Context, userID string, limit int) (
 	return history, nil
 }
 
-func (r *Repository) AddHistory(ctx context.Context, record *HistoryRecord) error {
-	_, err := r.db.Exec(ctx,
+// AddHistoryEnTx escribe la fila del historial dentro de la transaccion del
+// asiento: el envio y su historial confirman juntos o no confirman. La fila de
+// quien envia es la que suma el cupo diario, asi que un envio sin ella le
+// dejaba a la persona cupo de mas, y una repeticion que la escribia otra vez
+// se lo gastaba dos veces.
+func (r *Repository) AddHistoryEnTx(ctx context.Context, tx pgx.Tx, record *HistoryRecord) error {
+	_, err := tx.Exec(ctx,
 		`INSERT INTO sinpe_history (id, user_id, phone, contact_name, amount, fee, type, status, description, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		record.ID, record.UserID, record.Phone, record.ContactName,

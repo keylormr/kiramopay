@@ -2,18 +2,24 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { encodeContactQr } from '@/utils/contactQr';
+import { llaveDelIntento } from '@/services/intentoPendiente';
 import { SinpeView } from '../SinpeView';
 
 const mocks = vi.hoisted(() => ({
   api: { sinpe: { send: vi.fn() }, mfa: { totpVerify: vi.fn() } },
   dispatch: vi.fn(),
+  dataSync: {
+    refreshAccounts: vi.fn(() => Promise.resolve(true)),
+    refreshSinpe: vi.fn(() => Promise.resolve()),
+    refreshTransactions: vi.fn(() => Promise.resolve()),
+  },
   // Mutable a propósito: algunas pruebas necesitan contactos ya guardados
   // (para ejercitar la detección de duplicados) sin reescribir el mock entero.
   state: {
     accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
     sinpeContacts: [] as Array<{ id: string; name: string; phone: string; bank?: string; isFavorite?: boolean }>,
     sinpeHistory: [] as unknown[],
-    user: { phone: '+506 8888-0000' },
+    user: { phone: '+506 8888-0000' } as { id?: string; phone: string },
   },
 }));
 
@@ -28,6 +34,8 @@ vi.mock('@/hooks/useApp', () => ({
     dispatch: mocks.dispatch,
   }),
 }));
+
+vi.mock('@/services/dataSync', () => mocks.dataSync);
 
 function setup() {
   return render(
@@ -66,6 +74,9 @@ beforeEach(() => {
   mocks.api.sinpe.send.mockReset();
   mocks.api.mfa.totpVerify.mockReset();
   mocks.dispatch.mockReset();
+  mocks.dataSync.refreshAccounts.mockClear();
+  mocks.dataSync.refreshSinpe.mockClear();
+  mocks.dataSync.refreshTransactions.mockClear();
   mocks.state.sinpeContacts = [];
   mocks.state.user = { phone: '+506 8888-0000' };
   // jsdom no tiene cámara. Una promesa que nunca resuelve deja el escáner en su
@@ -193,7 +204,9 @@ describe('SinpeView — send', () => {
 
     await openSendSheetAndSubmit(user);
 
-    expect(await screen.findByText('Revisa el número: debe tener 8 dígitos')).toBeInTheDocument();
+    // El servidor solo lo rechaza por esto cuando el número tiene sus 8 dígitos
+    // pero no es un celular: "debe tener 8 dígitos" le hablaba de otra cosa.
+    expect(await screen.findByText('Revisa el número: debe ser un celular de 8 dígitos')).toBeInTheDocument();
     expect(screen.queryByText(/invalid SINPE Móvil phone number/)).not.toBeInTheDocument();
   });
 
@@ -523,3 +536,244 @@ describe('SinpeView — historial', () => {
   });
 });
 
+
+// La llave del envío. La pantalla la manda para el caso de la red que se corta
+// sin traer la respuesta: el envío pudo haber salido, y el reintento tiene que
+// llevar la MISMA llave para que el servidor conteste con aquel envío en vez de
+// hacer otro. Se soltaba ante cualquier error —y al cerrar la hoja—, así que
+// reintentar tras un corte mandaba la plata dos veces.
+describe('SinpeView — la llave del envío', () => {
+  const sinRed = { success: false, error: { code: 'NETWORK_ERROR', message: 'Sin conexión.' } };
+  const llaves = () => mocks.api.sinpe.send.mock.calls.map((c) => c[0].idempotencyKey as string);
+
+  // Con la hoja de enviar todavía abierta y sus datos puestos, vuelve a pasar
+  // por la revisión y confirma.
+  async function confirmarDeNuevo(user: ReturnType<typeof userEvent.setup>) {
+    const [hoja] = await screen.findAllByRole('dialog');
+    await user.click(within(hoja).getByRole('button', { name: /Enviar/ }));
+    const sheets = await screen.findAllByRole('dialog');
+    await user.click(within(sheets[sheets.length - 1]).getByRole('button', { name: /Enviar/ }));
+  }
+
+  it('tras un corte de red, reintentar el mismo envío lleva la misma llave', async () => {
+    mocks.api.sinpe.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+    await confirmarDeNuevo(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
+  });
+
+  it('tras un corte de red, cerrar la hoja y enviar lo mismo lleva la misma llave', async () => {
+    mocks.api.sinpe.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+    const [hoja] = await screen.findAllByRole('dialog');
+    await user.click(within(hoja).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
+  });
+
+  // La promesa vale para el reintento de ahora: la llave se olvida al cerrar
+  // sesión, y la sesión se cierra sola tras un rato sin uso. Más tarde lo
+  // seguro es mirar los movimientos antes.
+  it('un corte de red avisa que reintentar ahora no envía dos veces, y que más tarde conviene revisar', async () => {
+    mocks.api.sinpe.send.mockResolvedValue(sinRed);
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+
+    expect(await screen.findByText(/No pudimos confirmar el envío/)).toBeInTheDocument();
+    expect(screen.getByText(/Si lo intentas de nuevo ahora con los mismos datos, no se enviará dos veces/)).toBeInTheDocument();
+    // "Transacciones" es el nombre de la pantalla a la que manda.
+    expect(screen.getByText(/Si lo intentas más tarde, revisa antes tus transacciones/)).toBeInTheDocument();
+  });
+
+  // Las tres entradas de SINPE —esta pantalla, el contacto escaneado del Inicio
+  // y el asistente— le dan la misma llave al mismo envío: el ámbito 'sinpe' y
+  // la firma teléfono con +506 y monto. Si una cambiara cualquiera de los dos,
+  // el corte en una y el reintento en otra mandarían la plata dos veces.
+  it('el mismo envío lleva la llave que le dieron las otras entradas de SINPE', async () => {
+    mocks.state.user = { id: 'user-001', phone: '+506 8888-0000' };
+    llaveDelIntento('user-001', 'sinpe', '+50688887777|5000', () => 'llave-de-otra-entrada');
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+
+    expect(llaves()).toEqual(['llave-de-otra-entrada']);
+  });
+
+  // El servidor pide el segundo factor antes de crear nada: cancelarlo deja
+  // ese envío sin hacer y suelta su llave. Solo la suya: se soltaba la que
+  // hubiera, y podía ser la de otro envío que seguía sin confirmar.
+  it('cancelar el segundo factor suelta la llave de ese envío y no la de otro pendiente', async () => {
+    mocks.state.user = { id: 'user-001', phone: '+506 8888-0000' };
+    const otra = llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'llave-de-otro-envio');
+    mocks.api.sinpe.send.mockResolvedValue({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    const reto = (await screen.findByText('Verificación requerida')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(reto).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByText('Verificación requerida')).not.toBeInTheDocument());
+
+    expect(llaveDelIntento('user-001', 'sinpe', '+50677776666|1000', () => 'nueva')).toBe(otra);
+    await confirmarDeNuevo(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+    const [primera, segunda] = llaves();
+    expect(segunda).not.toBe(primera);
+  });
+
+  it('corregir el monto tras un corte de red es otro envío y lleva otra llave', async () => {
+    mocks.api.sinpe.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+    const [hoja] = await screen.findAllByRole('dialog');
+    const monto = within(hoja).getByPlaceholderText('0');
+    await user.clear(monto);
+    await user.type(monto, '6000');
+    await confirmarDeNuevo(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(segunda).not.toBe(primera);
+  });
+
+  it('la llave de otro envío lo explica y el siguiente intento lleva otra llave', async () => {
+    mocks.api.sinpe.send
+      .mockResolvedValueOnce({
+        success: false,
+        error: { code: 'LLAVE_REUTILIZADA', message: 'idempotency key reused for a different movement' },
+      })
+      .mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    expect(
+      await screen.findByText(/ya se hizo con otros datos\. Revisa tus transacciones antes de intentar de nuevo/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/idempotency key reused/)).not.toBeInTheDocument();
+
+    await confirmarDeNuevo(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+    const [primera, segunda] = llaves();
+    expect(segunda).not.toBe(primera);
+  });
+
+  // Verificar el segundo factor reintenta el MISMO envío: la misma llave.
+  it('el reintento tras verificar el segundo factor lleva la misma llave', async () => {
+    mocks.api.sinpe.send
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
+      .mockResolvedValueOnce({ success: true, data: sentTx });
+    mocks.api.mfa.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    expect(await screen.findByText('Verificación requerida')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByText('Verificar y enviar'));
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
+  });
+
+  // Cambiar de pestaña desmonta la pantalla, y bloquear la app o recargarla
+  // también. La llave vivía en la pantalla: volver a SINPE y enviar lo mismo
+  // llevaba otra, y el texto acababa de prometer que no se enviaría dos veces.
+  it('tras un corte de red, salir de SINPE y volver a enviar lo mismo lleva la misma llave', async () => {
+    mocks.api.sinpe.send.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    const pantalla = setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+    pantalla.unmount();
+    setup();
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(primera).toMatch(/\S/);
+    expect(segunda).toBe(primera);
+  });
+
+  // La repetición: el servidor contestó con un envío que YA estaba hecho bajo
+  // esa llave. Puede ser el reintento tras un corte, o un segundo envío igual
+  // hecho a propósito con la llave que la pantalla conservaba. No es un envío
+  // nuevo: no se celebra ni se anota —sería la fila doble y el saldo contado
+  // dos veces—, se dice, y la llave se suelta para que el siguiente sí lo sea.
+  it('si el envío ya se había hecho, lo dice, no lo anota otra vez y el siguiente lleva otra llave', async () => {
+    mocks.api.sinpe.send
+      .mockResolvedValueOnce(sinRed)
+      .mockResolvedValueOnce({ success: true, data: { ...sentTx, repetida: true } })
+      .mockResolvedValueOnce({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+    await confirmarDeNuevo(user);
+
+    const titulo = await screen.findByText(/Ese envío ya se había hecho/);
+    expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
+    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ADD_SINPE_TRANSACTION' }));
+    // La app no se había enterado del envío: trae del servidor el saldo, los
+    // movimientos y el historial SINPE.
+    expect(mocks.dataSync.refreshAccounts).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshTransactions).toHaveBeenCalled();
+    expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
+
+    const aviso = titulo.closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(3));
+
+    const [, segunda, tercera] = llaves();
+    expect(segunda).toMatch(/\S/);
+    expect(tercera).not.toBe(segunda);
+  });
+
+  it('después de un envío que salió, el siguiente lleva otra llave', async () => {
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+    const user = userEvent.setup();
+    setup();
+
+    await openSendSheetAndSubmit(user);
+    const exito = (await screen.findByText('¡Enviado!')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(exito).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
+    await openSendSheetAndSubmit(user);
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
+
+    const [primera, segunda] = llaves();
+    expect(segunda).not.toBe(primera);
+  });
+});

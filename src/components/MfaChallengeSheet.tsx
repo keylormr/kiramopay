@@ -56,7 +56,15 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
     if (code.length < 6) return;
     setLoading(true);
     setError('');
-    const res = await getApiLayer().mfa.totpVerify(code, purpose);
+    // La hoja no se cierra mientras verifica: si la verificacion lanzara en vez
+    // de contestar (el cliente de hoy no lo hace), quedaria trabada hasta
+    // recargar la app. Se trata como un fallo mas.
+    let res;
+    try {
+      res = await getApiLayer().mfa.totpVerify(code, purpose);
+    } catch {
+      res = { success: false, error: { code: 'ERROR', message: t('err_generic') } };
+    }
     setLoading(false);
     if (!res.success) {
       setError(res.error?.message || t('twofa_invalid_code'));
@@ -68,7 +76,16 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
   };
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={handleClose} title={t('mfa_challenge_title')}>
+    // Con el codigo en vuelo no se cierra (ni la X, ni el fondo, ni Escape, ni
+    // Atras): cerrar no detenia la verificacion, y si el servidor la daba por
+    // buena la operacion salia igual, despues de que la persona la cancelo. La
+    // peticion tiene su limite de espera; al volver, se puede cerrar.
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={handleClose}
+      dismissable={!loading}
+      title={t('mfa_challenge_title')}
+    >
       <div className="space-y-5">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3">

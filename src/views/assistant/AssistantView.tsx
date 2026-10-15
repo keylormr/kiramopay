@@ -3,7 +3,10 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
-import { refreshAccounts } from '@/services/dataSync';
+import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
+import { useAuthStore } from '@/stores/auth.store';
+import { normalizarTelefonoCR } from '@/utils/telefono';
 import type { AssistantTurn, AssistantProposal, AssistantConversationSummary } from '@/api';
 
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
@@ -56,10 +59,21 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const [activeConvId, setActiveConvId] = useState('');
   const [showConvs, setShowConvs] = useState(false);
   // Per-proposal confirmation status, keyed by "<msgIndex>:<proposalIndex>".
-  const [pstate, setPstate] = useState<Record<string, { status: ProposalState; error?: string }>>({});
+  // repetida: el servidor contesto con un envio que ya estaba hecho bajo la
+  // llave, y la tarjeta no lo da por un envio nuevo.
+  const [pstate, setPstate] = useState<
+    Record<string, { status: ProposalState; error?: string; repetida?: boolean }>
+  >({});
+  const persona = useAuthStore((s) => s.user?.id ?? '');
   const [showMfa, setShowMfa] = useState(false);
-  // The proposal whose confirmation hit the high-value MFA gate, retried after verify.
-  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal } | null>(null);
+  // Lo que autoriza el segundo factor, para su boton: un SINPE se envia, una
+  // recarga o un recibo se pagan. Sin esto decia "Verificar y activar", el de
+  // activar el segundo factor en Perfil. No se borra al cerrar: la hoja se va
+  // con su texto.
+  const [mfaPaga, setMfaPaga] = useState(false);
+  // The proposal whose confirmation hit the high-value MFA gate, retried after
+  // verify. Lleva la llave del envio: cancelar el segundo factor suelta esa.
+  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -157,8 +171,28 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     const api = getApiLayer();
     const amount = p.amountMinor / 100; // repos take major units
     let res;
+    // La llave del SINPE es la que las pantallas de SINPE y de Inicio le dan al
+    // mismo envio: el telefono y el monto, por persona. Sin ella el servidor
+    // acunaba una por llamada, y confirmar otra vez tras un corte de red
+    // mandaba la plata dos veces.
+    let llave = '';
+    let repetida = false;
     if (p.kind === 'sinpe_transfer') {
-      res = await api.sinpe.send({ phone: p.phone || '', amount, description: p.description });
+      // El modelo propone el numero en 8 digitos y el servidor solo acepta el
+      // +506 y los 8 digitos: sin normalizarlo, la confirmacion no salia nunca.
+      const telefono = normalizarTelefonoCR(p.phone || '');
+      if (!telefono) {
+        setPstate((s) => ({ ...s, [key]: { status: 'error', error: t('sinpe_phone_invalid') } }));
+        return;
+      }
+      llave = llaveDelIntento(persona, 'sinpe', `${telefono}|${amount}`, () =>
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `asistente-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+      const envio = await api.sinpe.send({ phone: telefono, amount, description: p.description, idempotencyKey: llave });
+      repetida = envio.success && envio.data?.repetida === true;
+      res = envio;
     } else if (p.kind === 'recharge') {
       res = await api.services.recharge({ operatorId: p.operator || '', phone: p.phone || '', amount });
     } else {
@@ -172,21 +206,43 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     }
     // High-value action: prompt for a TOTP code, then retry this same proposal.
     if (!res.success && res.error?.code === MFA_REQUIRED) {
-      mfaRetryRef.current = { key, p };
+      mfaRetryRef.current = { key, p, llave };
+      setMfaPaga(p.kind !== 'sinpe_transfer');
       setShowMfa(true);
       setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
       return;
     }
+    const code = res.error?.code ?? '';
+    // El envio salio o ya estaba hecho, o la llave es de otro envio: el
+    // siguiente intento lleva otra. Ante cualquier otro error se conserva:
+    // tras un corte, el envio pudo haber salido.
+    if (llave && (res.success || code === 'LLAVE_REUTILIZADA')) soltarIntento(persona, 'sinpe', llave);
     if (res.success) {
       // The confirmed proposal moved money (SINPE / recharge / bill payment):
       // refetch the global wallet balance so it is not left stale.
       refreshAccounts().catch(() => {});
+      // El envio —o el que ya estaba hecho, que la app no conocia— va a los
+      // movimientos y al historial SINPE.
+      if (p.kind === 'sinpe_transfer') {
+        refreshTransactions().catch(() => {});
+        refreshSinpe().catch(() => {});
+      }
     }
+    const porCodigo: Record<string, string> =
+      p.kind === 'sinpe_transfer'
+        ? {
+            RECIPIENT_NOT_USER: t('sinpe_recipient_not_user'),
+            SELF_SEND: t('sinpe_self_send_error'),
+            INVALID_PHONE: t('sinpe_phone_invalid'),
+            NETWORK_ERROR: t('sinpe_err_sin_confirmar'),
+            LLAVE_REUTILIZADA: t('err_llave_reutilizada'),
+          }
+        : {};
     setPstate((s) => ({
       ...s,
       [key]: res.success
-        ? { status: 'done' }
-        : { status: 'error', error: res.error?.message || t('assistant_action_failed') },
+        ? { status: 'done', repetida }
+        : { status: 'error', error: porCodigo[code] || res.error?.message || t('assistant_action_failed') },
     }));
   };
 
@@ -327,10 +383,20 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                     <span className="text-sm font-bold uv-text-primary">{p.summary}</span>
                   </div>
                   {st.status === 'done' ? (
-                    <div className="flex items-center gap-2 text-green-600 text-sm font-semibold">
-                      <Icons.Check size={16} />
-                      {t('assistant_confirmed')}
-                    </div>
+                    st.repetida ? (
+                      <div className="flex items-start gap-2 text-sm">
+                        <Icons.CheckCircle size={16} className="text-green-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold uv-text-primary">{t('sinpe_ya_hecho')}</p>
+                          <p className="text-xs uv-text-muted">{t('sinpe_ya_hecho_desc')}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-green-600 text-sm font-semibold">
+                        <Icons.Check size={16} />
+                        {t('assistant_confirmed')}
+                      </div>
+                    )
                   ) : (
                     <>
                       {st.status === 'error' && (
@@ -403,7 +469,15 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       {/* High-value MFA challenge → on verify, retry the pending proposal */}
       <MfaChallengeSheet
         isOpen={showMfa}
-        onClose={() => setShowMfa(false)}
+        confirmLabel={mfaPaga ? t('mfa_verify_and_pay') : t('mfa_verify_and_send')}
+        onClose={() => {
+          setShowMfa(false);
+          // Sin verificar, la propuesta no salio: el servidor pide el segundo
+          // factor antes de crear nada. Se suelta su llave, y no otra.
+          const pendiente = mfaRetryRef.current;
+          mfaRetryRef.current = null;
+          if (pendiente?.llave) soltarIntento(persona, 'sinpe', pendiente.llave);
+        }}
         onVerified={() => {
           setShowMfa(false);
           const pending = mfaRetryRef.current;

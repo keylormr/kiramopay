@@ -175,7 +175,7 @@ func TestWithdrawToOwner_ReplayAndStatus(t *testing.T) {
 	owner0 := walletCRC(t, pool, owner)
 
 	const key = "wd-replay-test"
-	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
+	if _, err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
 	if got := walletCRC(t, pool, owner); got != owner0+collected {
@@ -192,7 +192,7 @@ func TestWithdrawToOwner_ReplayAndStatus(t *testing.T) {
 	}
 
 	// Replay with the SAME key after the balance is drained: success, no movement.
-	if err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
+	if _, err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", collected, key); err != nil {
 		t.Fatalf("replay must succeed, got: %v", err)
 	}
 	if got := walletCRC(t, pool, owner); got != owner0+collected {
@@ -203,7 +203,7 @@ func TestWithdrawToOwner_ReplayAndStatus(t *testing.T) {
 	}
 
 	// A NEW key over the drained balance: rejected, and no transaction row.
-	err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", 1, "wd-over-test")
+	_, err := svc.WithdrawToOwner(ctx, qr.MerchantID, owner, "CRC", 1, "wd-over-test")
 	if !errors.Is(err, transaction.ErrInsufficientMerchantBalance) {
 		t.Fatalf("overdraw: want ErrInsufficientMerchantBalance, got %v", err)
 	}

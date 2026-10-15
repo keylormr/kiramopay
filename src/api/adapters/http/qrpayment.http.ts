@@ -266,14 +266,19 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     amount: number,
     currency: string,
     idempotencyKey: string,
-  ): Promise<ApiResponse<void>> {
-    const res = await this.client.post(`/api/v1/qr/merchants/${merchantId}/withdraw`, {
+  ): Promise<ApiResponse<{ repetida: boolean }>> {
+    const res = await this.client.post<{ replayed?: boolean }>(`/api/v1/qr/merchants/${merchantId}/withdraw`, {
       amount: Math.round(amount * 100), // major -> minor units
       currency,
       idempotency_key: idempotencyKey,
     });
-    if (!res.success) return apiError('WITHDRAW_FAILED', res.error?.message || 'Failed');
-    return apiSuccess(undefined as unknown as void);
+    // El codigo pasa tal cual: la pantalla necesita distinguir la red que se
+    // corto (NETWORK_ERROR: el retiro pudo haber salido y el reintento lleva
+    // la misma llave) de la llave que ya es de otro retiro (LLAVE_REUTILIZADA).
+    if (!res.success) return apiError(res.error?.code || 'WITHDRAW_FAILED', res.error?.message || 'Failed');
+    // La repeticion de un retiro que ya estaba hecho bajo la llave: la pantalla
+    // no se la da al dueño por un retiro nuevo.
+    return apiSuccess({ repetida: res.data?.replayed === true });
   }
 
   async registerMerchant(request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {

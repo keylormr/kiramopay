@@ -182,4 +182,20 @@ describe('BottomSheet', () => {
     await user.keyboard('{Escape}');
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  // El fondo, Escape y Atrás respetaban la operación en vuelo; la X no. Cerrar
+  // por la X a mitad de un envío y volver a abrir la hoja dejaba que la
+  // respuesta tardía pintara su resultado sobre la hoja nueva.
+  it('con una operacion en vuelo, la X no la cierra', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <BottomSheet isOpen onClose={onClose} title="Enviando" dismissable={false}>
+        <p>c</p>
+      </BottomSheet>,
+      { wrapper: Wrapper },
+    );
+    await user.click(screen.getByLabelText(/cerrar/i));
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

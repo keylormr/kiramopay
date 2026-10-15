@@ -117,3 +117,30 @@ describe('HttpSinpeRepository — la fecha de maquina', () => {
     expect(res.data?.[0].dateISO).toBe('2026-09-04T15:30:00Z');
   });
 });
+
+// La repeticion del envio: el servidor contesta con el envio que ya estaba
+// hecho bajo la llave y lo marca con `replayed: true`. La pantalla lo necesita
+// para no anotar ni celebrar como nuevo un envio que no hizo.
+describe('HttpSinpeRepository.send — la repeticion', () => {
+  const respuesta = {
+    transaction_id: 't1', status: 'completed', amount: 500000, fee: 0, recipient: 'Ana', internal: true,
+  };
+
+  it('la repeticion llega marcada', async () => {
+    const post = vi.fn().mockResolvedValue({ success: true, data: { ...respuesta, replayed: true } });
+    const res = await new HttpSinpeRepository(fakeClient({ post })).send({
+      phone: '+50688887777', amount: 5000, idempotencyKey: 'k1',
+    });
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(true);
+  });
+
+  it('el envio nuevo no', async () => {
+    const post = vi.fn().mockResolvedValue({ success: true, data: respuesta });
+    const res = await new HttpSinpeRepository(fakeClient({ post })).send({
+      phone: '+50688887777', amount: 5000, idempotencyKey: 'k1',
+    });
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBeFalsy();
+  });
+});

@@ -159,12 +159,12 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(collected - withdrawn);
   }
 
-  async withdrawMerchant(merchantId: string, amount: number): Promise<ApiResponse<void>> {
+  async withdrawMerchant(merchantId: string, amount: number): Promise<ApiResponse<{ repetida: boolean }>> {
     const state = getState();
     const withdrawn: Record<string, number> = state?.merchantWithdrawn ?? {};
     withdrawn[merchantId] = (withdrawn[merchantId] ?? 0) + amount;
     saveField('merchantWithdrawn', withdrawn);
-    return apiSuccess(undefined as unknown as void);
+    return apiSuccess({ repetida: false });
   }
 
   async updateMerchant(merchantId: string, request: RegisterMerchantRequest): Promise<ApiResponse<QRMerchant>> {
