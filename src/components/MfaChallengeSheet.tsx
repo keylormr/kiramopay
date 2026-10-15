@@ -12,12 +12,11 @@ interface MfaChallengeSheetProps {
   /** MFA challenge purpose; defaults to the high-value-money gate. */
   purpose?: string;
   /**
-   * Texto del boton de confirmar. Por defecto usa el mismo texto que activar
-   * 2FA en Perfil (t('twofa_verify')), que para un reto de UNA transaccion
-   * puntual ("Verificar y activar") sugiere que se va a activar 2FA en la
-   * cuenta en vez de autorizar el envio en curso. Quien abre este reto para
-   * autorizar dinero deberia pasar un texto propio (p. ej. "Verificar y
-   * enviar").
+   * Texto del boton de confirmar. Por defecto "Verificar y continuar": antes
+   * era el de activar el segundo factor en Perfil ("Verificar y activar"), que
+   * en un reto para autorizar una operacion sugeria que se iba a activar algo
+   * en la cuenta. Quien sabe que hace la operacion pasa un texto propio (p. ej.
+   * "Verificar y enviar").
    */
   confirmLabel?: string;
 }
@@ -115,7 +114,7 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
           disabled={loading || code.length < 6}
           className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
         >
-          {loading ? t('loading') : confirmLabel || t('twofa_verify')}
+          {loading ? t('loading') : confirmLabel || t('mfa_verify_and_continue')}
         </button>
       </div>
     </BottomSheet>

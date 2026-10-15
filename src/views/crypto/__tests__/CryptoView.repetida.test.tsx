@@ -84,7 +84,7 @@ const YA_HECHA = 'Esa operación ya se había hecho';
 // Lo que el aviso dice de los saldos depende de si se pudieron traer: no anota
 // nada, asi que lo que se ve es lo que llego del servidor, o lo de antes.
 const ACTUALIZANDO = 'No se repitió. Estamos actualizando tus saldos.';
-const AL_DIA = 'No se repitió: tus saldos y movimientos ya muestran lo que quedó registrado.';
+const AL_DIA = 'No se repitió: tus saldos y tus transacciones recientes ya muestran lo que quedó registrado.';
 const SIN_ACTUALIZAR = 'No se repitió, pero no pudimos actualizar tus saldos: puede que todavía veas los de antes.';
 
 function diferido<T>() {

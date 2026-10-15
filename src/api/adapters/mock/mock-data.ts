@@ -11,6 +11,7 @@ import type {
   SavedService,
   Recharge,
 } from '@/types';
+import { traducirFueraDeReact as tr } from '@/i18n/mensajesDeError';
 
 export const initialAccounts: Account[] = [
   { ccy: 'CRC', balance: 384500, symbol: '₡', flag: '🇨🇷', iban: 'CR14 0152 0001 2345 6789 01', name: 'Colones Account', type: 'fiat', rateToUsd: 0.0019 },
@@ -21,20 +22,27 @@ export const initialAccounts: Account[] = [
 // data in dev/no-backend mode. (Production data carries a real created_at.)
 const _txDaysAgo = (d: number): string => new Date(Date.now() - d * 86400000).toISOString();
 
-export const initialTransactions: Transaction[] = [
-  { id: '1', title: 'Café Alma', amount: -7500, ccy: 'CRC', date: 'Hoy, 9:41 AM', dateISO: _txDaysAgo(0), type: 'debit', category: 'Comida', status: 'completed' },
-  { id: '2', title: 'SINPE de Diego', amount: 25000, ccy: 'CRC', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), type: 'credit', category: 'SINPE', status: 'completed' },
-  { id: '3', title: 'Uber', amount: -4350, ccy: 'CRC', date: 'Ayer, 8:15 AM', dateISO: _txDaysAgo(1), type: 'debit', category: 'Transporte', status: 'completed' },
-  { id: '4', title: 'Pago ICE', amount: -32450, ccy: 'CRC', date: 'Hace 6 días', dateISO: _txDaysAgo(6), type: 'debit', category: 'Servicios', status: 'completed' },
-  { id: '5', title: 'Uber Eats', amount: -12800, ccy: 'CRC', date: 'Hace 20 días', dateISO: _txDaysAgo(20), type: 'debit', category: 'Comida', status: 'completed' },
-];
+// Los ejemplos con texto (movimientos, presupuestos, historial de SINPE y
+// avisos) se arman al leerlos, con el idioma activo: como constantes se
+// escribian una vez, en espanol, antes de que cargara el idioma de la app.
+export function initialTransactions(): Transaction[] {
+  return [
+    { id: '1', title: 'Café Alma', amount: -7500, ccy: 'CRC', date: 'Hoy, 9:41 AM', dateISO: _txDaysAgo(0), type: 'debit', category: 'Comida', status: 'completed' },
+    { id: '2', title: tr('demo_tx_sinpe_diego'), amount: 25000, ccy: 'CRC', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), type: 'credit', category: 'SINPE', status: 'completed' },
+    { id: '3', title: 'Uber', amount: -4350, ccy: 'CRC', date: 'Ayer, 8:15 AM', dateISO: _txDaysAgo(1), type: 'debit', category: 'Transporte', status: 'completed' },
+    { id: '4', title: tr('demo_tx_pago_ice'), amount: -32450, ccy: 'CRC', date: 'Hace 6 días', dateISO: _txDaysAgo(6), type: 'debit', category: 'Servicios', status: 'completed' },
+    { id: '5', title: 'Uber Eats', amount: -12800, ccy: 'CRC', date: 'Hace 20 días', dateISO: _txDaysAgo(20), type: 'debit', category: 'Comida', status: 'completed' },
+  ];
+}
 
-export const initialBudgets: Budget[] = [
-  { id: '1', label: 'Comida', spent: 45000, limit: 80000, ccy: 'CRC', icon: 'utensils', color: '#f97316' },
-  { id: '2', label: 'Transporte', spent: 12500, limit: 30000, ccy: 'CRC', icon: 'car', color: '#3b82f6' },
-  { id: '3', label: 'Entretenimiento', spent: 8000, limit: 25000, ccy: 'CRC', icon: 'gamepad-2', color: '#a855f7' },
-  { id: '4', label: 'Servicios', spent: 32450, limit: 60000, ccy: 'CRC', icon: 'zap', color: '#eab308' },
-];
+export function initialBudgets(): Budget[] {
+  return [
+    { id: '1', label: tr('budget_icon_food'), spent: 45000, limit: 80000, ccy: 'CRC', icon: 'utensils', color: '#f97316' },
+    { id: '2', label: tr('budget_icon_transport'), spent: 12500, limit: 30000, ccy: 'CRC', icon: 'car', color: '#3b82f6' },
+    { id: '3', label: tr('budget_icon_fun'), spent: 8000, limit: 25000, ccy: 'CRC', icon: 'gamepad-2', color: '#a855f7' },
+    { id: '4', label: tr('budget_icon_utilities'), spent: 32450, limit: 60000, ccy: 'CRC', icon: 'zap', color: '#eab308' },
+  ];
+}
 
 export const initialSinpeContacts: SinpeContact[] = [
   { id: '1', name: 'Diego Mora', phone: '8888-1234', bank: 'BAC', isFavorite: true },
@@ -43,21 +51,25 @@ export const initialSinpeContacts: SinpeContact[] = [
   { id: '4', name: 'Ana Rodríguez', phone: '8585-3456', bank: 'Scotiabank', isFavorite: false },
 ];
 
-export const initialSinpeHistory: SinpeTransaction[] = [
-  { id: '1', type: 'sent', amount: 15000, phone: '8888-1234', name: 'Diego Mora', date: 'Hoy, 2:30 PM', dateISO: _txDaysAgo(0.1), status: 'completed', reference: 'Almuerzo' },
-  { id: '2', type: 'received', amount: 25000, phone: '7777-5678', name: 'María González', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), status: 'completed', reference: 'Pago deuda' },
-  { id: '3', type: 'sent', amount: 50000, phone: '6666-9012', name: 'Carlos Jiménez', date: '22 Dic, 10:15 AM', dateISO: _txDaysAgo(8), status: 'completed', reference: 'Regalo' },
-];
+export function initialSinpeHistory(): SinpeTransaction[] {
+  return [
+    { id: '1', type: 'sent', amount: 15000, phone: '8888-1234', name: 'Diego Mora', date: 'Hoy, 2:30 PM', dateISO: _txDaysAgo(0.1), status: 'completed', reference: tr('demo_sinpe_ref_lunch') },
+    { id: '2', type: 'received', amount: 25000, phone: '7777-5678', name: 'María González', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), status: 'completed', reference: tr('demo_sinpe_ref_debt') },
+    { id: '3', type: 'sent', amount: 50000, phone: '6666-9012', name: 'Carlos Jiménez', date: '22 Dic, 10:15 AM', dateISO: _txDaysAgo(8), status: 'completed', reference: tr('demo_sinpe_ref_gift') },
+  ];
+}
 
 // dateISO es la fecha que escribe la pantalla, en el idioma de la persona;
 // `date` queda como el texto de respaldo que ya traian.
-export const initialNotifications: Notification[] = [
-  { id: '1', title: 'Bienvenido a KiramoPay', message: 'Tu cuenta ha sido creada exitosamente. ¡Comienza a disfrutar de todos los beneficios!', type: 'info', date: 'Hoy, 10:00 AM', dateISO: _txDaysAgo(0.1), read: false },
-  { id: '2', title: 'SINPE recibido', message: 'María González te envió ₡25,000 por SINPE Móvil', type: 'transaction', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), read: false },
-  { id: '3', title: 'Pago exitoso', message: 'Tu pago de ₡32,450 a ICE fue procesado correctamente', type: 'transaction', date: '24 Dic, 2024', dateISO: _txDaysAgo(3), read: true },
-  { id: '4', title: 'Promoción especial', message: 'Obtén 5% de cashback en tus compras de supermercado este fin de semana', type: 'promo', date: '22 Dic, 2024', dateISO: _txDaysAgo(5), read: true },
-  { id: '5', title: 'Seguridad', message: 'Se detectó un nuevo inicio de sesión desde tu dispositivo', type: 'security', date: '20 Dic, 2024', dateISO: _txDaysAgo(7), read: true },
-];
+export function initialNotifications(): Notification[] {
+  return [
+    { id: '1', title: tr('demo_notif_welcome_title'), message: tr('demo_notif_welcome_body'), type: 'info', date: 'Hoy, 10:00 AM', dateISO: _txDaysAgo(0.1), read: false },
+    { id: '2', title: tr('demo_notif_sinpe_title'), message: tr('demo_notif_sinpe_body'), type: 'transaction', date: 'Ayer, 4:20 PM', dateISO: _txDaysAgo(1), read: false },
+    { id: '3', title: tr('demo_notif_paid_title'), message: tr('demo_notif_paid_body'), type: 'transaction', date: '24 Dic, 2024', dateISO: _txDaysAgo(3), read: true },
+    { id: '4', title: tr('demo_notif_promo_title'), message: tr('demo_notif_promo_body'), type: 'promo', date: '22 Dic, 2024', dateISO: _txDaysAgo(5), read: true },
+    { id: '5', title: tr('demo_notif_security_title'), message: tr('demo_notif_security_body'), type: 'security', date: '20 Dic, 2024', dateISO: _txDaysAgo(7), read: true },
+  ];
+}
 
 export const initialCryptoAssets: CryptoAsset[] = [
   { id: 'btc', symbol: 'BTC', name: 'Bitcoin', icon: '₿', color: '#F7931A', balance: 0.0523, avgBuyPrice: 42500, currentPrice: 42850, priceChange24h: 2.35, priceHistory: [41200, 41800, 42100, 42500, 42300, 42650, 42850] },

@@ -10,9 +10,9 @@ function getNotifications(): Notification[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     const state = data ? JSON.parse(data) : null;
-    return state?.notifications ?? initialNotifications;
+    return state?.notifications ?? initialNotifications();
   } catch {
-    return initialNotifications;
+    return initialNotifications();
   }
 }
 

@@ -342,6 +342,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       {/* High-value MFA challenge → on verify, retry the create */}
       <MfaChallengeSheet
         isOpen={showMfa}
+        confirmLabel={t('mfa_verify_and_send')}
         onClose={() => setShowMfa(false)}
         onVerified={() => {
           setShowMfa(false);

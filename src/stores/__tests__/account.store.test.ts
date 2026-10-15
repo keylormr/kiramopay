@@ -7,7 +7,7 @@ describe('useAccountStore', () => {
     useAccountStore.setState({
       baseCurrency: 'CRC',
       accounts: [...initialAccounts],
-      budgets: [...initialBudgets],
+      budgets: initialBudgets(),
     });
   });
 

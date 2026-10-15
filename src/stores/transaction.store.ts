@@ -16,7 +16,7 @@ interface TransactionState {
 export const useTransactionStore = create<TransactionState>()(
   persist(
     (set) => ({
-      transactions: hasBackend ? [] : initialTransactions,
+      transactions: hasBackend ? [] : initialTransactions(),
 
       setTransactions: (transactions) => set({ transactions }),
 

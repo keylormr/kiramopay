@@ -18,6 +18,7 @@ import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
 import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
+import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
 import type { LucideIcon } from 'lucide-react';
@@ -982,6 +983,8 @@ const AppInit = () => {
   const themeScheduleStart = useSettingsStore((s) => s.themeScheduleStart);
   const themeScheduleEnd = useSettingsStore((s) => s.themeScheduleEnd);
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
+  // Sin servidor: los datos de ejemplo pasan al idioma de la app cuando carga.
+  useSemillasDeLaDemo();
 
   useEffect(() => {
     // Hide native splash screen after app is ready

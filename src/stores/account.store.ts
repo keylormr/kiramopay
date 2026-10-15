@@ -28,7 +28,7 @@ export const useAccountStore = create<AccountState>()(
     (set) => ({
       baseCurrency: 'CRC',
       accounts: hasBackend ? [] : initialAccounts,
-      budgets: hasBackend ? [] : initialBudgets,
+      budgets: hasBackend ? [] : initialBudgets(),
 
       setBaseCurrency: (ccy) => set({ baseCurrency: ccy }),
 
