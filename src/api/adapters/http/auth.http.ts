@@ -31,7 +31,7 @@ export class HttpAuthRepository implements IAuthRepository {
         kyc_level: number;
         status: string;
         plan?: string;
-        language?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -91,7 +91,7 @@ export class HttpAuthRepository implements IAuthRepository {
         email: string;
         referral_code?: string;
         plan?: string;
-        language?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -291,7 +291,7 @@ export class HttpAuthRepository implements IAuthRepository {
       created_at?: string;
       referral_code?: string;
       plan?: string;
-      language?: string;
+      language?: string | null;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {

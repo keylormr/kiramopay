@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -310,34 +309,9 @@ func datosDelAviso(a *Agreement, plazo *time.Time) map[string]any {
 	}
 	return map[string]any{
 		"descripcion": a.Description,
-		"monto":       montoLegible(a.AmountMinor, a.Currency),
+		"monto":       notification.Monto(a.AmountMinor, a.Currency),
 		"limite":      limite,
 	}
-}
-
-// montoLegible escribe el monto como lo muestra la app: simbolo y miles con
-// coma, que es la regla del dueno para todos los montos.
-func montoLegible(minor int64, moneda string) string {
-	simbolo := moneda + " "
-	switch moneda {
-	case "CRC":
-		simbolo = "₡"
-	case "USD":
-		simbolo = "$"
-	}
-	signo := ""
-	if minor < 0 {
-		signo, minor = "-", -minor
-	}
-	enteros := fmt.Sprintf("%d", minor/100)
-	var b strings.Builder
-	for i, c := range enteros {
-		if i > 0 && (len(enteros)-i)%3 == 0 {
-			b.WriteByte(',')
-		}
-		b.WriteRune(c)
-	}
-	return fmt.Sprintf("%s%s%s.%02d", signo, simbolo, b.String(), minor%100)
 }
 
 // zonaCR es la hora de Costa Rica. Si el sistema no trae la base de zonas, se

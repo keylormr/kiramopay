@@ -31,8 +31,10 @@ type UserRecord struct {
 	Plan string `json:"plan"`
 	// Language es el idioma en que la persona usa la app (migracion 074). Con el
 	// se escriben sus avisos y sus push; la app lo guarda con
-	// PUT /users/me/language. Una cuenta que nunca lo guardo esta en "es".
-	Language     string     `json:"language"`
+	// PUT /users/me/language. nil (null en el JSON) es una cuenta que todavia
+	// no eligio: sus avisos salen en espanol, y la app sabe que puede darle el
+	// de la pantalla sin pisar una eleccion hecha en otro dispositivo.
+	Language     *string    `json:"language"`
 	ReferralCode string     `json:"referral_code"`
 	ReferredBy   *string    `json:"-"` // atribucion interna; nunca sale al cliente
 	CreatedAt    time.Time  `json:"created_at"`

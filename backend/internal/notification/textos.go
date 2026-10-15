@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -237,6 +238,78 @@ func Texto(clave, idioma string, datos Datos) (titulo, cuerpo string) {
 		p = porIdioma["es"]
 	}
 	return llenar(p.titulo, idioma, datos), llenar(p.cuerpo, idioma, datos)
+}
+
+// Monto escribe el monto como lo muestra la app: simbolo y miles con coma, que
+// es la regla del dueno para todos los montos. Todos los avisos lo usan: SINPE
+// escribia "₡10000.00" y el cobro QR "CRC 500.00".
+func Monto(minor int64, moneda string) string {
+	simbolo := moneda + " "
+	switch moneda {
+	case "CRC":
+		simbolo = "₡"
+	case "USD":
+		simbolo = "$"
+	}
+	signo := ""
+	if minor < 0 {
+		signo, minor = "-", -minor
+	}
+	enteros := fmt.Sprintf("%d", minor/100)
+	var b strings.Builder
+	for i, c := range enteros {
+		if i > 0 && (len(enteros)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(c)
+	}
+	return fmt.Sprintf("%s%s%s.%02d", signo, simbolo, b.String(), minor%100)
+}
+
+// DatosQueFaltan dice que datos de la plantilla del aviso no vienen, o vienen
+// de un tipo que el aviso no sabe escribir: los dos salen como texto vacio y
+// nadie se entera. Es para las pruebas de cada productor. Una clave sin
+// plantilla devuelve la clave misma.
+func DatosQueFaltan(clave string, datos Datos) []string {
+	porIdioma, ok := catalogo[clave]
+	if !ok {
+		return []string{clave}
+	}
+	vistos := map[string]bool{}
+	var faltan []string
+	for _, p := range porIdioma {
+		for _, nombre := range append(nombresEn(p.titulo), nombresEn(p.cuerpo)...) {
+			if vistos[nombre] {
+				continue
+			}
+			vistos[nombre] = true
+			switch datos[nombre].(type) {
+			case string, time.Time:
+			default:
+				faltan = append(faltan, nombre)
+			}
+		}
+	}
+	sort.Strings(faltan)
+	return faltan
+}
+
+// nombresEn son los {dato} de una plantilla.
+func nombresEn(plantilla string) []string {
+	var out []string
+	resto := plantilla
+	for {
+		i := strings.IndexByte(resto, '{')
+		if i < 0 {
+			return out
+		}
+		j := strings.IndexByte(resto[i:], '}')
+		if j < 0 {
+			return out
+		}
+		out = append(out, resto[i+1:i+j])
+		resto = resto[i+j+1:]
+	}
 }
 
 // llenar reemplaza cada {dato} de la plantilla en una sola pasada: lo que se

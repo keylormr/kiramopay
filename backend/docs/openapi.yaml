@@ -4932,6 +4932,11 @@ components:
                   type: string
                   enum: [free, plus, pro]
                   description: Personal plan; every account starts on free
+                language:
+                  type: string
+                  nullable: true
+                  enum: [es, en, fr, pt, zh-cn, ja, hi]
+                  description: Same as UserProfile.language; a new account has none (null)
 
     UserProfile:
       type: object
@@ -4965,10 +4970,13 @@ components:
             administrator changes it.
         language:
           type: string
+          nullable: true
           enum: [es, en, fr, pt, zh-cn, ja, hi]
           description: >-
             Language the person uses the app in. Notifications and push are
-            written in it. An account that never saved one is in es.
+            written in it. null means the person has not chosen one yet: their
+            notifications go out in es, and the app may save the language its
+            screen shows without overwriting a choice made on another device.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }

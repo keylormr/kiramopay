@@ -2,7 +2,10 @@ package notification
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -63,11 +66,17 @@ func (r *Repository) GetSubscriptionsByUser(ctx context.Context, userID string) 
 }
 
 // IdiomaDe es el idioma guardado de la cuenta (users.language, migracion 074).
-// Si no se puede leer, el espanol de siempre: un aviso en espanol es mejor que
-// ninguno.
+// Una cuenta que no eligio ninguno, o que no se puede leer, recibe el espanol
+// de siempre: un aviso en espanol es mejor que ninguno. Si la lectura falla
+// por otra cosa que una cuenta inexistente, queda en el log: una cuenta en
+// japones que recibe un aviso de dinero en espanol tiene que tener explicacion.
 func (r *Repository) IdiomaDe(ctx context.Context, userID string) string {
 	var idioma string
-	if err := r.db.QueryRow(ctx, `SELECT language FROM users WHERE id = $1`, userID).Scan(&idioma); err != nil {
+	err := r.db.QueryRow(ctx, `SELECT COALESCE(language, 'es') FROM users WHERE id = $1`, userID).Scan(&idioma)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			slog.Warn("avisos: no se pudo leer el idioma de la cuenta, va en espanol", "user", userID, "err", err.Error())
+		}
 		return "es"
 	}
 	return idioma

@@ -227,7 +227,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
 	-- Igual que la 074: el idioma de la cuenta, con el que se escriben sus avisos.
-	ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5) NOT NULL DEFAULT 'es';
+	-- NULL es "no eligio" (los avisos salen en espanol). Los dos ALTER COLUMN
+	-- dejan igual una base de pruebas creada con la version anterior.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5);
+	ALTER TABLE users ALTER COLUMN language DROP NOT NULL;
+	ALTER TABLE users ALTER COLUMN language DROP DEFAULT;
 	DO $$ BEGIN
 		ALTER TABLE users ADD CONSTRAINT chk_users_language CHECK (language IN ('es', 'en', 'fr', 'pt', 'zh-cn', 'ja', 'hi'));
 	EXCEPTION WHEN duplicate_object THEN NULL; END $$;

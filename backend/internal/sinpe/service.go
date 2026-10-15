@@ -281,7 +281,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		// Notify the recipient (best-effort, detached so it never blocks or
 		// fails the transfer).
 		if s.notifier != nil {
-			monto := fmt.Sprintf("₡%d.%02d", req.Amount/100, req.Amount%100)
+			monto := notification.Monto(req.Amount, "CRC")
 			// #nosec G118 -- intentionally detached: the request context is
 			// cancelled when the response returns, but this best-effort
 			// notification must outlive the request (notifyReceiver uses its own

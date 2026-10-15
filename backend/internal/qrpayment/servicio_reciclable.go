@@ -447,10 +447,7 @@ func (s *Service) avisarCobro(ctx context.Context, destinos []string, p *QRPayme
 		return
 	}
 	vistos := map[string]bool{}
-	detalle := fmt.Sprintf("%s %s", p.Currency, formatearMonto(p.Amount))
-	if p.Note != "" {
-		detalle += " — " + p.Note
-	}
+	detalle := detalleDelCobro(p)
 	for _, uid := range destinos {
 		if uid == "" || vistos[uid] {
 			continue
@@ -461,8 +458,14 @@ func (s *Service) avisarCobro(ctx context.Context, destinos []string, p *QRPayme
 	}
 }
 
-func formatearMonto(centimos int64) string {
-	return fmt.Sprintf("%d.%02d", centimos/100, centimos%100)
+// detalleDelCobro es lo que el aviso dice del cobro: el monto como lo escribe
+// la app y, si la tiene, la nota.
+func detalleDelCobro(p *QRPaymentRecord) string {
+	detalle := notification.Monto(p.Amount, p.Currency)
+	if p.Note != "" {
+		detalle += " — " + p.Note
+	}
+	return detalle
 }
 
 // traducirReclamo convierte el "no se pudo reclamar" del gancho en el motivo

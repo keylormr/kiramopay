@@ -8387,6 +8387,11 @@ export interface components {
                      * @enum {string}
                      */
                     plan?: "free" | "plus" | "pro";
+                    /**
+                     * @description Same as UserProfile.language; a new account has none (null)
+                     * @enum {string|null}
+                     */
+                    language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
                 };
             };
         };
@@ -8420,10 +8425,10 @@ export interface components {
              */
             plan?: "free" | "plus" | "pro";
             /**
-             * @description Language the person uses the app in. Notifications and push are written in it. An account that never saved one is in es.
-             * @enum {string}
+             * @description Language the person uses the app in. Notifications and push are written in it. null means the person has not chosen one yet: their notifications go out in es, and the app may save the language its screen shows without overwriting a choice made on another device.
+             * @enum {string|null}
              */
-            language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
+            language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

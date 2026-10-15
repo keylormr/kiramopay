@@ -21,5 +21,5 @@ export interface User {
    * Idioma que el servidor tiene guardado para la cuenta: con el escribe sus
    * avisos y sus push. Un servidor anterior a la migracion 074 no lo manda.
    */
-  language?: string;
+  language?: string | null;
 }

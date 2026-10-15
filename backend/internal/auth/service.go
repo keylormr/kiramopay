@@ -260,7 +260,7 @@ type LoginResponse struct {
 }
 
 type RegisterRequest struct {
-	Cedula    string `json:"cedula"`
+	Cedula string `json:"cedula"`
 	// Username es el nombre de usuario con el que se va a entrar. Opcional por
 	// compatibilidad: los clientes viejos no lo mandan y siguen registrando
 	// cuentas, que quedan sin nombre de usuario y entran por los otros tres
@@ -673,9 +673,9 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		// El INSERT no escribe plan: la columna arranca en su DEFAULT 'free'.
 		// Se refleja aqui para que la respuesta del registro no diga "".
 		Plan: "free",
-		// Lo mismo con el idioma (migracion 074, DEFAULT 'es'). La app guarda el
-		// suyo apenas entra.
-		Language: "es",
+		// El idioma no se escribe ni se refleja: una cuenta nueva no eligio
+		// ninguno (null, migracion 074) y la app le da el de la pantalla apenas
+		// entra.
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		// Telefono o correo ya registrados (la cedula se reviso arriba, pero
