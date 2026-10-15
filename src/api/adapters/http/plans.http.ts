@@ -7,7 +7,8 @@ import type {
   TopesDePlan,
 } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { TARIFAS_POR_DEFECTO } from '../../../utils/planes';
 import { HttpClient } from './client';
 
@@ -82,10 +83,7 @@ export class HttpPlansRepository implements IPlansRepository {
     if (!res.success || !esObjeto(res.data)) {
       // El codigo del servidor se conserva tal cual: sin el, PLAN_INVALID y una
       // caida del servicio quedarian indistinguibles para quien llame.
-      return apiError(
-        res.error?.code || 'INTEREST_FAILED',
-        res.error?.message || 'plan interest failed',
-      );
+      return falla(res, 'INTEREST_FAILED');
     }
     const devuelto = res.data.plan as PlanDeInteres;
     return apiSuccess({
@@ -98,7 +96,7 @@ export class HttpPlansRepository implements IPlansRepository {
     // Endpoint publico: va sin sesion.
     const res = await this.client.get<unknown>('/api/v1/transparency/fees', false);
     if (!res.success || !esObjeto(res.data)) {
-      return apiError(res.error?.code || 'FEES_FAILED', res.error?.message || 'fees unavailable');
+      return falla(res, 'FEES_FAILED');
     }
     return apiSuccess(leerTarifas(res.data));
   }

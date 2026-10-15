@@ -7,7 +7,8 @@ import type {
 } from '../../repositories/transaction.repository';
 import type { ApiResponse } from '../../types';
 import type { Transaction } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 interface BackendTransactionRow {
@@ -63,7 +64,7 @@ export class HttpTransactionRepository implements ITransactionRepository {
       // El codigo del cliente pasa: la busqueda distingue un 429 ("hay
       // demasiado trafico") de la falta de red, y pisado con FETCH_FAILED
       // mandaba siempre a revisar la conexion.
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch transactions');
+      return falla(res, 'FETCH_FAILED');
     }
 
     return apiSuccess({
@@ -75,7 +76,7 @@ export class HttpTransactionRepository implements ITransactionRepository {
   async getTransactions(limit?: number): Promise<ApiResponse<Transaction[]>> {
     const res = await this.listTransactions({ limit });
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch transactions');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(res.data.transactions);
   }
@@ -84,7 +85,7 @@ export class HttpTransactionRepository implements ITransactionRepository {
     const qs = new URLSearchParams({ from: params.from, to: params.to });
     const res = await this.client.get<BackendSummary>(`/api/v1/transactions/summary?${qs.toString()}`);
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch the transaction summary');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(mapSummary(res.data));
   }

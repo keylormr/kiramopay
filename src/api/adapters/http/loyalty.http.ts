@@ -8,7 +8,8 @@ import type {
   ReferralSummary,
 } from '../../repositories/loyalty.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpLoyaltyRepository implements ILoyaltyRepository {
@@ -20,7 +21,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       available_points: number; lifetime_points: number; tier: string;
     }>('/api/v1/loyalty/account');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch loyalty account');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess({
       id: res.data.id,
@@ -38,7 +39,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       ref_type: string; ref_id: string; created_at: string;
     }>>('/api/v1/loyalty/transactions');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch transactions');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((t) => ({
       id: t.id,
@@ -58,7 +59,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       stock: number; cashback_minor?: number;
     }>>('/api/v1/loyalty/rewards');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rewards');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((r) => ({
       id: r.id,
@@ -83,7 +84,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
     // la pantalla para que diga que no hay fondo de promociones, y no un fallo
     // cualquiera.
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'REDEEM_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'REDEEM_FAILED');
     }
 
     return apiSuccess({
@@ -103,7 +104,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       code: string; created_at: string;
     }>>('/api/v1/loyalty/redemptions');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch redemptions');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((r) => ({
       id: r.id,
@@ -121,7 +122,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       max_points_per_tx: number; active: boolean;
     }>>('/api/v1/loyalty/cashback-rules');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rules');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((r) => ({
       id: r.id,
@@ -142,7 +143,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
     // no debe llegar a la vista como resumen: sin codigo no hay resumen, y los
     // contadores se fuerzan a numero para que nunca viaje un undefined.
     if (!res.success || !res.data || typeof res.data.referral_code !== 'string') {
-      return apiError('FETCH_FAILED', 'Failed to fetch referrals');
+      return falla(res, 'FETCH_FAILED');
     }
 
     return apiSuccess({

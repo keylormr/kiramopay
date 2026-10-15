@@ -11,7 +11,8 @@ import type {
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
 
@@ -39,7 +40,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // Keep the backend code (ACCOUNT_BLOCKED, RATE_LIMITED, ...): the login
       // view tells them apart; a fixed AUTH_FAILED collapsed all of them into
       // "wrong credentials".
-      return apiError(res.error?.code || 'AUTH_FAILED', res.error?.message || 'Login failed');
+      return falla(res, 'AUTH_FAILED');
     }
 
     const { user: u, tokens } = res.data;
@@ -113,7 +114,7 @@ export class HttpAuthRepository implements IAuthRepository {
     if (!res.success || !res.data) {
       // Conservar el codigo del backend: la UI distingue un codigo de
       // invitacion inexistente (REFERRAL_CODE_INVALID) del error generico.
-      return apiError(res.error?.code || 'REGISTER_FAILED', res.error?.message || 'Registration failed');
+      return falla(res, 'REGISTER_FAILED');
     }
 
     const { user: u, tokens } = res.data;
@@ -158,7 +159,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // El codigo pasa: la pantalla elige el texto por codigo, y pisado con el
       // de aqui decia "contrasena incorrecta" tambien sin red o cuando la
       // nueva era igual a la actual.
-      return apiError(res.error?.code || 'CHANGE_PASSWORD_FAILED', res.error?.message || 'Failed to change password');
+      return falla(res, 'CHANGE_PASSWORD_FAILED');
     }
 
     return apiSuccess({ changed: true });
@@ -174,7 +175,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success) {
-      return apiError('OTP_SEND_FAILED', res.error?.message || 'Could not send the verification code');
+      return falla(res, 'OTP_SEND_FAILED');
     }
 
     return apiSuccess<SendRegistrationOtpResult>({ devCode: res.data?.dev_code });
@@ -188,7 +189,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success || !res.data?.verification_token) {
-      return apiError('OTP_INVALID', res.error?.message || 'Invalid or expired verification code');
+      return falla(res, 'OTP_INVALID');
     }
 
     return apiSuccess<VerifyRegistrationOtpResult>({ verificationToken: res.data.verification_token });
@@ -209,7 +210,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success) {
-      return apiError(res.error?.code || 'FORGOT_PASSWORD_FAILED', res.error?.message || 'Could not process the request');
+      return falla(res, 'FORGOT_PASSWORD_FAILED');
     }
 
     // `dev_token` is only present when the backend runs in a dev environment.
@@ -230,7 +231,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // Preserve the backend code so the UI can distinguish an invalid/expired
       // token (RESET_FAILED) from a weak password (VALIDATION_ERROR) and show
       // the right localized guidance.
-      return apiError(res.error?.code || 'RESET_PASSWORD_FAILED', res.error?.message || 'Could not reset the password');
+      return falla(res, 'RESET_PASSWORD_FAILED');
     }
 
     return apiSuccess({ reset: true });
@@ -250,7 +251,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // REFRESH_FAILED, y el arranque no podia distinguir una sesion invalida
       // (REFRESH_FAILED, ACCOUNT_BLOCKED) de un corte pasajero (NETWORK_ERROR,
       // RATE_LIMITED, un 5xx): cerraba la sesion por un parpadeo de la red.
-      return apiError(res.error?.code || 'REFRESH_FAILED', res.error?.message || 'Token refresh failed');
+      return falla(res, 'REFRESH_FAILED');
     }
     return apiSuccess<TokenPair>({
       access_token: res.data.access_token,
@@ -282,7 +283,7 @@ export class HttpAuthRepository implements IAuthRepository {
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
-      return apiError('PROFILE_FAILED', res.error?.message || 'Failed to load profile');
+      return falla(res, 'PROFILE_FAILED');
     }
 
     const u = res.data;

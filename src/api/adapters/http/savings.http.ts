@@ -4,7 +4,8 @@ import type {
   CreateSavingsGoalRequest,
 } from '../../repositories/savings.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 interface GoalDTO {
@@ -44,7 +45,7 @@ export class HttpSavingsRepository implements ISavingsRepository {
 
   async getGoals(): Promise<ApiResponse<SavingsGoal[]>> {
     const res = await this.client.get<GoalDTO[]>('/api/v1/savings/goals');
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch savings goals');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapGoal));
   }
 
@@ -60,14 +61,14 @@ export class HttpSavingsRepository implements ISavingsRepository {
     // fijo, un 409 SAVINGS_GOAL_LIMIT {plan, limite, actuales} se volvia un
     // "no se pudo crear" sin explicacion.
     if (!res.success || !res.data) {
-      return apiErrorConDetalle(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed', res.error?.details);
+      return falla(res, 'CREATE_FAILED');
     }
     return apiSuccess(mapGoal(res.data));
   }
 
   async deleteGoal(id: string): Promise<ApiResponse<{ status: string }>> {
     const res = await this.client.del<{ status: string }>(`/api/v1/savings/goals/${id}`);
-    if (!res.success) return apiError('DELETE_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'DELETE_FAILED');
     return apiSuccess(res.data ?? { status: 'deleted' });
   }
 
@@ -78,7 +79,7 @@ export class HttpSavingsRepository implements ISavingsRepository {
       true,
       { 'Idempotency-Key': idempotencyKey() }, // exact retries (queue/replay) move money once
     );
-    if (!res.success || !res.data) return apiError('SAVINGS_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'SAVINGS_FAILED');
     return apiSuccess(mapGoal(res.data));
   }
 
@@ -89,7 +90,7 @@ export class HttpSavingsRepository implements ISavingsRepository {
       true,
       { 'Idempotency-Key': idempotencyKey() },
     );
-    if (!res.success || !res.data) return apiError('SAVINGS_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'SAVINGS_FAILED');
     return apiSuccess(mapGoal(res.data));
   }
 }

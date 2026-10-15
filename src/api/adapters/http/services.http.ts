@@ -5,7 +5,8 @@ import type {
 } from '../../repositories/services.repository';
 import type { ApiResponse } from '../../types';
 import type { SavedService, Bill, Recharge } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpServicesRepository implements IServicesRepository {
@@ -24,7 +25,7 @@ export class HttpServicesRepository implements IServicesRepository {
     >('/api/v1/services/saved');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch saved services');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -47,7 +48,7 @@ export class HttpServicesRepository implements IServicesRepository {
     });
 
     if (!res.success) {
-      return apiError('ADD_FAILED', res.error?.message || 'Failed to save service');
+      return falla(res, 'ADD_FAILED');
     }
 
     return apiSuccess(service);
@@ -68,7 +69,7 @@ export class HttpServicesRepository implements IServicesRepository {
     >('/api/v1/services/history');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch bill history');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -105,8 +106,7 @@ export class HttpServicesRepository implements IServicesRepository {
     if (!res.success || !res.data) {
       // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
       // limit, fraud block, …) so the UI can react; only fall back when absent.
-      const code = res.error?.code || 'PAYMENT_FAILED';
-      return apiError(code, res.error?.message || 'Bill payment failed');
+      return falla(res, 'PAYMENT_FAILED');
     }
 
     const bill: Bill = {
@@ -137,7 +137,7 @@ export class HttpServicesRepository implements IServicesRepository {
     >('/api/v1/services/history');
 
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch recharge history');
+      return falla(res, 'FETCH_FAILED');
     }
 
     const recharges: Recharge[] = res.data
@@ -173,8 +173,7 @@ export class HttpServicesRepository implements IServicesRepository {
     if (!res.success || !res.data) {
       // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
       // limit, fraud block, …) so the UI can react; only fall back when absent.
-      const code = res.error?.code || 'RECHARGE_FAILED';
-      return apiError(code, res.error?.message || 'Recharge failed');
+      return falla(res, 'RECHARGE_FAILED');
     }
 
     const ahora = new Date().toISOString();

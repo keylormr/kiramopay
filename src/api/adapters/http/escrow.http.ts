@@ -6,7 +6,8 @@ import type {
   CreateEscrowRequest,
 } from '../../repositories/escrow.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 interface RawAgreement {
@@ -54,7 +55,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
   async list(limit = 50): Promise<ApiResponse<EscrowAgreement[]>> {
     const res = await this.client.get<RawAgreement[]>(`/api/v1/escrow?limit=${limit}`);
     if (!res.success || !res.data) {
-      return apiError('ESCROW_LIST_FAILED', res.error?.message || 'Could not load agreements');
+      return falla(res, 'ESCROW_LIST_FAILED');
     }
     return apiSuccess(res.data.map(mapAgreement));
   }
@@ -62,7 +63,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
   async get(id: string): Promise<ApiResponse<EscrowAgreement>> {
     const res = await this.client.get<RawAgreement>(`/api/v1/escrow/${id}`);
     if (!res.success || !res.data) {
-      return apiError('ESCROW_GET_FAILED', res.error?.message || 'Could not load agreement');
+      return falla(res, 'ESCROW_GET_FAILED');
     }
     return apiSuccess(mapAgreement(res.data));
   }
@@ -79,10 +80,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
       // Se conserva el codigo del servidor —ESCROW_SELLER_NOT_FOUND es el que
       // importa aca— igual que en `action`. Pisarlo con uno generico deja a la
       // pantalla sin forma de decir QUE paso.
-      return apiError(
-        res.error?.code || 'ESCROW_CREATE_FAILED',
-        res.error?.message || 'Could not create agreement',
-      );
+      return falla(res, 'ESCROW_CREATE_FAILED');
     }
     return apiSuccess(mapAgreement(res.data));
   }
@@ -93,8 +91,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
       // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
       // limit, fraud block, …) so the UI can react; only fall back to a generic
       // code when the backend did not provide one.
-      const code = res.error?.code || 'ESCROW_ACTION_FAILED';
-      return apiError(code, res.error?.message || 'Action failed');
+      return falla(res, 'ESCROW_ACTION_FAILED');
     }
     return apiSuccess(mapAgreement(res.data));
   }
@@ -136,7 +133,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
       status: string;
     }>(`/api/v1/admin/escrow?${qs.toString()}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'ESCROW_LIST_FAILED', res.error?.message || 'Could not load the queue');
+      return falla(res, 'ESCROW_LIST_FAILED');
     }
     return apiSuccess({
       agreements: (res.data.agreements ?? []).map(mapAgreement),
@@ -148,7 +145,7 @@ export class HttpEscrowRepository implements IEscrowRepository {
   async adminResolve(id: string, outcome: 'released' | 'refunded'): Promise<ApiResponse<EscrowAgreement>> {
     const res = await this.client.post<RawAgreement>(`/api/v1/admin/escrow/${id}/resolve`, { outcome });
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'ESCROW_RESOLVE_FAILED', res.error?.message || 'Could not resolve');
+      return falla(res, 'ESCROW_RESOLVE_FAILED');
     }
     return apiSuccess(mapAgreement(res.data));
   }
