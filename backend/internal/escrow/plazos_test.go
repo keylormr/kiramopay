@@ -8,28 +8,6 @@ import (
 	"github.com/kiramopay/backend/internal/notification"
 )
 
-// Los avisos escriben el monto como la app: simbolo y miles con coma, que es
-// la regla del dueno para todos los montos.
-func TestMontoLegible(t *testing.T) {
-	casos := map[string]struct {
-		minor  int64
-		moneda string
-	}{
-		"₡12,500.00":    {1_250_000, "CRC"},
-		"₡1,234,567.89": {123_456_789, "CRC"},
-		"₡0.99":         {99, "CRC"},
-		"$25.00":        {2_500, "USD"},
-		"$1,000.00":     {100_000, "USD"},
-		"EUR 10.50":     {1_050, "EUR"},
-		"-₡5.00":        {-500, "CRC"},
-	}
-	for want, c := range casos {
-		if got := montoLegible(c.minor, c.moneda); got != want {
-			t.Errorf("montoLegible(%d, %s) = %q, se esperaba %q", c.minor, c.moneda, got, want)
-		}
-	}
-}
-
 // La fecha del aviso va en hora de Costa Rica, no en la del servidor, con el
 // formato del idioma de quien lo lee.
 func TestFechaDelAvisoEnHoraDeCostaRica(t *testing.T) {

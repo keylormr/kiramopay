@@ -3,6 +3,7 @@ package crypto
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
@@ -172,6 +173,11 @@ type buzon struct {
 // NotificarEnSuIdioma guarda el aviso escrito en espanol, como lo leeria una
 // cuenta sin idioma guardado.
 func (b *buzon) NotificarEnSuIdioma(_ context.Context, userID, clave string, datos map[string]any, tag string) error {
+	if f := notification.DatosQueFaltan(clave, datos); len(f) > 0 {
+		// Un dato mal escrito en el productor salia como texto vacio dentro del
+		// aviso y ninguna asercion lo veia.
+		panic(fmt.Sprintf("el aviso %s sale sin %v", clave, f))
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	titulo, cuerpo := notification.Texto(clave, "es", datos)

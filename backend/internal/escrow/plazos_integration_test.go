@@ -3,6 +3,7 @@ package escrow_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -31,6 +32,11 @@ type avisosDePrueba struct {
 // NotificarEnSuIdioma guarda el aviso escrito en espanol, como lo leeria una
 // cuenta sin idioma guardado.
 func (a *avisosDePrueba) NotificarEnSuIdioma(_ context.Context, userID, clave string, datos map[string]any, _ string) error {
+	if f := notification.DatosQueFaltan(clave, datos); len(f) > 0 {
+		// Un dato mal escrito en el productor salia como texto vacio dentro del
+		// aviso y ninguna asercion lo veia.
+		panic(fmt.Sprintf("el aviso %s sale sin %v", clave, f))
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	titulo, cuerpo := notification.Texto(clave, "es", datos)

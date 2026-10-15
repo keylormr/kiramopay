@@ -42,10 +42,14 @@ func TestNotificarEnSuIdioma_UsaElIdiomaDeLaCuenta(t *testing.T) {
 }
 
 // Una cuenta que nunca guardo su idioma (todas las de antes de la 074) sigue
-// recibiendo el espanol de siempre.
+// recibiendo el espanol de siempre. La columna admite que no tenga ninguno.
 func TestNotificarEnSuIdioma_SinIdiomaGuardadoSaleEnEspanol(t *testing.T) {
 	pool := testutil.TestDB(t)
 	uid := testutil.SeedTestUser(t, pool, "702650930", "dummy")
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE users SET language = NULL WHERE id = $1::uuid`, uid); err != nil {
+		t.Fatalf("una cuenta sin idioma: %v", err)
+	}
 	svc := notification.NewService(notification.NewRepository(pool), "", "")
 
 	if err := svc.NotificarEnSuIdioma(context.Background(), uid, "sinpe_recibido",

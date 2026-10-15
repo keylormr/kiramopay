@@ -45,7 +45,9 @@ func TestSend_QuienRecibeEnInglesRecibeElAvisoEnIngles(t *testing.T) {
 	if titulo != "SINPE received" {
 		t.Fatalf("titulo del aviso = %q, se esperaba en ingles", titulo)
 	}
-	if !strings.HasPrefix(cuerpo, "You received ₡") || !strings.HasSuffix(cuerpo, " via SINPE Móvil") {
-		t.Fatalf("cuerpo del aviso = %q, se esperaba en ingles", cuerpo)
+	// Y el monto como lo escribe la app, con los miles separados: antes
+	// llegaba "₡10000.00".
+	if cuerpo != "You received ₡10,000.00 via SINPE Móvil" {
+		t.Fatalf("cuerpo del aviso = %q, se esperaba en ingles y con el monto como la app", cuerpo)
 	}
 }

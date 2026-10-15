@@ -128,3 +128,47 @@ func TestTextos_IdiomaValido(t *testing.T) {
 		}
 	}
 }
+
+// Los avisos escriben el monto como la app: simbolo y miles con coma, que es
+// la regla del dueno para todos los montos. SINPE mandaba "₡10000.00" y el
+// cobro QR "CRC 500.00"; solo los de pagos protegidos lo hacian bien.
+func TestMonto(t *testing.T) {
+	casos := map[string]struct {
+		minor  int64
+		moneda string
+	}{
+		"₡12,500.00":    {1_250_000, "CRC"},
+		"₡1,234,567.89": {123_456_789, "CRC"},
+		"₡0.99":         {99, "CRC"},
+		"$25.00":        {2_500, "USD"},
+		"$1,000.00":     {100_000, "USD"},
+		"EUR 10.50":     {1_050, "EUR"},
+		"-₡5.00":        {-500, "CRC"},
+	}
+	for want, c := range casos {
+		if got := notification.Monto(c.minor, c.moneda); got != want {
+			t.Errorf("Monto(%d, %s) = %q, se esperaba %q", c.minor, c.moneda, got, want)
+		}
+	}
+}
+
+// Un dato que el productor no manda (o manda con otro nombre) salia como texto
+// vacio dentro del aviso. DatosQueFaltan lo dice, para que las pruebas de cada
+// productor lo vean.
+func TestDatosQueFaltan(t *testing.T) {
+	if f := notification.DatosQueFaltan(notification.AvisoSinpeRecibido, notification.Datos{"monto": "₡1.00"}); len(f) != 0 {
+		t.Fatalf("con el monto no falta nada, dijo %v", f)
+	}
+	f := notification.DatosQueFaltan(notification.AvisoSinpeRecibido, notification.Datos{"monto ": "₡1.00"})
+	if len(f) != 1 || f[0] != "monto" {
+		t.Fatalf("con la clave mal escrita falta el monto, dijo %v", f)
+	}
+	// Un valor de un tipo que el aviso no sabe escribir tambien sale vacio.
+	f = notification.DatosQueFaltan(notification.AvisoSinpeRecibido, notification.Datos{"monto": 1000})
+	if len(f) != 1 || f[0] != "monto" {
+		t.Fatalf("un monto que no es texto sale vacio, dijo %v", f)
+	}
+	if f := notification.DatosQueFaltan("no_existe", nil); len(f) == 0 {
+		t.Fatal("una clave sin plantilla no puede pasar como completa")
+	}
+}

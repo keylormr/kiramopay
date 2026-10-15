@@ -38,6 +38,16 @@ func pedirComo(ruta http.Handler, userID, metodo, url, cuerpo string) *httptest.
 
 func idiomaDelPerfil(t *testing.T, ruta http.Handler, userID string) string {
 	t.Helper()
+	idioma := idiomaOpcionalDelPerfil(t, ruta, userID)
+	if idioma == nil {
+		t.Fatal("el perfil no trae el idioma")
+	}
+	return *idioma
+}
+
+// idiomaOpcionalDelPerfil es el idioma del perfil, nil si la cuenta no tiene.
+func idiomaOpcionalDelPerfil(t *testing.T, ruta http.Handler, userID string) *string {
+	t.Helper()
 	rec := pedirComo(ruta, userID, http.MethodGet, "/api/v1/users/me", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("perfil: %d %s", rec.Code, rec.Body.String())
@@ -50,17 +60,19 @@ func idiomaDelPerfil(t *testing.T, ruta http.Handler, userID string) string {
 	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
 		t.Fatalf("perfil: %v", err)
 	}
-	if env.Data.Language == nil {
-		t.Fatalf("el perfil no trae el idioma: %s", rec.Body.String())
-	}
-	return *env.Data.Language
+	return env.Data.Language
 }
 
-func TestIdioma_UnaCuentaNuevaEstaEnEspanol(t *testing.T) {
+// Una cuenta nueva (y toda cuenta de antes de la 074) no tiene idioma: el perfil
+// dice null. Asi la app sabe que puede darle el de la pantalla aunque solo lo
+// haya adivinado el navegador, y que no debe pisar uno que la persona ya eligio
+// en otro dispositivo. Con 'es' por defecto no habia forma de distinguirlas.
+// Sus avisos salen en espanol mientras tanto.
+func TestIdioma_UnaCuentaNuevaNoTieneIdioma(t *testing.T) {
 	pool := testutil.TestDB(t)
 	uid := testutil.SeedTestUser(t, pool, "702650930", "dummy")
-	if got := idiomaDelPerfil(t, rutasDelIdioma(pool), uid); got != "es" {
-		t.Fatalf("idioma de una cuenta nueva = %q, se esperaba es", got)
+	if got := idiomaOpcionalDelPerfil(t, rutasDelIdioma(pool), uid); got != nil {
+		t.Fatalf("idioma de una cuenta nueva = %q, se esperaba null", *got)
 	}
 }
 
