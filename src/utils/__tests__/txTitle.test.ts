@@ -28,6 +28,26 @@ const base: Transaction = {
 };
 
 describe('txTitle', () => {
+  // El servidor describe las operaciones de cripto en ingles ("Buy BTC",
+  // "Sell BTC", "Send 0.5 BTC"). La fila trae casi siempre la contraparte, pero
+  // un envio cuyo destinatario no se pudo leer llegaba solo con esa descripcion
+  // y la lista la mostraba en ingles en cualquier idioma.
+  it.each([
+    ['crypto_send', 'Send 0.5 BTC', '[tx_title_crypto_send]: 0.5 BTC'],
+    ['crypto_buy', 'Buy BTC', '[tx_title_crypto_buy]: BTC'],
+    ['crypto_sell', 'Sell ETH', '[tx_title_crypto_sell]: ETH'],
+  ])('%s sin contraparte no muestra la descripcion en ingles', (kind, descripcion, esperado) => {
+    const corchetes = (k: string) => `[${k}]`;
+    const tx = { ...base, title: descripcion, description: descripcion, kind };
+    expect(txTitle(tx, corchetes)).toBe(esperado);
+  });
+
+  it('una operacion de cripto con contraparte sigue con su nombre', () => {
+    const corchetes = (k: string) => `[${k}]`;
+    const tx = { ...base, title: 'Ana Mora', description: 'Ana Mora', kind: 'crypto_send' };
+    expect(txTitle(tx, corchetes)).toBe('Ana Mora');
+  });
+
   it('usa el titulo de la contraparte cuando existe', () => {
     expect(txTitle({ ...base, title: 'Victor Lobo' }, t)).toBe('Victor Lobo');
   });

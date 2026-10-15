@@ -16,6 +16,15 @@ beforeEach(() => {
 });
 
 describe('MfaChallengeSheet', () => {
+  // El boton decia por defecto "Verificar y activar", el texto de ACTIVAR el
+  // segundo factor en Perfil: en un reto para autorizar un pago protegido o un
+  // retiro sugeria que se iba a activar algo en la cuenta.
+  it('sin texto propio, el boton no dice activar', () => {
+    render(<MfaChallengeSheet isOpen onClose={vi.fn()} onVerified={vi.fn()} />, { wrapper: Wrapper });
+    expect(screen.queryByRole('button', { name: /activar/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /verificar/i })).toBeTruthy();
+  });
+
   // Cerrar la hoja con el código en vuelo no detenía la verificación: si el
   // servidor lo daba por bueno, onVerified llegaba igual, y quien había
   // cancelado veía salir el envío, con una llave nueva (cancelar la soltaba).

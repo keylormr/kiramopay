@@ -1,65 +1,127 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Test the threshold logic without importing the service (avoids Capacitor native dependency)
-describe('Biometric threshold logic', () => {
-  const BIOMETRIC_THRESHOLD = 10000000; // 100,000 CRC in centimos
+// Esta prueba comparaba constantes que ella misma definia (un umbral y unos
+// textos de error que el servicio no tiene), y su "respaldo web" afirmaba un
+// exito simulado que el servicio quito a proposito: en web la biometria fingida
+// abria sola el candado del PIN. Ahora prueba el servicio de verdad, con el
+// plugin nativo simulado, en web y en el telefono.
 
-  function requiresBiometric(amountCentimos: number): boolean {
-    return amountCentimos >= BIOMETRIC_THRESHOLD;
-  }
+const nativo = vi.hoisted(() => ({
+  isAvailable: vi.fn(),
+  verifyIdentity: vi.fn(),
+  setCredentials: vi.fn(),
+  getCredentials: vi.fn(),
+  deleteCredentials: vi.fn(),
+}));
 
-  it('amount < 100,000 CRC does not require biometric', () => {
-    expect(requiresBiometric(5000000)).toBe(false); // 50,000 CRC
-    expect(requiresBiometric(9999999)).toBe(false); // 99,999.99 CRC
-  });
+vi.mock('capacitor-native-biometric', () => ({
+  NativeBiometric: nativo,
+  BiometryType: {
+    NONE: 0,
+    TOUCH_ID: 1,
+    FACE_ID: 2,
+    FINGERPRINT: 3,
+    FACE_AUTHENTICATION: 4,
+    IRIS_AUTHENTICATION: 5,
+    MULTIPLE: 6,
+  },
+}));
 
-  it('amount >= 100,000 CRC requires biometric', () => {
-    expect(requiresBiometric(10000000)).toBe(true); // 100,000 CRC
-    expect(requiresBiometric(50000000)).toBe(true); // 500,000 CRC
-  });
+// El servicio decide si es nativo al crearse, asi que cada prueba lo importa de
+// nuevo con el entorno que le toca.
+async function servicio(enElTelefono: boolean) {
+  vi.resetModules();
+  const win = window as unknown as Record<string, unknown>;
+  if (enElTelefono) win.Capacitor = { isNativePlatform: () => true };
+  else delete win.Capacitor;
+  return (await import('../biometric')).biometricService;
+}
 
-  it('exact threshold amount requires biometric', () => {
-    expect(requiresBiometric(10000000)).toBe(true);
-  });
+beforeEach(() => {
+  Object.values(nativo).forEach((f) => f.mockReset());
+  localStorage.clear();
 });
 
-describe('Biometric error handling', () => {
-  const BIOMETRIC_ERRORS: Record<string, string> = {
-    BIOMETRIC_NOT_ENROLLED: 'No biometric data enrolled. Please set up fingerprint or face ID in device settings.',
-    BIOMETRIC_LOCKED_OUT: 'Biometric authentication is temporarily locked. Please try again later or use your PIN.',
-    USER_CANCELLED: 'Authentication cancelled by user.',
-  };
-
-  it('BIOMETRIC_NOT_ENROLLED returns descriptive message', () => {
-    const msg = BIOMETRIC_ERRORS['BIOMETRIC_NOT_ENROLLED'];
-    expect(msg).toContain('enrolled');
-    expect(msg).toContain('settings');
-  });
-
-  it('BIOMETRIC_LOCKED_OUT returns descriptive message', () => {
-    const msg = BIOMETRIC_ERRORS['BIOMETRIC_LOCKED_OUT'];
-    expect(msg).toContain('locked');
-    expect(msg).toContain('PIN');
-  });
-
-  it('USER_CANCELLED returns descriptive message', () => {
-    const msg = BIOMETRIC_ERRORS['USER_CANCELLED'];
-    expect(msg).toContain('cancelled');
-  });
+afterEach(() => {
+  delete (window as unknown as Record<string, unknown>).Capacitor;
 });
 
-describe('Web fallback', () => {
-  it('web environment returns simulated success', async () => {
-    // Simulate web environment check
-    const win = window as unknown as Record<string, { isNativePlatform?: () => boolean }>;
-    const isNative = typeof win.Capacitor !== 'undefined' &&
-                     win.Capacitor?.isNativePlatform?.();
-    expect(isNative).toBe(false); // We're in jsdom, not native
-
-    // Web fallback should work
-    const result = await new Promise<{ success: boolean }>((resolve) => {
-      setTimeout(() => resolve({ success: true }), 10);
+describe('biometria en web', () => {
+  it('no esta disponible y no le pregunta al plugin', async () => {
+    const bio = await servicio(false);
+    await expect(bio.checkAvailability()).resolves.toEqual({
+      isAvailable: false,
+      biometryType: 'none',
+      errorMessage: undefined,
     });
-    expect(result.success).toBe(true);
+    expect(nativo.isAvailable).not.toHaveBeenCalled();
+  });
+
+  it('nunca finge una autenticacion exitosa', async () => {
+    const bio = await servicio(false);
+    const res = await bio.authenticate('Confirmar el envio');
+    expect(res.success).toBe(false);
+    expect(nativo.verifyIdentity).not.toHaveBeenCalled();
+  });
+
+  it('no guarda la contrasena en el navegador', async () => {
+    const bio = await servicio(false);
+    await expect(bio.setCredentials('kiramopay', 'ana', 'la-contrasena')).resolves.toBe(false);
+    const guardado = Object.keys(localStorage).map((k) => localStorage.getItem(k) ?? '');
+    expect(guardado.some((v) => v.includes('la-contrasena'))).toBe(false);
+  });
+
+  it('borra lo que una version anterior hubiera dejado en texto plano', async () => {
+    localStorage.setItem('bio_cred_kiramopay', JSON.stringify({ username: 'ana', password: 'vieja' }));
+    const bio = await servicio(false);
+    await expect(bio.getCredentials('kiramopay')).resolves.toBeNull();
+    expect(localStorage.getItem('bio_cred_kiramopay')).toBeNull();
+  });
+});
+
+describe('biometria en el telefono', () => {
+  it.each([
+    [1, 'fingerprint'],
+    [3, 'fingerprint'],
+    [2, 'face'],
+    [4, 'face'],
+    [5, 'iris'],
+  ])('el tipo %i del plugin es %s', async (tipo, esperado) => {
+    nativo.isAvailable.mockResolvedValue({ isAvailable: true, biometryType: tipo });
+    const bio = await servicio(true);
+    await expect(bio.checkAvailability()).resolves.toEqual({ isAvailable: true, biometryType: esperado });
+  });
+
+  it('si el plugin falla, no esta disponible', async () => {
+    nativo.isAvailable.mockRejectedValue(new Error('sin sensor'));
+    const bio = await servicio(true);
+    const res = await bio.checkAvailability();
+    expect(res.isAvailable).toBe(false);
+    expect(res.biometryType).toBe('none');
+  });
+
+  it('autentica con el motivo de la pantalla, tres intentos y el boton en el idioma de la app', async () => {
+    nativo.verifyIdentity.mockResolvedValue(undefined);
+    const bio = await servicio(true);
+    await expect(bio.authenticate('Confirmar el envio')).resolves.toEqual({ success: true });
+    expect(nativo.verifyIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'Confirmar el envio', maxAttempts: 3, negativeButtonText: 'Cancelar' }),
+    );
+  });
+
+  it('una lectura rechazada no es un exito', async () => {
+    nativo.verifyIdentity.mockRejectedValue(new Error('no coincide'));
+    const bio = await servicio(true);
+    const res = await bio.authenticate('Confirmar el envio');
+    expect(res.success).toBe(false);
+  });
+
+  it('las credenciales van al almacen seguro del sistema', async () => {
+    nativo.setCredentials.mockResolvedValue(undefined);
+    nativo.getCredentials.mockResolvedValue({ username: 'ana', password: 'la-contrasena' });
+    const bio = await servicio(true);
+    await expect(bio.setCredentials('kiramopay', 'ana', 'la-contrasena')).resolves.toBe(true);
+    expect(nativo.setCredentials).toHaveBeenCalledWith({ username: 'ana', password: 'la-contrasena', server: 'kiramopay' });
+    await expect(bio.getCredentials('kiramopay')).resolves.toEqual({ username: 'ana', password: 'la-contrasena' });
   });
 });
