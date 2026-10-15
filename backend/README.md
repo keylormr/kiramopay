@@ -25,7 +25,7 @@ curl http://localhost:8080/health
 # {"status":"ok","version":"1.0.0","environment":"development","services":{"database":"ok","redis":"ok"},"websocket_clients":0}
 ```
 
-### Sin Docker (requiere Go 1.22+)
+### Sin Docker (requiere Go 1.26+)
 
 ```bash
 # 1. Copiar archivo de entorno
