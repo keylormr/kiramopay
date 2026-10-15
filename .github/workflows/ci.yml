@@ -155,7 +155,9 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Run unit tests
         working-directory: backend
-        run: go test ./pkg/... -v -count=1
+        # ./cmd/... trae las pruebas de la politica CORS (cmd/api/cors_test.go),
+        # que no necesitan base y hasta ahora no corrian en ningun job.
+        run: go test ./pkg/... ./cmd/... -v -count=1
 
   backend-test-integration:
     name: Backend Integration Tests

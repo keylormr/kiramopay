@@ -284,9 +284,26 @@ describe('lo exportado sale en el idioma de la app', () => {
     expect(texto).toContain('SUMMARY');
     expect(texto).toContain('Total income');
     expect(texto).toContain('Net balance');
-    expect(texto).toContain('Generated: ');
+    // La fecha reemplaza el marcador: nunca "Generated: {fecha}".
+    expect(texto).toMatch(/Generated: \d/);
+    expect(texto).not.toContain('{fecha}');
     expect(sinEspanol(texto)).toEqual([]);
     expect(nombres[0]).toMatch(/^KiramoPay-Transactions-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  // El titulo puede ser el nombre que escribio otra persona (la contraparte).
+  // Si empieza con = + - @, tabulador o retorno, la hoja de calculo lo ejecuta
+  // como formula aunque vaya entre comillas. Se neutraliza con un apostrofo,
+  // como el reporte del comercio (celdaSegura en reporte.go). Los montos
+  // negativos no pasan por ahi: siguen siendo numeros.
+  it('un titulo que empieza como formula no se ejecuta en la hoja de calculo', async () => {
+    const peligrosos = ['=HYPERLINK("http://x.test","clic")', '+1+1', '-2+3', '@SUM(A1)', '\t=1+1', '\r=1+1'];
+    const txs = peligrosos.map((title, i) => ({ ...conFecha(`p${i}`, -100, 'CRC'), title }));
+    const texto = await leerArchivo(() => exportTransactionsCSV(txs, tEs));
+    for (const p of peligrosos) {
+      expect(texto).toContain(`"'${p.replace(/"/g, '""')}"`);
+    }
+    expect(texto).toContain(',-100.00,');
   });
 
   it('el CSV en japones tampoco trae texto en espanol', async () => {
