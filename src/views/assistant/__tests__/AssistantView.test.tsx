@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import es from '@/i18n/languages/es';
 import { llaveDelIntento } from '@/services/intentoPendiente';
 import { AssistantView } from '../AssistantView';
 
@@ -392,5 +393,78 @@ describe('AssistantView — la llave del envío SINPE', () => {
     await waitFor(() => expect(mockApi.sinpe.send).toHaveBeenCalledTimes(1));
 
     expect(pedidos().map((p) => p.idempotencyKey)).toEqual(['llave-de-otra-entrada']);
+  });
+});
+
+// Una recarga o un recibo que el servidor rechaza mostraba error.message tal
+// cual: el texto del servidor, en ingles o en espanol fijo ("process payment:
+// insufficient balance", "el pago no se puede entregar todavia"). Ahora se dice
+// con los textos de la pantalla de Servicios, que confirma por las mismas
+// rutas, y lo que no se conoce cae al generico. Lo mismo con el chat.
+describe('AssistantView — cada rechazo en el idioma de la app', () => {
+  const recarga = {
+    kind: 'recharge',
+    summary: 'Recarga ₡2,000 a 8888-7777',
+    amountMinor: 200000,
+    currency: 'CRC',
+    phone: '88887777',
+    operator: 'kolbi',
+    description: '',
+  };
+  const recibo = {
+    kind: 'bill_payment',
+    summary: 'Pago ICE ₡10,000',
+    amountMinor: 1000000,
+    currency: 'CRC',
+    providerCode: 'ICE',
+    providerName: 'ICE',
+    clientId: '1234567',
+    period: '2026-10',
+    description: '',
+  };
+
+  async function confirmar(propuesta: typeof recarga | typeof recibo) {
+    mockApi.assistant.chat.mockResolvedValue({
+      success: true,
+      data: { reply: 'Listo.', toolsUsed: [], proposals: [propuesta] },
+    });
+    const user = userEvent.setup();
+    setup();
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'hazlo{Enter}');
+    await user.click(await screen.findByText('Confirmar'));
+  }
+
+  it.each([
+    ['la recarga', 'SIN_CONVENIO', 'el pago no se puede entregar todavia', es.recharge_no_agreement, recarga],
+    ['el recibo', 'SIN_CONVENIO', 'el pago no se puede entregar todavia', es.bill_no_agreement, recibo],
+    ['la recarga', 'RECHARGE_FAILED', 'process recharge: insufficient balance', es.assistant_action_failed, recarga],
+    ['el recibo', 'PAYMENT_FAILED', 'process payment: insufficient balance', es.assistant_action_failed, recibo],
+  ])('%s: el rechazo %s se dice en el idioma de la app', async (_, code, message, texto, propuesta) => {
+    mockApi.services.recharge.mockReset();
+    mockApi.services.payBill.mockReset();
+    mockApi.services.recharge.mockResolvedValue({ success: false, error: { code, message } });
+    mockApi.services.payBill.mockResolvedValue({ success: false, error: { code, message } });
+
+    await confirmar(propuesta);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  it.each([
+    ['ASSISTANT_UNAVAILABLE', 'the assistant is not available', es.assistant_unavailable],
+    ['CONVERSATION_NOT_FOUND', 'conversation not found', es.assistant_error],
+    ['ASSISTANT_FAILED', 'the assistant could not answer right now', es.assistant_error],
+  ])('el chat rechazado con %s lo dice en el idioma de la app', async (code, message, texto) => {
+    mockApi.assistant.chat.mockResolvedValue({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'hola{Enter}');
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
   });
 });

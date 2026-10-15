@@ -76,18 +76,21 @@ describe('ServicesView — pago de servicios', () => {
     expect(await screen.findByText('¡Pago exitoso!')).toBeInTheDocument();
   });
 
-  // Lo más importante: un rechazo NO puede verse como un pago hecho.
+  // Lo más importante: un rechazo NO puede verse como un pago hecho. Y se
+  // dice en el idioma de la app: la pantalla mostraba el texto del servidor tal
+  // cual ("process payment: insufficient balance").
   it('no muestra éxito cuando el servidor rechaza el pago', async () => {
     mocks.api.services.payBill.mockResolvedValue({
       success: false,
-      error: { code: 'PAYMENT_FAILED', message: 'saldo insuficiente' },
+      error: { code: 'PAYMENT_FAILED', message: 'process payment: insufficient balance' },
     });
     const user = userEvent.setup();
     setup();
 
     await completarPago(user);
 
-    expect(await screen.findByText('saldo insuficiente')).toBeInTheDocument();
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText('process payment: insufficient balance')).not.toBeInTheDocument();
     expect(screen.queryByText('¡Pago exitoso!')).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
@@ -207,6 +210,22 @@ describe('ServicesView — recarga', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('el pago no se puede entregar todavia')).not.toBeInTheDocument();
     expect(screen.queryByText('¡Recarga exitosa!')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  // Como el pago: la recarga rechazada mostraba el texto del servidor tal cual.
+  it('una recarga rechazada se dice en el idioma de la app', async () => {
+    mocks.api.services.recharge.mockResolvedValue({
+      success: false,
+      error: { code: 'RECHARGE_FAILED', message: 'process recharge: insufficient balance' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarRecarga(user);
+
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText('process recharge: insufficient balance')).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 });
