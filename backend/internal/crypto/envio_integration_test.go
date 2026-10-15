@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/testutil"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -48,13 +49,16 @@ type avisosDePrueba struct {
 	paraQuien string
 	cuerpo    string
 	veces     int
-	// falla, si no es nil, es lo que devuelve NotifyUser: el envio ya se
+	// falla, si no es nil, es lo que devuelve el aviso: el envio ya se
 	// confirmo antes de avisar, asi que un aviso que falla no lo puede tumbar.
 	falla error
 }
 
-func (a *avisosDePrueba) NotifyUser(_ context.Context, userID, _, body, _ string) error {
-	a.paraQuien, a.cuerpo = userID, body
+// NotificarEnSuIdioma guarda el cuerpo escrito en espanol, como lo leeria una
+// cuenta sin idioma guardado.
+func (a *avisosDePrueba) NotificarEnSuIdioma(_ context.Context, userID, clave string, datos map[string]any, _ string) error {
+	_, cuerpo := notification.Texto(clave, "es", datos)
+	a.paraQuien, a.cuerpo = userID, cuerpo
 	a.veces++
 	return a.falla
 }

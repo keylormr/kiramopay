@@ -1,8 +1,11 @@
 package escrow
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/kiramopay/backend/internal/notification"
 )
 
 // Los avisos escriben el monto como la app: simbolo y miles con coma, que es
@@ -27,14 +30,24 @@ func TestMontoLegible(t *testing.T) {
 	}
 }
 
-// La fecha del aviso va en hora de Costa Rica, no en la del servidor.
-func TestFechaLegibleEnHoraDeCostaRica(t *testing.T) {
+// La fecha del aviso va en hora de Costa Rica, no en la del servidor, con el
+// formato del idioma de quien lo lee.
+func TestFechaDelAvisoEnHoraDeCostaRica(t *testing.T) {
 	utc := time.Date(2026, 9, 20, 3, 30, 0, 0, time.UTC) // 21:30 del 19 en CR
-	if got := fechaLegible(&utc); got != "19/09/2026 a las 21:30" {
-		t.Fatalf("fechaLegible = %q", got)
+	a := &Agreement{Description: "Bicicleta", AmountMinor: 1_250_000, Currency: "CRC"}
+	datos := datosDelAviso(a, &utc)
+	_, es := notification.Texto(notification.AvisoEscrowEntregaPorVencerVendedor, "es", datos)
+	if !strings.Contains(es, "19/09/2026 a las 21:30") || !strings.Contains(es, "₡12,500.00") {
+		t.Fatalf("en espanol: %q", es)
 	}
-	if got := fechaLegible(nil); got == "" {
-		t.Fatal("sin fecha tiene que decirlo, no quedar vacio")
+	_, en := notification.Texto(notification.AvisoEscrowEntregaPorVencerVendedor, "en", datos)
+	if !strings.Contains(en, "09/19/2026 at 9:30 PM") {
+		t.Fatalf("en ingles: %q", en)
+	}
+	// Sin plazo lo dice, en vez de quedar vacio o con la fecha cero.
+	_, sin := notification.Texto(notification.AvisoEscrowEntregaPorVencerVendedor, "es", datosDelAviso(a, nil))
+	if !strings.Contains(sin, "(sin fecha)") || strings.Contains(sin, "0001") {
+		t.Fatalf("sin plazo: %q", sin)
 	}
 }
 

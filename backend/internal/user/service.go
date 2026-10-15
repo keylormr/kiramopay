@@ -1,11 +1,12 @@
 package user
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/pkg/hash"
 	"strings"
-	"errors"
-	"context"
-	"fmt"
 )
 
 type Service struct {
@@ -38,6 +39,19 @@ var ErrCuentaDeDemostracion = errors.New("una cuenta de demostracion no puede ca
 // ErrContrasenaRequerida: se intento cambiar el correo sin presentar la
 // contrasena vigente, o presentando una equivocada.
 var ErrContrasenaRequerida = errors.New("se requiere la contrasena vigente para cambiar el correo")
+
+// ErrIdiomaInvalido: el idioma no es uno de los de la app.
+var ErrIdiomaInvalido = errors.New("idioma no soportado")
+
+// SetLanguage guarda el idioma en que la persona usa la app, con el que el
+// servidor escribe sus avisos y sus push. No es un dato de identidad: lo puede
+// guardar tambien una cuenta de demostracion, que no puede cambiar sus datos.
+func (s *Service) SetLanguage(ctx context.Context, userID, idioma string) error {
+	if !notification.IdiomaValido(idioma) {
+		return ErrIdiomaInvalido
+	}
+	return s.repo.SetLanguage(ctx, userID, idioma)
+}
 
 func (s *Service) UpdateProfile(ctx context.Context, userID string, req *UpdateProfileRequest) (*UserRecord, error) {
 	actual, err := s.repo.FindByID(ctx, userID)

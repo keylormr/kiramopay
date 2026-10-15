@@ -648,6 +648,57 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/users/me/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the language the person uses the app in
+         * @description Notifications and push are written in this language. Demo accounts can save it too: it is not identity data.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        language: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
+                    };
+                };
+            };
+            responses: {
+                /** @description Saved */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_LANGUAGE (not one of the app's languages) or INVALID_BODY */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/wallets/me": {
         parameters: {
             query?: never;
@@ -8368,6 +8419,11 @@ export interface components {
              * @enum {string}
              */
             plan?: "free" | "plus" | "pro";
+            /**
+             * @description Language the person uses the app in. Notifications and push are written in it. An account that never saved one is in es.
+             * @enum {string}
+             */
+            language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

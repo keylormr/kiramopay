@@ -977,6 +977,7 @@ func main() {
 			// User
 			r.Get("/users/me", userHandler.GetProfile)
 			r.Patch("/users/me", userHandler.UpdateProfile)
+			r.Put("/users/me/language", userHandler.SetLanguage)
 
 			// KYC
 			r.Get("/kyc/status", kycHandler.GetStatus)

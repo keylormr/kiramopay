@@ -62,6 +62,17 @@ func (r *Repository) GetSubscriptionsByUser(ctx context.Context, userID string) 
 	return subs, nil
 }
 
+// IdiomaDe es el idioma guardado de la cuenta (users.language, migracion 074).
+// Si no se puede leer, el espanol de siempre: un aviso en espanol es mejor que
+// ninguno.
+func (r *Repository) IdiomaDe(ctx context.Context, userID string) string {
+	var idioma string
+	if err := r.db.QueryRow(ctx, `SELECT language FROM users WHERE id = $1`, userID).Scan(&idioma); err != nil {
+		return "es"
+	}
+	return idioma
+}
+
 // InsertNotification saves a notification record.
 func (r *Repository) InsertNotification(ctx context.Context, n *NotificationRecord) error {
 	_, err := r.db.Exec(ctx,

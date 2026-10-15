@@ -17,4 +17,9 @@ export interface User {
    * un backend anterior a los planes no lo manda y se lee como 'free'.
    */
   plan?: 'free' | 'plus' | 'pro';
+  /**
+   * Idioma que el servidor tiene guardado para la cuenta: con el escribe sus
+   * avisos y sus push. Un servidor anterior a la migracion 074 no lo manda.
+   */
+  language?: string;
 }

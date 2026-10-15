@@ -408,6 +408,30 @@ paths:
         '200':
           $ref: '#/components/responses/Success'
 
+  /api/v1/users/me/language:
+    put:
+      tags: [Users]
+      summary: Save the language the person uses the app in
+      description: >-
+        Notifications and push are written in this language. Demo accounts can
+        save it too: it is not identity data.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language: { type: string, enum: [es, en, fr, pt, zh-cn, ja, hi] }
+      responses:
+        '204':
+          description: Saved
+        '400':
+          description: INVALID_LANGUAGE (not one of the app's languages) or INVALID_BODY
+
   # ── Wallets ────────────────────────────────────────────────────────────
   /api/v1/wallets/me:
     get:
@@ -4939,6 +4963,12 @@ components:
             Personal plan. It sets the savings goal and card limits and the
             assistant's daily questions. There is no charging yet: only an
             administrator changes it.
+        language:
+          type: string
+          enum: [es, en, fr, pt, zh-cn, ja, hi]
+          description: >-
+            Language the person uses the app in. Notifications and push are
+            written in it. An account that never saved one is in es.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }

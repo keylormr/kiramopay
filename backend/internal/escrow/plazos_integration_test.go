@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/escrow"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/testutil"
 )
 
@@ -27,10 +28,13 @@ type avisosDePrueba struct {
 	lista []aviso
 }
 
-func (a *avisosDePrueba) NotifyUser(_ context.Context, userID, title, body, _ string) error {
+// NotificarEnSuIdioma guarda el aviso escrito en espanol, como lo leeria una
+// cuenta sin idioma guardado.
+func (a *avisosDePrueba) NotificarEnSuIdioma(_ context.Context, userID, clave string, datos map[string]any, _ string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.lista = append(a.lista, aviso{userID, title, body})
+	titulo, cuerpo := notification.Texto(clave, "es", datos)
+	a.lista = append(a.lista, aviso{userID, titulo, cuerpo})
 	return nil
 }
 

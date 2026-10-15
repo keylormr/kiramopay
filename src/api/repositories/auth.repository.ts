@@ -108,4 +108,10 @@ export interface IAuthRepository {
    * never has to be persisted in localStorage.
    */
   getProfile(): Promise<ApiResponse<User>>;
+
+  /**
+   * Guarda el idioma de la app en la cuenta (PUT /users/me/language): el
+   * servidor escribe los avisos y los push en ese idioma.
+   */
+  setLanguage(language: string): Promise<ApiResponse<void>>;
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/internal/wallet"
@@ -18,7 +19,9 @@ import (
 // Notifier delivers a user-facing notification (history + push). Implemented by
 // the notification service; optional so sinpe works without it.
 type Notifier interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 type Service struct {
@@ -71,10 +74,11 @@ func (s *Service) GetHistory(ctx context.Context, userID string) ([]HistoryRecor
 // notifyReceiver delivers the "SINPE received" notification on a context
 // detached from the (already-completed) request, bounded by its own timeout.
 // Best-effort: never blocks or fails the transfer.
-func (s *Service) notifyReceiver(userID, body string) {
+func (s *Service) notifyReceiver(userID, monto string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_ = s.notifier.NotifyUser(ctx, userID, "SINPE recibido", body, "transaction")
+	_ = s.notifier.NotificarEnSuIdioma(ctx, userID, notification.AvisoSinpeRecibido,
+		map[string]any{"monto": monto}, "transaction")
 }
 
 // Send transfers CRC to a recipient phone. If the phone belongs to a
@@ -277,12 +281,12 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		// Notify the recipient (best-effort, detached so it never blocks or
 		// fails the transfer).
 		if s.notifier != nil {
-			body := fmt.Sprintf("Recibiste ₡%d.%02d por SINPE Móvil", req.Amount/100, req.Amount%100)
+			monto := fmt.Sprintf("₡%d.%02d", req.Amount/100, req.Amount%100)
 			// #nosec G118 -- intentionally detached: the request context is
 			// cancelled when the response returns, but this best-effort
 			// notification must outlive the request (notifyReceiver uses its own
 			// bounded context).
-			go s.notifyReceiver(peer.ID, body)
+			go s.notifyReceiver(peer.ID, monto)
 		}
 		if s.auditLogger != nil {
 			s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)

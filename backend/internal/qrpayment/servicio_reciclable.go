@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/kiramopay/backend/internal/notification"
 )
 
 // ── La identidad permanente ─────────────────────────────────────────────────
@@ -446,16 +447,17 @@ func (s *Service) avisarCobro(ctx context.Context, destinos []string, p *QRPayme
 		return
 	}
 	vistos := map[string]bool{}
-	cuerpo := fmt.Sprintf("%s %s", p.Currency, formatearMonto(p.Amount))
+	detalle := fmt.Sprintf("%s %s", p.Currency, formatearMonto(p.Amount))
 	if p.Note != "" {
-		cuerpo += " — " + p.Note
+		detalle += " — " + p.Note
 	}
 	for _, uid := range destinos {
 		if uid == "" || vistos[uid] {
 			continue
 		}
 		vistos[uid] = true
-		_ = s.notifier.NotifyUser(ctx, uid, "Pago recibido", cuerpo, "qr_cobro")
+		_ = s.notifier.NotificarEnSuIdioma(ctx, uid, notification.AvisoQRPagoRecibido,
+			map[string]any{"detalle": detalle}, "qr_cobro")
 	}
 }
 

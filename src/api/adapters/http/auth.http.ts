@@ -31,6 +31,7 @@ export class HttpAuthRepository implements IAuthRepository {
         kyc_level: number;
         status: string;
         plan?: string;
+        language?: string;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -57,6 +58,7 @@ export class HttpAuthRepository implements IAuthRepository {
       createdAt: new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     // IMPORTANT: expose the full `tokens` object — the auth store reads
@@ -89,6 +91,7 @@ export class HttpAuthRepository implements IAuthRepository {
         email: string;
         referral_code?: string;
         plan?: string;
+        language?: string;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -131,6 +134,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: 0,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     return apiSuccess({
@@ -265,6 +269,14 @@ export class HttpAuthRepository implements IAuthRepository {
     return apiSuccess(undefined as unknown as void);
   }
 
+  async setLanguage(language: string): Promise<ApiResponse<void>> {
+    const res = await this.client.put<void>('/api/v1/users/me/language', { language });
+    if (!res.success) {
+      return apiError(res.error?.code || 'LANGUAGE_FAILED', res.error?.message || 'Failed to save the language');
+    }
+    return apiSuccess(undefined as unknown as void);
+  }
+
   async getProfile(): Promise<ApiResponse<User>> {
     const res = await this.client.get<{
       id: string;
@@ -279,6 +291,7 @@ export class HttpAuthRepository implements IAuthRepository {
       created_at?: string;
       referral_code?: string;
       plan?: string;
+      language?: string;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
@@ -299,6 +312,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: u.kyc_level as 0 | 1 | 2,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
     return apiSuccess<User>(user);
   }
