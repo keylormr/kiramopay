@@ -673,6 +673,9 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest, lc LoginCo
 		// El INSERT no escribe plan: la columna arranca en su DEFAULT 'free'.
 		// Se refleja aqui para que la respuesta del registro no diga "".
 		Plan: "free",
+		// Lo mismo con el idioma (migracion 074, DEFAULT 'es'). La app guarda el
+		// suyo apenas entra.
+		Language: "es",
 	}
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		// Telefono o correo ya registrados (la cedula se reviso arriba, pero

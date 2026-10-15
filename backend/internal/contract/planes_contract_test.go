@@ -60,13 +60,21 @@ func TestUsersMe_LlevaElPlan(t *testing.T) {
 	ahora := time.Now().UTC()
 	u := user.UserRecord{
 		ID: unUUID, Cedula: "702650930", Phone: "+50688881234", FirstName: "Keilor", LastName: "Martinez",
-		KYCStatus: "pending", Status: "active", ReferralCode: "K7PM3XQ2", Plan: "plus",
+		KYCStatus: "pending", Status: "active", ReferralCode: "K7PM3XQ2", Plan: "plus", Language: "es",
 		CreatedAt: ahora, UpdatedAt: ahora,
 	}
 	cuerpo, _ := json.Marshal(response.APIResponse{Success: true, Data: u})
 	if err := contract.ValidateResponseBody(router, http.MethodGet, base+"/api/v1/users/me", http.StatusOK, cuerpo); err != nil {
 		t.Fatalf("/users/me viola el esquema: %v", err)
 	}
+
+	// El idioma tambien es un enum vivo: uno que la app no tiene no pasa.
+	u.Language = "xx"
+	cuerpo, _ = json.Marshal(response.APIResponse{Success: true, Data: u})
+	if err := contract.ValidateResponseBody(router, http.MethodGet, base+"/api/v1/users/me", http.StatusOK, cuerpo); err == nil {
+		t.Fatal("un idioma fuera de los siete de la app paso el contrato")
+	}
+	u.Language = "es"
 
 	// El enum esta vivo: un plan inventado no pasa.
 	u.Plan = "gold"
