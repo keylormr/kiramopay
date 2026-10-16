@@ -9,7 +9,8 @@ import type {
   ConvertCurrencyResponse,
 } from '../../repositories/country.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpCountryRepository implements ICountryRepository {
@@ -22,7 +23,7 @@ export class HttpCountryRepository implements ICountryRepository {
       flag_emoji: string; active: boolean;
     }>>('/api/v1/countries', false);
 
-    if (!res.success) return apiError('FETCH_FAILED', 'Failed to fetch countries');
+    if (!res.success) return falla(res, 'FETCH_FAILED');
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
     return apiSuccess(res.data.map((c) => ({
@@ -44,7 +45,7 @@ export class HttpCountryRepository implements ICountryRepository {
       rate: number; source: string; updated_at: string;
     }> | null>('/api/v1/exchange-rates', false);
 
-    if (!res.success) return apiError('FETCH_FAILED', 'Failed to fetch rates');
+    if (!res.success) return falla(res, 'FETCH_FAILED');
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
     return apiSuccess(res.data.map((r) => ({
@@ -67,7 +68,7 @@ export class HttpCountryRepository implements ICountryRepository {
       amount: request.amount * 100,
     });
 
-    if (!res.success || !res.data) return apiError('CONVERT_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'CONVERT_FAILED');
 
     return apiSuccess({
       fromCurrency: res.data.from_currency,
@@ -83,7 +84,7 @@ export class HttpCountryRepository implements ICountryRepository {
       id: string; country_code: string; currency: string; balance: number; active: boolean;
     }> | null>('/api/v1/country/wallets');
 
-    if (!res.success) return apiError('FETCH_FAILED', 'Failed to fetch wallets');
+    if (!res.success) return falla(res, 'FETCH_FAILED');
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
     return apiSuccess(res.data.map((w) => ({
@@ -100,7 +101,7 @@ export class HttpCountryRepository implements ICountryRepository {
       id: string; country_code: string; currency: string; balance: number; active: boolean;
     }>(`/api/v1/country/wallets/${countryCode}`);
 
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'CREATE_FAILED');
 
     return apiSuccess({
       id: res.data.id,
@@ -128,7 +129,7 @@ export class HttpCountryRepository implements ICountryRepository {
     // borraba SIN_CORRESPONSAL, que es el unico que distingue "no hay quien
     // entregue la remesa" de un fallo del usuario o de su saldo.
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'TRANSFER_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'TRANSFER_FAILED');
     }
 
     return apiSuccess(mapTransfer(res.data));
@@ -142,7 +143,7 @@ export class HttpCountryRepository implements ICountryRepository {
       status: string; created_at: string;
     }>>('/api/v1/country/transfers');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch transfers');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map(mapTransfer));
   }
@@ -155,7 +156,7 @@ export class HttpCountryRepository implements ICountryRepository {
       status: string; created_at: string;
     }>(`/api/v1/country/transfers/${transferId}`);
 
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Transfer not found');
+    if (!res.success || !res.data) return falla(res, 'NOT_FOUND');
 
     return apiSuccess(mapTransfer(res.data));
   }

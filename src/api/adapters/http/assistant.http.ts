@@ -7,7 +7,8 @@ import type {
   AssistantConversationSummary,
 } from '../../repositories/assistant.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 interface RawConversation {
@@ -77,7 +78,7 @@ export class HttpAssistantRepository implements IAssistantRepository {
     if (!res.success || !res.data) {
       // Preserve the backend error code (e.g. ASSISTANT_QUOTA, ASSISTANT_BUSY,
       // CONVERSATION_LIMIT) so the view can show the right message.
-      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'The assistant could not answer');
+      return falla(res, 'ASSISTANT_FAILED');
     }
     return apiSuccess({
       reply: res.data.reply,
@@ -92,7 +93,7 @@ export class HttpAssistantRepository implements IAssistantRepository {
       '/api/v1/assistant/conversations',
     );
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'Failed to load conversations');
+      return falla(res, 'ASSISTANT_FAILED');
     }
     return apiSuccess(
       (res.data.conversations || []).map((c) => ({
@@ -107,7 +108,7 @@ export class HttpAssistantRepository implements IAssistantRepository {
   async getConversation(id: string): Promise<ApiResponse<AssistantConversation>> {
     const res = await this.client.get<RawConversation>(`/api/v1/assistant/conversations/${id}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'Failed to load conversation');
+      return falla(res, 'ASSISTANT_FAILED');
     }
     return apiSuccess(mapConversation(res.data));
   }
@@ -115,7 +116,7 @@ export class HttpAssistantRepository implements IAssistantRepository {
   async createConversation(): Promise<ApiResponse<AssistantConversation>> {
     const res = await this.client.post<RawConversation>('/api/v1/assistant/conversations', {});
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'Failed to create conversation');
+      return falla(res, 'ASSISTANT_FAILED');
     }
     return apiSuccess(mapConversation(res.data));
   }
@@ -123,7 +124,7 @@ export class HttpAssistantRepository implements IAssistantRepository {
   async deleteConversation(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<void>(`/api/v1/assistant/conversations/${id}`);
     if (!res.success) {
-      return apiError(res.error?.code || 'ASSISTANT_FAILED', res.error?.message || 'Failed to delete conversation');
+      return falla(res, 'ASSISTANT_FAILED');
     }
     return apiSuccess(undefined);
   }

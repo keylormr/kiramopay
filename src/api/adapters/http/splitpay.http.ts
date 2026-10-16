@@ -5,9 +5,9 @@ import type {
   CreateSplitRequest,
 } from '../../repositories/splitpay.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
-import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export class HttpSplitPayRepository implements ISplitPayRepository {
   constructor(private client: HttpClient) {}
@@ -48,9 +48,9 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
     // Sin un texto que mostrar, el aviso generico en el idioma activo: la vista
     // pinta este mensaje, y un 'Failed' fijo salia en ingles en cualquier idioma.
     if (!res.success) {
-      return apiError(res.error?.code || 'CREATE_FAILED', res.error?.message || traducirFueraDeReact('err_generic'));
+      return falla(res, 'CREATE_FAILED');
     }
-    if (!res.data) return apiError('CREATE_FAILED', traducirFueraDeReact('err_generic'));
+    if (!res.data) return falla(res, 'CREATE_FAILED');
 
     return apiSuccess({
       group: mapGroup(res.data.group),
@@ -65,7 +65,7 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
       created_at: string;
     }> | null>('/api/v1/splits');
 
-    if (!res.success) return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || traducirFueraDeReact('err_generic'));
+    if (!res.success) return falla(res, 'FETCH_FAILED');
 
     // Un payload null es "sin divisiones todavia", no una falla: el backend ya
     // normaliza la lista nil a [] (ver listaVaciaSiNil en el propio backend),
@@ -88,7 +88,7 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
     }>(`/api/v1/splits/${groupId}`);
 
     if (!res.success) return falla(res, 'NOT_FOUND');
-    if (!res.data) return apiError('NOT_FOUND', traducirFueraDeReact('err_generic'));
+    if (!res.data) return falla(res, 'NOT_FOUND');
 
     return apiSuccess({
       group: mapGroup(res.data.group),
@@ -113,16 +113,6 @@ export class HttpSplitPayRepository implements ISplitPayRepository {
     if (!res.success) return falla(res, 'CANCEL_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
-}
-
-// Ver el detalle, pagar, rechazar y cancelar pisaban el codigo del cliente con
-// el suyo, y SplitPayView nunca veia NETWORK_ERROR, SESSION_EXPIRED,
-// RATE_LIMITED ni ACCOUNT_BLOCKED, que el cliente ya trae traducidos: a quien
-// estaba sin conexion le decia que no se pudo pagar. El codigo del modulo queda
-// solo para cuando no viene ninguno; los rechazos propios del servidor en estas
-// rutas ya son ese mismo codigo.
-function falla<T>(res: { error?: { code?: string; message?: string } }, codigoDelModulo: string): ApiResponse<T> {
-  return apiError<T>(res.error?.code || codigoDelModulo, res.error?.message || traducirFueraDeReact('err_generic'));
 }
 
 function mapGroup(g: {

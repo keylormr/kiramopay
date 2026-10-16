@@ -17,7 +17,8 @@ import type {
   PriceAlert,
   NuevaAlertaDePrecio,
 } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla, errorPropio } from './falla';
 import { HttpClient } from './client';
 import type { Schema } from '../../generated/helpers';
 
@@ -167,7 +168,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     >('/api/v1/crypto/assets');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch crypto assets');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -191,7 +192,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     const res = await this.client.get<MovimientoDelServidor[]>('/api/v1/crypto/transactions');
 
     if (!res.success) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch crypto transactions');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -209,7 +210,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'BUY_FAILED', res.error?.message || 'Buy failed');
+      return falla(res, 'BUY_FAILED');
     }
 
     return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'buy' }), res.data));
@@ -226,7 +227,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'SELL_FAILED', res.error?.message || 'Sell failed');
+      return falla(res, 'SELL_FAILED');
     }
 
     return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'sell' }), res.data));
@@ -242,7 +243,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     if (!res.success || !res.data) {
       // El codigo del servidor pasa tal cual: es el que sabe si el QR es de un
       // comercio, si esta revocado o si la persona se esta enviando a si misma.
-      return apiError(res.error?.code || 'SEND_PREVIEW_FAILED', res.error?.message || 'Send preview failed');
+      return falla(res, 'SEND_PREVIEW_FAILED');
     }
 
     return apiSuccess({
@@ -265,7 +266,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'SEND_FAILED', res.error?.message || 'Send failed');
+      return falla(res, 'SEND_FAILED');
     }
 
     return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'send' }), res.data));
@@ -282,7 +283,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'CONVERT_FAILED', res.error?.message || 'Convert failed');
+      return falla(res, 'CONVERT_FAILED');
     }
 
     return apiSuccess(conMarca(movimientoDesdeServidor({ ...res.data, type: 'convert' }), res.data));
@@ -292,7 +293,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     const res = await this.client.get<PosicionDelServidor[]>('/api/v1/crypto/staking');
 
     if (!res.success) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch staking positions');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -313,7 +314,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     if (!res.success || !res.data) {
       // El codigo del servidor pasa tal cual: la pantalla traduce por el. Antes
       // se pisaba con STAKE_FAILED y solo quedaba el texto en ingles.
-      return apiError(res.error?.code || 'STAKE_FAILED', res.error?.message || 'Staking failed');
+      return falla(res, 'STAKE_FAILED');
     }
 
     return apiSuccess(conMarca(posicionDesdeServidor(res.data), res.data));
@@ -322,7 +323,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
   async unstake(positionId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/crypto/staking/${encodeURIComponent(positionId)}`);
     if (!res.success) {
-      return apiError(res.error?.code || 'UNSTAKE_FAILED', res.error?.message || 'Unstake failed');
+      return falla(res, 'UNSTAKE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -331,7 +332,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     // El backend no acredita rendimiento: no existe el endpoint. Devolvia
     // exito con amount 0, y como la vista despachaba igual, la pantalla sumaba
     // una ganancia que ningun servidor respalda. Mejor decir que no se puede.
-    return apiError('CLAIM_NOT_AVAILABLE', 'Staking yield is not credited yet');
+    return errorPropio('CLAIM_NOT_AVAILABLE');
   }
 
   async getPriceAlerts(): Promise<ApiResponse<PriceAlert[]>> {
@@ -340,7 +341,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     // El codigo y el texto del servidor pasan tal cual: pisarlos con uno fijo
     // le quitaba a la pantalla la forma de explicar el rechazo.
     if (!res.success) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to fetch price alerts');
+      return falla(res, 'FETCH_FAILED');
     }
     // Sin alertas el servidor puede responder data: null. Es una lista vacia,
     // no un fallo.
@@ -356,12 +357,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
     });
 
     if (!res.success || !res.data) {
-      return apiError(
-        res.error?.code || 'ALERT_FAILED',
-        res.error?.message || 'Failed to add alert',
-        undefined,
-        res.error?.details,
-      );
+      return falla(res, 'ALERT_FAILED');
     }
 
     // La alerta que vale es la que guardo el servidor: con su id, su estado y
@@ -372,7 +368,7 @@ export class HttpCryptoRepository implements ICryptoRepository {
   async removePriceAlert(alertId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/crypto/alerts/${encodeURIComponent(alertId)}`);
     if (!res.success) {
-      return apiError(res.error?.code || 'REMOVE_FAILED', res.error?.message || 'Failed to remove alert');
+      return falla(res, 'REMOVE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }

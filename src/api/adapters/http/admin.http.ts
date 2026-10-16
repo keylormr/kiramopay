@@ -6,7 +6,8 @@ import type {
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
 
@@ -69,7 +70,7 @@ function mapList(data: unknown): AdminUser[] {
 }
 
 function fail<T>(res: ApiResponse<unknown>): ApiResponse<T> {
-  return apiError(res.error?.code || 'ADMIN_ACTION_FAILED', res.error?.message || 'Admin action failed');
+  return falla(res, 'ADMIN_ACTION_FAILED');
 }
 
 export class HttpAdminRepository implements IAdminRepository {

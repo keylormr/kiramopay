@@ -6,7 +6,8 @@ import type {
   CreatePayoutRequest,
 } from '../../repositories/payout.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 interface RawDestination {
@@ -69,7 +70,7 @@ export class HttpPayoutRepository implements IPayoutRepository {
   async list(limit = 50): Promise<ApiResponse<Payout[]>> {
     const res = await this.client.get<RawPayout[]>(`/api/v1/payouts?limit=${limit}`);
     if (!res.success || !res.data) {
-      return apiError('PAYOUT_LIST_FAILED', res.error?.message || 'Could not load payouts');
+      return falla(res, 'PAYOUT_LIST_FAILED');
     }
     return apiSuccess(res.data.map(mapPayout));
   }
@@ -77,7 +78,7 @@ export class HttpPayoutRepository implements IPayoutRepository {
   async get(id: string): Promise<ApiResponse<Payout>> {
     const res = await this.client.get<RawPayout>(`/api/v1/payouts/${id}`);
     if (!res.success || !res.data) {
-      return apiError('PAYOUT_GET_FAILED', res.error?.message || 'Could not load payout');
+      return falla(res, 'PAYOUT_GET_FAILED');
     }
     return apiSuccess(mapPayout(res.data));
   }
@@ -100,8 +101,7 @@ export class HttpPayoutRepository implements IPayoutRepository {
       // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
       // limit, fraud block, …) so the UI can react; only fall back to a generic
       // code when the backend did not provide one.
-      const code = res.error?.code || 'PAYOUT_CREATE_FAILED';
-      return apiError(code, res.error?.message || 'Could not create payout');
+      return falla(res, 'PAYOUT_CREATE_FAILED');
     }
     return apiSuccess(mapPayout(res.data));
   }
@@ -109,7 +109,7 @@ export class HttpPayoutRepository implements IPayoutRepository {
   async refresh(id: string): Promise<ApiResponse<Payout>> {
     const res = await this.client.post<RawPayout>(`/api/v1/payouts/${id}/refresh`, undefined);
     if (!res.success || !res.data) {
-      return apiError('PAYOUT_REFRESH_FAILED', res.error?.message || 'Could not refresh payout');
+      return falla(res, 'PAYOUT_REFRESH_FAILED');
     }
     return apiSuccess(mapPayout(res.data));
   }
@@ -117,7 +117,7 @@ export class HttpPayoutRepository implements IPayoutRepository {
   async rails(): Promise<ApiResponse<string[]>> {
     const res = await this.client.get<{ rails: string[] }>('/api/v1/payouts/rails');
     if (!res.success || !res.data) {
-      return apiError('PAYOUT_RAILS_FAILED', res.error?.message || 'Could not load rails');
+      return falla(res, 'PAYOUT_RAILS_FAILED');
     }
     return apiSuccess(res.data.rails || []);
   }

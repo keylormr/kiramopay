@@ -22,7 +22,8 @@ import type {
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
-import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { normalizarPlanComercio } from '../../../utils/planes';
 import { HttpClient } from './client';
 
@@ -249,7 +250,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       legal_name: request.legalName,
     });
 
-    if (!res.success || !res.data) return apiError('UPDATE_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'UPDATE_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 
@@ -257,7 +258,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.get<{ balance: number; currency: string }>(
       `/api/v1/qr/merchants/${merchantId}/balance?currency=${currency}`,
     );
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.balance / 100); // minor units -> major
   }
 
@@ -275,7 +276,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     // El codigo pasa tal cual: la pantalla necesita distinguir la red que se
     // corto (NETWORK_ERROR: el retiro pudo haber salido y el reintento lleva
     // la misma llave) de la llave que ya es de otro retiro (LLAVE_REUTILIZADA).
-    if (!res.success) return apiError(res.error?.code || 'WITHDRAW_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'WITHDRAW_FAILED');
     // La repeticion de un retiro que ya estaba hecho bajo la llave: la pantalla
     // no se la da al dueño por un retiro nuevo.
     return apiSuccess({ repetida: res.data?.replayed === true });
@@ -291,13 +292,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       legal_name: request.legalName,
     });
 
-    if (!res.success || !res.data) return apiError('REGISTER_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'REGISTER_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 
   async getMerchants(): Promise<ApiResponse<QRMerchant[]>> {
     const res = await this.client.get<MerchantDTO[]>('/api/v1/qr/merchants');
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch merchants');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapMerchant));
   }
 
@@ -312,13 +313,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       location_id: request.locationId,
     });
 
-    if (!res.success || !res.data) return apiError('CREATE_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'CREATE_FAILED');
     return apiSuccess(mapCode(res.data));
   }
 
   async getQRCodes(): Promise<ApiResponse<QRPaymentCode[]>> {
     const res = await this.client.get<QRCodeDTO[]>('/api/v1/qr/codes');
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch QR codes');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapCode));
   }
 
@@ -335,7 +336,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     // COBRO_REEMPLAZADO, COBRO_YA_PAGADO, QR_REVOCADO y los demas: la pantalla
     // decia "no se pudo pagar" sin poder explicar por que.
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'PAYMENT_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'PAYMENT_FAILED');
     }
     return apiSuccess(mapPayment(res.data));
   }
@@ -345,7 +346,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   async getMyCode(currency = 'CRC'): Promise<ApiResponse<QRPaymentCode>> {
     const res = await this.client.get<QRCodeDTO>(`/api/v1/qr/codes/me?currency=${encodeURIComponent(currency)}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(mapCode(res.data));
   }
@@ -358,14 +359,14 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     if (opts.locationId) q.set('location_id', opts.locationId);
     const res = await this.client.get<QRCodeDTO>(`/api/v1/qr/merchants/${merchantId}/code?${q.toString()}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(mapCode(res.data));
   }
 
   async revokeCode(codeId: string): Promise<ApiResponse<void>> {
     const res = await this.client.post<void>(`/api/v1/qr/codes/${codeId}/revoke`, {});
-    if (!res.success) return apiError(res.error?.code || 'REVOKE_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'REVOKE_FAILED');
     return apiSuccess(undefined as void);
   }
 
@@ -377,7 +378,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     }
     const res = await this.client.post<ResolveDTO>('/api/v1/qr/resolve', { qr_data: qrData });
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'RESOLVE_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'RESOLVE_FAILED');
     }
     const d = res.data;
     return apiSuccess({
@@ -404,7 +405,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       replaces: request.replaces,
     });
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'CHARGE_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'CHARGE_FAILED');
     }
     return apiSuccess(mapCharge(res.data));
   }
@@ -412,14 +413,14 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
   async getCharge(chargeId: string): Promise<ApiResponse<QRCharge>> {
     const res = await this.client.get<ChargeDTO>(`/api/v1/qr/charges/${chargeId}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(mapCharge(res.data));
   }
 
   async cancelCharge(chargeId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del<void>(`/api/v1/qr/charges/${chargeId}`);
-    if (!res.success) return apiError(res.error?.code || 'CANCEL_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'CANCEL_FAILED');
     return apiSuccess(undefined as void);
   }
 
@@ -427,20 +428,20 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const q = status ? `?status=${encodeURIComponent(status)}` : '';
     const res = await this.client.get<ChargeDTO[]>(`/api/v1/qr/charges${q}`);
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess(res.data.map(mapCharge));
   }
 
   async getPaymentHistory(): Promise<ApiResponse<QRPayment[]>> {
     const res = await this.client.get<PaymentDTO[]>('/api/v1/qr/history');
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch history');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapPayment));
   }
 
   async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
     const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments`);
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapPayment));
   }
 
@@ -456,7 +457,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       by_location: BucketDTO[] | null; by_collector: BucketDTO[] | null; plan?: string; comparison?: ComparisonDTO | null;
     }
     const res = await this.client.get<ReportDTO>(`/api/v1/qr/merchants/${merchantId}/report?days=${days}&tz=${tz}`);
-    if (!res.success || !res.data) return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     const bucket = (b: BucketDTO): BusinessReportBucket => ({
       key: b.key || undefined,
       label: b.label || undefined,
@@ -508,7 +509,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?days=${days}&tz=${tz}${lang}`,
     );
     if (!res.success || !res.data) {
-      return apiErrorConDetalle(res.error?.code || 'EXPORT_FAILED', res.error?.message || 'Failed', res.error?.details);
+      return falla(res, 'EXPORT_FAILED');
     }
     return apiSuccess({ blob: res.data.blob, nombre: res.data.nombre || `reporte-${days}-dias.csv` });
   }
@@ -517,7 +518,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
 
   async getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>> {
     const res = await this.client.get<StaffDTO[]>(`/api/v1/qr/merchants/${merchantId}/staff`);
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapStaff));
   }
 
@@ -528,7 +529,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     // El codigo del servidor pasa: la hoja del equipo traduce
     // STAFF_CEDULA_NOT_FOUND por codigo, y pisado con el de aqui decia
     // "No se pudo completar la accion" a una cedula sin cuenta.
-    if (!res.success || !res.data) return apiError(res.error?.code || 'ADD_STAFF_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'ADD_STAFF_FAILED');
     return apiSuccess(mapStaff(res.data));
   }
 
@@ -536,13 +537,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.put<StaffDTO>(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`, {
       role, location_id: locationId,
     });
-    if (!res.success || !res.data) return apiError(res.error?.code || 'UPDATE_STAFF_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'UPDATE_STAFF_FAILED');
     return apiSuccess(mapStaff(res.data));
   }
 
   async revokeStaff(merchantId: string, staffId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/qr/merchants/${merchantId}/staff/${staffId}`);
-    if (!res.success) return apiError(res.error?.code || 'REVOKE_STAFF_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'REVOKE_STAFF_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -550,13 +551,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
 
   async getLocations(merchantId: string): Promise<ApiResponse<MerchantLocation[]>> {
     const res = await this.client.get<LocationDTO[]>(`/api/v1/qr/merchants/${merchantId}/locations`);
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapLocation));
   }
 
   async createLocation(merchantId: string, name: string, address: string): Promise<ApiResponse<MerchantLocation>> {
     const res = await this.client.post<LocationDTO>(`/api/v1/qr/merchants/${merchantId}/locations`, { name, address });
-    if (!res.success || !res.data) return apiError('CREATE_LOCATION_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'CREATE_LOCATION_FAILED');
     return apiSuccess(mapLocation(res.data));
   }
 
@@ -570,7 +571,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       address: patch.address ?? '',
       active: patch.active,
     });
-    if (!res.success || !res.data) return apiError('UPDATE_LOCATION_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'UPDATE_LOCATION_FAILED');
     return apiSuccess(mapLocation(res.data));
   }
 
@@ -578,7 +579,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
 
   async getCatalog(merchantId: string): Promise<ApiResponse<CatalogItem[]>> {
     const res = await this.client.get<CatalogItemDTO[]>(`/api/v1/qr/merchants/${merchantId}/catalog`);
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapCatalogItem));
   }
 
@@ -591,7 +592,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       price_minor: Math.round(item.price * 100), // major -> minor
       currency: item.currency,
     });
-    if (!res.success || !res.data) return apiError('CREATE_ITEM_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'CREATE_ITEM_FAILED');
     return apiSuccess(mapCatalogItem(res.data));
   }
 
@@ -606,13 +607,13 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       active: patch.active,
       sort_order: patch.sortOrder,
     });
-    if (!res.success || !res.data) return apiError('UPDATE_ITEM_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'UPDATE_ITEM_FAILED');
     return apiSuccess(mapCatalogItem(res.data));
   }
 
   async deleteCatalogItem(merchantId: string, itemId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/qr/merchants/${merchantId}/catalog/${itemId}`);
-    if (!res.success) return apiError('DELETE_ITEM_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'DELETE_ITEM_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -620,25 +621,25 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
 
   async listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>> {
     const res = await this.client.get<MerchantDTO[]>('/api/v1/admin/merchants/pending');
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapMerchant));
   }
 
   async approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/approve`, {});
-    if (!res.success || !res.data) return apiError('APPROVE_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'APPROVE_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 
   async rejectMerchant(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/reject`, { reason });
-    if (!res.success || !res.data) return apiError('REJECT_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'REJECT_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 
   async setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.patch<MerchantDTO>(`/api/v1/admin/merchants/${merchantId}/commission`, { commission_bps: commissionBps });
-    if (!res.success || !res.data) return apiError('SET_COMMISSION_FAILED', res.error?.message || 'Failed');
+    if (!res.success || !res.data) return falla(res, 'SET_COMMISSION_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 
@@ -650,7 +651,7 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
       { plan },
     );
     if (!res.success || !res.data || Array.isArray(res.data)) {
-      return apiError(res.error?.code || 'PLAN_UPDATE_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'PLAN_UPDATE_FAILED');
     }
     return apiSuccess(mapMerchant(res.data));
   }

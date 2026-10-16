@@ -1,7 +1,8 @@
 import type { IAccountRepository } from '../../repositories/account.repository';
 import type { ApiResponse } from '../../types';
 import type { Account, Budget } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla, errorPropio } from './falla';
 import { HttpClient } from './client';
 import { getUsdToCrcRate } from '@/services/fxRate';
 // Generated from backend/docs/openapi.yaml — re-run `npm run gen:api`
@@ -25,7 +26,7 @@ export class HttpAccountRepository implements IAccountRepository {
     >('/api/v1/wallets/me/balance');
 
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch accounts');
+      return falla(res, 'FETCH_FAILED');
     }
 
     const crcMinor = res.data.crc ?? res.data.balance_crc ?? 0;
@@ -66,24 +67,24 @@ export class HttpAccountRepository implements IAccountRepository {
   async getAccount(ccy: string): Promise<ApiResponse<Account>> {
     const res = await this.getAccounts();
     if (!res.success || !res.data) {
-      return apiError('NOT_FOUND', 'Account not found');
+      return falla(res, 'NOT_FOUND');
     }
     const account = res.data.find((a) => a.ccy === ccy);
     if (!account) {
-      return apiError('NOT_FOUND', `No account for currency ${ccy}`);
+      return errorPropio('NOT_FOUND');
     }
     return apiSuccess(account);
   }
 
   async addAccount(_account: Account): Promise<ApiResponse<Account>> {
     // Backend doesn't support adding custom accounts in Phase 1
-    return apiError('NOT_IMPLEMENTED', 'Adding accounts not available yet');
+    return errorPropio('NOT_IMPLEMENTED');
   }
 
   async getBalanceSummary(): Promise<ApiResponse<{ totalUsd: number; accounts: Account[] }>> {
     const res = await this.getAccounts();
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch balance');
+      return falla(res, 'FETCH_FAILED');
     }
 
     // getAccounts already attached rateToUsd from the shared FX rate, so the
@@ -99,6 +100,6 @@ export class HttpAccountRepository implements IAccountRepository {
   }
 
   async updateBudget(_id: string, _updates: Partial<Budget>): Promise<ApiResponse<Budget>> {
-    return apiError('NOT_IMPLEMENTED', 'Budget management not available on server yet');
+    return errorPropio('NOT_IMPLEMENTED');
   }
 }

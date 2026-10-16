@@ -5,7 +5,8 @@ import type {
   BusinessLookupResult,
 } from '../../repositories/kyc.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpKycRepository implements IKycRepository {
@@ -19,7 +20,7 @@ export class HttpKycRepository implements IKycRepository {
     }>('/api/v1/kyc/status');
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'KYC_STATUS_FAILED', res.error?.message || 'Failed to fetch KYC status');
+      return falla(res, 'KYC_STATUS_FAILED');
     }
 
     return apiSuccess({
@@ -39,7 +40,7 @@ export class HttpKycRepository implements IKycRepository {
     }>('/api/v1/kyc/verify-identity');
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'IDENTITY_VERIFY_FAILED', res.error?.message || 'Identity verification failed');
+      return falla(res, 'IDENTITY_VERIFY_FAILED');
     }
 
     return apiSuccess({
@@ -58,7 +59,7 @@ export class HttpKycRepository implements IKycRepository {
     );
 
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'CEDULA_NOT_FOUND', res.error?.message || 'Lookup failed');
+      return falla(res, 'CEDULA_NOT_FOUND');
     }
 
     return apiSuccess({ name: res.data.name, idType: res.data.id_type });
