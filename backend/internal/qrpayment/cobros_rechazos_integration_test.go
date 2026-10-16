@@ -36,7 +36,7 @@ func TestMiCodigo_UnaMonedaQueNoSeManejaTieneCodigoPropio(t *testing.T) {
 
 	for _, moneda := range []string{"XYZ", "MONEDA-LARGA-DE-MAS"} {
 		rec := httptest.NewRecorder()
-		h.GetMyCode(rec, peticion(http.MethodGet, "/api/v1/qr/my-code?currency="+moneda, "", payer, ""))
+		h.GetMyCode(rec, peticion(http.MethodGet, "/api/v1/qr/codes/me?currency="+moneda, "", payer, ""))
 		r := rechazoDe(t, rec)
 		if r.estado != http.StatusBadRequest || r.codigo != "UNSUPPORTED_CURRENCY" {
 			t.Fatalf("%s = %d %s (%q), se esperaba 400 UNSUPPORTED_CURRENCY", moneda, r.estado, r.codigo, r.mensaje)
@@ -46,7 +46,7 @@ func TestMiCodigo_UnaMonedaQueNoSeManejaTieneCodigoPropio(t *testing.T) {
 	// Las dos monedas de la billetera siguen sirviendo.
 	for _, moneda := range []string{"CRC", "USD"} {
 		rec := httptest.NewRecorder()
-		h.GetMyCode(rec, peticion(http.MethodGet, "/api/v1/qr/my-code?currency="+moneda, "", payer, ""))
+		h.GetMyCode(rec, peticion(http.MethodGet, "/api/v1/qr/codes/me?currency="+moneda, "", payer, ""))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d: %s", moneda, rec.Code, rec.Body.String())
 		}

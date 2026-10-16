@@ -26,6 +26,7 @@ import {
   PAGO_SIN_CONFIRMAR,
   codigoDeCobroCerrado,
   mensajeDeCobro,
+  mensajeDelRechazoDelCobro,
   minutosParaVencer,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
@@ -422,7 +423,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         const res = await api.qrPayments.getMyCode(baseAccount?.ccy ?? 'CRC');
         if (cancelado) return;
         if (res.success && res.data) setCobrarCode(res.data);
-        else setCobrarError(res.error?.message || t('qr_gen_error'));
+        else setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
       } catch {
         if (!cancelado) setCobrarError(t('qr_gen_error'));
       } finally {
@@ -456,7 +457,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         setCobrarCharge(res.data);
         setCobrarAmount('');
       } else {
-        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
         // Si el cobro viejo ya se pago, el estado en pantalla esta atrasado.
         if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
       }
@@ -480,7 +481,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       if (res.success || res.error?.code === 'COBRO_CANCELADO') {
         setCobrarCharge(null);
       } else {
-        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
         if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
       }
     } finally {
