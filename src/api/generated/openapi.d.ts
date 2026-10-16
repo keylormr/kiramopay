@@ -3779,6 +3779,190 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/savings/goals/{id}/deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from the wallet into a goal
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE — the wallet does not cover the amount (the same code as POST /api/v1/sinpe/send). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/savings/goals/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from a goal back to the wallet
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_EXCEEDS_SAVED — the goal holds less than the amount (it changed elsewhere). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/budgets": {
         parameters: {
             query?: never;

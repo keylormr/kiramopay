@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/plans"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -100,17 +101,46 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request, deposit bool) {
 	}
 	idemKey := r.Header.Get("Idempotency-Key")
 	var (
-		g   *Goal
-		err error
+		g        *Goal
+		repetido bool
+		err      error
 	)
 	if deposit {
-		g, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor, idemKey)
+		g, repetido, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor, idemKey)
 	} else {
-		g, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor, idemKey)
+		g, repetido, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor, idemKey)
 	}
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "SAVINGS_FAILED", err.Error())
+		if estado, codigo, mensaje, ok := rechazoAlMover(err); ok {
+			response.Error(w, estado, codigo, mensaje)
+			return
+		}
+		// Lo que no se reconoce es un 500: nada del pedido lo explica, y el
+		// movimiento pudo haberse hecho (un commit que se corta termina aqui).
+		// La pantalla lo dice como un movimiento sin confirmar y conserva la
+		// llave, asi que reintentar no lo hace dos veces. Como 400, lo tomaba
+		// por un rechazo. El detalle queda en el log (response.Error no lo deja
+		// salir).
+		response.Error(w, http.StatusInternalServerError, "SAVINGS_FAILED", err.Error())
 		return
 	}
-	response.JSON(w, http.StatusOK, g)
+	response.JSON(w, http.StatusOK, Movimiento{Goal: g, Replayed: repetido})
+}
+
+// rechazoAlMover traduce un rechazo de depositar o retirar a su codigo. En
+// ninguno se movio dinero. El mensaje es para quien integra la API; la pantalla
+// traduce por codigo.
+func rechazoAlMover(err error) (estado int, codigo, mensaje string, ok bool) {
+	switch {
+	case errors.Is(err, ErrMontoInvalido):
+		return http.StatusBadRequest, "SAVINGS_INVALID_AMOUNT", "the amount must be greater than zero", true
+	case errors.Is(err, ErrMetaNoEncontrada):
+		return http.StatusNotFound, "SAVINGS_GOAL_NOT_FOUND", "savings goal not found", true
+	// El mismo codigo que SINPE y el pago con QR para el mismo motivo.
+	case errors.Is(err, transaction.ErrSaldoInsuficiente):
+		return http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE", transaction.ErrSaldoInsuficiente.Error(), true
+	case errors.Is(err, ErrExcedeLoAhorrado):
+		return http.StatusUnprocessableEntity, "SAVINGS_EXCEEDS_SAVED", "the amount exceeds what the goal holds", true
+	}
+	return 0, "", "", false
 }

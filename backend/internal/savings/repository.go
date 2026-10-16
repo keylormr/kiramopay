@@ -2,9 +2,11 @@ package savings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -66,12 +68,22 @@ func ContarMetasEnTx(ctx context.Context, tx pgx.Tx, userID string) (int, error)
 	return n, err
 }
 
+// Get trae la meta si es de userID. Una meta ajena y una que no existe son lo
+// mismo para quien pide: ErrMetaNoEncontrada.
 func (r *Repository) Get(ctx context.Context, id, userID string) (*Goal, error) {
-	g, err := scanGoal(r.db.QueryRow(ctx,
-		`SELECT `+goalCols+` FROM savings_goals WHERE id = $1 AND user_id = $2`, id, userID))
+	// Un id que no es UUID no puede ser una meta: sin esto llegaba a la base y
+	// volvia como un error de sintaxis, que salia como falla del servidor. A la
+	// base va la forma canonica, porque uuid.Parse acepta escrituras
+	// (urn:uuid:...) que Postgres no.
+	uid, err := uuid.Parse(id)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("goal not found")
+		return nil, ErrMetaNoEncontrada
+	}
+	g, err := scanGoal(r.db.QueryRow(ctx,
+		`SELECT `+goalCols+` FROM savings_goals WHERE id = $1 AND user_id = $2`, uid.String(), userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrMetaNoEncontrada
 		}
 		return nil, err
 	}
@@ -84,7 +96,7 @@ func (r *Repository) Delete(ctx context.Context, id, userID string) error {
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		return fmt.Errorf("goal not found")
+		return ErrMetaNoEncontrada
 	}
 	return nil
 }
@@ -103,8 +115,8 @@ func AddSavedEnTx(ctx context.Context, tx pgx.Tx, id, userID string, delta int64
 		`UPDATE savings_goals SET saved_minor = saved_minor + $3
 		 WHERE id = $1 AND user_id = $2 RETURNING `+goalCols, id, userID, delta))
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("goal not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrMetaNoEncontrada
 		}
 		return nil, err
 	}
@@ -120,8 +132,8 @@ func DeductSavedEnTx(ctx context.Context, tx pgx.Tx, id, userID string, amount i
 		 WHERE id = $1 AND user_id = $2 AND saved_minor >= $3 RETURNING `+goalCols,
 		id, userID, amount))
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("amount exceeds amount saved")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrExcedeLoAhorrado
 		}
 		return nil, err
 	}

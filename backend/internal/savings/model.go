@@ -28,3 +28,13 @@ type CreateGoalRequest struct {
 type AmountRequest struct {
 	AmountMinor int64 `json:"amount_minor"`
 }
+
+// Movimiento es la respuesta de depositar y retirar: la meta como queda y, si
+// la llave ya tenia hecho ese movimiento, la marca de la repeticion. Con la
+// marca, la pantalla dice que ya estaba hecho y suelta la llave; sin ella, un
+// segundo movimiento identico hecho a proposito viajaba con la llave del que
+// se corto y se devolvia como hecho sin mover nada.
+type Movimiento struct {
+	*Goal
+	Replayed bool `json:"replayed,omitempty"`
+}

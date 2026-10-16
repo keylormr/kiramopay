@@ -92,7 +92,7 @@ func TestTopeMetas_QuienYaTieneMasLasConserva(t *testing.T) {
 		t.Fatalf("metas = %d (err %v), se esperaban las 5: el tope no quita nada", len(goals), err)
 	}
 	// Y siguen funcionando: se puede guardar en la quinta.
-	if _, err := svc.Deposit(ctx, user, goals[4].ID, 1000, ""); err != nil {
+	if _, _, err := svc.Deposit(ctx, user, goals[4].ID, 1000, ""); err != nil {
 		t.Fatalf("depositar en una meta por encima del tope: %v", err)
 	}
 }
