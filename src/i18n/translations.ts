@@ -1233,6 +1233,7 @@ export type TranslationKeys = {
   qr_cobro_cerrado_hint: string;
   qr_err_actualiza_app: string;
   qr_err_invalido: string;
+  qr_err_no_se_pudo_verificar: string;
   qr_err_pago_propio: string;
   qr_err_monto_requerido: string;
   qr_err_llave_reutilizada: string;

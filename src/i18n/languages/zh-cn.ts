@@ -1087,6 +1087,7 @@ const zhCn: TranslationKeys = {
   qr_cobro_cerrado_hint: '如果你仍需支付该金额，请向收款方索取新的收款码。',
   qr_err_actualiza_app: '请更新应用后再支付此码。',
   qr_err_invalido: '该二维码不存在或已失效。',
+  qr_err_no_se_pudo_verificar: '无法核对该二维码，请重试。',
   qr_err_pago_propio: '不能向自己付款。',
   qr_err_monto_requerido: '请输入付款金额。',
   qr_err_llave_reutilizada: '该操作已以不同金额完成。请先查看交易记录再重试。',

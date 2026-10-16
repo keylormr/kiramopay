@@ -54,6 +54,17 @@ func TestResolveQR_UnCodigoQueNoExisteSigueSiendoQRInvalido(t *testing.T) {
 	}
 }
 
+// Una cadena que la base rechaza por su contenido tampoco es una caida: un byte
+// nulo no se guarda en una columna de texto, y la respuesta es la misma cada
+// vez. Es un codigo invalido, no un "intenta de nuevo".
+func TestResolveQR_UnaCadenaQueLaBaseRechazaEsQRInvalido(t *testing.T) {
+	svc, _, _, _ := setupQR(t)
+	estado, codigo, mensaje := resolverPorLaRuta(t, svc, `KP:p2p_receive:abcd1234:0:CRC:i\u0000`)
+	if estado != http.StatusBadRequest || codigo != "QR_INVALIDO" {
+		t.Fatalf("= %d %s (%q), se esperaba 400 QR_INVALIDO", estado, codigo, mensaje)
+	}
+}
+
 // El nombre del comercio es lo que la hoja muestra ANTES del boton de pagar:
 // es la defensa contra el rotulo de otro pegado encima. Si leer el comercio
 // fallaba, el error se descartaba y la hoja recibia un 200 sin nombre, como si

@@ -1086,6 +1086,7 @@ const ja: TranslationKeys = {
   qr_cobro_cerrado_hint: 'まだこの金額を支払う必要がある場合は、請求者に新しいコードを依頼してください。',
   qr_err_actualiza_app: 'アプリを更新するとこのコードに再度支払えます。',
   qr_err_invalido: 'このコードは存在しないか、無効になっています。',
+  qr_err_no_se_pudo_verificar: 'コードを確認できませんでした。もう一度お試しください。',
   qr_err_pago_propio: '自分自身に支払うことはできません。',
   qr_err_monto_requerido: '支払う金額を入力してください。',
   qr_err_llave_reutilizada: 'この操作は別の金額ですでに処理されています。取引履歴を確認してから、もう一度お試しください。',

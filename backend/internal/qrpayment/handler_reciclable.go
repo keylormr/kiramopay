@@ -165,7 +165,13 @@ func (h *Handler) ResolveQR(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.service.ResolveQR(r.Context(), req.QRData)
 	if err != nil {
-		responderError(w, err)
+		// Los rechazos del codigo salen con su codigo (QR_INVALIDO solo si no
+		// existe). Lo demas es la base que no contesto: 500, con el detalle en
+		// el log y no en la respuesta. Por responderError salia 400
+		// PAYMENT_FAILED con el error tal cual.
+		if !responderConocido(w, err) {
+			response.Error(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
+		}
 		return
 	}
 	response.JSON(w, http.StatusOK, res)

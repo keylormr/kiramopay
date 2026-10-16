@@ -113,6 +113,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // mostrador el fraude es tapar el de uno con el de otro.
   const [resuelto, setResuelto] = useState<ResolvedQR | null>(null);
   const [resolviendo, setResolviendo] = useState(false);
+  // El servidor no pudo verificar el codigo (se cayo, no hubo red): no es un
+  // codigo malo, y la hoja ofrece volver a preguntar. Cada toque de Reintentar
+  // sube el contador y vuelve a correr la consulta.
+  const [resolverFallo, setResolverFallo] = useState(false);
+  const [intentoResolver, setIntentoResolver] = useState(0);
   // Nonce del pago de MONTO ABIERTO. Vive en un ref y NO se acuna dentro del
   // adaptador: el cliente reintenta la peticion entera tras un refresh
   // silencioso de 401, y ese reintento tiene que llevar el mismo nonce.
@@ -317,29 +322,42 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // se pinta al instante desde la cadena (parsearQrKiramo se conserva justo
   // para eso); el nombre llega cuando contesta el servidor, y si el servidor no
   // contesta el pago sigue siendo posible.
+  //
+  // Un rechazo del codigo (no existe, fue retirado) se dice con su motivo.
+  // Cualquier otra respuesta es que no se pudo verificar: el servidor responde
+  // 500 RESOLVE_FAILED cuando la base no contesta, y sin red llega
+  // NETWORK_ERROR. Antes la hoja se quedaba en "—" sin decir nada, y el
+  // servidor llegaba a contestar una caida como QR_INVALIDO.
   useEffect(() => {
     if (!scannedQrData) {
       setResuelto(null);
+      setResolverFallo(false);
       return;
     }
     let cancelado = false;
     (async () => {
       setResolviendo(true);
+      setResolverFallo(false);
       try {
         const api = getApiLayer();
         if (!api.qrPayments) return;
         const res = await api.qrPayments.resolveQr(scannedQrData);
         if (cancelado) return;
-        if (res.success && res.data) setResuelto(res.data);
-        else setPayError(mensajeDeCobro(t, res.error?.code) || '');
+        if (res.success && res.data) {
+          setResuelto(res.data);
+          return;
+        }
+        const motivo = mensajeDeCobro(t, res.error?.code);
+        if (motivo) setPayError(motivo);
+        else setResolverFallo(true);
       } catch {
-        /* degradado: se paga igual, sin el nombre */
+        if (!cancelado) setResolverFallo(true);
       } finally {
         if (!cancelado) setResolviendo(false);
       }
     })();
     return () => { cancelado = true; };
-  }, [scannedQrData, t]);
+  }, [scannedQrData, t, intentoResolver]);
 
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
   // el ledger). Generar el código no movía dinero; esto sí.
@@ -1039,8 +1057,22 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                         <p className="text-xs uv-text-muted">{resuelto.locationName}</p>
                       )}
                     </>
+                  ) : resolviendo ? (
+                    <p className="text-sm uv-text-muted">{t('qr_verificando')}</p>
+                  ) : resolverFallo ? (
+                    <div className="mt-1 flex flex-col items-center gap-1.5" aria-live="polite">
+                      <p className="text-sm text-[var(--color-danger)]">{t('qr_err_no_se_pudo_verificar')}</p>
+                      <button
+                        type="button"
+                        onClick={() => setIntentoResolver((n) => n + 1)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                      >
+                        <Icons.RefreshCw size={14} aria-hidden="true" />
+                        {t('error_retry')}
+                      </button>
+                    </div>
                   ) : (
-                    <p className="text-sm uv-text-muted">{resolviendo ? t('qr_verificando') : '—'}</p>
+                    <p className="text-sm uv-text-muted">—</p>
                   )}
                 </div>
 

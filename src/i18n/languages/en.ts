@@ -1092,6 +1092,7 @@ const en: TranslationKeys = {
   qr_cobro_cerrado_hint: 'If you still owe that amount, ask the person charging you for a new code.',
   qr_err_actualiza_app: 'Update the app to pay this code again.',
   qr_err_invalido: "That code doesn't exist or is no longer valid.",
+  qr_err_no_se_pudo_verificar: "We couldn't check the code. Please try again.",
   qr_err_pago_propio: "You can't pay yourself.",
   qr_err_monto_requerido: 'Enter how much you want to pay.',
   qr_err_llave_reutilizada: 'That operation already went through with a different amount. Check your transactions before trying again.',
