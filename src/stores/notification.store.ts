@@ -30,7 +30,7 @@ interface NotificationState {
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set) => ({
-      notifications: hasBackend ? [] : initialNotifications,
+      notifications: hasBackend ? [] : initialNotifications(),
       ocultas: [],
 
       setNotifications: (notifications) =>

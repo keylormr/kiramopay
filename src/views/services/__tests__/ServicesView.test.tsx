@@ -109,7 +109,7 @@ describe('ServicesView — pago de servicios', () => {
     expect(screen.queryByText('mfa needed')).not.toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText('000000'), '123456');
-    await user.click(screen.getByText('Verificar y activar'));
+    await user.click(screen.getByText('Verificar y pagar'));
 
     await waitFor(() => {
       expect(mocks.api.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');

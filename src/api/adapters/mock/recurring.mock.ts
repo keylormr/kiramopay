@@ -6,55 +6,59 @@ import type { ApiResponse } from '../../types';
 import type { RecurringPayment } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { esFechaValida, hoyLocal, siguienteFecha } from '@/utils/pagosFijos';
+import { traducirFueraDeReact as tr } from '@/i18n/mensajesDeError';
 
 const STORAGE_KEY = 'kiramopay_recurring_payments';
 
-const defaultPayments: RecurringPayment[] = [
-  {
-    id: 'rec-1',
-    label: 'Pago ICE',
-    type: 'service',
-    amount: 32450,
-    ccy: 'CRC',
-    frequency: 'monthly',
-    nextDate: '2026-03-15',
-    lastPaidDate: '2026-02-15',
-    serviceProviderId: 'ice',
-    clientId: '1234567',
-    enabled: true,
-  },
-  {
-    id: 'rec-2',
-    label: 'SINPE a Diego',
-    type: 'sinpe',
-    amount: 15000,
-    ccy: 'CRC',
-    frequency: 'biweekly',
-    nextDate: '2026-03-01',
-    recipientPhone: '8888-1234',
-    recipientName: 'Diego Mora',
-    enabled: true,
-  },
-  {
-    id: 'rec-3',
-    label: 'Recarga Kolbi',
-    type: 'recharge',
-    amount: 5000,
-    ccy: 'CRC',
-    frequency: 'monthly',
-    nextDate: '2026-03-20',
-    lastPaidDate: '2026-02-20',
-    recipientPhone: '8888-0000',
-    enabled: false,
-  },
-];
+// Se arman al leerlos, con el idioma activo (ver mock-data.ts).
+function defaultPayments(): RecurringPayment[] {
+  return [
+    {
+      id: 'rec-1',
+      label: tr('demo_tx_pago_ice'),
+      type: 'service',
+      amount: 32450,
+      ccy: 'CRC',
+      frequency: 'monthly',
+      nextDate: '2026-03-15',
+      lastPaidDate: '2026-02-15',
+      serviceProviderId: 'ice',
+      clientId: '1234567',
+      enabled: true,
+    },
+    {
+      id: 'rec-2',
+      label: tr('demo_rec_sinpe_diego'),
+      type: 'sinpe',
+      amount: 15000,
+      ccy: 'CRC',
+      frequency: 'biweekly',
+      nextDate: '2026-03-01',
+      recipientPhone: '8888-1234',
+      recipientName: 'Diego Mora',
+      enabled: true,
+    },
+    {
+      id: 'rec-3',
+      label: tr('demo_rec_recarga_kolbi'),
+      type: 'recharge',
+      amount: 5000,
+      ccy: 'CRC',
+      frequency: 'monthly',
+      nextDate: '2026-03-20',
+      lastPaidDate: '2026-02-20',
+      recipientPhone: '8888-0000',
+      enabled: false,
+    },
+  ];
+}
 
 function load(): RecurringPayment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [...defaultPayments];
+    return raw ? JSON.parse(raw) : defaultPayments();
   } catch {
-    return [...defaultPayments];
+    return defaultPayments();
   }
 }
 

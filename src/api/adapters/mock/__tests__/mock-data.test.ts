@@ -6,7 +6,7 @@ import { initialSinpeHistory, initialRechargeHistory } from '../mock-data';
 // idioma de la app; cada fila de ejemplo tiene que traerla.
 describe('semilla de la demo — SINPE', () => {
   it('cada SINPE de ejemplo trae una fecha de maquina valida', () => {
-    for (const fila of initialSinpeHistory) {
+    for (const fila of initialSinpeHistory()) {
       expect(Number.isNaN(Date.parse(fila.dateISO ?? '')), fila.id).toBe(false);
     }
   });

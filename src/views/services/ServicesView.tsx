@@ -704,6 +704,7 @@ export const ServicesView: React.FC = () => {
           MFA_REQUIRED; al verificar el codigo se reintenta la misma. */}
       <MfaChallengeSheet
         isOpen={showMfa}
+        confirmLabel={t('mfa_verify_and_pay')}
         onClose={() => {
           setShowMfa(false);
           setPendingAction(null);

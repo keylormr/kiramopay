@@ -7,7 +7,7 @@ describe('useSinpeStore', () => {
     localStorage.clear();
     useSinpeStore.setState({
       sinpeContacts: initialSinpeContacts.map((c) => ({ ...c })),
-      sinpeHistory: initialSinpeHistory.map((h) => ({ ...h })),
+      sinpeHistory: initialSinpeHistory().map((h) => ({ ...h })),
     });
   });
 
@@ -19,7 +19,7 @@ describe('useSinpeStore', () => {
 
   it('should have initial transaction history', () => {
     const { sinpeHistory } = useSinpeStore.getState();
-    expect(sinpeHistory).toHaveLength(initialSinpeHistory.length);
+    expect(sinpeHistory).toHaveLength(initialSinpeHistory().length);
     expect(sinpeHistory[0].type).toBe('sent');
   });
 
@@ -66,7 +66,7 @@ describe('useSinpeStore', () => {
 
     useSinpeStore.getState().addTransaction(tx);
     const { sinpeHistory } = useSinpeStore.getState();
-    expect(sinpeHistory).toHaveLength(initialSinpeHistory.length + 1);
+    expect(sinpeHistory).toHaveLength(initialSinpeHistory().length + 1);
     expect(sinpeHistory[0].id).toBe('4');
     expect(sinpeHistory[0].type).toBe('sent');
     expect(sinpeHistory[0].amount).toBe(10000);

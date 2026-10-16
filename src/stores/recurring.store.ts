@@ -2,47 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { RecurringPayment } from '@/types';
 
-const hasBackend = !!import.meta.env.VITE_API_URL;
-
-const initialPayments: RecurringPayment[] = [
-  {
-    id: 'rec-1',
-    label: 'Pago ICE',
-    type: 'service',
-    amount: 32450,
-    ccy: 'CRC',
-    frequency: 'monthly',
-    nextDate: '2026-03-15',
-    lastPaidDate: '2026-02-15',
-    serviceProviderId: 'ice',
-    clientId: '1234567',
-    enabled: true,
-  },
-  {
-    id: 'rec-2',
-    label: 'SINPE a Diego',
-    type: 'sinpe',
-    amount: 15000,
-    ccy: 'CRC',
-    frequency: 'biweekly',
-    nextDate: '2026-03-01',
-    recipientPhone: '8888-1234',
-    recipientName: 'Diego Mora',
-    enabled: true,
-  },
-  {
-    id: 'rec-3',
-    label: 'Recarga Kolbi',
-    type: 'recharge',
-    amount: 5000,
-    ccy: 'CRC',
-    frequency: 'monthly',
-    nextDate: '2026-03-20',
-    lastPaidDate: '2026-02-20',
-    recipientPhone: '8888-0000',
-    enabled: false,
-  },
-];
 
 interface RecurringState {
   payments: RecurringPayment[];
@@ -58,7 +17,10 @@ interface RecurringState {
 export const useRecurringStore = create<RecurringState>()(
   persist(
     (set) => ({
-      payments: hasBackend ? [] : initialPayments,
+      // Vacio aun sin servidor: la pantalla pide los pagos al repositorio al
+      // abrirse, y el de la demo los da en el idioma de la app. Una copia aqui
+      // se armaba al importar, en espanol, antes de que cargara el idioma.
+      payments: [],
 
       setPayments: (payments) => set({ payments }),
 

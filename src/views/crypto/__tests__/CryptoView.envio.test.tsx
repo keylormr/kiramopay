@@ -174,7 +174,7 @@ describe('envio de cripto — los numeros son los del servidor', () => {
     );
 
     // Las tres lineas del patron aprobado, mas la comision como porcentaje.
-    expect(await hoja.findByText('Vos enviás')).toBeInTheDocument();
+    expect(await hoja.findByText('Tú envías')).toBeInTheDocument();
     expect(hoja.getByText('Tu saldo baja')).toBeInTheDocument();
     expect(hoja.getByText('Le llega a Victor Lobo')).toBeInTheDocument();
     expect(hoja.getByText('0.0050125 BTC')).toBeInTheDocument();
