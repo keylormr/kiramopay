@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/testutil"
@@ -193,5 +194,16 @@ func TestResolveQR_SinPoderLeerLaSucursalEsUn500(t *testing.T) {
 	res, err := svc.ResolveQR(ctx, code.QRData)
 	if err != nil || res.MerchantName != "Soda Tica" || res.LocationName != "Sucursal Centro" {
 		t.Fatalf("con la base sana = %+v, %v; se esperaba Soda Tica, Sucursal Centro", res, err)
+	}
+}
+
+// La otra mitad de la sucursal. Por la ruta no se llega: borrar una sucursal
+// deja el location_id del rotulo en NULL. Pero entre leer el rotulo y leer su
+// sucursal alguien puede borrarla, y eso es "no esta", no una caida.
+func TestNombreDeSucursal_UnaQueNoEstaEsVaciaSinError(t *testing.T) {
+	pool := testutil.TestDB(t)
+	nombre, err := qrpayment.NewRepository(pool).NombreDeSucursal(context.Background(), uuid.NewString())
+	if err != nil || nombre != "" {
+		t.Fatalf("= %q, %v; se esperaba vacio y sin error", nombre, err)
 	}
 }

@@ -1978,10 +1978,20 @@ paths:
                         enum: [code, charge, legacy]
                       payee_name:
                         type: string
+                        description: >-
+                          The person who charges, for a personal code. Absent
+                          when that person no longer exists; a read that
+                          fails is a 500, never an absent name.
                       merchant_name:
                         type: string
+                        description: >-
+                          The business, for a merchant code. Absent when
+                          the business no longer exists.
                       location_name:
                         type: string
+                        description: >-
+                          The business location printed on the code. Absent
+                          when the code has no location or it no longer exists.
                       currency:
                         type: string
                       amount:
@@ -2016,8 +2026,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: >-
-            RESOLVE_FAILED — the server could not read the code or the business
-            behind it. The message never carries the detail; retrying may work.
+            RESOLVE_FAILED — the server could not read the code or who is
+            behind it (the person, the business or its location). The message
+            never carries the detail; retrying may work.
           content:
             application/json:
               schema:

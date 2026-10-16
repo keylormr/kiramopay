@@ -346,9 +346,17 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 		case !errors.Is(err, pgx.ErrNoRows):
 			return nil, fmt.Errorf("leer el comercio: %w", err)
 		}
-		res.LocationName = s.repo.NombreDeSucursal(ctx, obj.code.LocationID)
+		if res.LocationName, err = s.repo.NombreDeSucursal(ctx, obj.code.LocationID); err != nil {
+			return nil, fmt.Errorf("leer la sucursal: %w", err)
+		}
 	} else {
-		res.PayeeName = s.displayName(ctx, obj.code.CreatorID)
+		// Lo mismo con la persona. No es displayName, que se traga el error
+		// porque en los pagos un nombre nunca puede hacer fallar un movimiento
+		// de valor; aqui no se mueve nada, y un nombre vacio se lee como un
+		// codigo sin a quien pagarle.
+		if res.PayeeName, err = s.nombreDeLaPersona(ctx, obj.code.CreatorID); err != nil {
+			return nil, fmt.Errorf("leer a quien cobra: %w", err)
+		}
 	}
 	return res, nil
 }

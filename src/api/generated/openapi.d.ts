@@ -3180,8 +3180,11 @@ export interface paths {
                             data: {
                                 /** @enum {string} */
                                 kind: "code" | "charge" | "legacy";
+                                /** @description The person who charges, for a personal code. Absent when that person no longer exists; a read that fails is a 500, never an absent name. */
                                 payee_name?: string;
+                                /** @description The business, for a merchant code. Absent when the business no longer exists. */
                                 merchant_name?: string;
+                                /** @description The business location printed on the code. Absent when the code has no location or it no longer exists. */
                                 location_name?: string;
                                 currency: string;
                                 /**
@@ -3218,7 +3221,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description RESOLVE_FAILED — the server could not read the code or the business behind it. The message never carries the detail; retrying may work. */
+                /** @description RESOLVE_FAILED — the server could not read the code or who is behind it (the person, the business or its location). The message never carries the detail; retrying may work. */
                 500: {
                     headers: {
                         [name: string]: unknown;
