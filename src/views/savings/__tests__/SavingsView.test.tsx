@@ -216,8 +216,13 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
 
   // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara: un
   // deposito RECHAZADO se veia exactamente igual que uno exitoso.
+  // SAVINGS_FAILED ya no es un rechazo sino el 500 (ver
+  // SavingsView.rechazos.test.tsx): aqui va un rechazo de verdad.
   it('un deposito rechazado deja la hoja abierta, el monto escrito y el motivo a la vista', async () => {
-    mocks.api.savings.deposit.mockResolvedValue({ success: false, error: { code: 'SAVINGS_FAILED' } });
+    mocks.api.savings.deposit.mockResolvedValue({
+      success: false,
+      error: { code: 'INSUFFICIENT_BALANCE', message: 'insufficient balance' },
+    });
     const user = userEvent.setup();
 
     setup();
@@ -227,7 +232,7 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
     await user.type(monto, '10000');
     await user.click(screen.getByRole('button', { name: 'Depositar' }));
 
-    expect(await screen.findByText('No se pudo depositar. Tu dinero sigue en la billetera.')).toBeInTheDocument();
+    expect(await screen.findByText('No tienes saldo suficiente en la billetera para ese depósito.')).toBeInTheDocument();
     // CampoMonto muestra el separador de miles; el monto sigue siendo 10000.
     expect(monto).toHaveValue('10,000');
   });
@@ -436,7 +441,10 @@ describe('SavingsView — retirar de una meta', () => {
 
   it('un retiro rechazado deja la hoja abierta, el monto escrito y el motivo a la vista', async () => {
     mocks.api.savings.getGoals.mockResolvedValue({ success: true, data: [{ ...meta, saved: 50000 }] });
-    mocks.api.savings.withdraw.mockResolvedValue({ success: false, error: { code: 'SAVINGS_FAILED' } });
+    mocks.api.savings.withdraw.mockResolvedValue({
+      success: false,
+      error: { code: 'SAVINGS_INVALID_AMOUNT', message: 'the amount must be greater than zero' },
+    });
     const user = userEvent.setup();
 
     setup();
@@ -446,7 +454,7 @@ describe('SavingsView — retirar de una meta', () => {
     await user.type(monto, '10000');
     await user.click(screen.getByRole('button', { name: 'Retirar' }));
 
-    expect(await screen.findByText('No se pudo retirar. Tu dinero sigue en la meta.')).toBeInTheDocument();
+    expect(await screen.findByText('El monto debe ser mayor a cero.')).toBeInTheDocument();
     expect(monto).toHaveValue('10,000');
   });
 
