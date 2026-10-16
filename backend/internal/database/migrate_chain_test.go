@@ -330,13 +330,15 @@ var columnasDeLa075 = []string{
 // lea esas columnas desde una vista o las cambie lleva su bajada aca, antes de
 // la de la 075.
 var bajadasHastaLa075 = []string{
+	"076_fn_fx_rate_at_con_zona.down.sql",
 	"075_fechas_con_zona.down.sql",
 }
 
 // exigirBajadaDeLa075 aplica las bajadas hasta antes de la 075, fuera de UTC,
 // dentro de una transaccion que despues se deshace: la base queda como estaba.
 // Las quince columnas vuelven a ser sin zona, con la hora de UTC de lo que
-// guardaban, y las dos vistas siguen.
+// guardaban, las dos vistas siguen, y fn_fx_rate_at vuelve a recibir el
+// instante sin zona, como en la 021.
 func exigirBajadaDeLa075(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -364,6 +366,16 @@ func exigirBajadaDeLa075(ctx context.Context, t *testing.T, pool *pgxpool.Pool) 
 	}
 	exigirVistas(ctx, t, tx)
 	compararFechasSembradas(ctx, t, tx, "despues de la bajada")
+
+	var comoLa021 bool
+	if err := tx.QueryRow(ctx,
+		`SELECT to_regprocedure('fn_fx_rate_at(varchar, varchar, timestamp)') IS NOT NULL`).
+		Scan(&comoLa021); err != nil {
+		t.Fatalf("buscar fn_fx_rate_at despues de la bajada: %v", err)
+	}
+	if !comoLa021 {
+		t.Errorf("despues de la bajada no esta la fn_fx_rate_at de la 021 (instante sin zona)")
+	}
 }
 
 // columnasSinZona devuelve, ordenadas, las columnas timestamp sin zona de las
