@@ -169,14 +169,15 @@ func (r *Repository) RegistrarTipoDeCambio(ctx context.Context, from, to string,
 // TipoDeCambioConEdad devuelve la tasa vigente del par y cuanto hace que la
 // fuente la confirmo.
 //
-// La edad se calcula EN LA BASE: updated_at es TIMESTAMP sin zona, y restarlo
-// contra el reloj del proceso mezclaria dos zonas horarias. Contra NOW() de la
-// misma sesion las dos puntas usan la misma.
+// La edad se calcula EN LA BASE, contra NOW(): las dos puntas salen del reloj de
+// la base, aunque el del proceso no coincida con el. updated_at es TIMESTAMPTZ
+// desde la 034, asi que la resta da el tiempo transcurrido sin depender de la
+// zona de la sesion.
 func (r *Repository) TipoDeCambioConEdad(ctx context.Context, from, to string) (float64, time.Duration, error) {
 	var tasa float64
 	var segundos float64
 	err := r.db.QueryRow(ctx,
-		`SELECT rate, EXTRACT(EPOCH FROM (NOW()::timestamp - updated_at))
+		`SELECT rate, EXTRACT(EPOCH FROM (NOW() - updated_at))
 		   FROM exchange_rates
 		  WHERE from_currency = $1 AND to_currency = $2 AND effective_to IS NULL
 		  ORDER BY effective_from DESC
