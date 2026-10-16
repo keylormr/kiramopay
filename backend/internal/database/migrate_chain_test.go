@@ -211,7 +211,10 @@ var fechasEsperadas = map[string]time.Time{
 // instante que se sembro.
 func compararFechasSembradas(ctx context.Context, t *testing.T, s sesion, cuando string) {
 	t.Helper()
-	filas, err := s.Query(ctx, fechasSembradas)
+	// Protocolo simple: la misma consulta corre antes y despues de la bajada, y
+	// sus columnas cambian de tipo. El plan que pgx prepara y guarda en la
+	// conexion ya no serviria ("cached plan must not change result type").
+	filas, err := s.Query(ctx, fechasSembradas, pgx.QueryExecModeSimpleProtocol)
 	if err != nil {
 		t.Fatalf("%s: leer las fechas sembradas: %v", cuando, err)
 	}
