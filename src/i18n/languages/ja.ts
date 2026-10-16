@@ -578,6 +578,7 @@ const ja: TranslationKeys = {
   crypto_tx_gave: '渡した分',
   crypto_tx_got: '受け取った分',
   crypto_status_failed: '失敗',
+  crypto_status_unknown: '未確認',
   crypto_onramp_cta: 'カードで購入',
   crypto_onramp_soon_title: 'カード購入は近日対応',
   crypto_onramp_soon_desc: '近日中に、外部プロバイダー（Onramper / Transak / MoonPay）を通じてカードや銀行で暗号資産を購入できるようになります。本人確認・流動性・保管はプロバイダーが担い、KiramoPay がこれらの資金を預かることはありません。',

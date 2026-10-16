@@ -305,3 +305,39 @@ describe('HttpCryptoRepository — la respuesta repetida', () => {
     expect(res.data).not.toHaveProperty('repetida');
   });
 });
+
+// El servidor anota hoy todo movimiento de cripto como 'completed' (la columna
+// no tiene CHECK y vale 'completed' por defecto). Un estado que la app no
+// conoce, o ninguno, se convertia en 'completed': la pantalla decia que algo se
+// completo sin que el servidor lo hubiera dicho.
+describe('HttpCryptoRepository — el estado de cada movimiento', () => {
+  const fila = (extra: Record<string, unknown>) => ({
+    id: 'e1', type: 'buy', asset: 'BTC', amount: '0.01', price: '40000', total: '400',
+    currency: 'USD', fee: '0', created_at: '2026-10-15T15:00:00Z', ...extra,
+  });
+
+  it.each(['completed', 'pending', 'failed'])('%s llega tal cual', async (status) => {
+    const repo = new HttpCryptoRepository(clientReturning([fila({ status })]));
+    expect((await repo.getTransactions()).data![0].status).toBe(status);
+  });
+
+  it.each(['reversed', 'disputed', 'COMPLETED', ''])('"%s" llega sin confirmar, no completado', async (status) => {
+    const repo = new HttpCryptoRepository(clientReturning([fila({ status })]));
+    expect((await repo.getTransactions()).data![0].status).toBe('unknown');
+  });
+
+  it('sin estado tampoco es completado', async () => {
+    const repo = new HttpCryptoRepository(clientReturning([fila({})]));
+    expect((await repo.getTransactions()).data![0].status).toBe('unknown');
+  });
+
+  it('la respuesta de una compra conserva el estado que mando el servidor', async () => {
+    const pendiente = new HttpCryptoRepository(clientReturning(fila({ status: 'pending' })));
+    const res = await pendiente.buy({ asset: 'BTC', amount: 0.01, price: 40000, fromCurrency: 'USD', fromAmount: 400 });
+    expect(res.data!.status).toBe('pending');
+
+    const raro = new HttpCryptoRepository(clientReturning(fila({ status: 'en_revision' })));
+    const res2 = await raro.buy({ asset: 'BTC', amount: 0.01, price: 40000, fromCurrency: 'USD', fromAmount: 400 });
+    expect(res2.data!.status).toBe('unknown');
+  });
+});
