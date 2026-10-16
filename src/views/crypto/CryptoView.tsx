@@ -2073,7 +2073,7 @@ export const CryptoView: React.FC = () => {
                 {!lectura.entrega && monedaPrecio === 'USD' && selectedTx.price > 0 && (
                   <div className={fila}>
                     <span className="uv-text-muted">{t('crypto_total_usd')}</span>
-                    <span className="font-bold uv-text-primary tabular-nums text-right">{formatUsd(lectura.principal.monto * selectedTx.price)}</span>
+                    <span className={`font-bold ${montoEntregado} tabular-nums text-right`}>{formatUsd(lectura.principal.monto * selectedTx.price)}</span>
                   </div>
                 )}
                 {/* La otra persona del envio. Aqui iba un "Hash TX": un hash

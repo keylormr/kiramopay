@@ -127,6 +127,18 @@ describe('el detalle dice el estado con su nombre y su color', () => {
     expect(hoja.getByText('0.01 BTC')).not.toHaveClass('text-green-500');
   });
 
+  it('en un envio fallido tambien el monto y su total en dolares', async () => {
+    mocks.movimientos = [{
+      id: 'e-failed', type: 'send', fromAsset: 'BTC', fromAmount: 0.01, price: 40000, priceCurrency: 'USD',
+      fee: 0, date: '2026-10-15T15:00:00Z', status: 'failed', counterpartyName: 'Victor Lobo',
+    }];
+    montar();
+
+    const hoja = await abrirDetalle(/^Enviado BTC/);
+    expect(hoja.getByText('0.01 BTC')).toHaveClass('line-through');
+    expect(hoja.getByText('$400.00')).toHaveClass('line-through');
+  });
+
   it('en una completada no', async () => {
     mocks.movimientos = [compra('completed')];
     montar();
