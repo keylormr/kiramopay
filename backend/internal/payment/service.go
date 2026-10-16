@@ -21,6 +21,34 @@ import (
 // Estas dos rutas se habian saltado esa politica.
 var ErrSinConvenio = errors.New("sin convenio con el proveedor: el cobro no se puede entregar")
 
+// Los rechazos de la entrada, con codigo propio en el handler. Salian como
+// PAYMENT_FAILED / RECHARGE_FAILED con la frase en ingles, igual que un fallo
+// del servidor.
+var (
+	// ErrProveedorInvalido: no hay un proveedor activo con ese codigo.
+	ErrProveedorInvalido = errors.New("invalid provider")
+	// ErrOperadorInvalido: el operador no es uno de los que se recargan.
+	ErrOperadorInvalido = errors.New("invalid operator")
+	// ErrLlaveInvalida: la llave de idempotencia no cabe en el libro. Se
+	// rechaza antes de mover nada; reventaba en la base.
+	ErrLlaveInvalida = errors.New("invalid idempotency key")
+)
+
+// largoMaximoDeLaLlave deja lugar al prefijo (llaveDelLibro) dentro de la
+// columna de la llave de `transactions`, VARCHAR(120).
+const largoMaximoDeLaLlave = 100
+
+// llaveDelLibro es la llave con que el pago viaja al motor de transferencias.
+// El prefijo la separa de las de otros modulos: la misma llave que la pantalla
+// uso para un SINPE no puede contestar por un recibo. Sin llave no hay
+// idempotencia, como antes: una app vieja que no la manda cobra cada vez.
+func llaveDelLibro(tipo, llave string) string {
+	if llave == "" {
+		return ""
+	}
+	return tipo + ":" + llave
+}
+
 type Service struct {
 	repo      *Repository
 	txService *transaction.Service
@@ -60,38 +88,47 @@ func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillReques
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
+	if len(req.IdempotencyKey) > largoMaximoDeLaLlave {
+		return nil, ErrLlaveInvalida
+	}
 
 	// Resolve provider
 	_, providerName, err := s.repo.GetProviderByCode(ctx, req.ProviderCode)
 	if err != nil {
-		return nil, fmt.Errorf("invalid provider: %s", req.ProviderCode)
+		return nil, fmt.Errorf("%w: %s", ErrProveedorInvalido, req.ProviderCode)
 	}
 
-	// Create transaction via transaction service
-	txRecord, err := s.txService.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type:             transaction.TypeBillPayment,
-		Amount:           req.Amount,
-		Currency:         "CRC",
-		Fee:              0,
-		CounterpartyType: "service",
-		CounterpartyName: providerName,
-		Description:      fmt.Sprintf("Pago %s - Cliente %s", providerName, req.ClientID),
-		Internal:         true,
+	// La llave cubre tambien la descripcion, que es la que dice el numero de
+	// cliente: bajo la misma llave, el recibo de otro cliente no es el
+	// reintento de este.
+	txRecord, repetido, err := s.txService.CrearOReconocer(ctx, userID, &transaction.CreateTransactionRequest{
+		Type:                    transaction.TypeBillPayment,
+		Amount:                  req.Amount,
+		Currency:                "CRC",
+		Fee:                     0,
+		CounterpartyType:        "service",
+		CounterpartyName:        providerName,
+		Description:             fmt.Sprintf("Pago %s - Cliente %s", providerName, req.ClientID),
+		IdempotencyKey:          llaveDelLibro("bill", req.IdempotencyKey),
+		LlaveCubreLaDescripcion: true,
+		Internal:                true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process payment: %w", err)
 	}
 
-	// Record in payment history
-	_ = s.repo.AddPaymentHistory(ctx, &PaymentHistoryRecord{
-		UserID:       userID,
-		Type:         "bill",
-		ProviderCode: req.ProviderCode,
-		ProviderName: providerName,
-		ClientID:     req.ClientID,
-		Amount:       req.Amount,
-		Status:       "completed",
-	})
+	// La repeticion no escribe otra fila: la de aquel pago es la que vale.
+	if !repetido {
+		_ = s.repo.AddPaymentHistory(ctx, &PaymentHistoryRecord{
+			UserID:       userID,
+			Type:         "bill",
+			ProviderCode: req.ProviderCode,
+			ProviderName: providerName,
+			ClientID:     req.ClientID,
+			Amount:       req.Amount,
+			Status:       "completed",
+		})
+	}
 
 	return &PayBillResponse{
 		TransactionID: txRecord.ID,
@@ -99,6 +136,7 @@ func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillReques
 		ProviderName:  providerName,
 		Amount:        req.Amount,
 		Status:        "completed",
+		Replayed:      repetido,
 	}, nil
 }
 
@@ -109,6 +147,9 @@ func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequ
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
+	if len(req.IdempotencyKey) > largoMaximoDeLaLlave {
+		return nil, ErrLlaveInvalida
+	}
 
 	// Map operator to display name
 	operatorNames := map[string]string{
@@ -118,35 +159,41 @@ func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequ
 	}
 	operatorName, ok := operatorNames[req.Operator]
 	if !ok {
-		return nil, fmt.Errorf("invalid operator: %s", req.Operator)
+		return nil, fmt.Errorf("%w: %s", ErrOperadorInvalido, req.Operator)
 	}
 
-	// Create transaction
-	txRecord, err := s.txService.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type:              transaction.TypeRecharge,
-		Amount:            req.Amount,
-		Currency:          "CRC",
-		Fee:               0,
-		CounterpartyType:  "service",
-		CounterpartyName:  operatorName,
-		CounterpartyPhone: req.Phone,
-		Description:       fmt.Sprintf("Recarga %s %s", operatorName, req.Phone),
-		Internal:          true,
+	// La llave cubre tambien la descripcion, que es la que dice el telefono:
+	// bajo la misma llave, la recarga de otro numero no es el reintento de
+	// esta.
+	txRecord, repetido, err := s.txService.CrearOReconocer(ctx, userID, &transaction.CreateTransactionRequest{
+		Type:                    transaction.TypeRecharge,
+		Amount:                  req.Amount,
+		Currency:                "CRC",
+		Fee:                     0,
+		CounterpartyType:        "service",
+		CounterpartyName:        operatorName,
+		CounterpartyPhone:       req.Phone,
+		Description:             fmt.Sprintf("Recarga %s %s", operatorName, req.Phone),
+		IdempotencyKey:          llaveDelLibro("recharge", req.IdempotencyKey),
+		LlaveCubreLaDescripcion: true,
+		Internal:                true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process recharge: %w", err)
 	}
 
-	// Record in payment history
-	_ = s.repo.AddPaymentHistory(ctx, &PaymentHistoryRecord{
-		UserID:       userID,
-		Type:         "recharge",
-		ProviderCode: req.Operator,
-		ProviderName: operatorName,
-		ClientID:     req.Phone,
-		Amount:       req.Amount,
-		Status:       "completed",
-	})
+	// La repeticion no escribe otra fila: la de aquella recarga es la que vale.
+	if !repetido {
+		_ = s.repo.AddPaymentHistory(ctx, &PaymentHistoryRecord{
+			UserID:       userID,
+			Type:         "recharge",
+			ProviderCode: req.Operator,
+			ProviderName: operatorName,
+			ClientID:     req.Phone,
+			Amount:       req.Amount,
+			Status:       "completed",
+		})
+	}
 
 	return &RechargeResponse{
 		TransactionID: txRecord.ID,
@@ -154,6 +201,7 @@ func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequ
 		Phone:         req.Phone,
 		Amount:        req.Amount,
 		Status:        "completed",
+		Replayed:      repetido,
 	}, nil
 }
 
