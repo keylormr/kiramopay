@@ -78,6 +78,42 @@ export interface ForgotPasswordResult {
   devToken?: string;
 }
 
+/**
+ * Lo que impide eliminar la cuenta todavia. Son codigos del backend (la pantalla
+ * los traduce, nunca muestra el texto del servidor).
+ */
+export type BloqueoDeEliminacion =
+  | 'BALANCE_POSITIVE'
+  | 'SAVINGS_BALANCE'
+  | 'CRYPTO_BALANCE'
+  | 'STAKING_ACTIVE'
+  | 'REGIONAL_BALANCE'
+  | 'MERCHANT_BALANCE'
+  | 'MERCHANT_PENDING_CHARGES'
+  | 'TX_PENDING'
+  | 'ESCROW_OPEN'
+  | 'PAYOUT_PENDING'
+  | 'CROSS_BORDER_PENDING'
+  | 'MARKETPLACE_IN_PROGRESS';
+
+/** Por que esta cuenta no puede usar la via de la app, cuando no es cuestion de saldo. */
+export type MotivoDeEliminacion = 'DEMO_ACCOUNT' | 'ADMIN_ACCOUNT' | 'ACCOUNT_NOT_ELIGIBLE';
+
+export interface PreflightDeEliminacion {
+  elegible: boolean;
+  motivo?: MotivoDeEliminacion;
+  /** Nunca null: vacio cuando no hay nada que resolver. */
+  bloqueos: string[];
+  /** La confirmacion pedira ademas el codigo del autenticador. */
+  pideSegundoFactor: boolean;
+}
+
+export interface EliminarCuentaRequest {
+  password: string;
+  /** Solo si el autenticador esta encendido. */
+  totpCode?: string;
+}
+
 export interface IAuthRepository {
   login(request: LoginRequest): Promise<ApiResponse<LoginResponse>>;
   register(request: RegisterRequest): Promise<ApiResponse<RegisterResponse>>;
@@ -102,6 +138,18 @@ export interface IAuthRepository {
   /** Exchanges a refresh token for a fresh token pair (rotation). */
   refresh(refreshToken: string): Promise<ApiResponse<TokenPair>>;
   logout(): Promise<ApiResponse<void>>;
+  /**
+   * Pregunta si la cuenta se puede eliminar ahora, sin tocar nada. Los codigos
+   * de `bloqueos` son lo que la persona puede resolver antes.
+   */
+  deletionPreflight(): Promise<ApiResponse<PreflightDeEliminacion>>;
+  /**
+   * Elimina la cuenta de quien esta conectado, reautenticandolo. La fila no se
+   * borra: queda como tumba y el historial del dinero se conserva (ver la
+   * politica de privacidad). En un 409 DELETION_BLOCKED, `error.details.blockers`
+   * trae los codigos pendientes.
+   */
+  deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<{ alreadyDeleted: boolean }>>;
   /**
    * Fetches the authenticated user's profile (GET /users/me). Used on cold
    * start to rehydrate the profile from the backend so PII (cedula/phone/email)

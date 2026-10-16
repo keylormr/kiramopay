@@ -648,6 +648,380 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/users/me/delete-account/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Can this account be deleted right now?
+         * @description Answers without touching anything. `eligible` is true when nothing stands in the way. `blockers` lists what the person can resolve first (a positive balance in any wallet, pending money in flight, an open escrow, and so on); it is always an array, never null. `reason` is set instead when the account cannot use this path at all: `DEMO_ACCOUNT`, `ADMIN_ACCOUNT` or `ACCOUNT_NOT_ELIGIBLE` (blocked or suspended accounts are handled by the web request, with a person in the loop). `requires_totp` says whether the confirmation will also ask for the authenticator code. Not cacheable.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Eligibility */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: components["schemas"]["AccountDeletionPreflight"];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["AccountBlocked"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/delete-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete the signed-in person's account
+         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and then deletes the account. The user row is NEVER removed: the ledger is append-only and other tables reference it, so the row stays as a tombstone (`status = closed`) with every personal field replaced. Credentials, sessions, devices, contacts and free text are deleted; cards are cancelled; the ledger accounts are closed and no entry is ever touched. Records that identify a counterparty inside a financial or compliance record are kept until the retention period is defined (see the privacy policy). The whole operation runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the delete. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call after success is harmless.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Deleted (`already_deleted` is true on a repeat) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                already_deleted?: boolean;
+                            };
+                        };
+                    };
+                };
+                /** @description INVALID_BODY | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description DEMO_ACCOUNT | ADMIN_ACCOUNT | ACCOUNT_NOT_ELIGIBLE */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DELETION_BLOCKED. `error.details.blockers` lists the codes to resolve first (BALANCE_POSITIVE, SAVINGS_BALANCE, CRYPTO_BALANCE, STAKING_ACTIVE, REGIONAL_BALANCE, MERCHANT_BALANCE, MERCHANT_PENDING_CHARGES, TX_PENDING, ESCROW_OPEN, PAYOUT_PENDING, CROSS_BORDER_PENDING, MARKETPLACE_IN_PROGRESS). Nothing was changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description DELETION_LOCKED (too many failed confirmations) */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for an account to be deleted, from the public web page
+         * @description For people who no longer have the app. `contact` is the email or phone the account was registered with; anything else (a cedula, a username) is rejected with 400 INVALID_CONTACT. The answer is IDENTICAL whether or not an account exists, so the form cannot be used to find out who is registered. When an account matches, a 6-digit code goes to that contact (SMS when a provider is configured, otherwise the email on file), valid 15 minutes, at most one per minute per contact. A request that is already verified is never reopened. Only HMACs of the contact and the code are stored.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Registered email or phone */
+                        contact: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Received (always, when the contact is well formed) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | INVALID_CONTACT */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove control of the contact with the code that was sent
+         * @description Moves the request to `verified`, which puts it in the operations queue. Nothing is deleted yet: a person on the team reviews and runs it. Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        contact: string;
+                        /** @example 123456 */
+                        code: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Verified */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | INVALID_CONTACT | INVALID_CODE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Web deletion requests waiting for a person (verified contact)
+         * @description Oldest first. The account is shown masked from SQL, like the rest of the admin panel.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Queue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountDeletionRequestAdmin"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the deletion for a verified web request
+         * @description Runs the same routine as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it. The outcome is written on the request: `completed`, `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (no account, or an administrator account). Audited with the administrator as actor.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a verified request without deleting anything */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Closed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/wallets/me": {
         parameters: {
             query?: never;
@@ -7696,6 +8070,35 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountDeletionPreflight: {
+            eligible: boolean;
+            /** @enum {string} */
+            reason?: "DEMO_ACCOUNT" | "ADMIN_ACCOUNT" | "ACCOUNT_NOT_ELIGIBLE";
+            blockers: {
+                /** @example BALANCE_POSITIVE */
+                code: string;
+            }[];
+            requires_totp: boolean;
+        };
+        DeleteAccountRequest: {
+            /** Format: password */
+            password: string;
+            /** @description Required only when the authenticator is turned on */
+            totp_code?: string;
+        };
+        AccountDeletionRequestAdmin: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            contact_kind?: "email" | "phone";
+            /** @example verified */
+            status?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            verified_at?: string | null;
+            account?: components["schemas"]["AdminUser"] | null;
+        };
         /** @description Administrative card of an account. PII is masked in SQL: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain. */
         AdminUser: {
             /** Format: uuid */

@@ -8,6 +8,7 @@ import { normalizarCodigoInvitacion, clearReferralCode } from '@/utils/referralC
 import { esNombreDeUsuarioValido } from '@/utils/identificador';
 import { useCapa } from '@/navegacion/pilaDeCapas';
 import { BotonIdioma } from './BotonIdioma';
+import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 
 interface RegisterViewProps {
   onComplete: () => void;
@@ -650,6 +651,20 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
             >
               {t('create_account')}
             </Button>
+
+            {/* La politica de privacidad se puede leer ANTES de crear la cuenta
+                (Google Play lo exige dentro de la app, y aqui es donde se
+                entregan los datos). Es un aviso, no un consentimiento. */}
+            <p className="text-[var(--color-text-muted-dark)]/80 text-xs text-center leading-relaxed">
+              {t('register_privacy_hint')}{' '}
+              <button
+                type="button"
+                onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
+                className="font-semibold underline underline-offset-2 text-[var(--color-text-secondary-dark)] hover:text-white transition-colors"
+              >
+                {t('privacy_policy')}
+              </button>
+            </p>
           </div>
         );
     }
