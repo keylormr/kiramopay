@@ -15,10 +15,13 @@ import "github.com/go-chi/cors"
 // src/api/adapters/http/savings.http.ts.
 func opcionesCORS(origenes []string) cors.Options {
 	return cors.Options{
-		AllowedOrigins:   origenes,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", "X-Kiramopay-Dev"},
-		ExposedHeaders:   []string{"Link"},
+		AllowedOrigins: origenes,
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", "X-Kiramopay-Dev"},
+		// Content-Disposition lleva el nombre del archivo que se descarga (el
+		// reporte CSV del comercio, en el idioma de la app). Sin exponerla, la
+		// app no la puede leer en una peticion entre dominios.
+		ExposedHeaders:   []string{"Link", "Content-Disposition"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}

@@ -1,4 +1,12 @@
 import type { Transaction } from '@/types';
+import { etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
+
+/**
+ * El traductor de la app (`t` de useLanguage). Lo que la persona lee del
+ * archivo, del texto copiado y del compartido sale en su idioma, con las mismas
+ * palabras que la pantalla: salia en espanol en cualquier idioma.
+ */
+export type Traductor = (clave: string) => string;
 
 /**
  * Resumen POR MONEDA.
@@ -36,10 +44,19 @@ export function resumirPorMoneda(transactions: Transaction[]): ResumenPorMoneda[
 }
 
 // --- Excel-compatible CSV ---
-export function exportTransactionsCSV(transactions: Transaction[], filename?: string): void {
+export function exportTransactionsCSV(transactions: Transaction[], t: Traductor, filename?: string): void {
   // Excel separator hint + BOM for UTF-8
   const sep = 'sep=,\n';
-  const headers = ['ID', 'Fecha', 'Titulo', 'Monto', 'Moneda', 'Tipo', 'Categoria', 'Estado'];
+  const headers = [
+    t('export_col_id'),
+    t('export_col_date'),
+    t('export_col_title'),
+    t('export_col_amount'),
+    t('export_col_currency'),
+    t('export_col_type'),
+    t('export_col_category'),
+    t('export_col_status'),
+  ].map(celda);
 
   const rows = transactions.map((tx) => [
     tx.id,
@@ -47,29 +64,32 @@ export function exportTransactionsCSV(transactions: Transaction[], filename?: st
     celda(tx.title || ''),
     tx.amount.toFixed(2),
     tx.ccy,
-    tx.type === 'credit' ? 'Ingreso' : 'Egreso',
-    tx.category || 'General',
-    tx.status === 'completed' ? 'Completado' : 'Pendiente',
+    celda(tx.type === 'credit' ? t('export_type_credit') : t('export_type_debit')),
+    celda(etiquetaDeCategoria(tx.category, t)),
+    celda(estadoDe(tx, t)),
   ]);
 
   // Summary rows at the bottom, UNA TANDA POR MONEDA. La moneda viaja en su
   // propia columna para que la hoja de calculo pueda agrupar por ella.
   rows.push([]);
-  rows.push(['', '', '"RESUMEN"', '', '', '', '', '']);
+  rows.push(['', '', celda(t('export_summary')), '', '', '', '', '']);
   for (const r of resumirPorMoneda(transactions)) {
-    rows.push(['', '', '"Total Ingresos"', r.ingresos.toFixed(2), r.moneda, '', '', '']);
-    rows.push(['', '', '"Total Egresos"', r.egresos.toFixed(2), r.moneda, '', '', '']);
-    rows.push(['', '', '"Balance Neto"', r.neto.toFixed(2), r.moneda, '', '', '']);
+    rows.push(['', '', celda(t('export_total_income')), r.ingresos.toFixed(2), r.moneda, '', '', '']);
+    rows.push(['', '', celda(t('export_total_expenses')), r.egresos.toFixed(2), r.moneda, '', '', '']);
+    rows.push(['', '', celda(t('export_net_balance')), r.neto.toFixed(2), r.moneda, '', '', '']);
   }
-  rows.push(['', '', celda(`Generado: ${fechaLocal(new Date().toISOString())}`), '', '', '', '', '']);
+  const generado = t('export_generated').replace('{fecha}', fechaLocal(new Date().toISOString()));
+  rows.push(['', '', celda(generado), '', '', '', '', '']);
 
   const csvContent = sep + [headers.join(','), ...rows.map((r) => (r as string[]).join(','))].join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  downloadBlob(blob, filename || `KiramoPay-Transacciones-${dateStamp()}.csv`);
+  downloadBlob(blob, filename || nombreDeArchivo(t, 'csv'));
 }
 
 // --- JSON export ---
-export function exportTransactionsJSON(transactions: Transaction[], filename?: string): void {
+// El contenido es de maquina (claves en ingles, `credit`/`debit`, la fecha ISO):
+// lo lee un programa. El nombre del archivo si lo lee la persona.
+export function exportTransactionsJSON(transactions: Transaction[], t: Traductor, filename?: string): void {
   const data = {
     app: 'KiramoPay',
     exportDate: new Date().toISOString(),
@@ -99,30 +119,33 @@ export function exportTransactionsJSON(transactions: Transaction[], filename?: s
 
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
-  downloadBlob(blob, filename || `KiramoPay-Transacciones-${dateStamp()}.json`);
+  downloadBlob(blob, filename || nombreDeArchivo(t, 'json'));
 }
 
 // --- Copy to clipboard (formatted table) ---
 // Los totales van por moneda, como en el CSV: sumaban todas las filas y con
 // colones y dolares en la lista escribian un numero que no era ninguno de los
 // dos, sin moneda.
-export async function copyTransactionsToClipboard(transactions: Transaction[]): Promise<boolean> {
+export async function copyTransactionsToClipboard(transactions: Transaction[], t: Traductor): Promise<boolean> {
   const lines: string[] = [];
 
-  lines.push('KiramoPay - Transacciones');
+  lines.push(t('export_copy_title'));
   lines.push('═'.repeat(40));
 
   for (const tx of transactions) {
     const sign = tx.amount > 0 ? '+' : '';
     lines.push(`${fechaParaArchivo(tx)}  ${tx.title}`);
-    lines.push(`  ${sign}${tx.amount.toFixed(2)} ${tx.ccy}  [${tx.category || 'General'}]`);
+    lines.push(`  ${sign}${tx.amount.toFixed(2)} ${tx.ccy}  [${etiquetaDeCategoria(tx.category, t)}]`);
   }
 
   lines.push('═'.repeat(40));
+  // Las cifras alineadas: cada rotulo se rellena al ancho del mas largo del
+  // idioma ("Ingresos: +", "Egresos:  ", "Neto:     " en espanol).
+  const rotulo = alineador([t('export_line_income'), t('export_line_expenses'), t('export_line_net')]);
   for (const r of resumirPorMoneda(transactions)) {
-    lines.push(`Ingresos: +${r.ingresos.toFixed(2)} ${r.moneda}`);
-    lines.push(`Egresos:  ${r.egresos.toFixed(2)} ${r.moneda}`);
-    lines.push(`Neto:     ${r.neto.toFixed(2)} ${r.moneda}`);
+    lines.push(`${rotulo(t('export_line_income'))}+${r.ingresos.toFixed(2)} ${r.moneda}`);
+    lines.push(`${rotulo(t('export_line_expenses'))}${r.egresos.toFixed(2)} ${r.moneda}`);
+    lines.push(`${rotulo(t('export_line_net'))}${r.neto.toFixed(2)} ${r.moneda}`);
   }
 
   try {
@@ -135,30 +158,49 @@ export async function copyTransactionsToClipboard(transactions: Transaction[]): 
 
 // --- Share via Web Share API ---
 // Por moneda, por la misma razon que copiar.
-export async function shareTransactions(transactions: Transaction[]): Promise<boolean> {
+export async function shareTransactions(transactions: Transaction[], t: Traductor): Promise<boolean> {
+  const n = transactions.length;
   const text = [
-    `KiramoPay - Resumen de Transacciones`,
-    `${transactions.length} transacciones`,
+    t('export_share_title'),
+    `${n} ${n === 1 ? t('num_transactions_one') : t('num_transactions')}`,
     ...resumirPorMoneda(transactions).flatMap((r) => [
-      `Ingresos: +${r.ingresos.toFixed(2)} ${r.moneda}`,
-      `Egresos: ${r.egresos.toFixed(2)} ${r.moneda}`,
-      `Balance: ${r.neto >= 0 ? '+' : ''}${r.neto.toFixed(2)} ${r.moneda}`,
+      `${t('export_line_income')}: +${r.ingresos.toFixed(2)} ${r.moneda}`,
+      `${t('export_line_expenses')}: ${r.egresos.toFixed(2)} ${r.moneda}`,
+      `${t('export_line_balance')}: ${r.neto >= 0 ? '+' : ''}${r.neto.toFixed(2)} ${r.moneda}`,
     ]),
   ].join('\n');
 
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'KiramoPay Transacciones', text });
+      await navigator.share({ title: t('export_copy_title'), text });
       return true;
     } catch {
       return false;
     }
   }
   // Fallback: copy to clipboard
-  return copyTransactionsToClipboard(transactions);
+  return copyTransactionsToClipboard(transactions, t);
 }
 
 // --- Helpers ---
+
+/**
+ * El estado con la misma regla que la pantalla (TransactionsView y el detalle):
+ * sin estado es un movimiento completado. El CSV lo escribia "Pendiente".
+ */
+function estadoDe(tx: Transaction, t: Traductor): string {
+  return (tx.status ?? 'completed') === 'completed' ? t('tx_status_completed') : t('pending');
+}
+
+/** "Ingresos: " rellenado al ancho del rotulo mas largo, mas un espacio. */
+function alineador(rotulos: string[]): (rotulo: string) => string {
+  const ancho = Math.max(...rotulos.map((r) => r.length)) + 1;
+  return (rotulo) => `${rotulo}:`.padEnd(ancho) + ' ';
+}
+
+function nombreDeArchivo(t: Traductor, extension: 'csv' | 'json'): string {
+  return `KiramoPay-${t('export_file_name')}-${dateStamp()}.${extension}`;
+}
 
 /**
  * La fecha de un movimiento en lo exportado: la de maquina, en hora local y sin
@@ -180,8 +222,13 @@ function fechaLocal(iso: string | undefined): string {
 }
 
 /** Un campo de texto del CSV, entre comillas: una coma adentro no parte la fila. */
+// Comillas dobladas, y un apostrofo delante de lo que la hoja de calculo
+// ejecutaria como formula (= + - @, tabulador, retorno): el titulo puede ser el
+// nombre que escribio otra persona. Mismo criterio que celdaSegura del reporte
+// del comercio (backend/internal/qrpayment/reporte.go).
 function celda(texto: string): string {
-  return `"${texto.replace(/"/g, '""')}"`;
+  const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto;
+  return `"${seguro.replace(/"/g, '""')}"`;
 }
 
 function aCentimos(monto: number): number {

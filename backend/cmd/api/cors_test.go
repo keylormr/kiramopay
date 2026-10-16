@@ -58,3 +58,28 @@ func TestUnaCabeceraNoPermitidaDejaElPreflightSinCORS(t *testing.T) {
 		t.Fatalf("una cabecera no permitida deberia abortar el preflight; Access-Control-Allow-Origin=%q", got)
 	}
 }
+
+// La app lee el nombre del archivo de Content-Disposition: el reporte CSV del
+// comercio sale con el nombre en el idioma de la app. En una peticion entre
+// dominios (kiramopay.com -> api.kiramopay.com, y la app Android) el navegador
+// solo deja leer las cabeceras expuestas, y esta no lo estaba: el nombre
+// llegaba vacio y la app usaba uno fijo en espanol.
+func TestLaRespuestaExponeContentDisposition(t *testing.T) {
+	h := cors.Handler(opcionesCORS([]string{origenDePrueba}))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="report-2026-10-01-to-2026-10-14.csv"`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/qr/merchants/m1/report.csv?days=14&lang=en", nil)
+	req.Header.Set("Origin", origenDePrueba)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	expuestas := strings.ToLower(rec.Header().Get("Access-Control-Expose-Headers"))
+	if !strings.Contains(expuestas, "content-disposition") {
+		t.Fatalf("Access-Control-Expose-Headers=%q: falta Content-Disposition", expuestas)
+	}
+	// La que ya estaba sigue estando.
+	if !strings.Contains(expuestas, "link") {
+		t.Fatalf("Access-Control-Expose-Headers=%q: se perdio Link", expuestas)
+	}
+}

@@ -875,6 +875,28 @@ export type TranslationKeys = {
   share_transactions_desc: string;
   export_success: string;
   export_copy_failed: string;
+  export_col_id: string;
+  export_col_date: string;
+  export_col_title: string;
+  export_col_amount: string;
+  export_col_currency: string;
+  export_col_type: string;
+  export_col_category: string;
+  export_col_status: string;
+  export_type_credit: string;
+  export_type_debit: string;
+  export_summary: string;
+  export_total_income: string;
+  export_total_expenses: string;
+  export_net_balance: string;
+  export_generated: string;
+  export_file_name: string;
+  export_copy_title: string;
+  export_line_income: string;
+  export_line_expenses: string;
+  export_line_net: string;
+  export_line_balance: string;
+  export_share_title: string;
 
   // Transactions view
   income: string;
