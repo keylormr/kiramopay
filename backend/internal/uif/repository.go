@@ -27,33 +27,43 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // de estructuracion dejo de ver ese dinero, sin fallar ni avisar.
 var outgoingTypesSQL = transaction.ListaSQLDeSalidas()
 
-// GetUserDailyOutgoingTotal returns the sum of the user's completed outgoing
-// transactions for `currency` so far TODAY (including any just-posted tx).
-func (r *Repository) GetUserDailyOutgoingTotal(ctx context.Context, userID, currency string) (int64, error) {
-	var total int64
-	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(amount), 0) FROM transactions
-		 WHERE user_id = $1::uuid AND currency = $2 AND status = 'completed'
-		   AND created_at::date = CURRENT_DATE
-		   AND type IN `+outgoingTypesSQL,
-		userID, currency,
-	).Scan(&total)
-	return total, err
+// SalidasDelDiaPorMoneda suma las salidas completadas de HOY, por moneda,
+// incluido el movimiento recien confirmado. El agregado del dia junta todas las
+// monedas por su equivalente en dolares; esta consulta trae cada una por su
+// lado para convertirla.
+func (r *Repository) SalidasDelDiaPorMoneda(ctx context.Context, userID string) (map[string]int64, error) {
+	return r.salidasPorMoneda(ctx, userID, `created_at::date = CURRENT_DATE`)
 }
 
-// GetUserOutgoingTotal30Dias suma las salidas completadas de los ultimos 30
-// dias, incluido el movimiento recien confirmado. Misma lista de tipos que el
-// agregado diario (transaction.TiposDeSalida), por la misma razon.
-func (r *Repository) GetUserOutgoingTotal30Dias(ctx context.Context, userID, currency string) (int64, error) {
-	var total int64
-	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(amount), 0) FROM transactions
-		 WHERE user_id = $1::uuid AND currency = $2 AND status = 'completed'
-		   AND created_at >= NOW() - INTERVAL '30 days'
-		   AND type IN `+outgoingTypesSQL,
-		userID, currency,
-	).Scan(&total)
-	return total, err
+// SalidasDe30DiasPorMoneda es lo mismo para los ultimos 30 dias.
+func (r *Repository) SalidasDe30DiasPorMoneda(ctx context.Context, userID string) (map[string]int64, error) {
+	return r.salidasPorMoneda(ctx, userID, `created_at >= NOW() - INTERVAL '30 days'`)
+}
+
+// salidasPorMoneda: la ventana es una de las dos constantes de arriba, nunca un
+// dato de afuera.
+func (r *Repository) salidasPorMoneda(ctx context.Context, userID, ventana string) (map[string]int64, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT currency, COALESCE(SUM(amount), 0) FROM transactions
+		  WHERE user_id = $1::uuid AND status = 'completed' AND `+ventana+`
+		    AND type IN `+outgoingTypesSQL+`
+		  GROUP BY currency`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var moneda string
+		var total int64
+		if err := rows.Scan(&moneda, &total); err != nil {
+			return nil, err
+		}
+		out[moneda] = total
+	}
+	return out, rows.Err()
 }
 
 // CreateReport inserts a report. A single_threshold/structuring report for the

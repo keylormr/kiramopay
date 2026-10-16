@@ -44,10 +44,11 @@ func TestUIF_AgregadoDiarioCuentaTodaSalida(t *testing.T) {
 		}
 		esperado += monto
 
-		total, err := repo.GetUserDailyOutgoingTotal(ctx, userID, "CRC")
+		porMoneda, err := repo.SalidasDelDiaPorMoneda(ctx, userID)
 		if err != nil {
-			t.Fatalf("GetUserDailyOutgoingTotal tras %q: %v", tipo, err)
+			t.Fatalf("SalidasDelDiaPorMoneda tras %q: %v", tipo, err)
 		}
+		total := porMoneda["CRC"]
 		if total != esperado {
 			t.Fatalf("el tipo %q no suma al agregado diario de la UIF: total %d, esperado %d.\n"+
 				"Esa salida de dinero es invisible para la deteccion de estructuracion.", tipo, total, esperado)
@@ -78,10 +79,11 @@ func TestUIF_AgregadoDiarioIgnoraLoQueNoEsSalida(t *testing.T) {
 		}
 	}
 
-	total, err := repo.GetUserDailyOutgoingTotal(ctx, userID, "CRC")
+	porMoneda, err := repo.SalidasDelDiaPorMoneda(ctx, userID)
 	if err != nil {
-		t.Fatalf("GetUserDailyOutgoingTotal: %v", err)
+		t.Fatalf("SalidasDelDiaPorMoneda: %v", err)
 	}
+	total := porMoneda["CRC"]
 	if total != 0 {
 		t.Fatalf("el agregado diario conto entradas o ahorro como salida: %d", total)
 	}
