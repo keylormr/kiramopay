@@ -1,34 +1,116 @@
 default_platform(:android)
 
+# Firma de release.
+#
+# android/app/build.gradle lee estas cuatro variables de entorno y el workflow
+# android-apk.yml las define con los mismos nombres, asi que los lanes no se las
+# pasan a Gradle: Gradle las hereda del entorno de Fastlane. Antes habia un
+# segundo juego (KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) que
+# build.gradle nunca leia; si faltaba el primero el release salia SIN firmar y
+# Play lo rechazaba despues de subirlo.
+VARIABLES_DE_FIRMA = %w[
+  KIRAMOPAY_KEYSTORE_FILE
+  KIRAMOPAY_KEYSTORE_PASSWORD
+  KIRAMOPAY_KEY_ALIAS
+  KIRAMOPAY_KEY_PASSWORD
+].freeze
+
+# Fastlane ejecuta cada ACCION (gradle, upload_to_play_store) desde la carpeta
+# que contiene fastlane/, o sea android/, pero el Ruby suelto del lane (File,
+# ENV) corre dentro de fastlane/. El Fastfile anterior pasaba rutas con ".."
+# pensadas para fastlane/: project_dir caia en la raiz del repo, donde no hay
+# gradlew, y el lane fallaba antes de compilar. Aqui las acciones usan rutas
+# relativas a android/ y el Ruby usa RAIZ_ANDROID.
+RAIZ_ANDROID = File.expand_path("..", FastlaneCore::FastlaneFolder.path).freeze
+
+# Donde deja Gradle el bundle de `bundleRelease`.
+AAB_DE_GRADLE = File.join(RAIZ_ANDROID, "app/build/outputs/bundle/release/app-release.aab").freeze
+
 platform :android do
+  # Las rutas que vienen de fuera tienen que ser absolutas: el Ruby del lane, las
+  # acciones y Gradle parten cada uno de una carpeta distinta, y una ruta
+  # relativa apuntaria a un sitio distinto en cada uno.
+  private_lane :exigir_archivo do |opciones|
+    nombre = opciones[:nombre]
+    ruta = opciones[:ruta].to_s
+    UI.user_error!("#{nombre} debe ser una ruta absoluta: #{ruta}") unless Pathname.new(ruta).absolute?
+    UI.user_error!("#{nombre} apunta a un archivo que no existe: #{ruta}") unless File.file?(ruta)
+  end
+
+  # Corta antes de compilar si falta algo de la firma, con el nombre de lo que
+  # falta en vez de un APK o un AAB sin firmar.
+  private_lane :exigir_firma do
+    faltan = VARIABLES_DE_FIRMA.select { |nombre| ENV[nombre].to_s.strip.empty? }
+    unless faltan.empty?
+      UI.user_error!("Falta la firma de release. Define: #{faltan.join(', ')}")
+    end
+    exigir_archivo(nombre: "KIRAMOPAY_KEYSTORE_FILE", ruta: ENV["KIRAMOPAY_KEYSTORE_FILE"])
+  end
+
+  # Igual para la credencial de la API de Play: sin ella `upload_to_play_store`
+  # falla recien despues de compilar.
+  private_lane :exigir_credencial_de_play do
+    clave = ENV["PLAY_STORE_JSON_KEY"].to_s.strip
+    UI.user_error!("Falta PLAY_STORE_JSON_KEY: ruta absoluta al JSON de la cuenta de servicio de Play") if clave.empty?
+    exigir_archivo(nombre: "PLAY_STORE_JSON_KEY", ruta: clave)
+  end
+
   desc "Build debug APK"
   lane :debug do
     gradle(
       task: "assembleDebug",
-      project_dir: ".."
+      project_dir: "."
     )
   end
 
-  desc "Build release APK"
+  desc "Build release APK (firmado)"
   lane :release do
+    exigir_firma
     gradle(
       task: "assembleRelease",
-      project_dir: "..",
-      properties: {
-        "android.injected.signing.store.file" => ENV["KEYSTORE_PATH"],
-        "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"],
-        "android.injected.signing.key.alias" => ENV["KEY_ALIAS"],
-        "android.injected.signing.key.password" => ENV["KEY_PASSWORD"],
-      }
+      project_dir: "."
     )
   end
 
-  desc "Deploy to Google Play internal track"
-  lane :internal do
-    release
+  desc "Build release AAB (firmado): el unico formato que acepta Google Play"
+  lane :aab do
+    exigir_firma
+    gradle(
+      task: "bundleRelease",
+      project_dir: "."
+    )
+  end
+
+  # Sube un AAB a la pista interna. Sirve para las versiones SIGUIENTES a la
+  # primera: la primera subida de una app nueva se hace a mano en Play Console.
+  #
+  #   bundle exec fastlane internal                       compila y sube
+  #   bundle exec fastlane internal aab:/ruta/absoluta/kiramopay.aab   sube el del CI
+  #   bundle exec fastlane internal estado:draft          deja el lanzamiento en borrador
+  #
+  # Con `aab:` no compila ni pide la firma: ese archivo ya viene firmado (el
+  # artefacto kiramopay-aab de android-apk.yml). Solo se sube el bundle y las
+  # notas de la version (metadata/android/es-419/changelogs/); la ficha de la
+  # tienda (titulo, descripciones, imagenes) NO se toca desde aqui.
+  desc "Sube el AAB a la pista interna de Google Play (no la primera subida)"
+  lane :internal do |options|
+    exigir_credencial_de_play
+
+    ruta = options[:aab]
+    if ruta.to_s.strip.empty?
+      aab
+      ruta = AAB_DE_GRADLE
+    end
+    exigir_archivo(nombre: "aab", ruta: ruta)
+
     upload_to_play_store(
       track: "internal",
-      aab: "../app/build/outputs/bundle/release/app-release.aab"
+      aab: ruta,
+      release_status: options[:estado] || "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
     )
   end
 end

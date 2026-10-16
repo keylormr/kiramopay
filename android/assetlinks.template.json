@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kiramopay.app",
+      "sha256_cert_fingerprints": [
+        "REEMPLAZAR:HUELLA:SHA-256:DE:LA:CLAVE:DE:FIRMA:DE:LA:APP:QUE:MUESTRA:PLAY:CONSOLE"
+      ]
+    }
+  }
+]
