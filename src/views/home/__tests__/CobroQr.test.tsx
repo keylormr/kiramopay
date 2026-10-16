@@ -440,3 +440,62 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
     expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
   });
 });
+
+// /qr/resolve respondia QR_INVALIDO a cualquier error de la base: una caida
+// pasajera se le decia a la persona como un codigo malo ("Ese codigo no existe
+// o ya no es valido"), que no tiene sentido volver a intentar. Ahora el
+// servidor separa las dos cosas (500 RESOLVE_FAILED) y la hoja dice que no se
+// pudo verificar el codigo, con un boton para volver a intentarlo. Antes, sin
+// red o con un 500, la hoja se quedaba en "—" sin decir nada.
+describe('Pagar un QR — no se pudo verificar el codigo', () => {
+  async function escanear() {
+    const user = userEvent.setup();
+    pintar();
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    return user;
+  }
+
+  it.each([
+    ['RESOLVE_FAILED', 'Hubo un problema en el servidor.'],
+    ['SERVER_ERROR', 'Hubo un problema en el servidor.'],
+    ['NETWORK_ERROR', 'Sin conexión.'],
+    ['TIMEOUT', 'La solicitud tardó demasiado.'],
+  ])('%s dice que no se pudo verificar y reintentar vuelve a preguntar', async (code, message) => {
+    mocks.resolveQr.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = await escanear();
+
+    expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
+    expect(screen.queryByText('Ese código no existe o ya no es válido.')).toBeNull();
+    expect(screen.queryByText(message)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByText('Soda Tica')).toBeInTheDocument();
+    expect(mocks.resolveQr).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('No pudimos verificar el código. Intenta de nuevo.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+  });
+
+  it('una excepcion al preguntar tambien lo dice', async () => {
+    mocks.resolveQr.mockRejectedValueOnce(new Error('boom'));
+    await escanear();
+
+    expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+  });
+
+  // La otra mitad: un codigo que de verdad no existe se sigue diciendo asi, y
+  // no ofrece reintentar, porque reintentar no lo arregla.
+  it('QR_INVALIDO sigue diciendo que el codigo no existe, sin ofrecer reintentar', async () => {
+    mocks.resolveQr.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'QR_INVALIDO', message: 'ese codigo no existe o ya no es valido' },
+    });
+    await escanear();
+
+    expect(await screen.findByText('Ese código no existe o ya no es válido.')).toBeInTheDocument();
+    expect(screen.queryByText('No pudimos verificar el código. Intenta de nuevo.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+  });
+});
