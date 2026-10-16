@@ -1,6 +1,8 @@
 BEGIN;
 
 DROP FUNCTION IF EXISTS fn_fx_rate_at(VARCHAR, VARCHAR, TIMESTAMP);
+-- La de la 076, por si se llega aca sin haber aplicado antes la bajada de la 076.
+DROP FUNCTION IF EXISTS fn_fx_rate_at(VARCHAR, VARCHAR, TIMESTAMPTZ);
 DROP VIEW IF EXISTS current_exchange_rates;
 DROP TRIGGER IF EXISTS trg_fx_close_active ON exchange_rates;
 DROP FUNCTION IF EXISTS fn_fx_close_active();
