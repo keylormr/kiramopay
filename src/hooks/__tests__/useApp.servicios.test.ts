@@ -42,3 +42,12 @@ describe('useApp — la fila local de un pago de servicio y de una recarga', () 
     expect(fila.dateISO).toBe('2026-10-15T12:00:00.000Z');
   });
 });
+
+// Una recarga que fallo se anotaba "pending", igual que el SINPE.
+describe('useApp — el estado de la fila local de una recarga', () => {
+  it.each(['completed', 'pending', 'failed'] as const)('una %s se anota con ese estado', (status) => {
+    const { result } = renderHook(() => useApp());
+    act(() => result.current.dispatch({ type: 'ADD_RECHARGE', payload: { ...recarga, status } }));
+    expect(useTransactionStore.getState().transactions[0].status).toBe(status);
+  });
+});

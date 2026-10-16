@@ -28,3 +28,39 @@ describe('HttpTransactionRepository.listTransactions', () => {
     expect(res.error?.code).toBe('NETWORK_ERROR');
   });
 });
+
+// El servidor guarda cinco estados (pending, processing, completed, failed,
+// reversed: transaction/model.go) y el adaptador los pasaba con un `as` a un tipo
+// que conocia dos. Ahora cada uno llega con su nombre, y uno que la app no
+// conoce llega como 'unknown': ni completado ni pendiente, que serian un dato
+// inventado.
+describe('HttpTransactionRepository — el estado de cada fila', () => {
+  const fila = (status: string) => ({
+    id: `tx-${status || 'vacio'}`,
+    type: 'sinpe_send',
+    amount: 500000,
+    currency: 'CRC',
+    fee: 0,
+    counterparty_name: 'Ana Mora',
+    counterparty_phone: '',
+    status,
+    created_at: '2026-09-04T15:30:00Z',
+    metadata: '',
+  });
+
+  async function estadoDe(status: string) {
+    const client = {
+      get: async () => ({ success: true, data: { transactions: [fila(status)], total: 1 } }),
+    } as unknown as HttpClient;
+    const res = await new HttpTransactionRepository(client).listTransactions({ limit: 20 });
+    return res.data?.transactions[0].status;
+  }
+
+  it.each(['completed', 'pending', 'processing', 'failed', 'reversed'])('%s llega tal cual', async (status) => {
+    expect(await estadoDe(status)).toBe(status);
+  });
+
+  it.each(['disputed', 'algo_nuevo', ''])('"%s", que la app no conoce, llega como unknown', async (status) => {
+    expect(await estadoDe(status)).toBe('unknown');
+  });
+});
