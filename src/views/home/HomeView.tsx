@@ -21,7 +21,13 @@ import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { QRPaymentCode, QRPayment, QRCharge, ResolvedQR } from '@/api/repositories/qrpayment.repository';
-import { codigoDeCobroCerrado, mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import {
+  CLAVES_DEL_RECHAZO_DEL_PAGO,
+  PAGO_SIN_CONFIRMAR,
+  codigoDeCobroCerrado,
+  mensajeDeCobro,
+  minutosParaVencer,
+} from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
 import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
@@ -382,12 +388,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         setShowPagoMfa(true);
         return;
       }
-      const sinRespuesta = codigo === 'NETWORK_ERROR' || codigo === 'TIMEOUT' || codigo === 'SERVER_ERROR';
-      if (!sinRespuesta) idemPagoRef.current = '';
-      setPayError(mensajeDeCobro(t, codigo) || res.error?.message || t('qr_pay_error'));
+      if (!PAGO_SIN_CONFIRMAR.has(codigo)) idemPagoRef.current = '';
+      // Primero los del cobro, despues los del pago; uno que la pantalla no
+      // conoce cae al generico, nunca al texto del servidor.
+      setPayError(
+        mensajeDeCobro(t, codigo) ||
+          mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_PAGO, 'qr_pay_error', t),
+      );
     } catch {
-      // Excepcion sin respuesta del servidor: el nonce se CONSERVA.
-      setPayError(t('qr_pay_error'));
+      // Excepcion sin respuesta del servidor: el nonce se CONSERVA, y el pago
+      // queda sin confirmar como con un corte de red.
+      setPayError(t('qr_err_sin_confirmar'));
     } finally {
       setPayLoading(false);
     }

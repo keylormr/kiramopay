@@ -1,6 +1,7 @@
 import type { ISessionsRepository, DeviceSession } from '../../repositories/sessions.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 // Tipos escritos a mano a proposito: openapi.d.ts lo regenera otro frente y la
@@ -36,7 +37,7 @@ function mapSession(d: SessionDTO): DeviceSession {
 // El codigo del error viaja intacto: la pantalla traduce por codigo y nunca
 // muestra el texto crudo del servidor.
 function fail<T>(res: ApiResponse<unknown>): ApiResponse<T> {
-  return apiError(res.error?.code || 'SESSIONS_FAILED', res.error?.message || 'Session action failed');
+  return falla(res, 'SESSIONS_FAILED');
 }
 
 export class HttpSessionsRepository implements ISessionsRepository {

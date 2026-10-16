@@ -296,10 +296,19 @@ func (s *Service) MarkAllRead(ctx context.Context, userID string) error {
 	return s.repo.MarkAllRead(ctx, userID)
 }
 
-// NotifyUser persists a notification to the user's history and attempts web-push
-// delivery. Best-effort: a push failure does not fail the call (history is the
-// source of truth the app reads on sync). Implements the consumer-side
-// notifier interface used by domains like SINPE.
-func (s *Service) NotifyUser(ctx context.Context, userID, title, body, tag string) error {
-	return s.SendToUser(ctx, userID, &NotificationPayload{Title: title, Body: body, Tag: tag})
+// NotificarEnSuIdioma escribe el aviso `clave` del catalogo (textos.go) en el
+// idioma que la cuenta tiene guardado y lo entrega como todo aviso: historial,
+// tiempo real y push. Best-effort: a push failure does not fail the call
+// (history is the source of truth the app reads on sync). Implements the
+// consumer-side notifier interface used by domains like SINPE.
+//
+// Reemplaza a NotifyUser, que recibia el titulo y el cuerpo ya escritos: cada
+// modulo los escribia en espanol, fuera cual fuera el idioma de quien los leia.
+func (s *Service) NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos Datos, tag string) error {
+	idioma := "es"
+	if s.repo != nil {
+		idioma = s.repo.IdiomaDe(ctx, userID)
+	}
+	titulo, cuerpo := Texto(clave, idioma, datos)
+	return s.SendToUser(ctx, userID, &NotificationPayload{Title: titulo, Body: cuerpo, Tag: tag})
 }

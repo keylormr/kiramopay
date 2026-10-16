@@ -2,6 +2,7 @@ package uif_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -16,11 +17,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// tasaFija es un tipo de cambio de prueba: cuantas unidades de cada moneda vale
+// un dolar. Una moneda que no esta da error, como si no hubiera tipo de cambio.
+func tasaFija(porDolar map[string]float64) func(context.Context, string) (float64, error) {
+	return func(_ context.Context, moneda string) (float64, error) {
+		if t, ok := porDolar[moneda]; ok {
+			return t, nil
+		}
+		return 0, errors.New("sin tipo de cambio para " + moneda)
+	}
+}
+
 func setupUIF(t *testing.T) (*uif.Service, *transaction.Service, *pgxpool.Pool, string) {
 	t.Helper()
 	pool := testutil.TestDB(t)
 
-	uifSvc := uif.NewService(uif.NewRepository(pool), nil)
+	// A 550 colones por dolar el umbral de US$10.000 son ₡5.500.000: los mismos
+	// numeros que estas pruebas usaban cuando el umbral en colones era fijo.
+	uifSvc := uif.NewService(uif.NewRepository(pool), &uif.Options{TipoDeCambio: tasaFija(map[string]float64{"CRC": 550})})
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	txSvc := transaction.NewService(
 		transaction.NewRepository(pool), wallet.NewRepository(pool), l,

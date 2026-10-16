@@ -47,6 +47,43 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
 }
 
 /**
+ * Los rechazos del pago (POST /qr/pay) que no son del cobro en si, por codigo:
+ * los del motor de transferencias, que comparte con SINPE, y los del comercio.
+ * Van despues de mensajeDeCobro, con mensajeDeRechazo: un codigo que no este en
+ * ninguno de los dos cae al generico, nunca al texto del servidor, que es para
+ * quien integra la API, esta en ingles y arrastraba los prefijos internos
+ * ("qr payment transfer: insufficient balance").
+ */
+export const CLAVES_DEL_RECHAZO_DEL_PAGO: Readonly<Record<string, string>> = {
+  INSUFFICIENT_BALANCE: 'insufficient_funds',
+  DAILY_LIMIT_EXCEEDED: 'pago_err_tope_diario',
+  MONTHLY_LIMIT_EXCEEDED: 'pago_err_tope_mensual',
+  MERCHANT_UNAVAILABLE: 'qr_err_comercio_no_disponible',
+  // El comercio del codigo ya no existe: para quien paga, el codigo no sirve.
+  MERCHANT_NOT_FOUND: 'qr_err_invalido',
+  // Sin respuesta o con el 500 el pago pudo haber salido. La llave se
+  // conserva (ver PAGO_SIN_CONFIRMAR), y eso es lo que permite decir que
+  // reintentar ahora no cobra dos veces.
+  NETWORK_ERROR: 'qr_err_sin_confirmar',
+  TIMEOUT: 'qr_err_sin_confirmar',
+  SERVER_ERROR: 'qr_err_sin_confirmar',
+  PAYMENT_FAILED: 'qr_err_sin_confirmar',
+};
+
+/**
+ * Los codigos con los que el pago pudo haber salido: la llave del pago se
+ * CONSERVA, para que el reintento sea el mismo pago y no uno nuevo. Desde que
+ * el servidor responde cada rechazo con su codigo, PAYMENT_FAILED es solo el
+ * 500.
+ */
+export const PAGO_SIN_CONFIRMAR: ReadonlySet<string> = new Set([
+  'NETWORK_ERROR',
+  'TIMEOUT',
+  'SERVER_ERROR',
+  'PAYMENT_FAILED',
+]);
+
+/**
  * El estado que /qr/resolve informa de un cobro, traducido al mismo codigo con
  * el que el servidor rechazaria el pago. Sirve para avisar ANTES de ofrecer el
  * boton de pagar: hasta ahora la hoja pintaba un cobro ya pagado o cancelado

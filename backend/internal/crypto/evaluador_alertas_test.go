@@ -3,6 +3,7 @@ package crypto
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/shopspring/decimal"
 )
 
@@ -168,10 +170,18 @@ type buzon struct {
 	falla  error
 }
 
-func (b *buzon) NotifyUser(_ context.Context, userID, title, body, tag string) error {
+// NotificarEnSuIdioma guarda el aviso escrito en espanol, como lo leeria una
+// cuenta sin idioma guardado.
+func (b *buzon) NotificarEnSuIdioma(_ context.Context, userID, clave string, datos map[string]any, tag string) error {
+	if f := notification.DatosQueFaltan(clave, datos); len(f) > 0 {
+		// Un dato mal escrito en el productor salia como texto vacio dentro del
+		// aviso y ninguna asercion lo veia.
+		panic(fmt.Sprintf("el aviso %s sale sin %v", clave, f))
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.avisos = append(b.avisos, aviso{userID, title, body, tag})
+	titulo, cuerpo := notification.Texto(clave, "es", datos)
+	b.avisos = append(b.avisos, aviso{userID, titulo, cuerpo, tag})
 	return b.falla
 }
 
@@ -543,14 +553,20 @@ func TestEvaluador_UnProveedorCaidoNoDejaLaVueltaAMedias(t *testing.T) {
 }
 
 // El texto sale en la pantalla de bloqueo: ningun monto, ni el objetivo ni el
-// precio con que se cumplio.
-func TestTextoDelAviso_NoLlevaMontos(t *testing.T) {
+// precio con que se cumplio, en ningun idioma.
+func TestAvisoDeAlerta_NoLlevaMontos(t *testing.T) {
 	precio := dec("64999.5")
 	for _, dir := range []string{"above", "below"} {
 		a := &PriceAlertRecord{Asset: "BTC", Direction: dir, TargetPrice: dec("65000"), TriggeredPrice: &precio}
-		titulo, cuerpo := textoDelAviso(a)
-		if regexp.MustCompile(`[0-9$₡]`).MatchString(titulo + cuerpo) {
-			t.Fatalf("%s: el aviso lleva montos: %q / %q", dir, titulo, cuerpo)
+		clave, datos := avisoDeAlerta(a)
+		if len(datos) != 1 || datos["activo"] != "BTC" {
+			t.Fatalf("%s: el aviso lleva mas datos que el activo: %v", dir, datos)
+		}
+		for _, idioma := range notification.Idiomas {
+			titulo, cuerpo := notification.Texto(clave, idioma, datos)
+			if regexp.MustCompile(`[0-9$₡]`).MatchString(titulo + cuerpo) {
+				t.Fatalf("%s en %s: el aviso lleva montos: %q / %q", dir, idioma, titulo, cuerpo)
+			}
 		}
 	}
 }

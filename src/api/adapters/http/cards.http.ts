@@ -6,7 +6,8 @@ import type {
   UpdateLimitsRequest,
 } from '../../repositories/cards.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpCardsRepository implements ICardsRepository {
@@ -17,33 +18,33 @@ export class HttpCardsRepository implements ICardsRepository {
     // El codigo y el detalle del servidor viajan intactos: CARD_LIMIT trae
     // {plan, limite, actuales} y la pantalla lo necesita para explicar el tope.
     if (!res.success || !res.data) {
-      return apiErrorConDetalle(res.error?.code || 'CREATE_FAILED', res.error?.message || 'Failed', res.error?.details);
+      return falla(res, 'CREATE_FAILED');
     }
     return apiSuccess(mapCard(res.data));
   }
 
   async getCards(): Promise<ApiResponse<VirtualCard[]>> {
     const res = await this.client.get<RawCard[] | null>('/api/v1/cards');
-    if (!res.success) return apiError('FETCH_FAILED', 'Failed to fetch cards');
+    if (!res.success) return falla(res, 'FETCH_FAILED');
     // A null payload is "no cards yet", not a failure.
     return apiSuccess(Array.isArray(res.data) ? res.data.map(mapCard) : []);
   }
 
   async getCard(cardId: string): Promise<ApiResponse<VirtualCard>> {
     const res = await this.client.get<RawCard>(`/api/v1/cards/${cardId}`);
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Card not found');
+    if (!res.success || !res.data) return falla(res, 'NOT_FOUND');
     return apiSuccess(mapCard(res.data));
   }
 
   async freezeCard(cardId: string, frozen: boolean): Promise<ApiResponse<void>> {
     const res = await this.client.post(`/api/v1/cards/${cardId}/freeze`, { frozen });
-    if (!res.success) return apiError('FREEZE_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'FREEZE_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
   async cancelCard(cardId: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/cards/${cardId}`);
-    if (!res.success) return apiError('CANCEL_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'CANCEL_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -58,7 +59,7 @@ export class HttpCardsRepository implements ICardsRepository {
       monthly_limit: centimos(request.monthlyLimit),
       atm_limit: centimos(request.atmLimit),
     });
-    if (!res.success) return apiError('UPDATE_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'UPDATE_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -69,7 +70,7 @@ export class HttpCardsRepository implements ICardsRepository {
       decline_reason: string; created_at: string;
     }>>(`/api/v1/cards/${cardId}/transactions`);
 
-    if (!res.success) return apiError('FETCH_FAILED', 'Failed to fetch transactions');
+    if (!res.success) return falla(res, 'FETCH_FAILED');
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
     return apiSuccess(res.data.map((t) => ({

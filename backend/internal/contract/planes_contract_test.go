@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,10 +64,29 @@ func TestUsersMe_LlevaElPlan(t *testing.T) {
 		KYCStatus: "pending", Status: "active", ReferralCode: "K7PM3XQ2", Plan: "plus",
 		CreatedAt: ahora, UpdatedAt: ahora,
 	}
+	// Una cuenta que no eligio idioma dice null.
 	cuerpo, _ := json.Marshal(response.APIResponse{Success: true, Data: u})
+	if err := contract.ValidateResponseBody(router, http.MethodGet, base+"/api/v1/users/me", http.StatusOK, cuerpo); err != nil {
+		t.Fatalf("/users/me sin idioma viola el esquema: %v", err)
+	}
+	if !strings.Contains(string(cuerpo), `"language":null`) {
+		t.Fatalf("una cuenta sin idioma tiene que decir null: %s", cuerpo)
+	}
+	es := "es"
+	u.Language = &es
+	cuerpo, _ = json.Marshal(response.APIResponse{Success: true, Data: u})
 	if err := contract.ValidateResponseBody(router, http.MethodGet, base+"/api/v1/users/me", http.StatusOK, cuerpo); err != nil {
 		t.Fatalf("/users/me viola el esquema: %v", err)
 	}
+
+	// El idioma tambien es un enum vivo: uno que la app no tiene no pasa.
+	xx := "xx"
+	u.Language = &xx
+	cuerpo, _ = json.Marshal(response.APIResponse{Success: true, Data: u})
+	if err := contract.ValidateResponseBody(router, http.MethodGet, base+"/api/v1/users/me", http.StatusOK, cuerpo); err == nil {
+		t.Fatal("un idioma fuera de los siete de la app paso el contrato")
+	}
+	u.Language = &es
 
 	// El enum esta vivo: un plan inventado no pasa.
 	u.Plan = "gold"

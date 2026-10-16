@@ -182,15 +182,21 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       case 'ADD_BILL_PAYMENT': {
         services.addBillPayment(action.payload);
+        // Se titula con el proveedor, como la fila del servidor, y lleva su
+        // tipo (la lista lo traduce) y su fecha: "Pago <proveedor>" quedaba
+        // en espanol en cualquier idioma, y sin fecha de maquina la lista
+        // decia "Ahora" para siempre.
         const billTx = {
           id: `bill-${action.payload.id}`,
-          title: `Pago ${action.payload.providerName}`,
+          title: action.payload.providerName,
           amount: -action.payload.amount,
           ccy: 'CRC',
-          date: 'Ahora',
+          date: '',
+          dateISO: new Date().toISOString(),
           type: 'debit' as const,
           category: 'Servicios',
           status: 'completed' as const,
+          kind: 'bill_payment',
         };
         txStore.addTransaction(billTx);
         accounts.updateAccountBalance('CRC', -action.payload.amount);
@@ -208,12 +214,15 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
         break;
       case 'ADD_RECHARGE': {
         services.addRecharge(action.payload);
+        // Igual que el pago de un servicio: la contraparte, el tipo y la fecha.
         const rechargeTx = {
           id: `recharge-${action.payload.id}`,
-          title: `Recarga ${action.payload.phone}`,
+          title: action.payload.phone,
           amount: -action.payload.amount,
           ccy: 'CRC',
           date: action.payload.date,
+          dateISO: action.payload.dateISO || new Date().toISOString(),
+          kind: 'recharge',
           type: 'debit' as const,
           category: 'Recarga',
           status: (action.payload.status === 'completed' ? 'completed' : 'pending') as

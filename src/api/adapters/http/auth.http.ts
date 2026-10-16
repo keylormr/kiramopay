@@ -14,9 +14,11 @@ import type {
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export class HttpAuthRepository implements IAuthRepository {
   constructor(private client: HttpClient) {}
@@ -34,6 +36,7 @@ export class HttpAuthRepository implements IAuthRepository {
         kyc_level: number;
         status: string;
         plan?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -42,7 +45,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // Keep the backend code (ACCOUNT_BLOCKED, RATE_LIMITED, ...): the login
       // view tells them apart; a fixed AUTH_FAILED collapsed all of them into
       // "wrong credentials".
-      return apiError(res.error?.code || 'AUTH_FAILED', res.error?.message || 'Login failed');
+      return falla(res, 'AUTH_FAILED');
     }
 
     const { user: u, tokens } = res.data;
@@ -60,6 +63,7 @@ export class HttpAuthRepository implements IAuthRepository {
       createdAt: new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     // IMPORTANT: expose the full `tokens` object — the auth store reads
@@ -92,6 +96,7 @@ export class HttpAuthRepository implements IAuthRepository {
         email: string;
         referral_code?: string;
         plan?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -116,7 +121,7 @@ export class HttpAuthRepository implements IAuthRepository {
     if (!res.success || !res.data) {
       // Conservar el codigo del backend: la UI distingue un codigo de
       // invitacion inexistente (REFERRAL_CODE_INVALID) del error generico.
-      return apiError(res.error?.code || 'REGISTER_FAILED', res.error?.message || 'Registration failed');
+      return falla(res, 'REGISTER_FAILED');
     }
 
     const { user: u, tokens } = res.data;
@@ -134,6 +139,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: 0,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     return apiSuccess({
@@ -161,7 +167,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // El codigo pasa: la pantalla elige el texto por codigo, y pisado con el
       // de aqui decia "contrasena incorrecta" tambien sin red o cuando la
       // nueva era igual a la actual.
-      return apiError(res.error?.code || 'CHANGE_PASSWORD_FAILED', res.error?.message || 'Failed to change password');
+      return falla(res, 'CHANGE_PASSWORD_FAILED');
     }
 
     return apiSuccess({ changed: true });
@@ -175,7 +181,7 @@ export class HttpAuthRepository implements IAuthRepository {
       requires_totp: boolean;
     }>('/api/v1/users/me/delete-account/preflight');
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'PREFLIGHT_FAILED', res.error?.message || 'Preflight failed');
+      return falla(res, 'PREFLIGHT_FAILED');
     }
     const d = res.data;
     return apiSuccess({
@@ -195,12 +201,7 @@ export class HttpAuthRepository implements IAuthRepository {
     if (!res.success) {
       // El codigo y el detalle pasan: la pantalla elige el texto por codigo y,
       // en DELETION_BLOCKED, lista lo que hay que resolver.
-      return apiError(
-        res.error?.code || 'DELETION_FAILED',
-        res.error?.message || 'Account deletion failed',
-        undefined,
-        res.error?.details,
-      );
+      return falla(res, 'DELETION_FAILED');
     }
     return apiSuccess({ alreadyDeleted: !!res.data?.already_deleted });
   }
@@ -215,7 +216,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success) {
-      return apiError('OTP_SEND_FAILED', res.error?.message || 'Could not send the verification code');
+      return falla(res, 'OTP_SEND_FAILED');
     }
 
     return apiSuccess<SendRegistrationOtpResult>({ devCode: res.data?.dev_code });
@@ -229,7 +230,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success || !res.data?.verification_token) {
-      return apiError('OTP_INVALID', res.error?.message || 'Invalid or expired verification code');
+      return falla(res, 'OTP_INVALID');
     }
 
     return apiSuccess<VerifyRegistrationOtpResult>({ verificationToken: res.data.verification_token });
@@ -250,7 +251,7 @@ export class HttpAuthRepository implements IAuthRepository {
     );
 
     if (!res.success) {
-      return apiError(res.error?.code || 'FORGOT_PASSWORD_FAILED', res.error?.message || 'Could not process the request');
+      return falla(res, 'FORGOT_PASSWORD_FAILED');
     }
 
     // `dev_token` is only present when the backend runs in a dev environment.
@@ -271,7 +272,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // Preserve the backend code so the UI can distinguish an invalid/expired
       // token (RESET_FAILED) from a weak password (VALIDATION_ERROR) and show
       // the right localized guidance.
-      return apiError(res.error?.code || 'RESET_PASSWORD_FAILED', res.error?.message || 'Could not reset the password');
+      return falla(res, 'RESET_PASSWORD_FAILED');
     }
 
     return apiSuccess({ reset: true });
@@ -291,7 +292,7 @@ export class HttpAuthRepository implements IAuthRepository {
       // REFRESH_FAILED, y el arranque no podia distinguir una sesion invalida
       // (REFRESH_FAILED, ACCOUNT_BLOCKED) de un corte pasajero (NETWORK_ERROR,
       // RATE_LIMITED, un 5xx): cerraba la sesion por un parpadeo de la red.
-      return apiError(res.error?.code || 'REFRESH_FAILED', res.error?.message || 'Token refresh failed');
+      return falla(res, 'REFRESH_FAILED');
     }
     return apiSuccess<TokenPair>({
       access_token: res.data.access_token,
@@ -303,6 +304,27 @@ export class HttpAuthRepository implements IAuthRepository {
   async logout(): Promise<ApiResponse<void>> {
     await this.client.post('/api/v1/auth/logout');
     this.client.clearTokens();
+    return apiSuccess(undefined as unknown as void);
+  }
+
+  async setLanguage(language: string): Promise<ApiResponse<void>> {
+    const res = await this.client.put<void>('/api/v1/users/me/language', { language });
+    if (!res.success) {
+      // El codigo, el texto y los detalles que trajo el cliente pasan enteros
+      // (sin red, sesion vencida, un rechazo del servidor): el cliente ya los
+      // deja en el idioma activo. Sin ninguno, el codigo propio con el texto
+      // generico del idioma activo, nunca una frase fija en ingles.
+      const e = res.error;
+      return {
+        success: false,
+        error: {
+          code: e?.code || 'LANGUAGE_FAILED',
+          message: e?.message?.trim() || traducirFueraDeReact('err_generic'),
+          ...(e?.data !== undefined ? { data: e.data } : {}),
+          ...(e?.details ? { details: e.details } : {}),
+        },
+      };
+    }
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -320,10 +342,11 @@ export class HttpAuthRepository implements IAuthRepository {
       created_at?: string;
       referral_code?: string;
       plan?: string;
+      language?: string | null;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
-      return apiError('PROFILE_FAILED', res.error?.message || 'Failed to load profile');
+      return falla(res, 'PROFILE_FAILED');
     }
 
     const u = res.data;
@@ -340,6 +363,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: u.kyc_level as 0 | 1 | 2,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
     return apiSuccess<User>(user);
   }

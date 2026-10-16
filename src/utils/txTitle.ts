@@ -74,9 +74,36 @@ function tituloDeCuotaDividida(tx: Transaction, t: (key: string) => string): str
   return division ? `${etiqueta}: ${division}` : etiqueta;
 }
 
+/**
+ * Cripto: backend/internal/crypto describe la compra, la venta y el envio en
+ * ingles ("Buy BTC", "Sell BTC", "Send 0.5 BTC"). Casi siempre la fila trae la
+ * contraparte (el activo, o quien recibe), que es el titulo; pero un envio cuyo
+ * destinatario no se pudo leer llegaba solo con esa descripcion, y la lista la
+ * mostraba en ingles en cualquier idioma. Se reemplaza solo el prefijo conocido.
+ */
+const PREFIJOS_CRIPTO: Record<string, string> = {
+  crypto_buy: 'Buy ',
+  crypto_sell: 'Sell ',
+  crypto_send: 'Send ',
+};
+
+function tituloDeCripto(tx: Transaction, t: (key: string) => string): string | null {
+  const kind = (tx.kind || '').trim();
+  const prefijo = PREFIJOS_CRIPTO[kind];
+  if (!prefijo) return null;
+  const cruda = (tx.title || tx.description || '').trim();
+  if (!cruda.startsWith(prefijo)) return null;
+  const resto = cruda.slice(prefijo.length).trim();
+  const etiqueta = t(`tx_title_${kind}`);
+  return resto ? `${etiqueta}: ${resto}` : etiqueta;
+}
+
 export function txTitle(tx: Transaction, t: (key: string) => string): string {
   const deAhorro = tituloDeAhorro(tx, t);
   if (deAhorro) return deAhorro;
+
+  const deCripto = tituloDeCripto(tx, t);
+  if (deCripto) return deCripto;
 
   const deCuota = tituloDeCuotaDividida(tx, t);
   if (deCuota) return deCuota;

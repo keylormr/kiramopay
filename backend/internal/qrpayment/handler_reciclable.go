@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
@@ -18,6 +19,27 @@ import (
 // el monto", "ese cobro ya lo pagaron", "el codigo fue retirado"— no llegaba
 // nunca a la pantalla. 409 para los de estado, 400 para los de forma.
 func responderError(w http.ResponseWriter, err error) {
+	if responderConocido(w, err) {
+		return
+	}
+	response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+}
+
+// responderErrorDelPago es responderError para POST /qr/pay, con una
+// diferencia: lo que no se reconoce es un 500. Ahi el pago pudo haber salido
+// (un commit que se corta termina aqui), y la pantalla lo dice como un pago sin
+// confirmar y conserva la llave, asi que reintentar no cobra dos veces. Como
+// 400, la pantalla lo tomaba por un rechazo y soltaba la llave: el reintento
+// era otro pago. El detalle queda en el log (response.Error no lo deja salir).
+func responderErrorDelPago(w http.ResponseWriter, err error) {
+	if responderConocido(w, err) {
+		return
+	}
+	response.Error(w, http.StatusInternalServerError, "PAYMENT_FAILED", err.Error())
+}
+
+// responderConocido responde el error si tiene codigo propio, y dice si lo hizo.
+func responderConocido(w http.ResponseWriter, err error) bool {
 	type caso struct {
 		err    error
 		codigo string
@@ -50,14 +72,34 @@ func responderError(w http.ResponseWriter, err error) {
 		// verifica el codigo y se reintenta la misma peticion.
 		{transaction.ErrMFARequired, "MFA_REQUIRED", http.StatusPreconditionRequired,
 			"este monto necesita verificar el segundo factor"},
+		// Los rechazos del motor de transferencias, con el codigo que SINPE ya
+		// usa para el mismo motivo. Caian al PAYMENT_FAILED de abajo con el
+		// error envuelto ("qr payment transfer: insufficient balance"), y la
+		// pantalla lo mostraba en ingles. El saldo: el de la comprobacion previa
+		// y el del asiento, que es el que frena bajo concurrencia.
+		{transaction.ErrSaldoInsuficiente, "INSUFFICIENT_BALANCE", http.StatusUnprocessableEntity,
+			transaction.ErrSaldoInsuficiente.Error()},
+		{ledger.ErrInsufficientFunds, "INSUFFICIENT_BALANCE", http.StatusUnprocessableEntity,
+			transaction.ErrSaldoInsuficiente.Error()},
+		{transaction.ErrDailyLimitExceeded, "DAILY_LIMIT_EXCEEDED", http.StatusUnprocessableEntity,
+			transaction.ErrDailyLimitExceeded.Error()},
+		{transaction.ErrMonthlyLimitExceeded, "MONTHLY_LIMIT_EXCEEDED", http.StatusUnprocessableEntity,
+			transaction.ErrMonthlyLimitExceeded.Error()},
+		{transaction.ErrBloqueadoPorRiesgo, "TRANSFER_BLOCKED", http.StatusBadRequest,
+			transaction.ErrBloqueadoPorRiesgo.Error()},
+		// La llave que ya es de otro movimiento, vista desde el libro.
+		{transaction.ErrLlaveDeOtroMovimiento, "LLAVE_REUTILIZADA", http.StatusConflict,
+			"esa operacion ya se hizo con otro monto"},
+		{ErrComercioNoEncontrado, "MERCHANT_NOT_FOUND", http.StatusNotFound, ErrComercioNoEncontrado.Error()},
+		{ErrComercioNoDisponible, "MERCHANT_UNAVAILABLE", http.StatusConflict, ErrComercioNoDisponible.Error()},
 	}
 	for _, c := range casos {
 		if errors.Is(err, c.err) {
 			response.Error(w, c.http, c.codigo, c.msg)
-			return
+			return true
 		}
 	}
-	response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+	return false
 }
 
 // responderErrorDeEquipo traduce los errores de administrar el equipo del

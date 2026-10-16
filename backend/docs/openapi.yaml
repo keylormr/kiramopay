@@ -408,6 +408,30 @@ paths:
         '200':
           $ref: '#/components/responses/Success'
 
+  /api/v1/users/me/language:
+    put:
+      tags: [Users]
+      summary: Save the language the person uses the app in
+      description: >-
+        Notifications and push are written in this language. Demo accounts can
+        save it too: it is not identity data.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language: { type: string, enum: [es, en, fr, pt, zh-cn, ja, hi] }
+      responses:
+        '204':
+          description: Saved
+        '400':
+          description: INVALID_LANGUAGE (not one of the app's languages) or INVALID_BODY
+
   # ── Account deletion ───────────────────────────────────────────────────
   /api/v1/users/me/delete-account/preflight:
     get:
@@ -1985,13 +2009,22 @@ paths:
           in: query
           description: Client offset in minutes WEST of UTC (Costa Rica = 360)
           schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+        - name: lang
+          in: query
+          description: >-
+            App language for the header, the section names, the label of the
+            unassigned bucket and the file name. Missing or unknown: Spanish.
+          schema: { type: string, enum: [es, en, fr, pt, zh-cn, ja, hi] }
       responses:
         '200':
           description: >-
             UTF-8 CSV with byte order mark, served as an attachment with
-            Cache-Control no-store. Columns: seccion, desde, hasta, clave,
-            nombre, bruto, comision, neto, cobros. seccion is dia, sucursal,
-            cobrador, total or periodo_anterior. Amounts are units with two
+            Cache-Control no-store. Columns (in Spanish): seccion, desde, hasta,
+            clave, nombre, bruto, comision, neto, cobros. seccion is dia,
+            sucursal, cobrador, total or periodo_anterior. With lang the same
+            columns and sections come in that language (en: section, from, to,
+            key, name, gross, fee, net, payments; day, location, collector,
+            total, previous_period). Amounts are units with two
             decimals, not centimos. Every cell that starts with = + - @, a tab
             or a carriage return is prefixed with an apostrophe, so a
             spreadsheet shows it as text instead of running it as a formula.
@@ -2132,8 +2165,55 @@ paths:
       responses:
         '200':
           description: Payment completed
+        '400':
+          description: >-
+            The request or the code cannot be paid as sent: QR_INVALIDO,
+            NO_PODES_PAGARTE (paying your own code), MONTO_REQUERIDO
+            (open-amount code without an amount), MONTO_INVALIDO,
+            LLAVE_INVALIDA (malformed idempotency_key), TRANSFER_BLOCKED (the
+            risk engine stopped the transfer) or INVALID_BODY. No money moves.
+            The client should translate by `error.code`, not show
+            `error.message`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND — the code belongs to a business that no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            The code or the charge no longer accepts this payment: QR_REVOCADO,
+            COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO,
+            LLAVE_REUTILIZADA (the idempotency_key belongs to a different
+            payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or
+            MERCHANT_UNAVAILABLE (the business is not approved).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED,
+            the same codes as POST /api/v1/sinpe/send. No money moves.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '428':
           description: MFA_REQUIRED — verify the second factor and retry the same request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            PAYMENT_FAILED — the server failed and the payment may have gone
+            through. Retrying the same request (same idempotency_key on an
+            open-amount code) never charges twice.
           content:
             application/json:
               schema:
@@ -5217,6 +5297,11 @@ components:
                   type: string
                   enum: [free, plus, pro]
                   description: Personal plan; every account starts on free
+                language:
+                  type: string
+                  nullable: true
+                  enum: [es, en, fr, pt, zh-cn, ja, hi]
+                  description: Same as UserProfile.language; a new account has none (null)
 
     UserProfile:
       type: object
@@ -5248,6 +5333,15 @@ components:
             Personal plan. It sets the savings goal and card limits and the
             assistant's daily questions. There is no charging yet: only an
             administrator changes it.
+        language:
+          type: string
+          nullable: true
+          enum: [es, en, fr, pt, zh-cn, ja, hi]
+          description: >-
+            Language the person uses the app in. Notifications and push are
+            written in it. null means the person has not chosen one yet: their
+            notifications go out in es, and the app may save the language its
+            screen shows without overwriting a choice made on another device.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }

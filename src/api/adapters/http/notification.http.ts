@@ -1,7 +1,8 @@
 import type { INotificationRepository, SuscripcionPush } from '../../repositories/notification.repository';
 import type { ApiResponse } from '../../types';
 import type { Notification } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 import type { ApiData } from '../../generated/helpers';
 
@@ -22,7 +23,7 @@ export class HttpNotificationRepository implements INotificationRepository {
     >('/api/v1/notifications');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch notifications');
+      return falla(res, 'FETCH_FAILED');
     }
     // A null/undefined data payload is a valid "no records" response. Don't
     // treat that as failure — just hand back an empty list.
@@ -44,7 +45,7 @@ export class HttpNotificationRepository implements INotificationRepository {
   async markRead(id: string): Promise<ApiResponse<void>> {
     const res = await this.client.patch<void>(`/api/v1/notifications/${id}/read`);
     if (!res.success) {
-      return apiError('UPDATE_FAILED', res.error?.message || 'Failed to mark read');
+      return falla(res, 'UPDATE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -52,7 +53,7 @@ export class HttpNotificationRepository implements INotificationRepository {
   async markAllRead(): Promise<ApiResponse<void>> {
     const res = await this.client.post<void>('/api/v1/notifications/read-all');
     if (!res.success) {
-      return apiError('UPDATE_FAILED', res.error?.message || 'Failed to mark all read');
+      return falla(res, 'UPDATE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -62,7 +63,7 @@ export class HttpNotificationRepository implements INotificationRepository {
     if (!res.success) {
       // El codigo del servidor pasa tal cual (NOTIFICATION_NOT_FOUND,
       // INVALID_ID, NETWORK_ERROR): pisarlo con uno generico borraba el motivo.
-      return apiError(res.error?.code || 'DELETE_FAILED', res.error?.message || 'Failed to delete');
+      return falla(res, 'DELETE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -70,7 +71,7 @@ export class HttpNotificationRepository implements INotificationRepository {
   async pushPublicKey(): Promise<ApiResponse<{ publicKey: string; habilitado: boolean }>> {
     const res = await this.client.get<{ public_key?: string; habilitado?: boolean }>('/api/v1/push/public-key');
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to read the push key');
+      return falla(res, 'FETCH_FAILED');
     }
     const publicKey = res.data.public_key ?? '';
     return apiSuccess({ publicKey, habilitado: res.data.habilitado === true && publicKey !== '' });
@@ -82,7 +83,7 @@ export class HttpNotificationRepository implements INotificationRepository {
     // la guardaba sin claves.
     const res = await this.client.post<void>('/api/v1/push/subscribe', sub);
     if (!res.success) {
-      return apiError(res.error?.code || 'SUBSCRIBE_FAILED', res.error?.message || 'Failed to subscribe');
+      return falla(res, 'SUBSCRIBE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -90,7 +91,7 @@ export class HttpNotificationRepository implements INotificationRepository {
   async pushNativo(): Promise<ApiResponse<{ habilitado: boolean }>> {
     const res = await this.client.get<{ habilitado?: boolean }>('/api/v1/push/nativo');
     if (!res.success || !res.data) {
-      return apiError(res.error?.code || 'FETCH_FAILED', res.error?.message || 'Failed to read native push');
+      return falla(res, 'FETCH_FAILED');
     }
     return apiSuccess({ habilitado: res.data.habilitado === true });
   }
@@ -100,7 +101,7 @@ export class HttpNotificationRepository implements INotificationRepository {
     if (!res.success) {
       // Se conserva el codigo: NATIVE_PUSH_DISABLED se muestra distinto de un
       // fallo de red.
-      return apiError(res.error?.code || 'REGISTER_FAILED', res.error?.message || 'Failed to register the device');
+      return falla(res, 'REGISTER_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -108,7 +109,7 @@ export class HttpNotificationRepository implements INotificationRepository {
   async olvidarDispositivo(token: string): Promise<ApiResponse<void>> {
     const res = await this.client.post<void>('/api/v1/push/dispositivos/baja', { token });
     if (!res.success) {
-      return apiError(res.error?.code || 'UNREGISTER_FAILED', res.error?.message || 'Failed to remove the device');
+      return falla(res, 'UNREGISTER_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }
@@ -118,7 +119,7 @@ export class HttpNotificationRepository implements INotificationRepository {
     // no manda cuerpo en un DELETE.
     const res = await this.client.post<void>('/api/v1/push/unsubscribe', { endpoint });
     if (!res.success) {
-      return apiError(res.error?.code || 'UNSUBSCRIBE_FAILED', res.error?.message || 'Failed to unsubscribe');
+      return falla(res, 'UNSUBSCRIBE_FAILED');
     }
     return apiSuccess(undefined as unknown as void);
   }

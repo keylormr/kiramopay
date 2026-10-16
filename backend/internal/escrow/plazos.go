@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/ledger"
+	"github.com/kiramopay/backend/internal/notification"
 )
 
 // Un escrow fondeado no vencia nunca: si el comprador se callaba, la plata
@@ -19,7 +19,9 @@ import (
 // Notifier avisa a una persona dentro de la app. Lo satisface
 // *notification.Service, el mismo que usan sinpe y los cobros QR.
 type Notifier interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 // ── Repositorio ─────────────────────────────────────────────────────────────
@@ -180,9 +182,7 @@ func (s *Service) MarcarEntregado(ctx context.Context, callerID, id string) (*Ag
 	}
 	s.audit(callerID, out, "escrow_entregado", "low", nil)
 	s.emit(ctx, out, "escrow.delivered")
-	s.avisar(ctx, out.BuyerID, "El vendedor marcó la entrega",
-		fmt.Sprintf("%s: %s. Tienes hasta el %s para liberar el pago o reclamar; si no haces nada, se le paga al vendedor.",
-			out.Description, montoLegible(out.AmountMinor, out.Currency), fechaLegible(out.ReviewBy)))
+	s.avisar(ctx, out.BuyerID, notification.AvisoEscrowEntregaMarcada, datosDelAviso(out, out.ReviewBy))
 	return out, nil
 }
 
@@ -266,75 +266,52 @@ func (s *Service) cerrarPorVencimiento(ctx context.Context, a *Agreement) (*Agre
 
 // ── Avisos ──────────────────────────────────────────────────────────────────
 
-func (s *Service) avisar(ctx context.Context, userID, titulo, cuerpo string) {
+func (s *Service) avisar(ctx context.Context, userID, clave string, datos map[string]any) {
 	if s.notifier == nil || userID == "" {
 		return
 	}
 	// Best-effort: un aviso que no sale no puede frenar el movimiento de plata
 	// que lo origino. La notificacion queda en el historial de la app, que es
 	// lo que la persona lee al sincronizar.
-	_ = s.notifier.NotifyUser(ctx, userID, titulo, cuerpo, "escrow")
+	_ = s.notifier.NotificarEnSuIdioma(ctx, userID, clave, datos, "escrow")
 }
 
 func (s *Service) avisarVencimientoProximo(ctx context.Context, a *Agreement) {
-	monto := montoLegible(a.AmountMinor, a.Currency)
 	if a.DeliveredAt == nil {
-		limite := fechaLegible(a.DeliverBy)
-		s.avisar(ctx, a.SellerID, "Tu plazo de entrega está por vencer",
-			fmt.Sprintf("%s (%s): si no marcas la entrega antes del %s, se le devuelve el pago al comprador.",
-				a.Description, monto, limite))
-		s.avisar(ctx, a.BuyerID, "El plazo de entrega está por vencer",
-			fmt.Sprintf("%s (%s): si el vendedor no marca la entrega antes del %s, se te devuelve el pago.",
-				a.Description, monto, limite))
+		datos := datosDelAviso(a, a.DeliverBy)
+		s.avisar(ctx, a.SellerID, notification.AvisoEscrowEntregaPorVencerVendedor, datos)
+		s.avisar(ctx, a.BuyerID, notification.AvisoEscrowEntregaPorVencerComprador, datos)
 		return
 	}
-	limite := fechaLegible(a.ReviewBy)
-	s.avisar(ctx, a.BuyerID, "Tu plazo para revisar está por vencer",
-		fmt.Sprintf("%s (%s): si no liberas el pago ni reclamas antes del %s, se le paga al vendedor.",
-			a.Description, monto, limite))
-	s.avisar(ctx, a.SellerID, "El plazo de revisión está por vencer",
-		fmt.Sprintf("%s (%s): si el comprador no reclama antes del %s, se te paga.",
-			a.Description, monto, limite))
+	datos := datosDelAviso(a, a.ReviewBy)
+	s.avisar(ctx, a.BuyerID, notification.AvisoEscrowRevisionPorVencerComprador, datos)
+	s.avisar(ctx, a.SellerID, notification.AvisoEscrowRevisionPorVencerVendedor, datos)
 }
 
 func (s *Service) avisarCierrePorVencimiento(ctx context.Context, a *Agreement) {
-	monto := montoLegible(a.AmountMinor, a.Currency)
+	datos := datosDelAviso(a, nil)
 	if a.ClosedByExpiry == VencioRevision {
-		s.avisar(ctx, a.SellerID, "Se te pagó un escrow",
-			fmt.Sprintf("%s: %s. El comprador no reclamó dentro del plazo.", a.Description, monto))
-		s.avisar(ctx, a.BuyerID, "Se le pagó al vendedor",
-			fmt.Sprintf("%s: %s. Venció tu plazo para reclamar.", a.Description, monto))
+		s.avisar(ctx, a.SellerID, notification.AvisoEscrowPagadoVendedor, datos)
+		s.avisar(ctx, a.BuyerID, notification.AvisoEscrowPagadoComprador, datos)
 		return
 	}
-	s.avisar(ctx, a.BuyerID, "Se te devolvió un escrow",
-		fmt.Sprintf("%s: %s. El vendedor no marcó la entrega dentro del plazo.", a.Description, monto))
-	s.avisar(ctx, a.SellerID, "Se le devolvió el pago al comprador",
-		fmt.Sprintf("%s: %s. Venció tu plazo para marcar la entrega.", a.Description, monto))
+	s.avisar(ctx, a.BuyerID, notification.AvisoEscrowDevueltoComprador, datos)
+	s.avisar(ctx, a.SellerID, notification.AvisoEscrowDevueltoVendedor, datos)
 }
 
-// montoLegible escribe el monto como lo muestra la app: simbolo y miles con
-// coma, que es la regla del dueno para todos los montos.
-func montoLegible(minor int64, moneda string) string {
-	simbolo := moneda + " "
-	switch moneda {
-	case "CRC":
-		simbolo = "₡"
-	case "USD":
-		simbolo = "$"
+// datosDelAviso son la descripcion, el monto y, si el aviso habla de un plazo,
+// su fecha en la hora de Costa Rica. El catalogo la escribe con el formato del
+// idioma de quien lo recibe; sin plazo, dice "sin fecha" en ese idioma.
+func datosDelAviso(a *Agreement, plazo *time.Time) map[string]any {
+	limite := time.Time{}
+	if plazo != nil {
+		limite = plazo.In(zonaCR)
 	}
-	signo := ""
-	if minor < 0 {
-		signo, minor = "-", -minor
+	return map[string]any{
+		"descripcion": a.Description,
+		"monto":       notification.Monto(a.AmountMinor, a.Currency),
+		"limite":      limite,
 	}
-	enteros := fmt.Sprintf("%d", minor/100)
-	var b strings.Builder
-	for i, c := range enteros {
-		if i > 0 && (len(enteros)-i)%3 == 0 {
-			b.WriteByte(',')
-		}
-		b.WriteRune(c)
-	}
-	return fmt.Sprintf("%s%s%s.%02d", signo, simbolo, b.String(), minor%100)
 }
 
 // zonaCR es la hora de Costa Rica. Si el sistema no trae la base de zonas, se
@@ -345,10 +322,3 @@ var zonaCR = func() *time.Location {
 	}
 	return time.FixedZone("CST", -6*3600)
 }()
-
-func fechaLegible(t *time.Time) string {
-	if t == nil {
-		return "(sin fecha)"
-	}
-	return t.In(zonaCR).Format("02/01/2006 a las 15:04")
-}

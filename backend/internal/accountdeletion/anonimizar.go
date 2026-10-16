@@ -212,7 +212,7 @@ var pasos = []paso{
 		WHERE user_id IS NULL
 		  AND group_id IN (SELECT id FROM split_groups WHERE creator_id = $1::uuid)`},
 	{"revocar vinculos de personal", `UPDATE merchant_staff
-		SET status = 'revoked', revoked_at = COALESCE(revoked_at, (NOW() AT TIME ZONE 'UTC'))
+		SET status = 'revoked', revoked_at = COALESCE(revoked_at, NOW())
 		WHERE status <> 'revoked'
 		  AND (user_id = $1::uuid
 		       OR merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid))`},
@@ -243,7 +243,7 @@ var pasos = []paso{
 // Que se conserva y por que: id, created_at y role (la identidad del registro);
 // kyc_level y kyc_status (acompanan a los registros de cumplimiento, que el
 // abogado decide); referral_code (inservible: FindByReferralCode exige cuenta
-// activa); referred_by, plan; y el rastro del bloqueo, si lo habia (la 074
+// activa); referred_by, plan; y el rastro del bloqueo, si lo habia (la 076
 // relajo el CHECK para 'closed').
 //
 // Los valores de reemplazo de cedula y telefono llevan ':' y miden menos de 64,
@@ -254,7 +254,7 @@ var pasos = []paso{
 const sqlTumba = `
 UPDATE users SET
     status              = 'closed',
-    deleted_at          = (NOW() AT TIME ZONE 'UTC'),
+    deleted_at          = NOW(),
     anonymized_at       = NOW(),
     deletion_channel    = $2,
     first_name          = 'Usuario',
@@ -276,5 +276,5 @@ UPDATE users SET
     password_hash       = '!deleted',
     demo_login          = false,
     expires_at          = NULL,
-    updated_at          = (NOW() AT TIME ZONE 'UTC')
+    updated_at          = NOW()
 WHERE id = $1::uuid`

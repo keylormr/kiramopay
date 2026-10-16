@@ -298,7 +298,9 @@ export interface IQRPaymentRepository {
    * El mismo reporte en CSV (plan analitica). Sin el plan responde
    * PLAN_REQUIRED; fuera del equipo, NOT_FOUND.
    */
-  exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>>;
+  // idioma: el de la app; el servidor escribe el encabezado, las secciones y
+  // el nombre del archivo en ese idioma (sin el, en espanol).
+  exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>>;
   // Team (owner manages; identified by the cedula the employee registered with).
   getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>>;
   addStaff(merchantId: string, cedula: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>>;

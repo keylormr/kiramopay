@@ -453,3 +453,32 @@ describe('HttpClient error con data (p. ej. 409 CONTACT_EXISTS)', () => {
     expect(r.error?.data).toEqual(contactoExistente);
   });
 });
+
+// El cupo diario del asistente y su capacidad tambien son 429, con su propio
+// codigo. El cliente devolvia RATE_LIMITED sin leer el cuerpo, asi que a quien
+// habia agotado las preguntas del dia la pantalla le decia que esperara un
+// momento. El 429 del limitador, o uno sin JSON (del borde), sigue siendo
+// RATE_LIMITED con el texto del cliente.
+describe('HttpClient: 429', () => {
+  it.each(['ASSISTANT_QUOTA', 'ASSISTANT_BUSY'])('%s conserva su codigo', async (codigo) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeErrRes(429, codigo)));
+    const r = await new HttpClient('http://x').post('/api/v1/assistant/chat', {});
+    expect(r.error?.code).toBe(codigo);
+  });
+
+  it('el del limitador sigue siendo RATE_LIMITED, con el texto del cliente', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeErrRes(429, 'RATE_LIMITED')));
+    const r = await new HttpClient('http://x').post('/api/v1/auth/login', {});
+    expect(r.error).toEqual({ code: 'RATE_LIMITED', message: traducirFueraDeReact('err_rate_limited') });
+  });
+
+  it('uno sin JSON tambien es RATE_LIMITED', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+      json: async () => { throw new Error('no es JSON'); },
+    }));
+    const r = await new HttpClient('http://x').get('/api/v1/accounts');
+    expect(r.error).toEqual({ code: 'RATE_LIMITED', message: traducirFueraDeReact('err_rate_limited') });
+  });
+});

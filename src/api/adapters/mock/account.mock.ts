@@ -57,12 +57,12 @@ export class MockAccountRepository implements IAccountRepository {
 
   async getBudgets(): Promise<ApiResponse<Budget[]>> {
     const state = getState();
-    return apiSuccess(state?.budgets ?? initialBudgets);
+    return apiSuccess(state?.budgets ?? initialBudgets());
   }
 
   async updateBudget(id: string, updates: Partial<Budget>): Promise<ApiResponse<Budget>> {
     const state = getState();
-    const budgets: Budget[] = state?.budgets ?? [...initialBudgets];
+    const budgets: Budget[] = state?.budgets ?? initialBudgets();
     const index = budgets.findIndex((b) => b.id === id);
     if (index === -1) {
       return apiError('NOT_FOUND', `Budget ${id} not found`);

@@ -17,9 +17,9 @@ function getTransactions(): Transaction[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     const state = data ? JSON.parse(data) : null;
-    return state?.transactions ?? initialTransactions;
+    return state?.transactions ?? initialTransactions();
   } catch {
-    return initialTransactions;
+    return initialTransactions();
   }
 }
 

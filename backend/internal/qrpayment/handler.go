@@ -178,7 +178,8 @@ func (h *Handler) GetMerchantReport(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, report)
 }
 
-// GetMerchantReportCSV — GET /api/v1/qr/merchants/{id}/report.csv?days=30&tz=360.
+// GetMerchantReportCSV — GET /api/v1/qr/merchants/{id}/report.csv?days=30&tz=360&lang=en.
+// lang es el idioma de la app; sin el, o con uno que la app no tiene, en espanol.
 // Dueno o gerente, como el reporte, y con el plan analitica. Quien no es del
 // equipo recibe 404 igual que en el reporte; un comercio sin el plan, 403
 // PLAN_REQUIRED con el plan que hace falta, para que la pantalla lo explique.
@@ -203,14 +204,15 @@ func (h *Handler) GetMerchantReportCSV(w http.ResponseWriter, r *http.Request) {
 	// Se arma entero antes de escribir la cabecera: si fallara a mitad, el
 	// cliente recibiria un 200 con medio archivo.
 	var buf bytes.Buffer
-	if err := EscribirReporteCSV(&buf, rep); err != nil {
+	idioma := r.URL.Query().Get("lang")
+	if err := EscribirReporteCSVEnIdioma(&buf, rep, idioma); err != nil {
 		response.Error(w, http.StatusInternalServerError, "EXPORT_FAILED", err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	// El nombre solo lleva fechas que arma el servidor: nada del cliente llega
-	// a la cabecera.
-	w.Header().Set("Content-Disposition", `attachment; filename="reporte-`+rep.From+`-a-`+rep.To+`.csv"`)
+	// El nombre solo lleva fechas que arma el servidor y un patron fijo por
+	// idioma: nada del cliente llega a la cabecera (lang solo elige el patron).
+	w.Header().Set("Content-Disposition", `attachment; filename="`+NombreDelReporteCSV(rep, idioma)+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buf.Bytes())
@@ -504,7 +506,7 @@ func (h *Handler) ScanAndPay(w http.ResponseWriter, r *http.Request) {
 
 	payment, err := h.service.ScanAndPay(r.Context(), userID, &req)
 	if err != nil {
-		responderError(w, err)
+		responderErrorDelPago(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, payment)

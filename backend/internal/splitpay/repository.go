@@ -114,11 +114,24 @@ func (r *Repository) ListUserGroups(ctx context.Context, userID string) ([]Split
 
 // ── Split Shares ─────────────────────────────────────────────────────────────
 
+// GetGroupShares lee las cuotas de una division.
+//
+// La cuota de quien la crea se guarda sin nombre (en el formulario solo se
+// anotan los invitados), y el detalle la mostraba en blanco: quien tenia que
+// pagar no sabia a quien, y su movimiento salia sin contraparte. El nombre que
+// falte se toma de la cuenta al leer, asi que tambien lo tienen las divisiones
+// ya guardadas. Esa cuota va primera: es a quien se le paga. El id desempata
+// dos invitados con el mismo nombre, para que no cambien de lugar entre lecturas.
 func (r *Repository) GetGroupShares(ctx context.Context, groupID string) ([]SplitShare, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, group_id, COALESCE(user_id::text, ''), COALESCE(user_phone, ''),
-		 user_name, amount, status, paid_at
-		 FROM split_shares WHERE group_id = $1 ORDER BY user_name`, groupID)
+		`SELECT s.id, s.group_id, COALESCE(s.user_id::text, ''), COALESCE(s.user_phone, ''),
+		        COALESCE(NULLIF(s.user_name, ''), TRIM(u.first_name || ' ' || u.last_name), '') AS nombre,
+		        s.amount, s.status, s.paid_at
+		   FROM split_shares s
+		   JOIN split_groups g ON g.id = s.group_id
+		   LEFT JOIN users u ON u.id = s.user_id
+		  WHERE s.group_id = $1
+		  ORDER BY COALESCE(s.user_id = g.creator_id, false) DESC, nombre, s.id`, groupID)
 	if err != nil {
 		return nil, err
 	}

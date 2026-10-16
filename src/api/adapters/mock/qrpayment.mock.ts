@@ -21,6 +21,19 @@ import type { ApiResponse, ArchivoDescargado } from '../../types';
 import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 
 const STORAGE_KEY = 'kiramopay_app_state';
+
+// Los rotulos del CSV del reporte en cada idioma, los mismos que escribe el
+// servidor (backend/internal/qrpayment/reporte.go, rotulosPorIdioma). Sin
+// idioma, o con uno que no esta, en espanol como el servidor.
+const ROTULOS_CSV: Record<string, { encabezado: string; dia: string; total: string; archivo: string }> = {
+  es: { encabezado: 'seccion,desde,hasta,clave,nombre,bruto,comision,neto,cobros', dia: 'dia', total: 'total', archivo: 'reporte' },
+  en: { encabezado: 'section,from,to,key,name,gross,fee,net,payments', dia: 'day', total: 'total', archivo: 'report' },
+  fr: { encabezado: 'section,du,au,cle,nom,brut,commission,net,encaissements', dia: 'jour', total: 'total', archivo: 'rapport' },
+  pt: { encabezado: 'secao,de,ate,chave,nome,bruto,comissao,liquido,cobrancas', dia: 'dia', total: 'total', archivo: 'relatorio' },
+  'zh-cn': { encabezado: '分组,开始,结束,标识,名称,总额,手续费,净额,笔数', dia: '日', total: '合计', archivo: 'report' },
+  ja: { encabezado: '区分,開始,終了,キー,名前,総額,手数料,純額,件数', dia: '日', total: '合計', archivo: 'report' },
+  hi: { encabezado: 'खंड,से,तक,कुंजी,नाम,सकल,शुल्क,शुद्ध,भुगतान', dia: 'दिन', total: 'कुल', archivo: 'report' },
+};
 const DEFAULT_COMMISSION_BPS = 50; // 0.50%
 
 function getState() {
@@ -340,7 +353,8 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     try {
       qrInfo = JSON.parse(request.qrData);
     } catch {
-      return apiError('INVALID_QR', 'Codigo QR invalido');
+      // El mismo codigo que el servidor, para que la pantalla lo traduzca.
+      return apiError('QR_INVALIDO', 'Codigo QR invalido');
     }
 
     const amount = request.amount ?? qrInfo.amount ?? 0;
@@ -611,7 +625,7 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   // El mock arma el mismo CSV que el servidor (columnas, BOM, montos en
   // unidades) y responde PLAN_REQUIRED sin el plan, para que la pantalla se
   // pueda probar sin backend.
-  async exportMerchantReportCsv(merchantId: string, days: number): Promise<ApiResponse<ArchivoDescargado>> {
+  async exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>> {
     const merchant = readMerchants().find((m) => m.id === merchantId);
     if (!merchant) return apiError('NOT_FOUND', 'merchant not found');
     if (merchant.plan !== 'analitica') {
@@ -620,14 +634,15 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     const rep = await this.getMerchantReport(merchantId, days);
     if (!rep.success || !rep.data) return apiError('EXPORT_FAILED', 'export failed');
     const monto = (v: number) => v.toFixed(2);
+    const rot = ROTULOS_CSV[idioma ?? ''] ?? ROTULOS_CSV.es;
     const filas = [
-      'seccion,desde,hasta,clave,nombre,bruto,comision,neto,cobros',
-      ...rep.data.daily.map((d) => `dia,${d.date},${d.date},,,${monto(d.gross)},${monto(d.fee)},${monto(d.net)},${d.count}`),
-      `total,,,,,${monto(rep.data.totals.gross)},${monto(rep.data.totals.fee)},${monto(rep.data.totals.net)},${rep.data.totals.count}`,
+      rot.encabezado,
+      ...rep.data.daily.map((d) => `${rot.dia},${d.date},${d.date},,,${monto(d.gross)},${monto(d.fee)},${monto(d.net)},${d.count}`),
+      `${rot.total},,,,,${monto(rep.data.totals.gross)},${monto(rep.data.totals.fee)},${monto(rep.data.totals.net)},${rep.data.totals.count}`,
     ];
     return apiSuccess({
       blob: new Blob([`${String.fromCharCode(0xfeff)}${filas.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }),
-      nombre: `reporte-${days}-dias.csv`,
+      nombre: `${rot.archivo}-${days}.csv`,
     });
   }
 

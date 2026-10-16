@@ -50,7 +50,9 @@ func (s *Service) NombreDe(ctx context.Context, userID string) string {
 // Notifier avisa al cobrador que le pagaron. Lo satisface
 // *notification.Service, el mismo que ya usa sinpe.
 type Notifier interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 // Options lleva los colaboradores opcionales.
@@ -354,12 +356,18 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	payeeName := ""
 	var merchant *Merchant
 	if obj.code.MerchantID != "" {
+		// Solo un comercio que no existe es "no encontrado": una caida de la
+		// base al leerlo es un fallo del servidor, y el handler la responde
+		// como tal.
 		merchant, err = s.repo.GetMerchant(ctx, obj.code.MerchantID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrComercioNoEncontrado
+		}
 		if err != nil {
-			return nil, fmt.Errorf("merchant not found")
+			return nil, fmt.Errorf("leer el comercio: %w", err)
 		}
 		if merchant.VerificationStatus != "verified" {
-			return nil, fmt.Errorf("merchant is not available")
+			return nil, ErrComercioNoDisponible
 		}
 		// La efectiva, no commission_bps: durante la promocion de entrada se
 		// cobra la menor entre las dos. GetMerchant la calculo al leer la fila.

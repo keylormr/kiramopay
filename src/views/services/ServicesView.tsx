@@ -14,6 +14,12 @@ import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import { fechaCorta } from '@/utils/fechaPlazo';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import {
+  CLAVES_DEL_RECHAZO_DEL_RECIBO,
+  CLAVES_DEL_RECHAZO_DE_LA_RECARGA,
+  CLAVE_GENERICA_DEL_SERVICIO,
+} from './rechazosDelServicio';
 
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
@@ -166,7 +172,7 @@ export const ServicesView: React.FC = () => {
         setActionError(t('bill_no_agreement'));
         return;
       }
-      setActionError(res.error?.message || t('assistant_action_failed'));
+      setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_RECIBO, CLAVE_GENERICA_DEL_SERVICIO, t));
       return;
     }
 
@@ -210,7 +216,7 @@ export const ServicesView: React.FC = () => {
         setActionError(t('recharge_no_agreement'));
         return;
       }
-      setActionError(res.error?.message || t('assistant_action_failed'));
+      setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DE_LA_RECARGA, CLAVE_GENERICA_DEL_SERVICIO, t));
       return;
     }
 
@@ -704,6 +710,7 @@ export const ServicesView: React.FC = () => {
           MFA_REQUIRED; al verificar el codigo se reintenta la misma. */}
       <MfaChallengeSheet
         isOpen={showMfa}
+        confirmLabel={t('mfa_verify_and_pay')}
         onClose={() => {
           setShowMfa(false);
           setPendingAction(null);

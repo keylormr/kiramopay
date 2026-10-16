@@ -13,9 +13,9 @@ const STORAGE_KEY = 'kiramopay_budgets';
 function load(): Budget[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [...initialBudgets];
+    return raw ? JSON.parse(raw) : initialBudgets();
   } catch {
-    return [...initialBudgets];
+    return initialBudgets();
   }
 }
 

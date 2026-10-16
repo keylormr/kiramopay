@@ -226,6 +226,15 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(10) NOT NULL DEFAULT 'free';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
+	-- Igual que la 074: el idioma de la cuenta, con el que se escriben sus avisos.
+	-- NULL es "no eligio" (los avisos salen en espanol). Los dos ALTER COLUMN
+	-- dejan igual una base de pruebas creada con la version anterior.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5);
+	ALTER TABLE users ALTER COLUMN language DROP NOT NULL;
+	ALTER TABLE users ALTER COLUMN language DROP DEFAULT;
+	DO $$ BEGIN
+		ALTER TABLE users ADD CONSTRAINT chk_users_language CHECK (language IN ('es', 'en', 'fr', 'pt', 'zh-cn', 'ja', 'hi'));
+	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users (referral_code);
 
@@ -286,7 +295,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- produccion. Aqui va sin CONCURRENTLY porque el esquema de pruebas se crea
 	-- en una sola consulta, que es de por si una transaccion.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-	-- Eliminacion de cuenta (migracion 074): la tumba y su coherencia. El CHECK de
+	-- Eliminacion de cuenta (migracion 076): la tumba y su coherencia. El CHECK de
 	-- bloqueo se relaja para 'closed', igual que alla.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymized_at    TIMESTAMPTZ;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel VARCHAR(16);
@@ -470,7 +479,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		metadata JSONB DEFAULT '{}',
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
-	-- Migracion 074: la cuenta de una persona eliminada deja de resolverse.
+	-- Migracion 076: la cuenta de una persona eliminada deja de resolverse.
 	ALTER TABLE ledger_accounts ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_user_currency
 		ON ledger_accounts (user_id, currency) WHERE type = 'user_wallet';
@@ -1372,7 +1381,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, created_at DESC);
 
-	-- Tablas que la eliminacion de cuenta (migracion 074) toca y que este esquema
+	-- Tablas que la eliminacion de cuenta (migracion 076) toca y que este esquema
 	-- no declaraba. Mismas columnas y FK que las migraciones que las crean.
 	CREATE TABLE IF NOT EXISTS user_devices (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1522,7 +1531,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
-	-- Cola de solicitudes de eliminacion hechas desde la web (migracion 074).
+	-- Cola de solicitudes de eliminacion hechas desde la web (migracion 076).
 	CREATE TABLE IF NOT EXISTS account_deletion_requests (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		contact_kind VARCHAR(8) NOT NULL,

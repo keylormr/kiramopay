@@ -6,13 +6,13 @@ describe('useNotificationStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useNotificationStore.setState({
-      notifications: initialNotifications.map((n) => ({ ...n })),
+      notifications: initialNotifications().map((n) => ({ ...n })),
     });
   });
 
   it('should have initial notifications', () => {
     const { notifications } = useNotificationStore.getState();
-    expect(notifications).toHaveLength(initialNotifications.length);
+    expect(notifications).toHaveLength(initialNotifications().length);
     expect(notifications[0].title).toBe('Bienvenido a KiramoPay');
   });
 
@@ -36,13 +36,13 @@ describe('useNotificationStore', () => {
 
     useNotificationStore.getState().addNotification(newNotification);
     const { notifications } = useNotificationStore.getState();
-    expect(notifications).toHaveLength(initialNotifications.length + 1);
+    expect(notifications).toHaveLength(initialNotifications().length + 1);
     expect(notifications[0].id).toBe('new-1');
     expect(notifications[0].title).toBe('New Alert');
   });
 
   it('should mark a single notification as read', () => {
-    const unreadId = initialNotifications.find((n) => !n.read)!.id;
+    const unreadId = initialNotifications().find((n) => !n.read)!.id;
     expect(useNotificationStore.getState().notifications.find((n) => n.id === unreadId)!.read).toBe(false);
 
     useNotificationStore.getState().markRead(unreadId);
@@ -63,13 +63,13 @@ describe('useNotificationStore', () => {
     const { notifications } = useNotificationStore.getState();
     const unread = notifications.filter((n) => !n.read);
     expect(unread).toHaveLength(0);
-    expect(notifications).toHaveLength(initialNotifications.length);
+    expect(notifications).toHaveLength(initialNotifications().length);
   });
 
   it('should delete a notification', () => {
     useNotificationStore.getState().deleteNotification('1');
     const { notifications } = useNotificationStore.getState();
-    expect(notifications).toHaveLength(initialNotifications.length - 1);
+    expect(notifications).toHaveLength(initialNotifications().length - 1);
     expect(notifications.find((n) => n.id === '1')).toBeUndefined();
   });
 
@@ -83,7 +83,7 @@ describe('useNotificationStore', () => {
   it('should handle deleting a non-existent notification gracefully', () => {
     useNotificationStore.getState().deleteNotification('non-existent');
     const { notifications } = useNotificationStore.getState();
-    expect(notifications).toHaveLength(initialNotifications.length);
+    expect(notifications).toHaveLength(initialNotifications().length);
   });
 
   it('should handle adding multiple notifications in order', () => {

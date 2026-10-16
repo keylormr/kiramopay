@@ -648,6 +648,57 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/users/me/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the language the person uses the app in
+         * @description Notifications and push are written in this language. Demo accounts can save it too: it is not identity data.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        language: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
+                    };
+                };
+            };
+            responses: {
+                /** @description Saved */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_LANGUAGE (not one of the app's languages) or INVALID_BODY */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/delete-account/preflight": {
         parameters: {
             query?: never;
@@ -3260,6 +3311,8 @@ export interface paths {
                     days?: number;
                     /** @description Client offset in minutes WEST of UTC (Costa Rica = 360) */
                     tz?: number;
+                    /** @description App language for the header, the section names, the label of the unassigned bucket and the file name. Missing or unknown: Spanish. */
+                    lang?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
                 };
                 header?: never;
                 path: {
@@ -3269,7 +3322,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description UTF-8 CSV with byte order mark, served as an attachment with Cache-Control no-store. Columns: seccion, desde, hasta, clave, nombre, bruto, comision, neto, cobros. seccion is dia, sucursal, cobrador, total or periodo_anterior. Amounts are units with two decimals, not centimos. Every cell that starts with = + - @, a tab or a carriage return is prefixed with an apostrophe, so a spreadsheet shows it as text instead of running it as a formula. */
+                /** @description UTF-8 CSV with byte order mark, served as an attachment with Cache-Control no-store. Columns (in Spanish): seccion, desde, hasta, clave, nombre, bruto, comision, neto, cobros. seccion is dia, sucursal, cobrador, total or periodo_anterior. With lang the same columns and sections come in that language (en: section, from, to, key, name, gross, fee, net, payments; day, location, collector, total, previous_period). Amounts are units with two decimals, not centimos. Every cell that starts with = + - @, a tab or a carriage return is prefixed with an apostrophe, so a spreadsheet shows it as text instead of running it as a formula. */
                 200: {
                     headers: {
                         "Content-Disposition"?: string;
@@ -3490,8 +3543,53 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description The request or the code cannot be paid as sent: QR_INVALIDO, NO_PODES_PAGARTE (paying your own code), MONTO_REQUERIDO (open-amount code without an amount), MONTO_INVALIDO, LLAVE_INVALIDA (malformed idempotency_key), TRANSFER_BLOCKED (the risk engine stopped the transfer) or INVALID_BODY. No money moves. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND — the code belongs to a business that no longer exists. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or MERCHANT_UNAVAILABLE (the business is not approved). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. No money moves. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MFA_REQUIRED — verify the second factor and retry the same request. */
                 428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed and the payment may have gone through. Retrying the same request (same idempotency_key on an open-amount code) never charges twice. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8802,6 +8900,11 @@ export interface components {
                      * @enum {string}
                      */
                     plan?: "free" | "plus" | "pro";
+                    /**
+                     * @description Same as UserProfile.language; a new account has none (null)
+                     * @enum {string|null}
+                     */
+                    language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
                 };
             };
         };
@@ -8834,6 +8937,11 @@ export interface components {
              * @enum {string}
              */
             plan?: "free" | "plus" | "pro";
+            /**
+             * @description Language the person uses the app in. Notifications and push are written in it. null means the person has not chosen one yet: their notifications go out in es, and the app may save the language its screen shows without overwriting a choice made on another device.
+             * @enum {string|null}
+             */
+            language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

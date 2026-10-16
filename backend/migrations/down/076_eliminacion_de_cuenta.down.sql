@@ -1,4 +1,4 @@
--- Bajada de 074_eliminacion_de_cuenta.sql
+-- Bajada de 076_eliminacion_de_cuenta.sql
 --
 -- Quita las columnas y la tabla. NO deshace las anonimizaciones ya hechas: los
 -- datos personales que se borraron no vuelven, por eso la subida es de un solo

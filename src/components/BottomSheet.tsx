@@ -156,7 +156,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         }}
       />
 
-      {/* Sheet */}
+      {/* Sheet. Una columna: el asa y el titulo miden lo suyo y el contenido
+          se encoge hasta caber en lo que queda, desplazandose por dentro.
+          Antes el contenido tenia su propio tope (70% del alto) que, sumado al
+          asa y al titulo, pasaba el de la hoja (85%): en un telefono chico el
+          final de la hoja, con su boton y su error, quedaba bajo el borde. */}
       <div
         ref={hojaRef}
         role="dialog"
@@ -164,17 +168,17 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         tabIndex={-1}
         {...(title ? { 'aria-labelledby': idTitulo } : {})}
         className={`
-          relative w-full max-w-md uv-surface-1 uv-shadow-floating outline-none
+          relative flex flex-col w-full max-w-md uv-surface-1 uv-shadow-floating outline-none
           rounded-t-[2.25rem] sm:rounded-3xl p-6 transform transition-transform duration-300
           ${isOpen ? 'translate-y-0 scale-100' : 'translate-y-full sm:translate-y-10 sm:scale-95'}
         `}
-        style={{ maxHeight: '85vh', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+        style={{ maxHeight: `calc(${viewportHeight} * 0.85)`, paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
       >
         {/* Drag handle (mobile only) */}
-        <div className="w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
+        <div className="shrink-0 w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
 
         {title && (
-          <div className="flex justify-between items-center mb-5">
+          <div className="shrink-0 flex justify-between items-center mb-5">
             <div className="flex items-center gap-1.5 min-w-0">
               <h2
                 id={idTitulo}
@@ -198,7 +202,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
           </div>
         )}
 
-        <div className="max-h-[70vh] overflow-y-auto no-scrollbar">
+        <div className="min-h-0 overflow-y-auto no-scrollbar">
           {children}
         </div>
       </div>

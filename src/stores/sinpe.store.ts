@@ -20,7 +20,7 @@ export const useSinpeStore = create<SinpeState>()(
   persist(
     (set) => ({
       sinpeContacts: hasBackend ? [] : initialSinpeContacts,
-      sinpeHistory: hasBackend ? [] : initialSinpeHistory,
+      sinpeHistory: hasBackend ? [] : initialSinpeHistory(),
 
       setContacts: (contacts) => set({ sinpeContacts: contacts }),
 

@@ -217,7 +217,7 @@ func TestEliminar_Elegibilidad(t *testing.T) {
 			t.Fatalf("la via de la app debia rechazarla: %v", err)
 		}
 		// La via con una persona de operaciones si la acepta, y el rastro del
-		// bloqueo SOBREVIVE (decision del abogado, ver la 074).
+		// bloqueo SOBREVIVE (decision del abogado, ver la 076).
 		if _, err := svc.ejecutar(ctx, a.ID, opciones{canal: CanalWeb, permitirCuentaBloqueada: true}); err != nil {
 			t.Fatalf("la via web debia aceptarla: %v", err)
 		}

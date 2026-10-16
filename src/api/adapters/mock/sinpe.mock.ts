@@ -37,7 +37,7 @@ export class MockSinpeRepository implements ISinpeRepository {
 
   async getHistory(): Promise<ApiResponse<SinpeTransaction[]>> {
     const state = getState();
-    return apiSuccess(state?.sinpeHistory ?? initialSinpeHistory);
+    return apiSuccess(state?.sinpeHistory ?? initialSinpeHistory());
   }
 
   async send(request: SendSinpeRequest): Promise<ApiResponse<SinpeTransaction>> {
@@ -58,7 +58,7 @@ export class MockSinpeRepository implements ISinpeRepository {
       internal: true,
     };
 
-    const history: SinpeTransaction[] = state?.sinpeHistory ?? [...initialSinpeHistory];
+    const history: SinpeTransaction[] = state?.sinpeHistory ?? initialSinpeHistory();
     history.unshift(tx);
     saveField('sinpeHistory', history);
 

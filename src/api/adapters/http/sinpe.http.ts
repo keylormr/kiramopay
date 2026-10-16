@@ -1,7 +1,8 @@
 import type { ISinpeRepository, SendSinpeRequest } from '../../repositories/sinpe.repository';
 import type { ApiResponse } from '../../types';
 import type { SinpeContact, SinpeTransaction } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 import { normalizarTelefonoCR } from '@/utils/telefono';
 
@@ -20,7 +21,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
     >('/api/v1/sinpe/contacts');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch contacts');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -59,8 +60,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
       // Preserva el codigo del servidor (p. ej. CONTACT_EXISTS con el contacto
       // existente en `data`) en vez de aplanarlo todo a ADD_FAILED, para que
       // quien llame pueda distinguir un duplicado de cualquier otro fallo.
-      const code = res.error?.code || 'ADD_FAILED';
-      return apiError(code, res.error?.message || 'Failed to add contact', res.error?.data);
+      return falla(res, 'ADD_FAILED');
     }
 
     return apiSuccess({
@@ -85,7 +85,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
     >('/api/v1/sinpe/history');
 
     if (!res.success) {
-      return apiError('FETCH_FAILED', 'Failed to fetch history');
+      return falla(res, 'FETCH_FAILED');
     }
     if (!Array.isArray(res.data)) return apiSuccess([]);
 
@@ -127,8 +127,7 @@ export class HttpSinpeRepository implements ISinpeRepository {
       // Preserve the backend error code (MFA_REQUIRED, insufficient funds, daily
       // limit, fraud block, …) so callers can react; only fall back to a generic
       // code when the backend did not provide one.
-      const code = res.error?.code || 'SINPE_FAILED';
-      return apiError(code, res.error?.message || 'SINPE transfer failed');
+      return falla(res, 'SINPE_FAILED');
     }
 
     const tx: SinpeTransaction = {

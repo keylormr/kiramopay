@@ -6,13 +6,13 @@ describe('useTransactionStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useTransactionStore.setState({
-      transactions: initialTransactions.map((t) => ({ ...t })),
+      transactions: initialTransactions().map((t) => ({ ...t })),
     });
   });
 
   it('should have initial transactions', () => {
     const { transactions } = useTransactionStore.getState();
-    expect(transactions).toHaveLength(initialTransactions.length);
+    expect(transactions).toHaveLength(initialTransactions().length);
     expect(transactions[0].title).toBe('Café Alma');
   });
 
@@ -38,7 +38,7 @@ describe('useTransactionStore', () => {
 
     useTransactionStore.getState().addTransaction(newTx);
     const { transactions } = useTransactionStore.getState();
-    expect(transactions).toHaveLength(initialTransactions.length + 1);
+    expect(transactions).toHaveLength(initialTransactions().length + 1);
     expect(transactions[0].id).toBe('100');
     expect(transactions[0].title).toBe('Supermercado');
     expect(transactions[0].amount).toBe(-25000);

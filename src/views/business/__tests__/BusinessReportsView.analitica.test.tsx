@@ -127,7 +127,8 @@ describe('BusinessReportsView con Analitica', () => {
     await user.click(screen.getByRole('button', { name: 'Exportar CSV' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Listo. El archivo se descargó.');
-    expect(mocks.api.qrPayments.exportMerchantReportCsv).toHaveBeenCalledWith('m1', 7);
+    // En el idioma de la app: el servidor escribe el reporte en ese idioma.
+    expect(mocks.api.qrPayments.exportMerchantReportCsv).toHaveBeenCalledWith('m1', 7, 'es');
     expect(clic).toHaveBeenCalledTimes(1);
   });
 

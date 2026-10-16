@@ -6,7 +6,8 @@ import type {
 } from '../../repositories/marketplace.repository';
 import type { ApiResponse } from '../../types';
 import type { MarketplacePartner, RideRequest, FoodOrder } from '@/types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpMarketplaceRepository implements IMarketplaceRepository {
@@ -27,7 +28,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     }>('/api/v1/marketplace/partners');
 
     if (!res.success || !res.data) {
-      return apiError('FETCH_FAILED', 'Failed to fetch partners');
+      return falla(res, 'FETCH_FAILED');
     }
 
     const partners: MarketplacePartner[] = res.data.partners.map((p) => ({
@@ -46,13 +47,13 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
 
   async connectPartner(partnerCode: string): Promise<ApiResponse<void>> {
     const res = await this.client.post('/api/v1/marketplace/connect', { partner_code: partnerCode });
-    if (!res.success) return apiError('CONNECT_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'CONNECT_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
   async disconnectPartner(partnerCode: string): Promise<ApiResponse<void>> {
     const res = await this.client.del(`/api/v1/marketplace/connect/${partnerCode}`);
-    if (!res.success) return apiError('DISCONNECT_FAILED', res.error?.message || 'Failed');
+    if (!res.success) return falla(res, 'DISCONNECT_FAILED');
     return apiSuccess(undefined as unknown as void);
   }
 
@@ -72,7 +73,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       // El codigo del servidor tiene que sobrevivir hasta la vista: es lo que
       // distingue "no hay integracion con el socio" (SIN_INTEGRACION) de un
       // fallo cualquiera, y la pantalla lo explica distinto.
-      return apiError(res.error?.code || 'RIDE_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'RIDE_FAILED');
     }
 
     return apiSuccess({
@@ -106,7 +107,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     if (!res.success || !res.data) {
       // Confirmar es el paso que cobra: si el servidor lo niega por falta de
       // integracion (SIN_INTEGRACION), su codigo llega intacto a la vista.
-      return apiError(res.error?.code || 'CONFIRM_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'CONFIRM_FAILED');
     }
 
     return apiSuccess({
@@ -137,7 +138,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       minutes_remaining: number;
     }>>('/api/v1/marketplace/rides');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch rides');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((r) => ({
       id: r.id,
@@ -167,7 +168,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       minutes_remaining: number;
     }>(`/api/v1/marketplace/rides/${rideId}`);
 
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Ride not found');
+    if (!res.success || !res.data) return falla(res, 'NOT_FOUND');
 
     return apiSuccess({
       id: res.data.id,
@@ -203,7 +204,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
     if (!res.success || !res.data) {
       // Crear el pedido es el paso que cobra: si el servidor lo niega por falta
       // de integracion (SIN_INTEGRACION), su codigo llega intacto a la vista.
-      return apiError(res.error?.code || 'ORDER_FAILED', res.error?.message || 'Failed');
+      return falla(res, 'ORDER_FAILED');
     }
 
     return apiSuccess({
@@ -227,7 +228,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       status: string; estimated_delivery: string; minutes_remaining: number;
     }>>('/api/v1/marketplace/food-orders');
 
-    if (!res.success || !res.data) return apiError('FETCH_FAILED', 'Failed to fetch orders');
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
 
     return apiSuccess(res.data.map((o) => ({
       id: o.id,
@@ -254,7 +255,7 @@ export class HttpMarketplaceRepository implements IMarketplaceRepository {
       items: Array<{ name: string; quantity: number; price: number }>;
     }>(`/api/v1/marketplace/food-orders/${orderId}`);
 
-    if (!res.success || !res.data) return apiError('NOT_FOUND', 'Order not found');
+    if (!res.success || !res.data) return falla(res, 'NOT_FOUND');
 
     return apiSuccess({
       id: res.data.order.id,

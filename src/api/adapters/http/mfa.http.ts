@@ -3,7 +3,8 @@ import type {
   TotpEnrollResponse,
 } from '../../repositories/mfa.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess, apiError } from '../../types';
+import { apiSuccess } from '../../types';
+import { falla } from './falla';
 import { HttpClient } from './client';
 
 export class HttpMfaRepository implements IMfaRepository {
@@ -12,7 +13,7 @@ export class HttpMfaRepository implements IMfaRepository {
   async totpStatus(): Promise<ApiResponse<{ enabled: boolean }>> {
     const res = await this.client.get<{ enabled: boolean }>('/api/v1/mfa/totp/status');
     if (!res.success || !res.data) {
-      return apiError('TOTP_STATUS_FAILED', res.error?.message || 'Could not read 2FA status');
+      return falla(res, 'TOTP_STATUS_FAILED');
     }
     return apiSuccess({ enabled: !!res.data.enabled });
   }
@@ -22,7 +23,7 @@ export class HttpMfaRepository implements IMfaRepository {
       '/api/v1/mfa/totp/enroll',
     );
     if (!res.success || !res.data) {
-      return apiError('TOTP_ENROLL_FAILED', res.error?.message || 'Could not start enrollment');
+      return falla(res, 'TOTP_ENROLL_FAILED');
     }
     return apiSuccess({ secret: res.data.secret, otpauthUrl: res.data.otpauth_url });
   }
@@ -33,7 +34,7 @@ export class HttpMfaRepository implements IMfaRepository {
       { code },
     );
     if (!res.success || !res.data) {
-      return apiError('TOTP_CONFIRM_FAILED', res.error?.message || 'Invalid code');
+      return falla(res, 'TOTP_CONFIRM_FAILED');
     }
     return apiSuccess({ recoveryCodes: res.data.recovery_codes || [] });
   }
@@ -44,7 +45,7 @@ export class HttpMfaRepository implements IMfaRepository {
       purpose,
     });
     if (!res.success) {
-      return apiError('TOTP_VERIFY_FAILED', res.error?.message || 'Invalid code');
+      return falla(res, 'TOTP_VERIFY_FAILED');
     }
     return apiSuccess({ verified: true });
   }
@@ -52,7 +53,7 @@ export class HttpMfaRepository implements IMfaRepository {
   async totpDisable(code: string): Promise<ApiResponse<{ disabled: boolean }>> {
     const res = await this.client.post<{ status: string }>('/api/v1/mfa/totp/disable', { code });
     if (!res.success) {
-      return apiError('TOTP_DISABLE_FAILED', res.error?.message || 'Invalid code');
+      return falla(res, 'TOTP_DISABLE_FAILED');
     }
     return apiSuccess({ disabled: true });
   }

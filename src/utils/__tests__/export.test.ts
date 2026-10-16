@@ -6,6 +6,15 @@ import {
   shareTransactions,
 } from '../export';
 import type { Transaction } from '@/types';
+import es from '@/i18n/languages/es';
+import en from '@/i18n/languages/en';
+import ja from '@/i18n/languages/ja';
+
+// Lo exportado se escribe con el traductor de la app, como la pantalla.
+const traductor = (dic: object) => (clave: string) => (dic as Record<string, string>)[clave] ?? clave;
+const tEs = traductor(es);
+const tEn = traductor(en);
+const tJa = traductor(ja);
 
 // El resumen del CSV sumaba TODAS las filas con un `reduce` sin mirar la moneda:
 // colones y dolares uno junto a otro, y el total escrito sin simbolo. El usuario
@@ -78,7 +87,7 @@ describe('el CSV escribe la moneda de cada total', () => {
     globalThis.URL.revokeObjectURL = () => {};
 
     try {
-      exportTransactionsCSV([tx('1', 1000, 'CRC'), tx('2', 50, 'USD')]);
+      exportTransactionsCSV([tx('1', 1000, 'CRC'), tx('2', 50, 'USD')], tEs);
       const texto = await blobs[0].text();
       const lineas = texto.split('\n').filter((l) => l.includes('Balance Neto'));
       expect(lineas).toHaveLength(2);
@@ -125,7 +134,7 @@ async function leerArchivo(exportar: () => void): Promise<string> {
 // fecha y cuya coma partia la fila del CSV en una columna de mas.
 describe('lo exportado lleva la fecha de maquina, sin ambiguedad', () => {
   it('el CSV escribe la fecha y hora locales como aaaa-mm-dd hh:mm, no el d/m de es-CR', async () => {
-    const texto = await leerArchivo(() => exportTransactionsCSV([conFecha('1', 1000, 'CRC')]));
+    const texto = await leerArchivo(() => exportTransactionsCSV([conFecha('1', 1000, 'CRC')], tEs));
 
     const fila = texto.split('\n').find((l) => l.startsWith('1,'));
     expect(fila).toContain('2026-09-04 09:30');
@@ -135,14 +144,14 @@ describe('lo exportado lleva la fecha de maquina, sin ambiguedad', () => {
   it('sin fecha de maquina, la que trae va entre comillas y su coma no parte la fila', async () => {
     const viejo = { ...tx('1', 1000, 'CRC'), date: 'Hoy, 9:41 AM' };
 
-    const texto = await leerArchivo(() => exportTransactionsCSV([viejo]));
+    const texto = await leerArchivo(() => exportTransactionsCSV([viejo], tEs));
 
     const fila = texto.split('\n').find((l) => l.startsWith('1,'));
     expect(fila).toContain('"Hoy, 9:41 AM"');
   });
 
   it('el JSON trae la fecha ISO del movimiento', async () => {
-    const texto = await leerArchivo(() => exportTransactionsJSON([conFecha('1', 1000, 'CRC')]));
+    const texto = await leerArchivo(() => exportTransactionsJSON([conFecha('1', 1000, 'CRC')], tEs));
 
     expect(JSON.parse(texto).transactions[0].date).toBe(ISO);
   });
@@ -161,7 +170,7 @@ describe('copiar y compartir no mezclan monedas', () => {
       configurable: true,
     });
 
-    expect(await copyTransactionsToClipboard(movimientos())).toBe(true);
+    expect(await copyTransactionsToClipboard(movimientos(), tEs)).toBe(true);
 
     expect(copiado).toContain('Ingresos: +1000.00 CRC');
     expect(copiado).toContain('Egresos:  -400.00 CRC');
@@ -179,7 +188,7 @@ describe('copiar y compartir no mezclan monedas', () => {
     });
 
     try {
-      expect(await shareTransactions(movimientos())).toBe(true);
+      expect(await shareTransactions(movimientos(), tEs)).toBe(true);
     } finally {
       Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
     }
@@ -220,14 +229,164 @@ describe('el nombre del archivo lleva el dia local', () => {
   });
 
   it('el CSV exportado de noche se llama con el dia de Costa Rica, no con el de UTC', () => {
-    exportTransactionsCSV([conFecha('1', 1000, 'CRC')]);
+    exportTransactionsCSV([conFecha('1', 1000, 'CRC')], tEs);
 
     expect(nombres).toEqual(['KiramoPay-Transacciones-2026-09-24.csv']);
   });
 
   it('el JSON tambien', () => {
-    exportTransactionsJSON([conFecha('1', 1000, 'CRC')]);
+    exportTransactionsJSON([conFecha('1', 1000, 'CRC')], tEs);
 
     expect(nombres).toEqual(['KiramoPay-Transacciones-2026-09-24.json']);
+  });
+});
+
+// El CSV, el texto copiado y el compartido salian en espanol en cualquier
+// idioma: encabezados, "Ingreso"/"Egreso", "Completado"/"Pendiente", el
+// resumen, la linea "Generado" y el nombre del archivo. Ahora salen en el idioma
+// de la app, con las mismas palabras que la pantalla.
+describe('lo exportado sale en el idioma de la app', () => {
+  // Palabras que solo puede traer el texto fijo en espanol.
+  const ESPANOL = ['Fecha', 'Titulo', 'Título', 'Monto', 'Moneda', 'Ingreso', 'Egreso', 'Completado', 'Pendiente',
+    'RESUMEN', 'Balance Neto', 'Generado', 'Transacciones', 'Neto'];
+  const sinEspanol = (texto: string) => ESPANOL.filter((p) => texto.includes(p));
+
+  const movimientos = () => [
+    conFecha('1', 1000, 'CRC'),
+    { ...conFecha('2', -400, 'CRC'), status: 'pending' as const },
+    conFecha('3', 50, 'USD'),
+  ];
+
+  let nombres: string[] = [];
+  beforeEach(() => {
+    nombres = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      nombres.push(this.download);
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('el CSV en ingles: encabezados, tipo, estado, categoria, resumen y nombre del archivo', async () => {
+    const texto = await leerArchivo(() => exportTransactionsCSV(movimientos(), tEn));
+    const lineas = texto.split('\n');
+
+    expect(lineas[1]).toBe('"ID","Date","Title","Amount","Currency","Type","Category","Status"');
+    const ingreso = lineas.find((l) => l.startsWith('1,'));
+    expect(ingreso).toContain('"Income"');
+    expect(ingreso).toContain('"Completed"');
+    // La categoria con el nombre de la pantalla, no la clave cruda.
+    expect(ingreso).toContain(`"${en.analytics_cat_other}"`);
+    const pendiente = lineas.find((l) => l.startsWith('2,'));
+    expect(pendiente).toContain('"Expense"');
+    expect(pendiente).toContain('"Pending"');
+    expect(texto).toContain('SUMMARY');
+    expect(texto).toContain('Total income');
+    expect(texto).toContain('Net balance');
+    // La fecha reemplaza el marcador: nunca "Generated: {fecha}".
+    expect(texto).toMatch(/Generated: \d/);
+    expect(texto).not.toContain('{fecha}');
+    expect(sinEspanol(texto)).toEqual([]);
+    expect(nombres[0]).toMatch(/^KiramoPay-Transactions-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  // El titulo puede ser el nombre que escribio otra persona (la contraparte).
+  // Si empieza con = + - @, tabulador o retorno, la hoja de calculo lo ejecuta
+  // como formula aunque vaya entre comillas. Se neutraliza con un apostrofo,
+  // como el reporte del comercio (celdaSegura en reporte.go). Los montos
+  // negativos no pasan por ahi: siguen siendo numeros.
+  it('un titulo que empieza como formula no se ejecuta en la hoja de calculo', async () => {
+    const peligrosos = ['=HYPERLINK("http://x.test","clic")', '+1+1', '-2+3', '@SUM(A1)', '\t=1+1', '\r=1+1'];
+    const txs = peligrosos.map((title, i) => ({ ...conFecha(`p${i}`, -100, 'CRC'), title }));
+    const texto = await leerArchivo(() => exportTransactionsCSV(txs, tEs));
+    for (const p of peligrosos) {
+      expect(texto).toContain(`"'${p.replace(/"/g, '""')}"`);
+    }
+    expect(texto).toContain(',-100.00,');
+  });
+
+  it('el CSV en japones tampoco trae texto en espanol', async () => {
+    const texto = await leerArchivo(() => exportTransactionsCSV(movimientos(), tJa));
+
+    expect(sinEspanol(texto)).toEqual([]);
+    expect(texto.split('\n')[1]).toContain('"日付"');
+  });
+
+  it('un movimiento sin estado sale como completado, igual que en la pantalla', async () => {
+    const sinEstado = { ...conFecha('1', 1000, 'CRC'), status: undefined };
+    const texto = await leerArchivo(() => exportTransactionsCSV([sinEstado], tEs));
+
+    const fila = texto.split('\n').find((l) => l.startsWith('1,'));
+    expect(fila).toContain('"Completado"');
+    expect(fila).not.toContain('Pendiente');
+  });
+
+  it('el CSV en espanol lleva las tildes de sus encabezados', async () => {
+    const texto = await leerArchivo(() => exportTransactionsCSV(movimientos(), tEs));
+
+    expect(texto.split('\n')[1]).toBe('"ID","Fecha","Título","Monto","Moneda","Tipo","Categoría","Estado"');
+  });
+
+  it('el nombre del JSON va en el idioma; su contenido sigue siendo de maquina', async () => {
+    const texto = await leerArchivo(() => exportTransactionsJSON(movimientos(), tEn));
+
+    expect(nombres[0]).toMatch(/^KiramoPay-Transactions-\d{4}-\d{2}-\d{2}\.json$/);
+    const datos = JSON.parse(texto);
+    expect(datos.transactions[0].type).toBe('credit');
+    expect(datos.transactions[1].status).toBe('pending');
+  });
+
+  it('copiar en ingles', async () => {
+    let copiado = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: async (s: string) => { copiado = s; } },
+      configurable: true,
+    });
+
+    expect(await copyTransactionsToClipboard(movimientos(), tEn)).toBe(true);
+
+    expect(copiado).toContain('KiramoPay - Transactions');
+    // Las cifras van alineadas con espacios, como en espanol.
+    expect(copiado).toMatch(/Income: +\+1000\.00 CRC/);
+    expect(copiado).toMatch(/Expenses: +-400\.00 CRC/);
+    expect(copiado).toMatch(/Net: +600\.00 CRC/);
+    expect(sinEspanol(copiado)).toEqual([]);
+  });
+
+  it('compartir en ingles, con el titulo y la cuenta de movimientos', async () => {
+    let compartido = { title: '', text: '' };
+    Object.defineProperty(navigator, 'share', {
+      value: async (datos: { title: string; text: string }) => { compartido = datos; },
+      configurable: true,
+    });
+
+    try {
+      expect(await shareTransactions(movimientos(), tEn)).toBe(true);
+    } finally {
+      Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    }
+
+    expect(compartido.title).toBe('KiramoPay - Transactions');
+    expect(compartido.text).toContain('KiramoPay - Transaction summary');
+    expect(compartido.text).toContain('3 transactions');
+    expect(compartido.text).toContain('Balance: +600.00 CRC');
+    expect(sinEspanol(`${compartido.title}\n${compartido.text}`)).toEqual([]);
+  });
+
+  it('compartir un solo movimiento lo cuenta en singular', async () => {
+    let texto = '';
+    Object.defineProperty(navigator, 'share', {
+      value: async (datos: { text: string }) => { texto = datos.text; },
+      configurable: true,
+    });
+
+    try {
+      await shareTransactions([conFecha('1', 1000, 'CRC')], tEn);
+    } finally {
+      Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    }
+
+    expect(texto).toContain('1 transaction\n');
   });
 });

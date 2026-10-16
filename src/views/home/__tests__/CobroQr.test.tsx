@@ -374,3 +374,69 @@ describe('Pagar un QR — segundo factor en montos altos', () => {
     expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).not.toBe(mocks.scanAndPay.mock.calls[0][0].idempotencyKey);
   });
 });
+
+// Sin saldo, por encima de un tope o a un comercio no habilitado, el pago se
+// rechazaba con el texto del servidor tal cual ("qr payment transfer:
+// insufficient balance"), en ingles. Cada rechazo se dice ahora en el idioma
+// de la app, y uno que la pantalla no conoce cae al generico, nunca al texto
+// del servidor.
+describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
+  async function pagar(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '1000');
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+  }
+
+  it.each([
+    ['INSUFFICIENT_BALANCE', 'insufficient balance', 'Fondos insuficientes'],
+    ['DAILY_LIMIT_EXCEEDED', 'daily spending limit exceeded', 'Este pago supera tu límite diario.'],
+    ['MONTHLY_LIMIT_EXCEEDED', 'monthly spending limit exceeded', 'Este pago supera tu límite mensual.'],
+    ['MERCHANT_UNAVAILABLE', 'merchant is not available', 'Ese comercio no puede recibir pagos por ahora.'],
+    ['MERCHANT_NOT_FOUND', 'merchant not found', 'Ese código no existe o ya no es válido.'],
+    // El motor de riesgo, como cualquier codigo que la pantalla no conoce.
+    ['TRANSFER_BLOCKED', 'this transaction was blocked by the risk engine', 'No se pudo completar el pago'],
+    ['ALGO_NUEVO', 'qr payment transfer: something new', 'No se pudo completar el pago'],
+  ])('%s se dice en el idioma de la app, sin el texto del servidor', async (code, message, texto) => {
+    mocks.scanAndPay.mockResolvedValueOnce({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    pintar();
+
+    await pagar(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  // El 500: el servidor fallo y el pago pudo haber salido. Como sin red, la
+  // llave se CONSERVA (el reintento es el mismo pago) y se dice que no se pudo
+  // confirmar. Antes llegaba como un rechazo: la llave se soltaba y el
+  // reintento era un cobro nuevo.
+  it('PAYMENT_FAILED conserva el nonce y dice que el pago quedo sin confirmar', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'PAYMENT_FAILED', message: 'Hubo un problema en el servidor.' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await pagar(user);
+    expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
+    const primera = mocks.scanAndPay.mock.calls[0][0].idempotencyKey;
+    expect(primera).toBeTruthy();
+    expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).toBe(primera);
+  });
+
+  it('sin red tambien dice que el pago quedo sin confirmar', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await pagar(user);
+    expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
+  });
+});
