@@ -290,6 +290,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- bloqueo se relaja para 'closed', igual que alla.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymized_at    TIMESTAMPTZ;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel VARCHAR(16);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS biometric_public_key TEXT;
 	DO $$ BEGIN
 		ALTER TABLE users ADD CONSTRAINT chk_users_deletion_channel
 			CHECK (deletion_channel IS NULL OR deletion_channel IN ('in_app', 'web', 'admin'));
@@ -1388,6 +1389,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		UNIQUE (user_id, device_id)
 	);
+	-- Migracion 001: la sesion apunta al dispositivo desde el que se abrio (sin
+	-- ON DELETE, como alla). El CREATE de user_sessions de arriba no la traia.
+	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES user_devices(id);
 	CREATE TABLE IF NOT EXISTS linked_bank_accounts (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

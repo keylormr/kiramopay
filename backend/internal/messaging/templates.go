@@ -206,3 +206,57 @@ func securityNotice() string {
 		`KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.` +
 		`</td></tr></table>`
 }
+
+// DeletionCodeSMS es el cuerpo del codigo con que se comprueba que quien pide
+// eliminar una cuenta desde la pagina web controla el telefono registrado.
+// ASCII sin tildes, igual que los otros SMS (ver VerificationSMS).
+func DeletionCodeSMS(code string) string {
+	return fmt.Sprintf("KiramoPay: tu codigo para eliminar la cuenta es %s. Vence en 15 minutos. Si no lo pediste, ignora este mensaje.", code)
+}
+
+// DeletionCodeEmail arma el correo con el codigo para confirmar una solicitud de
+// eliminacion de cuenta hecha desde la pagina web.
+func DeletionCodeEmail(code string) (subject, textBody, htmlBody string) {
+	subject = "Confirmá que querés eliminar tu cuenta de KiramoPay"
+
+	var text strings.Builder
+	text.WriteString("Alguien pidió eliminar la cuenta de KiramoPay asociada a este correo.\n\n")
+	text.WriteString("Si fuiste vos, este es el código para confirmar la solicitud:\n")
+	text.WriteString(code + "\n\n")
+	text.WriteString("El código vence en 15 minutos y solo puede usarse una vez.\n")
+	text.WriteString("Si no fuiste vos, ignorá este mensaje: no se elimina nada sin este código.\n\n")
+	text.WriteString("KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.\n")
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph("Alguien pidió eliminar la cuenta de KiramoPay asociada a este correo. Si fuiste vos, usá este código para confirmar la solicitud:"))
+	body.WriteString(codeBlock(code))
+	body.WriteString(note("El código vence en <strong>15 minutos</strong> y solo puede usarse una vez. " +
+		"Si no fuiste vos, ignorá este mensaje: no se elimina nada sin este código."))
+	body.WriteString(securityNotice())
+
+	htmlBody = emailShell("Confirmá la eliminación de tu cuenta", "Tu código vence en 15 minutos.", body.String())
+	return subject, text.String(), htmlBody
+}
+
+// AccountDeletedEmail avisa que la cuenta fue eliminada. Es la unica pista que
+// recibe el dueno legitimo si la solicitud la hizo alguien con su sesion y su
+// contrasena, asi que dice que hacer en ese caso. No lleva datos de la cuenta:
+// el correo mismo es lo ultimo que se borra.
+func AccountDeletedEmail() (subject, textBody, htmlBody string) {
+	subject = "Tu cuenta de KiramoPay fue eliminada"
+
+	var text strings.Builder
+	text.WriteString("Tu cuenta de KiramoPay fue eliminada y ya no se puede usar.\n\n")
+	text.WriteString("Se borraron tus datos personales y de acceso. Los registros de movimientos de dinero se conservan sin tus datos de contacto, " +
+		"como se explica en la política de privacidad.\n\n")
+	text.WriteString("Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay.\n")
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph("Tu cuenta de KiramoPay fue eliminada y ya no se puede usar."))
+	body.WriteString(paragraph("Se borraron tus datos personales y de acceso. Los registros de movimientos de dinero se conservan " +
+		"sin tus datos de contacto, como se explica en la política de privacidad."))
+	body.WriteString(note("Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay."))
+
+	htmlBody = emailShell("Tu cuenta fue eliminada", "Tu cuenta de KiramoPay fue eliminada.", body.String())
+	return subject, text.String(), htmlBody
+}

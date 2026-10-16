@@ -340,13 +340,21 @@ func (h *Handler) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]int{"revoked": n})
 }
 
+// EndSession limpia la cookie de sesion y le pide al navegador que suelte los
+// datos del sitio. Es lo que hace Logout antes de revocar nada, y lo reusa la
+// eliminacion de cuenta: la persona acaba de cerrar la cuenta y su navegador no
+// debe conservar nada.
+func (h *Handler) EndSession(w http.ResponseWriter) {
+	h.cookies.clearRefreshCookie(w)
+	w.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
+	noStore(w)
+}
+
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Clear the session cookie and ask the browser to drop cached site data,
 	// regardless of the backend revocation outcome below — the client intends to
 	// be logged out.
-	h.cookies.clearRefreshCookie(w)
-	w.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
-	noStore(w)
+	h.EndSession(w)
 
 	jti := middleware.GetAccessJTI(r.Context())
 	exp := middleware.GetAccessExp(r.Context())
