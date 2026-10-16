@@ -29,7 +29,10 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
-vi.mock('@/services/dataSync', () => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/services/dataSync', () => ({
+  refreshAccounts: vi.fn(() => Promise.resolve()),
+  refreshTransactions: vi.fn(() => Promise.resolve()),
+}));
 
 function setup() {
   return render(

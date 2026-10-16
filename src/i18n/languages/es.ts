@@ -1758,6 +1758,11 @@ const es: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'Todavía no tenemos convenio con esta empresa, así que no podemos entregarle tu pago. No se cobró nada: tu saldo sigue igual.',
   recharge_no_agreement: 'Todavía no tenemos convenio con este operador, así que la recarga no llegaría al teléfono. No se cobró nada: tu saldo sigue igual.',
+  bill_err_sin_confirmar: 'No pudimos confirmar el pago. Si lo intentas de nuevo ahora con los mismos datos, no se cobrará dos veces. Si lo intentas más tarde, revisa antes tus transacciones.',
+  recharge_err_sin_confirmar: 'No pudimos confirmar la recarga. Si la intentas de nuevo ahora con los mismos datos, no se cobrará dos veces. Si la intentas más tarde, revisa antes tus transacciones.',
+  bill_ya_hecho: 'Ese pago ya se había hecho',
+  recharge_ya_hecho: 'Esa recarga ya se había hecho',
+  servicio_ya_hecho_desc: 'No se cobró otra vez. Si querías hacer otro igual, inténtalo de nuevo.',
   bill_invalid_amount: 'Ingresa un monto mayor a cero',
   ride_no_integration: 'Todavía no tenemos integración con esta aplicación de viajes, así que no podemos pagarle el viaje. No se cobró nada: tu saldo sigue igual.',
   order_no_integration: 'Todavía no tenemos integración con este servicio de pedidos, así que el pedido no llegaría al restaurante. No se cobró nada: tu saldo sigue igual.',

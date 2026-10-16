@@ -108,6 +108,17 @@ type CreateTransactionRequest struct {
 	// Lleva `json:"-"` por lo mismo que Internal.
 	EnLaMismaTx func(ctx context.Context, tx pgx.Tx, txID string) error `json:"-"`
 
+	// LlaveCubreLaDescripcion hace que la llave de idempotencia describa
+	// tambien la descripcion: bajo la misma llave, otra descripcion es otro
+	// movimiento (ErrLlaveReutilizada), no su reintento. Lo usan el recibo y la
+	// recarga, que dicen ahi a quien va el pago —el numero de cliente, el
+	// telefono— porque la fila no tiene otra columna para eso. Sin esto, la
+	// llave de un recibo pagado contestaba "ya estaba hecho" por el de otro
+	// cliente del mismo monto.
+	//
+	// Lleva `json:"-"` por lo mismo que Internal.
+	LlaveCubreLaDescripcion bool `json:"-"`
+
 	// contraparteID es a quien va la plata, para guardarlo en la fila. Lo
 	// ponen solo las transferencias y el retiro del negocio, de este paquete:
 	// sin exportar, ni un cliente ni otro modulo pueden escribirlo.
