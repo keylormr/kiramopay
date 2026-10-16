@@ -1114,6 +1114,8 @@ export type TranslationKeys = {
   savings_err_deposit: string;
   savings_withdraw_exceeds_saved: string;
   savings_err_withdraw: string;
+  savings_err_sin_confirmar: string;
+  savings_ya_hecho: string;
   savings_err_delete: string;
   savings_delete_title: string;
   savings_delete_warning: string;

@@ -2259,6 +2259,126 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlanLimitError'
 
+  /api/v1/savings/goals/{id}/deposit:
+    post:
+      tags: [Savings]
+      summary: Move money from the wallet into a goal
+      description: >-
+        Send an Idempotency-Key and keep it while the outcome is unknown (no
+        answer, a dropped connection): a retry with the same key never moves
+        the money twice and answers with the goal as it stands and `replayed:
+        true`. Without a key, every request is a new movement.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor:
+                  type: integer
+                  format: int64
+                  description: Minor units, greater than zero, in the goal's currency.
+      responses:
+        '200':
+          description: The goal as it stands after the movement
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SavingsGoal'
+                  - type: object
+                    properties:
+                      replayed:
+                        type: boolean
+                        description: >-
+                          Present and true when the key had already made this
+                          movement: nothing moved in this request.
+        '400':
+          description: >-
+            SAVINGS_FAILED: not enough balance in the wallet, an amount that is not greater than zero, or a
+            goal that is not the caller's. Today a failure of the server answers
+            the same way; the client must not show `error.message`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/savings/goals/{id}/withdraw:
+    post:
+      tags: [Savings]
+      summary: Move money from a goal back to the wallet
+      description: >-
+        Send an Idempotency-Key and keep it while the outcome is unknown (no
+        answer, a dropped connection): a retry with the same key never moves
+        the money twice and answers with the goal as it stands and `replayed:
+        true`. Without a key, every request is a new movement.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor:
+                  type: integer
+                  format: int64
+                  description: Minor units, greater than zero, in the goal's currency.
+      responses:
+        '200':
+          description: The goal as it stands after the movement
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SavingsGoal'
+                  - type: object
+                    properties:
+                      replayed:
+                        type: boolean
+                        description: >-
+                          Present and true when the key had already made this
+                          movement: nothing moved in this request.
+        '400':
+          description: >-
+            SAVINGS_FAILED: more than the goal holds, an amount that is not greater than zero, or a
+            goal that is not the caller's. Today a failure of the server answers
+            the same way; the client must not show `error.message`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ── Budgets ────────────────────────────────────────────────────────────
   /api/v1/budgets:
     get:

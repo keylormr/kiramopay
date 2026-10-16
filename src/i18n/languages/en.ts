@@ -973,6 +973,8 @@ const en: TranslationKeys = {
   savings_err_deposit: 'The deposit did not go through. Your money is still in your wallet.',
   savings_withdraw_exceeds_saved: 'That amount is more than you have saved in this goal.',
   savings_err_withdraw: 'The withdrawal did not go through. Your money is still in the goal.',
+  savings_err_sin_confirmar: "We couldn't confirm the transfer. If you try again now with the same amount, it won't happen twice. If you try later, check your goal first.",
+  savings_ya_hecho: "That transfer had already been made. It wasn't made again; if you wanted another one like it, try again.",
   savings_err_delete: 'The goal could not be deleted. Try again.',
   savings_delete_title: 'Delete goal',
   savings_delete_warning: 'You are about to delete “{name}”. This cannot be undone.',
