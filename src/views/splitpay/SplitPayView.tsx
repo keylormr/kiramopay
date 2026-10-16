@@ -456,7 +456,13 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]'}`}>
                     <div className="min-w-0">
                       <p className="text-sm font-bold uv-text-primary truncate">
-                        {esMia ? t('splitpay_your_share') : (cuota.userName || cuota.userPhone)}
+                        {esMia
+                          ? t('splitpay_your_share')
+                          // La de quien creo la division llegaba sin nombre ni
+                          // telefono y la fila salia en blanco. El servidor ya
+                          // manda el nombre; si aun asi falta, dice quien es.
+                          : cuota.userName || cuota.userPhone ||
+                            (cuota.userId === detalle.group.creatorId ? t('splitpay_creator_share') : '')}
                       </p>
                       <p className="text-[11px] text-gray-400">
                         {cuota.status === 'paid' ? t('splitpay_share_paid')

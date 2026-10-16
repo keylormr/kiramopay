@@ -1094,6 +1094,7 @@ const zhCn: TranslationKeys = {
   splitpay_phone_hint: '每位参与者都需要手机号：分账只能向 KiramoPay 账户收款。',
   splitpay_pay_share: '支付我的部分',
   splitpay_your_share: '你的部分',
+  splitpay_creator_share: '分账发起人',
   splitpay_share_paid: '已支付',
   splitpay_share_pending: '待支付',
   splitpay_share_declined: '已拒绝',

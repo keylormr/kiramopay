@@ -1102,6 +1102,7 @@ const pt: TranslationKeys = {
   splitpay_phone_hint: 'Cada participante precisa do seu número: uma divisão só pode ser cobrada de contas KiramoPay.',
   splitpay_pay_share: 'Pagar minha parte',
   splitpay_your_share: 'Sua parte',
+  splitpay_creator_share: 'Quem criou a divisão',
   splitpay_share_paid: 'Paga',
   splitpay_share_pending: 'Pendente',
   splitpay_share_declined: 'Recusada',

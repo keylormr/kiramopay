@@ -1093,6 +1093,7 @@ const hi: TranslationKeys = {
   splitpay_phone_hint: 'हर सहभागी का नंबर चाहिए: बिल बांटने का शुल्क केवल KiramoPay खातों से लिया जा सकता है।',
   splitpay_pay_share: 'मेरा हिस्सा भरें',
   splitpay_your_share: 'आपका हिस्सा',
+  splitpay_creator_share: 'बंटवारा बनाने वाले',
   splitpay_share_paid: 'भुगतान हो गया',
   splitpay_share_pending: 'बाकी',
   splitpay_share_declined: 'अस्वीकृत',

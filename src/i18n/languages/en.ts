@@ -1101,6 +1101,7 @@ const en: TranslationKeys = {
   splitpay_phone_hint: 'Every participant needs their number: a split can only be charged to KiramoPay accounts.',
   splitpay_pay_share: 'Pay my share',
   splitpay_your_share: 'Your share',
+  splitpay_creator_share: 'Who created the split',
   splitpay_share_paid: 'Paid',
   splitpay_share_pending: 'Pending',
   splitpay_share_declined: 'Declined',

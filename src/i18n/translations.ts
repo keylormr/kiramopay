@@ -1244,6 +1244,7 @@ export type TranslationKeys = {
   splitpay_phone_hint: string;
   splitpay_pay_share: string;
   splitpay_your_share: string;
+  splitpay_creator_share: string;
   splitpay_share_paid: string;
   splitpay_share_pending: string;
   splitpay_share_declined: string;
