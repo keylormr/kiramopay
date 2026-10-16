@@ -11,10 +11,10 @@ const hasBackend = !!import.meta.env.VITE_API_URL;
 
 // Live food-order tracker steps (status -> step index).
 const FOOD_STEPS = [
-  { key: 'preparing', label: 'Preparando', icon: '👨‍🍳' },
-  { key: 'ready', label: 'Listo', icon: '🍽️' },
-  { key: 'on_the_way', label: 'En camino', icon: '🛵' },
-  { key: 'delivered', label: 'Entregado', icon: '🎉' },
+  { key: 'preparing', labelKey: 'market_food_step_preparing', icon: '👨‍🍳' },
+  { key: 'ready', labelKey: 'market_food_step_ready', icon: '🍽️' },
+  { key: 'on_the_way', labelKey: 'market_food_step_on_the_way', icon: '🛵' },
+  { key: 'delivered', labelKey: 'market_food_step_delivered', icon: '🎉' },
 ] as const;
 const FOOD_STATUS_INDEX: Record<string, number> = {
   preparing: 0,
@@ -26,10 +26,10 @@ const FOOD_STATUS_INDEX: Record<string, number> = {
 
 // Live ride tracker steps (status -> step index).
 const RIDE_STEPS = [
-  { key: 'confirmed', label: 'Confirmado', icon: '✅' },
-  { key: 'arriving', label: 'En camino a ti', icon: '🚗' },
-  { key: 'in_progress', label: 'Viaje en curso', icon: '🛣️' },
-  { key: 'completed', label: 'Llegaste', icon: '🎉' },
+  { key: 'confirmed', labelKey: 'market_ride_step_confirmed', icon: '✅' },
+  { key: 'arriving', labelKey: 'market_ride_step_arriving', icon: '🚗' },
+  { key: 'in_progress', labelKey: 'market_ride_step_in_progress', icon: '🛣️' },
+  { key: 'completed', labelKey: 'market_ride_step_completed', icon: '🎉' },
 ] as const;
 const RIDE_STATUS_INDEX: Record<string, number> = {
   confirmed: 0,
@@ -40,7 +40,8 @@ const RIDE_STATUS_INDEX: Record<string, number> = {
   cancelled: -1,
 };
 
-// Partners del marketplace
+// Partners del marketplace. La descripcion se guarda como clave de traduccion:
+// la pantalla la traduce al pintar, asi que sigue al idioma de la app.
 const MARKETPLACE_PARTNERS = {
   transport: [
     {
@@ -48,7 +49,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Uber',
       logo: '🚗',
       color: 'from-black to-gray-800',
-      description: 'Viajes seguros y confiables',
+      descriptionKey: 'market_desc_uber',
       category: 'transport' as const,
     },
     {
@@ -56,7 +57,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'DiDi',
       logo: '🟠',
       color: 'from-orange-500 to-orange-600',
-      description: 'Tu viaje, tu precio',
+      descriptionKey: 'market_desc_didi',
       category: 'transport' as const,
     },
     {
@@ -64,7 +65,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'InDriver',
       logo: '🟢',
       color: 'from-green-500 to-green-600',
-      description: 'Negocia tu tarifa',
+      descriptionKey: 'market_desc_indriver',
       category: 'transport' as const,
     },
   ],
@@ -74,7 +75,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Uber Eats',
       logo: '🍔',
       color: 'from-green-600 to-green-700',
-      description: 'Tu comida favorita a domicilio',
+      descriptionKey: 'market_desc_ubereats',
       category: 'food' as const,
     },
     {
@@ -82,7 +83,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'PedidosYa',
       logo: '🛵',
       color: 'from-red-500 to-red-600',
-      description: 'Pide lo que quieras',
+      descriptionKey: 'market_desc_pedidosya',
       category: 'food' as const,
     },
     {
@@ -90,7 +91,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Rappi',
       logo: '📦',
       color: 'from-orange-500 to-red-500',
-      description: 'Todo a tu puerta',
+      descriptionKey: 'market_desc_rappi',
       category: 'food' as const,
     },
   ],
@@ -100,7 +101,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Auto Mercado',
       logo: '🛒',
       color: 'from-red-600 to-red-700',
-      description: 'Supermercado premium',
+      descriptionKey: 'market_desc_automercado',
       category: 'supermarket' as const,
     },
     {
@@ -108,7 +109,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Walmart',
       logo: '🏪',
       color: 'from-blue-600 to-blue-700',
-      description: 'Precios bajos siempre',
+      descriptionKey: 'market_desc_walmart',
       category: 'supermarket' as const,
     },
     {
@@ -116,7 +117,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Mas x Menos',
       logo: '🛍️',
       color: 'from-yellow-500 to-yellow-600',
-      description: 'Tu súper de confianza',
+      descriptionKey: 'market_desc_masxmenos',
       category: 'supermarket' as const,
     },
     {
@@ -124,7 +125,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'PriceSmart',
       logo: '📦',
       color: 'from-blue-700 to-blue-800',
-      description: 'Compras al mayoreo',
+      descriptionKey: 'market_desc_pricesmart',
       category: 'supermarket' as const,
     },
   ],
@@ -134,7 +135,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Cinemark',
       logo: '🎬',
       color: 'from-purple-600 to-purple-700',
-      description: 'La mejor experiencia de cine',
+      descriptionKey: 'market_desc_cinemark',
       category: 'entertainment' as const,
     },
     {
@@ -142,7 +143,7 @@ const MARKETPLACE_PARTNERS = {
       name: 'Nova Cinemas',
       logo: '🍿',
       color: 'from-red-600 to-pink-600',
-      description: 'Cine de calidad',
+      descriptionKey: 'market_desc_novacinemas',
       category: 'entertainment' as const,
     },
   ],
@@ -150,13 +151,25 @@ const MARKETPLACE_PARTNERS = {
 
 // Restaurantes para demo de Uber Eats. Sin costo de envio: el que se cobra lo
 // fija el servidor al crear el pedido, y la tabla local decia otro numero.
+// El rango de minutos va sin unidad: la pantalla le pone "min" en el idioma de
+// la app (market_minutes).
 const DEMO_RESTAURANTS = [
-  { id: '1', name: 'McDonalds', logo: '🍟', rating: 4.5, time: '15-25 min' },
-  { id: '2', name: 'Taco Bell', logo: '🌮', rating: 4.3, time: '20-30 min' },
-  { id: '3', name: 'Pizza Hut', logo: '🍕', rating: 4.4, time: '25-35 min' },
-  { id: '4', name: 'KFC', logo: '🍗', rating: 4.2, time: '20-30 min' },
-  { id: '5', name: 'Subway', logo: '🥪', rating: 4.6, time: '15-20 min' },
-  { id: '6', name: 'Sushi Express', logo: '🍱', rating: 4.7, time: '30-40 min' },
+  { id: '1', name: 'McDonalds', logo: '🍟', rating: 4.5, minutes: '15-25' },
+  { id: '2', name: 'Taco Bell', logo: '🌮', rating: 4.3, minutes: '20-30' },
+  { id: '3', name: 'Pizza Hut', logo: '🍕', rating: 4.4, minutes: '25-35' },
+  { id: '4', name: 'KFC', logo: '🍗', rating: 4.2, minutes: '20-30' },
+  { id: '5', name: 'Subway', logo: '🥪', rating: 4.6, minutes: '15-20' },
+  { id: '6', name: 'Sushi Express', logo: '🍱', rating: 4.7, minutes: '30-40' },
+];
+
+// Menu de demostracion. Los combos son nombres propios del restaurante y se
+// quedan como estan; el resto lleva la clave de su nombre.
+const DEMO_MENU: { id: string; name?: string; nameKey?: string; price: number }[] = [
+  { id: 'combo-1', name: 'Combo 1', price: 4500 },
+  { id: 'combo-2', name: 'Combo 2', price: 5500 },
+  { id: 'combo-3', name: 'Combo 3', price: 6500 },
+  { id: 'papas', nameKey: 'market_item_fries', price: 2000 },
+  { id: 'bebida', nameKey: 'market_item_drink', price: 1200 },
 ];
 
 // El servidor niega el cobro con este codigo cuando no hay integracion con el
@@ -192,7 +205,7 @@ export const MarketplaceView: React.FC = () => {
     name: string;
     logo: string;
     color: string;
-    description: string;
+    descriptionKey: string;
     category: 'transport' | 'food' | 'supermarket' | 'entertainment';
   } | null>(null);
 
@@ -282,6 +295,9 @@ export const MarketplaceView: React.FC = () => {
     };
   }, [rideStep, activeRide?.id]);
 
+  // "9 min" en el idioma de la app. Acepta un rango ya armado ("15-25").
+  const minutosEn = (minutos: number | string) => t('market_minutes').replace('{n}', String(minutos));
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
   };
@@ -364,7 +380,7 @@ export const MarketplaceView: React.FC = () => {
       }
       setActiveRide(res.data); // status confirmed; the tracker polls from here
       if (hasBackend) refreshAccounts().catch(() => {});
-      else localDebit(res.data.estimatedPrice, `${selectedPartner?.name || 'Viaje'}`);
+      else localDebit(res.data.estimatedPrice, `${selectedPartner?.name || t('market_trip_label')}`);
       setRideStep('tracking');
     } finally {
       setIsConfirmingRide(false);
@@ -431,7 +447,7 @@ export const MarketplaceView: React.FC = () => {
     name: string;
     logo: string;
     color: string;
-    description: string;
+    descriptionKey: string;
     category: 'transport' | 'food' | 'supermarket' | 'entertainment';
   }> = [
     ...MARKETPLACE_PARTNERS.transport,
@@ -451,6 +467,14 @@ export const MarketplaceView: React.FC = () => {
     { id: 'supermarket', label: t('market_cat_supermarket'), icon: '🛒' },
     { id: 'entertainment', label: t('market_cat_entertainment'), icon: '🎬' },
   ];
+
+  // El nombre que se muestra es el mismo que va al carrito y al pedido, ya en
+  // el idioma de la app.
+  const menu = DEMO_MENU.map((plato) => ({
+    id: plato.id,
+    name: plato.nameKey ? t(plato.nameKey) : (plato.name ?? ''),
+    price: plato.price,
+  }));
 
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
@@ -531,7 +555,7 @@ export const MarketplaceView: React.FC = () => {
                 {partner.logo}
               </div>
               <p className="font-bold uv-text-primary">{partner.name}</p>
-              <p className="text-xs text-gray-500 mt-1">{partner.description}</p>
+              <p className="text-xs text-gray-500 mt-1">{t(partner.descriptionKey)}</p>
             </button>
           ))}
         </div>
@@ -551,13 +575,13 @@ export const MarketplaceView: React.FC = () => {
             <h2 className="text-2xl font-black uv-text-primary mb-2">
               {selectedPartner.name}
             </h2>
-            <p className="text-gray-500 mb-6">{selectedPartner.description}</p>
+            <p className="text-gray-500 mb-6">{t(selectedPartner.descriptionKey)}</p>
 
             {isConnected(selectedPartner.id) ? (
               <div className="space-y-3">
                 <div className="bg-green-100 dark:bg-green-900/30 text-green-600 px-4 py-3 rounded-xl flex items-center justify-center gap-2">
                   <Icons.Check size={18} />
-                  <span className="font-bold">Cuenta conectada</span>
+                  <span className="font-bold">{t('market_account_connected')}</span>
                 </div>
                 <button
                   onClick={() => {
@@ -571,33 +595,33 @@ export const MarketplaceView: React.FC = () => {
                   }}
                   className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
                 >
-                  Usar {selectedPartner.name}
+                  {t('market_use_partner').replace('{name}', selectedPartner.name)}
                 </button>
                 <button
                   onClick={() => dispatch({ type: 'DISCONNECT_PARTNER', payload: selectedPartner.id })}
                   className="w-full text-red-500 py-3 font-medium"
                 >
-                  Desconectar cuenta
+                  {t('market_disconnect_account')}
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="uv-surface-2 rounded-xl p-4 text-left">
                   <h4 className="font-bold uv-text-primary mb-2">
-                    Al conectar podrás:
+                    {t('market_connect_benefits_title')}
                   </h4>
                   <ul className="space-y-2 text-sm uv-text-secondary">
                     <li className="flex items-center gap-2">
                       <Icons.Check size={16} className="text-green-500" />
-                      Pagar directamente con KiramoPay
+                      {t('market_benefit_pay')}
                     </li>
                     <li className="flex items-center gap-2">
                       <Icons.Check size={16} className="text-green-500" />
-                      Ver historial de transacciones
+                      {t('market_benefit_history')}
                     </li>
                     <li className="flex items-center gap-2">
                       <Icons.Check size={16} className="text-green-500" />
-                      Recibir cashback exclusivo
+                      {t('market_benefit_cashback')}
                     </li>
                   </ul>
                 </div>
@@ -617,7 +641,7 @@ export const MarketplaceView: React.FC = () => {
                   }}
                   className="w-full bg-gradient-to-r from-primary to-accent text-white py-4 rounded-xl font-bold text-lg shadow-lg"
                 >
-                  Conectar {selectedPartner.name}
+                  {t('market_connect_partner').replace('{name}', selectedPartner.name)}
                 </button>
               </div>
             )}
@@ -629,7 +653,7 @@ export const MarketplaceView: React.FC = () => {
       <BottomSheet
         isOpen={showRideSheet}
         onClose={closeRideSheet}
-        title={selectedPartner?.name || 'Pedir viaje'}
+        title={selectedPartner?.name || t('market_request_ride_title')}
       >
         <div className="space-y-6">
           {rideStep === 'location' && (
@@ -641,7 +665,7 @@ export const MarketplaceView: React.FC = () => {
                     type="text"
                     value={pickup}
                     onChange={(e) => setPickup(e.target.value)}
-                    placeholder="¿Dónde te recogemos?"
+                    placeholder={t('market_pickup_placeholder')}
                     className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-10 pr-4 py-4 rounded-xl outline-none uv-text-primary"
                   />
                 </div>
@@ -651,7 +675,7 @@ export const MarketplaceView: React.FC = () => {
                     type="text"
                     value={destination}
                     onChange={(e) => setDestination(e.target.value)}
-                    placeholder="¿A dónde vas?"
+                    placeholder={t('market_destination_placeholder')}
                     className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-10 pr-4 py-4 rounded-xl outline-none uv-text-primary"
                   />
                 </div>
@@ -660,11 +684,11 @@ export const MarketplaceView: React.FC = () => {
               {/* Quick locations */}
               <div className="space-y-2">
                 <button
-                  onClick={() => setPickup('Mi ubicación actual')}
+                  onClick={() => setPickup(t('market_my_location'))}
                   className="w-full flex items-center gap-3 p-3 uv-surface-2 rounded-xl"
                 >
                   <Icons.MapPin size={18} className="text-[var(--color-primary)]" />
-                  <span className="uv-text-primary">Mi ubicación actual</span>
+                  <span className="uv-text-primary">{t('market_my_location')}</span>
                 </button>
                 <button
                   onClick={() => setDestination('Escazú, San José')}
@@ -691,7 +715,7 @@ export const MarketplaceView: React.FC = () => {
                 disabled={!pickup || !destination}
                 className={`w-full py-4 rounded-xl font-bold text-lg text-white disabled:opacity-50 bg-gradient-to-r ${selectedPartner?.color || 'from-primary to-accent'}`}
               >
-                Pedir {selectedPartner?.name}
+                {t('market_request_partner').replace('{name}', selectedPartner?.name ?? '')}
               </button>
             </>
           )}
@@ -703,9 +727,9 @@ export const MarketplaceView: React.FC = () => {
                 <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
               </div>
               <h3 className="text-xl font-bold uv-text-primary mb-2">
-                Buscando conductor...
+                {t('market_searching_driver')}
               </h3>
-              <p className="uv-text-muted">Esto puede tomar unos segundos</p>
+              <p className="uv-text-muted">{t('market_searching_driver_hint')}</p>
             </div>
           )}
 
@@ -714,7 +738,7 @@ export const MarketplaceView: React.FC = () => {
           {rideStep === 'found' && activeRide && (
             <div className="space-y-4">
               <div className="bg-green-100 dark:bg-green-900/30 text-green-600 px-4 py-3 rounded-xl text-center font-bold">
-                ¡Conductor encontrado!
+                {t('market_driver_found')}
               </div>
 
               {activeRide.driver && (
@@ -738,14 +762,14 @@ export const MarketplaceView: React.FC = () => {
 
               <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="uv-text-muted">Total a pagar</span>
+                  <span className="uv-text-muted">{t('market_total_to_pay')}</span>
                   <span className="font-black text-xl uv-text-primary">
                     {formatCurrency(activeRide.estimatedPrice)}
                   </span>
                 </div>
                 {activeRide.estimatedTime && (
                   <div className="flex justify-between text-sm">
-                    <span className="uv-text-muted">Tiempo estimado</span>
+                    <span className="uv-text-muted">{t('market_estimated_time')}</span>
                     <span className="font-bold uv-text-primary">{activeRide.estimatedTime}</span>
                   </div>
                 )}
@@ -764,7 +788,7 @@ export const MarketplaceView: React.FC = () => {
                     {t('processing')}
                   </>
                 ) : (
-                  'Confirmar viaje'
+                  t('market_confirm_ride')
                 )}
               </button>
             </div>
@@ -775,10 +799,10 @@ export const MarketplaceView: React.FC = () => {
               <div className="text-center">
                 <h3 className="text-xl font-bold uv-text-primary mb-1">
                   {activeRide?.status === 'completed'
-                    ? '¡Llegaste a tu destino!'
+                    ? t('market_ride_arrived')
                     : activeRide?.status === 'in_progress'
-                      ? 'Viaje en curso'
-                      : 'Tu conductor viene en camino'}
+                      ? t('market_ride_step_in_progress')
+                      : t('market_ride_driver_coming')}
                 </h3>
                 <p className="uv-text-muted">{activeRide?.destination}</p>
               </div>
@@ -786,10 +810,10 @@ export const MarketplaceView: React.FC = () => {
               {activeRide?.status !== 'completed' && (
                 <div className="uv-surface-2 rounded-xl p-4 text-center">
                   <p className="text-sm text-gray-500 mb-1">
-                    {activeRide?.status === 'in_progress' ? 'Llegas en' : 'Tu conductor llega en'}
+                    {activeRide?.status === 'in_progress' ? t('market_ride_arrives_in') : t('market_ride_driver_arrives_in')}
                   </p>
                   <p className="text-3xl font-black uv-text-primary">
-                    {(activeRide?.minutesRemaining ?? 0) > 0 ? `${activeRide?.minutesRemaining} min` : 'Muy pronto'}
+                    {(activeRide?.minutesRemaining ?? 0) > 0 ? minutosEn(activeRide?.minutesRemaining ?? 0) : t('market_very_soon')}
                   </p>
                 </div>
               )}
@@ -812,7 +836,7 @@ export const MarketplaceView: React.FC = () => {
                         {done ? <Icons.Check size={18} /> : step.icon}
                       </div>
                       <span className={`font-medium ${done ? 'uv-text-primary' : 'uv-text-muted'}`}>
-                        {step.label}
+                        {t(step.labelKey)}
                       </span>
                     </div>
                   );
@@ -843,7 +867,7 @@ export const MarketplaceView: React.FC = () => {
                 onClick={closeRideSheet}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
-                {activeRide?.status === 'completed' ? 'Listo' : 'Seguir en segundo plano'}
+                {activeRide?.status === 'completed' ? t('done') : t('market_keep_in_background')}
               </button>
             </div>
           )}
@@ -854,7 +878,7 @@ export const MarketplaceView: React.FC = () => {
       <BottomSheet
         isOpen={showFoodSheet}
         onClose={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); setOrderAviso(null); }}
-        title={selectedPartner?.name || 'Pedir comida'}
+        title={selectedPartner?.name || t('market_order_food_title')}
       >
         <div className="space-y-4 -mx-2">
           {orderStep === 'menu' && !selectedRestaurant && (
@@ -862,7 +886,7 @@ export const MarketplaceView: React.FC = () => {
               <div className="px-2">
                 <input
                   type="text"
-                  placeholder="Buscar restaurantes..."
+                  placeholder={t('market_search_restaurants')}
                   className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-4 py-3 rounded-xl outline-none"
                 />
               </div>
@@ -885,7 +909,7 @@ export const MarketplaceView: React.FC = () => {
                           {rest.rating}
                         </span>
                         <span>•</span>
-                        <span>{rest.time}</span>
+                        <span>{minutosEn(rest.minutes)}</span>
                       </div>
                     </div>
                     <Icons.ChevronRight size={18} className="uv-text-muted" />
@@ -903,7 +927,7 @@ export const MarketplaceView: React.FC = () => {
                   className="flex items-center gap-2 text-gray-500 mb-4"
                 >
                   <Icons.ChevronLeft size={18} />
-                  Volver
+                  {t('back')}
                 </button>
 
                 <div className="flex items-center gap-4 mb-6">
@@ -914,21 +938,15 @@ export const MarketplaceView: React.FC = () => {
                     <h3 className="text-xl font-bold uv-text-primary">
                       {selectedRestaurant.name}
                     </h3>
-                    <p className="text-sm text-gray-500">{selectedRestaurant.time}</p>
+                    <p className="text-sm text-gray-500">{minutosEn(selectedRestaurant.minutes)}</p>
                   </div>
                 </div>
 
-                <h4 className="font-bold uv-text-primary mb-3">Menú</h4>
+                <h4 className="font-bold uv-text-primary mb-3">{t('market_menu')}</h4>
                 <div className="space-y-2">
-                  {[
-                    { name: 'Combo 1', price: 4500 },
-                    { name: 'Combo 2', price: 5500 },
-                    { name: 'Combo 3', price: 6500 },
-                    { name: 'Papas Grandes', price: 2000 },
-                    { name: 'Bebida', price: 1200 },
-                  ].map((item) => (
+                  {menu.map((item) => (
                     <div
-                      key={item.name}
+                      key={item.id}
                       className="flex items-center justify-between uv-surface-2 p-4 rounded-xl"
                     >
                       <div>
@@ -936,7 +954,7 @@ export const MarketplaceView: React.FC = () => {
                         <p className="text-sm text-gray-500">{formatCurrency(item.price)}</p>
                       </div>
                       <button
-                        onClick={() => addToCart(item)}
+                        onClick={() => addToCart({ name: item.name, price: item.price })}
                         className="w-8 h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-full flex items-center justify-center"
                       >
                         <Icons.Plus size={16} />
@@ -952,7 +970,7 @@ export const MarketplaceView: React.FC = () => {
                     onClick={() => setOrderStep('cart')}
                     className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-between px-4"
                   >
-                    <span>Ver carrito ({cartItems.reduce((a, i) => a + i.qty, 0)})</span>
+                    <span>{t('market_view_cart').replace('{n}', String(cartItems.reduce((a, i) => a + i.qty, 0)))}</span>
                     <span>{formatCurrency(cartTotal)}</span>
                   </button>
                 </div>
@@ -962,7 +980,7 @@ export const MarketplaceView: React.FC = () => {
 
           {orderStep === 'cart' && (
             <div className="px-2 space-y-4">
-              <h3 className="text-xl font-bold uv-text-primary">Tu pedido</h3>
+              <h3 className="text-xl font-bold uv-text-primary">{t('market_your_order')}</h3>
 
               <div className="space-y-2">
                 {cartItems.map((item) => (
@@ -981,7 +999,7 @@ export const MarketplaceView: React.FC = () => {
                   coincidia con lo que se debitaba. */}
               <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="uv-text-muted">Subtotal</span>
+                  <span className="uv-text-muted">{t('market_subtotal')}</span>
                   <span className="font-bold uv-text-primary">{formatCurrency(cartTotal)}</span>
                 </div>
                 <p className="uv-text-muted text-sm pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
@@ -1002,7 +1020,7 @@ export const MarketplaceView: React.FC = () => {
                     {t('processing')}
                   </>
                 ) : (
-                  'Pagar con KiramoPay'
+                  t('market_pay_with_kiramopay')
                 )}
               </button>
             </div>
@@ -1012,16 +1030,16 @@ export const MarketplaceView: React.FC = () => {
             <div className="px-2 py-2 space-y-5">
               <div className="text-center">
                 <h3 className="text-xl font-bold uv-text-primary mb-1">
-                  {activeOrder?.status === 'delivered' ? '¡Pedido entregado!' : 'Pedido en curso'}
+                  {activeOrder?.status === 'delivered' ? t('market_order_delivered') : t('market_order_in_progress')}
                 </h3>
                 <p className="uv-text-muted">{selectedRestaurant?.name}</p>
               </div>
 
               {activeOrder?.status !== 'delivered' && (
                 <div className="uv-surface-2 rounded-xl p-4 text-center">
-                  <p className="text-sm text-gray-500 mb-1">Llega en</p>
+                  <p className="text-sm text-gray-500 mb-1">{t('market_order_arrives_in')}</p>
                   <p className="text-3xl font-black uv-text-primary">
-                    {(activeOrder?.minutesRemaining ?? 0) > 0 ? `${activeOrder?.minutesRemaining} min` : 'Casi listo'}
+                    {(activeOrder?.minutesRemaining ?? 0) > 0 ? minutosEn(activeOrder?.minutesRemaining ?? 0) : t('market_almost_ready')}
                   </p>
                 </div>
               )}
@@ -1044,7 +1062,7 @@ export const MarketplaceView: React.FC = () => {
                         {done ? <Icons.Check size={18} /> : step.icon}
                       </div>
                       <span className={`font-medium ${done ? 'uv-text-primary' : 'uv-text-muted'}`}>
-                        {step.label}
+                        {t(step.labelKey)}
                       </span>
                     </div>
                   );
@@ -1056,15 +1074,15 @@ export const MarketplaceView: React.FC = () => {
               {activeOrder && (
                 <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="uv-text-muted">Subtotal</span>
+                    <span className="uv-text-muted">{t('market_subtotal')}</span>
                     <span className="font-bold uv-text-primary">{formatCurrency(activeOrder.subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="uv-text-muted">Envío</span>
+                    <span className="uv-text-muted">{t('market_delivery')}</span>
                     <span className="font-bold uv-text-primary">{formatCurrency(activeOrder.deliveryFee)}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                    <span className="font-bold uv-text-primary">Total cobrado</span>
+                    <span className="font-bold uv-text-primary">{t('market_total_charged')}</span>
                     <span className="font-black text-xl uv-text-primary">{formatCurrency(activeOrder.total)}</span>
                   </div>
                 </div>
@@ -1078,7 +1096,7 @@ export const MarketplaceView: React.FC = () => {
                   </div>
                   <div className="flex-1">
                     <p className="font-bold uv-text-primary">{activeOrder.courier.name}</p>
-                    <p className="text-sm text-gray-500">Tu repartidor</p>
+                    <p className="text-sm text-gray-500">{t('market_your_courier')}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold uv-text-primary">{activeOrder.courier.vehicle}</p>
@@ -1091,7 +1109,7 @@ export const MarketplaceView: React.FC = () => {
                 onClick={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); setOrderAviso(null); }}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
-                {activeOrder?.status === 'delivered' ? 'Listo' : 'Seguir en segundo plano'}
+                {activeOrder?.status === 'delivered' ? t('done') : t('market_keep_in_background')}
               </button>
             </div>
           )}

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   dispatch: vi.fn(),
+  conectados: ['uber', 'ubereats'] as string[],
 }));
 
 vi.mock('@/api', () => ({ getApiLayer: () => mocks.api }));
@@ -24,7 +25,7 @@ vi.mock('@/hooks/useApp', () => ({
     state: {
       accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
       baseCurrency: 'CRC',
-      connectedPartners: ['uber', 'ubereats'],
+      connectedPartners: mocks.conectados,
     },
     dispatch: mocks.dispatch,
   }),
@@ -74,6 +75,7 @@ beforeEach(() => {
   localStorage.setItem('kiramopay_language', 'es');
   for (const fn of Object.values(mocks.api.marketplace)) fn.mockReset();
   mocks.dispatch.mockReset();
+  mocks.conectados = ['uber', 'ubereats'];
   mocks.api.marketplace.getRide.mockResolvedValue({ success: false });
   mocks.api.marketplace.getFoodOrder.mockResolvedValue({ success: false });
 });
@@ -248,5 +250,350 @@ describe('MarketplaceView — idioma', () => {
     // El titulo de la seccion sigue al filtro elegido, en el mismo idioma.
     await user.click(screen.getByRole('button', { name: /Groceries/ }));
     expect(screen.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+  });
+});
+
+// Los pasos del seguimiento, las descripciones de los socios, los textos de
+// las hojas de viaje y de pedido, los marcadores y los botones estaban escritos
+// en espanol dentro de la pantalla: con la app en ingles se leia "Preparando",
+// "¿A dónde vas?" o "Pagar con KiramoPay".
+describe('MarketplaceView — viajes y pedidos en el idioma de la app', () => {
+  const EN_CAMINO = { ...VIAJE, status: 'confirmed', minutesRemaining: 9 };
+  const PEDIDO = {
+    id: 'o1',
+    partnerId: 'ubereats',
+    restaurantName: 'McDonalds',
+    items: [{ name: 'Combo 1', quantity: 1, price: 4500 }],
+    subtotal: 4500,
+    deliveryFee: 1500,
+    total: 6000,
+    status: 'preparing',
+    estimatedDelivery: '30 min',
+    minutesRemaining: 30,
+  };
+
+  beforeEach(() => {
+    localStorage.setItem('kiramopay_language', 'en');
+  });
+
+  /** Ninguno de estos textos fijos en espanol puede quedar en pantalla. */
+  function sinTextos(...textos: Array<string | RegExp>) {
+    for (const texto of textos) {
+      expect(screen.queryByText(texto)).not.toBeInTheDocument();
+    }
+  }
+
+  /** Espera a que el idioma cargue y abre la hoja de viaje de Uber. */
+  async function abrirViaje(user: ReturnType<typeof userEvent.setup>) {
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Uber')[0]);
+    await screen.findByPlaceholderText('Where should we pick you up?');
+  }
+
+  /** Abre el viaje y escribe origen y destino, con la app en ingles. */
+  async function escribirViaje(user: ReturnType<typeof userEvent.setup>) {
+    await abrirViaje(user);
+    await user.type(screen.getByPlaceholderText('Where should we pick you up?'), 'Paraíso');
+    await user.type(screen.getByPlaceholderText('Where are you going?'), 'Cartago');
+  }
+
+  /** Llega a la pantalla del viaje cotizado: pide y espera al conductor. */
+  async function cotizarViaje(user: ReturnType<typeof userEvent.setup>) {
+    mocks.api.marketplace.createRide.mockResolvedValue({ success: true, data: VIAJE });
+    await escribirViaje(user);
+    await user.click(screen.getByRole('button', { name: 'Request Uber' }));
+    await screen.findByText('Driver found!');
+  }
+
+  /** Confirma el viaje cotizado y entra al seguimiento con el estado dado. */
+  async function seguirViaje(
+    user: ReturnType<typeof userEvent.setup>,
+    viaje: typeof EN_CAMINO,
+  ) {
+    mocks.api.marketplace.confirmRide.mockResolvedValue({ success: true, data: viaje });
+    await cotizarViaje(user);
+    await user.click(screen.getByRole('button', { name: 'Confirm ride' }));
+  }
+
+  /** Espera el idioma, abre Uber Eats, elige McDonalds y agrega un combo. */
+  async function agregarCombo(user: ReturnType<typeof userEvent.setup>) {
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Uber Eats')[0]);
+    await user.click(await screen.findByText('McDonalds'));
+    const fila = screen.getByText('Combo 1').closest('div')?.parentElement as HTMLElement;
+    await user.click(within(fila).getByRole('button'));
+  }
+
+  /** Paga el carrito y entra al seguimiento del pedido con el estado dado. */
+  async function seguirPedido(
+    user: ReturnType<typeof userEvent.setup>,
+    pedido: typeof PEDIDO & { courier?: { name: string; vehicle: string; plate: string } },
+  ) {
+    mocks.api.marketplace.createFoodOrder.mockResolvedValue({ success: true, data: pedido });
+    await agregarCombo(user);
+    await user.click(screen.getByRole('button', { name: /View cart \(1\)/ }));
+    await user.click(screen.getByRole('button', { name: 'Pay with KiramoPay' }));
+  }
+
+  it('traduce la descripcion de cada socio', async () => {
+    setup();
+
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    for (const descripcion of [
+      'Safe and reliable rides',
+      'Your ride, your price',
+      'Negotiate your fare',
+      'Your favorite food, delivered',
+      'Order whatever you want',
+      'Everything at your door',
+      'Premium supermarket',
+      'Low prices, always',
+      'Your trusted supermarket',
+      'Wholesale shopping',
+      'The best movie experience',
+      'Quality cinema',
+    ]) {
+      expect(screen.getByText(descripcion)).toBeInTheDocument();
+    }
+    sinTextos(
+      'Viajes seguros y confiables',
+      'Tu viaje, tu precio',
+      'Negocia tu tarifa',
+      'Tu comida favorita a domicilio',
+      'Pide lo que quieras',
+      'Todo a tu puerta',
+      'Supermercado premium',
+      'Precios bajos siempre',
+      'Tu súper de confianza',
+      'Compras al mayoreo',
+      'La mejor experiencia de cine',
+      'Cine de calidad',
+    );
+  });
+
+  it('traduce la hoja para conectar una cuenta', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    await user.click(screen.getByText('Walmart'));
+
+    expect(await screen.findByText('Once connected, you can:')).toBeInTheDocument();
+    expect(screen.getByText('Pay directly with KiramoPay')).toBeInTheDocument();
+    expect(screen.getByText('View transaction history')).toBeInTheDocument();
+    expect(screen.getByText('Receive exclusive cashback')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Walmart' })).toBeInTheDocument();
+    sinTextos(
+      'Al conectar podrás:',
+      'Pagar directamente con KiramoPay',
+      'Ver historial de transacciones',
+      'Recibir cashback exclusivo',
+    );
+    expect(screen.queryByRole('button', { name: 'Conectar Walmart' })).not.toBeInTheDocument();
+  });
+
+  it('traduce la hoja de una cuenta ya conectada', async () => {
+    mocks.conectados = ['walmart'];
+    const user = userEvent.setup();
+    setup();
+
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Walmart')[0]);
+
+    expect(await screen.findByText('Account connected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use Walmart' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect account' })).toBeInTheDocument();
+    sinTextos('Cuenta conectada');
+    expect(screen.queryByRole('button', { name: 'Usar Walmart' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Desconectar cuenta' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el origen, el destino y el boton de pedir el viaje', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await abrirViaje(user);
+
+    expect(screen.getByPlaceholderText('Where are you going?')).toBeInTheDocument();
+    expect(screen.getByText('My current location')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request Uber' })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('¿Dónde te recogemos?')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('¿A dónde vas?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pedir Uber' })).not.toBeInTheDocument();
+    sinTextos('Mi ubicación actual');
+
+    // El atajo escribe el origen en el idioma de la app.
+    await user.click(screen.getByText('My current location'));
+    expect(screen.getByPlaceholderText('Where should we pick you up?')).toHaveValue(
+      'My current location',
+    );
+  });
+
+  it('traduce la espera del conductor', async () => {
+    mocks.api.marketplace.createRide.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    setup();
+
+    await escribirViaje(user);
+    await user.click(screen.getByRole('button', { name: 'Request Uber' }));
+
+    expect(await screen.findByText('Looking for a driver...')).toBeInTheDocument();
+    expect(screen.getByText('This may take a few seconds')).toBeInTheDocument();
+    sinTextos('Buscando conductor...', 'Esto puede tomar unos segundos');
+  });
+
+  it('traduce el viaje cotizado y el boton de confirmar', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await cotizarViaje(user);
+
+    expect(screen.getByText('Total to pay')).toBeInTheDocument();
+    expect(screen.getByText('Estimated time')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm ride' })).toBeInTheDocument();
+    sinTextos('¡Conductor encontrado!', 'Total a pagar', 'Tiempo estimado');
+    expect(screen.queryByRole('button', { name: 'Confirmar viaje' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el seguimiento del viaje con el conductor en camino', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirViaje(user, EN_CAMINO);
+
+    expect(await screen.findByText('Your driver is on the way')).toBeInTheDocument();
+    expect(screen.getByText('Your driver arrives in')).toBeInTheDocument();
+    expect(screen.getByText('9 min')).toBeInTheDocument();
+    for (const paso of ['Confirmed', 'On the way to you', 'Trip in progress', 'You arrived']) {
+      expect(screen.getByText(paso)).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Continue in the background' })).toBeInTheDocument();
+    sinTextos(
+      'Tu conductor viene en camino',
+      'Tu conductor llega en',
+      'Confirmado',
+      'En camino a ti',
+      'Viaje en curso',
+      'Llegaste',
+    );
+    expect(screen.queryByRole('button', { name: 'Seguir en segundo plano' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el viaje en curso, el aviso de llegada inminente y el fin del viaje', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirViaje(user, { ...EN_CAMINO, status: 'in_progress', minutesRemaining: 0 });
+
+    // El titulo y el paso del seguimiento dicen lo mismo: dos textos.
+    expect(await screen.findAllByText('Trip in progress')).toHaveLength(2);
+    expect(screen.getByText('You arrive in')).toBeInTheDocument();
+    expect(screen.getByText('Very soon')).toBeInTheDocument();
+    sinTextos('Viaje en curso', 'Llegas en', 'Muy pronto');
+  });
+
+  it('traduce la llegada al destino y el boton de cerrar', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirViaje(user, { ...EN_CAMINO, status: 'completed', minutesRemaining: 0 });
+
+    expect(await screen.findByText('You arrived at your destination!')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    sinTextos('¡Llegaste a tu destino!', 'Llegaste');
+    expect(screen.queryByRole('button', { name: 'Listo' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el buscador de restaurantes y el menu', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    expect(await screen.findByText('Rides, food and more')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Uber Eats')[0]);
+
+    expect(await screen.findByPlaceholderText('Search restaurants...')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Buscar restaurantes...')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('McDonalds'));
+
+    expect(await screen.findByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Menu' })).toBeInTheDocument();
+    expect(screen.getByText('Large Fries')).toBeInTheDocument();
+    expect(screen.getByText('Drink')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Volver' })).not.toBeInTheDocument();
+    sinTextos('Menú', 'Papas Grandes', 'Bebida');
+  });
+
+  it('traduce el carrito', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await agregarCombo(user);
+
+    expect(screen.getByRole('button', { name: /View cart \(1\)/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ver carrito/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /View cart \(1\)/ }));
+
+    expect(screen.getByText('Your order')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay with KiramoPay' })).toBeInTheDocument();
+    sinTextos('Tu pedido');
+    expect(screen.queryByRole('button', { name: 'Pagar con KiramoPay' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el seguimiento del pedido', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirPedido(user, PEDIDO);
+
+    expect(await screen.findByText('Order in progress')).toBeInTheDocument();
+    expect(screen.getByText('Arrives in')).toBeInTheDocument();
+    expect(screen.getByText('30 min')).toBeInTheDocument();
+    for (const paso of ['Preparing', 'Ready', 'On the way', 'Delivered']) {
+      expect(screen.getByText(paso)).toBeInTheDocument();
+    }
+    expect(screen.getByText('Delivery')).toBeInTheDocument();
+    expect(screen.getByText('Total charged')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue in the background' })).toBeInTheDocument();
+    sinTextos(
+      'Pedido en curso',
+      'Llega en',
+      'Preparando',
+      'Listo',
+      'En camino',
+      'Entregado',
+      'Envío',
+      'Total cobrado',
+    );
+    expect(screen.queryByRole('button', { name: 'Seguir en segundo plano' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el pedido a punto de llegar y el pedido entregado', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirPedido(user, {
+      ...PEDIDO,
+      status: 'delivered',
+      minutesRemaining: 0,
+      courier: { name: 'Luis Mora', vehicle: 'Honda 125', plate: 'MOT-110' },
+    });
+
+    expect(await screen.findByText('Order delivered!')).toBeInTheDocument();
+    expect(screen.getByText('Your courier')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    sinTextos('¡Pedido entregado!', 'Tu repartidor');
+    expect(screen.queryByRole('button', { name: 'Listo' })).not.toBeInTheDocument();
+  });
+
+  it('traduce el aviso de pedido casi listo', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await seguirPedido(user, { ...PEDIDO, minutesRemaining: 0 });
+
+    expect(await screen.findByText('Almost there')).toBeInTheDocument();
+    sinTextos('Casi listo');
   });
 });
