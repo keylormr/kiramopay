@@ -251,7 +251,7 @@ describe('envio de cripto — codigos que no sirven', () => {
 
     expect(
       await hoja.findByText(
-        'Ese código no es de KiramoPay. Pedile a la otra persona el código de su perfil.',
+        'Ese código no es de KiramoPay. Pídele a la otra persona el código de su perfil.',
       ),
     ).toBeInTheDocument();
     expect(mocks.api.crypto.sendPreview).not.toHaveBeenCalled();
@@ -269,7 +269,7 @@ describe('envio de cripto — codigos que no sirven', () => {
 
     expect(
       await hoja.findByText(
-        'Ese es el código de un comercio, y un comercio cobra en dinero, no en cripto. Pedile a la persona su código personal.',
+        'Ese es el código de un comercio, y un comercio cobra en dinero, no en cripto. Pídele a la persona su código personal.',
       ),
     ).toBeInTheDocument();
     expect(hoja.queryByText(/merchant qr code/)).not.toBeInTheDocument();
@@ -388,18 +388,25 @@ describe('envio de cripto — el campo de monto crece con lo que se escribe', ()
 describe('envio de cripto — el error se anuncia y queda a la vista', () => {
   const desplazados = registrarDesplazamientos();
 
-  it('el rechazo de la vista previa', async () => {
+  it('el rechazo del envio, despues de confirmar', async () => {
     mocks.api.crypto.sendPreview.mockResolvedValue({
+      success: true,
+      data: vistaPrevia(0.005, 0.0000125),
+    });
+    mocks.api.crypto.send.mockResolvedValue({
       success: false,
-      error: { code: 'QR_DE_COMERCIO', message: 'merchant qr code' },
+      error: { code: 'ALGO_NUEVO', message: 'something new' },
     });
     const user = userEvent.setup();
     const hoja = await abrirEnvio(user);
 
     await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
+    await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
+    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
 
     const aviso = await hoja.findByRole('alert');
-    expect(aviso).toHaveTextContent(/código de un comercio/);
+    expect(aviso.textContent).not.toBe('');
     expect(desplazados).toContain(aviso);
   });
 });
