@@ -51,6 +51,17 @@ var (
 	ErrEstiloInvalido   = errors.New("savings: invalid icon or color")
 )
 
+// Rechazos de depositar y retirar. Cada uno tiene su codigo en el handler, y la
+// billetera sin saldo es transaction.ErrSaldoInsuficiente, el mismo motivo que
+// SINPE y el pago con QR. Antes todos salian como 400 SAVINGS_FAILED, igual que
+// una falla de la base: la pantalla no podia decir el motivo, y tomaba la falla
+// por un rechazo aunque el dinero se hubiera movido.
+var (
+	ErrMontoInvalido    = errors.New("savings: amount must be positive")
+	ErrMetaNoEncontrada = errors.New("savings: goal not found")
+	ErrExcedeLoAhorrado = errors.New("savings: amount exceeds amount saved")
+)
+
 // Los largos de la tabla savings_goals (migracion 040). Pasarlos llegaba a la
 // base y volvia como un error de Postgres con el texto crudo en la respuesta.
 const (
@@ -130,7 +141,7 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 // second money movement, and the second return value says so.
 func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, bool, error) {
 	if amount <= 0 {
-		return nil, false, fmt.Errorf("amount must be positive")
+		return nil, false, ErrMontoInvalido
 	}
 	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
 	if err != nil {
@@ -154,14 +165,14 @@ func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64, 
 		} else if hecho {
 			return g, true, nil
 		}
-		return nil, false, fmt.Errorf("insufficient balance")
+		return nil, false, transaction.ErrSaldoInsuficiente
 	}
 	return s.move(ctx, userID, g, amount, true, idemKey)
 }
 
 func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, bool, error) {
 	if amount <= 0 {
-		return nil, false, fmt.Errorf("amount must be positive")
+		return nil, false, ErrMontoInvalido
 	}
 	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
 	if err != nil {
