@@ -1934,6 +1934,95 @@ paths:
         '200':
           description: QR code list
 
+  /api/v1/qr/resolve:
+    post:
+      tags: [QR Payments]
+      summary: Resolve a scanned QR before paying it
+      description: >-
+        Who is being paid, before the payment sheet offers a pay button: the
+        business (merchant_name, location_name) or the person (payee_name),
+        the amount (0 = open amount) and, for a charge, its id, status and
+        expiry. Only a code that does not exist is QR_INVALIDO; a server that
+        could not read it answers 500 RESOLVE_FAILED, and retrying is the
+        right move.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qr_data]
+              properties:
+                qr_data:
+                  type: string
+                  description: The scanned payload (KP:...).
+      responses:
+        '200':
+          description: The code and who receives the payment
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required: [kind, currency, amount, qr_code_id]
+                    properties:
+                      kind:
+                        type: string
+                        enum: [code, charge, legacy]
+                      payee_name:
+                        type: string
+                      merchant_name:
+                        type: string
+                      location_name:
+                        type: string
+                      currency:
+                        type: string
+                      amount:
+                        type: integer
+                        format: int64
+                        description: Minor units; 0 is an open amount.
+                      note:
+                        type: string
+                      status:
+                        type: string
+                        description: The charge's status (pending, paid, cancelled, expired, superseded).
+                      expires_at:
+                        type: string
+                        format: date-time
+                      charge_id:
+                        type: string
+                      qr_code_id:
+                        type: string
+        '400':
+          description: >-
+            QR_INVALIDO — the code does not exist (or is not a code at all) —
+            or INVALID_BODY. Retrying the same code does not change the answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: QR_REVOCADO — the owner withdrew the code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            RESOLVE_FAILED — the server could not read the code or the business
+            behind it. The message never carries the detail; retrying may work.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/qr/pay:
     post:
       tags: [QR Payments]

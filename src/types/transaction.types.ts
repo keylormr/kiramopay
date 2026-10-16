@@ -1,3 +1,9 @@
+/**
+ * Los estados que guarda el servidor (transaction/model.go), mas 'unknown' para
+ * uno que la app no conoce: ver utils/estadoMovimiento.ts.
+ */
+export type EstadoMovimiento = 'completed' | 'pending' | 'processing' | 'failed' | 'reversed' | 'unknown';
+
 export interface Transaction {
   id: string;
   title: string;
@@ -9,7 +15,8 @@ export interface Transaction {
   dateISO?: string;
   type: 'credit' | 'debit';
   category?: string;
-  status?: 'completed' | 'pending';
+  // Sin estado es un movimiento completado (los anotados localmente).
+  status?: EstadoMovimiento;
   icon?: string;
   description?: string;
   // Backend transaction type (sinpe_send, qr_payment, …). Kept apart from the
