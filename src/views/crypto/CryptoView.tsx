@@ -19,11 +19,11 @@ import { refreshAccounts, refreshCrypto } from '@/services/dataSync';
 import { ACTIVOS_CON_STAKING } from '@/api/repositories/crypto.repository';
 import type { CryptoSendPreview } from '@/api/repositories/crypto.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { estiloDeEstadoCripto, criptoNoSeMovio } from '@/utils/estadoCripto';
 import { localeDe } from '@/utils/periodos';
 import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
-import { estiloDeEstadoCripto, criptoNoSeMovio } from '@/utils/estadoCripto';
 
 // Donde se apoya el aviso de la operacion repetida, medido desde abajo: la
 // barra de navegacion (h-16 en App.tsx), la zona segura del aparato y un
