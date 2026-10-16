@@ -17,7 +17,7 @@ import type {
   CatalogItem,
   MerchantLocation,
 } from '@/api/repositories/qrpayment.repository';
-import { mensajeDeCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { mensajeDelRechazoDelCobro, minutosParaVencer } from '@/utils/erroresQr';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { fechaCorta } from '@/utils/fechaPlazo';
 
@@ -142,7 +142,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       const res = await api.getMerchantCode(merchant.id, { locationId: locationId || undefined, currency: ccy });
       if (cancelled) return;
       if (res.success && res.data) setCode(res.data);
-      else setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+      else setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));
     })();
     return () => { cancelled = true; };
   }, [showCharge, merchant.id, locationId, ccy, t]);
@@ -226,7 +226,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       setCart({});
       return;
     }
-    setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+    setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));
     if (res.error?.code === 'COBRO_YA_PAGADO') {
       // La pantalla estaba atrasada: la venta ya entro.
       const actual = await api.getCharge(cobro?.id ?? '');
@@ -245,7 +245,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       setCobro(null);
       return;
     }
-    setError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('merchant_qr_error'));
+    setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));
     if (res.error?.code === 'COBRO_YA_PAGADO') {
       const actual = await api.getCharge(cobro.id);
       if (actual.success && actual.data) setCobro(actual.data);

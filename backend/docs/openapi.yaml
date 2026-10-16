@@ -1982,7 +1982,9 @@ paths:
         '422':
           description: >-
             INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED,
-            the same codes as POST /api/v1/sinpe/send. No money moves.
+            the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY
+            (the code is in a currency the wallet does not handle). No money
+            moves.
           content:
             application/json:
               schema:
@@ -1998,6 +2000,198 @@ paths:
             PAYMENT_FAILED — the server failed and the payment may have gone
             through. Retrying the same request (same idempotency_key on an
             open-amount code) never charges twice.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/codes/me:
+    get:
+      tags: [QR Payments]
+      summary: Get or create the caller's permanent receive code
+      description: >-
+        Returns the caller's permanent code in the given currency, creating it
+        the first time. Error codes are for the client to translate; never show
+        `error.message` to the user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: currency
+          in: query
+          required: false
+          description: CRC (default) or USD.
+          schema:
+            type: string
+            enum: [CRC, USD]
+      responses:
+        '200':
+          description: The permanent code
+        '400':
+          description: UNSUPPORTED_CURRENCY — the wallet does not handle that currency.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_FAILED — the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/code:
+    get:
+      tags: [QR Payments]
+      summary: Get or create the counter code of a business
+      description: >-
+        Any active member of the business team can ask for it. The code never
+        changes and is the one that gets printed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: location_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: currency
+          in: query
+          required: false
+          description: CRC (default) or USD.
+          schema:
+            type: string
+            enum: [CRC, USD]
+      responses:
+        '200':
+          description: The counter code
+        '400':
+          description: UNSUPPORTED_CURRENCY — the wallet does not handle that currency.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >-
+            MERCHANT_NOT_FOUND (the business does not exist or the caller is
+            not on its team) or LOCATION_NOT_FOUND (the location is not of
+            this business or is closed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_UNAVAILABLE — the business is not approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_FAILED — the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/charges:
+    post:
+      tags: [QR Payments]
+      summary: Issue a charge on a permanent code
+      description: >-
+        The charge carries its own payload with the amount inside. With
+        `replaces`, the previous charge of the same code is closed in the same
+        transaction; if it was already paid, no new charge is created.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qr_code_id, amount]
+              properties:
+                qr_code_id:
+                  type: string
+                  format: uuid
+                amount:
+                  type: integer
+                  format: int64
+                  description: Minor units, greater than zero. The currency is the code's.
+                note:
+                  type: string
+                channel:
+                  type: string
+                  enum: [counter, link]
+                replaces:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Charge issued
+        '400':
+          description: >-
+            MONTO_INVALIDO (the amount is zero or negative), QR_INVALIDO (the
+            code does not exist or the caller cannot charge with it) or
+            INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved),
+            or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO
+            or COBRO_REEMPLAZADO.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_FAILED — the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/charges/{id}:
+    delete:
+      tags: [QR Payments]
+      summary: Cancel a pending charge
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Charge cancelled
+        '400':
+          description: QR_INVALIDO — the charge does not exist or the caller cannot manage it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            The charge is no longer pending: COBRO_YA_PAGADO (never reported as
+            cancelled), COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_FAILED — the server failed; the detail stays in the log.
           content:
             application/json:
               schema:

@@ -1098,6 +1098,8 @@ const fr: TranslationKeys = {
   pago_err_tope_mensual: 'Ce paiement dépasse votre plafond mensuel.',
   qr_err_comercio_no_disponible: 'Ce commerce ne peut pas recevoir de paiements pour le moment.',
   qr_err_sin_confirmar: "Impossible de confirmer le paiement. Si vous réessayez maintenant avec le même montant, il ne sera pas débité deux fois. Si vous réessayez plus tard, vérifiez d'abord vos transactions.",
+  qr_err_monto_invalido: 'Le montant doit être supérieur à zéro.',
+  qr_err_moneda: "Ce code est dans une devise que KiramoPay ne prend pas en charge. Les paiements se font uniquement en colones ou en dollars.",
   home_top_cat: 'Dépense principale',
   home_savings: 'Épargne',
   home_savings_view: 'Mes objectifs',

@@ -1,3 +1,5 @@
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+
 /**
  * Traduce el codigo de error que manda el servidor en el riel de QR.
  *
@@ -61,6 +63,8 @@ export const CLAVES_DEL_RECHAZO_DEL_PAGO: Readonly<Record<string, string>> = {
   MERCHANT_UNAVAILABLE: 'qr_err_comercio_no_disponible',
   // El comercio del codigo ya no existe: para quien paga, el codigo no sirve.
   MERCHANT_NOT_FOUND: 'qr_err_invalido',
+  // Un codigo en una moneda que la billetera no maneja: no se movio nada.
+  UNSUPPORTED_CURRENCY: 'qr_err_moneda',
   // Sin respuesta o con el 500 el pago pudo haber salido. La llave se
   // conserva (ver PAGO_SIN_CONFIRMAR), y eso es lo que permite decir que
   // reintentar ahora no cobra dos veces.
@@ -113,4 +117,30 @@ export function minutosParaVencer(expiresAt?: string): number {
   const restante = new Date(expiresAt).getTime() - Date.now();
   if (!Number.isFinite(restante) || restante <= 0) return 0;
   return Math.max(1, Math.round(restante / 60000));
+}
+
+/**
+ * Los rechazos de pedir el codigo propio o el rotulo, emitir un cobro y
+ * quitarle el monto, por codigo. Las tres hojas que cobran (inicio, solicitar
+ * en SINPE y el negocio) pintaban `res.error.message` cuando el codigo no era
+ * de los del cobro: el texto del servidor en ingles ("merchant is pending
+ * verification") y, cuando fallaba la base, la frase del driver.
+ */
+export const CLAVES_DEL_RECHAZO_DEL_COBRO: Readonly<Record<string, string>> = {
+  MONTO_INVALIDO: 'qr_err_monto_invalido',
+  UNSUPPORTED_CURRENCY: 'qr_err_moneda',
+  MERCHANT_UNAVAILABLE: 'qr_err_comercio_no_disponible',
+};
+
+/**
+ * El texto de un rechazo del cobro: primero los del cobro en si (ya pagado,
+ * vencido...), despues los de la tabla de arriba, y lo demas al aviso de la
+ * hoja. Nunca el texto del servidor.
+ */
+export function mensajeDelRechazoDelCobro(
+  t: (k: string) => string,
+  error: { code?: string; message?: string } | undefined,
+  claveGenerica: string,
+): string {
+  return mensajeDeCobro(t, error?.code) || mensajeDeRechazo(error, CLAVES_DEL_RECHAZO_DEL_COBRO, claveGenerica, t);
 }

@@ -1091,6 +1091,8 @@ const ja: TranslationKeys = {
   pago_err_tope_mensual: 'この支払いは月間の上限を超えています。',
   qr_err_comercio_no_disponible: 'この店舗は現在、支払いを受け付けられません。',
   qr_err_sin_confirmar: '支払いを確認できませんでした。今すぐ同じ金額でもう一度お試しいただければ、二重に請求されることはありません。後でお試しになる場合は、先に取引履歴をご確認ください。',
+  qr_err_monto_invalido: '金額は0より大きくしてください。',
+  qr_err_moneda: 'このコードの通貨はKiramoPayで扱っていません。支払いと受け取りはコロンまたはドルのみです。',
   home_top_cat: 'トップカテゴリ',
   home_savings: '貯蓄',
   home_savings_view: 'マイ目標',

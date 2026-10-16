@@ -44,6 +44,16 @@ var (
 	// en ingles, que la pantalla mostraba tal cual.
 	ErrComercioNoDisponible = errors.New("merchant is not available")
 
+	// ErrMonedaNoSoportada: se pidio un codigo en una moneda que la billetera
+	// no maneja. El codigo nacia igual y nadie lo podia pagar (el motor no
+	// tiene tope para esa moneda y se niega a moverla); una moneda mas larga
+	// que la columna salia como 400 PAYMENT_FAILED con el texto del driver.
+	ErrMonedaNoSoportada = errors.New("unsupported currency")
+
+	// ErrSucursalNoEncontrada: el rotulo se pidio para una sucursal que no es
+	// del comercio o que esta cerrada.
+	ErrSucursalNoEncontrada = errors.New("location not found")
+
 	// ErrMontoInvalido: un cobro con monto cero o negativo. La pantalla ya no
 	// deja llegar aca, pero otro cliente si, y recibia "amount must be
 	// positive" en ingles bajo el PAYMENT_FAILED generico.
