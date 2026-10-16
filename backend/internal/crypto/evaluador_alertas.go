@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/cluster"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/shopspring/decimal"
 )
 
@@ -71,7 +72,9 @@ type EvaluadorDeAlertas struct {
 // navegadores suscritos. Lo satisface *notification.Service, el mismo que usan
 // sinpe, escrow y los cobros QR.
 type Notifier interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 // fuenteDePrecios es lo que el barrido necesita de PriceService: leer lo que ya
@@ -271,21 +274,21 @@ func (e *EvaluadorDeAlertas) avisar(ctx context.Context, a *PriceAlertRecord) {
 	if e.avisos == nil {
 		return
 	}
-	titulo, cuerpo := textoDelAviso(a)
-	if err := e.avisos.NotifyUser(ctx, a.UserID, titulo, cuerpo, EtiquetaAvisoDeAlerta); err != nil {
+	clave, datos := avisoDeAlerta(a)
+	if err := e.avisos.NotificarEnSuIdioma(ctx, a.UserID, clave, datos, EtiquetaAvisoDeAlerta); err != nil {
 		e.logger.Warn("aviso de alerta de precio fallido", "alerta", a.ID, "error", err)
 	}
 }
 
-// textoDelAviso arma el aviso SIN montos: el mismo texto sale en la pantalla
+// avisoDeAlerta arma el aviso SIN montos: el mismo texto sale en la pantalla
 // de bloqueo del telefono, y el precio objetivo dice cuanto piensa comprar o
 // vender la persona. El precio y la fecha estan en la app, detras del acceso.
-func textoDelAviso(a *PriceAlertRecord) (titulo, cuerpo string) {
-	titulo = "Alerta de precio: " + a.Asset
-	verbo := "subió"
+// El unico dato es el activo; el texto, en el idioma de la persona, lo pone el
+// catalogo de notification.
+func avisoDeAlerta(a *PriceAlertRecord) (clave string, datos map[string]any) {
+	clave = notification.AvisoAlertaPrecioSubio
 	if a.Direction == "below" {
-		verbo = "bajó"
+		clave = notification.AvisoAlertaPrecioBajo
 	}
-	cuerpo = fmt.Sprintf("%s %s a tu precio objetivo. Abre KiramoPay para ver el detalle.", a.Asset, verbo)
-	return titulo, cuerpo
+	return clave, map[string]any{"activo": a.Asset}
 }

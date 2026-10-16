@@ -3,37 +3,43 @@ package user
 import "time"
 
 type UserRecord struct {
-	ID               string     `json:"id"`
-	Cedula           string     `json:"cedula"`
-	Phone            string     `json:"phone"`
-	PhoneVerified    bool       `json:"phone_verified"`
-	Email            string     `json:"email,omitempty"`
-	EmailVerified    bool       `json:"email_verified"`
-	FirstName        string     `json:"first_name"`
-	LastName         string     `json:"last_name"`
-	BirthDate        *time.Time `json:"birth_date,omitempty"`
-	ProfilePictureURL string    `json:"profile_picture_url,omitempty"`
-	PasswordHash     string     `json:"-"`
-	BiometricEnabled bool       `json:"biometric_enabled"`
-	KYCLevel         int        `json:"kyc_level"`
-	KYCStatus        string     `json:"kyc_status"`
-	Status           string     `json:"status"`
+	ID                string     `json:"id"`
+	Cedula            string     `json:"cedula"`
+	Phone             string     `json:"phone"`
+	PhoneVerified     bool       `json:"phone_verified"`
+	Email             string     `json:"email,omitempty"`
+	EmailVerified     bool       `json:"email_verified"`
+	FirstName         string     `json:"first_name"`
+	LastName          string     `json:"last_name"`
+	BirthDate         *time.Time `json:"birth_date,omitempty"`
+	ProfilePictureURL string     `json:"profile_picture_url,omitempty"`
+	PasswordHash      string     `json:"-"`
+	BiometricEnabled  bool       `json:"biometric_enabled"`
+	KYCLevel          int        `json:"kyc_level"`
+	KYCStatus         string     `json:"kyc_status"`
+	Status            string     `json:"status"`
 	// Username es el nombre de usuario con el que se entra. Vacio mientras la
 	// cuenta no tenga uno: hasta la migracion 058 no existia ninguno.
-	Username         string     `json:"username,omitempty"`
+	Username string `json:"username,omitempty"`
 	// DemoLogin permite entrar a esta cuenta SIN CONTRASENA. No alcanza por si
 	// sola: el servidor exige ademas que DEMO_LOGIN_ENABLED este encendida.
 	// Nunca sale al cliente.
-	DemoLogin        bool       `json:"-"`
+	DemoLogin bool `json:"-"`
 	// Plan es el plan personal (free, plus, pro; migracion 048). Hoy no hay
 	// cobro: solo un administrador lo cambia, para pilotos. Define los topes de
 	// metas de ahorro y tarjetas y la cuota del asistente.
-	Plan             string     `json:"plan"`
-	ReferralCode     string     `json:"referral_code"`
-	ReferredBy       *string    `json:"-"` // atribucion interna; nunca sale al cliente
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	LastLoginAt      *time.Time `json:"last_login_at,omitempty"`
+	Plan string `json:"plan"`
+	// Language es el idioma en que la persona usa la app (migracion 074). Con el
+	// se escriben sus avisos y sus push; la app lo guarda con
+	// PUT /users/me/language. nil (null en el JSON) es una cuenta que todavia
+	// no eligio: sus avisos salen en espanol, y la app sabe que puede darle el
+	// de la pantalla sin pisar una eleccion hecha en otro dispositivo.
+	Language     *string    `json:"language"`
+	ReferralCode string     `json:"referral_code"`
+	ReferredBy   *string    `json:"-"` // atribucion interna; nunca sale al cliente
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
 }
 
 type UpdateProfileRequest struct {

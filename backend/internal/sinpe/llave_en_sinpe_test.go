@@ -181,7 +181,7 @@ func TestSend_LaRepeticionNoEscribeOtraVezElHistorial(t *testing.T) {
 
 type avisosContados struct{ llegaron chan string }
 
-func (a *avisosContados) NotifyUser(_ context.Context, userID, _, _, _ string) error {
+func (a *avisosContados) NotificarEnSuIdioma(_ context.Context, userID, _ string, _ map[string]any, _ string) error {
 	a.llegaron <- userID
 	return nil
 }

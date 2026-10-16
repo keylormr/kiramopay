@@ -14,6 +14,7 @@ import type { User } from '@/types';
 import { apiSuccess, apiError } from '../../types';
 import { normalizarPlan } from '../../../utils/planes';
 import { HttpClient } from './client';
+import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export class HttpAuthRepository implements IAuthRepository {
   constructor(private client: HttpClient) {}
@@ -31,6 +32,7 @@ export class HttpAuthRepository implements IAuthRepository {
         kyc_level: number;
         status: string;
         plan?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -57,6 +59,7 @@ export class HttpAuthRepository implements IAuthRepository {
       createdAt: new Date().toISOString(),
       kycLevel: u.kyc_level as 0 | 1 | 2,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     // IMPORTANT: expose the full `tokens` object — the auth store reads
@@ -89,6 +92,7 @@ export class HttpAuthRepository implements IAuthRepository {
         email: string;
         referral_code?: string;
         plan?: string;
+        language?: string | null;
       };
       tokens: { access_token: string; refresh_token: string };
     }>(
@@ -131,6 +135,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: 0,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
 
     return apiSuccess({
@@ -265,6 +270,27 @@ export class HttpAuthRepository implements IAuthRepository {
     return apiSuccess(undefined as unknown as void);
   }
 
+  async setLanguage(language: string): Promise<ApiResponse<void>> {
+    const res = await this.client.put<void>('/api/v1/users/me/language', { language });
+    if (!res.success) {
+      // El codigo, el texto y los detalles que trajo el cliente pasan enteros
+      // (sin red, sesion vencida, un rechazo del servidor): el cliente ya los
+      // deja en el idioma activo. Sin ninguno, el codigo propio con el texto
+      // generico del idioma activo, nunca una frase fija en ingles.
+      const e = res.error;
+      return {
+        success: false,
+        error: {
+          code: e?.code || 'LANGUAGE_FAILED',
+          message: e?.message?.trim() || traducirFueraDeReact('err_generic'),
+          ...(e?.data !== undefined ? { data: e.data } : {}),
+          ...(e?.details ? { details: e.details } : {}),
+        },
+      };
+    }
+    return apiSuccess(undefined as unknown as void);
+  }
+
   async getProfile(): Promise<ApiResponse<User>> {
     const res = await this.client.get<{
       id: string;
@@ -279,6 +305,7 @@ export class HttpAuthRepository implements IAuthRepository {
       created_at?: string;
       referral_code?: string;
       plan?: string;
+      language?: string | null;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
@@ -299,6 +326,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: u.kyc_level as 0 | 1 | 2,
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
+      language: u.language,
     };
     return apiSuccess<User>(user);
   }

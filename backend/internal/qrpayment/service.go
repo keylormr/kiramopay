@@ -50,7 +50,9 @@ func (s *Service) NombreDe(ctx context.Context, userID string) string {
 // Notifier avisa al cobrador que le pagaron. Lo satisface
 // *notification.Service, el mismo que ya usa sinpe.
 type Notifier interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 // Options lleva los colaboradores opcionales.

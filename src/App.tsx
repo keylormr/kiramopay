@@ -31,6 +31,7 @@ import { takeResetToken } from './utils/resetToken';
 import { takeReferralCode } from './utils/referralCode';
 import { enlaceInvitacion, compartirEnlace } from './utils/compartir';
 import { useAuthStore } from './stores/auth.store';
+import { useIdiomaEnElServidor } from './hooks/useIdiomaEnElServidor';
 import { useBusinessStore } from './stores/business.store';
 import { useBusinessData } from './hooks/useBusinessData';
 import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
@@ -982,6 +983,9 @@ const AppInit = () => {
   const themeScheduleStart = useSettingsStore((s) => s.themeScheduleStart);
   const themeScheduleEnd = useSettingsStore((s) => s.themeScheduleEnd);
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
+
+  // El servidor escribe los avisos y los push en el idioma de la persona.
+  useIdiomaEnElServidor();
 
   useEffect(() => {
     // Hide native splash screen after app is ready

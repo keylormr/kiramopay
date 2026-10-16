@@ -11,6 +11,12 @@ import { fijarDiccionarioActivo } from './mensajesDeError';
 
 interface LanguageContextType {
   language: Language;
+  /**
+   * Si la persona eligio el idioma (en este dispositivo, ahora o antes) o si
+   * solo lo adivino el navegador. Un idioma adivinado no pisa el que la cuenta
+   * ya tiene en el servidor (ver useIdiomaEnElServidor).
+   */
+  elegido: boolean;
   setLanguage: (lang: Language) => void;
   t: (key: string) => string;
   languages: LanguageOption[];
@@ -21,13 +27,20 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 const STORAGE_KEY = 'kiramopay_language';
 
-function detectInitialLanguage(): Language {
+// La eleccion que la persona guardo en este dispositivo, si hay una.
+function eleccionGuardada(): Language | null {
   const saved = localStorage.getItem(STORAGE_KEY);
   // Migrate users who picked the now-removed Traditional Chinese to Simplified.
   if (saved === 'zh-tw') return 'zh-cn';
   if (saved && LANGUAGES.some((l) => l.code === saved)) {
     return saved as Language;
   }
+  return null;
+}
+
+function detectInitialLanguage(): Language {
+  const saved = eleccionGuardada();
+  if (saved) return saved;
   const browserLang = navigator.language.toLowerCase();
   if (browserLang.startsWith('es')) return 'es';
   if (browserLang.startsWith('en')) return 'en';
@@ -41,6 +54,7 @@ function detectInitialLanguage(): Language {
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(detectInitialLanguage);
+  const [elegido, setElegido] = useState<boolean>(() => eleccionGuardada() !== null);
   // Spanish is bundled (defaultTranslations); the other languages ship as their
   // own chunks and load on demand. Until a non-default chunk arrives, t() falls
   // back to Spanish, then to the raw key.
@@ -74,6 +88,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
+    setElegido(true);
     localStorage.setItem(STORAGE_KEY, lang);
   };
 
@@ -88,6 +103,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   return (
     <LanguageContext.Provider value={{
       language,
+      elegido,
       setLanguage,
       t,
       languages: LANGUAGES,

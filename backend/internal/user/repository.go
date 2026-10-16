@@ -55,7 +55,7 @@ const userSelectCols = `id, fn_pii_decrypt(cedula_enc), fn_pii_decrypt(phone_enc
 	        first_name, last_name, birth_date, COALESCE(profile_picture_url, ''),
 	        password_hash, biometric_enabled, kyc_level, COALESCE(kyc_status, 'pending'), status,
 	        created_at, updated_at, last_login_at, referral_code,
-	        COALESCE(username, ''), demo_login, COALESCE(plan, 'free')`
+	        COALESCE(username, ''), demo_login, COALESCE(plan, 'free'), language`
 
 func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 	u := &UserRecord{}
@@ -64,7 +64,7 @@ func scanUser(row interface{ Scan(...any) error }) (*UserRecord, error) {
 		&u.FirstName, &u.LastName, &u.BirthDate, &u.ProfilePictureURL,
 		&u.PasswordHash, &u.BiometricEnabled, &u.KYCLevel, &u.KYCStatus, &u.Status,
 		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt, &u.ReferralCode,
-		&u.Username, &u.DemoLogin, &u.Plan,
+		&u.Username, &u.DemoLogin, &u.Plan, &u.Language,
 	)
 	return u, err
 }
@@ -202,6 +202,24 @@ func (r *Repository) UpdateLastLogin(ctx context.Context, id string) error {
 		id,
 	)
 	return err
+}
+
+// ErrCuentaInexistente: no hay una cuenta con ese id.
+var ErrCuentaInexistente = errors.New("user not found")
+
+// SetLanguage guarda el idioma de la cuenta.
+func (r *Repository) SetLanguage(ctx context.Context, id, idioma string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE users SET language = $2, updated_at = NOW() WHERE id = $1`,
+		id, idioma,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCuentaInexistente
+	}
+	return nil
 }
 
 func (r *Repository) UpdatePasswordHash(ctx context.Context, id string, passwordHash string) error {

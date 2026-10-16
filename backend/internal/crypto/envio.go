@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/kiramopay/backend/internal/notification"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/shopspring/decimal"
@@ -79,7 +80,9 @@ type UIFReporter interface {
 // Avisos le dice a quien recibe que le llego algo. Lo satisface
 // *notification.Service, el mismo que usan sinpe y los cobros por QR.
 type Avisos interface {
-	NotifyUser(ctx context.Context, userID, title, body, tag string) error
+	// clave es un aviso del catalogo de notification (textos.go): el servicio
+	// lo escribe en el idioma guardado de quien lo recibe.
+	NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos map[string]any, tag string) error
 }
 
 // Logger es la superficie minima de log (compatible con slog); nil esta bien.
@@ -387,11 +390,13 @@ func (s *Service) avisarDelEnvio(ctx context.Context, envio *TransactionRecord) 
 	// justamente la persona a la que se le avisa—. Si no se pudo leer, el aviso
 	// dice solo lo que es cierto y no inventa un nombre.
 	deQuien := s.nombreDeQuienEnvia(ctx, envio.UserID)
-	cuerpo := fmt.Sprintf("Recibiste %s %s", envio.Amount.String(), envio.Asset)
+	clave := notification.AvisoCriptoRecibida
+	datos := map[string]any{"monto": envio.Amount.String(), "activo": envio.Asset}
 	if deQuien != "" {
-		cuerpo = fmt.Sprintf("%s de %s", cuerpo, deQuien)
+		clave = notification.AvisoCriptoRecibidaDe
+		datos["nombre"] = deQuien
 	}
-	if err := s.avisos.NotifyUser(ctx, envio.CounterpartyUserID, "Te enviaron cripto", cuerpo, "crypto_receive"); err != nil && s.logger != nil {
+	if err := s.avisos.NotificarEnSuIdioma(ctx, envio.CounterpartyUserID, clave, datos, "crypto_receive"); err != nil && s.logger != nil {
 		s.logger.Warn("aviso de envio de cripto", "error", err.Error(), "user", envio.CounterpartyUserID)
 	}
 }
