@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { CryptoView } from '../CryptoView';
+import { registrarDesplazamientos } from '@/test/desplazamientos';
 
 // El envio de cripto a otra persona de KiramoPay. Antes esta hoja pedia una
 // direccion de cadena, inventaba una comision de red del 0,01 % y descontaba el
@@ -378,5 +379,27 @@ describe('envio de cripto — el campo de monto crece con lo que se escribe', ()
     await user.type(campo, '0.12345678');
     expect(campo).toHaveValue('0.12345678');
     expect(campo.style.width).toMatch(/^\d+ch$/);
+  });
+});
+
+// La hoja de envio puede ser mas alta que un telefono chico: el rechazo
+// aparecia al fondo, sin anunciarse. Como en el envio SINPE, se anuncia y se
+// lleva a la vista.
+describe('envio de cripto — el error se anuncia y queda a la vista', () => {
+  const desplazados = registrarDesplazamientos();
+
+  it('el rechazo de la vista previa', async () => {
+    mocks.api.crypto.sendPreview.mockResolvedValue({
+      success: false,
+      error: { code: 'QR_DE_COMERCIO', message: 'merchant qr code' },
+    });
+    const user = userEvent.setup();
+    const hoja = await abrirEnvio(user);
+
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
+
+    const aviso = await hoja.findByRole('alert');
+    expect(aviso).toHaveTextContent(/código de un comercio/);
+    expect(desplazados).toContain(aviso);
   });
 });
