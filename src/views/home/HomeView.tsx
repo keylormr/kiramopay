@@ -14,6 +14,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { txTitle } from '../../utils/txTitle';
 import { fechaCorta } from '@/utils/fechaPlazo';
+import { estaCompletado, estiloDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
@@ -581,9 +582,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           {state.transactions.slice(0, 4).map((tx) => {
             const incoming = tx.amount > 0;
+            // Lo completado va como siempre, sin rotulo. Lo demas dice su
+            // estado: un SINPE que fallo se veia igual que uno que salio.
+            const completado = estaCompletado(tx);
+            const estado = estiloDeEstado(tx);
+            const tachado = noMovioDinero(tx);
             return (
               <div
                 key={tx.id}
+                data-movimiento
                 onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
                 className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
               >
@@ -594,8 +601,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
                   <div className="text-xs uv-text-muted mt-0.5">{fechaCorta(tx.dateISO, language) || tx.date}</div>
                 </div>
-                <div className={`font-bold text-sm tabular-nums shrink-0 ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
-                  {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
+                <div className="shrink-0 text-right">
+                  <div className={`font-bold text-sm tabular-nums ${
+                    tachado ? 'uv-text-muted line-through' : incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
+                  }`}>
+                    {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
+                  </div>
+                  {!completado && (
+                    <span className={`mt-0.5 inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold ${estado.chip}`}>
+                      {t(estado.clave)}
+                    </span>
+                  )}
                 </div>
               </div>
             );

@@ -1,6 +1,6 @@
 export type { User } from './auth.types';
 export type { Account, Budget } from './account.types';
-export type { Transaction } from './transaction.types';
+export type { Transaction, EstadoMovimiento } from './transaction.types';
 export type { SinpeContact, SinpeTransaction } from './sinpe.types';
 export type {
   ServiceProvider,

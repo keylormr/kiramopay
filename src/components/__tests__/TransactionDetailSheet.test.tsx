@@ -62,15 +62,16 @@ describe('TransactionDetailSheet — cada estado con su nombre', () => {
     expect(screen.getByText('Completado')).toBeInTheDocument();
   });
 
-  it('en ingles, un movimiento fallido y uno revertido', () => {
+  // El ingles llega en su propio trozo: se espera a que el texto aparezca.
+  it('en ingles, un movimiento fallido y uno revertido', async () => {
     localStorage.setItem('kiramopay_language', 'en');
     const { unmount } = pintar(conEstado('failed'));
-    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(await screen.findByText('Failed')).toBeInTheDocument();
     expect(screen.queryByText('Pending')).toBeNull();
     unmount();
 
     pintar(conEstado('reversed'));
-    expect(screen.getByText('Reversed')).toBeInTheDocument();
+    expect(await screen.findByText('Reversed')).toBeInTheDocument();
   });
 
   // El monto de lo que no movio dinero va tachado, como el de un cobro que ya

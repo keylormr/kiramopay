@@ -1,10 +1,10 @@
 import React from 'react';
 import { BottomSheet } from './BottomSheet';
-import { Icons } from './Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
 import { fechaYHora } from '@/utils/fechaPlazo';
 import { estiloDeCategoria, etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
+import { estiloDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
 import type { Transaction } from '@/types';
 
 interface TransactionDetailSheetProps {
@@ -46,7 +46,11 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
   const estilo = estiloDeCategoria(tx?.category);
   const Icono = estilo.icon;
   const entrante = (tx?.amount ?? 0) > 0;
-  const completado = (tx?.status ?? 'completed') === 'completed';
+  // Cada estado con su nombre: todo lo que no estaba completado se decia
+  // "Pendiente", tambien un movimiento que fallo o que se revirtio.
+  const estado = estiloDeEstado(tx ?? {});
+  const IconoEstado = estado.icon;
+  const tachado = tx ? noMovioDinero(tx) : false;
 
   return (
     <BottomSheet isOpen={isOpen && tx !== null} onClose={onClose} title={t('transaction_details')}>
@@ -59,7 +63,11 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
             <p className="max-w-full break-words text-lg font-bold uv-text-primary">{txTitle(tx, t)}</p>
             <p
               className={`mt-1 text-3xl font-black tabular-nums tracking-tight ${
-                entrante ? 'text-[var(--color-success)]' : 'uv-text-primary'
+                tachado
+                  ? 'uv-text-muted line-through decoration-2'
+                  : entrante
+                    ? 'text-[var(--color-success)]'
+                    : 'uv-text-primary'
               }`}
             >
               {entrante ? '+' : ''}
@@ -69,13 +77,9 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
 
           <dl className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
             <Fila etiqueta={t('status')}>
-              <span
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold ${
-                  completado ? 'uv-chip-success' : 'uv-chip-warning'
-                }`}
-              >
-                {completado ? <Icons.Check size={12} aria-hidden="true" /> : <Icons.Clock size={12} aria-hidden="true" />}
-                {completado ? t('tx_status_completed') : t('pending')}
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold ${estado.chip}`}>
+                <IconoEstado size={12} aria-hidden="true" />
+                {t(estado.clave)}
               </span>
             </Fila>
             <Fila etiqueta={t('date')}>{fechaYHora(tx.dateISO, language) || tx.date}</Fila>
