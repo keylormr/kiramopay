@@ -238,6 +238,14 @@ var ErrIdempotent = errors.New("idempotent: posting already recorded")
 // guarantee from the CHECK constraints on their cached balance row.
 var ErrInsufficientFunds = errors.New("insufficient funds")
 
+// ErrCuentaCerrada: el asiento toca la cuenta de una persona o de un comercio
+// cuyo dueno elimino su cuenta (migracion 076, ledger_accounts.closed_at). No
+// se puede acreditar ni debitar: el dinero que llegara ahi no tendria dueno. Se
+// resuelve aqui, en el unico lugar que traduce una persona a su cuenta, para
+// que ningun camino (transferencia, escrow, cobro QR, cripto) tenga que
+// acordarse de comprobarlo.
+var ErrCuentaCerrada = errors.New("la cuenta esta cerrada")
+
 // errIdempotencyRace is an internal, retryable signal: a concurrent posting
 // won the idempotency-key race. Retrying lets the top-level lookup return the
 // winner's posting id as ErrIdempotent.
@@ -461,12 +469,16 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 		// to apply a delta to the users' `wallets` cache — a merchant balance is
 		// derived from the journal instead.
 		var id, nb string
+		var cerrada bool
 		err := tx.QueryRow(ctx,
-			`SELECT id::text, normal_balance FROM ledger_accounts
+			`SELECT id::text, normal_balance, closed_at IS NOT NULL FROM ledger_accounts
 			 WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'`,
 			en.Account.MerchantID, en.Currency,
-		).Scan(&id, &nb)
+		).Scan(&id, &nb, &cerrada)
 		if err == nil {
+			if cerrada {
+				return "", false, "", ErrCuentaCerrada
+			}
 			return id, false, nb, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -501,12 +513,16 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 	}
 	// User wallet account
 	var id, nb string
+	var cerrada bool
 	err := tx.QueryRow(ctx,
-		`SELECT id::text, normal_balance FROM ledger_accounts
+		`SELECT id::text, normal_balance, closed_at IS NOT NULL FROM ledger_accounts
 		 WHERE user_id = $1::uuid AND currency = $2 AND type = 'user_wallet'`,
 		en.Account.UserID, en.Currency,
-	).Scan(&id, &nb)
+	).Scan(&id, &nb, &cerrada)
 	if err == nil {
+		if cerrada {
+			return "", false, "", ErrCuentaCerrada
+		}
 		return id, true, nb, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Eliminar tu cuenta de KiramoPay</title>
+  <meta name="description" content="Pide la eliminación de tu cuenta de KiramoPay y de tus datos personales, sin necesidad de abrir la aplicación." />
+  <meta name="theme-color" content="#2D7BFF" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="stylesheet" href="/legal.css" />
+  <!-- Nombre del desarrollador en Google Play (completar si difiere de la app):
+       el nombre de la app, KiramoPay, ya figura en el titulo y en el encabezado. -->
+</head>
+<body>
+<div class="pagina">
+
+  <header class="marca">
+    <a href="/" aria-label="KiramoPay">
+      <img src="/icon.svg" alt="" width="40" height="40" />
+      <span>KiramoPay</span>
+    </a>
+  </header>
+
+  <h1>Eliminar tu cuenta de KiramoPay</h1>
+  <p class="lede">
+    Pide aquí que eliminemos tu cuenta y tus datos personales. No necesitas abrir ni reinstalar la aplicación.
+  </p>
+
+  <section class="solicitud" aria-labelledby="titulo-solicitud">
+    <h2 id="titulo-solicitud">Pedir la eliminación</h2>
+
+    <noscript>
+      <p class="error">
+        Este formulario necesita JavaScript. Si no puedes activarlo, elimina tu cuenta desde la aplicación
+        (Perfil, Seguridad, Eliminar mi cuenta) o escribe al contacto de privacidad que figura en la
+        <a href="/privacidad/#contacto">política de privacidad</a>.
+      </p>
+    </noscript>
+
+    <!-- Paso 1: el contacto con el que se registro -->
+    <form id="paso-contacto" novalidate>
+      <label for="contacto">Correo o teléfono con que te registraste</label>
+      <input id="contacto" name="contacto" type="text" inputmode="email" autocomplete="username"
+             autocapitalize="none" spellcheck="false" required
+             placeholder="nombre@correo.com" />
+      <p class="meta">
+        Te enviamos un código de 6 dígitos para comprobar que la cuenta es tuya. Si ese contacto tiene una
+        cuenta, el código llega en unos minutos.
+      </p>
+      <p class="error" id="error-contacto" role="alert" hidden></p>
+      <button class="principal" type="submit" id="enviar-codigo">Enviar código</button>
+    </form>
+
+    <!-- Paso 2: el codigo -->
+    <form id="paso-codigo" novalidate hidden>
+      <p class="ok" id="aviso-codigo" role="status"></p>
+      <label for="codigo">Código de 6 dígitos</label>
+      <input id="codigo" name="codigo" type="text" class="codigo" inputmode="numeric" maxlength="6"
+             autocomplete="one-time-code" required />
+      <p class="error" id="error-codigo" role="alert" hidden></p>
+      <button class="principal" type="submit" id="confirmar">Confirmar solicitud</button>
+      <p><button class="enlace" type="button" id="otro-contacto">Usar otro correo o teléfono</button></p>
+    </form>
+
+    <!-- Paso 3: hecho -->
+    <div id="paso-listo" hidden role="status">
+      <h3>Solicitud recibida</h3>
+      <p>
+        Una persona del equipo la va a revisar y eliminar tu cuenta. Si hay algo pendiente que lo impida (por
+        ejemplo, saldo en la cuenta), te escribimos al correo registrado para decirte qué resolver.
+      </p>
+      <p>Cuando termine, tu cuenta ya no podrá usarse y tus datos personales se habrán borrado.</p>
+    </div>
+  </section>
+
+  <h2 id="que-pasa">Qué pasa con tus datos</h2>
+  <p><strong>Se borra:</strong> tu nombre, cédula, teléfono, correo y fecha de nacimiento; tu contraseña, dispositivos y sesiones; tus contactos, cuentas vinculadas, presupuestos, pagos recurrentes y conversaciones con el asistente. Tus tarjetas virtuales se cancelan.</p>
+  <p>
+    <strong>Se conserva:</strong> el registro de los movimientos de dinero, sin tus datos de contacto, y los registros
+    que se guardan por obligación legal, seguridad o prevención de fraude. Los detalles y plazos están en la
+    <a href="/privacidad/#retencion">política de privacidad</a>.
+  </p>
+  <p><strong>Eliminar tu cuenta no se puede deshacer.</strong></p>
+
+  <h2 id="antes">Antes de pedirlo</h2>
+  <p>La cuenta se puede eliminar cuando:</p>
+  <ul>
+    <li>el saldo está en cero (billetera, ahorros, criptoactivos y, si tienes comercio, también el del comercio);</li>
+    <li>no hay movimientos, retiros, transferencias internacionales, acuerdos de garantía ni pedidos en curso.</li>
+  </ul>
+  <p>Si tienes saldo, envíalo, retíralo o gástalo primero. Si no puedes hacerlo, igual puedes pedir la eliminación: te diremos qué falta.</p>
+
+  <h2 id="desde-la-app">Si todavía tienes la aplicación</h2>
+  <p>Entra a <strong>Perfil</strong>, luego <strong>Seguridad</strong> y elige <strong>Eliminar mi cuenta</strong>. Te pedimos tu contraseña para confirmar que eres tú.</p>
+
+  <footer class="pie">
+    <a href="/privacidad/">Política de privacidad</a>
+    <a href="/">Ir a KiramoPay</a>
+  </footer>
+
+</div>
+<script src="/eliminar-cuenta/app.js" defer></script>
+</body>
+</html>

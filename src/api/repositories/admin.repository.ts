@@ -40,6 +40,30 @@ export interface AdminUser {
 }
 
 /**
+ * Una solicitud de eliminacion hecha desde la pagina web, con el contacto ya
+ * verificado, esperando a que una persona la atienda. La cuenta llega
+ * enmascarada desde el servidor; es null si el contacto no corresponde a
+ * ninguna cuenta.
+ */
+export interface SolicitudDeEliminacion {
+  id: string;
+  /** Por donde pidio: el correo o el telefono con que se registro. */
+  contactKind: 'email' | 'phone';
+  createdAt: string;
+  verifiedAt: string | null;
+  account: AdminUser | null;
+}
+
+/** Lo que paso al atender una solicitud. */
+export interface ResultadoDeSolicitud {
+  /** completed | blocked | rejected */
+  status: string;
+  resultCode: string;
+  /** Codigos de lo que impide eliminar (solo cuando status = blocked). */
+  blockers: string[];
+}
+
+/**
  * Admin repository: remote account blocking. Like kyc/auth this ALWAYS talks
  * to the real backend (the role is enforced server-side); there is no mock
  * adapter.
@@ -64,6 +88,19 @@ export interface IAdminRepository {
    * Bajar de plan no borra metas ni tarjetas: solo impide crear nuevas.
    */
   setUserPlan(id: string, plan: PlanPersonal): Promise<ApiResponse<PlanAsignado>>;
+
+  // ── Solicitudes de eliminacion de cuenta (pagina web) ──
+  /** La cola: contacto verificado, la mas antigua primero. */
+  listDeletionRequests(): Promise<ApiResponse<SolicitudDeEliminacion[]>>;
+  /**
+   * Corre la eliminacion de la cuenta de la solicitud. Un bloqueo (saldo, dinero
+   * en transito) NO es un error: vuelve como status = blocked con sus codigos y
+   * no se toco nada. Acepta cuentas bloqueadas, porque aqui hay una persona que
+   * las reviso. Queda en la auditoria con el administrador como actor.
+   */
+  processDeletionRequest(id: string): Promise<ApiResponse<ResultadoDeSolicitud>>;
+  /** Cierra la solicitud sin eliminar nada. */
+  rejectDeletionRequest(id: string): Promise<ApiResponse<{ rejected: boolean }>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

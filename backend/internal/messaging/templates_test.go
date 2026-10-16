@@ -95,3 +95,62 @@ func TestRegistrationOTPEmail(t *testing.T) {
 		t.Error("falta el vencimiento de 10 minutos")
 	}
 }
+
+func TestDeletionCodeEmailLlevaElCodigoYElVencimiento(t *testing.T) {
+	subject, text, html := DeletionCodeEmail("481516")
+	if !strings.Contains(subject, "eliminar") {
+		t.Errorf("el asunto no dice de que se trata: %q", subject)
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		if !strings.Contains(cuerpo, "481516") {
+			t.Errorf("el cuerpo %s no lleva el codigo", nombre)
+		}
+		if !strings.Contains(cuerpo, "15 minutos") {
+			t.Errorf("el cuerpo %s no dice cuando vence", nombre)
+		}
+	}
+}
+
+// El SMS entra en una sola parte solo si es ASCII y cabe en 160 caracteres (ver
+// VerificationSMS); una tilde lo parte en dos.
+func TestDeletionCodeSMSEsAsciiYCabeEnUnaParte(t *testing.T) {
+	sms := DeletionCodeSMS("123456")
+	if len(sms) > 160 {
+		t.Errorf("el SMS mide %d, mas que una parte", len(sms))
+	}
+	for _, r := range sms {
+		if r > 127 {
+			t.Fatalf("el SMS lleva un caracter no ASCII: %q", r)
+		}
+	}
+	if !strings.Contains(sms, "123456") {
+		t.Error("el SMS no lleva el codigo")
+	}
+}
+
+// El aviso de cuenta eliminada llega a un buzon que se borra en el mismo acto:
+// no debe repetir ningun dato de la cuenta.
+func TestAccountDeletedEmailNoLlevaDatosDeLaCuenta(t *testing.T) {
+	_, text, html := AccountDeletedEmail()
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		if strings.Contains(cuerpo, "@") && nombre == "texto" {
+			t.Errorf("el %s lleva algo con forma de correo", nombre)
+		}
+		if !strings.Contains(cuerpo, "eliminada") {
+			t.Errorf("el %s no dice que la cuenta fue eliminada", nombre)
+		}
+	}
+}
+
+func TestDeletionBlockedEmailListaLosMotivosYEscapaElHTML(t *testing.T) {
+	_, text, html := DeletionBlockedEmail([]string{"Tienes saldo en tu billetera.", "Un <script> en el texto"})
+	if !strings.Contains(text, "- Tienes saldo en tu billetera.") {
+		t.Errorf("el texto no lista el motivo: %q", text)
+	}
+	if !strings.Contains(html, "Tienes saldo en tu billetera.") || strings.Contains(html, "<script>") {
+		t.Errorf("el html no escapa o no lista: %q", html)
+	}
+	if !strings.Contains(text, "No se borró nada") {
+		t.Error("tiene que decir que no se borro nada")
+	}
+}

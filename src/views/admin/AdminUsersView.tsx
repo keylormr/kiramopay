@@ -7,8 +7,9 @@ import type { AdminUser, AdminUserStatus } from '@/api/repositories/admin.reposi
 import type { PlanPersonal } from '@/api/repositories/plans.repository';
 import { PLANES_PERSONALES, rellenar } from '@/utils/planes';
 import { localeDe } from '@/utils/periodos';
+import { SolicitudesDeEliminacion } from './SolicitudesDeEliminacion';
 
-type Tab = 'search' | 'blocked';
+type Tab = 'search' | 'blocked' | 'deletions';
 type Translate = (key: string) => string;
 
 const MIN_TERM = 3;
@@ -471,6 +472,10 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
               <Icons.Lock size={14} aria-hidden="true" />
               {t('admin_users_tab_blocked')}
             </button>
+            <button type="button" role="tab" aria-selected={tab === 'deletions'} onClick={() => setTab('deletions')} className={tabClass(tab === 'deletions')}>
+              <Icons.Trash size={14} aria-hidden="true" />
+              {t('admin_del_tab')}
+            </button>
           </div>
         </div>
 
@@ -521,6 +526,8 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 : list(results)}
           </>
         )}
+
+        {tab === 'deletions' && <SolicitudesDeEliminacion />}
 
         {tab === 'blocked' && (
           <>

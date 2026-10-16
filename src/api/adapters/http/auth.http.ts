@@ -8,6 +8,9 @@ import type {
   SendRegistrationOtpResult,
   VerifyRegistrationOtpResult,
   TokenPair,
+  PreflightDeEliminacion,
+  MotivoDeEliminacion,
+  EliminarCuentaRequest,
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
@@ -168,6 +171,39 @@ export class HttpAuthRepository implements IAuthRepository {
     }
 
     return apiSuccess({ changed: true });
+  }
+
+  async deletionPreflight(): Promise<ApiResponse<PreflightDeEliminacion>> {
+    const res = await this.client.get<{
+      eligible: boolean;
+      reason?: MotivoDeEliminacion;
+      blockers: { code: string }[] | null;
+      requires_totp: boolean;
+    }>('/api/v1/users/me/delete-account/preflight');
+    if (!res.success || !res.data) {
+      return falla(res, 'PREFLIGHT_FAILED');
+    }
+    const d = res.data;
+    return apiSuccess({
+      elegible: !!d.eligible,
+      motivo: d.reason,
+      bloqueos: (d.blockers ?? []).map((b) => b.code),
+      pideSegundoFactor: !!d.requires_totp,
+    });
+  }
+
+  async deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<{ alreadyDeleted: boolean }>> {
+    const res = await this.client.post<{ already_deleted?: boolean }>('/api/v1/users/me/delete-account', {
+      password: request.password,
+      // undefined se omite del JSON: sin autenticador no viaja la clave.
+      totp_code: request.totpCode,
+    });
+    if (!res.success) {
+      // El codigo y el detalle pasan: la pantalla elige el texto por codigo y,
+      // en DELETION_BLOCKED, lista lo que hay que resolver.
+      return falla(res, 'DELETION_FAILED');
+    }
+    return apiSuccess({ alreadyDeleted: !!res.data?.already_deleted });
   }
 
   async sendRegistrationOtp(phone: string, email: string): Promise<ApiResponse<SendRegistrationOtpResult>> {

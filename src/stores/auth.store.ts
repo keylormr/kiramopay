@@ -86,7 +86,7 @@ interface AuthState {
   // en memoria (fuera de partialize): el aviso se muestra una vez, en la
   // pantalla de login que sigue a la expulsion, y no debe resucitar en una
   // recarga ni heredarse al siguiente usuario del dispositivo.
-  logoutReason: 'blocked' | null;
+  logoutReason: 'blocked' | 'deleted' | null;
   /**
    * Como va la restauracion de la sesion al arrancar. Vive solo en memoria.
    * - 'normal': nada que avisar.
@@ -128,6 +128,13 @@ interface AuthState {
   /** Descarta el aviso de expulsion (el usuario lo cerro). */
   clearLogoutReason: () => void;
   completeOnboarding: () => void;
+  /**
+   * La cuenta se acaba de eliminar en el servidor: soltar TODO lo local sin
+   * pedirle nada (la sesion ya esta revocada y el logout normal fallaria con
+   * 401). A diferencia de logout, tambien olvida la tarjeta de acceso rapido y
+   * la credencial de la huella: ya no hay a que cuenta volver.
+   */
+  cuentaEliminada: () => void;
   /** La respuesta entera: la pantalla dice por que no se pudo, no solo que no. */
   changePassword: (oldPassword: string, newPassword: string) => Promise<ApiResponse<{ changed: boolean }>>;
 }
@@ -311,6 +318,27 @@ export const useAuthStore = create<AuthState>()(
 
       clearLogoutReason: () => {
         set({ logoutReason: null });
+      },
+
+      cuentaEliminada: () => {
+        // El servidor ya borro las suscripciones de avisos y revoco las sesiones;
+        // esto corta la del navegador.
+        soltarAvisosAlSalir(false);
+        clearLockPin();
+        secureTokenStore.clear();
+        olvidarUltimoAcceso();
+        limpiarDatosDeUsuario();
+        generacionDeSesion++;
+        set({
+          isAuthenticated: false,
+          sessionHint: false,
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          // El login que sigue avisa que la cuenta se elimino.
+          logoutReason: 'deleted' as const,
+          restauracion: 'normal',
+        });
       },
 
       bootstrap: () => {

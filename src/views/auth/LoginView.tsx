@@ -18,6 +18,7 @@ import { User } from '../../types';
 import { RecoverPasswordView } from './RecoverPasswordView';
 import { Capacitor } from '@capacitor/core';
 import { resolveApiBaseUrl } from '@/api/baseUrl';
+import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -309,6 +310,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             <p className="font-bold text-white">{t('account_blocked_title')}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
               {t('account_blocked_body')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearLogoutReason}
+            aria-label={t('close')}
+            className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Icons.X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Aviso de cuenta eliminada: la persona la elimino y volvio al login */}
+      {logoutReason === 'deleted' && (
+        <div
+          role="status"
+          className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-4 animate-slide-up"
+        >
+          <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-white">{t('account_deleted_title')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+              {t('account_deleted_body')}
             </p>
           </div>
           <button
@@ -693,6 +718,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         <p className="text-[var(--color-text-muted-dark)]/70 text-[11px] text-center mt-6 leading-relaxed">
           {t('login_terms')}
         </p>
+        {/* Google Play exige la politica de privacidad enlazada dentro de la app.
+            La frase de arriba la nombra; este enlace la abre. */}
+        <button
+          type="button"
+          onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
+          className="mx-auto mt-2 block text-xs font-semibold text-[var(--color-text-secondary-dark)] underline underline-offset-2 hover:text-white transition-colors"
+        >
+          {t('privacy_policy')}
+        </button>
       </footer>
 
       {showRecover && (

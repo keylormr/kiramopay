@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/kiramopay/backend/internal/accountdeletion"
 	"github.com/kiramopay/backend/internal/adminusers"
 	"github.com/kiramopay/backend/internal/appversion"
 	"github.com/kiramopay/backend/internal/assistant"
@@ -627,6 +628,18 @@ func main() {
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
 	adminUsersHandler := adminusers.NewHandler(adminUsersService)
+	// Eliminar la cuenta: la persona desde la app (reautenticada), o desde la
+	// pagina web con codigo y un administrador de por medio. La fila de users
+	// queda como tumba; el libro del dinero no se toca.
+	accountDeletionService := accountdeletion.NewService(pool, userRepo, &accountdeletion.Options{
+		TOTP:        mfaSvc,
+		Lockout:     lockoutStore,
+		MaxIntentos: 5,
+		Email:       emailSender,
+		SMS:         smsSender,
+		Logger:      logger,
+	})
+	accountDeletionHandler := accountdeletion.NewHandler(accountDeletionService, authHandler.EndSession)
 	transparencyHandler := transparency.NewHandler(pool)
 	// /fees publica los MISMOS topes que aplican los servicios, no una copia.
 	planesPublicados := transparency.PlanesPublicados{Metas: topesMetas, Tarjetas: topesTarjetas}
@@ -668,6 +681,7 @@ func main() {
 	// despues que el servicio de administracion, asi que se cablea aqui, igual
 	// que el broadcaster de arriba.
 	adminUsersService.SetDisconnector(wsHub)
+	accountDeletionService.SetDisconnector(wsHub)
 
 	// ── Reconciliation worker ────────────────────────────────────────────
 	// Auto-fix snaps the wallets cache to the journal (source of truth) under
@@ -956,6 +970,11 @@ func main() {
 			r.Post("/auth/register/otp/verify", authHandler.RegisterVerifyOTP)
 			r.Post("/auth/forgot-password", authHandler.ForgotPassword)
 			r.Post("/auth/reset-password", authHandler.ResetPassword)
+			// Eliminacion de cuenta desde la pagina web, para quien ya no tiene la
+			// app. Mismo limite por IP que el resto de lo anonimo; el tope por
+			// contacto (un codigo por minuto) lo pone el servicio.
+			r.Post("/public/account-deletion-requests", accountDeletionHandler.Solicitar)
+			r.Post("/public/account-deletion-requests/verify", accountDeletionHandler.Verificar)
 		})
 
 		// ─────────────────────────────────────────────────────────────
@@ -991,6 +1010,10 @@ func main() {
 			// User
 			r.Get("/users/me", userHandler.GetProfile)
 			r.Patch("/users/me", userHandler.UpdateProfile)
+			// Eliminar la cuenta. El preflight dice que hay que resolver antes; el
+			// POST reautentica con la contrasena (y el autenticador si lo hay).
+			r.Get("/users/me/delete-account/preflight", accountDeletionHandler.Preflight)
+			r.Post("/users/me/delete-account", accountDeletionHandler.Eliminar)
 			r.Put("/users/me/language", userHandler.SetLanguage)
 
 			// KYC
@@ -1305,6 +1328,11 @@ func main() {
 					r.Get("/admin/users/{id}/sessions", adminUsersHandler.Sessions)
 					r.Post("/admin/users/{id}/sessions/revoke-all", adminUsersHandler.RevokeAllSessions)
 					r.Post("/admin/users/{id}/sessions/{sid}/revoke", adminUsersHandler.RevokeSession)
+					// Cola de solicitudes de eliminacion hechas desde la web: ya
+					// verificadas, esperando a que una persona las atienda.
+					r.Get("/admin/account-deletion-requests", accountDeletionHandler.ListarSolicitudes)
+					r.Post("/admin/account-deletion-requests/{id}/process", accountDeletionHandler.Procesar)
+					r.Post("/admin/account-deletion-requests/{id}/reject", accountDeletionHandler.Rechazar)
 				})
 
 				// Lista de espera de los planes de pago, con la PII enmascarada.
