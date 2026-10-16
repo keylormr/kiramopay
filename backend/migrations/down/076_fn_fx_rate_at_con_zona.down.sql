@@ -5,7 +5,7 @@
 
 DROP FUNCTION IF EXISTS fn_fx_rate_at(VARCHAR, VARCHAR, TIMESTAMPTZ);
 
-CREATE FUNCTION fn_fx_rate_at(
+CREATE OR REPLACE FUNCTION fn_fx_rate_at(
     p_from VARCHAR, p_to VARCHAR, p_at TIMESTAMP
 ) RETURNS NUMERIC(20, 10) AS $$
     SELECT rate FROM exchange_rates

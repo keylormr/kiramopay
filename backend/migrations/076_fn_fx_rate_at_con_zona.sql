@@ -7,12 +7,14 @@
 -- sesion, y fuera de UTC la funcion devuelve la tasa de otra hora.
 --
 -- Cambia el tipo de un parametro, que CREATE OR REPLACE no puede hacer: se
--- borra la de la 021 y se crea la nueva con el mismo cuerpo. Nada en la
--- aplicacion la llama, y no tiene permisos propios.
+-- borra la de la 021 y se crea la nueva con el mismo cuerpo. OR REPLACE queda
+-- por si la version con zona ya existiera (creada a mano): sin el, el CREATE
+-- fallaria y el arranque con ella. Nada en la aplicacion la llama, y no tiene
+-- permisos propios.
 
 DROP FUNCTION IF EXISTS fn_fx_rate_at(VARCHAR, VARCHAR, TIMESTAMP);
 
-CREATE FUNCTION fn_fx_rate_at(
+CREATE OR REPLACE FUNCTION fn_fx_rate_at(
     p_from VARCHAR, p_to VARCHAR, p_at TIMESTAMPTZ
 ) RETURNS NUMERIC(20, 10) AS $$
     SELECT rate FROM exchange_rates
