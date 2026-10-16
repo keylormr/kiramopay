@@ -47,26 +47,10 @@ func TestRunAllMigrations(t *testing.T) {
 // sinZonaConocidas son las columnas que siguen siendo timestamp sin zona al
 // final de la cadena. La 034 convirtio todas las que habia, salvo las que usaba
 // una vista (Postgres no cambia el tipo de una columna que una vista lee), y
-// despues de la 034 tres migraciones volvieron a crear columnas sin zona. Son
-// deuda: convertirlas es una migracion propia. Lo que esta lista cuida es que
-// no se sumen otras.
-var sinZonaConocidas = map[string]bool{
-	"exchange_rates.effective_from":      true, // 021, la lee la vista current_exchange_rates
-	"exchange_rates.effective_to":        true, // 021, idem
-	"users.created_at":                   true, // 001, la lee la vista users_masked
-	"users.updated_at":                   true, // 001, idem
-	"users.last_login_at":                true, // 001, idem
-	"users.kyc_verified_at":              true, // 001, idem
-	"users.deleted_at":                   true, // 001, idem
-	"merchant_locations.created_at":      true, // 046
-	"merchant_staff.created_at":          true, // 046
-	"merchant_staff.revoked_at":          true, // 046
-	"merchant_catalog_items.created_at":  true, // 046
-	"assistant_conversations.created_at": true, // 049
-	"assistant_conversations.updated_at": true, // 049
-	"user_totp.disabled_at":              true, // 055
-	"totp_recovery_codes.invalidated_at": true, // 055
-}
+// despues de la 034 tres migraciones volvieron a crear columnas sin zona. La
+// 075 convirtio esas quince: la lista queda vacia, y una columna sin zona nueva
+// es un error.
+var sinZonaConocidas = map[string]bool{}
 
 // exigirFechasConZona falla si al final de la cadena hay una columna timestamp
 // sin zona que no este en sinZonaConocidas, o si una de la lista ya no lo es (y
