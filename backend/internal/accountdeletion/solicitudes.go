@@ -367,10 +367,67 @@ func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*A
 	if err != nil {
 		return nil, err
 	}
-	if userID := s.idDeSolicitud(ctx, solicitudID); userID != "" && out != nil && out.Estado == "completed" {
-		s.despues(userID, res)
+	if userID := s.idDeSolicitud(ctx, solicitudID); userID != "" && out != nil {
+		switch out.Estado {
+		case "completed":
+			s.despues(userID, res)
+		case "blocked":
+			s.avisarBloqueo(ctx, userID, out.Bloqueos)
+		}
 	}
 	return out, nil
+}
+
+// frasesDeBloqueo es lo que se le escribe a la persona por cada cosa pendiente.
+// Van aqui, y no en el front, porque salen por correo y no hay pantalla que las
+// traduzca. Un codigo que no este aqui cae en la frase generica.
+var frasesDeBloqueo = map[string]string{
+	BloqueoSaldo:             "tienes saldo en tu billetera: envíalo, retíralo o gástalo hasta dejarla en cero",
+	BloqueoAhorros:           "tienes dinero en tus metas de ahorro: pásalo a tu billetera",
+	BloqueoCripto:            "tienes criptomonedas: véndelas o envíalas",
+	BloqueoStaking:           "tienes cripto en staking: retírala",
+	BloqueoSaldoRegional:     "tienes saldo en una billetera regional",
+	BloqueoSaldoComercio:     "tu comercio tiene saldo: pásalo a tu billetera",
+	BloqueoCobrosAbiertos:    "tu comercio tiene cobros por QR sin pagar: cancélalos",
+	BloqueoMovimientoEnCurso: "tienes un movimiento en proceso: espera a que termine",
+	BloqueoEscrowAbierto:     "tienes un acuerdo de garantía abierto: ciérralo o espera a que se liquide",
+	BloqueoPayoutEnCurso:     "tienes un retiro en proceso: espera a que termine",
+	BloqueoTransfronterizo:   "tienes una transferencia internacional en proceso: espera a que termine",
+	BloqueoMarketplace:       "tienes un viaje o un pedido en curso: espera a que termine",
+}
+
+// avisarBloqueo le escribe a la persona, al correo de su cuenta, que su
+// solicitud todavia no se pudo atender y que tiene que resolver. Sin esto una
+// solicitud hecha desde la web que no se puede completar moriria en silencio: la
+// pagina promete que se avisa. Sin correo en la cuenta no hay a donde avisar y la
+// solicitud queda marcada como bloqueada para operaciones. Es de mejor esfuerzo:
+// la base ya quedo escrita.
+func (s *Service) avisarBloqueo(ctx context.Context, userID string, bloqueos []Bloqueo) {
+	if s.email == nil || len(bloqueos) == 0 {
+		return
+	}
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil || u.Email == "" {
+		return
+	}
+	motivos := make([]string, 0, len(bloqueos))
+	for _, b := range bloqueos {
+		if f, ok := frasesDeBloqueo[b.Codigo]; ok {
+			motivos = append(motivos, f)
+		} else {
+			motivos = append(motivos, "hay algo pendiente en tu cuenta")
+		}
+	}
+	// #nosec G118 -- intentionally detached: the request context dies with the
+	// response and the notice must outlive it; it bounds itself with avisoTimeout.
+	go func(correo string) {
+		cctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
+		defer cancel()
+		subject, text, html := messaging.DeletionBlockedEmail(motivos)
+		if err := s.email.SendEmail(cctx, correo, subject, text, html); err != nil {
+			s.logger.Warn("aviso de eliminacion bloqueada no enviado", "user", userID, "err", err.Error())
+		}
+	}(u.Email)
 }
 
 // idDeSolicitud devuelve la cuenta de una solicitud ya atendida, para los

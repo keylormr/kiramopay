@@ -260,3 +260,32 @@ func AccountDeletedEmail() (subject, textBody, htmlBody string) {
 	htmlBody = emailShell("Tu cuenta fue eliminada", "Tu cuenta de KiramoPay fue eliminada.", body.String())
 	return subject, text.String(), htmlBody
 }
+
+// DeletionBlockedEmail le dice a quien pidio eliminar su cuenta desde la web que
+// todavia no se pudo y que tiene que resolver. motivos son frases ya redactadas
+// (una por cada cosa pendiente). No promete un plazo: lo unico que pide es
+// resolverlo y volver a solicitarlo.
+func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string) {
+	subject = "Todavía no pudimos eliminar tu cuenta de KiramoPay"
+
+	var text strings.Builder
+	text.WriteString("Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero todavía no se pudo porque:\n\n")
+	for _, m := range motivos {
+		text.WriteString("- " + m + "\n")
+	}
+	text.WriteString("\nNo se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay.\n")
+	text.WriteString("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba.\n")
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph("Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero todavía no se pudo porque:"))
+	items := new(strings.Builder)
+	for _, m := range motivos {
+		items.WriteString("<li style=\"margin:0 0 6px\">" + html.EscapeString(m) + "</li>")
+	}
+	body.WriteString(`<ul style="margin:0 0 16px;padding-left:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:` + inkPrimary + `">` + items.String() + `</ul>`)
+	body.WriteString(paragraph("No se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay."))
+	body.WriteString(note("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."))
+
+	htmlBody = emailShell("Todavía no pudimos eliminar tu cuenta", "No se borró nada.", body.String())
+	return subject, text.String(), htmlBody
+}

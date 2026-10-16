@@ -141,3 +141,16 @@ func TestAccountDeletedEmailNoLlevaDatosDeLaCuenta(t *testing.T) {
 		}
 	}
 }
+
+func TestDeletionBlockedEmailListaLosMotivosYEscapaElHTML(t *testing.T) {
+	_, text, html := DeletionBlockedEmail([]string{"Tienes saldo en tu billetera.", "Un <script> en el texto"})
+	if !strings.Contains(text, "- Tienes saldo en tu billetera.") {
+		t.Errorf("el texto no lista el motivo: %q", text)
+	}
+	if !strings.Contains(html, "Tienes saldo en tu billetera.") || strings.Contains(html, "<script>") {
+		t.Errorf("el html no escapa o no lista: %q", html)
+	}
+	if !strings.Contains(text, "No se borró nada") {
+		t.Error("tiene que decir que no se borro nada")
+	}
+}

@@ -364,6 +364,12 @@ func TestProcesar_ConSaldoQuedaBloqueadaYNoSeToca(t *testing.T) {
 	if cuenta1[string](t, pool, `SELECT result_code FROM account_deletion_requests WHERE id = $1::uuid`, id) != BloqueoSaldo {
 		t.Error("el motivo no quedo en la solicitud")
 	}
+	// La pagina promete avisar: la persona recibe, en su correo, lo que tiene que
+	// resolver. Sin esto la solicitud moriria en silencio.
+	aviso := esperar(t, correo.ch)
+	if aviso.Para != a.Correo || !strings.Contains(aviso.Texto, "saldo en tu billetera") || !strings.Contains(aviso.Texto, "No se borró nada") {
+		t.Errorf("aviso inesperado: %+v", aviso)
+	}
 }
 
 func TestProcesar_SolicitudSinCuentaSeRechaza(t *testing.T) {
