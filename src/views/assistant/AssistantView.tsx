@@ -7,12 +7,27 @@ import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/d
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import { CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO } from '@/views/sinpe/rechazosDelEnvio';
+import {
+  CLAVES_DEL_RECHAZO_DEL_RECIBO,
+  CLAVES_DEL_RECHAZO_DE_LA_RECARGA,
+  CLAVE_GENERICA_DEL_SERVICIO,
+} from '@/views/services/rechazosDelServicio';
 import { useAuthStore } from '@/stores/auth.store';
 import { normalizarTelefonoCR } from '@/utils/telefono';
 import type { AssistantTurn, AssistantProposal, AssistantConversationSummary } from '@/api';
 
 type ChatMsg = AssistantTurn & { proposals?: AssistantProposal[] };
 type ProposalState = 'idle' | 'pending' | 'done' | 'error';
+
+// Las respuestas del chat que no son una respuesta, por codigo. Con
+// mensajeDeRechazo, uno que no este aqui cae a assistant_error, nunca al texto
+// del servidor; los del cliente (sin red, sesion vencida) se respetan.
+const CLAVES_DEL_RECHAZO_DEL_CHAT: Readonly<Record<string, string>> = {
+  ASSISTANT_QUOTA: 'assistant_quota_reached',
+  ASSISTANT_BUSY: 'assistant_busy',
+  CONVERSATION_LIMIT: 'assistant_conv_limit',
+  ASSISTANT_UNAVAILABLE: 'assistant_unavailable',
+};
 
 // The model replies in light Markdown (**bold**, "- " bullets). Render just
 // those inline so the assistant bubble doesn't show raw ** or - characters.
@@ -154,15 +169,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         reloadConversations();
       }
     } else {
-      const code = res.error?.code;
-      const text =
-        code === 'ASSISTANT_QUOTA'
-          ? t('assistant_quota_reached')
-          : code === 'ASSISTANT_BUSY'
-            ? t('assistant_busy')
-            : code === 'CONVERSATION_LIMIT'
-              ? t('assistant_conv_limit')
-              : res.error?.message || t('assistant_error');
+      // Por codigo; uno que no se conoce cae al generico, nunca al texto del
+      // servidor ("the assistant could not answer right now").
+      const text = mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_CHAT, 'assistant_error', t);
       setMessages([...next, { role: 'assistant', text }]);
     }
   };
@@ -230,12 +239,20 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         refreshSinpe().catch(() => {});
       }
     }
-    // El SINPE con los mismos textos que la pantalla SINPE: es el mismo envio.
+    // Cada uno con los mismos textos que su pantalla, que confirma por la misma
+    // ruta: el SINPE como la pantalla SINPE, la recarga y el recibo como la de
+    // Servicios. La recarga y el recibo mostraban el texto del servidor tal
+    // cual ("process payment: insufficient balance").
     const error = res.success
       ? ''
       : p.kind === 'sinpe_transfer'
         ? mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_SINPE, CLAVE_GENERICA_DEL_ENVIO, t)
-        : res.error?.message || t('assistant_action_failed');
+        : mensajeDeRechazo(
+            res.error,
+            p.kind === 'recharge' ? CLAVES_DEL_RECHAZO_DE_LA_RECARGA : CLAVES_DEL_RECHAZO_DEL_RECIBO,
+            CLAVE_GENERICA_DEL_SERVICIO,
+            t,
+          );
     setPstate((s) => ({
       ...s,
       [key]: res.success ? { status: 'done', repetida } : { status: 'error', error },

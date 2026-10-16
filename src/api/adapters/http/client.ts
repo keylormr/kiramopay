@@ -226,8 +226,21 @@ export class HttpClient {
       }
 
       // Rate limited: surface a distinct code so the UI doesn't mistake it for
-      // bad credentials, and don't try to parse a possibly non-JSON body.
+      // bad credentials. El cupo diario del asistente y su capacidad tambien
+      // son 429, con su propio codigo, y se conserva: sin leer el cuerpo, a
+      // quien habia agotado las preguntas del dia se le decia que esperara un
+      // momento. El del limitador, o uno sin JSON (del borde), es RATE_LIMITED.
       if (res.status === 429) {
+        let sobre: { error?: { code?: string; message?: string } } | null = null;
+        try {
+          sobre = await res.json();
+        } catch {
+          sobre = null;
+        }
+        const codigo = sobre?.error?.code;
+        if (codigo && codigo !== 'RATE_LIMITED') {
+          return apiError<T>(codigo, mensajeDelServidor(res.status, codigo, sobre?.error?.message));
+        }
         return apiError<T>('RATE_LIMITED', mensajeDelCliente('RATE_LIMITED'));
       }
 

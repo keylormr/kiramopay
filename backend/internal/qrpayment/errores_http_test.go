@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
 )
 
@@ -81,5 +83,37 @@ func TestResponderError_LlaveDeOtraTransferenciaEs409(t *testing.T) {
 	codigo, _ := codigoDe(t, rec)
 	if rec.Code != http.StatusConflict || codigo != "LLAVE_REUTILIZADA" {
 		t.Fatalf("%d %s, se esperaba 409 LLAVE_REUTILIZADA", rec.Code, codigo)
+	}
+}
+
+// Los rechazos del motor de transferencias, que comparten SINPE y QR, salen con
+// el mismo codigo que en SINPE. En QR caian al PAYMENT_FAILED generico con el
+// error envuelto ("qr payment transfer: insufficient balance"), y la pantalla
+// lo mostraba tal cual, en ingles.
+func TestResponderError_LosRechazosDeLaTransferenciaTienenCodigoPropio(t *testing.T) {
+	casos := []struct {
+		err    error
+		estado int
+		codigo string
+	}{
+		{transaction.ErrSaldoInsuficiente, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
+		// El del asiento, que es el que frena bajo concurrencia.
+		{ledger.ErrInsufficientFunds, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
+		{transaction.ErrDailyLimitExceeded, http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED"},
+		{transaction.ErrMonthlyLimitExceeded, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED"},
+		{transaction.ErrBloqueadoPorRiesgo, http.StatusBadRequest, "TRANSFER_BLOCKED"},
+		// La llave que ya es de otro movimiento, vista desde el libro.
+		{transaction.ErrLlaveDeOtroMovimiento, http.StatusConflict, "LLAVE_REUTILIZADA"},
+	}
+	for _, c := range casos {
+		rec := httptest.NewRecorder()
+		responderError(rec, fmt.Errorf("qr payment transfer: %w", c.err))
+		codigo, msg := codigoDe(t, rec)
+		if rec.Code != c.estado || codigo != c.codigo {
+			t.Errorf("%v = %d %s, se esperaba %d %s", c.err, rec.Code, codigo, c.estado, c.codigo)
+		}
+		if strings.Contains(msg, "qr payment transfer") {
+			t.Errorf("%v: el texto lleva los prefijos internos: %q", c.err, msg)
+		}
 	}
 }
