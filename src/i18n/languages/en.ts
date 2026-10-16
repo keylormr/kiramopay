@@ -578,6 +578,7 @@ const en: TranslationKeys = {
   crypto_tx_gave: 'You gave',
   crypto_tx_got: 'You received',
   crypto_status_failed: 'Failed',
+  crypto_status_unknown: 'Unconfirmed',
   crypto_onramp_cta: 'Buy with card',
   crypto_onramp_soon_title: 'Card purchases coming soon',
   crypto_onramp_soon_desc: 'Soon you will be able to buy crypto with a card or bank through an external provider (Onramper / Transak / MoonPay) that handles verification, liquidity and custody. KiramoPay never holds those funds.',

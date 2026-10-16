@@ -578,6 +578,7 @@ const hi: TranslationKeys = {
   crypto_tx_gave: 'आपने दिया',
   crypto_tx_got: 'आपको मिला',
   crypto_status_failed: 'विफल',
+  crypto_status_unknown: 'अपुष्ट',
   crypto_onramp_cta: 'कार्ड से खरीदें',
   crypto_onramp_soon_title: 'कार्ड से खरीद जल्द आ रही है',
   crypto_onramp_soon_desc: 'जल्द ही आप किसी बाहरी प्रदाता (Onramper / Transak / MoonPay) के माध्यम से कार्ड या बैंक से क्रिप्टो खरीद सकेंगे, जो सत्यापन, तरलता और कस्टडी संभालता है। KiramoPay कभी उन फंड्स को नहीं रखता।',

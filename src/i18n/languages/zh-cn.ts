@@ -579,6 +579,7 @@ const zhCn: TranslationKeys = {
   crypto_tx_gave: '付出',
   crypto_tx_got: '收到',
   crypto_status_failed: '失败',
+  crypto_status_unknown: '未确认',
   crypto_onramp_cta: '用卡购买',
   crypto_onramp_soon_title: '刷卡购买即将上线',
   crypto_onramp_soon_desc: '很快你就能通过外部提供商（Onramper / Transak / MoonPay）用银行卡或银行账户购买加密货币，由其负责身份验证、流动性和托管。KiramoPay 绝不经手这些资金。',

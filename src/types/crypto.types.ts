@@ -12,6 +12,12 @@ export interface CryptoAsset {
 }
 
 /**
+ * Los estados que la app conoce de un movimiento de cripto, mas 'unknown'
+ * para uno que no conoce: ver utils/estadoCripto.ts.
+ */
+export type EstadoCripto = 'completed' | 'pending' | 'failed' | 'unknown';
+
+/**
  * Un movimiento de cripto. `from*` es lo que sale y `to*` lo que entra:
  *  - compra: sale el fiat (fromAsset = USD/CRC, fromAmount = lo pagado) y
  *    entra la cripto (toAsset, toAmount);
@@ -36,7 +42,7 @@ export interface CryptoTransaction {
   priceCurrency?: string;
   fee: number;
   date: string;
-  status: 'completed' | 'pending' | 'failed';
+  status: EstadoCripto;
   /**
    * La otra persona de KiramoPay, en un envio: a quien se le envio o de quien
    * vino. Solo la traen 'send' y 'receive'; el resto de los movimientos no

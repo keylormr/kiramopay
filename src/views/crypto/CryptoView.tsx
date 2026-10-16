@@ -23,6 +23,7 @@ import { localeDe } from '@/utils/periodos';
 import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
+import { estiloDeEstadoCripto, criptoNoSeMovio } from '@/utils/estadoCripto';
 
 // Donde se apoya el aviso de la operacion repetida, medido desde abajo: la
 // barra de navegacion (h-16 en App.tsx), la zona segura del aparato y un
@@ -1156,6 +1157,11 @@ export const CryptoView: React.FC = () => {
                   const valorUsd = (tx.priceCurrency ?? 'USD') === 'USD' && tx.price > 0
                     ? formatUsd(principal.monto * tx.price)
                     : '';
+                  // Lo que no esta completado lo dice la fila: una compra que
+                  // fallo se veia igual que una hecha, con la cripto en verde.
+                  const estado = tx.status === 'completed' ? null : estiloDeEstadoCripto(tx);
+                  const IconoEstado = estado?.icon;
+                  const tachado = criptoNoSeMovio(tx);
                   return (
                     <button
                       key={tx.id}
@@ -1170,12 +1176,20 @@ export const CryptoView: React.FC = () => {
                           {getTxLabel(tx.type)} {tx.fromAsset}{tx.toAsset ? ` → ${tx.toAsset}` : ''}
                         </div>
                         <div className="text-xs text-gray-500">{fechaLegible(tx.date, language, t('crypto_just_now'))}</div>
+                        {estado && IconoEstado && (
+                          <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${estado.chip}`}>
+                            <IconoEstado size={10} aria-hidden="true" />
+                            {t(estado.clave)}
+                          </span>
+                        )}
                       </div>
                       <div className="text-right shrink-0">
-                        <div className={`font-bold text-sm tabular-nums ${principal.entra ? 'text-green-500' : 'uv-text-primary'}`}>
+                        <div className={`font-bold text-sm tabular-nums ${
+                          tachado ? 'uv-text-muted line-through' : principal.entra ? 'text-green-500' : 'uv-text-primary'
+                        }`}>
                           {principal.entra ? '+' : '-'}{formatCrypto(principal.monto)} {principal.activo}
                         </div>
-                        <div className="text-xs text-gray-500 tabular-nums">
+                        <div className={`text-xs text-gray-500 tabular-nums ${tachado ? 'line-through' : ''}`}>
                           {contraparte
                             ? `${contraparte.entra ? '+' : '-'}${formatMonto(contraparte.monto, contraparte.activo)}`
                             : valorUsd}
@@ -1998,9 +2012,14 @@ export const CryptoView: React.FC = () => {
         const lectura = leerMovimiento(selectedTx);
         const monedaPrecio = selectedTx.priceCurrency ?? 'USD';
         const fila = 'flex justify-between gap-3 py-3 border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]';
-        const estado = selectedTx.status === 'completed'
-          ? t('tx_status_completed')
-          : selectedTx.status === 'pending' ? t('pending') : t('crypto_status_failed');
+        // Cada estado con su nombre y su color: todo lo que no era completado
+        // ni pendiente se decia "Fallida", tambien lo que la app no conoce.
+        const estado = estiloDeEstadoCripto(selectedTx);
+        const IconoEstado = estado.icon;
+        // Lo fallido no movio nada: sus montos van tachados, no en verde.
+        const tachado = criptoNoSeMovio(selectedTx);
+        const montoEntregado = tachado ? 'uv-text-muted line-through' : 'uv-text-primary';
+        const montoRecibido = tachado ? 'uv-text-muted line-through' : 'text-green-500';
         return (
           <BottomSheet isOpen={activeSheet === 'txDetail'} onClose={() => setActiveSheet('none')} title={t('transaction_details')}>
             <div className="space-y-4">
@@ -2023,17 +2042,17 @@ export const CryptoView: React.FC = () => {
                   <>
                     <div className={fila}>
                       <span className="uv-text-muted">{t('crypto_tx_gave')}</span>
-                      <span className="font-bold uv-text-primary tabular-nums text-right">{formatMonto(lectura.entrega.monto, lectura.entrega.activo)}</span>
+                      <span className={`font-bold ${montoEntregado} tabular-nums text-right`}>{formatMonto(lectura.entrega.monto, lectura.entrega.activo)}</span>
                     </div>
                     <div className={fila}>
                       <span className="uv-text-muted">{t('crypto_tx_got')}</span>
-                      <span className="font-bold text-green-500 tabular-nums text-right">{formatMonto(lectura.recibe.monto, lectura.recibe.activo)}</span>
+                      <span className={`font-bold ${montoRecibido} tabular-nums text-right`}>{formatMonto(lectura.recibe.monto, lectura.recibe.activo)}</span>
                     </div>
                   </>
                 ) : (
                   <div className={fila}>
                     <span className="uv-text-muted">{t('amount')}</span>
-                    <span className="font-bold uv-text-primary tabular-nums text-right">{formatCrypto(lectura.principal.monto)} {lectura.principal.activo}</span>
+                    <span className={`font-bold ${montoEntregado} tabular-nums text-right`}>{formatCrypto(lectura.principal.monto)} {lectura.principal.activo}</span>
                   </div>
                 )}
                 {selectedTx.price > 0 && (
@@ -2069,10 +2088,11 @@ export const CryptoView: React.FC = () => {
                     <span className="font-bold uv-text-primary text-right truncate">{selectedTx.counterpartyName}</span>
                   </div>
                 )}
-                <div className="flex justify-between py-3">
+                <div className="flex justify-between items-center py-3">
                   <span className="uv-text-muted">{t('status')}</span>
-                  <span className={`font-bold flex items-center gap-1 ${selectedTx.status === 'completed' ? 'text-green-500' : 'uv-text-secondary'}`}>
-                    {selectedTx.status === 'completed' && <Icons.Check size={14} />} {estado}
+                  <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold ${estado.chip}`}>
+                    <IconoEstado size={12} aria-hidden="true" />
+                    {t(estado.clave)}
                   </span>
                 </div>
               </div>
