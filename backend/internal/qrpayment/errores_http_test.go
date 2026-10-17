@@ -49,11 +49,15 @@ func TestResponderError_CobroConMontoNoPositivoTieneCodigoPropio(t *testing.T) {
 		t.Fatalf("%d %s, se esperaba 400 MONTO_INVALIDO", rec.Code, codigo)
 	}
 
-	// Lo que no tiene codigo propio sigue cayendo al generico de siempre.
+	// Lo que no tiene codigo propio es un fallo del servidor: 500 con el codigo
+	// de siempre y el detalle solo en el log. Salia 400 con el error tal cual,
+	// y crear un cobro que fallaba en la base le mostraba a la persona la frase
+	// del driver.
 	rec = httptest.NewRecorder()
-	responderError(rec, errors.New("insufficient balance"))
-	if codigo, msg := codigoDe(t, rec); rec.Code != http.StatusBadRequest || codigo != "PAYMENT_FAILED" || msg != "insufficient balance" {
-		t.Fatalf("%d %s %q, se esperaba 400 PAYMENT_FAILED con el mensaje original", rec.Code, codigo, msg)
+	responderError(rec, errors.New(`insert charge: ERROR: relation "qr_charges_secreta" does not exist`))
+	if codigo, msg := codigoDe(t, rec); rec.Code != http.StatusInternalServerError || codigo != "PAYMENT_FAILED" ||
+		strings.Contains(msg, "secreta") {
+		t.Fatalf("%d %s %q, se esperaba 500 PAYMENT_FAILED sin el detalle", rec.Code, codigo, msg)
 	}
 }
 

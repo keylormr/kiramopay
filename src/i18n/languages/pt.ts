@@ -1104,6 +1104,8 @@ const pt: TranslationKeys = {
   pago_err_tope_mensual: 'Este pagamento ultrapassa seu limite mensal.',
   qr_err_comercio_no_disponible: 'Esse comércio não pode receber pagamentos no momento.',
   qr_err_sin_confirmar: 'Não foi possível confirmar o pagamento. Se você tentar novamente agora com o mesmo valor, ele não será cobrado duas vezes. Se tentar mais tarde, confira antes suas transações.',
+  qr_err_monto_invalido: 'O valor tem que ser maior que zero.',
+  qr_err_moneda: 'Esse código está em uma moeda que o KiramoPay não aceita. Só é possível cobrar e pagar em colones ou dólares.',
   home_top_cat: 'Maior gasto',
   home_savings: 'Economia',
   home_savings_view: 'Minhas metas',

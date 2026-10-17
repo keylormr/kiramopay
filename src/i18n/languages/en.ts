@@ -1103,6 +1103,8 @@ const en: TranslationKeys = {
   pago_err_tope_mensual: 'This payment exceeds your monthly limit.',
   qr_err_comercio_no_disponible: "That business can't receive payments right now.",
   qr_err_sin_confirmar: "We couldn't confirm the payment. If you try again now with the same amount, you won't be charged twice. If you try later, check your transactions first.",
+  qr_err_monto_invalido: 'The amount has to be greater than zero.',
+  qr_err_moneda: "That code is in a currency KiramoPay doesn't support. Payments only work in colones or dollars.",
   home_top_cat: 'Top category',
   home_savings: 'Savings',
   home_savings_view: 'My Goals',

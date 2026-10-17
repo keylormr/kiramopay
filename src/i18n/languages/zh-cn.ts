@@ -1098,6 +1098,8 @@ const zhCn: TranslationKeys = {
   pago_err_tope_mensual: '这笔付款超出了你的每月限额。',
   qr_err_comercio_no_disponible: '该商家目前无法收款。',
   qr_err_sin_confirmar: '无法确认这笔付款。如果你现在用相同的金额再试一次，不会重复扣款。如果稍后再试，请先查看交易记录。',
+  qr_err_monto_invalido: '金额必须大于零。',
+  qr_err_moneda: '该二维码使用的货币 KiramoPay 不支持。只能用科朗或美元收款和付款。',
   home_top_cat: '最高类别',
   home_savings: '储蓄',
   home_savings_view: '我的目标',

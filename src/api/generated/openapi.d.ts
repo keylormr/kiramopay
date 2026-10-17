@@ -3408,7 +3408,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. No money moves. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle). No money moves. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3438,6 +3438,287 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/codes/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get or create the caller's permanent receive code
+         * @description Returns the caller's permanent code in the given currency, creating it the first time. Error codes are for the client to translate; never show `error.message` to the user.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description CRC (default) or USD. */
+                    currency?: "CRC" | "USD";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The permanent code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNSUPPORTED_CURRENCY — the wallet does not handle that currency. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get or create the counter code of a business
+         * @description Any active member of the business team can ask for it. The code never changes and is the one that gets printed.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    location_id?: string;
+                    /** @description CRC (default) or USD. */
+                    currency?: "CRC" | "USD";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The counter code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNSUPPORTED_CURRENCY — the wallet does not handle that currency. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND (the business does not exist or the caller is not on its team) or LOCATION_NOT_FOUND (the location is not of this business or is closed). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_UNAVAILABLE — the business is not approved. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a charge on a permanent code
+         * @description The charge carries its own payload with the amount inside. With `replaces`, the previous charge of the same code is closed in the same transaction; if it was already paid, no new charge is created.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        qr_code_id: string;
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero. The currency is the code's.
+                         */
+                        amount: number;
+                        note?: string;
+                        /** @enum {string} */
+                        channel?: "counter" | "link";
+                        /** Format: uuid */
+                        replaces?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Charge issued */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MONTO_INVALIDO (the amount is zero or negative), QR_INVALIDO (the code does not exist or the caller cannot charge with it) or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/charges/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel a pending charge */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Charge cancelled */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description QR_INVALIDO — the charge does not exist or the caller cannot manage it. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The charge is no longer pending: COBRO_YA_PAGADO (never reported as cancelled), COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
