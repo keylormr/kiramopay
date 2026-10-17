@@ -74,13 +74,16 @@ export const CLAVES_DEL_RECHAZO_DEL_PAGO: Readonly<Record<string, string>> = {
  * Los codigos con los que el pago pudo haber salido: la llave del pago se
  * CONSERVA, para que el reintento sea el mismo pago y no uno nuevo. Desde que
  * el servidor responde cada rechazo con su codigo, PAYMENT_FAILED es solo el
- * 500.
+ * 500. PAGO_NO_REGISTRADO va aunque el servidor si respondio: dice que el libro
+ * ya tiene este pago, asi que el dinero se movio y el reintento no puede ser
+ * otro pago.
  */
 export const PAGO_SIN_CONFIRMAR: ReadonlySet<string> = new Set([
   'NETWORK_ERROR',
   'TIMEOUT',
   'SERVER_ERROR',
   'PAYMENT_FAILED',
+  'PAGO_NO_REGISTRADO',
 ]);
 
 /**

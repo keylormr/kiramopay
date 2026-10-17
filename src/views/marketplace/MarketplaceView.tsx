@@ -297,6 +297,13 @@ export const MarketplaceView: React.FC = () => {
 
   // "9 min" en el idioma de la app. Acepta un rango ya armado ("15-25").
   const minutosEn = (minutos: number | string) => t('market_minutes').replace('{n}', String(minutos));
+  // El servidor cotiza el tiempo como texto ("9 min"): los minutos salen con la
+  // unidad del idioma, como en el seguimiento. Uno que no empieza con un numero
+  // queda como llego.
+  const tiempoEstimado = (texto: string) => {
+    const minutos = parseInt(texto, 10);
+    return Number.isNaN(minutos) ? texto : minutosEn(minutos);
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
@@ -770,7 +777,7 @@ export const MarketplaceView: React.FC = () => {
                 {activeRide.estimatedTime && (
                   <div className="flex justify-between text-sm">
                     <span className="uv-text-muted">{t('market_estimated_time')}</span>
-                    <span className="font-bold uv-text-primary">{activeRide.estimatedTime}</span>
+                    <span className="font-bold uv-text-primary">{tiempoEstimado(activeRide.estimatedTime)}</span>
                   </div>
                 )}
               </div>
