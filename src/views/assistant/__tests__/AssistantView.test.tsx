@@ -438,8 +438,14 @@ describe('AssistantView — cada rechazo en el idioma de la app', () => {
   it.each([
     ['la recarga', 'SIN_CONVENIO', 'el pago no se puede entregar todavia', es.recharge_no_agreement, recarga],
     ['el recibo', 'SIN_CONVENIO', 'el pago no se puede entregar todavia', es.bill_no_agreement, recibo],
-    ['la recarga', 'RECHARGE_FAILED', 'process recharge: insufficient balance', es.assistant_action_failed, recarga],
-    ['el recibo', 'PAYMENT_FAILED', 'process payment: insufficient balance', es.assistant_action_failed, recibo],
+    ['la recarga', 'INSUFFICIENT_BALANCE', 'insufficient balance', es.insufficient_funds, recarga],
+    ['el recibo', 'INSUFFICIENT_BALANCE', 'insufficient balance', es.insufficient_funds, recibo],
+    ['el recibo', 'DAILY_LIMIT_EXCEEDED', 'daily transaction limit exceeded', es.pago_err_tope_diario, recibo],
+    ['la recarga', 'MONTHLY_LIMIT_EXCEEDED', 'monthly transaction limit exceeded', es.pago_err_tope_mensual, recarga],
+    // El 500: el servidor falló y el cobro pudo haber salido. No es un
+    // rechazo: confirmar otra vez lleva la misma llave.
+    ['la recarga', 'RECHARGE_FAILED', 'internal server error', /^No pudimos confirmar la recarga/, recarga],
+    ['el recibo', 'PAYMENT_FAILED', 'internal server error', /^No pudimos confirmar el pago/, recibo],
   ])('%s: el rechazo %s se dice en el idioma de la app', async (_, code, message, texto, propuesta) => {
     mockApi.services.recharge.mockReset();
     mockApi.services.payBill.mockReset();
@@ -466,5 +472,84 @@ describe('AssistantView — cada rechazo en el idioma de la app', () => {
 
     expect(await screen.findByText(texto)).toBeInTheDocument();
     expect(screen.queryByText(message)).toBeNull();
+  });
+});
+
+// La recarga y el recibo que confirma el asistente no llevaban llave: tras un
+// corte de red, confirmar otra vez cobraba de nuevo. Llevan la misma que les da
+// la pantalla de Servicios al mismo pago.
+describe('AssistantView — la llave de la recarga y del recibo', () => {
+  const recarga = {
+    kind: 'recharge',
+    summary: 'Recarga ₡2,000 a 8888-7777',
+    amountMinor: 200000,
+    currency: 'CRC',
+    phone: '88887777',
+    operator: 'kolbi',
+    description: '',
+  };
+  const recibo = {
+    kind: 'bill_payment',
+    summary: 'Pago ICE ₡10,000',
+    amountMinor: 1000000,
+    currency: 'CRC',
+    providerCode: 'ICE',
+    providerName: 'ICE',
+    clientId: '1234567',
+    period: '2026-10',
+    description: '',
+  };
+  const sinRed = { success: false, error: { code: 'NETWORK_ERROR', message: 'Sin conexión.' } };
+
+  async function confirmar(user: ReturnType<typeof userEvent.setup>, propuesta: typeof recarga | typeof recibo) {
+    mockApi.assistant.chat.mockResolvedValue({
+      success: true,
+      data: { reply: 'Listo.', toolsUsed: [], proposals: [propuesta] },
+    });
+    setup();
+    const input = await screen.findByPlaceholderText(/Escribe tu pregunta/);
+    await user.type(input, 'hazlo{Enter}');
+    await user.click(await screen.findByText('Confirmar'));
+  }
+
+  beforeEach(() => {
+    mockApi.services.recharge.mockReset();
+    mockApi.services.payBill.mockReset();
+  });
+
+  it('tras un corte de red, confirmar otra vez la recarga lleva la misma llave', async () => {
+    mockApi.services.recharge.mockResolvedValueOnce(sinRed).mockResolvedValueOnce({ success: true, data: { id: 'r1' } });
+    const user = userEvent.setup();
+
+    await confirmar(user, recarga);
+    expect(await screen.findByText(/^No pudimos confirmar la recarga/)).toBeInTheDocument();
+    await user.click(screen.getByText('Confirmar'));
+    await waitFor(() => expect(mockApi.services.recharge).toHaveBeenCalledTimes(2));
+
+    const [primero, segundo] = mockApi.services.recharge.mock.calls.map((c) => c[0]);
+    expect(primero.idempotencyKey).toMatch(/\S/);
+    expect(segundo.idempotencyKey).toBe(primero.idempotencyKey);
+  });
+
+  it('el mismo recibo lleva la llave que le dio la pantalla de Servicios', async () => {
+    const deServicios = llaveDelIntento('', 'recibo', 'ICE|1234567|10000', () => 'llave-de-servicios');
+    mockApi.services.payBill.mockResolvedValue({ success: true, data: { id: 'b1' } });
+    const user = userEvent.setup();
+
+    await confirmar(user, recibo);
+    await waitFor(() => expect(mockApi.services.payBill).toHaveBeenCalledTimes(1));
+
+    expect(mockApi.services.payBill.mock.calls[0][0].idempotencyKey).toBe(deServicios);
+  });
+
+  it('si el recibo ya se había pagado, lo dice en vez de "Confirmado"', async () => {
+    mockApi.services.payBill.mockResolvedValue({ success: true, data: { id: 'b1', repetida: true } });
+    const user = userEvent.setup();
+
+    await confirmar(user, recibo);
+
+    expect(await screen.findByText('Ese pago ya se había hecho')).toBeInTheDocument();
+    expect(screen.getByText(/No se cobró otra vez/)).toBeInTheDocument();
+    expect(screen.queryByText('Confirmado')).not.toBeInTheDocument();
   });
 });

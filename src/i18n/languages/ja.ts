@@ -1752,6 +1752,11 @@ const ja: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'この会社とはまだ提携していないため、お支払いをお届けできません。請求は発生していません。残高はそのままです。',
   recharge_no_agreement: 'この通信事業者とはまだ提携していないため、チャージはその番号に届きません。請求は発生していません。残高はそのままです。',
+  bill_err_sin_confirmar: '支払いを確認できませんでした。今すぐ同じ内容でもう一度お試しいただければ、二重に請求されることはありません。後でお試しになる場合は、先に取引履歴をご確認ください。',
+  recharge_err_sin_confirmar: 'チャージを確認できませんでした。今すぐ同じ内容でもう一度お試しいただければ、二重に請求されることはありません。後でお試しになる場合は、先に取引履歴をご確認ください。',
+  bill_ya_hecho: 'この支払いはすでに完了していました',
+  recharge_ya_hecho: 'このチャージはすでに完了していました',
+  servicio_ya_hecho_desc: '二重には請求されていません。同じ内容でもう一度行いたい場合は、改めてお試しください。',
   bill_invalid_amount: '0より大きい金額を入力してください',
   ride_no_integration: 'この配車アプリとはまだ連携していないため、乗車料金をお支払いできません。請求は発生していません。残高はそのままです。',
   order_no_integration: 'この注文サービスとはまだ連携していないため、注文はお店に届きません。請求は発生していません。残高はそのままです。',

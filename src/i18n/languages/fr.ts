@@ -1761,6 +1761,11 @@ const fr: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: "Nous n'avons pas encore d'accord avec cette entreprise, nous ne pouvons donc pas lui remettre votre paiement. Rien n'a été débité : votre solde est inchangé.",
   recharge_no_agreement: "Nous n'avons pas encore d'accord avec cet opérateur, la recharge n'arriverait donc pas sur le téléphone. Rien n'a été débité : votre solde est inchangé.",
+  bill_err_sin_confirmar: "Impossible de confirmer le paiement. Si vous réessayez maintenant avec les mêmes informations, il ne sera pas débité deux fois. Si vous réessayez plus tard, vérifiez d'abord vos transactions.",
+  recharge_err_sin_confirmar: "Impossible de confirmer la recharge. Si vous réessayez maintenant avec les mêmes informations, elle ne sera pas débitée deux fois. Si vous réessayez plus tard, vérifiez d'abord vos transactions.",
+  bill_ya_hecho: 'Ce paiement avait déjà été effectué',
+  recharge_ya_hecho: 'Cette recharge avait déjà été effectuée',
+  servicio_ya_hecho_desc: "Rien n'a été débité une deuxième fois. Si vous vouliez en faire un autre identique, réessayez.",
   bill_invalid_amount: 'Indiquez un montant supérieur à zéro',
   ride_no_integration: "Nous ne sommes pas encore intégrés à cette application de transport, nous ne pouvons donc pas payer la course. Rien n'a été débité : votre solde est inchangé.",
   order_no_integration: "Nous ne sommes pas encore intégrés à ce service de commandes, la commande n'arriverait donc pas au restaurant. Rien n'a été débité : votre solde est inchangé.",

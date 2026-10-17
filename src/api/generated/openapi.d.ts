@@ -1146,7 +1146,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pay a bill */
+        /**
+         * Pay a bill
+         * @description Repeating a completed payment with the same `idempotency_key` (same provider, client number and amount) returns the recorded payment, with its `transaction_id` and `replayed: true`, and charges nothing, even when the balance or the limits no longer cover it (that payment already consumed them). The repetition writes no second history row. Without `idempotency_key` every request is a new payment.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1160,13 +1163,67 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Bill paid */
+                /** @description Bill paid, or the recorded payment when `replayed` is true */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["PayBillResponse"];
+                    };
+                };
+                /** @description VALIDATION_ERROR or INVALID_BODY (the request cannot be read), INVALID_PROVIDER (no active provider with that code), LLAVE_INVALIDA (`idempotency_key` longer than 100 characters) or TRANSFER_BLOCKED (the risk engine stopped the payment). Nothing was charged. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different payment (another client number or amount). Nothing was charged; a new payment needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. Nothing was charged. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify the second factor and retry the same request, with the same `idempotency_key`. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — a server failure; the detail is only logged. The payment may have gone through (a commit that is cut off ends here too): retrying with the same `idempotency_key` never charges twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SIN_CONVENIO — there is no agreement with the company to deliver the payment. Nothing was charged. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -1186,7 +1243,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mobile phone recharge */
+        /**
+         * Mobile phone recharge
+         * @description Same idempotency contract as POST /api/v1/services/pay-bill: the same `idempotency_key` with the same operator, phone and amount returns the recorded top-up with `replayed: true` and charges nothing.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1200,13 +1260,67 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Recharge completed */
+                /** @description Recharge completed, or the recorded one when `replayed` is true */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["RechargeResponse"];
+                    };
+                };
+                /** @description VALIDATION_ERROR or INVALID_BODY (the request cannot be read), INVALID_OPERATOR (not kolbi, claro or movistar), LLAVE_INVALIDA (`idempotency_key` longer than 100 characters) or TRANSFER_BLOCKED (the risk engine stopped the payment). Nothing was charged. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different payment (another phone or amount). Nothing was charged; a new payment needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. Nothing was charged. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify the second factor and retry the same request, with the same `idempotency_key`. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECHARGE_FAILED — a server failure; the detail is only logged. The payment may have gone through (a commit that is cut off ends here too): retrying with the same `idempotency_key` never charges twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SIN_CONVENIO — there is no agreement with the carrier to deliver the payment. Nothing was charged. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -8722,9 +8836,15 @@ export interface components {
         };
         PayBillRequest: {
             /** @example ICE */
-            provider: string;
-            account_number: string;
+            provider_code: string;
+            /** @description The customer number at the company. */
+            client_id: string;
+            /** @description Amount to pay, in centimos. */
             amount: number;
+            /** @description Billing period label, kept as written. */
+            period?: string;
+            /** @description Retrying with the same key, provider, client number and amount returns the recorded payment instead of charging again. */
+            idempotency_key?: string;
         };
         PayBillResponse: {
             transaction_id: string;
@@ -8734,6 +8854,8 @@ export interface components {
             amount: number;
             /** @example completed */
             status: string;
+            /** @description Present and true when this response repeats a payment already made under the same `idempotency_key`: nothing was charged now. */
+            replayed?: boolean;
         };
         RechargeResponse: {
             transaction_id: string;
@@ -8743,12 +8865,18 @@ export interface components {
             amount: number;
             /** @example completed */
             status: string;
+            /** @description Present and true when this response repeats a top-up already made under the same `idempotency_key`: nothing was charged now. */
+            replayed?: boolean;
         };
         RechargeRequest: {
-            /** @example Kolbi */
-            operator: string;
-            phone_number: string;
+            /** @enum {string} */
+            operator: "kolbi" | "claro" | "movistar";
+            /** @example 88887777 */
+            phone: string;
+            /** @description Amount to recharge, in centimos. */
             amount: number;
+            /** @description Retrying with the same key, operator, phone and amount returns the recorded top-up instead of charging again. */
+            idempotency_key?: string;
         };
         CryptoBuyRequest: {
             /** @example BTC */

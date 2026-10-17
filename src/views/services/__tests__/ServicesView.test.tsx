@@ -19,6 +19,7 @@ vi.mock('@/api', () => ({
 vi.mock('@/hooks/useApp', () => ({
   useApp: () => ({
     state: {
+      user: { id: 'u1' },
       accounts: [{ ccy: 'CRC', balance: 1_000_000 }],
       savedServices: [],
       billHistory: [],
@@ -28,7 +29,10 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
-vi.mock('@/services/dataSync', () => ({ refreshAccounts: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/services/dataSync', () => ({
+  refreshAccounts: vi.fn(() => Promise.resolve()),
+  refreshTransactions: vi.fn(() => Promise.resolve()),
+}));
 
 function setup() {
   return render(
@@ -77,20 +81,21 @@ describe('ServicesView — pago de servicios', () => {
   });
 
   // Lo más importante: un rechazo NO puede verse como un pago hecho. Y se
-  // dice en el idioma de la app: la pantalla mostraba el texto del servidor tal
-  // cual ("process payment: insufficient balance").
+  // dice en el idioma de la app y con su motivo: la pantalla mostraba el texto
+  // del servidor tal cual ("process payment: insufficient balance"), y después
+  // un "no se pudo completar la acción" sin decir por qué.
   it('no muestra éxito cuando el servidor rechaza el pago', async () => {
     mocks.api.services.payBill.mockResolvedValue({
       success: false,
-      error: { code: 'PAYMENT_FAILED', message: 'process payment: insufficient balance' },
+      error: { code: 'INSUFFICIENT_BALANCE', message: 'insufficient balance' },
     });
     const user = userEvent.setup();
     setup();
 
     await completarPago(user);
 
-    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
-    expect(screen.queryByText('process payment: insufficient balance')).not.toBeInTheDocument();
+    expect(await screen.findByText('Fondos insuficientes')).toBeInTheDocument();
+    expect(screen.queryByText('insufficient balance')).not.toBeInTheDocument();
     expect(screen.queryByText('¡Pago exitoso!')).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
@@ -217,15 +222,206 @@ describe('ServicesView — recarga', () => {
   it('una recarga rechazada se dice en el idioma de la app', async () => {
     mocks.api.services.recharge.mockResolvedValue({
       success: false,
-      error: { code: 'RECHARGE_FAILED', message: 'process recharge: insufficient balance' },
+      error: { code: 'INSUFFICIENT_BALANCE', message: 'insufficient balance' },
     });
     const user = userEvent.setup();
     setup();
 
     await completarRecarga(user);
 
-    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
-    expect(screen.queryByText('process recharge: insufficient balance')).not.toBeInTheDocument();
+    expect(await screen.findByText('Fondos insuficientes')).toBeInTheDocument();
+    expect(screen.queryByText('insufficient balance')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['DAILY_LIMIT_EXCEEDED', 'daily transaction limit exceeded', 'Este pago supera tu límite diario.'],
+    ['MONTHLY_LIMIT_EXCEEDED', 'monthly transaction limit exceeded', 'Este pago supera tu límite mensual.'],
+  ])('la recarga rechazada con %s dice cuál tope', async (code, message, texto) => {
+    mocks.api.services.recharge.mockResolvedValue({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    await completarRecarga(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+
+  // Sin respuesta, la recarga pudo haber salido: la pantalla lo dice así, y
+  // tocar otra vez con los mismos datos lleva la misma llave, de modo que el
+  // servidor contesta con aquella recarga en vez de cobrar otra.
+  it('sin respuesta lo dice, y recargar otra vez lleva la misma llave', async () => {
+    mocks.api.services.recharge
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'Sin conexión.' } })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { id: 'r1', operatorId: 'kolbi', phone: '88880000', amount: 1000, date: '', status: 'completed' },
+      });
+    const user = userEvent.setup();
+    setup();
+
+    await completarRecarga(user);
+    expect(await screen.findByText(/^No pudimos confirmar la recarga/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Recarga ₡/ }));
+    await waitFor(() => expect(mocks.api.services.recharge).toHaveBeenCalledTimes(2));
+
+    const [primero, segundo] = mocks.api.services.recharge.mock.calls.map((c) => c[0]);
+    expect(primero.idempotencyKey).toMatch(/\S/);
+    expect(segundo.idempotencyKey).toBe(primero.idempotencyKey);
+  });
+
+  it('una recarga que ya estaba hecha lo dice y no se anota otra vez', async () => {
+    mocks.api.services.recharge.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'r1', operatorId: 'kolbi', phone: '88880000', amount: 1000, date: '', status: 'completed', repetida: true,
+      },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarRecarga(user);
+
+    expect(await screen.findByText('Esa recarga ya se había hecho')).toBeInTheDocument();
+    expect(screen.queryByText('¡Recarga exitosa!')).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+// Pagar un recibo no llevaba llave de idempotencia: con la red cortada después
+// del cobro, la pantalla decía "revisa tu conexión" con el botón activo, y
+// tocarlo otra vez cobraba de nuevo.
+describe('ServicesView — la llave del pago de un recibo', () => {
+  const pedidos = () => mocks.api.services.payBill.mock.calls.map((c) => c[0]);
+  const pagado = { success: true, data: { id: 'b1', providerId: 'ice', amount: 250000, status: 'paid' } };
+
+  it('sin respuesta lo dice, y pagar otra vez lleva la misma llave', async () => {
+    mocks.api.services.payBill
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'Sin conexión.' } })
+      .mockResolvedValueOnce(pagado);
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+    expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
+    expect(await screen.findByText('¡Pago exitoso!')).toBeInTheDocument();
+
+    const [primero, segundo] = pedidos();
+    expect(primero.idempotencyKey).toMatch(/\S/);
+    expect(segundo.idempotencyKey).toBe(primero.idempotencyKey);
+  });
+
+  // El 500: el servidor falló y el pago pudo haber salido. Es lo mismo que la
+  // red cortada, no un rechazo.
+  it('el fallo del servidor es un pago sin confirmar, no un rechazo', async () => {
+    mocks.api.services.payBill.mockResolvedValue({
+      success: false,
+      error: { code: 'PAYMENT_FAILED', message: 'internal server error' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+
+    expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
+    expect(screen.queryByText('internal server error')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['DAILY_LIMIT_EXCEEDED', 'daily transaction limit exceeded', 'Este pago supera tu límite diario.'],
+    ['MONTHLY_LIMIT_EXCEEDED', 'monthly transaction limit exceeded', 'Este pago supera tu límite mensual.'],
+    [
+      'LLAVE_REUTILIZADA',
+      'idempotency key reused for a different movement',
+      'Esa operación ya se hizo con otros datos. Revisa tus transacciones antes de intentar de nuevo.',
+    ],
+  ])('el rechazo %s dice su motivo', async (code, message, texto) => {
+    mocks.api.services.payBill.mockResolvedValue({ success: false, error: { code, message } });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+
+  it('el reintento tras el segundo factor lleva la misma llave', async () => {
+    mocks.api.services.payBill
+      .mockResolvedValueOnce({ success: false, error: { code: 'MFA_REQUIRED', message: 'mfa needed' } })
+      .mockResolvedValueOnce(pagado);
+    mocks.api.mfa.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+    await screen.findByText('Verificación requerida');
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByText('Verificar y pagar'));
+    expect(await screen.findByText('¡Pago exitoso!')).toBeInTheDocument();
+
+    const [primero, segundo] = pedidos();
+    expect(primero.idempotencyKey).toMatch(/\S/);
+    expect(segundo.idempotencyKey).toBe(primero.idempotencyKey);
+  });
+
+  // Cancelar el segundo factor deja el pago sin hacer (el servidor lo pide
+  // antes de cobrar), y el siguiente intento es otro pago.
+  it('cancelar el segundo factor suelta la llave', async () => {
+    mocks.api.services.payBill.mockResolvedValue({
+      success: false,
+      error: { code: 'MFA_REQUIRED', message: 'mfa needed' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+    const reto = (await screen.findByText('Verificación requerida')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(reto).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByText('Verificación requerida')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
+    await waitFor(() => expect(mocks.api.services.payBill).toHaveBeenCalledTimes(2));
+
+    const [primero, segundo] = pedidos();
+    expect(segundo.idempotencyKey).not.toBe(primero.idempotencyKey);
+  });
+
+  // Un pago hecho suelta la llave: pagar otra vez lo mismo, a propósito, es
+  // otro pago.
+  it('después de un pago hecho, el siguiente igual lleva otra llave', async () => {
+    mocks.api.services.payBill.mockResolvedValue(pagado);
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+    await screen.findByText('¡Pago exitoso!');
+    await user.click(screen.getByRole('button', { name: 'Listo' }));
+    await completarPago(user);
+    await waitFor(() => expect(mocks.api.services.payBill).toHaveBeenCalledTimes(2));
+
+    const [primero, segundo] = pedidos();
+    expect(segundo.idempotencyKey).toMatch(/\S/);
+    expect(segundo.idempotencyKey).not.toBe(primero.idempotencyKey);
+  });
+
+  // La repetición: el servidor contestó con un pago que YA estaba hecho bajo
+  // esa llave. "¡Pago exitoso!" y otra fila en el historial harían creer que
+  // se pagó dos veces.
+  it('un pago que ya estaba hecho lo dice y no se anota otra vez', async () => {
+    mocks.api.services.payBill.mockResolvedValue({
+      success: true,
+      data: { ...pagado.data, repetida: true },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await completarPago(user);
+
+    expect(await screen.findByText('Ese pago ya se había hecho')).toBeInTheDocument();
+    expect(screen.getByText(/No se cobró otra vez/)).toBeInTheDocument();
+    expect(screen.queryByText('¡Pago exitoso!')).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 });

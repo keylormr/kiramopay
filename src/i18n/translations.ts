@@ -1832,6 +1832,13 @@ export type TranslationKeys = {
   // (SIN_CONVENIO / SIN_INTEGRACION).
   bill_no_agreement: string;
   recharge_no_agreement: string;
+  // El recibo o la recarga sin respuesta (o con el 500): pudo haber salido, y
+  // la llave se conserva. Y la repeticion de uno que ya estaba hecho.
+  bill_err_sin_confirmar: string;
+  recharge_err_sin_confirmar: string;
+  bill_ya_hecho: string;
+  recharge_ya_hecho: string;
+  servicio_ya_hecho_desc: string;
   bill_invalid_amount: string;
   ride_no_integration: string;
   order_no_integration: string;

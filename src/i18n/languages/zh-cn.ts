@@ -1752,6 +1752,11 @@ const zhCn: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: '我们尚未与这家公司签订合作，无法把你的付款交给对方。没有扣款：你的余额保持不变。',
   recharge_no_agreement: '我们尚未与这家运营商签订合作，充值无法到达该号码。没有扣款：你的余额保持不变。',
+  bill_err_sin_confirmar: '无法确认这笔付款。如果你现在用相同的信息再试一次，不会重复扣款。如果稍后再试，请先查看交易记录。',
+  recharge_err_sin_confirmar: '无法确认这笔充值。如果你现在用相同的信息再试一次，不会重复扣款。如果稍后再试，请先查看交易记录。',
+  bill_ya_hecho: '这笔付款之前已经完成',
+  recharge_ya_hecho: '这笔充值之前已经完成',
+  servicio_ya_hecho_desc: '没有重复扣款。如果你想再做一笔同样的，请重新操作。',
   bill_invalid_amount: '请输入大于零的金额',
   ride_no_integration: '我们尚未接入这款打车应用，无法为这趟行程付款。没有扣款：你的余额保持不变。',
   order_no_integration: '我们尚未接入这个订餐服务，订单无法送到餐厅。没有扣款：你的余额保持不变。',

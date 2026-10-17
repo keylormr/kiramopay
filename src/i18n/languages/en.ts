@@ -1760,6 +1760,11 @@ const en: TranslationKeys = {
   // Cobros que el servidor rechaza porque no hay a quien entregarlos.
   bill_no_agreement: 'We do not have an agreement with this company yet, so we cannot deliver your payment. Nothing was charged: your balance is unchanged.',
   recharge_no_agreement: 'We do not have an agreement with this carrier yet, so the top-up would not reach the phone. Nothing was charged: your balance is unchanged.',
+  bill_err_sin_confirmar: "We couldn't confirm the payment. If you try again now with the same details, you won't be charged twice. If you try later, check your transactions first.",
+  recharge_err_sin_confirmar: "We couldn't confirm the top-up. If you try again now with the same details, you won't be charged twice. If you try later, check your transactions first.",
+  bill_ya_hecho: 'That payment was already made',
+  recharge_ya_hecho: 'That top-up was already made',
+  servicio_ya_hecho_desc: "You weren't charged again. If you meant to make another one just like it, try again.",
   bill_invalid_amount: 'Enter an amount greater than zero',
   ride_no_integration: 'We are not integrated with this ride app yet, so we cannot pay for the trip. Nothing was charged: your balance is unchanged.',
   order_no_integration: 'We are not integrated with this delivery service yet, so the order would not reach the restaurant. Nothing was charged: your balance is unchanged.',
