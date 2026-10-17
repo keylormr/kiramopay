@@ -13,6 +13,7 @@ import {
   normalizarCategoria,
   type CategoriaMovimiento,
 } from '@/utils/categoriaMovimiento';
+import { estiloDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
 import {
   exportTransactionsCSV,
   exportTransactionsJSON,
@@ -269,12 +270,14 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     };
   }, [filtered, state.baseCurrency]);
 
+  // Lo fallido y lo revertido van tachados en la lista y no se suman: un SINPE
+  // que fallo contaba como gasto hecho.
   const totalIncome = useMemo(
-    () => enResumenCcy.filter((tx) => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0),
+    () => enResumenCcy.filter((tx) => tx.amount > 0 && !noMovioDinero(tx)).reduce((s, tx) => s + tx.amount, 0),
     [enResumenCcy],
   );
   const totalExpenses = useMemo(
-    () => enResumenCcy.filter((tx) => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0),
+    () => enResumenCcy.filter((tx) => tx.amount < 0 && !noMovioDinero(tx)).reduce((s, tx) => s + Math.abs(tx.amount), 0),
     [enResumenCcy],
   );
   const net = totalIncome - totalExpenses;
@@ -603,7 +606,9 @@ const TransactionCard: React.FC<{
   const style = estiloDeCategoria(tx.category);
   const Icon = style.icon;
   const incoming = tx.amount > 0;
-  const completado = (tx.status ?? 'completed') === 'completed';
+  const estado = estiloDeEstado(tx);
+  const IconoEstado = estado.icon;
+  const tachado = noMovioDinero(tx);
 
   // Un boton de verdad: la fila parecia tocable (cursor, sombra al pasar) y no
   // abria nada, ni con el dedo ni con el teclado.
@@ -633,14 +638,14 @@ const TransactionCard: React.FC<{
 
       {/* Amount */}
       <span className="text-right flex-shrink-0">
-        <span className={`block font-extrabold text-sm tabular-nums ${incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'}`}>
+        <span className={`block font-extrabold text-sm tabular-nums ${
+          tachado ? 'uv-text-muted line-through' : incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
+        }`}>
           {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
         </span>
-        <span className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${
-          completado ? 'uv-chip-success' : 'uv-chip-warning'
-        }`}>
-          {completado ? <Icons.Check size={10} aria-hidden="true" /> : <Icons.Clock size={10} aria-hidden="true" />}
-          {completado ? t('tx_status_completed') : t('pending')}
+        <span className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${estado.chip}`}>
+          <IconoEstado size={10} aria-hidden="true" />
+          {t(estado.clave)}
         </span>
       </span>
     </button>

@@ -3140,6 +3140,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qr/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a scanned QR before paying it
+         * @description Who is being paid, before the payment sheet offers a pay button: the business (merchant_name, location_name) or the person (payee_name), the amount (0 = open amount) and, for a charge, its id, status and expiry. Only a code that does not exist is QR_INVALIDO; a server that could not read it answers 500 RESOLVE_FAILED, and retrying is the right move.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The scanned payload (KP:...). */
+                        qr_data: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The code and who receives the payment */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            data: {
+                                /** @enum {string} */
+                                kind: "code" | "charge" | "legacy";
+                                /** @description The person who charges, for a personal code. Absent when that person no longer exists; a read that fails is a 500, never an absent name. */
+                                payee_name?: string;
+                                /** @description The business, for a merchant code. Absent when the business no longer exists. */
+                                merchant_name?: string;
+                                /** @description The business location printed on the code. Absent when the code has no location or it no longer exists. */
+                                location_name?: string;
+                                currency: string;
+                                /**
+                                 * Format: int64
+                                 * @description Minor units; 0 is an open amount.
+                                 */
+                                amount: number;
+                                note?: string;
+                                /** @description The charge's status (pending, paid, cancelled, expired, superseded). */
+                                status?: string;
+                                /** Format: date-time */
+                                expires_at?: string;
+                                charge_id?: string;
+                                qr_code_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description QR_INVALIDO — the code does not exist (or is not a code at all) — or INVALID_BODY. Retrying the same code does not change the answer. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_REVOCADO — the owner withdrew the code. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RESOLVE_FAILED — the server could not read the code or who is behind it (the person, the business or its location). The message never carries the detail; retrying may work. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/qr/pay": {
         parameters: {
             query?: never;

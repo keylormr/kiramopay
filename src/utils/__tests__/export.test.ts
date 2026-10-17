@@ -390,3 +390,84 @@ describe('lo exportado sale en el idioma de la app', () => {
     expect(texto).toContain('1 transaction\n');
   });
 });
+
+// El CSV escribia "Pendiente" en todo lo que no estaba completado, y el texto
+// copiado no decia el estado: un SINPE que fallo salia como un gasto mas, y
+// entraba en los totales. Cada estado sale con su nombre, en el CSV y en lo
+// copiado, y lo que no movio dinero (fallido) o se deshizo (revertido) no se
+// suma. Lo pendiente se sigue sumando, como en la pantalla.
+describe('lo exportado dice el estado de cada movimiento', () => {
+  const conEstado = (id: string, amount: number, status: string): Transaction =>
+    ({ ...conFecha(id, amount, 'CRC'), status: status as Transaction['status'] });
+
+  const movimientos = () => [
+    conEstado('1', 1000, 'completed'),
+    conEstado('2', -400, 'failed'),
+    conEstado('3', -300, 'reversed'),
+    conEstado('4', -200, 'pending'),
+    conEstado('5', -100, 'processing'),
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('el CSV escribe cada estado con su nombre y no suma lo fallido ni lo revertido', async () => {
+    const texto = await leerArchivo(() => exportTransactionsCSV(movimientos(), tEs));
+    const fila = (id: string) => texto.split('\n').find((l) => l.startsWith(`${id},`)) ?? '';
+
+    expect(fila('1')).toContain('"Completado"');
+    expect(fila('2')).toContain('"Fallido"');
+    expect(fila('3')).toContain('"Revertido"');
+    expect(fila('4')).toContain('"Pendiente"');
+    expect(fila('5')).toContain('"En proceso"');
+    expect(fila('2')).not.toContain('Pendiente');
+    expect(fila('3')).not.toContain('Pendiente');
+
+    // Gastos: 200 + 100. Sumando todo eran 1000 y el neto 0.
+    expect(texto).toMatch(/"Total Egresos",-300\.00,CRC/);
+    expect(texto).toMatch(/"Balance Neto",700\.00,CRC/);
+  });
+
+  it('el CSV en ingles', async () => {
+    const texto = await leerArchivo(() => exportTransactionsCSV(movimientos(), tEn));
+    const fila = (id: string) => texto.split('\n').find((l) => l.startsWith(`${id},`)) ?? '';
+
+    expect(fila('2')).toContain('"Failed"');
+    expect(fila('3')).toContain('"Reversed"');
+    expect(fila('5')).toContain('"Processing"');
+  });
+
+  it('copiar dice el estado de lo que no esta completado y no lo suma si no movio dinero', async () => {
+    let copiado = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: async (s: string) => { copiado = s; } },
+      configurable: true,
+    });
+
+    expect(await copyTransactionsToClipboard(movimientos(), tEs)).toBe(true);
+
+    const lineaDelMonto = (monto: string) => copiado.split('\n').find((l) => l.includes(monto)) ?? '';
+    expect(lineaDelMonto('-400.00 CRC')).toContain('Fallido');
+    expect(lineaDelMonto('-300.00 CRC')).toContain('Revertido');
+    expect(lineaDelMonto('-200.00 CRC')).toContain('Pendiente');
+    // Lo completado no lleva rotulo: es el caso de siempre.
+    expect(lineaDelMonto('+1000.00 CRC')).not.toContain('Completado');
+
+    expect(copiado).toMatch(/Egresos: +-300\.00 CRC/);
+    expect(copiado).toMatch(/Neto: +700\.00 CRC/);
+  });
+
+  it('el JSON escribe el estado de maquina tal cual', async () => {
+    const texto = await leerArchivo(() => exportTransactionsJSON(movimientos(), tEn));
+    const datos = JSON.parse(texto);
+
+    expect(datos.transactions.map((t: { status: string }) => t.status)).toEqual([
+      'completed', 'failed', 'reversed', 'pending', 'processing',
+    ]);
+    expect(datos.summaryByCurrency[0].totalExpenses).toBe(-300);
+  });
+});

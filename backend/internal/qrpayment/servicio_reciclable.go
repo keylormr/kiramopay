@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kiramopay/backend/internal/notification"
 )
 
@@ -253,29 +254,49 @@ type objetivo struct {
 //	i… → identidad permanente (qr_payment_codes)
 //	x… → cobro (qr_charges)
 //	24 hex sin prefijo → fila vieja, camino de compatibilidad
+//
+// Solo un codigo que no esta en la base es ErrQRInvalido. Cualquier otro error
+// era tambien "ese codigo no existe o ya no es valido", y una caida pasajera de
+// la base se le decia a la persona como un codigo malo, que no tiene sentido
+// volver a intentar. Ahora sube envuelto y cada ruta lo responde como su 500.
 func (s *Service) resolverQR(ctx context.Context, qrData string) (*objetivo, error) {
 	partes := strings.Split(qrData, ":")
 	if len(partes) >= 6 && strings.HasPrefix(partes[5], "x") {
 		cobro, err := s.repo.GetChargeByData(ctx, qrData)
 		if err != nil {
-			return nil, ErrQRInvalido
+			return nil, noEncontradoEsInvalido(err, "leer el cobro")
 		}
 		code, err := s.repo.GetQRCodeByID(ctx, cobro.QRCodeID)
 		if err != nil {
-			return nil, ErrQRInvalido
+			return nil, noEncontradoEsInvalido(err, "leer el codigo del cobro")
 		}
 		return &objetivo{code: code, charge: cobro, kind: "charge"}, nil
 	}
 
 	code, err := s.repo.GetQRCodeByData(ctx, qrData)
 	if err != nil {
-		return nil, ErrQRInvalido
+		return nil, noEncontradoEsInvalido(err, "leer el codigo")
 	}
 	kind := "legacy"
 	if code.Status == EstadoCodigoActivo {
 		kind = "code"
 	}
 	return &objetivo{code: code, kind: kind}, nil
+}
+
+// noEncontradoEsInvalido separa las dos cosas que un error de lectura puede ser:
+// el codigo no es (ErrQRInvalido) o la base no contesto (el error, envuelto).
+//
+// No es un codigo la fila que no esta, ni la cadena que la base rechaza por su
+// contenido (la clase 22 de Postgres, "data exception": un byte nulo, por
+// ejemplo). Las dos responden lo mismo cada vez, y ofrecer reintentar seria
+// prometer algo que no va a pasar.
+func noEncontradoEsInvalido(err error, que string) error {
+	var pgErr *pgconn.PgError
+	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "22")) {
+		return ErrQRInvalido
+	}
+	return fmt.Errorf("%s: %w", que, err)
 }
 
 // ResolveQR contesta a QUIEN se le esta por pagar, antes de que la hoja muestre
@@ -314,12 +335,28 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 	}
 
 	if obj.code.MerchantID != "" {
-		if m, err := s.repo.GetMerchant(ctx, obj.code.MerchantID); err == nil {
+		// El nombre del comercio es lo que la hoja muestra antes del boton de
+		// pagar. Un comercio que ya no existe deja el codigo sin nombre, como
+		// siempre, y el pago lo rechaza; no poder leerlo es un fallo del
+		// servidor, como en el pago (#271), y no un codigo sin a quien pagarle.
+		m, err := s.repo.GetMerchant(ctx, obj.code.MerchantID)
+		switch {
+		case err == nil:
 			res.MerchantName = m.Name
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("leer el comercio: %w", err)
 		}
-		res.LocationName = s.repo.NombreDeSucursal(ctx, obj.code.LocationID)
+		if res.LocationName, err = s.repo.NombreDeSucursal(ctx, obj.code.LocationID); err != nil {
+			return nil, fmt.Errorf("leer la sucursal: %w", err)
+		}
 	} else {
-		res.PayeeName = s.displayName(ctx, obj.code.CreatorID)
+		// Lo mismo con la persona. No es displayName, que se traga el error
+		// porque en los pagos un nombre nunca puede hacer fallar un movimiento
+		// de valor; aqui no se mueve nada, y un nombre vacio se lee como un
+		// codigo sin a quien pagarle.
+		if res.PayeeName, err = s.nombreDeLaPersona(ctx, obj.code.CreatorID); err != nil {
+			return nil, fmt.Errorf("leer a quien cobra: %w", err)
+		}
 	}
 	return res, nil
 }

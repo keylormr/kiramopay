@@ -28,11 +28,28 @@ type userLookup interface {
 // failed lookup returns "" and the frontend falls back to a generic title —
 // a name must never fail a payment.
 func (s *Service) displayName(ctx context.Context, userID string) string {
+	nombre, _ := s.nombreDeLaPersona(ctx, userID)
+	return nombre
+}
+
+// nombreDeLaPersona es displayName para la hoja de pago, donde el nombre es lo
+// que se muestra ANTES del boton de pagar: ahi un nombre vacio dice "este codigo
+// no tiene a quien pagarle", y eso solo es cierto si la persona no esta.
+//
+// Una persona que no esta (pgx.ErrNoRows, que FindByID envuelve) es "" sin
+// error, como siempre. No poder leerla devuelve el error. Es la misma lectura
+// que displayName, asi que la hoja y el historial escriben el nombre igual.
+func (s *Service) nombreDeLaPersona(ctx context.Context, userID string) (string, error) {
 	u, err := s.users.FindByID(ctx, userID)
-	if err != nil || u == nil {
-		return ""
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", err
+	case u == nil:
+		return "", nil
 	}
-	return strings.TrimSpace(u.FirstName + " " + u.LastName)
+	return strings.TrimSpace(u.FirstName + " " + u.LastName), nil
 }
 
 // NombreDe es displayName para quien esta fuera del paquete: el envio de cripto

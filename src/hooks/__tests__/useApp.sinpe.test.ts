@@ -43,3 +43,15 @@ describe('useApp — la fila local de un SINPE', () => {
     expect(useTransactionStore.getState().transactions[0].title).toBe('Ana Mora');
   });
 });
+
+// La fila local de un SINPE que fallo se anotaba "pending": la lista lo decia
+// pendiente hasta que llegaba la del servidor.
+describe('useApp — el estado de la fila local de un SINPE', () => {
+  it.each(['completed', 'pending', 'failed'] as const)('uno %s se anota con ese estado', (status) => {
+    const { result } = renderHook(() => useApp());
+
+    act(() => result.current.dispatch({ type: 'ADD_SINPE_TRANSACTION', payload: sinpe({ status }) }));
+
+    expect(useTransactionStore.getState().transactions[0].status).toBe(status);
+  });
+});
