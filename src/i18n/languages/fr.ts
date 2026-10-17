@@ -979,6 +979,8 @@ const fr: TranslationKeys = {
   savings_err_deposit: 'Le dépôt n’a pas abouti. Votre argent est toujours dans votre portefeuille.',
   savings_withdraw_exceeds_saved: 'Ce montant dépasse ce que vous avez épargné pour cet objectif.',
   savings_err_withdraw: 'Le retrait n’a pas abouti. Votre argent est toujours dans l’objectif.',
+  savings_err_sin_confirmar: "Impossible de confirmer l'opération. Si vous réessayez maintenant avec le même montant, elle ne sera pas faite deux fois. Si vous réessayez plus tard, vérifiez d'abord votre objectif.",
+  savings_ya_hecho: "Cette opération avait déjà été faite. Elle n'a pas été refaite ; si vous vouliez en faire une autre identique, réessayez.",
   savings_err_delete: 'L’objectif n’a pas pu être supprimé. Réessayez.',
   savings_delete_title: 'Supprimer l’objectif',
   savings_delete_warning: 'Vous allez supprimer « {name} ». Cette action est irréversible.',

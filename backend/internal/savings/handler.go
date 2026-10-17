@@ -100,17 +100,18 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request, deposit bool) {
 	}
 	idemKey := r.Header.Get("Idempotency-Key")
 	var (
-		g   *Goal
-		err error
+		g        *Goal
+		repetido bool
+		err      error
 	)
 	if deposit {
-		g, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor, idemKey)
+		g, repetido, err = h.service.Deposit(r.Context(), userID, id, req.AmountMinor, idemKey)
 	} else {
-		g, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor, idemKey)
+		g, repetido, err = h.service.Withdraw(r.Context(), userID, id, req.AmountMinor, idemKey)
 	}
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "SAVINGS_FAILED", err.Error())
 		return
 	}
-	response.JSON(w, http.StatusOK, g)
+	response.JSON(w, http.StatusOK, Movimiento{Goal: g, Replayed: repetido})
 }

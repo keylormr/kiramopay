@@ -4272,6 +4272,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/savings/goals/{id}/deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from the wallet into a goal
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_FAILED: not enough balance in the wallet, an amount that is not greater than zero, or a goal that is not the caller's. Today a failure of the server answers the same way; the client must not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/savings/goals/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from a goal back to the wallet
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_FAILED: more than the goal holds, an amount that is not greater than zero, or a goal that is not the caller's. Today a failure of the server answers the same way; the client must not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/budgets": {
         parameters: {
             query?: never;

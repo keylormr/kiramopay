@@ -975,6 +975,8 @@ const zhCn: TranslationKeys = {
   savings_err_deposit: '存入未完成，你的钱仍在钱包里。',
   savings_withdraw_exceeds_saved: '该金额超过了你在此目标中储蓄的金额。',
   savings_err_withdraw: '取出未完成，你的钱仍在目标中。',
+  savings_err_sin_confirmar: '无法确认这笔转账。如果你现在用相同的金额再试一次，不会重复转账。如果稍后再试，请先查看你的目标。',
+  savings_ya_hecho: '这笔转账之前已经完成，没有再做一次；如果你想再做一笔相同的，请重试。',
   savings_err_delete: '无法删除目标，请重试。',
   savings_delete_title: '删除目标',
   savings_delete_warning: '即将删除“{name}”，此操作无法撤销。',

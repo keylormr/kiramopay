@@ -60,6 +60,33 @@ describe('HttpSavingsRepository', () => {
     );
   });
 
+  // La llave la arma la pantalla y la conserva mientras no sabe que paso: una
+  // llave nueva en cada llamada hacia que el reintento tras un corte de red
+  // fuera otro movimiento.
+  it('deposit lleva la llave que le pasa la pantalla y marca la repeticion', async () => {
+    const post = vi.fn().mockResolvedValue({ success: true, data: { ...rawGoal, replayed: true } });
+    const res = await new HttpSavingsRepository(fakeClient({ post })).deposit('g1', 2500, 'llave-del-intento');
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/savings/goals/g1/deposit',
+      { amount_minor: 250000 },
+      true,
+      { 'Idempotency-Key': 'llave-del-intento' },
+    );
+    expect(res.data?.repetida).toBe(true);
+  });
+
+  it('withdraw lleva la llave, y sin repeticion no hay marca', async () => {
+    const post = vi.fn().mockResolvedValue({ success: true, data: rawGoal });
+    const res = await new HttpSavingsRepository(fakeClient({ post })).withdraw('g1', 1000, 'otra-llave');
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/savings/goals/g1/withdraw',
+      { amount_minor: 100000 },
+      true,
+      { 'Idempotency-Key': 'otra-llave' },
+    );
+    expect(res.data).not.toHaveProperty('repetida');
+  });
+
   // Con un CREATE_FAILED fijo, el 409 del tope del plan llegaba a la pantalla
   // como un "no se pudo crear" sin plan, sin limite y sin cuantas hay.
   it('conserva SAVINGS_GOAL_LIMIT y su detalle al crear', async () => {

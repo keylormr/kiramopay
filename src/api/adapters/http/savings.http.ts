@@ -3,6 +3,7 @@ import type {
   SavingsGoal,
   CreateSavingsGoalRequest,
 } from '../../repositories/savings.repository';
+import type { ConMarcaDeRepeticion } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess } from '../../types';
 import { falla } from './falla';
@@ -17,15 +18,23 @@ interface GoalDTO {
   icon: string;
   color: string;
   created_at: string;
+  // Solo en depositar y retirar: la llave ya tenia hecho ese movimiento.
+  replayed?: boolean;
 }
 
-// A per-request key so an exact retry of the same deposit/withdraw (offline
-// queue replay, proxy resend) is deduplicated by the backend and moves money
-// only once. A fresh user action gets a fresh key.
+// La llave del movimiento la pasa la pantalla, que la conserva mientras no sabe
+// que paso: una llave nueva en cada llamada hacia que el reintento tras un
+// corte de red moviera el dinero otra vez. Sin llave de la pantalla, una por
+// pedido, para que el reenvio exacto del mismo pedido se deduplique.
 function idempotencyKey(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function conMarca(d: GoalDTO): ConMarcaDeRepeticion<SavingsGoal> {
+  const meta = mapGoal(d);
+  return d.replayed === true ? { ...meta, repetida: true } : meta;
 }
 
 function mapGoal(d: GoalDTO): SavingsGoal {
@@ -72,25 +81,25 @@ export class HttpSavingsRepository implements ISavingsRepository {
     return apiSuccess(res.data ?? { status: 'deleted' });
   }
 
-  async deposit(id: string, amount: number): Promise<ApiResponse<SavingsGoal>> {
+  async deposit(id: string, amount: number, llave?: string): Promise<ApiResponse<ConMarcaDeRepeticion<SavingsGoal>>> {
     const res = await this.client.post<GoalDTO>(
       `/api/v1/savings/goals/${id}/deposit`,
       { amount_minor: Math.round(amount * 100) },
       true,
-      { 'Idempotency-Key': idempotencyKey() }, // exact retries (queue/replay) move money once
+      { 'Idempotency-Key': llave || idempotencyKey() },
     );
     if (!res.success || !res.data) return falla(res, 'SAVINGS_FAILED');
-    return apiSuccess(mapGoal(res.data));
+    return apiSuccess(conMarca(res.data));
   }
 
-  async withdraw(id: string, amount: number): Promise<ApiResponse<SavingsGoal>> {
+  async withdraw(id: string, amount: number, llave?: string): Promise<ApiResponse<ConMarcaDeRepeticion<SavingsGoal>>> {
     const res = await this.client.post<GoalDTO>(
       `/api/v1/savings/goals/${id}/withdraw`,
       { amount_minor: Math.round(amount * 100) },
       true,
-      { 'Idempotency-Key': idempotencyKey() },
+      { 'Idempotency-Key': llave || idempotencyKey() },
     );
     if (!res.success || !res.data) return falla(res, 'SAVINGS_FAILED');
-    return apiSuccess(mapGoal(res.data));
+    return apiSuccess(conMarca(res.data));
   }
 }

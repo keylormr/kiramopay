@@ -978,6 +978,8 @@ const es: TranslationKeys = {
   savings_err_deposit: 'No se pudo depositar. Tu dinero sigue en la billetera.',
   savings_withdraw_exceeds_saved: 'Ese monto supera lo que tienes ahorrado en esta meta.',
   savings_err_withdraw: 'No se pudo retirar. Tu dinero sigue en la meta.',
+  savings_err_sin_confirmar: 'No pudimos confirmar el movimiento. Si lo intentas de nuevo ahora con el mismo monto, no se hará dos veces. Si lo intentas más tarde, revisa antes tu meta.',
+  savings_ya_hecho: 'Ese movimiento ya se había hecho. No se hizo otra vez; si querías hacer otro igual, inténtalo de nuevo.',
   savings_err_delete: 'No se pudo eliminar la meta. Intenta de nuevo.',
   savings_delete_title: 'Eliminar meta',
   savings_delete_warning: 'Vas a eliminar “{name}”. Esta acción no se puede deshacer.',

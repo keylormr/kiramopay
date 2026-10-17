@@ -12,8 +12,24 @@ import type { Transaction } from '@/types';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
+
+// La llave de depositar y retirar vive en intentoPendiente, por meta, sentido y
+// monto: la misma mientras se reintente lo mismo, aunque la app se cierre en
+// medio.
+const AMBITO_DEL_AHORRO = 'ahorro';
+
+// Sin respuesta, el movimiento pudo haberse hecho: no se puede decir que el
+// dinero sigue donde estaba.
+const MOVIMIENTO_SIN_CONFIRMAR: ReadonlySet<string> = new Set(['NETWORK_ERROR', 'TIMEOUT']);
+
+function llaveNueva(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const GOAL_ICONS = [
   { id: 'piggy-bank', Icon: Icons.PiggyBank, label: 'Ahorro' },
@@ -114,6 +130,14 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   // el movimiento espejo salen de la cuenta en colones — no de la cuenta de la
   // moneda base, que se cambia con un toque en el home.
   const cuentaCRC = state.accounts.find((a) => a.ccy === 'CRC');
+
+  // Una llave nueva en cada llamada hacia que el reintento tras un corte de red
+  // moviera el dinero otra vez. Se conserva ante cualquier error (la pantalla
+  // no sabe si el servidor llego a hacer algo) y se suelta al salir bien, o al
+  // saber que ya estaba hecho.
+  const persona = state.user?.id ?? '';
+  const llaveDelMovimiento = (goalId: string, sentido: 'deposito' | 'retiro', amount: number) =>
+    llaveDelIntento(persona, AMBITO_DEL_AHORRO, `${goalId}|${sentido}|${Math.round(amount * 100)}`, llaveNueva);
 
   // In mock mode there is no backend ledger, so the view mirrors the wallet
   // movement locally; in http mode the backend moves the money and we refresh.
@@ -248,26 +272,29 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     if (!api.savings) return;
     setIsDepositing(true);
     setErrorHoja(null);
+    const llave = llaveDelMovimiento(selectedGoal.id, 'deposito', amount);
     try {
-      const res = await api.savings.deposit(selectedGoal.id, amount);
+      const res = await api.savings.deposit(selectedGoal.id, amount, llave);
       // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara,
       // asi que un deposito RECHAZADO se veia igual que uno exitoso. Ahora un
       // fallo deja la hoja abierta, el monto escrito y el motivo a la vista.
       if (!res.success || !res.data) {
-        setErrorHoja(t('savings_err_deposit'));
+        setErrorHoja(t(MOVIMIENTO_SIN_CONFIRMAR.has(res.error?.code ?? '') ? 'savings_err_sin_confirmar' : 'savings_err_deposit'));
         return;
       }
+      soltarIntento(persona, AMBITO_DEL_AHORRO, llave);
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet debit locally.
       if (hasBackend) refreshAccounts().catch(() => {});
-      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
       setDepositAmount('');
       setShowDepositSheet(false);
       setSelectedGoal(null);
     } catch {
-      setErrorHoja(t('savings_err_deposit'));
+      setErrorHoja(t('savings_err_sin_confirmar'));
     } finally {
       setIsDepositing(false);
     }
@@ -286,26 +313,29 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     if (!api.savings) return;
     setIsWithdrawing(true);
     setErrorHoja(null);
+    const llave = llaveDelMovimiento(selectedGoal.id, 'retiro', amount);
     try {
-      const res = await api.savings.withdraw(selectedGoal.id, amount);
+      const res = await api.savings.withdraw(selectedGoal.id, amount, llave);
       // Mismo criterio que el deposito: un retiro RECHAZADO deja la hoja
       // abierta, el monto escrito y el motivo a la vista, nunca se ve igual
       // que uno exitoso.
       if (!res.success || !res.data) {
-        setErrorHoja(t('savings_err_withdraw'));
+        setErrorHoja(t(MOVIMIENTO_SIN_CONFIRMAR.has(res.error?.code ?? '') ? 'savings_err_sin_confirmar' : 'savings_err_withdraw'));
         return;
       }
+      soltarIntento(persona, AMBITO_DEL_AHORRO, llave);
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet credit locally.
       if (hasBackend) refreshAccounts().catch(() => {});
-      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
+      else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
+      if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
       setWithdrawAmount('');
       setShowWithdrawSheet(false);
       setSelectedGoal(null);
     } catch {
-      setErrorHoja(t('savings_err_withdraw'));
+      setErrorHoja(t('savings_err_sin_confirmar'));
     } finally {
       setIsWithdrawing(false);
     }

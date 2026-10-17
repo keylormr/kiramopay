@@ -97,7 +97,7 @@ describe('SavingsView — la hoja de deposito habla en colones', () => {
     await user.click(screen.getByRole('button', { name: 'Depositar' }));
 
     await waitFor(() => {
-      expect(mocks.api.savings.deposit).toHaveBeenCalledWith('g1', 10000);
+      expect(mocks.api.savings.deposit).toHaveBeenCalledWith('g1', 10000, expect.any(String));
     });
   });
 });
@@ -397,7 +397,7 @@ describe('SavingsView — retirar de una meta', () => {
     await user.click(screen.getByRole('button', { name: 'Retirar' }));
 
     await waitFor(() => {
-      expect(mocks.api.savings.withdraw).toHaveBeenCalledWith('g1', 10000);
+      expect(mocks.api.savings.withdraw).toHaveBeenCalledWith('g1', 10000, expect.any(String));
     });
     // La hoja se cierra y la lista muestra el saldo que devolvio el servidor,
     // no el que se resto a mano en el cliente.

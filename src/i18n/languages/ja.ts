@@ -974,6 +974,8 @@ const ja: TranslationKeys = {
   savings_err_deposit: '入金できませんでした。お金はウォレットに残っています。',
   savings_withdraw_exceeds_saved: 'その金額はこの目標に貯めた額を超えています。',
   savings_err_withdraw: '出金できませんでした。お金は目標に残っています。',
+  savings_err_sin_confirmar: 'この操作を確認できませんでした。今すぐ同じ金額でもう一度お試しいただければ、二重に行われることはありません。後でお試しになる場合は、先に目標をご確認ください。',
+  savings_ya_hecho: 'この操作はすでに完了していました。もう一度は行われていません。同じ操作をもう一度したい場合は、再度お試しください。',
   savings_err_delete: '目標を削除できませんでした。もう一度お試しください。',
   savings_delete_title: '目標を削除',
   savings_delete_warning: '「{name}」を削除します。この操作は取り消せません。',
