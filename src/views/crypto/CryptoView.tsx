@@ -23,6 +23,7 @@ import { localeDe } from '@/utils/periodos';
 import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './erroresCripto';
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
+import { ErrorALaVista } from '@/components/ErrorALaVista';
 
 // Donde se apoya el aviso de la operacion repetida, medido desde abajo: la
 // barra de navegacion (h-16 en App.tsx), la zona segura del aparato y un
@@ -1602,11 +1603,7 @@ export const CryptoView: React.FC = () => {
             ))}
           </div>
 
-          {tradeError && (
-            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
-              {tradeError}
-            </p>
-          )}
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm mb-3 text-center" />
           {sinPrecio(selectedAsset) && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
           )}
@@ -1705,11 +1702,7 @@ export const CryptoView: React.FC = () => {
             </div>
           </div>
 
-          {tradeError && (
-            <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
-              {tradeError}
-            </p>
-          )}
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm mb-3 text-center" />
           {sinPrecio(selectedAsset) && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
           )}
@@ -1795,9 +1788,7 @@ export const CryptoView: React.FC = () => {
             </div>
           )}
 
-          {tradeError && (
-            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{tradeError}</p>
-          )}
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm text-center" />
 
           {sinPrecioConversion && assetsWithBalance.length > 0 && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
@@ -1898,9 +1889,7 @@ export const CryptoView: React.FC = () => {
               </p>
             )}
 
-            {tradeError && (
-              <p className="text-sm text-[var(--color-danger)] text-center" aria-live="polite">{tradeError}</p>
-            )}
+            <ErrorALaVista mensaje={tradeError} className="text-sm text-[var(--color-danger)] text-center" />
 
             <button
               onClick={() => setShowSendConfirm(true)}
@@ -1979,9 +1968,7 @@ export const CryptoView: React.FC = () => {
             <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
 
-          {tradeError && (
-            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{tradeError}</p>
-          )}
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm text-center" />
 
           <button
             onClick={handleStake}

@@ -10,8 +10,19 @@ import type { TranslationKeys } from '../translations';
 // La app le habla de "tu" a la persona. Seis textos se habian escrito con
 // voseo ("podés", "Vos enviás", "Escaneá", "Agregá... además de vos") y sonaban
 // a otra app. `` no sirve con letras acentuadas, por eso los bordes a mano.
-const VOSEO =
-  /(?<![a-záéíóúñ])(vos|podés|tenés|querés|sabés|enviás|escaneá|revisá|agregá|tocá|elegí|escribí|mirá|probá|hacé|poné|decí|confirmá)(?![a-záéíóúñ])/i;
+// La segunda parte es el imperativo con el pronombre pegado ("Pedile",
+// "Ponele", "Revisalos", "imprimilo"): en voseo va sin tilde y en tuteo la
+// lleva ("Pídele", "Revísalos", "imprímelo"). La lista vieja no lo veia y
+// ocho textos lo conservaban.
+const VOSEO = new RegExp(
+  '(?<![a-záéíóúñ])(' +
+    'vos|podés|tenés|querés|sabés|enviás|escaneá|revisá|agregá|tocá|elegí|escribí|mirá|probá|hacé|poné|decí|confirmá|' +
+    'pedile|pedila|pedilo|ponele|ponelo|decile|decilo|mandale|mandalo|avisale|avisanos|escribile|escribinos|' +
+    'contale|contanos|mostrale|mostralo|pasale|pasalo|revisalos?|revisalas?|imprimilos?|pegalos?|copialos?|' +
+    'guardalos?|usalos?|fijate|acordate|asegurate|registrate' +
+    ')(?![a-záéíóúñ])',
+  'i',
+);
 
 describe('el espanol de la app tutea', () => {
   it('ningun texto usa voseo', () => {

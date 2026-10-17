@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { HomeView } from '../HomeView';
+import { registrarDesplazamientos } from '@/test/desplazamientos';
 
 // El QR reciclable, desde la pantalla: el codigo ya esta cuando se abre la
 // hoja (antes habia que tocar "Generar QR", y cada toque creaba una fila
@@ -431,6 +432,27 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
     expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).toBe(primera);
   });
 
+  // PAGO_NO_REGISTRADO dice que el libro ya tiene este pago: el dinero se
+  // movio en el intento anterior. Soltar la llave convertia el siguiente toque
+  // en Pagar en un pago nuevo; conservada, el reintento es el mismo pago.
+  it('PAGO_NO_REGISTRADO conserva el nonce y manda a revisar las transacciones', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'PAGO_NO_REGISTRADO', message: 'payment is in the ledger but has no sale' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await pagar(user);
+    expect(await screen.findByText(/^El pago no quedó registrado/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
+    const primera = mocks.scanAndPay.mock.calls[0][0].idempotencyKey;
+    expect(primera).toBeTruthy();
+    expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).toBe(primera);
+  });
+
   it('sin red tambien dice que el pago quedo sin confirmar', async () => {
     mocks.scanAndPay.mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
     const user = userEvent.setup();
@@ -438,6 +460,50 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
 
     await pagar(user);
     expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
+  });
+});
+
+// La hoja de pagar y la de cobrar pueden ser mas altas que un telefono chico:
+// el error aparecia bajo el borde, sin anunciarse, y la persona tocaba de nuevo
+// a ciegas. Como en el envio SINPE, el error se anuncia y se lleva a la vista.
+describe('Pagar y cobrar con QR — el error se anuncia y queda a la vista', () => {
+  const desplazados = registrarDesplazamientos();
+
+  it('el rechazo del pago', async () => {
+    mocks.scanAndPay.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'INSUFFICIENT_BALANCE', message: 'insufficient balance' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '1000');
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent('Fondos insuficientes');
+    expect(desplazados).toContain(aviso);
+  });
+
+  it('el error al cobrar un monto', async () => {
+    mocks.createCharge.mockResolvedValueOnce({
+      success: false,
+      error: { code: 'NETWORK_ERROR', message: 'Sin conexión' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByRole('button', { name: 'Cobrar este monto' }));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent('Sin conexión');
+    expect(desplazados).toContain(aviso);
   });
 });
 

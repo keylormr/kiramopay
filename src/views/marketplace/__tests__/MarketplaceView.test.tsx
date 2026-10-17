@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { MarketplaceView } from '../MarketplaceView';
 import { precargarIdioma } from '@/test/idiomas';
+import ja from '@/i18n/languages/ja';
 
 const mocks = vi.hoisted(() => ({
   api: {
@@ -595,5 +596,34 @@ describe('MarketplaceView — viajes y pedidos en el idioma de la app', () => {
 
     expect(await screen.findByText('Almost there')).toBeInTheDocument();
     sinTextos('Casi listo');
+  });
+});
+
+// El tiempo estimado del viaje cotizado llega del servidor como "9 min" y se
+// pintaba tal cual: en japones, chino o hindi la cotizacion decia "9 min" y el
+// seguimiento, dos pantallas despues, "9分". Sale con la unidad del idioma.
+describe('MarketplaceView — el tiempo estimado en el idioma de la app', () => {
+  beforeAll(() => precargarIdioma('ja'));
+
+  beforeEach(() => {
+    localStorage.setItem('kiramopay_language', 'ja');
+  });
+
+  it('la cotizacion dice los minutos con la unidad del idioma', async () => {
+    mocks.api.marketplace.createRide.mockResolvedValue({ success: true, data: VIAJE });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click((await screen.findAllByText('Uber'))[0]);
+    await user.type(await screen.findByPlaceholderText(ja.market_pickup_placeholder), 'Paraíso');
+    await user.type(screen.getByPlaceholderText(ja.market_destination_placeholder), 'Cartago');
+    await user.click(
+      screen.getByRole('button', { name: ja.market_request_partner.replace('{name}', 'Uber') }),
+    );
+    await screen.findByText(ja.market_driver_found);
+
+    const fila = screen.getByText(ja.market_estimated_time).parentElement as HTMLElement;
+    expect(within(fila).getByText('9分')).toBeInTheDocument();
+    expect(within(fila).queryByText('9 min')).toBeNull();
   });
 });
