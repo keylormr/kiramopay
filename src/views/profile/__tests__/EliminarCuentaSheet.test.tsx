@@ -3,10 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { EliminarCuentaSheet } from '../EliminarCuentaSheet';
 
-// La hoja de eliminar la cuenta: lo que se borra y lo que se conserva, lo que hay
-// que resolver antes, y una confirmacion que pide la palabra, la contrasena y, si
-// lo tiene, el codigo del autenticador. El servidor reautentica; aqui se prueba
-// que la pantalla no deja enviar sin lo necesario y que dice el motivo por codigo.
+// La hoja de eliminar la cuenta: el plazo de 30 dias, lo que se borra ese dia y lo
+// que se conserva por ley, lo que hay que resolver antes, y una confirmacion que
+// pide la palabra, la contrasena, la aceptacion expresa del plazo y, si lo tiene,
+// el codigo del autenticador. El servidor reautentica; aqui se prueba que la
+// pantalla no deja enviar sin lo necesario y que dice el motivo por codigo.
 
 const api = vi.hoisted(() => ({
   auth: { deletionPreflight: vi.fn(), deleteAccount: vi.fn() },
@@ -31,6 +32,8 @@ vi.mock('@/utils/enlacesLegales', async (importOriginal) => ({
 }));
 
 const limpia = { elegible: true, bloqueos: [] as string[], pideSegundoFactor: false };
+const pedida = { yaPedida: false, solicitadaEn: '2026-10-18T15:00:00Z', seEliminaEl: '2026-11-17T15:00:00Z' };
+const BOTON = 'Pedir la eliminación';
 
 const pintar = (onClose = vi.fn()) => {
   render(
@@ -55,16 +58,29 @@ async function llegarALaConfirmacion(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Continuar' }));
 }
 
+// La palabra, la contrasena y la aceptacion del plazo.
+async function completar(user: ReturnType<typeof userEvent.setup>, clave = 'Clave-123') {
+  await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
+  await user.type(screen.getByLabelText('Contraseña actual'), clave);
+  await user.click(screen.getByRole('checkbox', { name: /Acepto el plazo/ }));
+}
+
 describe('EliminarCuentaSheet — revision previa', () => {
-  it('con la cuenta limpia dice que se borra y que se conserva, y enlaza la politica', async () => {
+  it('con la cuenta limpia explica el plazo, que se borra y que se conserva, y enlaza la politica', async () => {
     api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
     const user = userEvent.setup();
     pintar();
 
     expect(await screen.findByText('Vas a eliminar tu cuenta')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Se borra' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Se conserva' })).toBeInTheDocument();
-    expect(screen.getByText(/sin tus datos de contacto/)).toBeInTheDocument();
+    // El plazo: bloqueada desde hoy, eliminada en 30 dias, reactivable antes.
+    expect(screen.getByText(/bloqueada desde hoy/)).toHaveTextContent(/30 días/);
+    expect(screen.getByText(/bloqueada desde hoy/)).toHaveTextContent(/reactivarla/);
+    expect(screen.getByRole('heading', { name: 'El día 30 se borra' })).toBeInTheDocument();
+    expect(screen.getByText(/contactos/)).toBeInTheDocument();
+    expect(screen.getByText(/conversaciones con el asistente/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Se conserva por ley' })).toBeInTheDocument();
+    expect(screen.getByText(/Ley 7786/)).toBeInTheDocument();
+    expect(screen.getByText(/PRODHAB/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Leer la política de privacidad' }));
     expect(abrirPublico).toHaveBeenCalledWith('/privacidad');
@@ -126,54 +142,69 @@ describe('EliminarCuentaSheet — revision previa', () => {
 });
 
 describe('EliminarCuentaSheet — confirmacion', () => {
-  it('no se puede enviar sin la palabra y la contrasena; la palabra no distingue mayusculas', async () => {
+  it('no se puede enviar sin la palabra, la contrasena y la aceptacion del plazo; la palabra no distingue mayusculas', async () => {
     api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
     const user = userEvent.setup();
     pintar();
     await llegarALaConfirmacion(user);
 
-    const boton = screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' });
+    const boton = screen.getByRole('button', { name: BOTON });
     expect(boton).toBeDisabled();
 
     await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'eliminar');
     expect(boton).toBeDisabled(); // falta la contrasena
     await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
+    expect(boton).toBeDisabled(); // falta aceptar el plazo
+    const plazo = screen.getByRole('checkbox', { name: /Acepto el plazo/ });
+    expect(plazo).not.toBeChecked();
+    await user.click(plazo);
     expect(boton).toBeEnabled();
   });
 
-  it('elimina con la contrasena, suelta la sesion local y cierra', async () => {
+  it('pide la eliminacion con la aceptacion del plazo, suelta la sesion local con la fecha y cierra', async () => {
     api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
-    api.auth.deleteAccount.mockResolvedValue({ success: true, data: { alreadyDeleted: false } });
+    api.auth.deleteAccount.mockResolvedValue({ success: true, data: pedida });
     const user = userEvent.setup();
     const onClose = pintar();
     await llegarALaConfirmacion(user);
-
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
-    await user.click(screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' }));
+    await completar(user);
+    await user.click(screen.getByRole('button', { name: BOTON }));
 
     await waitFor(() => expect(cuentaEliminada).toHaveBeenCalledTimes(1));
-    expect(api.auth.deleteAccount).toHaveBeenCalledWith({ password: 'Clave-123', totpCode: undefined });
+    expect(cuentaEliminada).toHaveBeenCalledWith('2026-11-17T15:00:00Z');
+    expect(api.auth.deleteAccount).toHaveBeenCalledWith({ password: 'Clave-123', totpCode: undefined, acceptTerms: true });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('si el servidor dice que falta la aceptacion, lo explica en el formulario', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
+    api.auth.deleteAccount.mockResolvedValue({ success: false, error: { code: 'TERMS_NOT_ACCEPTED', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+    await user.click(screen.getByRole('button', { name: BOTON }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tienes que aceptar el plazo de 30 días.');
+    expect(cuentaEliminada).not.toHaveBeenCalled();
   });
 
   it('con el autenticador encendido pide el codigo y lo manda', async () => {
     api.auth.deletionPreflight.mockResolvedValue({ success: true, data: { ...limpia, pideSegundoFactor: true } });
-    api.auth.deleteAccount.mockResolvedValue({ success: true, data: { alreadyDeleted: false } });
+    api.auth.deleteAccount.mockResolvedValue({ success: true, data: pedida });
     const user = userEvent.setup();
     pintar();
     await llegarALaConfirmacion(user);
 
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
-    const boton = screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' });
+    await completar(user);
+    const boton = screen.getByRole('button', { name: BOTON });
     expect(boton).toBeDisabled(); // falta el codigo
     await user.type(screen.getByLabelText('Código de tu app autenticadora'), '12ab3456');
     expect(screen.getByLabelText('Código de tu app autenticadora')).toHaveValue('123456'); // solo digitos, 6
     await user.click(boton);
 
     await waitFor(() => expect(api.auth.deleteAccount).toHaveBeenCalled());
-    expect(api.auth.deleteAccount).toHaveBeenCalledWith({ password: 'Clave-123', totpCode: '123456' });
+    expect(api.auth.deleteAccount).toHaveBeenCalledWith({ password: 'Clave-123', totpCode: '123456', acceptTerms: true });
   });
 
   it('una contrasena equivocada se dice en el formulario, se borra el campo y NO se suelta la sesion', async () => {
@@ -183,9 +214,8 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     pintar();
     await llegarALaConfirmacion(user);
 
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'mala');
-    await user.click(screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' }));
+    await completar(user, 'mala');
+    await user.click(screen.getByRole('button', { name: BOTON }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('La contraseña no es correcta.');
     expect(screen.getByLabelText('Contraseña actual')).toHaveValue('');
@@ -199,9 +229,8 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     pintar();
     await llegarALaConfirmacion(user);
 
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
-    await user.click(screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' }));
+    await completar(user);
+    await user.click(screen.getByRole('button', { name: BOTON }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Demasiados intentos');
   });
 
@@ -212,12 +241,11 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     pintar();
     await llegarALaConfirmacion(user);
 
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
-    await user.click(screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' }));
+    await completar(user);
+    await user.click(screen.getByRole('button', { name: BOTON }));
 
     const alerta = await screen.findByRole('alert');
-    expect(alerta).toHaveTextContent('No pudimos eliminar tu cuenta');
+    expect(alerta).toHaveTextContent('No pudimos pedir la eliminación');
     expect(alerta).not.toHaveTextContent('secreta');
   });
 
@@ -231,9 +259,8 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     pintar();
     await llegarALaConfirmacion(user);
 
-    await user.type(screen.getByLabelText('Escribe ELIMINAR para confirmar'), 'ELIMINAR');
-    await user.type(screen.getByLabelText('Contraseña actual'), 'Clave-123');
-    await user.click(screen.getByRole('button', { name: 'Eliminar mi cuenta para siempre' }));
+    await completar(user);
+    await user.click(screen.getByRole('button', { name: BOTON }));
 
     expect(await screen.findByText(/movimiento en proceso/)).toBeInTheDocument();
     expect(cuentaEliminada).not.toHaveBeenCalled();

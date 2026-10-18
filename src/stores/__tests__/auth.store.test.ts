@@ -254,6 +254,15 @@ describe('useAuthStore', () => {
       expect(s.logoutReason).toBe('blocked');
     });
 
+    it('una cuenta con la eliminacion en curso no se reintenta', async () => {
+      mockRefresh.mockResolvedValue({ success: false, error: { code: 'ACCOUNT_PENDING_DELETION', message: 'x' } });
+      await useAuthStore.getState().bootstrap();
+      const s = useAuthStore.getState();
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(s.sessionHint).toBe(false);
+      expect(s.restauracion).toBe('normal');
+    });
+
     it('dos arranques a la vez hacen un solo refresh', async () => {
       mockRefresh.mockResolvedValue(restaurada);
       const uno = useAuthStore.getState().bootstrap();
@@ -338,6 +347,9 @@ describe('useAuthStore', () => {
       ['REFRESH_FAILED', 'rechazada'],
       ['INVALID_BODY', 'rechazada'],
       ['ACCOUNT_BLOCKED', 'bloqueada'],
+      // Eliminacion en curso: las sesiones se revocaron el dia 0; reintentar no
+      // la devuelve. El login dice por que y ofrece reactivar.
+      ['ACCOUNT_PENDING_DELETION', 'rechazada'],
     ])('un fallo %s es %s y no toca la sesion por si solo', async (codigo, esperado) => {
       await entrar();
       mockRefresh.mockResolvedValue({ success: false, error: { code: codigo, message: 'x' } });
@@ -441,6 +453,24 @@ describe('useAuthStore', () => {
         expect(useAuthStore.getState().isAuthenticated).toBe(false);
         expect(useAuthStore.getState().logoutReason).toBe('blocked');
       });
+    });
+  });
+
+  describe('eliminacion pedida (cuentaEliminada)', () => {
+    it('cierra la sesion y guarda la fecha del cierre para el aviso del login', async () => {
+      await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      useAuthStore.getState().cuentaEliminada('2026-11-17T15:00:00Z');
+      const s = useAuthStore.getState();
+      expect(s.isAuthenticated).toBe(false);
+      expect(s.logoutReason).toBe('deleted');
+      expect(s.seEliminaEl).toBe('2026-11-17T15:00:00Z');
+    });
+
+    it('entrar de nuevo descarta el aviso y la fecha', async () => {
+      useAuthStore.getState().cuentaEliminada('2026-11-17T15:00:00Z');
+      await useAuthStore.getState().login('702650930', 'Kiramopay2024!');
+      expect(useAuthStore.getState().logoutReason).toBeNull();
+      expect(useAuthStore.getState().seEliminaEl).toBeNull();
     });
   });
 

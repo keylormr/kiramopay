@@ -49,16 +49,51 @@ describe('HttpAuthRepository — eliminar la cuenta', () => {
     expect(res.error?.code).toBe('PREFLIGHT_FAILED');
   });
 
-  it('deleteAccount manda la contrasena y solo manda el codigo TOTP si hay', async () => {
-    const post = vi.fn().mockResolvedValue({ success: true, data: { already_deleted: false } });
+  it('deleteAccount manda la contrasena, la aceptacion del plazo y solo manda el codigo TOTP si hay', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { already_requested: false, requested_at: '2026-10-18T15:00:00Z', deletion_due_at: '2026-11-17T15:00:00Z' },
+    });
     const repo = new HttpAuthRepository(fakeClient({ post }));
 
-    const sinTotp = await repo.deleteAccount({ password: 'Clave-123' });
-    expect(post).toHaveBeenCalledWith('/api/v1/users/me/delete-account', { password: 'Clave-123', totp_code: undefined });
-    expect(sinTotp.data).toEqual({ alreadyDeleted: false });
+    const sinTotp = await repo.deleteAccount({ password: 'Clave-123', acceptTerms: true });
+    expect(post).toHaveBeenCalledWith('/api/v1/users/me/delete-account', {
+      password: 'Clave-123',
+      totp_code: undefined,
+      accept_terms: true,
+    });
+    expect(sinTotp.data).toEqual({
+      yaPedida: false,
+      solicitadaEn: '2026-10-18T15:00:00Z',
+      seEliminaEl: '2026-11-17T15:00:00Z',
+    });
 
-    await repo.deleteAccount({ password: 'Clave-123', totpCode: '123456' });
-    expect(post).toHaveBeenLastCalledWith('/api/v1/users/me/delete-account', { password: 'Clave-123', totp_code: '123456' });
+    await repo.deleteAccount({ password: 'Clave-123', totpCode: '123456', acceptTerms: true });
+    expect(post).toHaveBeenLastCalledWith('/api/v1/users/me/delete-account', {
+      password: 'Clave-123',
+      totp_code: '123456',
+      accept_terms: true,
+    });
+  });
+
+  it('el login manda reactivate solo cuando se pide, y un 403 por eliminar trae la fecha', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: false,
+      error: { code: 'ACCOUNT_PENDING_DELETION', message: 'x', details: { deletion_due_at: '2026-11-17T15:00:00Z' } },
+    });
+    const repo = new HttpAuthRepository(fakeClient({ post }));
+
+    const res = await repo.login({ identifier: 'keilor', password: 'Clave-123' });
+    expect(post).toHaveBeenLastCalledWith('/api/v1/auth/login', { identifier: 'keilor', password: 'Clave-123' }, false);
+    expect(res.error?.code).toBe('ACCOUNT_PENDING_DELETION');
+    expect(res.error?.details).toEqual({ deletion_due_at: '2026-11-17T15:00:00Z' });
+
+    await repo.login({ identifier: 'keilor', password: 'Clave-123', reactivate: true });
+    expect(post).toHaveBeenLastCalledWith(
+      '/api/v1/auth/login',
+      { identifier: 'keilor', password: 'Clave-123', reactivate: true },
+      false,
+    );
   });
 
   it('un rechazo conserva el codigo Y el detalle de lo que hay que resolver', async () => {
@@ -68,7 +103,7 @@ describe('HttpAuthRepository — eliminar la cuenta', () => {
         error: { code: 'DELETION_BLOCKED', message: 'pendiente', details: { blockers: [{ code: 'ESCROW_OPEN' }] } },
       }),
     });
-    const res = await new HttpAuthRepository(client).deleteAccount({ password: 'x' });
+    const res = await new HttpAuthRepository(client).deleteAccount({ password: 'x', acceptTerms: true });
     expect(res.success).toBe(false);
     expect(res.error?.code).toBe('DELETION_BLOCKED');
     expect(res.error?.details).toEqual({ blockers: [{ code: 'ESCROW_OPEN' }] });

@@ -64,20 +64,20 @@ describe('SolicitudesDeEliminacion', () => {
     expect(screen.queryByText('No hay solicitudes por atender.')).toBeNull();
   });
 
-  it('eliminar pide confirmacion, corre y relee la cola', async () => {
+  it('iniciar el plazo pide confirmacion, corre y relee la cola', async () => {
     api.admin.listDeletionRequests
       .mockResolvedValueOnce({ success: true, data: [solicitud] })
       .mockResolvedValueOnce({ success: true, data: [] });
-    api.admin.processDeletionRequest.mockResolvedValue({ success: true, data: { status: 'completed', resultCode: 'COMPLETED', blockers: [] } });
+    api.admin.processDeletionRequest.mockResolvedValue({ success: true, data: { status: 'scheduled', resultCode: 'SCHEDULED', blockers: [] } });
     const user = userEvent.setup();
     pintar();
 
-    await user.click(await screen.findByRole('button', { name: 'Eliminar cuenta' }));
+    await user.click(await screen.findByRole('button', { name: 'Iniciar el plazo' }));
     expect(api.admin.processDeletionRequest).not.toHaveBeenCalled(); // primero confirma
-    await user.click(await screen.findByRole('button', { name: 'Eliminar la cuenta' }));
+    await user.click(await screen.findByRole('button', { name: 'Sí, iniciar el plazo' }));
 
     await waitFor(() => expect(api.admin.processDeletionRequest).toHaveBeenCalledWith('r1'));
-    expect(await screen.findByText('Cuenta eliminada.')).toBeInTheDocument();
+    expect(await screen.findByText('Plazo iniciado. La cuenta se elimina en 30 días.')).toBeInTheDocument();
     expect(await screen.findByText('No hay solicitudes por atender.')).toBeInTheDocument();
   });
 
@@ -90,13 +90,13 @@ describe('SolicitudesDeEliminacion', () => {
     const user = userEvent.setup();
     pintar();
 
-    await user.click(await screen.findByRole('button', { name: 'Eliminar cuenta' }));
-    await user.click(await screen.findByRole('button', { name: 'Eliminar la cuenta' }));
+    await user.click(await screen.findByRole('button', { name: 'Iniciar el plazo' }));
+    await user.click(await screen.findByRole('button', { name: 'Sí, iniciar el plazo' }));
 
     const alerta = await screen.findByRole('alert');
-    expect(alerta).toHaveTextContent('No se pudo eliminar todavía');
+    expect(alerta).toHaveTextContent('No se pudo iniciar todavía');
     expect(alerta).toHaveTextContent('Tienes saldo en tu billetera');
-    expect(screen.queryByText('Cuenta eliminada.')).toBeNull();
+    expect(screen.queryByText('Plazo iniciado. La cuenta se elimina en 30 días.')).toBeNull();
   });
 
   it('una solicitud ya atendida por otra persona se avisa', async () => {
