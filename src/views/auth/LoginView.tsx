@@ -148,12 +148,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   }, []);
 
   const clasificado = clasificarIdentificador(identificador);
+  // Lo guardado es el usuario o la cedula con la que se entro; se clasifica
+  // igual que lo tecleado. Si algo viejo no clasifica, va tal cual.
+  const canonicoDelUltimo = (guardado: string) => clasificarIdentificador(guardado)?.canonico ?? guardado;
 
   const handleIdentificadorSubmit = async () => {
     if (!clasificado) {
       setError(t('login_identifier_invalid'));
       return;
     }
+    await sondear(clasificado.canonico);
+  };
+
+  // Lo comparten Continuar, el acceso rapido del ultimo usuario y la huella sin
+  // contrasena guardada. El acceso rapido iba directo al campo de contrasena, y
+  // una cuenta de demostracion que aparecia en "Ultimo acceso" tenia que
+  // escribir su nombre a mano para entrar sin ella.
+  const sondear = async (canonico: string) => {
     if (isLoading) return;
     setError('');
 
@@ -164,11 +175,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     // trata aparte a proposito, porque si contara, cinco pulsaciones de Enter
     // dejarian la cuenta bloqueada 15 minutos sin haber escrito nada.
     setIsLoading(true);
-    const res = await useAuthStore.getState().login(clasificado.canonico, '');
+    const res = await useAuthStore.getState().login(canonico, '');
     setIsLoading(false);
 
     if (res.success) {
-      await finalizarLogin(clasificado.canonico, '');
+      await finalizarLogin(canonico, '');
       return;
     }
     // El limitador, la pausa por intentos y la falta de red si se atienden
@@ -252,8 +263,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         if (credentials?.password) {
           handleLogin(lastUser.cedula, credentials.password);
         } else {
+          // Sin contrasena en el llavero: puede ser una cuenta que entra sin
+          // ella. El sondeo lo resuelve; si la pide, lleva al campo.
           setIdentificador(lastUser.cedula);
-          setShowPasswordStage(true);
+          await sondear(canonicoDelUltimo(lastUser.cedula));
         }
       } else {
         // authenticate() resuelve con success:false, nunca lanza: sin esta
@@ -267,10 +280,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   };
 
   const handleQuickLogin = () => {
-    if (lastUser) {
-      setIdentificador(lastUser.cedula);
-      setShowPasswordStage(true);
-    }
+    if (!lastUser) return;
+    setIdentificador(lastUser.cedula);
+    void sondear(canonicoDelUltimo(lastUser.cedula));
   };
 
   return (
