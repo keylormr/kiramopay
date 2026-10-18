@@ -53,6 +53,10 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
 	if err != nil {
+		if errors.Is(err, ErrComercioCerrado) {
+			response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
 		return
 	}
@@ -120,6 +124,8 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		// distinguen, para no decirle a nadie que comercios existen.
 		case errors.Is(err, ErrComercioNoEncontrado):
 			response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		case errors.Is(err, ErrComercioCerrado):
+			response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
 		default:
 			// La base, el libro: el detalle queda en el log. Un commit que se
 			// corta tambien cae aqui, asi que la pantalla lo dice como un
@@ -400,6 +406,10 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
 	if err != nil {
+		if errors.Is(err, ErrComercioCerrado) {
+			response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
 		return
 	}
@@ -414,6 +424,10 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
 	if err != nil {
+		if errors.Is(err, ErrComercioCerrado) {
+			response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
 		return
 	}

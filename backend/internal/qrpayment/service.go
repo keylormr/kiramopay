@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/user"
 )
@@ -79,21 +80,36 @@ type Options struct {
 	// AuditLogger deja el rastro de las acciones de administrador que cambian
 	// el plan de un comercio. Puede ser nil en pruebas.
 	AuditLogger *audit.Logger
+	// TOTP es el segundo factor con el que el dueno confirma el cierre de su
+	// comercio, si lo tiene encendido. nil: solo la contrasena.
+	TOTP TOTPChecker
+	// Lockout cuenta los intentos de confirmar el cierre; MaxIntentosDeCierre
+	// es el tope (5 si no se dice). nil: sin tope, como en las pruebas.
+	Lockout             middleware.LockoutStore
+	MaxIntentosDeCierre int
 }
 
 type Service struct {
-	repo        *Repository
-	tx          *transaction.Service
-	users       userLookup
-	notifier    Notifier
-	auditLogger *audit.Logger
+	repo                *Repository
+	tx                  *transaction.Service
+	users               userLookup
+	notifier            Notifier
+	auditLogger         *audit.Logger
+	totp                TOTPChecker
+	lockout             middleware.LockoutStore
+	maxIntentosDeCierre int
 }
 
 func NewService(repo *Repository, tx *transaction.Service, users userLookup, opts *Options) *Service {
-	s := &Service{repo: repo, tx: tx, users: users}
+	s := &Service{repo: repo, tx: tx, users: users, maxIntentosDeCierre: maxIntentosDeCierrePorDefecto}
 	if opts != nil {
 		s.notifier = opts.Notifier
 		s.auditLogger = opts.AuditLogger
+		s.totp = opts.TOTP
+		s.lockout = opts.Lockout
+		if opts.MaxIntentosDeCierre > 0 {
+			s.maxIntentosDeCierre = opts.MaxIntentosDeCierre
+		}
 	}
 	return s
 }
@@ -171,17 +187,24 @@ func (s *Service) GetMerchants(ctx context.Context, userID string) ([]Merchant, 
 
 // roleFor resolves how a user relates to a merchant: "owner", an active staff
 // role ("manager"/"cashier"), or "" when they have no business acting on it.
+//
+// Un comercio cerrado ya no lo administra nadie: a quien era de el se le dice
+// ErrComercioCerrado. Se mira despues del rol, para que a alguien ajeno no se le
+// confirme que el comercio existe. Su equipo quedo revocado al cerrarlo, asi que
+// en la practica solo el dueno llega a verlo.
 func (s *Service) roleFor(ctx context.Context, merchantID, userID string) (string, *Merchant, error) {
 	m, err := s.repo.GetMerchant(ctx, merchantID)
 	if err != nil {
 		return "", nil, fmt.Errorf("merchant not found")
 	}
+	role := ""
 	if m.UserID == userID {
-		return RoleOwner, m, nil
-	}
-	role, err := s.repo.GetStaffRole(ctx, merchantID, userID)
-	if err != nil {
+		role = RoleOwner
+	} else if role, err = s.repo.GetStaffRole(ctx, merchantID, userID); err != nil {
 		return "", nil, err
+	}
+	if role != "" && m.ClosedAt != nil {
+		return "", m, ErrComercioCerrado
 	}
 	return role, m, nil
 }
@@ -295,6 +318,14 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	if err != nil {
 		return nil, err
 	}
+	// El comercio se lee una sola vez, aqui. Cerrado se dice antes que nada: su
+	// rotulo quedo revocado al cerrarlo, y "ese codigo fue retirado" no le
+	// explica a quien escanea un rotulo viejo que el local cerro. El resto de lo
+	// que se le pide al comercio se mira mas abajo, en el mismo orden de antes.
+	merchant, errComercio := s.comercioDelCodigo(ctx, obj.code)
+	if merchant != nil && merchant.ClosedAt != nil {
+		return nil, ErrComercioCerrado
+	}
 	if obj.code.Status == EstadoCodigoRevocado {
 		return nil, ErrQRRevocado
 	}
@@ -371,17 +402,15 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	var fee int64
 	feeFromReceiver := false
 	payeeName := ""
-	var merchant *Merchant
 	if obj.code.MerchantID != "" {
 		// Solo un comercio que no existe es "no encontrado": una caida de la
 		// base al leerlo es un fallo del servidor, y el handler la responde
 		// como tal.
-		merchant, err = s.repo.GetMerchant(ctx, obj.code.MerchantID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(errComercio, pgx.ErrNoRows) {
 			return nil, ErrComercioNoEncontrado
 		}
-		if err != nil {
-			return nil, fmt.Errorf("leer el comercio: %w", err)
+		if errComercio != nil {
+			return nil, fmt.Errorf("leer el comercio: %w", errComercio)
 		}
 		if merchant.VerificationStatus != "verified" {
 			return nil, ErrComercioNoDisponible
@@ -520,6 +549,15 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	return existente, nil
 }
 
+// comercioDelCodigo lee el comercio de un codigo de comercio. Un codigo personal
+// no tiene comercio: (nil, nil).
+func (s *Service) comercioDelCodigo(ctx context.Context, code *QRPaymentCode) (*Merchant, error) {
+	if code.MerchantID == "" {
+		return nil, nil
+	}
+	return s.repo.GetMerchant(ctx, code.MerchantID)
+}
+
 // errorDeCobro traduce el estado de un cobro que ya no acepta pagos.
 func (s *Service) errorDeCobro(c *QRCharge) error {
 	switch c.Status {
@@ -567,6 +605,9 @@ func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string,
 	if current.UserID != userID {
 		return nil, fmt.Errorf("merchant not found")
 	}
+	if current.ClosedAt != nil {
+		return nil, ErrComercioCerrado
+	}
 	if req.Name == "" {
 		return nil, fmt.Errorf("merchant name is required")
 	}
@@ -587,10 +628,16 @@ func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string,
 		status = "pending"
 	}
 
-	return s.repo.UpdateMerchantProfile(
+	m, err := s.repo.UpdateMerchantProfile(
 		ctx, merchantID, req.Name, req.Description, req.Category,
 		req.Cedula, cedulaType, req.LegalName, status,
 	)
+	// La sentencia no toca un comercio cerrado: si se cerro mientras tanto, se
+	// dice eso y no "no encontrado".
+	if err != nil && s.estaCerrado(ctx, merchantID) {
+		return nil, ErrComercioCerrado
+	}
+	return m, err
 }
 
 // MerchantBalance returns the shop's own balance (minor units), derived from
@@ -637,6 +684,11 @@ func (s *Service) WithdrawToOwner(
 	}
 	if err != nil {
 		return nil, fmt.Errorf("leer el comercio: %w", err)
+	}
+	// Un comercio cerrado tiene saldo cero (el cierre lo exige), asi que el libro
+	// lo rechazaria igual por fondos; se dice el motivo verdadero.
+	if m.ClosedAt != nil {
+		return nil, ErrComercioCerrado
 	}
 	// No balance pre-check here: the transaction service replays idempotent
 	// retries first, and the ledger enforces the funds atomically — a read
@@ -963,8 +1015,19 @@ func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) 
 
 // ApproveMerchant verifica el comercio. Si es su PRIMERA aprobacion, le otorga
 // la promocion de entrada (ver Repository.UpdateVerification).
+//
+// Un comercio cerrado no se aprueba ni se rechaza: la sentencia no lo toca, y se
+// dice ErrComercioCerrado.
 func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string) (*Merchant, error) {
-	return s.repo.UpdateVerification(ctx, merchantID, "verified", adminID, "")
+	return s.decidirVerificacion(ctx, merchantID, "verified", adminID, "")
+}
+
+func (s *Service) decidirVerificacion(ctx context.Context, merchantID, status, adminID, reason string) (*Merchant, error) {
+	m, err := s.repo.UpdateVerification(ctx, merchantID, status, adminID, reason)
+	if err != nil && s.estaCerrado(ctx, merchantID) {
+		return nil, ErrComercioCerrado
+	}
+	return m, err
 }
 
 // AsignarPlanComercio cambia el plan del comercio a mano (base o analitica).
@@ -998,7 +1061,7 @@ func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, 
 }
 
 func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string) (*Merchant, error) {
-	return s.repo.UpdateVerification(ctx, merchantID, "rejected", adminID, reason)
+	return s.decidirVerificacion(ctx, merchantID, "rejected", adminID, reason)
 }
 
 // SetCommission updates a merchant's commission rate (basis points). The platform

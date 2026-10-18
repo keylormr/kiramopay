@@ -108,3 +108,55 @@ var (
 	// ErrComercioNoEncontrado: no existe un comercio con ese id.
 	ErrComercioNoEncontrado = errors.New("merchant not found")
 )
+
+// Errores del cierre del comercio (migracion 079).
+var (
+	// ErrComercioCerrado: el comercio se cerro. Pagarle, resolver su codigo,
+	// pedir su rotulo, retirar, editarlo o volver a cerrarlo responde esto, y no
+	// "no existe": la fila esta, y quien escanea un rotulo viejo tiene que saber
+	// por que no puede pagar.
+	ErrComercioCerrado = errors.New("merchant is closed")
+
+	// ErrComercioConSaldo: el negocio tiene plata. Cerrarlo dejaria ese dinero
+	// donde nadie puede entrar a retirarlo. El detalle va en
+	// ComercioConSaldoError.
+	ErrComercioConSaldo = errors.New("merchant balance is not zero")
+
+	// ErrComercioConCobrosPendientes: hay cobros que alguien puede estar por
+	// pagar. El detalle va en ComercioConCobrosError.
+	ErrComercioConCobrosPendientes = errors.New("merchant has pending charges")
+
+	// ErrMotivoDeCierreRequerido: un cierre sin motivo, o sin quien lo hace.
+	ErrMotivoDeCierreRequerido = errors.New("a closure needs a reason")
+
+	// La reautenticacion del dueno. Los mismos codigos que cambiar la
+	// contrasena: la pantalla ya los sabe decir.
+	ErrContrasenaIncorrecta = errors.New("current password is incorrect")
+	ErrTOTPRequerido        = errors.New("the authenticator code is required")
+	ErrTOTPInvalido         = errors.New("the authenticator code is not valid")
+	ErrCierreEnPausa        = errors.New("too many failed attempts; try again later")
+)
+
+// SaldoDelComercio es lo que queda en una moneda, en unidades menores.
+type SaldoDelComercio struct {
+	Currency string `json:"currency"`
+	Amount   int64  `json:"amount"`
+}
+
+// ComercioConSaldoError dice cuanto queda y en que moneda, para que la pantalla
+// lo diga sin adivinar. Es un ErrComercioConSaldo.
+type ComercioConSaldoError struct {
+	Saldos []SaldoDelComercio
+}
+
+func (e *ComercioConSaldoError) Error() string { return ErrComercioConSaldo.Error() }
+func (e *ComercioConSaldoError) Unwrap() error { return ErrComercioConSaldo }
+
+// ComercioConCobrosError dice cuantos cobros siguen vivos. Es un
+// ErrComercioConCobrosPendientes.
+type ComercioConCobrosError struct {
+	Pendientes int
+}
+
+func (e *ComercioConCobrosError) Error() string { return ErrComercioConCobrosPendientes.Error() }
+func (e *ComercioConCobrosError) Unwrap() error { return ErrComercioConCobrosPendientes }

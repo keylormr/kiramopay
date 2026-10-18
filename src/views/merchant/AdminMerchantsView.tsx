@@ -6,9 +6,10 @@ import { CampoMonto } from '@/components/CampoMonto';
 import { getApiLayer } from '@/api';
 import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
 import type { PlanComercio } from '@/api/repositories/plans.repository';
-import { porcentajeDeBps, rellenar } from '@/utils/planes';
+import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
+import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
 
-type Pestana = 'pending' | 'plan';
+type Pestana = 'pending' | 'all' | 'plan';
 
 const PLANES_COMERCIO: readonly PlanComercio[] = ['base', 'analitica'];
 
@@ -18,8 +19,18 @@ const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 const nombrePlan = (p: PlanComercio | undefined) => (p === 'analitica' ? 'business_plan_analitica' : 'business_plan_base');
 
+// El motivo que el servidor guarda cuando el comercio lo cierra su dueno.
+const CIERRE_PROPIO = 'owner_request';
+
+const ESTADO_COLOR: Record<QRMerchant['verificationStatus'] | 'closed', string> = {
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  closed: 'bg-[var(--color-surface-2)] uv-text-secondary dark:bg-[var(--color-surface-2-dark)]',
+};
+
 export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [pestana, setPestana] = useState<Pestana>('pending');
   const [merchants, setMerchants] = useState<QRMerchant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +51,20 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
   const [asignando, setAsignando] = useState(false);
   const asignandoRef = useRef(false);
   const [asignado, setAsignado] = useState<QRMerchant | null>(null);
+
+  // -- Todos los comercios, cerrados incluidos --
+  const [todos, setTodos] = useState<QRMerchant[]>([]);
+  const [cargandoTodos, setCargandoTodos] = useState(false);
+  const [errorTodos, setErrorTodos] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
+  const [recargaTodos, setRecargaTodos] = useState(0);
+  const [aCerrar, setACerrar] = useState<QRMerchant | null>(null);
+  const [motivoCierre, setMotivoCierre] = useState('');
+  const [cerrando, setCerrando] = useState(false);
+  const cerrandoRef = useRef(false);
+  const [rechazoCierre, setRechazoCierre] = useState<RechazoDelCierre | null>(null);
+  const [cerradoAhora, setCerradoAhora] = useState<string | null>(null);
 
   const cat = (c: string) => t(`merchant_cat_${c}` as Parameters<typeof t>[0]);
 
@@ -62,6 +87,65 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
     run();
     return () => { cancelled = true; };
   }, [reload]);
+
+  useEffect(() => {
+    if (pestana !== 'all') return;
+    let cancelled = false;
+    const run = async () => {
+      setCargandoTodos(true);
+      setErrorTodos('');
+      const api = getApiLayer();
+      if (!api.qrPayments) { if (!cancelled) setCargandoTodos(false); return; }
+      const res = await api.qrPayments.listAllMerchants(busquedaAplicada);
+      if (cancelled) return;
+      if (res.success && res.data) setTodos(res.data);
+      else setErrorTodos(res.error?.message || t('merchant_admin_action_failed'));
+      setCargandoTodos(false);
+    };
+    void run();
+    return () => { cancelled = true; };
+    // t cambia con el idioma; la lista no depende de el.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pestana, busquedaAplicada, recargaTodos]);
+
+  const buscar = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCerradoAhora(null);
+    setBusquedaAplicada(busqueda.trim());
+    setRecargaTodos((n) => n + 1);
+  };
+
+  const abrirCierre = (m: QRMerchant) => {
+    setMotivoCierre('');
+    setRechazoCierre(null);
+    setACerrar(m);
+  };
+
+  const cerrarComercio = async () => {
+    const m = aCerrar;
+    const motivo = motivoCierre.trim();
+    if (!m || !motivo || cerrandoRef.current) return;
+    cerrandoRef.current = true;
+    setCerrando(true);
+    setRechazoCierre(null);
+    try {
+      const api = getApiLayer();
+      if (!api.qrPayments) return;
+      const res = await api.qrPayments.closeMerchantAsAdmin(m.id, motivo);
+      if (res.success) {
+        setACerrar(null);
+        setCerradoAhora(m.name);
+        setRecargaTodos((n) => n + 1);
+      } else {
+        setRechazoCierre(rechazoDelCierre(t, res.error));
+      }
+    } catch {
+      setRechazoCierre(rechazoDelCierre(t, undefined));
+    } finally {
+      cerrandoRef.current = false;
+      setCerrando(false);
+    }
+  };
 
   // Approve, first applying an edited commission if the admin changed it.
   const approve = async (m: QRMerchant) => {
@@ -170,6 +254,10 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               <Icons.Shield size={14} aria-hidden="true" />
               {t('merchant_admin_tab_pending')}
             </button>
+            <button type="button" role="tab" aria-selected={pestana === 'all'} onClick={() => setPestana('all')} className={tabClass(pestana === 'all')}>
+              <Icons.Search size={14} aria-hidden="true" />
+              {t('merchant_admin_tab_all')}
+            </button>
             <button type="button" role="tab" aria-selected={pestana === 'plan'} onClick={() => setPestana('plan')} className={tabClass(pestana === 'plan')}>
               <Icons.TrendingUp size={14} aria-hidden="true" />
               {t('merchant_admin_tab_plan')}
@@ -227,6 +315,84 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               </div>
             )}
           </>
+        )}
+
+        {pestana === 'all' && (
+          <div className="px-4 pt-3 space-y-3">
+            <p className="text-xs uv-text-muted">{t('merchant_admin_all_desc')}</p>
+            <form onSubmit={buscar} className="flex gap-2" role="search">
+              <label htmlFor="admin-comercio-busqueda" className="sr-only">{t('merchant_admin_search_label')}</label>
+              <input
+                id="admin-comercio-busqueda"
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder={t('merchant_admin_search_placeholder')}
+                autoComplete="off"
+                spellCheck={false}
+                className="min-w-0 flex-1 px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent text-sm outline-none focus:border-[var(--color-primary)]"
+              />
+              <button type="submit" className="shrink-0 px-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold">
+                {t('merchant_admin_search')}
+              </button>
+            </form>
+
+            {cerradoAhora && (
+              <p role="status" className="rounded-2xl uv-chip-success p-3 text-sm font-semibold">
+                {rellenar(t('merchant_admin_close_done'), { name: cerradoAhora })}
+              </p>
+            )}
+            {errorTodos && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{errorTodos}</p>}
+
+            {cargandoTodos ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : todos.length === 0 && !errorTodos ? (
+              <p className="py-16 text-center font-semibold uv-text-primary">{t('merchant_admin_all_empty')}</p>
+            ) : (
+              <ul className="space-y-3 pb-4">
+                {todos.map((m) => {
+                  const cerrado = Boolean(m.closedAt);
+                  return (
+                    <li key={m.id} data-comercio={m.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 font-bold uv-text-primary truncate">{m.name}</p>
+                        <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${ESTADO_COLOR[cerrado ? 'closed' : m.verificationStatus]}`}>
+                          {cerrado
+                            ? t('merchant_status_closed')
+                            : t(`merchant_status_${m.verificationStatus}` as Parameters<typeof t>[0])}
+                        </span>
+                      </div>
+                      <p className="text-xs uv-text-muted mt-1">{cat(m.category)} · {m.legalName}</p>
+                      {m.ownerName && (
+                        <p className="text-xs uv-text-muted">{rellenar(t('merchant_admin_owner'), { name: m.ownerName })}</p>
+                      )}
+                      <p className="mt-1 font-mono text-[11px] uv-text-muted break-all">{m.id}</p>
+                      {cerrado ? (
+                        <div className="mt-3 rounded-xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 py-2 text-xs uv-text-secondary">
+                          <p className="font-semibold">{rellenar(t('merchant_admin_closed_on'), { fecha: fechaLarga(m.closedAt, language) })}</p>
+                          <p className="mt-0.5 break-words">
+                            {m.closureReason === CIERRE_PROPIO
+                              ? t('merchant_admin_closed_by_owner')
+                              : rellenar(t('merchant_admin_closed_reason'), { reason: m.closureReason ?? '' })}
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => abrirCierre(m)}
+                          className="mt-3 w-full border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold"
+                        >
+                          {t('merchant_admin_close')}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         )}
 
         {pestana === 'plan' && (
@@ -321,6 +487,52 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
             </div>
             <button onClick={() => reject(rejecting, reason.trim())} disabled={acting === rejecting.id} className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
               {acting === rejecting.id ? t('loading') : t('merchant_admin_reject')}
+            </button>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={aCerrar !== null}
+        onClose={() => { if (!cerrando) setACerrar(null); }}
+        title={t('business_close')}
+        dismissable={!cerrando}
+      >
+        {aCerrar && (
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed uv-text-secondary">
+              {rellenar(t('merchant_admin_close_body'), { name: aCerrar.name })}
+            </p>
+            <div>
+              <label htmlFor="admin-cierre-motivo" className="text-sm font-medium uv-text-secondary mb-1.5 block">
+                {t('merchant_admin_close_reason')}
+              </label>
+              <textarea
+                id="admin-cierre-motivo"
+                value={motivoCierre}
+                onChange={(e) => setMotivoCierre(e.target.value)}
+                rows={3}
+                maxLength={500}
+                className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)] resize-none"
+              />
+            </div>
+            {rechazoCierre && (
+              <div role="alert" className="text-sm text-[var(--color-danger)]">
+                <p>{rechazoCierre.mensaje}</p>
+                {rechazoCierre.saldos.length > 0 && (
+                  <ul className="mt-1 font-semibold tabular-nums">
+                    {rechazoCierre.saldos.map((saldo) => <li key={saldo}>{saldo}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => void cerrarComercio()}
+              disabled={!motivoCierre.trim() || cerrando}
+              className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            >
+              {cerrando ? t('loading') : rellenar(t('merchant_admin_close_confirm'), { name: aCerrar.name })}
             </button>
           </div>
         )}

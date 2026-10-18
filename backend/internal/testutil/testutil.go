@@ -1063,6 +1063,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS primera_aprobacion_at TIMESTAMPTZ;
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
 	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
+	-- Cierre logico del comercio (migracion 079): la fila se marca, nunca se borra.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES users(id);
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closure_reason TEXT;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cierre;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cierre CHECK (
+		(closed_at IS NULL AND closed_by IS NULL AND closure_reason IS NULL)
+		OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND active IS FALSE
+			AND closure_reason IS NOT NULL AND btrim(closure_reason) <> '')
+	);
 
 	-- Phase 3 of business mode (migration 046): locations, staff, catalog.
 	CREATE TABLE IF NOT EXISTS merchant_locations (

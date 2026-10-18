@@ -2944,7 +2944,7 @@ export interface paths {
         };
         /**
          * List the merchants the user owns or works for
-         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging.
+         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging. A closed merchant is not listed, for its owner or for its former staff.
          */
         get: {
             parameters: {
@@ -3167,7 +3167,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. */
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. MERCHANT_CLOSED — the shop was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3186,6 +3186,111 @@ export interface paths {
                     };
                 };
                 /** @description WITHDRAW_FAILED — a server failure, such as the database failing to read the merchant; the detail is only logged. The withdrawal may have gone through: retrying with the same `idempotency_key` does not withdraw twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a merchant (owner only)
+         * @description A logical closure: the row, its payments and its history stay. The merchant stops charging, leaves the owner's and the staff's lists, its staff is revoked and its counter codes are revoked; the closure is written to the audit log in the same transaction. It is refused while the shop holds money in any currency (withdraw it first) or has a pending charge that has not expired. The owner confirms with the account password, and with the authenticator code when TOTP is on; failed confirmations are limited per user. A closed merchant cannot be reopened: the owner registers a new one.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The owner's account password. */
+                        password: string;
+                        /** @description Authenticator code; required when the account has TOTP on. */
+                        totp_code?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The closed merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_BODY; CURRENT_PASSWORD_INVALID (the password does not match); TOTP_REQUIRED (the account has TOTP on and no code came: ask for it and retry, this does not count as a failed attempt); TOTP_INVALID (the code does not match). Nothing changed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description DEMO_ACCOUNT — a demo account cannot close a merchant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND — unknown merchant (including an id that is not a UUID), or the caller is not its owner (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED (it was already closed); MERCHANT_HAS_BALANCE (the shop still holds money: `error.details.balances` lists each currency with its amount in minor units); MERCHANT_HAS_PENDING_CHARGES (`error.details.pending_charges` says how many charges are still waiting to be paid). Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSE_LOCKED — too many failed confirmations; wait and retry. */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CLOSE_FAILED — the server failed; nothing was closed. */
                 500: {
                     headers: {
                         [name: string]: unknown;
@@ -3326,7 +3431,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description QR_REVOCADO — the owner withdrew the code. */
+                /** @description QR_REVOCADO — the owner withdrew the code; MERCHANT_CLOSED — the code belongs to a business that was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3399,7 +3504,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or MERCHANT_UNAVAILABLE (the business is not approved). */
+                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO, MERCHANT_UNAVAILABLE (the business is not approved) or MERCHANT_CLOSED (the business was closed). No money moves. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3552,7 +3657,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_UNAVAILABLE — the business is not approved. */
+                /** @description MERCHANT_UNAVAILABLE — the business is not approved; MERCHANT_CLOSED — the business was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3635,7 +3740,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), MERCHANT_CLOSED (the business was closed), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5523,6 +5628,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         delete?: never;
@@ -5602,6 +5714,152 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/admin/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every merchant, closed ones included (admin)
+         * @description Newest first, at most 200. Each merchant comes with its state (verification_status, active, and closed_at, closed_by and closure_reason when it was closed) and owner_name. `q` filters by a piece of the business name or the legal name, without regard to case (a LIKE wildcard is searched as text), or by the exact merchant id.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    q?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Merchants (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"][];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FETCH_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a merchant (admin)
+         * @description The same logical closure as POST /api/v1/qr/merchants/{id}/close, with a reason instead of the owner's password. The reason is stored in closure_reason and in the audit log (admin_merchant_closed, high). The same refusals apply: money in the shop or a pending charge that has not expired.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Why it is closed. Trimmed; it cannot be empty. */
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The closed merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_ID (not a UUID), INVALID_BODY or CLOSURE_REASON_REQUIRED (the reason is empty). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED, MERCHANT_HAS_BALANCE (with `error.details.balances`) or MERCHANT_HAS_PENDING_CHARGES (with `error.details.pending_charges`). Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CLOSE_FAILED — the server failed; nothing was closed. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users/search": {
@@ -8615,6 +8873,20 @@ export interface components {
              * @enum {string}
              */
             role?: "owner" | "manager" | "cashier";
+            /**
+             * Format: date-time
+             * @description When the merchant was closed. Absent while it is open. A closed merchant keeps its row and its history; it no longer charges and nobody administers it.
+             */
+            closed_at?: string;
+            /**
+             * Format: uuid
+             * @description Who closed it (the owner or an administrator). Absent while it is open.
+             */
+            closed_by?: string;
+            /** @description Why it was closed: owner_request when its owner closed it, or the reason an administrator wrote. Absent while it is open. */
+            closure_reason?: string;
+            /** @description Owner's display name (only in the administrator's list) */
+            owner_name?: string;
         };
         ReportBucket: {
             /** @description Location or collector id; absent for the unattributed bucket */

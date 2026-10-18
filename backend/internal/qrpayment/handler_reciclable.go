@@ -92,6 +92,10 @@ func responderConocido(w http.ResponseWriter, err error) bool {
 		// La llave que ya es de otro movimiento, vista desde el libro.
 		{transaction.ErrLlaveDeOtroMovimiento, "LLAVE_REUTILIZADA", http.StatusConflict,
 			"esa operacion ya se hizo con otro monto"},
+		// El comercio se cerro: pagarle, resolver su codigo o cobrar por el. No es
+		// "no existe": la fila esta, y quien escanea un rotulo viejo tiene que
+		// saber que el local cerro.
+		{ErrComercioCerrado, "MERCHANT_CLOSED", http.StatusConflict, ErrComercioCerrado.Error()},
 		{ErrComercioNoEncontrado, "MERCHANT_NOT_FOUND", http.StatusNotFound, ErrComercioNoEncontrado.Error()},
 		{ErrComercioNoDisponible, "MERCHANT_UNAVAILABLE", http.StatusConflict, ErrComercioNoDisponible.Error()},
 		{ErrSucursalNoEncontrada, "LOCATION_NOT_FOUND", http.StatusNotFound, ErrSucursalNoEncontrada.Error()},

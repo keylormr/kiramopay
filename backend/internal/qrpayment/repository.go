@@ -27,7 +27,8 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 const merchantCols = `id, user_id, name, description, category, COALESCE(logo_url, ''),
 	qr_code, active, cedula, cedula_type, legal_name, verification_status,
 	rejection_reason, reviewed_at, commission_bps, created_at,
-	plan, promo_hasta, primera_aprobacion_at`
+	plan, promo_hasta, primera_aprobacion_at,
+	closed_at, COALESCE(closed_by::text, ''), COALESCE(closure_reason, '')`
 
 // merchantDest son los destinos del Scan en el orden de merchantCols. Existe
 // para que las consultas que agregan una columna antes o despues (el plan
@@ -36,7 +37,8 @@ func merchantDest(m *Merchant) []any {
 	return []any{&m.ID, &m.UserID, &m.Name, &m.Description, &m.Category, &m.LogoURL,
 		&m.QRCode, &m.Active, &m.Cedula, &m.CedulaType, &m.LegalName, &m.VerificationStatus,
 		&m.RejectionReason, &m.ReviewedAt, &m.CommissionBps, &m.CreatedAt,
-		&m.Plan, &m.PromoHasta, &m.PrimeraAprobacionAt}
+		&m.Plan, &m.PromoHasta, &m.PrimeraAprobacionAt,
+		&m.ClosedAt, &m.ClosedBy, &m.ClosureReason}
 }
 
 func scanMerchant(row pgx.Row) (*Merchant, error) {
@@ -64,10 +66,12 @@ func (r *Repository) GetMerchant(ctx context.Context, merchantID string) (*Merch
 }
 
 // GetMerchantsByUserID returns every merchant profile a user owns (a user may run
-// several businesses).
+// several businesses). Un comercio cerrado no esta: su dueno ya no lo administra,
+// y la fila solo la ve la lista de administracion.
 func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([]Merchant, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+merchantCols+` FROM qr_merchants WHERE user_id = $1 ORDER BY created_at ASC`, userID)
+		`SELECT `+merchantCols+` FROM qr_merchants
+		  WHERE user_id = $1 AND closed_at IS NULL ORDER BY created_at ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +79,13 @@ func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([
 	return collectMerchants(rows)
 }
 
-// ListPendingMerchants returns merchants awaiting admin review (oldest first).
+// ListPendingMerchants returns merchants awaiting admin review (oldest first). Un
+// pendiente que se cerro ya no espera nada.
 func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+merchantCols+` FROM qr_merchants
-		 WHERE verification_status = 'pending' ORDER BY created_at ASC LIMIT 200`)
+		 WHERE verification_status = 'pending' AND closed_at IS NULL
+		 ORDER BY created_at ASC LIMIT 200`)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +134,7 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 		                                     WHEN $2::text = 'verified'
 		                                     THEN COALESCE(primera_aprobacion_at, NOW())
 		                                     ELSE primera_aprobacion_at END
-		  WHERE id = $1
+		  WHERE id = $1 AND closed_at IS NULL
 		  RETURNING `+merchantCols, merchantID, status, reviewedBy, reason, PromoEntradaMeses))
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -179,7 +185,7 @@ func (r *Repository) UpdateMerchantProfile(
 		        rejection_reason      = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END,
 		        reviewed_at           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_at END,
 		        reviewed_by           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_by END
-		  WHERE id = $1
+		  WHERE id = $1 AND closed_at IS NULL
 		  RETURNING `+merchantCols,
 		merchantID, name, description, category, cedula, cedulaType, legalName, status))
 	if err != nil {
@@ -550,10 +556,11 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 		`SELECT m.id, m.user_id, m.name, m.description, m.category, COALESCE(m.logo_url, ''),
 		        m.qr_code, m.active, m.cedula, m.cedula_type, m.legal_name, m.verification_status,
 		        m.rejection_reason, m.reviewed_at, m.commission_bps, m.created_at,
-		        m.plan, m.promo_hasta, m.primera_aprobacion_at, s.role
+		        m.plan, m.promo_hasta, m.primera_aprobacion_at,
+		        m.closed_at, COALESCE(m.closed_by::text, ''), COALESCE(m.closure_reason, ''), s.role
 		   FROM merchant_staff s
 		   JOIN qr_merchants m ON m.id = s.merchant_id
-		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE
+		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE AND m.closed_at IS NULL
 		  ORDER BY m.created_at ASC`, userID)
 	if err != nil {
 		return nil, err

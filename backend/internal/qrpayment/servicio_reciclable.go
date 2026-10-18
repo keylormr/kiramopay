@@ -51,6 +51,9 @@ func (s *Service) GetOrCreateMerchantCode(
 	// Ajeno o inexistente es lo mismo para quien pregunta: no se le confirma
 	// que existe un comercio que no es suyo.
 	role, merchant, err := s.roleFor(ctx, merchantID, userID)
+	if errors.Is(err, ErrComercioCerrado) {
+		return nil, err
+	}
 	if err != nil || role == "" {
 		return nil, ErrComercioNoEncontrado
 	}
@@ -228,6 +231,9 @@ func (s *Service) puedeCobrarCon(ctx context.Context, userID string, code *QRPay
 		return nil
 	}
 	role, merchant, err := s.roleFor(ctx, code.MerchantID, userID)
+	if errors.Is(err, ErrComercioCerrado) {
+		return err
+	}
 	if err != nil || role == "" {
 		return ErrQRInvalido
 	}
@@ -325,6 +331,12 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 	if err != nil {
 		return nil, err
 	}
+	// Como en el pago: un comercio cerrado se dice antes que el rotulo revocado,
+	// y se mira el comercio aunque el codigo siga vivo.
+	merchant, errComercio := s.comercioDelCodigo(ctx, obj.code)
+	if merchant != nil && merchant.ClosedAt != nil {
+		return nil, ErrComercioCerrado
+	}
 	if obj.code.Status == EstadoCodigoRevocado {
 		return nil, ErrQRRevocado
 	}
@@ -354,12 +366,11 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 		// pagar. Un comercio que ya no existe deja el codigo sin nombre, como
 		// siempre, y el pago lo rechaza; no poder leerlo es un fallo del
 		// servidor, como en el pago (#271), y no un codigo sin a quien pagarle.
-		m, err := s.repo.GetMerchant(ctx, obj.code.MerchantID)
 		switch {
-		case err == nil:
-			res.MerchantName = m.Name
-		case !errors.Is(err, pgx.ErrNoRows):
-			return nil, fmt.Errorf("leer el comercio: %w", err)
+		case errComercio == nil:
+			res.MerchantName = merchant.Name
+		case !errors.Is(errComercio, pgx.ErrNoRows):
+			return nil, fmt.Errorf("leer el comercio: %w", errComercio)
 		}
 		if res.LocationName, err = s.repo.NombreDeSucursal(ctx, obj.code.LocationID); err != nil {
 			return nil, fmt.Errorf("leer la sucursal: %w", err)
@@ -561,6 +572,16 @@ func (s *Service) ganchoEnLaMismaTx(
 ) func(context.Context, pgx.Tx, string) error {
 	return func(ctx context.Context, tx pgx.Tx, txID string) error {
 		payment.TxID = txID
+		// El comercio se vuelve a mirar aqui, con su fila pedida FOR SHARE: la
+		// lectura del principio de ScanAndPay es de antes del asiento, y un
+		// cierre que confirmo entre las dos dejaria entrar el pago a un
+		// comercio cerrado. Ver CerrarComercioEnTx.
+		if obj.code.MerchantID != "" {
+			if err := comercioAbiertoEnTx(ctx, tx, obj.code.MerchantID); err != nil {
+				*errDelModulo = err
+				return err
+			}
+		}
 		if obj.charge != nil {
 			if err := ReclamarCobroEnTx(ctx, tx, obj.charge.ID, payerID, txID); err != nil {
 				*errDelModulo = err

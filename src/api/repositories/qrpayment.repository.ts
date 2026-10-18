@@ -31,6 +31,17 @@ export interface QRMerchant {
   plan?: PlanComercio;
   /** Role of the CURRENT user on this business; drives which UI is shown. */
   role: MerchantRole;
+  /**
+   * Cuando se cerro (ISO-8601); null mientras esta abierto. Un comercio cerrado
+   * no cobra ni se administra, y solo aparece en la vista de administracion.
+   */
+  closedAt?: string | null;
+  /** Quien lo cerro (el dueno o un administrador). */
+  closedBy?: string;
+  /** owner_request si lo cerro su dueno; si no, el motivo del administrador. */
+  closureReason?: string;
+  /** Nombre del dueno; solo viene en la lista de administracion. */
+  ownerName?: string;
 }
 
 export interface StaffMember {
@@ -322,4 +333,16 @@ export interface IQRPaymentRepository {
   setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>>;
   /** Plan del comercio a mano, para pilotos. No cobra nada; queda en la auditoria. */
   setMerchantPlan(merchantId: string, plan: PlanComercio): Promise<ApiResponse<QRMerchant>>;
+  /** Todos los comercios, cerrados incluidos; `busqueda` filtra por nombre, razon social o id. */
+  listAllMerchants(busqueda?: string): Promise<ApiResponse<QRMerchant[]>>;
+  /**
+   * Cierre de un comercio por un administrador, con motivo. Los rechazos
+   * (MERCHANT_HAS_BALANCE, MERCHANT_HAS_PENDING_CHARGES...) traen su codigo y su detalle.
+   */
+  closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>>;
+  /**
+   * El dueno cierra su comercio confirmando su contrasena, y el codigo del
+   * autenticador si lo tiene encendido (sin el, el servidor responde TOTP_REQUIRED).
+   */
+  closeMerchant(merchantId: string, confirmacion: { password: string; totpCode?: string }): Promise<ApiResponse<QRMerchant>>;
 }

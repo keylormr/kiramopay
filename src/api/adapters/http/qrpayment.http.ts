@@ -44,6 +44,10 @@ interface MerchantDTO {
   promo_hasta?: string | null;
   plan?: string;
   role?: string;
+  closed_at?: string | null;
+  closed_by?: string;
+  closure_reason?: string;
+  owner_name?: string;
 }
 
 function mapMerchant(d: MerchantDTO): QRMerchant {
@@ -68,6 +72,11 @@ function mapMerchant(d: MerchantDTO): QRMerchant {
     // Endpoints that return a single merchant (register/update/admin) are all
     // owner or admin flows, so owner is the right default when absent.
     role: (d.role as MerchantRole) || 'owner',
+    // Un servidor anterior no manda el cierre: el comercio se lee abierto.
+    closedAt: d.closed_at || null,
+    closedBy: d.closed_by || undefined,
+    closureReason: d.closure_reason || undefined,
+    ownerName: d.owner_name || undefined,
   };
 }
 
@@ -653,6 +662,39 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     if (!res.success || !res.data || Array.isArray(res.data)) {
       return falla(res, 'PLAN_UPDATE_FAILED');
     }
+    return apiSuccess(mapMerchant(res.data));
+  }
+
+  async listAllMerchants(busqueda?: string): Promise<ApiResponse<QRMerchant[]>> {
+    const q = busqueda?.trim();
+    const ruta = q ? `/api/v1/admin/merchants?q=${encodeURIComponent(q)}` : '/api/v1/admin/merchants';
+    const res = await this.client.get<MerchantDTO[]>(ruta);
+    if (!res.success || !Array.isArray(res.data)) return falla(res, 'FETCH_FAILED');
+    return apiSuccess(res.data.map(mapMerchant));
+  }
+
+  async closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
+    const res = await this.client.post<MerchantDTO>(
+      `/api/v1/admin/merchants/${encodeURIComponent(merchantId)}/close`,
+      { reason },
+    );
+    if (!res.success || !res.data) return falla(res, 'CLOSE_FAILED');
+    return apiSuccess(mapMerchant(res.data));
+  }
+
+  async closeMerchant(
+    merchantId: string,
+    confirmacion: { password: string; totpCode?: string },
+  ): Promise<ApiResponse<QRMerchant>> {
+    // El codigo solo viaja si la persona lo escribio: sin el, el servidor
+    // responde TOTP_REQUIRED y la pantalla lo pide.
+    const cuerpo: { password: string; totp_code?: string } = { password: confirmacion.password };
+    if (confirmacion.totpCode) cuerpo.totp_code = confirmacion.totpCode;
+    const res = await this.client.post<MerchantDTO>(
+      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/close`,
+      cuerpo,
+    );
+    if (!res.success || !res.data) return falla(res, 'CLOSE_FAILED');
     return apiSuccess(mapMerchant(res.data));
   }
 }
