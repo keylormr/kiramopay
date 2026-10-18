@@ -28,6 +28,16 @@ import (
 // del web service del propio BCCR, que exige una suscripcion con correo.
 const URLHacienda = "https://api.hacienda.go.cr/indicadores/tc/dolar"
 
+// URLHaciendaEuro es el mismo servicio para el euro. Responde la fecha del BCCR
+// y cuantos dolares y cuantos colones vale un euro; el BCCR lo publica solo en
+// dias habiles, asi que un lunes todavia trae la fecha del viernes.
+const URLHaciendaEuro = "https://api.hacienda.go.cr/indicadores/tc/euro"
+
+// EdadMaximaEuro es cuan vieja puede venir la cotizacion del euro antes de
+// tomarla por una fuente muerta. Es mas larga que la del dolar porque el euro
+// no se publica los fines de semana ni los feriados.
+const EdadMaximaEuro = 7 * 24 * time.Hour
+
 // EdadMaximaTipoDeCambio es cuanto puede pasar sin que la fuente confirme el
 // tipo de cambio antes de que el camino que cobra deje de usarlo. Cubre un fin
 // de semana largo con feriado; mas que eso ya no es un tipo de cambio, es un
@@ -50,16 +60,67 @@ type FuenteTipoDeCambio interface {
 	Obtener(ctx context.Context) (*Cotizacion, error)
 }
 
-// FuenteHacienda lee URLHacienda.
+// FuenteEuro la cumple una fuente que tambien publica la cotizacion del euro:
+// cuantos dolares vale un euro, con la fecha del BCCR. Va aparte del dolar a
+// proposito: si el euro falla, el dolar con el que se cobra se actualiza igual.
+type FuenteEuro interface {
+	ObtenerEuro(ctx context.Context) (dolaresPorEuro float64, fecha time.Time, err error)
+}
+
+// FuenteHacienda lee URLHacienda y URLHaciendaEuro.
 type FuenteHacienda struct {
-	URL    string
-	Client *http.Client
+	URL     string
+	URLEuro string
+	Client  *http.Client
 }
 
 // NewFuenteHacienda arma la fuente con un tiempo de espera propio: una fuente
 // colgada no puede dejar colgado al actualizador.
 func NewFuenteHacienda() *FuenteHacienda {
-	return &FuenteHacienda{URL: URLHacienda, Client: &http.Client{Timeout: 15 * time.Second}}
+	return &FuenteHacienda{URL: URLHacienda, URLEuro: URLHaciendaEuro, Client: &http.Client{Timeout: 15 * time.Second}}
+}
+
+func (f *FuenteHacienda) ObtenerEuro(ctx context.Context) (float64, time.Time, error) {
+	if f.URLEuro == "" {
+		return 0, time.Time{}, errors.New("hacienda: sin direccion para el euro")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.URLEuro, nil)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	res, err := f.Client.Do(req)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("hacienda euro: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return 0, time.Time{}, fmt.Errorf("hacienda euro: HTTP %d", res.StatusCode)
+	}
+	var cuerpo struct {
+		Fecha   string  `json:"fecha"`
+		Dolares float64 `json:"dolares"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&cuerpo); err != nil {
+		return 0, time.Time{}, fmt.Errorf("hacienda euro: respuesta ilegible: %w", err)
+	}
+	fecha, err := time.Parse("2006-01-02", cuerpo.Fecha)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("hacienda euro: fecha ilegible %q", cuerpo.Fecha)
+	}
+	return cuerpo.Dolares, fecha, nil
+}
+
+// validarEuro rechaza lo que no puede ser una cotizacion del euro en dolares.
+// Igual que con el colon, los limites son anchos: solo atajan basura.
+func validarEuro(dolaresPorEuro float64, fecha, ahora time.Time) error {
+	if dolaresPorEuro < 0.5 || dolaresPorEuro > 3 {
+		return fmt.Errorf("euro fuera de rango: %v dolares por euro", dolaresPorEuro)
+	}
+	if ahora.Sub(fecha) > EdadMaximaEuro {
+		return fmt.Errorf("la fuente publica un euro del %s", fecha.Format("2006-01-02"))
+	}
+	return nil
 }
 
 func (f *FuenteHacienda) Obtener(ctx context.Context) (*Cotizacion, error) {
@@ -216,6 +277,19 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 		}
 	}
 
+	// La venta de cada dia, con la fecha que le pone el BCCR. exchange_rates
+	// guarda una fila solo cuando la tasa cambia, y con la hora en que se trajo:
+	// no dice cual era la venta de un dia dado, que es lo que la UIF necesita
+	// (el total del mes se convierte con la del ultimo dia del mes).
+	if err := a.repo.RegistrarCotizacionDelDia(ctx, "CRC", c.Fecha, c.Venta, "hacienda"); err != nil {
+		a.anotarError(err)
+		a.logger.Error("tipo de cambio: no se pudo guardar la venta del dia", "error", err)
+		return err
+	}
+	if fe, ok := a.fuente.(FuenteEuro); ok {
+		a.actualizarEuro(ctx, fe)
+	}
+
 	ahora := time.Now()
 	a.mu.Lock()
 	a.estado = DiagnosticoTipoDeCambio{
@@ -226,6 +300,23 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	a.logger.Info("tipo de cambio actualizado", "usd_crc", c.Venta, "compra", c.Compra,
 		"fecha", c.Fecha.Format("2006-01-02"))
 	return nil
+}
+
+// actualizarEuro guarda la cotizacion del euro del dia, en euros por dolar como
+// todo lo demas. Hoy ninguna billetera opera en euros: la cotizacion esta para
+// que la UIF pueda dolarizar un monto en euros con la del BCCR. Su falla solo
+// queda en el log, sin tocar el dolar.
+func (a *Actualizador) actualizarEuro(ctx context.Context, fe FuenteEuro) {
+	dolares, fecha, err := fe.ObtenerEuro(ctx)
+	if err == nil {
+		err = validarEuro(dolares, fecha, time.Now())
+	}
+	if err == nil {
+		err = a.repo.RegistrarCotizacionDelDia(ctx, "EUR", fecha, 1/dolares, "hacienda")
+	}
+	if err != nil {
+		a.logger.Error("tipo de cambio: no se pudo actualizar el euro", "error", err)
+	}
 }
 
 func (a *Actualizador) anotarError(err error) {

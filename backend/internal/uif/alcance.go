@@ -44,16 +44,18 @@ func (a Alcance) String() string {
 	return s
 }
 
-// DiagnosticoAcumulado compara el umbral de 30 dias contra el maximo que un
-// usuario puede sacar en un MES. A diferencia del diario, con el nivel de KYC
-// mas alto este si es alcanzable: es la regla que hace que la cola pueda
-// recibir un caso.
+// DiagnosticoAcumulado compara el umbral de las transacciones multiples del mes
+// contra el maximo que un usuario puede SACAR en un mes. A diferencia del
+// diario, con el nivel de KYC mas alto este si es alcanzable: es la regla que
+// hace que la cola pueda recibir un caso. (Las entradas del mes tambien cuentan
+// y no tienen tope; este diagnostico mira solo las salidas, que es lo que los
+// topes limitan.)
 //
 // porDolar es el tipo de cambio de cada moneda (unidades por dolar); el dolar
 // no lo necesita.
 func DiagnosticoAcumulado(t Thresholds, maximosMensuales map[string]int64, porDolar map[string]float64) Alcance {
 	max, sinTasa := sumarEnDolares(maximosMensuales, porDolar)
-	return Alcance{UmbralUSDMinor: t.Acumulado30USD, MaximoUSDMinor: max, Alcanzable: max >= t.Acumulado30USD,
+	return Alcance{UmbralUSDMinor: t.MensualUSD, MaximoUSDMinor: max, Alcanzable: max >= t.MensualUSD,
 		SinTipoDeCambio: sinTasa}
 }
 

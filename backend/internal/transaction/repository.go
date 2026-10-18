@@ -548,8 +548,45 @@ var TiposDeSalida = []string{
 // ListaSQLDeSalidas arma el `('a','b',...)` de un IN a partir de TiposDeSalida,
 // para que los dos consumidores lean la MISMA lista en vez de copiarla.
 func ListaSQLDeSalidas() string {
-	entre := make([]string, len(TiposDeSalida))
-	for i, t := range TiposDeSalida {
+	return listaSQL(TiposDeSalida)
+}
+
+// TiposDeEntrada son los movimientos que traen valor a la billetera de la
+// persona. Los usa la UIF: las transacciones multiples se acumulan por cliente
+// "en efectivo o por cualquier otro medio de pago" (SUGEF 13-19 art. 20), y
+// mientras no se decida si entradas y salidas se suman, se miden las dos.
+//
+// Quedan fuera, a proposito:
+//   - savings_withdraw, por lo mismo que savings_deposit no es salida: es plata
+//     de la persona que vuelve de su apartado.
+//   - loyalty_cashback: lo paga KiramoPay de su cuenta de promociones; no es
+//     una operacion del cliente con nadie.
+//
+// refund, escrow_refund y merchant_withdrawal SI estan: devuelven o traen
+// dinero a la billetera, y ante la duda la UIF prefiere revisar de mas.
+var TiposDeEntrada = []string{
+	"sinpe_receive", "qr_receive", "p2p_receive", "deposit", "crypto_sell",
+	"escrow_receive", "escrow_refund", "refund", "merchant_withdrawal",
+}
+
+// ListaSQLDeEntradas es ListaSQLDeSalidas para TiposDeEntrada.
+func ListaSQLDeEntradas() string {
+	return listaSQL(TiposDeEntrada)
+}
+
+// EsEntrada dice si un tipo de movimiento esta en TiposDeEntrada.
+func EsEntrada(tipo string) bool {
+	for _, t := range TiposDeEntrada {
+		if t == tipo {
+			return true
+		}
+	}
+	return false
+}
+
+func listaSQL(tipos []string) string {
+	entre := make([]string, len(tipos))
+	for i, t := range tipos {
 		entre[i] = "'" + t + "'"
 	}
 	return "(" + strings.Join(entre, ",") + ")"
