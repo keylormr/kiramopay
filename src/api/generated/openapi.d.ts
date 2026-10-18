@@ -4320,8 +4320,35 @@ export interface paths {
                         };
                     };
                 };
-                /** @description SAVINGS_FAILED: not enough balance in the wallet, an amount that is not greater than zero, or a goal that is not the caller's. Today a failure of the server answers the same way; the client must not show `error.message`. */
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE — the wallet does not cover the amount (the same code as POST /api/v1/sinpe/send). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4385,8 +4412,35 @@ export interface paths {
                         };
                     };
                 };
-                /** @description SAVINGS_FAILED: more than the goal holds, an amount that is not greater than zero, or a goal that is not the caller's. Today a failure of the server answers the same way; the client must not show `error.message`. */
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_EXCEEDS_SAVED — the goal holds less than the amount (it changed elsewhere). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };

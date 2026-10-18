@@ -2,6 +2,7 @@ package savings_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -121,12 +122,12 @@ func TestSavings_Withdraw_ExceedsSaved(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error withdrawing more than saved")
 	}
-	// El handler devuelve este texto tal cual al usuario. Desde que la fila del
-	// objetivo se escribe dentro de la transaccion del asiento, el error viaja
-	// por dentro del motor del libro: si se dejara envolver, la persona leeria
-	// "savings ledger post: en la misma tx: ..." en vez de que retira de mas.
-	if got := err.Error(); got != "amount exceeds amount saved" {
-		t.Fatalf("el mensaje que ve el usuario se ensucio: %q", got)
+	// El handler le da codigo propio a este error (SAVINGS_EXCEEDS_SAVED). Desde
+	// que la fila del objetivo se escribe dentro de la transaccion del asiento,
+	// el error viaja por dentro del motor del libro: si se perdiera en el
+	// camino, el retiro de mas saldria como falla del servidor.
+	if !errors.Is(err, savings.ErrExcedeLoAhorrado) {
+		t.Fatalf("err = %v, se esperaba ErrExcedeLoAhorrado", err)
 	}
 }
 

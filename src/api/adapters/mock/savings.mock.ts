@@ -59,7 +59,8 @@ export class MockSavingsRepository implements ISavingsRepository {
   private adjust(id: string, delta: number): ApiResponse<SavingsGoal> {
     const goals = read();
     const i = goals.findIndex((g) => g.id === id);
-    if (i === -1) return apiError('NOT_FOUND', 'Goal not found');
+    // El mismo codigo que el servidor, para que la pantalla diga lo mismo.
+    if (i === -1) return apiError('SAVINGS_GOAL_NOT_FOUND', 'savings goal not found');
     goals[i] = { ...goals[i], saved: Math.max(0, goals[i].saved + delta) };
     write(goals);
     return apiSuccess(goals[i]);
