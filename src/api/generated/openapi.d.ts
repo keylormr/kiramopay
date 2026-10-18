@@ -279,7 +279,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). ACCOUNT_PENDING_DELETION, also only after the password was verified, when the person asked to delete the account and the 30-day term is still running: `error.details.deletion_due_at` is the day it closes. Repeating the login with `reactivate: true` cancels the deletion and signs in. Once the term is over, or while the account is blocked, the answer is ACCOUNT_BLOCKED. */
+                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). ACCOUNT_PENDING_DELETION, also only after the password was verified, when the person asked to delete the account and the account is not closed yet: `error.details.deletion_due_at` is the day it closes, or the day it was due when the sweep could not close it because something was still pending. Repeating the login with `reactivate: true` cancels the deletion and signs in. Once the account is closed, or while it is blocked, the answer is ACCOUNT_BLOCKED. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -762,7 +762,7 @@ export interface paths {
         put?: never;
         /**
          * Ask for the signed-in person's account to be deleted
-         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and requires `accept_terms`, the express acceptance of the 30-day term. Day 0 (this call): the account moves to `pending_deletion` and is blocked at once; sessions, API keys and push subscriptions are revoked and the ledger accounts are closed, so no money moves in or out. A written answer goes to the email on file. Days 0 to 30: signing in with the password offers to reactivate the account, which cancels the process (see the login). Day 30: a scheduled sweep closes the account. What the person may delete is suppressed and credentials are revoked by overwriting them; what Costa Rica's Law 7786 requires (identity data and documents, the record of operations) is kept, isolated, for 5 years after the closure. When that period ends a second sweep dissociates it irreversibly. The user row is NEVER removed: the ledger is append-only and other tables reference it. Merchants end closed and inactive, not deleted. Day 0 runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the block. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call is harmless: the term does not restart.
+         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and requires `accept_terms`, the express acceptance of the 30-day term. Day 0 (this call): the account moves to `pending_deletion` and is blocked at once; sessions, API keys and push subscriptions are revoked and the ledger accounts are closed, so no money moves in or out. A written answer goes to the email on file. Days 0 to 30: signing in with the password offers to reactivate the account, which cancels the process (see the login); during the term the account is not a valid recipient (SINPE, QR, escrow) and gets no webhooks. Day 30: a scheduled sweep closes the account. One that cannot be closed (something is pending) stays reactivable until it is. What the person may delete is suppressed and credentials are revoked by overwriting them; what Costa Rica's Law 7786 requires (identity data and documents, the record of operations) is kept, isolated, for 5 years after the closure. When that period ends a second sweep dissociates it irreversibly. The user row is NEVER removed: the ledger is append-only and other tables reference it. Merchants end closed and inactive, not deleted. Day 0 runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the block. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call is harmless: the term does not restart.
          */
         post: {
             parameters: {
@@ -1459,7 +1459,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits). Nothing moved. */
+                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits), or RECIPIENT_UNAVAILABLE (the recipient asked to delete the account while the transfer was being made). Nothing moved. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3799,7 +3799,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle). No money moves. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle), or RECIPIENT_UNAVAILABLE (whoever charges asked to delete the account). No money moves. */
                 422: {
                     headers: {
                         [name: string]: unknown;

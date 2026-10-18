@@ -69,6 +69,7 @@ type Service struct {
 	email        messaging.EmailSender
 	sms          messaging.SMSSender
 	disconnector Disconnector
+	marcas       Marcas
 	logger       *slog.Logger
 }
 
@@ -80,7 +81,7 @@ func NewService(pool *pgxpool.Pool, users *user.Repository, opts *Options) *Serv
 		pool: pool, users: users,
 		totp: opts.TOTP, lockout: opts.Lockout, maxIntentos: opts.MaxIntentos,
 		email: opts.Email, sms: opts.SMS, disconnector: opts.Disconnector,
-		logger: opts.Logger,
+		marcas: opts.Marcas, logger: opts.Logger,
 	}
 	if s.maxIntentos <= 0 {
 		s.maxIntentos = 5
@@ -283,19 +284,53 @@ func esReintentable(err error) bool {
 // para que un proveedor lento no retenga la peticion.
 const avisoTimeout = 30 * time.Second
 
-// despues hace lo que no puede estar dentro de la transaccion del dia 0: cortar
-// los WebSocket y mandar la respuesta escrita. Nada de esto es critico: la base
-// ya es autoritativa y una falla aqui solo se registra.
+// despues hace lo que no puede estar dentro de la transaccion del dia 0: marcar
+// la cuenta para que ningun token siga vivo, cortar los WebSocket y mandar la
+// respuesta escrita. Nada de esto es critico: la base ya es autoritativa (sin
+// la marca, el repaso de las marcas la pone) y una falla aqui solo se registra.
 func (s *Service) despues(userID string, res resultado) {
 	if res.Ya {
 		return
 	}
+	s.marcar(userID)
 	if s.disconnector != nil {
 		s.disconnector.DisconnectUser(userID)
 	}
+	s.responderPorEscrito(userID, res)
+}
+
+// responderPorEscrito manda la respuesta escrita del dia 0 con las fechas de la
+// solicitud. La via web la vuelve a mandar cuando se pide de nuevo una cuenta
+// que ya esta en plazo: la pagina promete el correo.
+func (s *Service) responderPorEscrito(userID string, res resultado) {
 	subject, text, html := messaging.AccountDeletionRequestedEmail(res.SeEliminaEl,
 		res.SeEliminaEl.AddDate(anosDeConservacion, 0, 0))
 	s.enviarAviso(userID, res.Correo, subject, text, html, "respuesta a la solicitud de eliminacion no enviada")
+}
+
+// marcar pone la marca que el middleware mira en cada peticion autenticada.
+func (s *Service) marcar(userID string) {
+	if s.marcas == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
+	defer cancel()
+	if err := s.marcas.MarkUserBlocked(ctx, userID); err != nil {
+		s.logger.Warn("marca de la eliminacion no puesta", "user", userID, "err", err.Error())
+	}
+}
+
+// desmarcar quita la marca al reactivar. Si falla, la persona recibe
+// ACCOUNT_BLOCKED hasta que el repaso de las marcas la quite: queda en el log.
+func (s *Service) desmarcar(userID string) {
+	if s.marcas == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
+	defer cancel()
+	if err := s.marcas.ClearUserBlocked(ctx, userID); err != nil {
+		s.logger.Error("marca de la eliminacion no quitada al reactivar", "user", userID, "err", err.Error())
+	}
 }
 
 // enviarAviso manda un correo por fuera de la peticion, acotado por avisoTimeout.

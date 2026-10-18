@@ -61,6 +61,8 @@ export const CLAVES_DEL_RECHAZO_DEL_PAGO: Readonly<Record<string, string>> = {
   DAILY_LIMIT_EXCEEDED: 'pago_err_tope_diario',
   MONTHLY_LIMIT_EXCEEDED: 'pago_err_tope_mensual',
   MERCHANT_UNAVAILABLE: 'qr_err_comercio_no_disponible',
+  // Quien cobra pidio eliminar su cuenta: nada se movio y el codigo ya no sirve.
+  RECIPIENT_UNAVAILABLE: 'qr_err_invalido',
   // El comercio del codigo ya no existe: para quien paga, el codigo no sirve.
   MERCHANT_NOT_FOUND: 'qr_err_invalido',
   // Un codigo en una moneda que la billetera no maneja: no se movio nada.

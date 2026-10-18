@@ -33,7 +33,7 @@ interface AdminUserDTO {
   plan?: string;
 }
 
-const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed'];
+const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed', 'pending_deletion'];
 
 function mapStatus(raw: unknown): AdminUserStatus {
   return STATUSES.includes(raw as AdminUserStatus) ? (raw as AdminUserStatus) : 'active';

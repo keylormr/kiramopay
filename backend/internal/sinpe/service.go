@@ -117,6 +117,13 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	if peer != nil && peer.ID == userID {
 		return nil, ErrSelfSend
 	}
+	// Quien pidio eliminar su cuenta no recibe: para el envio es como un numero
+	// sin cuenta. El libro ya lo frenaria (la cuenta esta cerrada), pero asi el
+	// rechazo llega antes, con el motivo que la pantalla sabe explicar, y el
+	// reintento de un envio que ya salio se sigue contestando abajo.
+	if peer != nil && peer.Status == "pending_deletion" {
+		peer = nil
+	}
 	// Sending to a number that is NOT a KiramoPay user is refused rather than
 	// accepted. The cross-bank rail needs a licence we do not hold, so such a
 	// transfer could only be debited and parked in SYSTEM:EXTERNAL: never

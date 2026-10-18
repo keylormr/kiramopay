@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kiramopay/backend/internal/user"
 )
 
 // Canal es por donde llego la solicitud. Se guarda en users.deletion_channel.
@@ -72,35 +74,46 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	var (
 		status, role  string
 		pedida, vence *time.Time
-		cerrada       bool
+		cerrada, demo bool
 		correo        *string
 		nombre        string
 	)
 	err := tx.QueryRow(ctx,
 		`SELECT COALESCE(status, 'active'), COALESCE(role, 'user'),
 		        deletion_requested_at, deletion_due_at, deleted_at IS NOT NULL,
-		        fn_pii_decrypt(email_enc), first_name
+		        COALESCE(demo_login, false), fn_pii_decrypt(email_enc), first_name
 		   FROM users
 		  WHERE id = $1::uuid
 		    FOR UPDATE`,
 		userID,
-	).Scan(&status, &role, &pedida, &vence, &cerrada, &correo, &nombre)
+	).Scan(&status, &role, &pedida, &vence, &cerrada, &demo, &correo, &nombre)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return resultado{}, ErrCuentaNoEncontrada
 	}
 	if err != nil {
 		return resultado{}, fmt.Errorf("leer cuenta: %w", err)
 	}
+	res := resultado{Nombre: nombre}
+	if correo != nil {
+		res.Correo = *correo
+	}
 	if pedida != nil && vence != nil {
 		// Segunda orden sobre la misma cuenta (doble clic, reintento, la app y la
 		// web a la vez): la solicitud ya existe y el plazo no vuelve a correr.
-		return resultado{Ya: true, SolicitadaEn: *pedida, SeEliminaEl: *vence}, nil
+		res.Ya, res.SolicitadaEn, res.SeEliminaEl = true, *pedida, *vence
+		return res, nil
 	}
 	if cerrada {
 		return resultado{}, ErrCuentaNoElegible
 	}
 	if role != "user" {
 		return resultado{}, ErrRolNoPermitido
+	}
+	// Una cuenta de demostracion no se elimina por ninguna via: la app lo
+	// rechaza antes de la contrasena, y la web llega hasta aqui con el codigo del
+	// correo.
+	if demo {
+		return resultado{}, user.ErrCuentaDeDemostracion
 	}
 	// Elegible: activa, o bajo revision cuando una persona de operaciones la atiende.
 	bajoRevision := status == "blocked" || status == "suspended"
@@ -120,10 +133,6 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 		return resultado{}, &ErrBloqueada{Bloqueos: bloqueos}
 	}
 
-	res := resultado{Nombre: nombre}
-	if correo != nil {
-		res.Correo = *correo
-	}
 	// Una cuenta bajo revision conserva su estado: el bloqueo es de operaciones
 	// y lo levanta operaciones (al desbloquear vuelve a 'pending_deletion').
 	err = tx.QueryRow(ctx, `
@@ -198,7 +207,10 @@ var pasosDelDiaCero = []paso{
 // ── Reactivar ─────────────────────────────────────────────────────────────
 
 // reactivarEnTx cancela el proceso si la cuenta esta en 'pending_deletion' y el
-// plazo no vencio. false sin error: no habia nada que reactivar.
+// barrido no la cerro (ver SeEliminaEl). false sin error: no habia nada que
+// reactivar. La carrera con el cierre la ordena la fila de users: cerrarEnTx la
+// bloquea, asi que o cierra primero (y aqui no hay fila) o reactiva primero (y
+// el cierre ya no la encuentra en 'pending_deletion').
 func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) {
 	tag, err := tx.Exec(ctx, `
 		UPDATE users SET
@@ -207,7 +219,7 @@ func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) 
 		    deletion_terms_accepted_at = NULL, deletion_channel = NULL,
 		    updated_at = NOW()
 		WHERE id = $1::uuid AND status = 'pending_deletion'
-		  AND deleted_at IS NULL AND deletion_due_at > NOW()`, userID)
+		  AND deleted_at IS NULL`, userID)
 	if err != nil {
 		return false, fmt.Errorf("reactivar la cuenta: %w", err)
 	}
@@ -471,7 +483,18 @@ WHERE id = $1::uuid`
 // anos aunque retention_until diga cinco.
 const sqlConservacionVencida = `retention_until IS NOT NULL AND dissociated_at IS NULL
 	AND retention_until <= $2
-	AND (retention_extended_at IS NULL OR deleted_at + interval '` + intervaloConservacionExtensa + `' <= $2)`
+	AND (retention_extended_at IS NULL OR deleted_at + interval '` + intervaloConservacionExtensa + `' <= $2)
+	AND ` + sqlSinCasoAbierto
+
+// sqlSinCasoAbierto deja fuera de la desasociacion a quien tiene un caso
+// abierto: un reporte que nadie reviso o una alerta de fraude en curso. La
+// desasociacion es irreversible, y un caso abierto sin persona a quien
+// atribuirlo ya no se puede cerrar. Cerrado el caso, el barrido siguiente la
+// desasocia.
+const sqlSinCasoAbierto = `NOT EXISTS (SELECT 1 FROM uif_reports r
+	                 WHERE r.user_id = users.id AND r.status = 'pending')
+	AND NOT EXISTS (SELECT 1 FROM fraud_alerts f
+	                 WHERE f.user_id = users.id AND COALESCE(f.status, 'open') IN ('open', 'investigating'))`
 
 // desasociarEnTx deja lo conservado sin nada que identifique a la persona, de
 // forma irreversible. Las filas y los montos quedan (son rastro contable y

@@ -1508,6 +1508,7 @@ export type TranslationKeys = {
   admin_users_status_blocked: string;
   admin_users_status_suspended: string;
   admin_users_status_closed: string;
+  admin_users_status_pending_deletion: string;
   admin_users_block: string;
   admin_users_unblock: string;
   admin_users_block_title: string;
@@ -1927,6 +1928,7 @@ export type TranslationKeys = {
   login_pending_title: string;
   login_pending_body: string;
   login_pending_body_nodate: string;
+  login_pending_body_overdue: string;
   login_pending_reactivate: string;
   login_pending_keep: string;
   login_pending_failed: string;

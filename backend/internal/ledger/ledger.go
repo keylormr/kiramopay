@@ -242,8 +242,9 @@ var ErrInsufficientFunds = errors.New("insufficient funds")
 // cuyo dueno elimino su cuenta (migracion 077, ledger_accounts.closed_at). No
 // se puede acreditar ni debitar: el dinero que llegara ahi no tendria dueno. Se
 // resuelve aqui, en el unico lugar que traduce una persona a su cuenta, para
-// que ningun camino (transferencia, escrow, cobro QR, cripto) tenga que
-// acordarse de comprobarlo.
+// que ningun camino que pase por el libro (transferencia, escrow, cobro QR)
+// tenga que acordarse de comprobarlo. El cripto no pasa por el libro: lo frena
+// la busqueda de quien recibe (qrpayment.PersonaDelQR).
 var ErrCuentaCerrada = errors.New("la cuenta esta cerrada")
 
 // errIdempotencyRace is an internal, retryable signal: a concurrent posting
@@ -312,6 +313,14 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	// Zero rows locked is fine: the account may not exist yet — a first-ever
 	// credit provisions it inside this tx, and a debit against a still-missing
 	// account fails the negativity check anyway.
+	//
+	// La fila se toma con un UPDATE que no cambia nada, no con FOR UPDATE: el
+	// dia 0 de la eliminacion de cuenta corre SERIALIZABLE, lee el saldo del
+	// comercio en el diario y cierra esta misma fila. Un FOR UPDATE de otra
+	// transaccion que ya confirmo no le causa conflicto, asi que un cobro que
+	// entrara entre su lectura y su cierre dejaria el comercio cerrado con
+	// dinero adentro. Con una version nueva de la fila, su UPDATE falla por
+	// serializacion, reintenta y ve el cobro.
 	type merchantAccountKey struct{ merchantID, currency string }
 	lockMerchants := make([]merchantAccountKey, 0, len(p.Entries))
 	seenMerchant := make(map[merchantAccountKey]bool, len(p.Entries))
@@ -334,9 +343,9 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	})
 	for _, k := range lockMerchants {
 		if _, err := tx.Exec(ctx,
-			`SELECT 1 FROM ledger_accounts
-			  WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'
-			  FOR UPDATE`, k.merchantID, k.currency,
+			`UPDATE ledger_accounts SET closed_at = closed_at
+			  WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'`,
+			k.merchantID, k.currency,
 		); err != nil {
 			return "", fmt.Errorf("lock merchant account %s/%s: %w", k.merchantID, k.currency, err)
 		}

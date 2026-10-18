@@ -32,7 +32,8 @@ formulario arriba y no manda a reinstalar nada. Tiene una casilla obligatoria do
 acepta el plazo de 30 dias (sin marcarla no se envia nada, y el servidor tambien lo rechaza con
 `TERMS_NOT_ACCEPTED`). Comprueba que el correo o telefono es de la persona con un codigo, y con
 el codigo correcto empieza el plazo (el dia 0). La pagina responde lo mismo en todos los casos y
-no revela el estado de la cuenta; lo que sigue le llega por correo:
+no revela el estado de la cuenta; lo que sigue le llega al correo registrado en la cuenta (sin
+correo registrado no hay a donde escribirle, y la pagina misma explica lo que sigue):
 
 - Cuenta sin pendientes: queda bloqueada y recibe la respuesta escrita (que se suprime el dia
   30, que se conserva por la Ley 7786 y hasta cuando, y su derecho a acudir a la PRODHAB).
@@ -49,9 +50,9 @@ tiene una linea de tiempo que la politica y la pagina web explican igual:
 
 | Momento | Que pasa |
 |---|---|
-| Dia 0: la persona lo pide (app o web) y acepta el plazo | La cuenta queda bloqueada en el acto: no puede entrar, ni mover ni recibir dinero, ni recibe avisos. No se borra nada todavia. Recibe por correo una respuesta escrita: que se suprime el dia 30, que se conserva por la Ley 7786 y hasta cuando, y su derecho a acudir a la PRODHAB (Ley 8968). |
-| Dias 0 a 30 | Puede reactivarla entrando a la app con su contrasena (la app le ofrece reactivar). Reactivar cancela el proceso y la cuenta vuelve a funcionar. |
-| Dia 30 | Se **suprime** de forma definitiva: datos de acceso (las credenciales quedan revocadas), preferencias, contactos, cuentas bancarias vinculadas, servicios guardados, presupuestos, pagos programados, alertas de precio, conversaciones con el asistente, historial de avisos, dispositivos y sesiones; las tarjetas virtuales se cancelan. Se **conserva**, identificado y aislado (fuera de la aplicacion, solo para cumplir la ley), lo que la Ley 7786 (art. 16) obliga: identificacion y verificacion (KYC), registro de operaciones y sus contrapartes, auditoria de seguridad, y registros de cumplimiento y prevencion de fraude. El comercio, si tenia, queda cerrado e inactivo (su identidad legal y sus cobros son parte de lo conservado). Desde aqui la persona puede volver a registrarse con la misma cedula, telefono y correo; seria una cuenta nueva. |
+| Dia 0: la persona lo pide (app o web) y acepta el plazo | La cuenta queda bloqueada en el acto: no puede entrar, ni mover ni recibir dinero, ni recibe avisos. No se borra nada todavia. Recibe en el correo de la cuenta, si tiene uno, una respuesta escrita: que se suprime el dia 30, que se conserva por la Ley 7786 y hasta cuando, y su derecho a acudir a la PRODHAB (Ley 8968). |
+| Dias 0 a 30 | Puede reactivarla entrando a la app con su contrasena (la app le ofrece reactivar). Reactivar cancela el proceso y la cuenta vuelve a funcionar; los avisos se vuelven a encender desde Perfil y las llaves de API se crean de nuevo. Durante el plazo nadie le puede mandar dinero (SINPE, QR, garantia) ni recibe webhooks. Si el dia 30 aparece algo pendiente que impide cerrarla, sigue bloqueada y reactivable hasta que se cierre. |
+| Dia 30 | Se **suprime** de forma definitiva: datos de acceso (las credenciales quedan revocadas), preferencias, contactos, cuentas bancarias vinculadas, servicios guardados, presupuestos, pagos programados, alertas de precio, conversaciones con el asistente, historial de avisos, dispositivos y sesiones; las tarjetas virtuales se cancelan. Se **conserva**, identificado y aislado (fuera de la aplicacion, solo para cumplir la ley), lo que la Ley 7786 (art. 16) obliga: identificacion y verificacion (KYC), registro de operaciones y sus contrapartes, auditoria de seguridad, y registros de cumplimiento y prevencion de fraude. El comercio, si tenia, queda cerrado e inactivo (su identidad legal y sus cobros son parte de lo conservado). Las contrapartes conservan en su propio historial lo que ya veian (por ejemplo, el nombre en un envio). Desde aqui la persona puede volver a registrarse con la misma cedula, telefono y correo; seria una cuenta nueva. |
 | Dia 30 mas 5 anos | Lo conservado se desasocia de la persona de forma irreversible: se vacian nombres, documentos, telefonos, direcciones, notas e IP; quedan solo montos y fechas como rastro contable. El plazo puede ser mayor solo si la ley o una autoridad competente lo exige. |
 
 La fila de usuario no se borra nunca (el libro del dinero no se puede alterar); el dia 30 queda

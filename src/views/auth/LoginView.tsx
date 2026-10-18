@@ -43,6 +43,15 @@ const CLAVES_ERROR_LOGIN: Readonly<Record<string, string>> = {
   VALIDATION_ERROR: 'login_identifier_invalid',
 };
 
+// Una cuenta con el dia 30 ya pasado que el servidor todavia ofrece reactivar
+// es una que no se pudo cerrar: queda algo pendiente. "Se elimina el" con una
+// fecha que ya paso no le diria nada.
+function plazoVencido(iso: string | undefined): boolean {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) && t <= Date.now();
+}
+
 // Rechazos que el intento con contrasena repetiria igual: el sondeo del
 // identificador los avisa ahi, sin pedir la contrasena. La pausa por intentos
 // no delata cuentas: el servidor cuenta los intentos por identificador, exista
@@ -667,9 +676,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   <div className="min-w-0">
                     <p className="font-bold text-white">{t('login_pending_title')}</p>
                     <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
-                      {fechaLarga(porEliminar.fecha, language)
-                        ? t('login_pending_body').replace('{date}', fechaLarga(porEliminar.fecha, language))
-                        : t('login_pending_body_nodate')}
+                      {plazoVencido(porEliminar.fecha)
+                        ? t('login_pending_body_overdue')
+                        : fechaLarga(porEliminar.fecha, language)
+                          ? t('login_pending_body').replace('{date}', fechaLarga(porEliminar.fecha, language))
+                          : t('login_pending_body_nodate')}
                     </p>
                   </div>
                 </div>

@@ -202,6 +202,10 @@ func (r *Repository) ClearUserBlocked(ctx context.Context, userID string) error 
 // ante error devuelve (true, err) y el middleware responde 503, igual que
 // IsAccessJTIRevoked. Sin Redis configurado consulta la BD directamente (una
 // lectura por peticion, solo en ese despliegue).
+//
+// Una cuenta con la eliminacion en curso lleva la misma marca: durante el plazo
+// no hace nada, y un token de acceso que quedo vivo no sigue sirviendo hasta que
+// vence. La puerta de vuelta es el login, que no pasa por aqui.
 func (r *Repository) IsUserBlocked(ctx context.Context, userID string) (bool, error) {
 	if r.redis == nil {
 		var status string
@@ -215,7 +219,7 @@ func (r *Repository) IsUserBlocked(ctx context.Context, userID string) (bool, er
 		if err != nil {
 			return true, fmt.Errorf("blocked lookup: %w", err)
 		}
-		return status == "blocked", nil
+		return status == "blocked" || status == "pending_deletion", nil
 	}
 	n, err := r.redis.Exists(ctx, blockedKey(userID)).Result()
 	if err != nil {
@@ -286,7 +290,7 @@ func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed 
 
 	enBD := make(map[string]bool)
 	rows, err := r.db.Query(ctx,
-		`SELECT id::text FROM users WHERE status = 'blocked' AND deleted_at IS NULL`)
+		`SELECT id::text FROM users WHERE status IN ('blocked', 'pending_deletion') AND deleted_at IS NULL`)
 	if err != nil {
 		return 0, 0, fmt.Errorf("list blocked users: %w", err)
 	}

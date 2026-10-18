@@ -112,6 +112,11 @@ func respuestaDelRechazo(err error) (int, string, string) {
 		return http.StatusBadRequest, "RECIPIENT_NOT_USER", ErrRecipientNotUser.Error()
 	case errors.Is(err, ErrSelfSend):
 		return http.StatusBadRequest, "SELF_SEND", ErrSelfSend.Error()
+	// Quien recibe pidio eliminar su cuenta entre la busqueda y el asiento: el
+	// libro rechazo limpio y nada se movio. No es un envio sin confirmar.
+	case errors.Is(err, ledger.ErrCuentaCerrada):
+		return http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE",
+			"the recipient account cannot receive money"
 	case errors.Is(err, ErrInvalidPhone):
 		return http.StatusBadRequest, "INVALID_PHONE", ErrInvalidPhone.Error()
 	// La llave ya es de otro envio: es lo unico que le dice a la pantalla que

@@ -40,6 +40,10 @@ const (
 	// o el buzon de otra persona. Se mide con el vencimiento (que es el momento
 	// del envio mas vigenciaCodigo) para no agregar una columna.
 	esperaEntreCodigos = time.Minute
+	// ventanaDeIntentos: los intentos agotados vuelven recien cuando pasa este
+	// tiempo sin pedir codigos. Si pedir otro codigo los devolviera, quien conoce
+	// el correo de otra persona podria probar cinco por minuto, para siempre.
+	ventanaDeIntentos = 24 * time.Hour
 )
 
 var (
@@ -132,14 +136,24 @@ func (s *Service) Solicitar(ctx context.Context, raw string, aceptaPlazo bool) e
 		DO UPDATE SET user_id = EXCLUDED.user_id,
 		              verification_hash = EXCLUDED.verification_hash,
 		              verification_expires_at = EXCLUDED.verification_expires_at,
-		              verification_attempts = 0,
+		              verification_attempts = CASE
+		                  WHEN account_deletion_requests.verification_expires_at < NOW() - $7::interval THEN 0
+		                  ELSE account_deletion_requests.verification_attempts END,
 		              terms_accepted_at = EXCLUDED.terms_accepted_at
 		WHERE account_deletion_requests.status = 'pending_verification'
 		  AND (account_deletion_requests.verification_expires_at IS NULL
-		       OR account_deletion_requests.verification_expires_at < NOW() + $6::interval)`,
+		       OR account_deletion_requests.verification_expires_at < NOW() + $6::interval)
+		  -- Con los intentos agotados no sale otro codigo hasta que pase la ventana:
+		  -- no serviria, y seria un mensaje mas en el buzon de otra persona.
+		  AND (account_deletion_requests.verification_attempts < $8
+		       OR account_deletion_requests.verification_expires_at < NOW() - $7::interval)`,
 		string(kind), contactHash, userID, codigoHash,
 		fmt.Sprintf("%d seconds", int(vigenciaCodigo.Seconds())),
-		fmt.Sprintf("%d seconds", int((vigenciaCodigo-esperaEntreCodigos).Seconds())))
+		fmt.Sprintf("%d seconds", int((vigenciaCodigo-esperaEntreCodigos).Seconds())),
+		// El vencimiento es el envio mas vigenciaCodigo: "mas de un dia desde el
+		// ultimo codigo" es vencido hace mas de la ventana menos la vigencia.
+		fmt.Sprintf("%d seconds", int((ventanaDeIntentos-vigenciaCodigo).Seconds())),
+		maxIntentosCodigo)
 	if err != nil {
 		return fmt.Errorf("guardar solicitud: %w", err)
 	}
@@ -302,6 +316,8 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		}
 	case errors.Is(err, ErrRolNoPermitido):
 		err = cerrar("rejected", "ROLE_NOT_ALLOWED")
+	case errors.Is(err, user.ErrCuentaDeDemostracion):
+		err = cerrar("rejected", "DEMO_ACCOUNT")
 	case errors.Is(err, ErrCuentaNoElegible):
 		err = cerrar("rejected", "NOT_ELIGIBLE")
 	case errors.Is(err, ErrCuentaNoEncontrada):
@@ -314,13 +330,18 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 }
 
 // despuesDeAtender manda lo que corresponde tras el commit: la respuesta
-// escrita si empezo el plazo, o lo que hay que resolver si quedo bloqueada.
+// escrita si empezo el plazo (otra vez, si ya estaba en plazo), o lo que hay
+// que resolver si quedo bloqueada.
 func (s *Service) despuesDeAtender(ctx context.Context, userID string, out *Atendida, res resultado) {
 	if userID == "" || out == nil {
 		return
 	}
 	switch out.Estado {
 	case "scheduled":
+		if res.Ya {
+			s.responderPorEscrito(userID, res)
+			return
+		}
 		s.despues(userID, res)
 	case "blocked":
 		s.avisarBloqueo(ctx, userID, out.Bloqueos)

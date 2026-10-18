@@ -1,7 +1,7 @@
 import type { ApiResponse } from '../types';
 import type { PlanPersonal } from './plans.repository';
 
-export type AdminUserStatus = 'active' | 'blocked' | 'suspended' | 'closed';
+export type AdminUserStatus = 'active' | 'blocked' | 'suspended' | 'closed' | 'pending_deletion';
 
 /** Respuesta de asignar un plan a mano. No se cobro nada. */
 export interface PlanAsignado {

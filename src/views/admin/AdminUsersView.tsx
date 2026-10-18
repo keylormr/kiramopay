@@ -20,6 +20,7 @@ const CHIP_BY_STATUS: Record<AdminUserStatus, string> = {
   blocked: 'uv-chip-danger',
   suspended: 'uv-chip-warning',
   closed: 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-muted',
+  pending_deletion: 'uv-chip-warning',
 };
 
 // Contract error codes map to app-language copy; anything unknown falls back to

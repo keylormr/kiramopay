@@ -275,7 +275,9 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 		"fuera de la aplicación, y solo se usan para cumplir esa ley. El plazo puede ser mayor únicamente si la ley " +
 		"o una autoridad competente lo exige. Al vencer, dejan de estar asociados a vos de forma irreversible."
 	reactivar := "Si cambiás de opinión, hasta el " + dia30 + " podés reactivar tu cuenta: entrá a KiramoPay con " +
-		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta vuelve a funcionar."
+		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta vuelve a funcionar. " +
+		"Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tenés que crear otras: las " +
+		"de antes quedaron revocadas."
 	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
 	ajeno := "Si no fuiste vos quien lo pidió, entrá con tu contraseña, reactivá la cuenta y cambiá la contraseña, " +
@@ -321,9 +323,26 @@ func AccountDeletedEmail() (subject, textBody, htmlBody string) {
 }
 
 // AccountReactivatedEmail avisa que la cuenta se reactivo y la eliminacion se
-// cancelo.
+// cancelo. Si quien reactivo no fue la persona (alguien con su contrasena), asi
+// se entera: por eso dice que hacer en ese caso.
 func AccountReactivatedEmail() (subject, textBody, htmlBody string) {
-	return "", "", ""
+	subject = "Reactivaste tu cuenta de KiramoPay"
+	hecho := "Tu cuenta de KiramoPay se reactivó y la solicitud para eliminarla quedó cancelada. " +
+		"Tu cuenta vuelve a funcionar como antes."
+	pendiente := "Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tenés que crear " +
+		"otras: las de antes quedaron revocadas."
+	ajeno := "Si no fuiste vos quien la reactivó, alguien conoce tu contraseña: cambiala cuanto antes desde " +
+		"Perfil, o escribinos desde la página de ayuda de KiramoPay."
+
+	text := hecho + "\n\n" + pendiente + "\n\n" + ajeno + "\n"
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph(hecho))
+	body.WriteString(paragraph(pendiente))
+	body.WriteString(note(ajeno))
+
+	htmlBody = emailShell("Reactivaste tu cuenta", "La eliminación de tu cuenta quedó cancelada.", body.String())
+	return subject, text, htmlBody
 }
 
 // DeletionBlockedEmail le dice a quien pidio eliminar su cuenta desde la web que

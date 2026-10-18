@@ -639,6 +639,7 @@ func main() {
 		MaxIntentos: 5,
 		Email:       emailSender,
 		SMS:         smsSender,
+		Marcas:      authRepo,
 		Logger:      logger,
 	})
 	accountDeletionHandler := accountdeletion.NewHandler(accountDeletionService, authHandler.EndSession)

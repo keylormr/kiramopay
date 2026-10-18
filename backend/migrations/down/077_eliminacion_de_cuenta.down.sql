@@ -10,6 +10,12 @@
 -- ACCOUNT_BLOCKED) hasta que alguien decida que hacer con ella. Los CHECK de la
 -- 018 y de la 052 vuelven como NOT VALID por la misma razon: no deben hacer
 -- fallar la bajada ni obligar a tocar esas filas.
+--
+-- Ojo con el libro: al quitar ledger_accounts.closed_at se REABREN todas las
+-- cuentas cerradas, las de las personas en plazo y las de las ya eliminadas. El
+-- binario viejo no sabe que estaban cerradas y les acredita lo que llegue. Antes
+-- de bajar, revisar que nadie pueda mandarles dinero (sus telefonos y codigos QR
+-- ya no deberian resolver) o dejarlas en un estado que el binario viejo rechace.
 
 DROP TABLE IF EXISTS account_deletion_requests;
 DROP TABLE IF EXISTS closed_account_records;
