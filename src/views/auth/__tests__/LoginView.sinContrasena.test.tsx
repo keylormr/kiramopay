@@ -2,12 +2,23 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { LoginView } from '../LoginView';
+import es from '@/i18n/languages/es';
 
 // La pantalla sondea con la contrasena vacia para saber si esta cuenta entra
 // sin ella. Dos cosas hay que fijar: que una cuenta de demostracion entre de
 // una vez, y que el sondeo NO deje al usuario atrapado ni le muestre un error
 // antes de haber escrito nada.
 const mocks = vi.hoisted(() => ({ login: vi.fn(), user: null as Record<string, unknown> | null }));
+
+// La huella: por defecto no hay sensor, como en el navegador; las pruebas de la
+// huella lo encienden.
+const bio = vi.hoisted(() => ({
+  checkAvailability: vi.fn(),
+  authenticate: vi.fn(),
+  getCredentials: vi.fn(),
+  setCredentials: vi.fn(),
+}));
+vi.mock('@/services/biometric', () => ({ biometricService: bio }));
 
 vi.mock('@/services/dataSync', () => ({ syncAllData: vi.fn().mockResolvedValue(undefined) }));
 
@@ -61,6 +72,10 @@ describe('LoginView: entrada sin contrasena', () => {
     localStorage.setItem('kiramopay_language', 'es');
     mocks.login.mockReset();
     mocks.user = null;
+    bio.checkAvailability.mockReset().mockResolvedValue({ isAvailable: false, biometryType: 'none' });
+    bio.authenticate.mockReset();
+    bio.getCredentials.mockReset();
+    bio.setCredentials.mockReset();
   });
 
   it('una cuenta de demostracion entra tecleando solo el nombre de usuario', async () => {
@@ -163,6 +178,48 @@ describe('LoginView: entrada sin contrasena', () => {
       await waitFor(() =>
         expect(screen.getByText('Demasiados intentos. Espera un momento e intenta de nuevo.')).toBeInTheDocument(),
       );
+      expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
+    });
+
+    // Mientras el servidor contesta (con Render despertando, decenas de
+    // segundos), la tarjeta tiene que decir que esta trabajando, y "No soy yo"
+    // no puede correr: la respuesta llegaria despues y volveria a guardar el
+    // nombre recien olvidado, o abriria la contrasena sin identificador.
+    it('mientras consulta, la tarjeta avisa y "No soy yo" espera', async () => {
+      let responder: (r: { success: boolean; code?: string }) => void = () => undefined;
+      mocks.login.mockImplementation(() => new Promise((r) => { responder = r; }));
+      const user = userEvent.setup();
+      pintar();
+
+      const tarjeta = screen.getByText('Demo KiramoPay').closest('button')!;
+      await user.click(tarjeta);
+
+      await waitFor(() => expect(tarjeta).toBeDisabled());
+      expect(tarjeta).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('button', { name: es.login_no_soy_yo })).toBeDisabled();
+
+      responder({ success: false, code: 'PASSWORD_REQUIRED' });
+      await waitFor(() => expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument());
+    });
+
+    // Una cuenta que entra sin contrasena no guarda nada en el llavero: la
+    // huella la mandaba al campo de contrasena que esa cuenta no tiene.
+    it('la huella sin contrasena guardada consulta antes de pedirla', async () => {
+      bio.checkAvailability.mockResolvedValue({ isAvailable: true, biometryType: 'fingerprint' });
+      bio.authenticate.mockResolvedValue({ success: true });
+      bio.getCredentials.mockResolvedValue(null);
+      mocks.login.mockImplementation(async (_id: string, password: string) => {
+        if (password) return { success: false, code: 'AUTH_FAILED' };
+        mocks.user = { firstName: 'Demo', lastName: 'KiramoPay', username: 'demo' };
+        return { success: true };
+      });
+      const user = userEvent.setup();
+      const onLogin = pintar();
+
+      await user.click(await screen.findByText(es.biometric_login));
+
+      await waitFor(() => expect(onLogin).toHaveBeenCalled());
+      expect(mocks.login).toHaveBeenCalledWith('demo', '');
       expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
     });
   });
