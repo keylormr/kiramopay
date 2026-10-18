@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/country"
 	"github.com/kiramopay/backend/internal/testutil"
@@ -172,5 +173,96 @@ func TestUnaFuenteCaidaNoTocaLaTasa(t *testing.T) {
 	}
 	if tasa, _ := repo.TipoDeCambioParaCobrar(ctx, "USD", "CRC"); tasa != 450.06 {
 		t.Fatalf("tras la basura: tasa = %v, se esperaba 450.06 intacta", tasa)
+	}
+}
+
+// La UIF necesita la venta de referencia de CADA DIA, con la fecha que le pone
+// el BCCR: el total del mes se convierte con la del ultimo dia del mes, y cada
+// movimiento con la de su dia. exchange_rates solo guarda una fila cuando la
+// tasa cambia y con la hora en que se trajo, no la fecha de publicacion.
+
+func ventaGuardada(t *testing.T, pool *pgxpool.Pool, moneda, fecha string) (float64, string, bool) {
+	t.Helper()
+	var porDolar float64
+	var fuente string
+	err := pool.QueryRow(context.Background(), `
+		SELECT por_dolar::float8, fuente FROM tipo_de_cambio_diario
+		 WHERE moneda = $1 AND fecha = $2::date`, moneda, fecha).Scan(&porDolar, &fuente)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", false
+	}
+	if err != nil {
+		t.Fatalf("leer la venta de %s del %s: %v", moneda, fecha, err)
+	}
+	return porDolar, fuente, true
+}
+
+func TestElActualizadorGuardaLaVentaDelDia(t *testing.T) {
+	pool := testutil.TestDB(t)
+	repo := country.NewRepository(pool)
+	ctx := context.Background()
+
+	f := &fuente{c: &country.Cotizacion{Compra: 444.22, Venta: 450.06, Fecha: hoy()}}
+	if err := country.NewActualizador(repo, f, time.Hour, nil).ActualizarUnaVez(ctx); err != nil {
+		t.Fatalf("ActualizarUnaVez: %v", err)
+	}
+	venta, origen, ok := ventaGuardada(t, pool, "CRC", hoy().Format(time.DateOnly))
+	if !ok || venta != 450.06 || origen != "hacienda" {
+		t.Fatalf("venta del dia: %v (%s, guardada %v); se esperaba 450.06 de hacienda", venta, origen, ok)
+	}
+}
+
+// fuenteConEuro tambien publica la cotizacion del euro, en dolares por euro y
+// con su propia fecha: el BCCR no la publica los fines de semana.
+type fuenteConEuro struct {
+	fuente
+	dolaresPorEuro float64
+	fechaEuro      time.Time
+	errEuro        error
+}
+
+func (f *fuenteConEuro) ObtenerEuro(context.Context) (float64, time.Time, error) {
+	return f.dolaresPorEuro, f.fechaEuro, f.errEuro
+}
+
+func TestElActualizadorGuardaElEuroDelBCCR(t *testing.T) {
+	pool := testutil.TestDB(t)
+	repo := country.NewRepository(pool)
+	ctx := context.Background()
+
+	viernes := hoy().AddDate(0, 0, -2)
+	f := &fuenteConEuro{
+		fuente:         fuente{c: &country.Cotizacion{Compra: 444.22, Venta: 450.06, Fecha: hoy()}},
+		dolaresPorEuro: 1.1252, fechaEuro: viernes,
+	}
+	if err := country.NewActualizador(repo, f, time.Hour, nil).ActualizarUnaVez(ctx); err != nil {
+		t.Fatalf("ActualizarUnaVez: %v", err)
+	}
+	// Se guarda como todo lo demas: cuantos euros vale un dolar.
+	porDolar, _, ok := ventaGuardada(t, pool, "EUR", viernes.Format(time.DateOnly))
+	if !ok || porDolar < 0.88873 || porDolar > 0.88874 {
+		t.Fatalf("euro del %s: %v (guardado %v); se esperaba 1/1,1252 = 0,88873", viernes.Format(time.DateOnly), porDolar, ok)
+	}
+}
+
+// Si la cotizacion del euro falla, el dolar se actualiza igual: el euro no
+// puede dejar a la aplicacion sin el tipo de cambio con el que cobra.
+func TestSinEuroElDolarSeActualizaIgual(t *testing.T) {
+	pool := testutil.TestDB(t)
+	repo := country.NewRepository(pool)
+	ctx := context.Background()
+
+	f := &fuenteConEuro{
+		fuente:  fuente{c: &country.Cotizacion{Compra: 444.22, Venta: 450.06, Fecha: hoy()}},
+		errEuro: errors.New("hacienda: HTTP 503"),
+	}
+	if err := country.NewActualizador(repo, f, time.Hour, nil).ActualizarUnaVez(ctx); err != nil {
+		t.Fatalf("ActualizarUnaVez fallo por el euro: %v", err)
+	}
+	if tasa, err := repo.TipoDeCambioParaCobrar(ctx, "USD", "CRC"); err != nil || tasa != 450.06 {
+		t.Fatalf("USD/CRC = %v (%v), se esperaba 450.06", tasa, err)
+	}
+	if _, _, ok := ventaGuardada(t, pool, "CRC", hoy().Format(time.DateOnly)); !ok {
+		t.Fatal("sin euro no se guardo la venta del dolar del dia")
 	}
 }
