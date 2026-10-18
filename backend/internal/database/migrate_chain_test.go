@@ -79,6 +79,7 @@ func TestRunAllMigrations(t *testing.T) {
 	exigirFechasSembradas(ctx, t, pool)
 	exigirTasaPorInstante(ctx, t, pool)
 	exigirBajadaDeLa075(ctx, t, pool, vistasEnLa074)
+	exigirCierreDeComercios(ctx, t, pool)
 }
 
 // sesion es lo que estas pruebas usan de un pool o de una transaccion.
