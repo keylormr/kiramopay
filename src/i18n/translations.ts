@@ -1010,7 +1010,9 @@ export type TranslationKeys = {
   update_body_ios: string;
   update_download: string;
   update_open: string;
-  update_later: string;
+  // Encabezado de la lista de novedades del aviso obligatorio. La lista viene
+  // del changelog del release, que hoy esta solo en espanol.
+  update_whats_new: string;
   promo_invite_title: string;
   promo_invite_body: string;
   promo_invite_cta: string;

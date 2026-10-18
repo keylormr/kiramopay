@@ -6,8 +6,14 @@ import type { PlataformaApp } from '@/api/repositories/appversion.repository';
 
 // Deteccion de actualizaciones: la app instalada compara su propia version
 // contra la ultima publicada (el backend la sirve desde el release de GitHub) y
-// ofrece actualizar en un toque, sin tienda. Solo aplica en nativo; en web el
+// pide actualizar en un toque, sin tienda. Solo aplica en nativo; en web el
 // deploy llega solo.
+//
+// Toda version nueva es obligatoria: no hay "Despues". La version anterior de
+// este hook guardaba la pospuesta por 24 horas y la app vieja se seguia usando.
+// Se revisa al abrir y cada vez que la app vuelve a primer plano, porque puede
+// quedar abierta dias. Sin red, o con el servidor sin respuesta, no se bloquea:
+// la proxima revision vuelve a intentar.
 //
 // Las dos plataformas comparten la deteccion pero NO el desenlace:
 //
@@ -27,10 +33,22 @@ import type { PlataformaApp } from '@/api/repositories/appversion.repository';
 export interface ActualizacionDisponible {
   version: string;
   url: string;
+  /** Lo que trae la version; vacia si el release no lo dice. */
+  notas: string[];
 }
 
-const CLAVE_POSPUESTA = 'kiramopay-update-pospuesta';
-const REPOSO_MS = 24 * 60 * 60 * 1000; // recordar de nuevo tras un dia
+// Lo que se pospuso con la version anterior de este hook: ya no significa
+// nada y se borra al revisar.
+const CLAVE_POSPUESTA_VIEJA = 'kiramopay-update-pospuesta';
+
+// Solo textos con contenido: la lista se pinta tal cual.
+function notasLimpias(notas: unknown): string[] {
+  if (!Array.isArray(notas)) return [];
+  return notas
+    .filter((n): n is string => typeof n === 'string')
+    .map((n) => n.trim())
+    .filter((n) => n !== '');
+}
 
 // Comparacion semver simple (mayor.menor.parche numericos).
 export function esVersionMasNueva(remota: string, local: string): boolean {
@@ -61,7 +79,6 @@ export function plataformaNativa(): PlataformaApp | null {
 export function useActualizacion(): {
   actualizacion: ActualizacionDisponible | null;
   plataforma: PlataformaApp | null;
-  posponer: () => void;
   actualizar: () => void;
 } {
   const [actualizacion, setActualizacion] = useState<ActualizacionDisponible | null>(null);
@@ -70,7 +87,11 @@ export function useActualizacion(): {
   useEffect(() => {
     if (!plataforma) return;
     let viva = true;
-    (async () => {
+    try {
+      localStorage.removeItem(CLAVE_POSPUESTA_VIEJA);
+    } catch { /* sin storage no hay nada que limpiar */ }
+
+    const revisar = async () => {
       try {
         const [info, res] = await Promise.all([
           CapApp.getInfo(),
@@ -78,37 +99,23 @@ export function useActualizacion(): {
             Promise.resolve({ success: false as const, data: undefined }),
         ]);
         if (!viva || !res.success || !res.data) return;
-        const { version, url } = res.data;
+        const { version, url, notes } = res.data;
         // Sin URL no hay nada que abrir: el boton quedaria muerto.
         if (!url) return;
         if (!esVersionMasNueva(version, info.version)) return;
-        // Pospuesta hace menos de un dia para ESTA version: no insistir aun.
-        try {
-          const guardado = localStorage.getItem(CLAVE_POSPUESTA);
-          if (guardado) {
-            const { v, t } = JSON.parse(guardado) as { v: string; t: number };
-            if (v === version && Date.now() - t < REPOSO_MS) return;
-          }
-        } catch { /* storage roto: se ofrece igual */ }
-        setActualizacion({ version, url });
+        setActualizacion({ version, url, notas: notasLimpias(notes) });
       } catch {
-        // Sin red o backend caido: la proxima apertura reintenta.
+        // Sin red o backend caido: la proxima revision reintenta.
       }
-    })();
-    return () => { viva = false; };
-  }, [plataforma]);
+    };
 
-  const posponer = () => {
-    if (actualizacion) {
-      try {
-        localStorage.setItem(
-          CLAVE_POSPUESTA,
-          JSON.stringify({ v: actualizacion.version, t: Date.now() }),
-        );
-      } catch { /* sin storage no se persiste la pospuesta */ }
-    }
-    setActualizacion(null);
-  };
+    void revisar();
+    const escucha = CapApp.addListener('resume', () => void revisar());
+    return () => {
+      viva = false;
+      void escucha.then((e) => e.remove()).catch(() => undefined);
+    };
+  }, [plataforma]);
 
   const actualizar = () => {
     if (!actualizacion) return;
@@ -118,5 +125,5 @@ export function useActualizacion(): {
     window.open(actualizacion.url, '_system');
   };
 
-  return { actualizacion, plataforma, posponer, actualizar };
+  return { actualizacion, plataforma, actualizar };
 }

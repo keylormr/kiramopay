@@ -25,7 +25,7 @@ describe('notasDeVersion', () => {
           version: '3.1.0',
           buildNumber: 30,
           changes: [
-            'Uno con \'comillas\' adentro',
+            'Uno con \\'comillas\\' adentro',
             'Dos, con coma',
           ],
         },

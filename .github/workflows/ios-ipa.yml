@@ -60,6 +60,13 @@ jobs:
 
       - run: npm ci
 
+      # La misma descripcion que publica android-apk.yml: los dos workflows
+      # escriben en el mismo release y el que termina ultimo no debe dejarla
+      # distinta. El notas.json lo adjunta solo el de Android.
+      - name: Notas de la version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node scripts/notas-de-version.mjs "$GITHUB_REF_NAME"
+
       - name: Resolver modo de exportacion
         id: modo
         env:
@@ -294,6 +301,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: notas-de-version.md
           files: ${{ steps.artefacto.outputs.nombre }}
           fail_on_unmatched_files: true
 

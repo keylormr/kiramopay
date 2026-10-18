@@ -80,10 +80,11 @@ describe('ActualizacionObligatoria', () => {
     expect(onActualizar).toHaveBeenCalledOnce();
   });
 
-  it('habla el idioma de la persona', () => {
+  // Los idiomas distintos del espanol se cargan aparte: hay que esperarlos.
+  it('habla el idioma de la persona', async () => {
     localStorage.setItem('kiramopay_language', 'en');
     montar();
-    expect(screen.getByText("What's new in version 2.8.0")).toBeInTheDocument();
+    expect(await screen.findByText("What's new in version 2.8.0")).toBeInTheDocument();
   });
 });
 
