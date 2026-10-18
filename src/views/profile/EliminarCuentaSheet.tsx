@@ -52,6 +52,7 @@ const CLAVE_DEL_RECHAZO: Record<string, keyof TranslationKeys> = {
   TOTP_REQUIRED: 'del_err_totp',
   TOTP_INVALID: 'del_err_totp',
   DELETION_LOCKED: 'del_err_locked',
+  TERMS_NOT_ACCEPTED: 'del_err_terms',
 };
 
 const CAMPO =
@@ -73,11 +74,13 @@ function bloqueosDelError(details: Record<string, unknown> | undefined): string[
 }
 
 /**
- * Eliminar la cuenta desde la app. Accion irreversible, asi que va en tres
- * pasos: lo que se borra y lo que se conserva, lo que hay que resolver antes
- * (si hay algo), y una confirmacion que pide la palabra, la contrasena y, si lo
- * tiene encendido, el codigo del autenticador. El servidor reautentica: nada de
- * esto vale sin su respuesta.
+ * Pedir la eliminacion de la cuenta desde la app. Va en tres pasos: el plazo
+ * (la cuenta queda bloqueada desde hoy y se elimina en 30 dias, salvo que la
+ * persona la reactive), lo que se borra ese dia y lo que se conserva por ley; lo
+ * que hay que resolver antes (si hay algo); y una confirmacion que pide la
+ * palabra, la contrasena, la aceptacion expresa del plazo y, si lo tiene
+ * encendido, el codigo del autenticador. El servidor reautentica: nada de esto
+ * vale sin su respuesta.
  */
 interface ContenidoProps {
   onClose: () => void;
@@ -91,6 +94,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const idClave = useId();
   const idTotp = useId();
   const idError = useId();
+  const idPlazo = useId();
 
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
   const [intento, setIntento] = useState(0);
@@ -98,6 +102,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const [clave, setClave] = useState('');
   const [verClave, setVerClave] = useState(false);
   const [totp, setTotp] = useState('');
+  const [aceptaPlazo, setAceptaPlazo] = useState(false);
   const [enviando, setEnviandoLocal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,7 +138,8 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const palabraEsperada = t('del_word');
   const palabraCorrecta = palabra.trim().toLocaleUpperCase() === palabraEsperada.toLocaleUpperCase();
   const pideTotp = fase.tipo === 'confirmar' && fase.pideTotp;
-  const puedeEnviar = palabraCorrecta && clave.length > 0 && (!pideTotp || totp.length === 6) && !enviando;
+  const puedeEnviar =
+    palabraCorrecta && clave.length > 0 && aceptaPlazo && (!pideTotp || totp.length === 6) && !enviando;
 
   const eliminar = async () => {
     if (!puedeEnviar || fase.tipo !== 'confirmar') return;
@@ -142,11 +148,13 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
     const res = await getApiLayer().auth.deleteAccount({
       password: clave,
       totpCode: fase.pideTotp ? totp : undefined,
+      acceptTerms: aceptaPlazo,
     });
     if (res.success) {
       // La sesion ya esta revocada en el servidor: se suelta todo lo local sin
-      // pedirle nada mas. El login que sigue avisa que la cuenta se elimino.
-      useAuthStore.getState().cuentaEliminada();
+      // pedirle nada mas. El login que sigue dice cuando se elimina la cuenta y
+      // que hasta entonces se puede reactivar.
+      useAuthStore.getState().cuentaEliminada(res.data?.seEliminaEl);
       onClose();
       return;
     }
@@ -256,7 +264,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
 
         {fase.tipo === 'resumen' && (
           <>
-            {cabecera(t('del_heading'), t('del_irreversible'))}
+            {cabecera(t('del_heading'), t('del_timeline'))}
             <section aria-labelledby={`${idError}-borra`} className="uv-surface-2 rounded-xl p-4 space-y-2.5">
               <h3 id={`${idError}-borra`} className="text-xs font-bold uv-text-muted uppercase tracking-wider">
                 {t('del_erased_title')}
@@ -329,6 +337,19 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
                   {verClave ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-start gap-3 uv-surface-2 rounded-xl p-3.5">
+              <input
+                id={idPlazo}
+                type="checkbox"
+                checked={aceptaPlazo}
+                onChange={(e) => { setAceptaPlazo(e.target.checked); setError(null); }}
+                className="mt-0.5 w-5 h-5 shrink-0 accent-[var(--color-danger)] cursor-pointer"
+              />
+              <label htmlFor={idPlazo} className="text-sm uv-text-secondary leading-relaxed cursor-pointer">
+                {t('del_accept_terms')}
+              </label>
             </div>
 
             {pideTotp && (

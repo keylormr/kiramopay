@@ -102,8 +102,10 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	if role != "user" {
 		return resultado{}, ErrRolNoPermitido
 	}
+	// Elegible: activa, o bajo revision cuando una persona de operaciones la atiende.
 	bajoRevision := status == "blocked" || status == "suspended"
-	if status != "active" && !(bajoRevision && op.permitirCuentaBloqueada) {
+	elegible := status == "active" || (bajoRevision && op.permitirCuentaBloqueada)
+	if !elegible {
 		return resultado{}, ErrCuentaNoElegible
 	}
 

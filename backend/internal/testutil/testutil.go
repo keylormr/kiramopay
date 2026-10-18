@@ -971,7 +971,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		doc_type VARCHAR(30) NOT NULL,
 		file_ref TEXT NOT NULL,
 		sha256 VARCHAR(64),
-		uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_kyc_doc_type CHECK (doc_type IN ('id_front','id_back','proof_of_address','selfie'))
 	);
 
 	CREATE TABLE IF NOT EXISTS sanction_list (

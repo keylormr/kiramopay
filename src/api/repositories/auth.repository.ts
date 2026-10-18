@@ -14,6 +14,12 @@ export interface LoginRequest {
    */
   cedula?: string;
   password: string;
+  /**
+   * Solo para una cuenta con la eliminacion en curso: con la contrasena correcta
+   * cancela el proceso y entra. Sin el, el servidor responde 403
+   * ACCOUNT_PENDING_DELETION con `details.deletion_due_at`.
+   */
+  reactivate?: boolean;
 }
 
 export interface TokenPair {
@@ -112,6 +118,16 @@ export interface EliminarCuentaRequest {
   password: string;
   /** Solo si el autenticador esta encendido. */
   totpCode?: string;
+  /** La aceptacion expresa del plazo de 30 dias. Sin ella el servidor responde TERMS_NOT_ACCEPTED. */
+  acceptTerms: boolean;
+}
+
+/** La solicitud de eliminacion ya registrada: el dia 0 y el dia 30, en ISO. */
+export interface SolicitudDeEliminacionPropia {
+  /** true si ya habia una solicitud: el plazo no volvio a correr. */
+  yaPedida: boolean;
+  solicitadaEn: string;
+  seEliminaEl: string;
 }
 
 export interface IAuthRepository {
@@ -144,12 +160,13 @@ export interface IAuthRepository {
    */
   deletionPreflight(): Promise<ApiResponse<PreflightDeEliminacion>>;
   /**
-   * Elimina la cuenta de quien esta conectado, reautenticandolo. La fila no se
-   * borra: queda como tumba y el historial del dinero se conserva (ver la
+   * Pide la eliminacion de la cuenta de quien esta conectado, reautenticandolo.
+   * La cuenta queda bloqueada desde ese momento y se elimina 30 dias despues;
+   * hasta entonces se puede reactivar entrando con la contrasena (ver la
    * politica de privacidad). En un 409 DELETION_BLOCKED, `error.details.blockers`
    * trae los codigos pendientes.
    */
-  deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<{ alreadyDeleted: boolean }>>;
+  deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<SolicitudDeEliminacionPropia>>;
   /**
    * Fetches the authenticated user's profile (GET /users/me). Used on cold
    * start to rehydrate the profile from the backend so PII (cedula/phone/email)

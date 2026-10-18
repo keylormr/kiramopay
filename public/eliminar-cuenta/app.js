@@ -1,8 +1,10 @@
 // Formulario publico de solicitud de eliminacion de cuenta.
 //
-// Tres pasos: el contacto con que se registro, el codigo que le llega, y la
-// confirmacion. La API responde IGUAL exista o no la cuenta, asi que esta pagina
-// no puede (ni debe) decir si el contacto esta registrado.
+// Tres pasos: el contacto con que se registro (mas la casilla que acepta el plazo
+// de 30 dias), el codigo que le llega, y la confirmacion. El codigo correcto es el
+// dia 0: la cuenta se bloquea y empieza el plazo. La API responde IGUAL exista o
+// no la cuenta, asi que esta pagina no puede (ni debe) decir si el contacto esta
+// registrado, ni en que estado esta.
 //
 // Es un archivo aparte, y no un script dentro del HTML, porque la politica de
 // seguridad del sitio solo admite scripts del mismo origen.
@@ -20,13 +22,19 @@
   var pasoListo = $('paso-listo');
   var contacto = $('contacto');
   var codigo = $('codigo');
+  var acepto = $('acepto-plazo');
   var botonEnviar = $('enviar-codigo');
   var botonConfirmar = $('confirmar');
   var errorContacto = $('error-contacto');
+  var errorPlazo = $('error-plazo');
   var errorCodigo = $('error-codigo');
   var avisoCodigo = $('aviso-codigo');
 
-  if (!pasoContacto || !pasoCodigo || !pasoListo) return;
+  if (!pasoContacto || !pasoCodigo || !pasoListo || !acepto || !errorPlazo) return;
+
+  // Sin la casilla marcada no se envia nada: el servidor tambien lo rechaza con
+  // TERMS_NOT_ACCEPTED, y se usa este mismo mensaje.
+  var MENSAJE_PLAZO = 'Marca la casilla para continuar: debes aceptar que, al confirmar el código, tu cuenta se bloquea y se elimina 30 días después.';
 
   function mostrar(paso) {
     pasoContacto.hidden = paso !== pasoContacto;
@@ -68,20 +76,32 @@
     e.preventDefault();
     var valor = contacto.value.trim();
     error(errorContacto, '');
+    error(errorPlazo, '');
     if (!valor) {
       error(errorContacto, 'Escribe el correo o el teléfono con que te registraste.');
+      if (!acepto.checked) error(errorPlazo, MENSAJE_PLAZO);
       contacto.focus();
       return;
     }
+    if (!acepto.checked) {
+      error(errorPlazo, MENSAJE_PLAZO);
+      acepto.focus();
+      return;
+    }
     botonEnviar.disabled = true;
-    pedir('/api/v1/public/account-deletion-requests', { contact: valor }).then(function (r) {
+    pedir('/api/v1/public/account-deletion-requests', { contact: valor, accept_terms: true }).then(function (r) {
       botonEnviar.disabled = false;
       if (r.estado === 202 || r.estado === 200) {
         // Misma frase exista o no la cuenta.
-        avisoCodigo.textContent = 'Si ese contacto tiene una cuenta, te enviamos un código. Escríbelo aquí.';
+        avisoCodigo.textContent = 'Si ese contacto tiene una cuenta, te enviamos un código. Escríbelo aquí para confirmar la solicitud.';
         codigo.value = '';
         error(errorCodigo, '');
         mostrar(pasoCodigo);
+        return;
+      }
+      if (r.codigo === 'TERMS_NOT_ACCEPTED') {
+        error(errorPlazo, MENSAJE_PLAZO);
+        acepto.focus();
         return;
       }
       if (r.codigo === 'INVALID_CONTACT') {
@@ -90,6 +110,10 @@
       }
       error(errorContacto, mensajeDeFallo(r, 'No pudimos enviar la solicitud. Inténtalo de nuevo en unos minutos.'));
     });
+  });
+
+  acepto.addEventListener('change', function () {
+    if (acepto.checked) error(errorPlazo, '');
   });
 
   codigo.addEventListener('input', function () {
@@ -109,6 +133,9 @@
       .then(function (r) {
         botonConfirmar.disabled = false;
         if (r.estado === 200) {
+          // Misma respuesta en todos los casos (empezo el plazo, hay algo
+          // pendiente, o la atiende una persona): el texto esta en el HTML y no
+          // revela el estado de la cuenta.
           mostrar(pasoListo);
           return;
         }
@@ -123,6 +150,9 @@
 
   $('otro-contacto').addEventListener('click', function () {
     error(errorContacto, '');
+    error(errorPlazo, '');
+    // Cada solicitud acepta el plazo por separado.
+    acepto.checked = false;
     mostrar(pasoContacto);
   });
 })();

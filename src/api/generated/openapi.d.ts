@@ -279,7 +279,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). */
+                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). ACCOUNT_PENDING_DELETION, also only after the password was verified, when the person asked to delete the account and the 30-day term is still running: `error.details.deletion_due_at` is the day it closes. Repeating the login with `reactivate: true` cancels the deletion and signs in. Once the term is over, or while the account is blocked, the answer is ACCOUNT_BLOCKED. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -332,7 +332,15 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
-                403: components["responses"]["AccountBlocked"];
+                /** @description ACCOUNT_BLOCKED, or ACCOUNT_PENDING_DELETION (with `error.details.deletion_due_at`) when the person asked to delete the account: the session is not renewed and the way back is the login. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -753,8 +761,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Delete the signed-in person's account
-         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and then deletes the account. The user row is NEVER removed: the ledger is append-only and other tables reference it, so the row stays as a tombstone (`status = closed`) with every personal field replaced. Credentials, sessions, devices, contacts and free text are deleted; cards are cancelled; the ledger accounts are closed and no entry is ever touched. Records that identify a counterparty inside a financial or compliance record are kept until the retention period is defined (see the privacy policy). The whole operation runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the delete. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call after success is harmless.
+         * Ask for the signed-in person's account to be deleted
+         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and requires `accept_terms`, the express acceptance of the 30-day term. Day 0 (this call): the account moves to `pending_deletion` and is blocked at once; sessions, API keys and push subscriptions are revoked and the ledger accounts are closed, so no money moves in or out. A written answer goes to the email on file. Days 0 to 30: signing in with the password offers to reactivate the account, which cancels the process (see the login). Day 30: a scheduled sweep closes the account. What the person may delete is suppressed and credentials are revoked by overwriting them; what Costa Rica's Law 7786 requires (identity data and documents, the record of operations) is kept, isolated, for 5 years after the closure. When that period ends a second sweep dissociates it irreversibly. The user row is NEVER removed: the ledger is append-only and other tables reference it. Merchants end closed and inactive, not deleted. Day 0 runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the block. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call is harmless: the term does not restart.
          */
         post: {
             parameters: {
@@ -769,7 +777,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Deleted (`already_deleted` is true on a repeat) */
+                /** @description Term started. `already_requested` is true on a repeat, and then the dates are the ones of the first request. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -778,12 +786,19 @@ export interface paths {
                         "application/json": {
                             success?: boolean;
                             data?: {
-                                already_deleted?: boolean;
+                                already_requested?: boolean;
+                                /** Format: date-time */
+                                requested_at?: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Day 30, when the account is closed
+                                 */
+                                deletion_due_at?: string;
                             };
                         };
                     };
                 };
-                /** @description INVALID_BODY | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID */
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -798,7 +813,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description DELETION_BLOCKED. `error.details.blockers` lists the codes to resolve first (BALANCE_POSITIVE, SAVINGS_BALANCE, CRYPTO_BALANCE, STAKING_ACTIVE, REGIONAL_BALANCE, MERCHANT_BALANCE, MERCHANT_PENDING_CHARGES, TX_PENDING, ESCROW_OPEN, PAYOUT_PENDING, CROSS_BORDER_PENDING, MARKETPLACE_IN_PROGRESS). Nothing was changed. */
+                /** @description DELETION_BLOCKED. `error.details.blockers` lists the codes to resolve first (BALANCE_POSITIVE, SAVINGS_BALANCE, CRYPTO_BALANCE, STAKING_ACTIVE, REGIONAL_BALANCE, MERCHANT_BALANCE, MERCHANT_PENDING_CHARGES, TX_PENDING, ESCROW_OPEN, PAYOUT_PENDING, CROSS_BORDER_PENDING, MARKETPLACE_IN_PROGRESS). Nothing was changed and the term did not start. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -833,7 +848,7 @@ export interface paths {
         put?: never;
         /**
          * Ask for an account to be deleted, from the public web page
-         * @description For people who no longer have the app. `contact` is the email or phone the account was registered with; anything else (a cedula, a username) is rejected with 400 INVALID_CONTACT. The answer is IDENTICAL whether or not an account exists, so the form cannot be used to find out who is registered. When an account matches, a 6-digit code goes to that contact (SMS when a provider is configured, otherwise the email on file), valid 15 minutes, at most one per minute per contact. A request that is already verified is never reopened. Only HMACs of the contact and the code are stored.
+         * @description For people who no longer have the app. `contact` is the email or phone the account was registered with; anything else (a cedula, a username) is rejected with 400 INVALID_CONTACT. The answer is IDENTICAL whether or not an account exists, so the form cannot be used to find out who is registered. When an account matches, a 6-digit code goes to that contact (SMS when a provider is configured, otherwise the email on file), valid 15 minutes, at most one per minute per contact. A request that is already verified is never reopened. Only HMACs of the contact and the code are stored. `accept_terms` is the express acceptance of the 30-day term, and its time is stored with the request.
          */
         post: {
             parameters: {
@@ -847,6 +862,8 @@ export interface paths {
                     "application/json": {
                         /** @description Registered email or phone */
                         contact: string;
+                        /** @description Anything but true answers 400 TERMS_NOT_ACCEPTED */
+                        accept_terms: boolean;
                     };
                 };
             };
@@ -858,7 +875,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY | INVALID_CONTACT */
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | INVALID_CONTACT */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -891,7 +908,7 @@ export interface paths {
         put?: never;
         /**
          * Prove control of the contact with the code that was sent
-         * @description Moves the request to `verified`, which puts it in the operations queue. Nothing is deleted yet: a person on the team reviews and runs it. Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request.
+         * @description With the right code the 30-day term starts at once, exactly as from the app (day 0: the account is blocked and the written answer goes out by email), and the request ends `scheduled`, or `blocked` when something is pending (the person is told by email what to resolve). An account that is blocked or suspended does not start by itself: the request stays `verified`, in the operations queue. Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request.
          */
         post: {
             parameters: {
@@ -948,7 +965,7 @@ export interface paths {
         };
         /**
          * Web deletion requests waiting for a person (verified contact)
-         * @description Oldest first. The account is shown masked from SQL, like the rest of the admin panel.
+         * @description Oldest first. Only requests of accounts under review (blocked or suspended) wait here; the rest start the term when the code is verified. The account is shown masked from SQL, like the rest of the admin panel.
          */
         get: {
             parameters: {
@@ -992,8 +1009,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run the deletion for a verified web request
-         * @description Runs the same routine as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it. The outcome is written on the request: `completed`, `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (no account, or an administrator account). Audited with the administrator as actor.
+         * Start the deletion term for a verified web request
+         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the administrator as actor.
          */
         post: {
             parameters: {
@@ -1038,7 +1055,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Close a verified request without deleting anything */
+        /** Close a verified request without starting the term */
         post: {
             parameters: {
                 query?: never;
@@ -8858,6 +8875,8 @@ export interface components {
         DeleteAccountRequest: {
             /** Format: password */
             password: string;
+            /** @description Express acceptance of the 30-day term; anything but true answers 400 TERMS_NOT_ACCEPTED */
+            accept_terms: boolean;
             /** @description Required only when the authenticator is turned on */
             totp_code?: string;
         };
@@ -9559,6 +9578,8 @@ export interface components {
             cedula?: string;
             /** @example MiClave2024! */
             password: string;
+            /** @description Only for an account with the deletion term running: with the right password it cancels the deletion and signs in. Ignored otherwise. */
+            reactivate?: boolean;
         };
         AuthResponse: {
             success?: boolean;

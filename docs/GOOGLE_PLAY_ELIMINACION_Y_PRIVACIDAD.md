@@ -24,34 +24,63 @@ despues de desplegar que responden, con y sin barra final, antes de pegarlas.
 ## Como cumple cada requisito
 
 **Via dentro de la app:** Perfil, Seguridad, *Eliminar mi cuenta*. Pide palabra de
-confirmacion, contrasena y, si esta activo, el codigo del autenticador.
+confirmacion, contrasena y, si esta activo, el codigo del autenticador, y la persona acepta de
+forma expresa el plazo de 30 dias.
 
 **Enlace web que no necesita la app:** `/eliminar-cuenta/` nombra a KiramoPay, muestra el
-formulario arriba y no manda a reinstalar nada. Comprueba que el correo o telefono es de la
-persona con un codigo; una persona del equipo atiende la solicitud desde
-Admin, Cuentas, pestana *Eliminaciones*. Si hay saldo o algo pendiente, se le escribe al
-correo de la cuenta que debe resolver.
+formulario arriba y no manda a reinstalar nada. Tiene una casilla obligatoria donde la persona
+acepta el plazo de 30 dias (sin marcarla no se envia nada, y el servidor tambien lo rechaza con
+`TERMS_NOT_ACCEPTED`). Comprueba que el correo o telefono es de la persona con un codigo, y con
+el codigo correcto empieza el plazo (el dia 0). La pagina responde lo mismo en todos los casos y
+no revela el estado de la cuenta; lo que sigue le llega por correo:
+
+- Cuenta sin pendientes: queda bloqueada y recibe la respuesta escrita (que se suprime el dia
+  30, que se conserva por la Ley 7786 y hasta cuando, y su derecho a acudir a la PRODHAB).
+- Cuenta con algo pendiente (saldo, un movimiento en curso, etc.): el plazo no empieza y recibe
+  un correo con lo que tiene que resolver.
+- Cuenta bajo revision (bloqueada por el equipo): la atiende una persona del equipo, desde
+  Admin, Cuentas, pestana *Eliminaciones*, antes de que empiece el plazo.
 
 **Politica de privacidad:** `/privacidad/`, con enlace en Perfil (Soporte y Acerca de), en el
 login y en el registro. Esta marcada **BORRADOR** y no se debe enviar a Play como definitiva.
 
-**Que cuenta como eliminar:** la fila de usuario no se borra (el libro del dinero no se
-puede alterar); queda como tumba anonimizada. Se borran credenciales, sesiones, dispositivos,
-contactos, cuentas vinculadas, presupuestos, pagos recurrentes y conversaciones del asistente;
-las tarjetas se cancelan. El resto, por obligacion legal, seguridad o fraude, se conserva y
-la politica debe decirlo (seccion *Cuanto tiempo los conservamos*). Detalle completo por
-tabla en `backend/internal/accountdeletion/clasificacion.go`.
+**Que cuenta como eliminar (decision del dueno, 2026-10-18).** La eliminacion no es inmediata;
+tiene una linea de tiempo que la politica y la pagina web explican igual:
+
+| Momento | Que pasa |
+|---|---|
+| Dia 0: la persona lo pide (app o web) y acepta el plazo | La cuenta queda bloqueada en el acto: no puede entrar, ni mover ni recibir dinero, ni recibe avisos. No se borra nada todavia. Recibe por correo una respuesta escrita: que se suprime el dia 30, que se conserva por la Ley 7786 y hasta cuando, y su derecho a acudir a la PRODHAB (Ley 8968). |
+| Dias 0 a 30 | Puede reactivarla entrando a la app con su contrasena (la app le ofrece reactivar). Reactivar cancela el proceso y la cuenta vuelve a funcionar. |
+| Dia 30 | Se **suprime** de forma definitiva: datos de acceso (las credenciales quedan revocadas), preferencias, contactos, cuentas bancarias vinculadas, servicios guardados, presupuestos, pagos programados, alertas de precio, conversaciones con el asistente, historial de avisos, dispositivos y sesiones; las tarjetas virtuales se cancelan. Se **conserva**, identificado y aislado (fuera de la aplicacion, solo para cumplir la ley), lo que la Ley 7786 (art. 16) obliga: identificacion y verificacion (KYC), registro de operaciones y sus contrapartes, auditoria de seguridad, y registros de cumplimiento y prevencion de fraude. El comercio, si tenia, queda cerrado e inactivo (su identidad legal y sus cobros son parte de lo conservado). Desde aqui la persona puede volver a registrarse con la misma cedula, telefono y correo; seria una cuenta nueva. |
+| Dia 30 mas 5 anos | Lo conservado se desasocia de la persona de forma irreversible: se vacian nombres, documentos, telefonos, direcciones, notas e IP; quedan solo montos y fechas como rastro contable. El plazo puede ser mayor solo si la ley o una autoridad competente lo exige. |
+
+La fila de usuario no se borra nunca (el libro del dinero no se puede alterar); el dia 30 queda
+sin datos personales y la identidad pasa a una copia aislada. Detalle completo por tabla en
+`backend/internal/accountdeletion/clasificacion.go`.
+
+**Respuestas para el formulario de Play "Eliminacion de datos":**
+
+- Via para pedir la eliminacion: dentro de la app y por la web (las dos URL de arriba).
+- Datos que se eliminan: los de la fila "Dia 30" de la tabla, mas las credenciales; la
+  eliminacion se completa 30 dias despues de la solicitud, y hasta entonces la persona puede
+  reactivar la cuenta.
+- Datos que se conservan: los de la Ley 7786 (identificacion y verificacion, operaciones y
+  contrapartes, auditoria de seguridad, cumplimiento y prevencion de fraude), identificados y
+  aislados, por 5 anos desde el dia 30 (mas solo si la ley o una autoridad competente lo
+  exige); despues se desasocian de forma irreversible. Debe constar igual en la politica.
 
 ## Antes de enviar la ficha
 
 1. **Revision legal de la politica.** Todo lo marcado `[DEFINIR]` y `[CONFIRMAR]` en
    `public/privacidad/index.html` lo completa el responsable con su abogado: razon social,
-   plazos de conservacion, base legal, derechos y plazo de respuesta, edad minima, contacto
-   de privacidad, lista final de proveedores. Al publicar la version final, quitar el aviso
-   de borrador y la etiqueta `noindex`.
-2. **Plazos de retencion (decision del abogado).** Mientras no esten definidos, el sistema
-   conserva sin tocar: contrapartes dentro de transacciones y SINPE, pagos y retiros, KYC,
-   reportes UIF, fraude, auditoria con IP y la identidad legal de los comercios.
+   base legal, plazo de respuesta a las solicitudes de acceso y correccion, edad minima,
+   contacto de privacidad, lista final de proveedores y rotacion de las copias de seguridad.
+   Al publicar la version final, quitar el aviso de borrador y la etiqueta `noindex`.
+2. **Plazos de retencion (decididos por el dueno el 2026-10-18; falta la validacion del
+   abogado).** Lo que la Ley 7786 (art. 16) obliga se conserva identificado y aislado hasta el
+   dia 30 mas 5 anos, y despues se desasocia. La pagina web y la politica ya dicen esto; si el
+   abogado cambia el plazo, hay que cambiar el texto de ambas, el de la respuesta por correo y
+   la fecha que el sistema fija como fin de la conservacion.
 3. **Nombre del desarrollador** tal como aparece en la ficha de Play, si difiere de
    "KiramoPay": agregarlo a `public/eliminar-cuenta/index.html` (hay un comentario donde).
 4. **Correo de soporte o de privacidad**: no esta confirmado que exista; la politica y la
@@ -59,26 +88,32 @@ tabla en `backend/internal/accountdeletion/clasificacion.go`.
 5. **Formulario de Seguridad de los datos.** Declarar que se recolectan los datos de
    identidad, contacto, financieros, de dispositivo y de uso que lista la politica, y
    responder segun la pregunta vigente del formulario sobre eliminacion de datos: hay via
-   dentro de la app, hay enlace web, y parte de los datos se conserva por motivos legales y
-   de seguridad (debe constar en la politica). El asistente envia texto del usuario a un
-   proveedor externo de modelos de lenguaje: declararlo como dato compartido.
+   dentro de la app, hay enlace web, la eliminacion se completa a los 30 dias de la solicitud
+   (con plazo de reactivacion), y parte de los datos se conserva 5 anos por obligacion legal
+   (debe constar en la politica). El asistente envia texto del usuario a un proveedor externo
+   de modelos de lenguaje: declararlo como dato compartido.
 6. **Preguntas para el abogado** (el sistema ya soporta cualquier respuesta; aplicarla es
-   cambiar `clasificacion.go` y escribir un trabajo de purga, no redisenar):
-   - L1. Plazo de conservacion de los registros financieros y de transacciones. En el repo,
-     `AUDITORIA_INTEGRAL_2026-05-20.md` dice 5 anos citando Ley 8204 y SUGEF, sin cita de
-     articulo; no esta verificado en una fuente oficial. Tampoco el articulo de la Ley 8968
-     sobre supresion ni el procedimiento ante PRODHAB.
-   - L2. Si se conserva la identificacion de las contrapartes en transacciones, SINPE,
-     cripto y retiros, o se borra.
-   - L3. KYC, verificaciones de identidad, listas de sanciones y reportes UIF: conservar y
-     por cuanto.
+   cambiar `clasificacion.go` y los textos, no redisenar).
+   Decididas por el dueno el 2026-10-18, para que el abogado las valide:
+   - L1. Plazo de conservacion de los registros financieros y de transacciones: 5 anos desde el
+     dia 30, por la Ley 7786 (art. 16); el codigo cita ademas el Decreto 36948 (art. 21).
+     Ninguna cita esta verificada por el abogado. Tampoco el articulo de la Ley 8968 sobre
+     supresion ni el procedimiento ante PRODHAB.
+   - L2 y L3. Se conserva, identificada y aislada, la identificacion de las contrapartes y
+     el KYC, las verificaciones de identidad y la revision contra listas de sanciones.
+   - L5. La auditoria con IP y agente de usuario se conserva el mismo plazo y despues se
+     vacia la IP.
+   - L6. El comercio de quien elimina la cuenta queda cerrado e inactivo; su identidad legal
+     (cedula, razon social) y sus cobros se conservan.
+   - L8. El plazo que promete la pagina web es de 30 dias, con reactivacion hasta el dia 30.
+
+   Siguen abiertas:
    - L4. Fraude y perfil de riesgo; y si se conserva un hash de la cedula para impedir que
      una cuenta bloqueada por fraude vuelva a registrarse (hoy se descarta).
-   - L5. Auditoria con IP y agente de usuario: conservar o anonimizar pasado un plazo.
-   - L6. Identidad legal de los comercios (cedula, razon social) cuando su dueno elimina la cuenta.
    - L7. Texto sobre copias de seguridad y lista de proveedores encargados (SMS, correo,
      verificacion, notificaciones, asistente) con sus contratos, para pedirles el borrado.
-   - L8. El plazo que se promete en la pagina web y el texto de derechos.
+   - L9. Plazo de respuesta a las solicitudes de acceso y correccion, y derechos que la
+     politica debe listar.
 
 ## Despliegue
 

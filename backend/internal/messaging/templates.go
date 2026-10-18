@@ -275,7 +275,7 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 		"fuera de la aplicación, y solo se usan para cumplir esa ley. El plazo puede ser mayor únicamente si la ley " +
 		"o una autoridad competente lo exige. Al vencer, dejan de estar asociados a vos de forma irreversible."
 	reactivar := "Si cambiás de opinión, hasta el " + dia30 + " podés reactivar tu cuenta: entrá a KiramoPay con " +
-		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta queda como estaba."
+		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta vuelve a funcionar."
 	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
 	ajeno := "Si no fuiste vos quien lo pidió, entrá con tu contraseña, reactivá la cuenta y cambiá la contraseña, " +
@@ -332,7 +332,7 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 	for _, m := range motivos {
 		text.WriteString("- " + m + "\n")
 	}
-	text.WriteString("\nNo se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay.\n")
+	text.WriteString("\nNo se borró nada. Cuando lo resolvás, volvé a pedir la eliminación en la página de solicitud de KiramoPay.\n")
 	text.WriteString("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba.\n")
 
 	body := new(strings.Builder)
@@ -342,7 +342,7 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 		items.WriteString("<li style=\"margin:0 0 6px\">" + html.EscapeString(m) + "</li>")
 	}
 	body.WriteString(`<ul style="margin:0 0 16px;padding-left:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:` + inkPrimary + `">` + items.String() + `</ul>`)
-	body.WriteString(paragraph("No se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay."))
+	body.WriteString(paragraph("No se borró nada. Cuando lo resolvás, volvé a pedir la eliminación en la página de solicitud de KiramoPay."))
 	body.WriteString(note("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."))
 
 	htmlBody = emailShell("Todavía no pudimos eliminar tu cuenta", "No se borró nada.", body.String())

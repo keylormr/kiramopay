@@ -26,12 +26,19 @@ const hasBackend = !!import.meta.env.VITE_API_URL;
 
 // Respuestas de POST /auth/refresh que SI dicen que la sesion no sirve
 // (backend/internal/auth/handler.go, RefreshToken): 401 REFRESH_FAILED (token
-// vencido, revocado o reusado), 403 ACCOUNT_BLOCKED y 400 INVALID_BODY (no hay
-// cookie ni token que presentar). Todo lo demas —sin red, un 429 que el
+// vencido, revocado o reusado), 403 ACCOUNT_BLOCKED, 403 ACCOUNT_PENDING_DELETION
+// (la persona pidio eliminar la cuenta: sus sesiones se revocaron ese dia y se
+// vuelve entrando con la contrasena) y 400 INVALID_BODY (no hay cookie ni token
+// que presentar). Todo lo demas —sin red, un 429 que el
 // navegador entrega como fallo de red, un 5xx mientras el servidor despierta—
 // es pasajero: la sesion puede seguir viva, y cerrarla por eso mandaba al login
 // sin explicacion a quien solo recargo la pagina.
-const RECHAZOS_DEFINITIVOS_DE_SESION = new Set(['REFRESH_FAILED', 'ACCOUNT_BLOCKED', 'INVALID_BODY']);
+const RECHAZOS_DEFINITIVOS_DE_SESION = new Set([
+  'REFRESH_FAILED',
+  'ACCOUNT_BLOCKED',
+  'ACCOUNT_PENDING_DELETION',
+  'INVALID_BODY',
+]);
 
 function esRechazoDefinitivo(codigo: string | undefined): boolean {
   return RECHAZOS_DEFINITIVOS_DE_SESION.has(codigo ?? 'REFRESH_FAILED');
@@ -88,6 +95,11 @@ interface AuthState {
   // recarga ni heredarse al siguiente usuario del dispositivo.
   logoutReason: 'blocked' | 'deleted' | null;
   /**
+   * El dia 30 (ISO) de la eliminacion que la persona acaba de pedir, para el
+   * aviso del login. Solo en memoria, como logoutReason.
+   */
+  seEliminaEl: string | null;
+  /**
    * Como va la restauracion de la sesion al arrancar. Vive solo en memoria.
    * - 'normal': nada que avisar.
    * - 'reintentando': el refresh fallo por algo pasajero y se esta reintentando.
@@ -96,7 +108,16 @@ interface AuthState {
    */
   restauracion: 'normal' | 'reintentando' | 'sin_conexion';
 
-  login:(identificador: string, password: string) => Promise<{ success: boolean; code?: string }>;
+  /**
+   * `reactivar` solo para una cuenta con la eliminacion en curso: cancela el
+   * proceso y entra. Ante ACCOUNT_PENDING_DELETION devuelve `seEliminaEl`, la
+   * fecha del cierre, para que la pantalla ofrezca reactivar.
+   */
+  login: (
+    identificador: string,
+    password: string,
+    opciones?: { reactivar?: boolean },
+  ) => Promise<{ success: boolean; code?: string; seEliminaEl?: string }>;
   register: (params: RegisterParams) => Promise<{ success: boolean; error?: string; code?: string }>;
   loginWithUser: (user: User) => void;
   logout: () => void;
@@ -129,12 +150,13 @@ interface AuthState {
   clearLogoutReason: () => void;
   completeOnboarding: () => void;
   /**
-   * La cuenta se acaba de eliminar en el servidor: soltar TODO lo local sin
-   * pedirle nada (la sesion ya esta revocada y el logout normal fallaria con
+   * La persona acaba de pedir la eliminacion de su cuenta: soltar TODO lo local
+   * sin pedirle nada (la sesion ya esta revocada y el logout normal fallaria con
    * 401). A diferencia de logout, tambien olvida la tarjeta de acceso rapido y
-   * la credencial de la huella: ya no hay a que cuenta volver.
+   * la credencial de la huella: si reactiva, entra tecleando la contrasena.
+   * `seEliminaEl` es el dia 30, para el aviso del login.
    */
-  cuentaEliminada: () => void;
+  cuentaEliminada: (seEliminaEl?: string | null) => void;
   /** La respuesta entera: la pantalla dice por que no se pudo, no solo que no. */
   changePassword: (oldPassword: string, newPassword: string) => Promise<ApiResponse<{ changed: boolean }>>;
 }
@@ -149,9 +171,10 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       logoutReason: null,
+      seEliminaEl: null,
       restauracion: 'normal',
 
-      login: async (identificador, password) => {
+      login: async (identificador, password, opciones) => {
         // Un solo campo: cedula, correo o telefono. Se clasifica y canonicaliza
         // aca para que TODO login (manual, quick-login, biometrico) pase por
         // las mismas reglas que el backend.
@@ -166,6 +189,7 @@ export const useAuthStore = create<AuthState>()(
           // frontend nuevo habla con un backend que aun no conoce identifier.
           ...(clasificado.tipo === 'cedula' ? { cedula: clasificado.canonico } : {}),
           password,
+          ...(opciones?.reactivar ? { reactivate: true } : {}),
         });
         if (result.success && result.data) {
           // Antes de hidratar la sesion nueva, vaciar lo que hubiera quedado
@@ -183,6 +207,7 @@ export const useAuthStore = create<AuthState>()(
             // Entro alguien: el aviso de la expulsion anterior ya no aplica,
             // ni el de la sesion que no se pudo confirmar.
             logoutReason: null,
+            seEliminaEl: null,
             restauracion: 'normal',
           });
           // On native, stash the refresh token in OS secure storage (no-op on
@@ -193,7 +218,12 @@ export const useAuthStore = create<AuthState>()(
         }
         // Surface the failure code so the UI can tell "wrong password" apart
         // from "rate limited" (429) and similar.
-        return { success: false, code: result.error?.code };
+        const code = result.error?.code;
+        if (code === 'ACCOUNT_PENDING_DELETION') {
+          const fecha = result.error?.details?.deletion_due_at;
+          return { success: false, code, seEliminaEl: typeof fecha === 'string' ? fecha : undefined };
+        }
+        return { success: false, code };
       },
 
       register: async ({ cedula, username, phone, firstName, lastName, password, email, verificationToken, referralCode }) => {
@@ -317,10 +347,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearLogoutReason: () => {
-        set({ logoutReason: null });
+        set({ logoutReason: null, seEliminaEl: null });
       },
 
-      cuentaEliminada: () => {
+      cuentaEliminada: (seEliminaEl) => {
         // El servidor ya borro las suscripciones de avisos y revoco las sesiones;
         // esto corta la del navegador.
         soltarAvisosAlSalir(false);
@@ -335,8 +365,9 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           accessToken: null,
           refreshToken: null,
-          // El login que sigue avisa que la cuenta se elimino.
+          // El login que sigue avisa cuando se elimina y que se puede reactivar.
           logoutReason: 'deleted' as const,
+          seEliminaEl: seEliminaEl || null,
           restauracion: 'normal',
         });
       },

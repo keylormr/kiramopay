@@ -56,7 +56,7 @@ export interface SolicitudDeEliminacion {
 
 /** Lo que paso al atender una solicitud. */
 export interface ResultadoDeSolicitud {
-  /** completed | blocked | rejected */
+  /** scheduled (empezo el plazo de 30 dias) | blocked | rejected */
   status: string;
   resultCode: string;
   /** Codigos de lo que impide eliminar (solo cuando status = blocked). */

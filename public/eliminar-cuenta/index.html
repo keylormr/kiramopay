@@ -4,12 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Eliminar tu cuenta de KiramoPay</title>
-  <meta name="description" content="Pide la eliminación de tu cuenta de KiramoPay y de tus datos personales, sin necesidad de abrir la aplicación." />
+  <meta name="description" content="Pide la eliminación de tu cuenta de KiramoPay y de tus datos personales, sin necesidad de abrir la aplicación. La cuenta se bloquea hoy y se elimina 30 días después; hasta entonces puedes reactivarla." />
   <meta name="theme-color" content="#2D7BFF" />
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="stylesheet" href="/legal.css" />
   <!-- Nombre del desarrollador en Google Play (completar si difiere de la app):
        el nombre de la app, KiramoPay, ya figura en el titulo y en el encabezado. -->
+  <style>
+    /* Casilla de aceptacion del plazo: legal.css da a todo label display:block. */
+    .acepto { display: flex; gap: 12px; align-items: flex-start; font-weight: 400; margin: 18px 0 0; }
+    .acepto input { flex: none; width: 1.375rem; height: 1.375rem; margin: 2px 0 0; accent-color: var(--btn); }
+  </style>
 </head>
 <body>
 <div class="pagina">
@@ -24,6 +29,7 @@
   <h1>Eliminar tu cuenta de KiramoPay</h1>
   <p class="lede">
     Pide aquí que eliminemos tu cuenta y tus datos personales. No necesitas abrir ni reinstalar la aplicación.
+    Tu cuenta se bloquea hoy y se elimina 30 días después; hasta entonces puedes cambiar de opinión.
   </p>
 
   <section class="solicitud" aria-labelledby="titulo-solicitud">
@@ -37,7 +43,7 @@
       </p>
     </noscript>
 
-    <!-- Paso 1: el contacto con el que se registro -->
+    <!-- Paso 1: el contacto con el que se registro y la aceptacion del plazo -->
     <form id="paso-contacto" novalidate>
       <label for="contacto">Correo o teléfono con que te registraste</label>
       <input id="contacto" name="contacto" type="text" inputmode="email" autocomplete="username"
@@ -48,50 +54,119 @@
         cuenta, el código llega en unos minutos.
       </p>
       <p class="error" id="error-contacto" role="alert" hidden></p>
+
+      <label class="acepto" for="acepto-plazo">
+        <input id="acepto-plazo" name="acepto-plazo" type="checkbox" required aria-describedby="error-plazo" />
+        <span>
+          Entiendo que, al confirmar el código, mi cuenta queda bloqueada y se elimina 30 días después, y acepto ese plazo.
+          Hasta entonces puedo reactivarla entrando con mi contraseña.
+        </span>
+      </label>
+      <p class="error" id="error-plazo" role="alert" hidden></p>
+
       <button class="principal" type="submit" id="enviar-codigo">Enviar código</button>
     </form>
 
-    <!-- Paso 2: el codigo -->
+    <!-- Paso 2: el codigo. Con el codigo correcto empieza el plazo de 30 dias. -->
     <form id="paso-codigo" novalidate hidden>
       <p class="ok" id="aviso-codigo" role="status"></p>
       <label for="codigo">Código de 6 dígitos</label>
       <input id="codigo" name="codigo" type="text" class="codigo" inputmode="numeric" maxlength="6"
              autocomplete="one-time-code" required />
+      <p class="meta">
+        Al confirmar el código, tu cuenta se bloquea y empieza el plazo de 30 días.
+      </p>
       <p class="error" id="error-codigo" role="alert" hidden></p>
       <button class="principal" type="submit" id="confirmar">Confirmar solicitud</button>
       <p><button class="enlace" type="button" id="otro-contacto">Usar otro correo o teléfono</button></p>
     </form>
 
-    <!-- Paso 3: hecho -->
+    <!-- Paso 3: hecho. La respuesta es la misma exista o no la cuenta. -->
     <div id="paso-listo" hidden role="status">
       <h3>Solicitud recibida</h3>
       <p>
-        Una persona del equipo la va a revisar y eliminar tu cuenta. Si hay algo pendiente que lo impida (por
-        ejemplo, saldo en la cuenta), te escribimos al correo registrado para decirte qué resolver.
+        Listo. Si el código correspondía a una cuenta, te escribimos al correo con lo que sigue: cuándo se
+        elimina, qué se conserva y cómo reactivarla si cambias de opinión.
       </p>
-      <p>Cuando termine, tu cuenta ya no podrá usarse y tus datos personales se habrán borrado.</p>
+      <p>
+        Si hay algo pendiente que lo impida (por ejemplo, saldo en la cuenta), el correo te dice qué resolver
+        antes de que empiece el plazo. Si la cuenta está en revisión por el equipo, una persona atiende la
+        solicitud antes de que empiece. Revisa también la carpeta de correo no deseado.
+      </p>
     </div>
   </section>
 
-  <h2 id="que-pasa">Qué pasa con tus datos</h2>
-  <p><strong>Se borra:</strong> tu nombre, cédula, teléfono, correo y fecha de nacimiento; tu contraseña, dispositivos y sesiones; tus contactos, cuentas vinculadas, presupuestos, pagos recurrentes y conversaciones con el asistente. Tus tarjetas virtuales se cancelan.</p>
+  <h2 id="que-pasa">Qué pasa con tu cuenta y tus datos</h2>
+  <p>La eliminación no es inmediata. Se hace en etapas, para que puedas arrepentirte:</p>
+  <ol>
+    <li>
+      <strong>Hoy, cuando confirmas el código:</strong> tu cuenta queda bloqueada. No puedes entrar, mover ni recibir
+      dinero, y dejas de recibir avisos. Todavía no se borra nada. Te escribimos al correo una respuesta con lo que
+      sigue: que tus datos se suprimen el día 30, qué se conserva por la Ley 7786 y hasta cuándo, y tu derecho a
+      acudir a la PRODHAB.
+    </li>
+    <li>
+      <strong>Del día 0 al día 30:</strong> puedes reactivar la cuenta entrando a la aplicación con tu contraseña; la
+      aplicación te ofrece reactivarla. Reactivar cancela el proceso y la cuenta vuelve a funcionar.
+    </li>
+    <li>
+      <strong>El día 30:</strong> se suprimen de forma definitiva los datos que tienes derecho a borrar. A partir de
+      ahí la cuenta no se puede recuperar.
+    </li>
+    <li>
+      <strong>El día 30 más 5 años:</strong> lo que la ley nos obliga a conservar se desasocia de ti de forma
+      irreversible.
+    </li>
+  </ol>
+
+  <h3>Qué se suprime el día 30</h3>
   <p>
-    <strong>Se conserva:</strong> el registro de los movimientos de dinero, sin tus datos de contacto, y los registros
-    que se guardan por obligación legal, seguridad o prevención de fraude. Los detalles y plazos están en la
-    <a href="/privacidad/#retencion">política de privacidad</a>.
+    Tus datos de acceso (las credenciales quedan revocadas), tus preferencias, tus contactos, tus cuentas bancarias
+    vinculadas, tus servicios guardados, tus presupuestos, tus pagos programados, tus alertas de precio, tus
+    conversaciones con el asistente, tu historial de avisos, y tus dispositivos y sesiones. Tus tarjetas virtuales se
+    cancelan.
   </p>
-  <p><strong>Eliminar tu cuenta no se puede deshacer.</strong></p>
+
+  <h3>Qué se conserva, y por cuánto tiempo</h3>
+  <p>
+    Lo que la Ley 7786 (artículo 16) nos obliga a conservar: tu identificación y su verificación, el registro de tus
+    operaciones y de las otras partes que intervinieron, la auditoría de seguridad, y los registros de cumplimiento y
+    prevención de fraude. Esa información se guarda identificada y aislada, fuera de la aplicación, y solo se usa para
+    cumplir la ley.
+  </p>
+  <p>
+    Si tenías un comercio, queda cerrado e inactivo. No se borra: su identidad legal y sus cobros forman parte de lo
+    que se conserva.
+  </p>
+  <p>
+    El plazo es de 5 años contados desde el día 30. Puede ser mayor solo si la ley o una autoridad competente lo
+    exige. Al terminar ese plazo, lo conservado se desasocia de ti de forma irreversible: se vacían nombres,
+    documentos, teléfonos, direcciones, notas y direcciones IP, y quedan solo montos y fechas como rastro contable.
+    Los detalles están en la <a href="/privacidad/#retencion">política de privacidad</a>.
+  </p>
+
+  <h3>Si cambias de opinión, o quieres volver después</h3>
+  <p>
+    Hasta el día 30 puedes reactivar la cuenta como se explicó arriba. Después del día 30 no se puede reactivar, pero
+    puedes volver a registrarte con la misma cédula, teléfono y correo; sería una cuenta nueva, sin el historial de la
+    anterior.
+  </p>
+
+  <h3>Si consideras que no se respetaron tus derechos</h3>
+  <p>
+    Puedes acudir a la Agencia de Protección de Datos de los Habitantes (PRODHAB), conforme a la Ley 8968.
+  </p>
 
   <h2 id="antes">Antes de pedirlo</h2>
-  <p>La cuenta se puede eliminar cuando:</p>
+  <p>El plazo de 30 días empieza cuando la cuenta cumple esto:</p>
   <ul>
     <li>el saldo está en cero (billetera, ahorros, criptoactivos y, si tienes comercio, también el del comercio);</li>
     <li>no hay movimientos, retiros, transferencias internacionales, acuerdos de garantía ni pedidos en curso.</li>
   </ul>
-  <p>Si tienes saldo, envíalo, retíralo o gástalo primero. Si no puedes hacerlo, igual puedes pedir la eliminación: te diremos qué falta.</p>
+  <p>Si tienes saldo, envíalo, retíralo o gástalo primero. Si no puedes hacerlo, igual puedes pedir la eliminación: no empieza el plazo y te diremos qué falta.</p>
 
   <h2 id="desde-la-app">Si todavía tienes la aplicación</h2>
-  <p>Entra a <strong>Perfil</strong>, luego <strong>Seguridad</strong> y elige <strong>Eliminar mi cuenta</strong>. Te pedimos tu contraseña para confirmar que eres tú.</p>
+  <p>Entra a <strong>Perfil</strong>, luego <strong>Seguridad</strong> y elige <strong>Eliminar mi cuenta</strong>. Te pedimos tu contraseña para confirmar que eres tú y que aceptes el plazo de 30 días, igual que en esta página.</p>
 
   <footer class="pie">
     <a href="/privacidad/">Política de privacidad</a>

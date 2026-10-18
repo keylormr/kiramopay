@@ -1875,7 +1875,7 @@ export type TranslationKeys = {
   del_checking: string;
   del_check_failed: string;
   del_heading: string;
-  del_irreversible: string;
+  del_timeline: string;
   del_erased_title: string;
   del_erased_1: string;
   del_erased_2: string;
@@ -1908,15 +1908,24 @@ export type TranslationKeys = {
   del_word: string;
   del_word_label: string;
   del_totp_label: string;
+  del_accept_terms: string;
   del_confirm_button: string;
   del_err_password: string;
   del_err_totp: string;
   del_err_locked: string;
+  del_err_terms: string;
   del_err_generic: string;
   privacy_policy: string;
   register_privacy_hint: string;
   account_deleted_title: string;
   account_deleted_body: string;
+  account_deleted_body_nodate: string;
+  login_pending_title: string;
+  login_pending_body: string;
+  login_pending_body_nodate: string;
+  login_pending_reactivate: string;
+  login_pending_keep: string;
+  login_pending_failed: string;
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: string;
   admin_del_empty: string;

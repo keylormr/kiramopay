@@ -11,6 +11,7 @@ import type {
   PreflightDeEliminacion,
   MotivoDeEliminacion,
   EliminarCuentaRequest,
+  SolicitudDeEliminacionPropia,
 } from '../../repositories/auth.repository';
 import type { ApiResponse } from '../../types';
 import type { User } from '@/types';
@@ -192,18 +193,27 @@ export class HttpAuthRepository implements IAuthRepository {
     });
   }
 
-  async deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<{ alreadyDeleted: boolean }>> {
-    const res = await this.client.post<{ already_deleted?: boolean }>('/api/v1/users/me/delete-account', {
+  async deleteAccount(request: EliminarCuentaRequest): Promise<ApiResponse<SolicitudDeEliminacionPropia>> {
+    const res = await this.client.post<{
+      already_requested?: boolean;
+      requested_at?: string;
+      deletion_due_at?: string;
+    }>('/api/v1/users/me/delete-account', {
       password: request.password,
       // undefined se omite del JSON: sin autenticador no viaja la clave.
       totp_code: request.totpCode,
+      accept_terms: request.acceptTerms,
     });
     if (!res.success) {
       // El codigo y el detalle pasan: la pantalla elige el texto por codigo y,
       // en DELETION_BLOCKED, lista lo que hay que resolver.
       return falla(res, 'DELETION_FAILED');
     }
-    return apiSuccess({ alreadyDeleted: !!res.data?.already_deleted });
+    return apiSuccess({
+      yaPedida: !!res.data?.already_requested,
+      solicitadaEn: res.data?.requested_at ?? '',
+      seEliminaEl: res.data?.deletion_due_at ?? '',
+    });
   }
 
   async sendRegistrationOtp(phone: string, email: string): Promise<ApiResponse<SendRegistrationOtpResult>> {

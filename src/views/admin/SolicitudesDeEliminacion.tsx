@@ -8,9 +8,11 @@ import type { TranslationKeys } from '@/i18n/translations';
 import { fechaYHora } from '@/utils/fechaPlazo';
 
 // La cola de las solicitudes de eliminacion que llegan de la pagina web
-// (/eliminar-cuenta): contacto ya verificado con un codigo, esperando a una
-// persona. Atender una corre la MISMA eliminacion que la de la app, con los
-// mismos bloqueos, y deja al administrador en la auditoria.
+// (/eliminar-cuenta) y esperan a una persona: solo las de cuentas bajo revision
+// (bloqueadas o suspendidas), con el contacto ya verificado por un codigo; las
+// demas empiezan el plazo solas al verificar. Atender una inicia el MISMO plazo
+// de 30 dias que la app, con los mismos bloqueos, sin desbloquear la cuenta, y
+// deja al administrador en la auditoria.
 //
 // Vive como pestana de la pantalla de cuentas porque es la misma tarea
 // (gestionar una cuenta) y asi no se agrega otra entrada al menu.
@@ -76,7 +78,8 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     setConfirmando(null);
     if (!res?.success || !res.data) {
       setAviso({ tipo: 'error', texto: t(res?.error?.code === 'NOT_PENDING' ? 'admin_del_already' : 'admin_del_action_failed') });
-    } else if (res.data.status === 'completed') {
+    } else if (res.data.status === 'scheduled') {
+      // El plazo de 30 dias empezo; la cuenta sigue bloqueada mientras tanto.
       setAviso({ tipo: 'ok', texto: t('admin_del_done') });
     } else if (res.data.status === 'blocked') {
       setAviso({ tipo: 'bloqueada', bloqueos: res.data.blockers });
