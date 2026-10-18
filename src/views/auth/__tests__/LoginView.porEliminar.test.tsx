@@ -85,12 +85,17 @@ async function entrar(onLogin = vi.fn()) {
 }
 
 beforeEach(() => {
+  // Solo el reloj: la fecha del cierre es futura o ya paso segun el dia en que
+  // corra la prueba, y eso cambia el texto. Los temporizadores siguen reales.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-18T12:00:00Z'));
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -128,7 +133,22 @@ describe('LoginView — cuenta con la eliminacion en curso', () => {
     expect(cuerpos().some((c) => c.reactivate)).toBe(false);
   });
 
-  it('si ya no se puede reactivar (vencio el plazo) lo dice como cuenta que no puede entrar', async () => {
+  it('vencido el plazo sin que se pudiera cerrar, explica que algo quedo pendiente y ofrece reactivar', async () => {
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const c = JSON.parse(String(init?.body ?? '{}')) as Cuerpo;
+      if (!c.password) return rechazo(401, { code: 'PASSWORD_REQUIRED', message: 'password required' });
+      if (c.reactivate) return entra();
+      return rechazo(403, { code: 'ACCOUNT_PENDING_DELETION', message: 'x', details: { deletion_due_at: '2026-01-10T18:00:00Z' } });
+    });
+    await entrar();
+
+    expect(await screen.findByText('Tu cuenta se va a eliminar')).toBeInTheDocument();
+    expect(screen.getByText(/todavía no se pudo cerrar/)).toBeInTheDocument();
+    expect(screen.queryByText(/se elimina el/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reactivar mi cuenta' })).toBeInTheDocument();
+  });
+
+  it('si ya no se puede reactivar (la cuenta ya se cerro) lo dice como cuenta que no puede entrar', async () => {
     servidor(() => rechazo(403, { code: 'ACCOUNT_BLOCKED', message: 'account blocked' }));
     const onLogin = vi.fn();
     const user = await entrar(onLogin);

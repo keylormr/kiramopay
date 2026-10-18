@@ -416,8 +416,11 @@ func TestReactivar_CancelaElProcesoYDejaLaCuentaComoEstaba(t *testing.T) {
 	}
 }
 
-// Pasado el dia 30 ya no se puede volver, aunque el barrido no haya pasado.
-func TestReactivar_NoDespuesDelPlazo(t *testing.T) {
+// Vencido el dia 30, mientras el barrido no la cierre, la puerta sigue abierta.
+// Si algo pendiente impide el cierre (dinero que alguien mando, un acuerdo que
+// otro abrio), la persona tiene que poder entrar a resolverlo: sin esto quedaria
+// sin acceso, con lo pendiente adentro y sin cierre.
+func TestReactivar_VencidoSinCerrarTodaviaSePuede(t *testing.T) {
 	pool := testutil.TestDB(t)
 	ctx := context.Background()
 	a := sembrar(t, pool)
@@ -425,13 +428,33 @@ func TestReactivar_NoDespuesDelPlazo(t *testing.T) {
 	pedir(t, svc, a.ID)
 	vencerPlazo(t, pool, a.ID)
 
+	if _, reactivable, err := svc.SeEliminaEl(ctx, a.ID); err != nil || !reactivable {
+		t.Fatalf("vencida y sin cerrar debe ofrecerse: reactivable=%v err=%v", reactivable, err)
+	}
+	if ok, err := svc.Reactivar(ctx, a.ID); err != nil || !ok {
+		t.Fatalf("reactivar vencida y sin cerrar: ok=%v err=%v", ok, err)
+	}
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+		t.Errorf("quedo en %s", st)
+	}
+}
+
+// Una vez cerrada por el barrido ya no se puede volver.
+func TestReactivar_NoDespuesDelCierre(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	svc := nuevoServicio(pool, nil)
+	pedir(t, svc, a.ID)
+	cerrar(t, pool, svc, a.ID)
+
 	if _, reactivable, err := svc.SeEliminaEl(ctx, a.ID); err != nil || reactivable {
-		t.Errorf("vencido el plazo no debe ofrecerse: reactivable=%v err=%v", reactivable, err)
+		t.Errorf("cerrada no debe ofrecerse: reactivable=%v err=%v", reactivable, err)
 	}
 	if ok, err := svc.Reactivar(ctx, a.ID); err != nil || ok {
-		t.Fatalf("reactivo pasado el plazo: ok=%v err=%v", ok, err)
+		t.Fatalf("reactivo una cuenta cerrada: ok=%v err=%v", ok, err)
 	}
-	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "pending_deletion" {
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "closed" {
 		t.Errorf("quedo en %s", st)
 	}
 }
@@ -500,20 +523,21 @@ func TestLogin_OfreceReactivarYReactivaConLaContrasena(t *testing.T) {
 	}
 }
 
-// Una cuenta con el plazo vencido o bloqueada no recibe la oferta: el login la
-// trata como cualquier cuenta que no puede entrar.
+// Una cuenta ya cerrada no recibe la oferta, y sin el servicio cableado el login
+// la trata como cualquier cuenta que no puede entrar.
 func TestLogin_SinOfertaSiYaNoSePuedeReactivar(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("plazo vencido", func(t *testing.T) {
+	t.Run("ya cerrada", func(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		svc := nuevoServicio(pool, nil)
 		pedir(t, svc, a.ID)
-		vencerPlazo(t, pool, a.ID)
-		_, err := servicioDeLogin(pool, svc).Login(ctx, &auth.LoginRequest{Identifier: a.Cedula, Password: claveDePrueba, Reactivate: true}, auth.LoginContext{})
-		if !errors.Is(err, auth.ErrAccountBlocked) {
-			t.Fatalf("se esperaba ErrAccountBlocked, salio %v", err)
+		cerrar(t, pool, svc, a.ID)
+		resp, err := servicioDeLogin(pool, svc).Login(ctx, &auth.LoginRequest{Identifier: a.Cedula, Password: claveDePrueba, Reactivate: true}, auth.LoginContext{})
+		var porEliminar *auth.CuentaPorEliminarError
+		if err == nil || resp != nil || errors.As(err, &porEliminar) {
+			t.Fatalf("una cuenta cerrada no entra ni se ofrece: resp=%+v err=%v", resp, err)
 		}
 	})
 	t.Run("sin el servicio cableado", func(t *testing.T) {

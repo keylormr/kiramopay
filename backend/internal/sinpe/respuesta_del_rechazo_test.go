@@ -28,6 +28,10 @@ func TestRespuestaDelRechazo(t *testing.T) {
 			http.StatusConflict, "LLAVE_REUTILIZADA"},
 		{"el saldo que frena el asiento", envuelto(ledger.ErrInsufficientFunds),
 			http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
+		// Quien recibe pidio eliminar su cuenta en el medio: el asiento se
+		// rechazo limpio, no es un envio sin confirmar.
+		{"la cuenta de quien recibe esta cerrada", envuelto(ledger.ErrCuentaCerrada),
+			http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE"},
 		{"el tope mensual", envuelto(transaction.ErrMonthlyLimitExceeded),
 			http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED"},
 		// Con codigo propio: SINPE_FAILED queda para el 500, que la pantalla

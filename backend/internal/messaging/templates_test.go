@@ -193,3 +193,41 @@ func TestAccountDeletionRequestedEmailFechaEnHoraDeCostaRica(t *testing.T) {
 
 // mencionProhibida: lo que la respuesta a la persona nunca puede nombrar.
 var mencionProhibida = regexp.MustCompile(`(?i)sospechos|\buif\b|\bros\b`)
+
+// Ningun correo de la eliminacion nombra lo que la persona no puede saber: ni el
+// de la respuesta, ni el del cierre, ni el de lo pendiente, ni el de la
+// reactivacion.
+func TestCorreosDeLaEliminacionNoMencionanElReporte(t *testing.T) {
+	dia30 := time.Date(2026, 11, 17, 15, 4, 0, 0, time.UTC)
+	correos := map[string][2]string{}
+	_, a, b := AccountDeletionRequestedEmail(dia30, dia30.AddDate(5, 0, 0))
+	correos["respuesta"] = [2]string{a, b}
+	_, a, b = AccountDeletedEmail()
+	correos["cierre"] = [2]string{a, b}
+	_, a, b = DeletionBlockedEmail([]string{"Tienes saldo en tu billetera."})
+	correos["pendiente"] = [2]string{a, b}
+	_, a, b = AccountReactivatedEmail()
+	correos["reactivacion"] = [2]string{a, b}
+	for nombre, c := range correos {
+		for _, cuerpo := range c {
+			if m := mencionProhibida.FindString(cuerpo); m != "" {
+				t.Errorf("el correo de %s menciona %q", nombre, m)
+			}
+		}
+	}
+}
+
+// La reactivacion avisa por correo y dice que hacer si no fue la persona.
+func TestAccountReactivatedEmail(t *testing.T) {
+	subject, text, html := AccountReactivatedEmail()
+	if subject == "" {
+		t.Fatal("sin asunto")
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		for _, debe := range []string{"reactiv", "contraseña"} {
+			if !strings.Contains(cuerpo, debe) {
+				t.Errorf("el %s no dice %q", nombre, debe)
+			}
+		}
+	}
+}

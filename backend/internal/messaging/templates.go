@@ -320,6 +320,12 @@ func AccountDeletedEmail() (subject, textBody, htmlBody string) {
 	return subject, text, htmlBody
 }
 
+// AccountReactivatedEmail avisa que la cuenta se reactivo y la eliminacion se
+// cancelo.
+func AccountReactivatedEmail() (subject, textBody, htmlBody string) {
+	return "", "", ""
+}
+
 // DeletionBlockedEmail le dice a quien pidio eliminar su cuenta desde la web que
 // todavia no se pudo y que tiene que resolver. motivos son frases ya redactadas
 // (una por cada cosa pendiente). No promete un plazo: lo unico que pide es

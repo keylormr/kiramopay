@@ -198,3 +198,24 @@ func TestUnblock_ConLaEliminacionEnCursoVuelveAPendiente(t *testing.T) {
 		t.Fatalf("tras desbloquear quedo en %s", status)
 	}
 }
+
+// Una cuenta con la eliminacion en curso se rechaza en cada peticion autenticada,
+// igual que una bloqueada: un token de acceso que quedo vivo no sigue sirviendo
+// hasta que vence. Sin Redis lo dice la BD, y el repaso de las marcas le pone la
+// suya.
+func TestPorEliminar_SeRechazaEnCadaPeticion(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	ctx := context.Background()
+	resp := registerTestUser(t, env.svc)
+	marcarPorEliminar(t, env.pool, resp.User.ID)
+
+	if blocked, err := auth.NewRepository(env.pool, nil).IsUserBlocked(ctx, resp.User.ID); err != nil || !blocked {
+		t.Fatalf("IsUserBlocked sin Redis = (%v, %v), esperaba true", blocked, err)
+	}
+	if _, _, err := env.authRepo.ReconcileBlockedMarks(ctx); err != nil {
+		t.Fatalf("ReconcileBlockedMarks: %v", err)
+	}
+	if blocked, err := env.authRepo.IsUserBlocked(ctx, resp.User.ID); err != nil || !blocked {
+		t.Fatalf("IsUserBlocked con Redis tras el repaso = (%v, %v), esperaba true", blocked, err)
+	}
+}

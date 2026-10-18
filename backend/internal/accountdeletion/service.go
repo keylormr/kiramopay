@@ -45,7 +45,18 @@ type Options struct {
 	Email        messaging.EmailSender
 	SMS          messaging.SMSSender
 	Disconnector Disconnector
-	Logger       *slog.Logger
+	// Marcas pone y quita la marca de bloqueo que mira cada peticion
+	// autenticada (auth.Repository). Sin ella, el token de acceso que quedo vivo
+	// sirve hasta que vence.
+	Marcas Marcas
+	Logger *slog.Logger
+}
+
+// Marcas es la parte de auth.Repository que marca una cuenta para que el
+// middleware la rechace en cada peticion.
+type Marcas interface {
+	MarkUserBlocked(ctx context.Context, userID string) error
+	ClearUserBlocked(ctx context.Context, userID string) error
 }
 
 // Service elimina cuentas. Ver el comentario del paquete.
