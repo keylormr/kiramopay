@@ -26,6 +26,7 @@ function montar(props: Partial<React.ComponentProps<typeof ActualizacionObligato
     <LanguageProvider>
       <ActualizacionObligatoria
         version="2.8.0"
+        instalada="2.7.0"
         notas={NOTAS}
         plataforma="android"
         onActualizar={onActualizar}
@@ -57,6 +58,12 @@ describe('ActualizacionObligatoria', () => {
     expect(screen.getByText(/Para seguir usando KiramoPay/)).toBeInTheDocument();
     expect(screen.getByText('Qué trae la versión 2.8.0')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(NOTAS);
+  });
+
+  // Si la instalacion falla, con esto la persona sabe que pedir.
+  it('dice que version tiene instalada', () => {
+    montar();
+    expect(screen.getByText('Tienes la versión 2.7.0.')).toBeInTheDocument();
   });
 
   it('sin novedades no pinta una lista vacia', () => {
@@ -100,7 +107,7 @@ describe('BarreraDeActualizacion', () => {
   }
 
   it('con una version nueva no deja ver la app, ni siquiera el login', () => {
-    hook.actualizacion = { version: '2.8.0', url: 'https://ejemplo/kiramopay.apk', notas: NOTAS };
+    hook.actualizacion = { version: '2.8.0', instalada: '2.7.0', url: 'https://ejemplo/kiramopay.apk', notas: NOTAS };
     app();
     expect(screen.queryByText('pantalla de ingreso')).toBeNull();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
@@ -114,7 +121,7 @@ describe('BarreraDeActualizacion', () => {
   });
 
   it('el boton actualiza con la plataforma que corresponde', async () => {
-    hook.actualizacion = { version: '2.8.0', url: 'https://ejemplo/kiramopay.apk', notas: [] };
+    hook.actualizacion = { version: '2.8.0', instalada: '2.7.0', url: 'https://ejemplo/kiramopay.apk', notas: [] };
     app();
     await userEvent.click(screen.getByRole('button', { name: 'Descargar' }));
     expect(hook.actualizar).toHaveBeenCalledOnce();

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -57,6 +59,8 @@ func servidorAPI(t *testing.T, status int, cuotaAgotada bool) *httptest.Server {
 }
 
 // Servidor que imita github.com/<repo>/releases/latest: redirige al tag.
+// Tambien sirve la descarga del APK como GitHub: una redireccion al
+// almacenamiento de objetos, que responde el archivo.
 func servidorWeb(t *testing.T, redirige bool) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +68,16 @@ func servidorWeb(t *testing.T, redirige bool) *httptest.Server {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Location", "https://github.com/keylormr/kiramopay/releases/tag/v2.3.6")
-		w.WriteHeader(http.StatusFound)
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/download/"):
+			http.Redirect(w, r, "/objetos/kiramopay.apk", http.StatusFound)
+		case r.URL.Path == "/objetos/kiramopay.apk":
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("P"))
+		default:
+			w.Header().Set("Location", "https://github.com/keylormr/kiramopay/releases/tag/v2.3.6")
+			w.WriteHeader(http.StatusFound)
+		}
 	}))
 }
 
@@ -412,5 +424,125 @@ func TestNewHandler_BuscaLasNovedadesEnElRelease(t *testing.T) {
 	got := fmt.Sprintf(NewHandler().notasFmt, "v2.8.0")
 	if want := "https://github.com/keylormr/kiramopay/releases/download/v2.8.0/notas.json"; got != want {
 		t.Fatalf("notasFmt da %q, esperaba %q", got, want)
+	}
+}
+
+// ── Lo que encontro la revision de #287 ──────────────────────────────────────
+
+// Los dos workflows del tag publican en el mismo release. Si iOS termina
+// primero, o el job de Android falla, el release queda sin .apk: la API lo
+// rechaza, pero la redireccion armaba la URL del .apk sin mirar si existia.
+// Con la actualizacion obligatoria eso es una barrera con un boton que da 404.
+// Sin APK confirmado no se ofrece nada.
+func TestGetLatest_PorLaRedireccionSinAPKNoSeOfrece(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/download/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Location", "https://github.com/keylormr/kiramopay/releases/tag/v2.3.7")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer web.Close()
+
+	code, info := pedir(t, handlerDePrueba(api.URL, web.URL))
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("code=%d info=%+v, esperaba 503: el release no tiene el APK", code, info)
+	}
+
+	// Con una version anterior en cache, se sigue ofreciendo esa.
+	h := handlerDePrueba(api.URL, web.URL)
+	h.cache = &infoVersion{Version: "2.3.6", URL: "https://ejemplo/apk"}
+	h.cachedAt = time.Now().Add(-time.Hour)
+	if code, info := pedir(t, h); code != http.StatusOK || info.Version != "2.3.6" {
+		t.Fatalf("code=%d info=%+v, esperaba la 2.3.6 de la cache", code, info)
+	}
+}
+
+// Una falla pasajera al bajar las novedades (un 502, una descarga cortada) no
+// puede dejar la barrera sin lista los diez minutos de la cache, justo cuando
+// mas gente la ve. Un release sin notas (404) si es definitivo.
+func TestGetLatest_NovedadesConFallaPasajeraSeReintentanPronto(t *testing.T) {
+	for _, caso := range []struct {
+		nombre    string
+		primera   int
+		reintenta bool
+	}{
+		{"falla pasajera", http.StatusBadGateway, true},
+		{"release sin notas", http.StatusNotFound, false},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			api := servidorAPI(t, http.StatusOK, false)
+			defer api.Close()
+			web := servidorWeb(t, true)
+			defer web.Close()
+			var pedidas atomic.Int32
+			notas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if pedidas.Add(1) == 1 {
+					w.WriteHeader(caso.primera)
+					return
+				}
+				_, _ = w.Write([]byte(`{"version":"2.3.6","cambios":["Uno"]}`))
+			}))
+			defer notas.Close()
+			h := handlerDePrueba(api.URL, web.URL)
+			h.notasFmt = notas.URL + "/download/%s/notas.json"
+
+			if _, info := pedir(t, h); len(info.Notas) != 0 {
+				t.Fatalf("primera: notes=%q, esperaba vacia", info.Notas)
+			}
+			// Dos minutos despues: dentro de los diez de la cache normal.
+			h.mu.Lock()
+			h.cachedAt = time.Now().Add(-2 * time.Minute)
+			h.mu.Unlock()
+			_, info := pedir(t, h)
+			if caso.reintenta && !reflect.DeepEqual(info.Notas, []string{"Uno"}) {
+				t.Fatalf("segunda: notes=%q, esperaba [Uno]: la falla pasajera no debia quedar en cache", info.Notas)
+			}
+			if !caso.reintenta && pedidas.Load() != 1 {
+				t.Fatalf("pidio las notas %d veces: un release sin notas es definitivo y va a la cache", pedidas.Load())
+			}
+		})
+	}
+}
+
+// Con la cache vacia (un despliegue, o recien vencida) y muchos telefonos a la
+// vez, cada peticion salia a GitHub por su cuenta. Una sola consulta basta.
+func TestGetLatest_PeticionesSimultaneasConsultanUnaSolaVez(t *testing.T) {
+	var aLaAPI, aLasNotas atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aLaAPI.Add(1)
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"v2.3.6","assets":[{"name":"kiramopay.apk","browser_download_url":"https://ejemplo/apk"}]}`))
+	}))
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aLasNotas.Add(1)
+		_, _ = w.Write([]byte(`{"version":"2.3.6","cambios":["Uno"]}`))
+	}))
+	defer notas.Close()
+	h := handlerDePrueba(api.URL, web.URL)
+	h.notasFmt = notas.URL + "/download/%s/notas.json"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			h.GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version", nil))
+			if rec.Code != http.StatusOK {
+				t.Errorf("code=%d", rec.Code)
+			}
+		}()
+	}
+	wg.Wait()
+	if aLaAPI.Load() != 1 || aLasNotas.Load() != 1 {
+		t.Fatalf("API %d veces y notas %d veces, esperaba una de cada una", aLaAPI.Load(), aLasNotas.Load())
 	}
 }

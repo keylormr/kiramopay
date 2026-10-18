@@ -151,4 +151,47 @@ describe('useActualizacion', () => {
     });
     await waitFor(() => expect(result.current.actualizacion?.version).toBe('2.8.0'));
   });
+
+  it('borra lo que se pospuso con la version anterior del aviso', async () => {
+    localStorage.setItem('kiramopay-update-pospuesta', JSON.stringify({ v: '2.8.0', t: Date.now() }));
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalled());
+    expect(localStorage.getItem('kiramopay-update-pospuesta')).toBeNull();
+  });
+
+  // Si la instalacion falla, la persona tiene que poder decir que version
+  // tiene para pedir ayuda.
+  it('dice que version esta instalada', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.instalada).toBe('2.7.0');
+  });
+
+  // Sin red al abrir, la revision no esperaba a la proxima vuelta a la app:
+  // se repite en cuanto vuelve la conexion.
+  it('al volver la conexion revisa de nuevo', async () => {
+    getLatest
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR' } })
+      .mockResolvedValueOnce(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(result.current.actualizacion?.version).toBe('2.8.0'));
+  });
+
+  it('actualizar deja la descarga en manos del sistema', async () => {
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    act(() => result.current.actualizar());
+    expect(abrir).toHaveBeenCalledWith('https://ejemplo/kiramopay.apk', '_system');
+    abrir.mockRestore();
+  });
 });
