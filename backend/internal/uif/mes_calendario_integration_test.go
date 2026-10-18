@@ -141,8 +141,8 @@ func TestUIF_ElMesPasadoNoEntraEnElCasoRegulatorio(t *testing.T) {
 
 // Mientras el dueno y SUGEF no digan si entradas y salidas se suman, se miden
 // los dos sentidos por separado y el bruto, y cualquiera que cruce va a
-// revision. US$5.000 salieron y US$5.000 entraron: ningun sentido llega, el
-// bruto si.
+// revision. US$5.100 salieron y US$4.950 entraron: ningun sentido llega, el
+// bruto si, con los ultimos US$100.
 func TestUIF_ElBrutoDelMesTambienSeMide(t *testing.T) {
 	_, _, pool, userID := setupUIF(t)
 	svc := servicioConTasa(pool, map[string]float64{"CRC": 550})
@@ -150,7 +150,7 @@ func TestUIF_ElBrutoDelMesTambienSeMide(t *testing.T) {
 
 	ahora := time.Now()
 	movimientoEn(t, pool, userID, "sinpe_send", "USD", 500_000, ahora)
-	movimientoEn(t, pool, userID, "deposit", "USD", 500_000, ahora)
+	movimientoEn(t, pool, userID, "deposit", "USD", 495_000, ahora)
 	tx := movimientoEn(t, pool, userID, "sinpe_send", "USD", 10_000, ahora)
 	svc.Report(ctx, userID, tx, "USD", 10_000)
 
@@ -158,23 +158,25 @@ func TestUIF_ElBrutoDelMesTambienSeMide(t *testing.T) {
 	if len(casos) != 1 || casos[0].tipo != "multiples_mes" {
 		t.Fatalf("casos = %+v, se esperaba uno multiples_mes por el bruto del mes", casos)
 	}
-	if !strings.Contains(casos[0].razon, "bruto") {
-		t.Fatalf("la razon %q no dice que cruzo el bruto", casos[0].razon)
+	if !strings.Contains(casos[0].razon, "el bruto del mes") || strings.Contains(casos[0].razon, "las salidas del mes") {
+		t.Fatalf("la razon %q tiene que decir que cruzo el bruto, y no las salidas", casos[0].razon)
 	}
 }
 
-// Las entradas solas tambien cruzan. Un deposito por la aplicacion lleva las
-// entradas del mes de US$9.990 a mas de US$10.000.
+// Las entradas solas tambien cruzan. Lo que acredita una venta de cripto (un
+// credito que pide otro servicio del backend) lleva las entradas del mes de
+// US$9.990 a mas de US$10.000.
 func TestUIF_LasEntradasDelMesAbrenElCaso(t *testing.T) {
 	_, txSvc, pool, userID := setupUIF(t)
 	ctx := context.Background()
 
 	movimientoEn(t, pool, userID, "deposit", "USD", 999_000, time.Now())
 	if _, err := txSvc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-		Type:           transaction.TypeDeposit,
+		Type:           transaction.TypeCryptoSell,
 		Amount:         2_000, // US$20
 		Currency:       "USD",
 		IdempotencyKey: "uif-entrada-1",
+		Internal:       true,
 	}); err != nil {
 		t.Fatalf("CreateTransaction: %v", err)
 	}
@@ -183,7 +185,7 @@ func TestUIF_LasEntradasDelMesAbrenElCaso(t *testing.T) {
 	if len(casos) != 1 || casos[0].tipo != "multiples_mes" {
 		t.Fatalf("casos = %+v, se esperaba uno multiples_mes por las entradas del mes", casos)
 	}
-	if !strings.Contains(casos[0].razon, "entradas") {
+	if !strings.Contains(casos[0].razon, "las entradas del mes (US$10010.00)") {
 		t.Fatalf("la razon %q no dice que cruzaron las entradas", casos[0].razon)
 	}
 }
