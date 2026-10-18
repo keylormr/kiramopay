@@ -675,6 +675,7 @@ export type TranslationKeys = {
   crypto_tx_gave: string;
   crypto_tx_got: string;
   crypto_status_failed: string;
+  crypto_status_unknown: string;
   crypto_onramp_cta: string;
   crypto_onramp_soon_title: string;
   crypto_onramp_soon_desc: string;
