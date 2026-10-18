@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, waitFor, act } from '@testing-library/react';
 
 // El modulo lee Capacitor en tiempo de llamada, asi que el mock se define una
 // vez y cada test cambia lo que devuelve.
-const mockCapacitor = {
+const mockCapacitor = vi.hoisted(() => ({
   isNativePlatform: vi.fn(() => false),
   getPlatform: vi.fn(() => 'web'),
-};
+}));
 vi.mock('@capacitor/core', () => ({ Capacitor: mockCapacitor }));
-vi.mock('@capacitor/app', () => ({ App: { getInfo: vi.fn() } }));
-vi.mock('@/api', () => ({ getApiLayer: vi.fn(() => ({})) }));
+const capApp = vi.hoisted(() => ({ getInfo: vi.fn(), addListener: vi.fn() }));
+vi.mock('@capacitor/app', () => ({ App: capApp }));
+const capa = vi.hoisted(() => ({
+  appVersion: undefined as undefined | { getLatest: ReturnType<typeof vi.fn> },
+}));
+vi.mock('@/api', () => ({ getApiLayer: vi.fn(() => capa) }));
 
-const { esVersionMasNueva, plataformaNativa } = await import('../useActualizacion');
+const { esVersionMasNueva, plataformaNativa, useActualizacion } = await import('../useActualizacion');
 
 describe('esVersionMasNueva', () => {
   it('detecta versiones mayores en cada posicion', () => {
@@ -63,5 +68,130 @@ describe('plataformaNativa', () => {
     mockCapacitor.isNativePlatform.mockReturnValue(true);
     mockCapacitor.getPlatform.mockReturnValue('electron');
     expect(plataformaNativa()).toBeNull();
+  });
+});
+
+// Toda version nueva es obligatoria. La hoja de antes tenia "Despues", que la
+// cerraba por 24 horas y dejaba seguir con la version vieja.
+describe('useActualizacion', () => {
+  let alVolver: (() => void) | undefined;
+  const getLatest = vi.fn();
+
+  beforeEach(() => {
+    localStorage.clear();
+    mockCapacitor.isNativePlatform.mockReturnValue(true);
+    mockCapacitor.getPlatform.mockReturnValue('android');
+    capApp.getInfo.mockReset().mockResolvedValue({ version: '2.7.0' });
+    alVolver = undefined;
+    capApp.addListener.mockReset().mockImplementation((evento: string, cb: () => void) => {
+      if (evento === 'resume') alVolver = cb;
+      return Promise.resolve({ remove: vi.fn() });
+    });
+    getLatest.mockReset();
+    capa.appVersion = { getLatest };
+  });
+
+  const publicada = (version: string, notes?: unknown) => ({
+    success: true,
+    data: { version, url: 'https://ejemplo/kiramopay.apk', ...(notes === undefined ? {} : { notes }) },
+  });
+
+  it('exige la version nueva aunque antes se hubiera pospuesto', async () => {
+    localStorage.setItem('kiramopay-update-pospuesta', JSON.stringify({ v: '2.8.0', t: Date.now() }));
+    getLatest.mockResolvedValue(publicada('2.8.0', ['Uno']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.version).toBe('2.8.0'));
+  });
+
+  it('no ofrece posponer', () => {
+    getLatest.mockResolvedValue(publicada('2.7.0'));
+    const { result } = renderHook(() => useActualizacion());
+    expect(result.current).not.toHaveProperty('posponer');
+  });
+
+  it('trae lo que cambia en la version nueva', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0', ['Uno', 'Dos']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.notas).toEqual(['Uno', 'Dos']);
+  });
+
+  it('sin novedades, o con novedades que no son texto, la lista queda limpia', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0', ['Uno', 3, null, '  ', 'Dos']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.notas).toEqual(['Uno', 'Dos']);
+  });
+
+  it('un servidor que todavia no manda novedades da una lista vacia', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.notas).toEqual([]);
+  });
+
+  it('con la misma version no exige nada', async () => {
+    getLatest.mockResolvedValue(publicada('2.7.0', ['Uno']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+  });
+
+  // La app puede quedar abierta dias. Una version publicada mientras tanto
+  // tambien se exige, la proxima vez que la persona vuelva a ella.
+  it('al volver a la app revisa de nuevo', async () => {
+    getLatest.mockResolvedValueOnce(publicada('2.7.0')).mockResolvedValueOnce(publicada('2.8.0', ['Uno']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+    expect(alVolver).toBeDefined();
+
+    await act(async () => {
+      alVolver?.();
+    });
+    await waitFor(() => expect(result.current.actualizacion?.version).toBe('2.8.0'));
+  });
+
+  it('borra lo que se pospuso con la version anterior del aviso', async () => {
+    localStorage.setItem('kiramopay-update-pospuesta', JSON.stringify({ v: '2.8.0', t: Date.now() }));
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalled());
+    expect(localStorage.getItem('kiramopay-update-pospuesta')).toBeNull();
+  });
+
+  // Si la instalacion falla, la persona tiene que poder decir que version
+  // tiene para pedir ayuda.
+  it('dice que version esta instalada', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.instalada).toBe('2.7.0');
+  });
+
+  // Sin red al abrir, la revision no esperaba a la proxima vuelta a la app:
+  // se repite en cuanto vuelve la conexion.
+  it('al volver la conexion revisa de nuevo', async () => {
+    getLatest
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR' } })
+      .mockResolvedValueOnce(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(result.current.actualizacion?.version).toBe('2.8.0'));
+  });
+
+  it('actualizar deja la descarga en manos del sistema', async () => {
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+    getLatest.mockResolvedValue(publicada('2.8.0'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    act(() => result.current.actualizar());
+    expect(abrir).toHaveBeenCalledWith('https://ejemplo/kiramopay.apk', '_system');
+    abrir.mockRestore();
   });
 });

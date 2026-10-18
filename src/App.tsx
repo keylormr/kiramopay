@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
 import { sincronizarAvisos } from './utils/avisosPush';
-import { useActualizacion } from './hooks/useActualizacion';
 import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
@@ -17,6 +16,7 @@ import { HelpButton } from './components/HelpSheet';
 import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
+import { BarreraDeActualizacion } from './components/ActualizacionObligatoria';
 import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
@@ -306,15 +306,9 @@ const Layout = () => {
     if (idUsuario) void sincronizarAvisos(idUsuario);
   }, [idUsuario]);
 
-  // Actualizacion disponible y campana promocional vigente. La campana espera a
-  // que no haya otra hoja encima (ni oferta biometrica ni actualizacion): un
-  // solo pop-up a la vez o es spam.
-  const {
-    actualizacion,
-    plataforma: plataformaApp,
-    posponer: posponerActualizacion,
-    actualizar: aplicarActualizacion,
-  } = useActualizacion();
+  // Campana promocional vigente. Espera a que no haya otra hoja encima (la
+  // oferta biometrica): un solo pop-up a la vez o es spam. La actualizacion ya
+  // no compite: es obligatoria y tapa la app entera (BarreraDeActualizacion).
   const [campana, setCampana] = useState<Campana | null>(null);
   const [campanaCopiada, setCampanaCopiada] = useState(false);
   const cerrarCampana = () => {
@@ -359,15 +353,15 @@ const Layout = () => {
     return () => { vivo = false; };
   }, [state.settings.biometricEnabled]);
 
-  // La campana espera su turno: sin oferta biometrica ni actualizacion en
-  // pantalla, y con un respiro para no recibir al usuario con un pop-up.
+  // La campana espera su turno: sin oferta biometrica en pantalla, y con un
+  // respiro para no recibir al usuario con un pop-up.
   useEffect(() => {
-    if (showBioOffer || actualizacion || campana) return;
+    if (showBioOffer || campana) return;
     const timer = setTimeout(() => {
       setCampana(campanaPendiente());
     }, 2500);
     return () => clearTimeout(timer);
-  }, [showBioOffer, actualizacion, campana]);
+  }, [showBioOffer, campana]);
 
   const cerrarOfertaBio = async (activar: boolean) => {
     try {
@@ -730,44 +724,6 @@ const Layout = () => {
         </div>
       </BottomSheet>
 
-      {/* Actualizacion disponible. En Android un toque baja el .apk y el
-          sistema lo instala encima (misma firma), sin tienda. En iOS no se
-          puede instalar un binario bajado de un link: la URL lleva al canal
-          (TestFlight, App Store o instalador OTA), y por eso cambian el texto
-          y la accion. */}
-      <BottomSheet
-        isOpen={actualizacion !== null}
-        onClose={posponerActualizacion}
-        title=""
-      >
-        <div className="text-center py-4 px-2">
-          <div className="w-20 h-20 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
-            <Icons.Download size={36} />
-          </div>
-          <h3 className="text-xl font-black uv-text-primary mb-2">{t('update_title')}</h3>
-          <p className="text-sm uv-text-secondary mb-6">
-            {t(plataformaApp === 'ios' ? 'update_body_ios' : 'update_body').replace(
-              '{version}',
-              actualizacion?.version ?? '',
-            )}
-          </p>
-          <div className="flex gap-3">
-            <button
-              onClick={posponerActualizacion}
-              className="flex-1 py-3.5 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
-            >
-              {t('update_later')}
-            </button>
-            <button
-              onClick={aplicarActualizacion}
-              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
-            >
-              {t(plataformaApp === 'ios' ? 'update_open' : 'update_download')}
-            </button>
-          </div>
-        </div>
-      </BottomSheet>
-
       {/* Campana promocional vigente (una sola vez por dispositivo). */}
       <BottomSheet
         isOpen={campana !== null}
@@ -1052,7 +1008,12 @@ const AppInit = () => {
 const AppConGuardia: React.FC = () => {
   const { desactualizada, versionDesplegada } = useGuardiaDeVersion();
   if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
-  return <AppInit />;
+  // En la app instalada, una version nueva publicada se exige antes del login.
+  return (
+    <BarreraDeActualizacion>
+      <AppInit />
+    </BarreraDeActualizacion>
+  );
 };
 
 const App: React.FC = () => {

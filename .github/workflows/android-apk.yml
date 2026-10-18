@@ -21,6 +21,22 @@ jobs:
 
       - run: npm ci
 
+      # Notas del release, armadas desde el changelog de src/config/version.ts:
+      # la descripcion que se ve en GitHub y el notas.json que el backend le
+      # pasa al aviso de actualizacion de la app (internal/appversion). Va antes
+      # del build para fallar enseguida si el tag no es la version del
+      # changelog.
+      # Un tag con build.gradle o el proyecto de iOS atrasados publica una app
+      # que se cree la version anterior: con la actualizacion obligatoria, la
+      # barrera no se iria nunca despues de instalarla.
+      - name: Version sincronizada
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run check:version
+
+      - name: Notas de la version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node scripts/notas-de-version.mjs "$GITHUB_REF_NAME"
+
       # Avisos de la app instalada (FCM). Sin google-services.json,
       # PushNotifications.register() cierra la app en Android; por eso el mismo
       # secreto decide las dos cosas: si el archivo entra al build y si la app
@@ -112,5 +128,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: kiramopay.apk
+          body_path: notas-de-version.md
+          files: |
+            kiramopay.apk
+            notas.json
           fail_on_unmatched_files: true
