@@ -628,9 +628,11 @@ func main() {
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
 	adminUsersHandler := adminusers.NewHandler(adminUsersService)
-	// Eliminar la cuenta: la persona desde la app (reautenticada), o desde la
-	// pagina web con codigo y un administrador de por medio. La fila de users
-	// queda como tumba; el libro del dinero no se toca.
+	// Eliminar la cuenta: la persona la pide desde la app (reautenticada) o
+	// desde la pagina web (con codigo). El dia 0 queda bloqueada y el libro
+	// cerrado; durante 30 dias puede reactivarla al entrar; el dia 30 el barrido
+	// la cierra, y al vencer la conservacion legal la desasocia. La fila de
+	// users nunca se borra; el diario del dinero no se toca.
 	accountDeletionService := accountdeletion.NewService(pool, userRepo, &accountdeletion.Options{
 		TOTP:        mfaSvc,
 		Lockout:     lockoutStore,
@@ -640,6 +642,8 @@ func main() {
 		Logger:      logger,
 	})
 	accountDeletionHandler := accountdeletion.NewHandler(accountDeletionService, authHandler.EndSession)
+	// El login ofrece la reactivacion durante el plazo.
+	authService.SetCuentasPorEliminar(accountDeletionService)
 	transparencyHandler := transparency.NewHandler(pool)
 	// /fees publica los MISMOS topes que aplican los servicios, no una copia.
 	planesPublicados := transparency.PlanesPublicados{Metas: topesMetas, Tarjetas: topesTarjetas}
@@ -736,6 +740,14 @@ func main() {
 	// Cobros QR vencidos. Cosmetico para la correctitud —el reclamo ya filtra
 	// por vencimiento dentro del asiento—, pero sin el la pantalla del cajero
 	// muestra como "esperando pago" algo que ya no se puede pagar.
+	// ── Barrido de la eliminacion de cuentas ─────────────────────────────
+	// Cierra las cuentas cuyo dia 30 ya llego y desasocia lo conservado cuando
+	// vence la conservacion legal. Bajo el lock de cluster, como los demas.
+	accountDeletionPoller := accountdeletion.NewPoller(accountDeletionService, pool, 5*time.Minute, logger)
+	accountDeletionPollerCtx, accountDeletionPollerCancel := context.WithCancel(context.Background())
+	defer accountDeletionPollerCancel()
+	go accountDeletionPoller.Run(accountDeletionPollerCtx)
+
 	qrChargePoller := qrpayment.NewPoller(qrService, pool, 60*time.Second, logger)
 	qrChargePollerCtx, qrChargePollerCancel := context.WithCancel(context.Background())
 	defer qrChargePollerCancel()

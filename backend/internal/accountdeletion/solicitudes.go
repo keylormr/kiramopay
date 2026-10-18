@@ -23,11 +23,14 @@ import (
 //  1. Solicitar: dice el correo o telefono con que se registro. SIEMPRE se
 //     responde igual, exista o no la cuenta, para que el formulario no sea un
 //     oraculo de enumeracion. Si existe, se le manda un codigo a ESE canal.
-//  2. Verificar: presenta el codigo. Probarlo prueba que controla el canal.
-//     Sin esto un formulario abierto seria una puerta para borrar cuentas
-//     ajenas.
-//  3. Un administrador atiende la cola con Procesar, que corre la MISMA rutina
-//     de la aplicacion y con los mismos bloqueos.
+//     La solicitud exige aceptar el plazo de 30 dias, igual que en la app.
+//  2. Verificar: presenta el codigo. Probarlo prueba que controla el canal, y
+//     ese momento es el dia 0: corre la MISMA rutina de la aplicacion, con los
+//     mismos bloqueos, y la persona recibe la respuesta escrita. Sin el codigo
+//     un formulario abierto seria una puerta para cerrar cuentas ajenas.
+//  3. Solo una cuenta bajo revision (bloqueada o suspendida) espera a una
+//     persona: operaciones la atiende con Procesar, que inicia el plazo sin
+//     desbloquearla.
 
 const (
 	vigenciaCodigo    = 15 * time.Minute
@@ -82,7 +85,11 @@ func (s *Service) contacto(raw string) (identifier.Kind, string, error) {
 // escrito no es un correo ni un telefono, o si la base falla; que la cuenta
 // exista o no jamas se nota en la respuesta.
 func (s *Service) Solicitar(ctx context.Context, raw string, aceptaPlazo bool) error {
-	_ = aceptaPlazo
+	// Sin la aceptacion expresa del plazo no se registra nada, exista o no la
+	// cuenta: la respuesta no distingue.
+	if !aceptaPlazo {
+		return ErrPlazoNoAceptado
+	}
 	kind, canonico, err := s.contacto(raw)
 	if err != nil {
 		return err
@@ -117,14 +124,16 @@ func (s *Service) Solicitar(ctx context.Context, raw string, aceptaPlazo bool) e
 	// legitima.
 	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO account_deletion_requests
-		       (contact_kind, contact_hash, user_id, status, verification_hash, verification_expires_at)
+		       (contact_kind, contact_hash, user_id, status, verification_hash, verification_expires_at,
+		        terms_accepted_at)
 		VALUES ($1, $2, $3::uuid, 'pending_verification', NULLIF($4, ''),
-		        CASE WHEN $4 = '' THEN NULL ELSE NOW() + $5::interval END)
+		        CASE WHEN $4 = '' THEN NULL ELSE NOW() + $5::interval END, NOW())
 		ON CONFLICT (contact_hash) WHERE status IN ('pending_verification', 'verified')
 		DO UPDATE SET user_id = EXCLUDED.user_id,
 		              verification_hash = EXCLUDED.verification_hash,
 		              verification_expires_at = EXCLUDED.verification_expires_at,
-		              verification_attempts = 0
+		              verification_attempts = 0,
+		              terms_accepted_at = EXCLUDED.terms_accepted_at
 		WHERE account_deletion_requests.status = 'pending_verification'
 		  AND (account_deletion_requests.verification_expires_at IS NULL
 		       OR account_deletion_requests.verification_expires_at < NOW() + $6::interval)`,
@@ -173,8 +182,10 @@ func (s *Service) enviarCodigo(kind identifier.Kind, canonico string, cuenta *us
 	}
 }
 
-// Verificar comprueba el codigo y deja la solicitud lista para que operaciones
-// la atienda.
+// Verificar comprueba el codigo. Con el codigo correcto empieza el plazo (el dia
+// 0), salvo que la cuenta este bajo revision: esa queda en la cola de
+// operaciones. Un bloqueo (saldo, algo en curso) no es un error de la
+// verificacion: la solicitud queda bloqueada y se le escribe a la persona.
 func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 	_, canonico, err := s.contacto(raw)
 	if err != nil {
@@ -189,29 +200,34 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 	// CONFIRMAR la transaccion (para que el intento sumado quede escrito) y solo
 	// despues responder ErrCodigoInvalido; devolver el error desde dentro la
 	// desharia y el tope de intentos nunca se alcanzaria.
-	var fallido bool
+	var (
+		fallido bool
+		cuenta  string
+		out     *Atendida
+		res     resultado
+	)
 	err = s.conReintentos(ctx, func(tx pgx.Tx) error {
-		fallido = false
+		fallido, cuenta, out, res = false, "", nil, resultado{}
 		var (
-			id        string
-			guardado  *string
-			vence     *time.Time
-			intentos  int
-			conCuenta bool
+			id       string
+			guardado *string
+			vence    *time.Time
+			intentos int
+			cuentaDe *string
 		)
 		err := tx.QueryRow(ctx, `
-			SELECT id::text, verification_hash, verification_expires_at, verification_attempts, user_id IS NOT NULL
+			SELECT id::text, verification_hash, verification_expires_at, verification_attempts, user_id::text
 			  FROM account_deletion_requests
 			 WHERE contact_hash = $1 AND status = 'pending_verification'
 			   FOR UPDATE`, contactHash,
-		).Scan(&id, &guardado, &vence, &intentos, &conCuenta)
+		).Scan(&id, &guardado, &vence, &intentos, &cuentaDe)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCodigoInvalido
 		}
 		if err != nil {
 			return fmt.Errorf("leer solicitud: %w", err)
 		}
-		if !conCuenta || guardado == nil || vence == nil || time.Now().After(*vence) || intentos >= maxIntentosCodigo {
+		if cuentaDe == nil || guardado == nil || vence == nil || time.Now().After(*vence) || intentos >= maxIntentosCodigo {
 			return ErrCodigoInvalido
 		}
 		esperado := []byte(*guardado)
@@ -224,6 +240,7 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 			fallido = true
 			return nil
 		}
+		cuenta = *cuentaDe
 		_, err = tx.Exec(ctx, `
 			UPDATE account_deletion_requests
 			   SET status = 'verified', verified_at = NOW(), verification_hash = NULL
@@ -231,7 +248,17 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 		if err != nil {
 			return fmt.Errorf("marcar verificada: %w", err)
 		}
-		return nil
+		// Una cuenta bajo revision espera a operaciones: no pide la eliminacion
+		// sola. Cualquier otra empieza el plazo ahora, en esta misma transaccion.
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(status, 'active') FROM users WHERE id = $1::uuid`, cuenta).Scan(&status); err != nil {
+			return fmt.Errorf("leer cuenta: %w", err)
+		}
+		if status == "blocked" || status == "suspended" {
+			return nil
+		}
+		out, res, err = atenderEnTx(ctx, tx, id, cuenta, "", opciones{canal: CanalWeb})
+		return err
 	})
 	if err != nil {
 		return err
@@ -239,7 +266,65 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 	if fallido {
 		return ErrCodigoInvalido
 	}
+	s.despuesDeAtender(ctx, cuenta, out, res)
 	return nil
+}
+
+// atenderEnTx pide la eliminacion de la cuenta de una solicitud web ya
+// verificada y deja el resultado escrito en la solicitud: el plazo iniciado
+// (scheduled), bloqueada con la primera razon, o rechazada. adminID es quien la
+// atiende; vacio cuando la atiende el propio codigo de la persona.
+func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID string, op opciones) (*Atendida, resultado, error) {
+	var out *Atendida
+	cerrar := func(estadoFinal, codigo string) error {
+		_, err := tx.Exec(ctx, `
+			UPDATE account_deletion_requests
+			   SET status = $2, result_code = $3, processed_at = NOW(), processed_by = NULLIF($4, '')::uuid
+			 WHERE id = $1::uuid`, solicitudID, estadoFinal, codigo, adminID)
+		if err != nil {
+			return fmt.Errorf("cerrar solicitud: %w", err)
+		}
+		out = &Atendida{Estado: estadoFinal, Codigo: codigo}
+		return nil
+	}
+
+	op.actor = adminID
+	res, err := iniciarEnTx(ctx, tx, userID, op)
+	var bloqueada *ErrBloqueada
+	switch {
+	case err == nil && res.Ya:
+		err = cerrar("scheduled", "ALREADY_REQUESTED")
+	case err == nil:
+		err = cerrar("scheduled", "SCHEDULED")
+	case errors.As(err, &bloqueada):
+		if err = cerrar("blocked", bloqueada.Bloqueos[0].Codigo); err == nil {
+			out.Bloqueos = bloqueada.Bloqueos
+		}
+	case errors.Is(err, ErrRolNoPermitido):
+		err = cerrar("rejected", "ROLE_NOT_ALLOWED")
+	case errors.Is(err, ErrCuentaNoElegible):
+		err = cerrar("rejected", "NOT_ELIGIBLE")
+	case errors.Is(err, ErrCuentaNoEncontrada):
+		err = cerrar("rejected", "NOT_FOUND")
+	}
+	if err != nil {
+		return nil, resultado{}, err
+	}
+	return out, res, nil
+}
+
+// despuesDeAtender manda lo que corresponde tras el commit: la respuesta
+// escrita si empezo el plazo, o lo que hay que resolver si quedo bloqueada.
+func (s *Service) despuesDeAtender(ctx context.Context, userID string, out *Atendida, res resultado) {
+	if userID == "" || out == nil {
+		return
+	}
+	switch out.Estado {
+	case "scheduled":
+		s.despues(userID, res)
+	case "blocked":
+		s.avisarBloqueo(ctx, userID, out.Bloqueos)
+	}
 }
 
 // SolicitudAdmin es una fila de la cola, tal como la ve operaciones. La cuenta
@@ -301,17 +386,19 @@ type Atendida struct {
 	Bloqueos []Bloqueo `json:"blockers,omitempty"`
 }
 
-// Procesar atiende una solicitud verificada: corre la eliminacion con el canal
-// 'web' y, a diferencia de la via de la app, acepta una cuenta bloqueada porque
-// aqui hay una persona de operaciones que la reviso. El resultado queda escrito
-// en la solicitud: completada, o bloqueada con la primera razon.
+// Procesar atiende una solicitud de la cola (una cuenta bajo revision): inicia el
+// plazo con el canal 'web' y, a diferencia de la via de la app, acepta una cuenta
+// bloqueada porque aqui hay una persona de operaciones que la reviso. La cuenta
+// sigue bloqueada: pedir la eliminacion no la desbloquea. El resultado queda
+// escrito en la solicitud: el plazo iniciado, o bloqueada con la primera razon.
 func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*Atendida, error) {
 	var (
-		out *Atendida
-		res resultado
+		out    *Atendida
+		res    resultado
+		cuenta string
 	)
 	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
-		out, res = nil, resultado{}
+		out, res, cuenta = nil, resultado{}, ""
 
 		var estado string
 		var userID *string
@@ -329,53 +416,27 @@ func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*A
 			return ErrSolicitudNoPendiente
 		}
 
-		cerrar := func(estadoFinal, codigo string) error {
+		if userID == nil {
 			_, err := tx.Exec(ctx, `
 				UPDATE account_deletion_requests
-				   SET status = $2, result_code = $3, processed_at = NOW(), processed_by = $4::uuid
-				 WHERE id = $1::uuid`, solicitudID, estadoFinal, codigo, adminID)
+				   SET status = 'rejected', result_code = 'NO_ACCOUNT', processed_at = NOW(), processed_by = $2::uuid
+				 WHERE id = $1::uuid`, solicitudID, adminID)
 			if err != nil {
 				return fmt.Errorf("cerrar solicitud: %w", err)
 			}
-			out = &Atendida{Estado: estadoFinal, Codigo: codigo}
+			out = &Atendida{Estado: "rejected", Codigo: "NO_ACCOUNT"}
 			return nil
 		}
-
-		if userID == nil {
-			return cerrar("rejected", "NO_ACCOUNT")
-		}
-		res, err = eliminarEnTx(ctx, tx, *userID, opciones{
-			canal: CanalWeb, actor: adminID, permitirCuentaBloqueada: true,
+		cuenta = *userID
+		out, res, err = atenderEnTx(ctx, tx, solicitudID, cuenta, adminID, opciones{
+			canal: CanalWeb, permitirCuentaBloqueada: true,
 		})
-		var bloqueada *ErrBloqueada
-		switch {
-		case err == nil:
-			return cerrar("completed", "COMPLETED")
-		case errors.As(err, &bloqueada):
-			if e := cerrar("blocked", bloqueada.Bloqueos[0].Codigo); e != nil {
-				return e
-			}
-			out.Bloqueos = bloqueada.Bloqueos
-			return nil
-		case errors.Is(err, ErrRolNoPermitido):
-			return cerrar("rejected", "ROLE_NOT_ALLOWED")
-		case errors.Is(err, ErrCuentaNoEncontrada):
-			return cerrar("rejected", "NOT_FOUND")
-		default:
-			return err
-		}
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	if userID := s.idDeSolicitud(ctx, solicitudID); userID != "" && out != nil {
-		switch out.Estado {
-		case "completed":
-			s.despues(userID, res)
-		case "blocked":
-			s.avisarBloqueo(ctx, userID, out.Bloqueos)
-		}
-	}
+	s.despuesDeAtender(ctx, cuenta, out, res)
 	return out, nil
 }
 
@@ -431,19 +492,7 @@ func (s *Service) avisarBloqueo(ctx context.Context, userID string, bloqueos []B
 	}(u.Email)
 }
 
-// idDeSolicitud devuelve la cuenta de una solicitud ya atendida, para los
-// efectos posteriores al commit.
-func (s *Service) idDeSolicitud(ctx context.Context, solicitudID string) string {
-	var id *string
-	_ = s.pool.QueryRow(ctx,
-		`SELECT user_id::text FROM account_deletion_requests WHERE id = $1::uuid`, solicitudID).Scan(&id)
-	if id == nil {
-		return ""
-	}
-	return *id
-}
-
-// Rechazar cierra una solicitud verificada sin eliminar nada (por ejemplo, cuando
+// Rechazar cierra una solicitud de la cola sin iniciar nada (por ejemplo, cuando
 // la persona se arrepintio).
 func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) error {
 	tag, err := s.pool.Exec(ctx, `

@@ -950,7 +950,7 @@ func TestDesasociar_AlVencerLaConservacion(t *testing.T) {
 		}
 	}
 	// Los montos siguen ahi.
-	if cuenta1[int64](t, pool, `SELECT amount FROM payouts WHERE user_id = $1::uuid`, a.ID) != 100 {
+	if cuenta1[int64](t, pool, `SELECT amount_minor FROM payouts WHERE user_id = $1::uuid`, a.ID) != 100 {
 		t.Error("la desasociacion toco el monto de un retiro")
 	}
 	if !cuenta1[bool](t, pool, `SELECT closed_at IS NOT NULL FROM qr_merchants WHERE id = $1::uuid`, comercio) {

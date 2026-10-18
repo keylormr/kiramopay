@@ -484,16 +484,22 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return "", false, "", err
 		}
+		// El conflicto devuelve la fila que ya existia, que pudo haberla creado
+		// cerrada otra transaccion entre el SELECT y este INSERT (la solicitud de
+		// eliminacion provisiona cerradas las que faltan): se vuelve a mirar.
 		code := fmt.Sprintf("MERCHANT:%s:%s", en.Account.MerchantID, en.Currency)
 		err = tx.QueryRow(ctx,
 			`INSERT INTO ledger_accounts (code, type, merchant_id, currency, normal_balance)
 			 VALUES ($1, 'merchant_wallet', $2::uuid, $3, 'credit')
 			 ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
-			 RETURNING id::text, normal_balance`,
+			 RETURNING id::text, normal_balance, closed_at IS NOT NULL`,
 			code, en.Account.MerchantID, en.Currency,
-		).Scan(&id, &nb)
+		).Scan(&id, &nb, &cerrada)
 		if err != nil {
 			return "", false, "", fmt.Errorf("provision merchant account: %w", err)
+		}
+		if cerrada {
+			return "", false, "", ErrCuentaCerrada
 		}
 		return id, false, nb, nil
 	}
@@ -534,11 +540,14 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 		`INSERT INTO ledger_accounts (code, type, user_id, currency, normal_balance)
 		 VALUES ($1, 'user_wallet', $2::uuid, $3, 'credit')
 		 ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
-		 RETURNING id::text, normal_balance`,
+		 RETURNING id::text, normal_balance, closed_at IS NOT NULL`,
 		code, en.Account.UserID, en.Currency,
-	).Scan(&id, &nb)
+	).Scan(&id, &nb, &cerrada)
 	if err != nil {
 		return "", false, "", fmt.Errorf("provision user account: %w", err)
+	}
+	if cerrada {
+		return "", false, "", ErrCuentaCerrada
 	}
 	return id, true, nb, nil
 }

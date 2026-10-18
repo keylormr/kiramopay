@@ -169,6 +169,11 @@ func lockoutKey(userID string) string { return "lockout:delacct:uid:" + userID }
 // sumar despues deja que una rafaga en paralelo lo esquive. Sin Redis el tope no
 // frena, igual que en el login.
 func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirmacion) (*Solicitud, error) {
+	// Sin la aceptacion expresa del plazo no hay solicitud. Va antes que todo:
+	// no gasta intentos ni mira la contrasena.
+	if !c.AceptaPlazo {
+		return nil, ErrPlazoNoAceptado
+	}
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, ErrCuentaNoEncontrada
@@ -202,26 +207,21 @@ func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirm
 		s.lockout.ResetLockout(lockoutKey(userID))
 	}
 
-	res, err := s.ejecutar(ctx, userID, opciones{canal: CanalApp})
+	res, err := s.iniciar(ctx, userID, opciones{canal: CanalApp})
 	if err != nil {
 		return nil, err
 	}
 	s.despues(userID, res)
-	return &Solicitud{Ya: res.Ya}, nil
+	return &Solicitud{Ya: res.Ya, SolicitadaEn: res.SolicitadaEn, SeEliminaEl: res.SeEliminaEl}, nil
 }
 
-// iniciar empieza el plazo. Esqueleto: todavia elimina en el acto.
+// iniciar abre la transaccion SERIALIZABLE, pide la eliminacion (el dia 0) y
+// confirma, reintentando si el motor rechaza por serializacion.
 func (s *Service) iniciar(ctx context.Context, userID string, op opciones) (resultado, error) {
-	return s.ejecutar(ctx, userID, op)
-}
-
-// ejecutar abre la transaccion SERIALIZABLE, elimina y confirma, reintentando si
-// el motor rechaza por serializacion.
-func (s *Service) ejecutar(ctx context.Context, userID string, op opciones) (resultado, error) {
 	var res resultado
 	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
 		var err error
-		res, err = eliminarEnTx(ctx, tx, userID, op)
+		res, err = iniciarEnTx(ctx, tx, userID, op)
 		return err
 	})
 	return res, err
@@ -248,7 +248,7 @@ func (s *Service) conReintentos(ctx context.Context, f func(tx pgx.Tx) error) er
 		case <-time.After(time.Duration(intento+1) * 15 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("la eliminacion no pudo serializarse tras %d intentos: %w", maxReintentosSerializacion, ultimo)
+	return fmt.Errorf("no se pudo serializar tras %d intentos: %w", maxReintentosSerializacion, ultimo)
 }
 
 func (s *Service) unaVez(ctx context.Context, f func(tx pgx.Tx) error) error {
@@ -272,9 +272,9 @@ func esReintentable(err error) bool {
 // para que un proveedor lento no retenga la peticion.
 const avisoTimeout = 30 * time.Second
 
-// despues hace lo que no puede estar dentro de la transaccion: cortar los
-// WebSocket y avisar por correo. Nada de esto es critico: la base ya es
-// autoritativa y una falla aqui solo se registra.
+// despues hace lo que no puede estar dentro de la transaccion del dia 0: cortar
+// los WebSocket y mandar la respuesta escrita. Nada de esto es critico: la base
+// ya es autoritativa y una falla aqui solo se registra.
 func (s *Service) despues(userID string, res resultado) {
 	if res.Ya {
 		return
@@ -282,19 +282,24 @@ func (s *Service) despues(userID string, res resultado) {
 	if s.disconnector != nil {
 		s.disconnector.DisconnectUser(userID)
 	}
-	if s.email == nil || res.Correo == "" {
+	subject, text, html := messaging.AccountDeletionRequestedEmail(res.SeEliminaEl,
+		res.SeEliminaEl.AddDate(anosDeConservacion, 0, 0))
+	s.enviarAviso(userID, res.Correo, subject, text, html, "respuesta a la solicitud de eliminacion no enviada")
+}
+
+// enviarAviso manda un correo por fuera de la peticion, acotado por avisoTimeout.
+// El correo no se escribe en el log: es un dato que se va a suprimir.
+func (s *Service) enviarAviso(userID, correo, subject, text, html, siFalla string) {
+	if s.email == nil || correo == "" {
 		return
 	}
-	correo := res.Correo
 	// #nosec G118 -- intentionally detached: the request context dies with the
 	// response and the notice must outlive it; it bounds itself with avisoTimeout.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
 		defer cancel()
-		subject, text, html := messaging.AccountDeletedEmail()
 		if err := s.email.SendEmail(ctx, correo, subject, text, html); err != nil {
-			// El correo no se escribe en el log: es justo el dato que se borro.
-			s.logger.Warn("aviso de cuenta eliminada no enviado", "user", userID, "err", err.Error())
+			s.logger.Warn(siFalla, "user", userID, "err", err.Error())
 		}
 	}()
 }

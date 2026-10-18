@@ -43,7 +43,7 @@ const (
 	// Conservar: lo que la Ley 7786 (art. 16) y el Decreto 36948 (art. 21)
 	// obligan a guardar: identificacion, operaciones, contrapartes, auditoria,
 	// cumplimiento, UIF y fraude. Se conserva identificado y sin tocar hasta
-	// users.retention_until; ese dia se desasocia (pasosDesasociar).
+	// users.retention_until; ese dia se desasocia (pasosDeLaDesasociacion).
 	Conservar Tratamiento = "conservar"
 
 	// ConservarSinDatos: rastro contable sin datos de la persona, o registro

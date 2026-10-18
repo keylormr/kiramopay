@@ -48,7 +48,9 @@ func (h *Handler) Preflight(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, pf)
 }
 
-// Eliminar — POST /users/me/delete-account {"password":"...","totp_code":"..."}
+// Eliminar — POST /users/me/delete-account {"password":"...","totp_code":"...","accept_terms":true}
+//
+// Inicia el plazo de 30 dias (el dia 0) y responde las fechas.
 func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
@@ -64,6 +66,8 @@ func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var bloqueada *ErrBloqueada
 		switch {
+		case errors.Is(err, ErrPlazoNoAceptado):
+			response.Error(w, http.StatusBadRequest, "TERMS_NOT_ACCEPTED", err.Error())
 		case errors.As(err, &bloqueada):
 			response.ErrorConDetalle(w, http.StatusConflict, "DELETION_BLOCKED",
 				"la cuenta tiene algo pendiente que resolver antes de eliminarla",
@@ -98,7 +102,7 @@ func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, res)
 }
 
-// Solicitar — POST /public/account-deletion-requests {"contact":"..."}
+// Solicitar — POST /public/account-deletion-requests {"contact":"...","accept_terms":true}
 //
 // La respuesta es identica exista o no la cuenta. Lo unico que distingue es la
 // forma del dato (400 si no es correo ni telefono), que no revela nada.
@@ -112,11 +116,14 @@ func (h *Handler) Solicitar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.Solicitar(r.Context(), req.Contacto, req.AceptaPlazo); err != nil {
-		if errors.Is(err, ErrContactoInvalido) {
+		switch {
+		case errors.Is(err, ErrPlazoNoAceptado):
+			response.Error(w, http.StatusBadRequest, "TERMS_NOT_ACCEPTED", err.Error())
+		case errors.Is(err, ErrContactoInvalido):
 			response.Error(w, http.StatusBadRequest, "INVALID_CONTACT", err.Error())
-			return
+		default:
+			response.Error(w, http.StatusInternalServerError, "REQUEST_FAILED", "internal server error")
 		}
-		response.Error(w, http.StatusInternalServerError, "REQUEST_FAILED", "internal server error")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

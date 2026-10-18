@@ -239,32 +239,85 @@ func DeletionCodeEmail(code string) (subject, textBody, htmlBody string) {
 	return subject, text.String(), htmlBody
 }
 
-// AccountDeletionRequestedEmail es la respuesta escrita del dia 0. Esqueleto.
-func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subject, textBody, htmlBody string) {
-	return "", "", ""
-}
+// zonaCR es la hora de Costa Rica, la de las fechas que se le dan a la persona.
+// Si el sistema no trae la base de zonas, se usa el desfase fijo: el pais no
+// tiene horario de verano.
+var zonaCR = func() *time.Location {
+	if z, err := time.LoadLocation("America/Costa_Rica"); err == nil {
+		return z
+	}
+	return time.FixedZone("CST", -6*3600)
+}()
 
-// AccountDeletedEmail avisa que la cuenta fue eliminada. Es la unica pista que
-// recibe el dueno legitimo si la solicitud la hizo alguien con su sesion y su
-// contrasena, asi que dice que hacer en ese caso. No lleva datos de la cuenta:
-// el correo mismo es lo ultimo que se borra.
-func AccountDeletedEmail() (subject, textBody, htmlBody string) {
-	subject = "Tu cuenta de KiramoPay fue eliminada"
+func fechaCR(t time.Time) string { return t.In(zonaCR).Format("02/01/2006") }
+
+// AccountDeletionRequestedEmail es la respuesta escrita a la solicitud de
+// eliminacion, el dia 0 (Ley 8968, art. 7, y su Reglamento, art. 22). Dice que
+// se suprime y cuando, que se conserva por la Ley 7786 y hasta cuando, que la
+// persona puede reactivar la cuenta antes del cierre, y que puede acudir a la
+// PRODHAB. seEliminaEl es el dia 30; conservaHasta, el vencimiento de la
+// conservacion contado desde ese dia.
+//
+// Nunca nombra un reporte a las autoridades ni el motivo de una conservacion
+// mas larga: eso no se le comunica a la persona.
+func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subject, textBody, htmlBody string) {
+	subject = "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay"
+	dia30 := fechaCR(seEliminaEl)
+	hasta := fechaCR(conservaHasta)
+
+	bloqueada := "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay y aceptaste el plazo de 30 días. " +
+		"Desde ahora tu cuenta está bloqueada: no podés entrar, mover dinero ni recibir avisos."
+	suprime := "El " + dia30 + " se suprimen de forma definitiva tus datos de acceso, tus preferencias, " +
+		"tus contactos, tus presupuestos, tus pagos programados, tus alertas, tus conversaciones con el asistente " +
+		"y los dispositivos registrados."
+	conserva := "La Ley 7786 obliga a KiramoPay a conservar tus documentos de identificación y el registro de tus " +
+		"operaciones durante cinco años después del cierre, es decir, hasta el " + hasta + ". Se guardan aparte, " +
+		"fuera de la aplicación, y solo se usan para cumplir esa ley. El plazo puede ser mayor únicamente si la ley " +
+		"o una autoridad competente lo exige. Al vencer, dejan de estar asociados a vos de forma irreversible."
+	reactivar := "Si cambiás de opinión, hasta el " + dia30 + " podés reactivar tu cuenta: entrá a KiramoPay con " +
+		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta queda como estaba."
+	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
+		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
+	ajeno := "Si no fuiste vos quien lo pidió, entrá con tu contraseña, reactivá la cuenta y cambiá la contraseña, " +
+		"o escribinos desde la página de ayuda de KiramoPay."
 
 	var text strings.Builder
-	text.WriteString("Tu cuenta de KiramoPay fue eliminada y ya no se puede usar.\n\n")
-	text.WriteString("Se borraron tus datos personales y de acceso. Los registros de movimientos de dinero se conservan sin tus datos de contacto, " +
-		"como se explica en la política de privacidad.\n\n")
-	text.WriteString("Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay.\n")
+	for _, p := range []string{bloqueada, suprime, conserva, reactivar, prodhab, ajeno} {
+		text.WriteString(p + "\n\n")
+	}
 
 	body := new(strings.Builder)
-	body.WriteString(paragraph("Tu cuenta de KiramoPay fue eliminada y ya no se puede usar."))
-	body.WriteString(paragraph("Se borraron tus datos personales y de acceso. Los registros de movimientos de dinero se conservan " +
-		"sin tus datos de contacto, como se explica en la política de privacidad."))
-	body.WriteString(note("Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay."))
+	body.WriteString(paragraph(bloqueada))
+	body.WriteString(paragraph("<strong>Qué se borra.</strong> " + suprime))
+	body.WriteString(paragraph("<strong>Qué se conserva y hasta cuándo.</strong> " + conserva))
+	body.WriteString(paragraph("<strong>Si cambiás de opinión.</strong> " + reactivar))
+	body.WriteString(paragraph("<strong>Tus derechos.</strong> " + prodhab))
+	body.WriteString(note(ajeno))
+
+	htmlBody = emailShell("Recibimos tu solicitud", "Tu cuenta se elimina el "+dia30+".", body.String())
+	return subject, strings.TrimRight(text.String(), "\n") + "\n", htmlBody
+}
+
+// AccountDeletedEmail avisa, el dia 30, que la cuenta fue eliminada y que lo
+// anunciado en la respuesta del dia 0 ya se cumplio. No lleva datos de la
+// cuenta: el correo mismo deja de estar en uso en ese acto.
+func AccountDeletedEmail() (subject, textBody, htmlBody string) {
+	subject = "Tu cuenta de KiramoPay fue eliminada"
+	cerrada := "Tu cuenta de KiramoPay fue eliminada y ya no se puede usar ni reactivar."
+	hecho := "Se suprimieron tus datos de acceso, tus preferencias, tus contactos y el resto de lo que te " +
+		"indicamos al recibir tu solicitud. Lo que la Ley 7786 obliga a conservar queda guardado aparte, por el " +
+		"plazo que te informamos, y solo se usa para cumplir esa ley."
+	ajeno := "Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay."
+
+	text := cerrada + "\n\n" + hecho + "\n\n" + ajeno + "\n"
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph(cerrada))
+	body.WriteString(paragraph(hecho))
+	body.WriteString(note(ajeno))
 
 	htmlBody = emailShell("Tu cuenta fue eliminada", "Tu cuenta de KiramoPay fue eliminada.", body.String())
-	return subject, text.String(), htmlBody
+	return subject, text, htmlBody
 }
 
 // DeletionBlockedEmail le dice a quien pidio eliminar su cuenta desde la web que

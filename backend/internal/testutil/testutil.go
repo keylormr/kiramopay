@@ -276,9 +276,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_by     UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE INDEX IF NOT EXISTS idx_users_blocked ON users (blocked_at DESC) WHERE status = 'blocked';
-	DO $$ BEGIN
-		ALTER TABLE users ADD CONSTRAINT chk_users_status CHECK (status IN ('active','suspended','blocked','closed'));
-	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	-- El CHECK de estado es el de la 077, que agrega 'pending_deletion' (la
+	-- cuenta con la eliminacion en curso) a los de la 018.
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_status;
+	ALTER TABLE users ADD CONSTRAINT chk_users_status
+		CHECK (status IN ('active','suspended','blocked','closed','pending_deletion'));
 	-- Espejo de los CHECK de la 052: sin ellos una escritura incoherente
 	-- (blocked sin fecha ni motivo) pasaria verde en tests y fallaria en prod.
 	DO $$ BEGIN
@@ -295,21 +297,43 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- produccion. Aqui va sin CONCURRENTLY porque el esquema de pruebas se crea
 	-- en una sola consulta, que es de por si una transaccion.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-	-- Eliminacion de cuenta (migracion 077): la tumba y su coherencia. El CHECK de
-	-- bloqueo se relaja para 'closed', igual que alla.
-	ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymized_at    TIMESTAMPTZ;
-	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel VARCHAR(16);
+	-- Eliminacion de cuenta (migracion 077): la solicitud, el plazo, la
+	-- conservacion y sus CHECK, iguales que alla. El CHECK de bloqueo se relaja
+	-- para 'closed'.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS biometric_public_key TEXT;
-	DO $$ BEGIN
-		ALTER TABLE users ADD CONSTRAINT chk_users_deletion_channel
-			CHECK (deletion_channel IS NULL OR deletion_channel IN ('in_app', 'web', 'admin'));
-	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-	DO $$ BEGIN
-		ALTER TABLE users ADD CONSTRAINT chk_users_anonimizada_coherente CHECK (
-			(anonymized_at IS NULL AND deletion_channel IS NULL)
-			OR (anonymized_at IS NOT NULL AND deletion_channel IS NOT NULL
-			    AND status = 'closed' AND deleted_at IS NOT NULL));
-	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at      TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_due_at            TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_terms_accepted_at TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel           VARCHAR(16);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS retention_until            TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS retention_extended_at      TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS dissociated_at             TIMESTAMPTZ;
+	-- Una base de pruebas que sobrevivio a la version anterior de la 077.
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_anonimizada_coherente;
+	ALTER TABLE users DROP COLUMN IF EXISTS anonymized_at;
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_deletion_channel;
+	ALTER TABLE users ADD CONSTRAINT chk_users_deletion_channel
+		CHECK (deletion_channel IS NULL OR deletion_channel IN ('in_app', 'web', 'admin'));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_solicitud_completa;
+	ALTER TABLE users ADD CONSTRAINT chk_users_solicitud_completa CHECK (
+		(deletion_requested_at IS NULL AND deletion_due_at IS NULL
+		 AND deletion_terms_accepted_at IS NULL AND deletion_channel IS NULL)
+		OR (deletion_requested_at IS NOT NULL AND deletion_due_at > deletion_requested_at
+		    AND deletion_terms_accepted_at IS NOT NULL AND deletion_channel IS NOT NULL));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_por_eliminar_coherente;
+	ALTER TABLE users ADD CONSTRAINT chk_users_por_eliminar_coherente CHECK (
+		(status = 'pending_deletion' AND deletion_requested_at IS NOT NULL AND deleted_at IS NULL)
+		OR (status <> 'pending_deletion'
+		    AND (deletion_requested_at IS NULL OR status IN ('blocked', 'suspended', 'closed'))));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_conservacion_coherente;
+	ALTER TABLE users ADD CONSTRAINT chk_users_conservacion_coherente CHECK (
+		(retention_until IS NULL AND dissociated_at IS NULL)
+		OR (retention_until IS NOT NULL AND status = 'closed' AND deleted_at IS NOT NULL
+		    AND deletion_requested_at IS NOT NULL));
+	CREATE INDEX IF NOT EXISTS idx_users_por_eliminar ON users (deletion_due_at)
+		WHERE deletion_requested_at IS NOT NULL AND deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_users_por_desasociar ON users (retention_until)
+		WHERE retention_until IS NOT NULL AND dissociated_at IS NULL;
 	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_blocked_coherente;
 	ALTER TABLE users ADD CONSTRAINT chk_users_blocked_coherente CHECK (
 		(status = 'blocked' AND blocked_at IS NOT NULL AND blocked_reason IS NOT NULL)
@@ -479,7 +503,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		metadata JSONB DEFAULT '{}',
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
-	-- Migracion 077: la cuenta de una persona eliminada deja de resolverse.
+	-- Migracion 077: la cuenta de quien pidio cerrarla deja de resolverse.
 	ALTER TABLE ledger_accounts ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_user_currency
 		ON ledger_accounts (user_id, currency) WHERE type = 'user_wallet';
@@ -1083,6 +1107,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS plan VARCHAR(16) NOT NULL DEFAULT 'base';
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS promo_hasta TIMESTAMPTZ;
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS primera_aprobacion_at TIMESTAMPTZ;
+	-- Migracion 077: el comercio de una cuenta cerrada queda cerrado e inactivo.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cerrado_inactivo;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cerrado_inactivo
+		CHECK (closed_at IS NULL OR active = false);
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
 	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
 
@@ -1546,7 +1575,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
-	-- Cola de solicitudes de eliminacion hechas desde la web (migracion 077).
+	-- Solicitudes de eliminacion hechas desde la web (migracion 077). Una base
+	-- que sobrevivio a la version anterior de la 077 la trae sin la aceptacion
+	-- del plazo: se recrea.
+	DO $$ BEGIN
+		IF to_regclass('public.account_deletion_requests') IS NOT NULL
+		   AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+		                    WHERE table_name = 'account_deletion_requests' AND column_name = 'terms_accepted_at') THEN
+			DROP TABLE account_deletion_requests;
+		END IF;
+	END $$;
 	CREATE TABLE IF NOT EXISTS account_deletion_requests (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		contact_kind VARCHAR(8) NOT NULL,
@@ -1556,6 +1594,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		verification_hash VARCHAR(64),
 		verification_attempts INTEGER NOT NULL DEFAULT 0,
 		verification_expires_at TIMESTAMPTZ,
+		terms_accepted_at TIMESTAMPTZ NOT NULL,
 		result_code VARCHAR(40),
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		verified_at TIMESTAMPTZ,
@@ -1563,12 +1602,54 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		processed_by UUID REFERENCES users(id),
 		CONSTRAINT chk_adr_contact_kind CHECK (contact_kind IN ('email', 'phone')),
 		CONSTRAINT chk_adr_status CHECK (status IN
-			('pending_verification', 'verified', 'completed', 'blocked', 'rejected', 'expired')),
+			('pending_verification', 'verified', 'scheduled', 'blocked', 'rejected', 'expired', 'cancelled')),
 		CONSTRAINT chk_adr_attempts CHECK (verification_attempts >= 0)
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_adr_contacto_abierto
 		ON account_deletion_requests (contact_hash)
 		WHERE status IN ('pending_verification', 'verified');
+
+	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
+	CREATE TABLE IF NOT EXISTS closed_account_records (
+		user_id        UUID PRIMARY KEY REFERENCES users(id),
+		first_name     VARCHAR(100),
+		last_name      VARCHAR(100),
+		birth_date     DATE,
+		birth_date_enc BYTEA,
+		cedula_hash    VARCHAR(64),
+		cedula_enc     BYTEA,
+		phone_hash     VARCHAR(64),
+		phone_enc      BYTEA,
+		email_hash     VARCHAR(64),
+		email_enc      BYTEA,
+		closed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		dissociated_at TIMESTAMPTZ,
+		CONSTRAINT chk_car_desasociada_vacia CHECK (
+			dissociated_at IS NULL
+			OR (first_name IS NULL AND last_name IS NULL AND birth_date IS NULL
+			    AND birth_date_enc IS NULL AND cedula_hash IS NULL AND cedula_enc IS NULL
+			    AND phone_hash IS NULL AND phone_enc IS NULL
+			    AND email_hash IS NULL AND email_enc IS NULL))
+	);
+
+	-- Columnas y tabla de produccion que la desasociacion vacia y que este
+	-- esquema no declaraba: transactions las trae desde la 001, y
+	-- sinpe_history_archive es la copia plana que dejo la 023.
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS counterparty_account VARCHAR(50);
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS location_lat DECIMAL(10,8);
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS location_lng DECIMAL(11,8);
+	CREATE TABLE IF NOT EXISTS sinpe_history_archive (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		phone VARCHAR(15) NOT NULL,
+		contact_name VARCHAR(100) NOT NULL,
+		amount BIGINT NOT NULL,
+		fee BIGINT DEFAULT 0,
+		type VARCHAR(20) NOT NULL,
+		status VARCHAR(20) DEFAULT 'completed',
+		description TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -1599,7 +1680,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	tables := []string{
-		"account_deletion_requests", "identity_verifications", "payment_history",
+		"account_deletion_requests", "closed_account_records", "sinpe_history_archive",
+		"identity_verifications", "payment_history",
 		"assistant_conversations", "card_transactions", "cross_border_transfers",
 		"regional_wallets", "user_devices", "linked_bank_accounts",
 		"recurring_payments", "saved_services", "budgets",

@@ -3,7 +3,12 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/user"
+	"github.com/kiramopay/backend/pkg/identifier"
 )
 
 // Cuenta con la eliminacion en curso (users.status = 'pending_deletion', ver la
@@ -42,3 +47,55 @@ func (e *CuentaPorEliminarError) Is(target error) bool { return target == ErrCue
 // SetCuentasPorEliminar cablea el servicio de eliminacion, que se construye
 // despues que este (mismo patron que SetDisconnector en adminusers).
 func (s *Service) SetCuentasPorEliminar(c CuentasPorEliminar) { s.porEliminar = c }
+
+// loginPorEliminar resuelve el login de una cuenta con la eliminacion en curso,
+// con la contrasena ya verificada. Sin reactivate responde la fecha del cierre;
+// con reactivate cancela el proceso y emite la sesion. Si ya no se puede volver
+// (vencio el plazo, operaciones la bloqueo) o no hay quien responda por la
+// eliminacion, se rechaza cerrado como cualquier cuenta que no puede entrar.
+func (s *Service) loginPorEliminar(ctx context.Context, u *user.UserRecord, req *LoginRequest, kind identifier.Kind, canonical string, lc LoginContext) (*LoginResponse, error) {
+	rechazar := func() (*LoginResponse, error) {
+		s.auditarLoginNoActivo(u, lc)
+		return nil, ErrAccountBlocked
+	}
+	if s.porEliminar == nil {
+		return rechazar()
+	}
+	fecha, reactivable, err := s.porEliminar.SeEliminaEl(ctx, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("consultar la eliminacion: %w", err)
+	}
+	if !reactivable {
+		return rechazar()
+	}
+	if !req.Reactivate {
+		s.auditarLoginNoActivo(u, lc)
+		return nil, &CuentaPorEliminarError{SeEliminaEl: fecha}
+	}
+	ok, err := s.porEliminar.Reactivar(ctx, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("reactivar la cuenta: %w", err)
+	}
+	if !ok {
+		return rechazar()
+	}
+	u.Status = "active"
+	return s.emitirSesion(ctx, u, kind, canonical, lc)
+}
+
+// auditarLoginNoActivo deja en la auditoria el intento de entrar a una cuenta
+// que no esta activa, con su estado en el detalle.
+func (s *Service) auditarLoginNoActivo(u *user.UserRecord, lc LoginContext) {
+	if s.auditLogger == nil {
+		return
+	}
+	s.auditLogger.Log(audit.Event{
+		UserID:       u.ID,
+		Action:       "login_blocked",
+		ResourceType: "session",
+		IPAddress:    lc.IPAddress,
+		UserAgent:    lc.UserAgent,
+		Details:      map[string]interface{}{"status": u.Status},
+		RiskLevel:    "medium",
+	})
+}

@@ -33,6 +33,20 @@ func noStore(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 }
 
+// responderPorEliminar contesta ACCOUNT_PENDING_DELETION con la fecha del
+// cierre si err es una cuenta con la eliminacion en curso. Devuelve si respondio.
+func responderPorEliminar(w http.ResponseWriter, err error) bool {
+	var porEliminar *CuentaPorEliminarError
+	if !errors.As(err, &porEliminar) {
+		return false
+	}
+	noStore(w)
+	response.ErrorConDetalle(w, http.StatusForbidden, "ACCOUNT_PENDING_DELETION",
+		"account pending deletion",
+		map[string]any{"deletion_due_at": porEliminar.SeEliminaEl.UTC()})
+	return true
+}
+
 func loginContext(r *http.Request) LoginContext {
 	// La IP se valida antes de salir: acaba en NULLIF($6,'')::inet al crear la
 	// sesion, y un valor no parseable —"unknown" es real, lo emiten varios
@@ -65,6 +79,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Login(r.Context(), &req, loginContext(r))
 	if err != nil {
+		// Eliminacion en curso: 403 con la fecha del cierre, para que la pantalla
+		// ofrezca reactivar. Tambien solo con la contrasena correcta.
+		if responderPorEliminar(w, err) {
+			return
+		}
 		// Cuenta bloqueada: 403 con codigo propio para que el cliente lo
 		// muestre. Solo se llega aqui con la contrasena correcta (Service.Login).
 		if errors.Is(err, ErrAccountBlocked) {
@@ -273,6 +292,9 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 			h.cookies.clearRefreshCookie(w)
 		}
 		noStore(w)
+		if responderPorEliminar(w, err) {
+			return
+		}
 		// Cuenta bloqueada: la cookie tambien se limpia (sus sesiones ya estan
 		// revocadas) y el cliente recibe el codigo distinguible.
 		if errors.Is(err, ErrAccountBlocked) {

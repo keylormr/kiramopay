@@ -161,10 +161,15 @@ func (r *Repository) blockAndRevoke(ctx context.Context, userID, reason, updateS
 // a mano una demo vencida duraria hasta el siguiente tick del barrido, que la
 // volveria a bloquear con el mismo motivo. Un vencimiento FUTURO se conserva:
 // ahi el desbloqueo resuelve otra cosa y la demo sigue teniendo su fecha.
+//
+// Una cuenta con la eliminacion en curso (la persona la pidio antes o durante el
+// bloqueo) no vuelve a 'active' sino a 'pending_deletion': la decision de la
+// persona sigue en pie y el barrido la cierra el dia 30, salvo que la reactive.
 func (r *Repository) UnblockUser(ctx context.Context, userID string) (found bool, err error) {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE users
-		    SET status = 'active', blocked_at = NULL, blocked_reason = NULL,
+		    SET status = CASE WHEN deletion_requested_at IS NOT NULL THEN 'pending_deletion' ELSE 'active' END,
+		        blocked_at = NULL, blocked_reason = NULL,
 		        blocked_by = NULL, updated_at = NOW(),
 		        expires_at = CASE WHEN expires_at <= NOW() THEN NULL ELSE expires_at END
 		  WHERE id = $1::uuid AND deleted_at IS NULL`,
