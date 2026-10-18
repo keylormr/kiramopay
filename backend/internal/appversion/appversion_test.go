@@ -1,10 +1,12 @@
 package appversion
 
 import (
-	"strings"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,6 +17,9 @@ func handlerDePrueba(api, web string) *Handler {
 	h.apiURL = api
 	h.webURL = web
 	h.descargaFmt = web + "/download/%s/kiramopay.apk"
+	// Sin servidor de novedades: las pruebas que no las miran no salen a la
+	// red. Las que si, apuntan notasFmt a servidorNotas.
+	h.notasFmt = ""
 	h.token = ""
 	return h
 }
@@ -290,5 +295,122 @@ func TestGetLatest_ConCacheViejaAndroidSiRecibeElAPK(t *testing.T) {
 	_, info := pedirPlataforma(t, h, "?platform=android")
 	if !strings.HasSuffix(info.URL, ".apk") {
 		t.Fatalf("android no recibio el APK: %q", info.URL)
+	}
+}
+
+// ── Novedades ────────────────────────────────────────────────────────────────
+// La actualizacion es obligatoria y el aviso dice que trae. La app instalada no
+// conoce el changelog de la version nueva: se lo da el servidor, que lo lee del
+// notas.json que el CI adjunta a cada release.
+
+// Servidor que imita la descarga de un adjunto del release. GitHub no sirve el
+// archivo en esa URL: redirige al almacenamiento de objetos, y hay que seguir
+// la redireccion (el cliente principal no las sigue a proposito).
+func servidorNotas(t *testing.T, tag, cuerpo string, status int) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/download/"+tag+"/notas.json", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/objetos/notas.json", http.StatusFound)
+	})
+	mux.HandleFunc("/objetos/notas.json", func(w http.ResponseWriter, r *http.Request) {
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte(cuerpo))
+	})
+	return httptest.NewServer(mux)
+}
+
+func conNotas(api, web, notas string) *Handler {
+	h := handlerDePrueba(api, web)
+	h.notasFmt = notas + "/download/%s/notas.json"
+	return h
+}
+
+func TestGetLatest_TraeLasNovedadesDelRelease(t *testing.T) {
+	api := servidorAPI(t, http.StatusOK, false)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := servidorNotas(t, "v2.3.6", `{"version":"2.3.6","cambios":["Primero","Segundo"]}`, http.StatusOK)
+	defer notas.Close()
+
+	code, info := pedir(t, conNotas(api.URL, web.URL, notas.URL))
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200", code)
+	}
+	if want := []string{"Primero", "Segundo"}; !reflect.DeepEqual(info.Notas, want) {
+		t.Fatalf("notes=%q, esperaba %q", info.Notas, want)
+	}
+}
+
+// En Render la cuota de la API suele estar agotada y la version sale por la
+// redireccion: ese camino, que es el de todos los dias, tambien trae las
+// novedades.
+func TestGetLatest_PorLaRedireccionTambienTraeLasNovedades(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := servidorNotas(t, "v2.3.6", `{"version":"2.3.6","cambios":["Uno"]}`, http.StatusOK)
+	defer notas.Close()
+
+	code, info := pedir(t, conNotas(api.URL, web.URL, notas.URL))
+	if code != http.StatusOK || !reflect.DeepEqual(info.Notas, []string{"Uno"}) {
+		t.Fatalf("code=%d notes=%q, esperaba 200 con [Uno]", code, info.Notas)
+	}
+}
+
+// Un release sin notas.json (todos los anteriores a este cambio) o una descarga
+// que falla no pueden dejar a la gente sin el aviso: la version sale igual y
+// la lista de novedades va vacia, nunca null (la pantalla la recorre).
+func TestGetLatest_SinNovedadesLaVersionSaleIgualConListaVacia(t *testing.T) {
+	for _, caso := range []struct {
+		nombre string
+		cuerpo string
+		status int
+	}{
+		{"sin adjunto", "", http.StatusNotFound},
+		{"adjunto roto", "no es json", http.StatusOK},
+		{"notas de otra version", `{"version":"2.3.5","cambios":["Viejo"]}`, http.StatusOK},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			api := servidorAPI(t, http.StatusOK, false)
+			defer api.Close()
+			web := servidorWeb(t, true)
+			defer web.Close()
+			notas := servidorNotas(t, "v2.3.6", caso.cuerpo, caso.status)
+			defer notas.Close()
+
+			rec := httptest.NewRecorder()
+			conNotas(api.URL, web.URL, notas.URL).GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("code=%d, esperaba 200: sin novedades la version se ofrece igual", rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), `"version":"2.3.6"`) || !strings.Contains(rec.Body.String(), `"notes":[]`) {
+				t.Fatalf("body=%s, esperaba la 2.3.6 con notes:[]", rec.Body.String())
+			}
+		})
+	}
+}
+
+// iOS comparte la version y tambien lo que trae.
+func TestPlataforma_IOSRecibeLasMismasNovedades(t *testing.T) {
+	h := conCacheYCanal("https://testflight.apple.com/join/abc123")
+	h.cache.Notas = []string{"Algo nuevo"}
+	_, info := pedirPlataforma(t, h, "?platform=ios")
+	if !reflect.DeepEqual(info.Notas, []string{"Algo nuevo"}) {
+		t.Fatalf("notes=%q, esperaba las mismas novedades que Android", info.Notas)
+	}
+}
+
+// En produccion las novedades se buscan en el adjunto del release que publica
+// el CI (android-apk.yml).
+func TestNewHandler_BuscaLasNovedadesEnElRelease(t *testing.T) {
+	got := fmt.Sprintf(NewHandler().notasFmt, "v2.8.0")
+	if want := "https://github.com/keylormr/kiramopay/releases/download/v2.8.0/notas.json"; got != want {
+		t.Fatalf("notasFmt da %q, esperaba %q", got, want)
 	}
 }

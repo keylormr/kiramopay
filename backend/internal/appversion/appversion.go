@@ -50,8 +50,9 @@ const (
 )
 
 type infoVersion struct {
-	Version string `json:"version"`
-	URL     string `json:"url"`
+	Version string   `json:"version"`
+	URL     string   `json:"url"`
+	Notas   []string `json:"notes"`
 }
 
 type Handler struct {
@@ -66,6 +67,7 @@ type Handler struct {
 	apiURL      string
 	webURL      string
 	descargaFmt string
+	notasFmt    string
 	token       string
 }
 
