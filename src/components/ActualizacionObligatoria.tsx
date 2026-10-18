@@ -18,12 +18,14 @@ import type { PlataformaApp } from '../api/repositories/appversion.repository';
 
 interface Props {
   version: string;
+  /** La que corre en el telefono. */
+  instalada?: string;
   notas: string[];
   plataforma: PlataformaApp | null;
   onActualizar: () => void;
 }
 
-export const ActualizacionObligatoria: React.FC<Props> = ({ version, notas, plataforma, onActualizar }) => {
+export const ActualizacionObligatoria: React.FC<Props> = ({ version, instalada, notas, plataforma, onActualizar }) => {
   const { t } = useLanguage();
   const ios = plataforma === 'ios';
 
@@ -67,6 +69,12 @@ export const ActualizacionObligatoria: React.FC<Props> = ({ version, notas, plat
       </div>
 
       <div className="px-6 pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] border-t border-white/10">
+        {/* Si la instalacion falla, con esto la persona sabe que pedir. */}
+        {instalada && (
+          <p className="mb-3 text-center text-xs text-gray-400 tabular-nums">
+            {t('update_installed').replace('{version}', instalada)}
+          </p>
+        )}
         <button
           type="button"
           onClick={onActualizar}
@@ -90,6 +98,7 @@ export const BarreraDeActualizacion: React.FC<{ children: React.ReactNode }> = (
   return (
     <ActualizacionObligatoria
       version={actualizacion.version}
+      instalada={actualizacion.instalada}
       notas={actualizacion.notas}
       plataforma={plataforma}
       onActualizar={actualizar}

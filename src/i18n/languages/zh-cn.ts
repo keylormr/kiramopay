@@ -871,6 +871,7 @@ const zhCn: TranslationKeys = {
   update_download: '下载',
   update_open: '更新',
   update_whats_new: '{version} 版本新功能',
+  update_installed: '你当前的版本是 {version}。',
   promo_invite_title: '邀请好友赚积分',
   promo_invite_body: '把朋友带到KiramoPay：分享你的链接，几分钟即可开通，每有一位好友注册，你就能获得积分。',
   promo_invite_cta: '分享我的链接',

@@ -63,6 +63,13 @@ jobs:
       # La misma descripcion que publica android-apk.yml: los dos workflows
       # escriben en el mismo release y el que termina ultimo no debe dejarla
       # distinta. El notas.json lo adjunta solo el de Android.
+      # Un tag con build.gradle o el proyecto de iOS atrasados publica una app
+      # que se cree la version anterior: con la actualizacion obligatoria, la
+      # barrera no se iria nunca despues de instalarla.
+      - name: Version sincronizada
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run check:version
+
       - name: Notas de la version
         if: startsWith(github.ref, 'refs/tags/')
         run: node scripts/notas-de-version.mjs "$GITHUB_REF_NAME"

@@ -873,6 +873,7 @@ const fr: TranslationKeys = {
   update_download: 'Télécharger',
   update_open: 'Mettre à jour',
   update_whats_new: 'Nouveautés de la version {version}',
+  update_installed: 'Vous avez la version {version}.',
   promo_invite_title: 'Invitez et gagnez des points',
   promo_invite_body: 'Amenez vos amis sur KiramoPay : partagez-leur votre lien, ils sont prêts en quelques minutes et vous recevez des points pour chaque invité qui s’inscrit.',
   promo_invite_cta: 'Partager mon lien',

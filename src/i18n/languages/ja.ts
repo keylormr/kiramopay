@@ -870,6 +870,7 @@ const ja: TranslationKeys = {
   update_download: 'ダウンロード',
   update_open: 'アップデート',
   update_whats_new: 'バージョン {version} の新機能',
+  update_installed: '現在のバージョンは {version} です。',
   promo_invite_title: '招待してポイントをゲット',
   promo_invite_body: '友達をKiramoPayに招待しよう。あなたのリンクを共有すれば数分で始められ、登録した友達ひとりごとにポイントがもらえます。',
   promo_invite_cta: 'リンクを共有する',

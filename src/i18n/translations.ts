@@ -1013,6 +1013,8 @@ export type TranslationKeys = {
   // Encabezado de la lista de novedades del aviso obligatorio. La lista viene
   // del changelog del release, que hoy esta solo en espanol.
   update_whats_new: string;
+  // La version que corre en el telefono, al pie de la barrera.
+  update_installed: string;
   promo_invite_title: string;
   promo_invite_body: string;
   promo_invite_cta: string;

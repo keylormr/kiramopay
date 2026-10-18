@@ -870,6 +870,7 @@ const hi: TranslationKeys = {
   update_download: 'डाउनलोड करें',
   update_open: 'अपडेट करें',
   update_whats_new: 'संस्करण {version} में नया क्या है',
+  update_installed: 'आपके पास संस्करण {version} है।',
   promo_invite_title: 'आमंत्रित करें और पॉइंट्स कमाएं',
   promo_invite_body: 'अपने दोस्तों को KiramoPay पर लाएं: उन्हें अपना लिंक भेजें, वे मिनटों में तैयार हो जाते हैं और पंजीकरण करने वाले हर आमंत्रित व्यक्ति पर आपको पॉइंट्स मिलते हैं।',
   promo_invite_cta: 'मेरा लिंक साझा करें',

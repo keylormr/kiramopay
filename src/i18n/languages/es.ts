@@ -872,6 +872,7 @@ const es: TranslationKeys = {
   update_download: 'Descargar',
   update_open: 'Actualizar',
   update_whats_new: 'Qué trae la versión {version}',
+  update_installed: 'Tienes la versión {version}.',
   promo_invite_title: 'Invita y gana puntos',
   promo_invite_body: 'Trae a tus amigos a KiramoPay: compárteles tu enlace, quedan listos en minutos y tú recibes puntos por cada invitado que se registre.',
   promo_invite_cta: 'Compartir mi enlace',

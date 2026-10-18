@@ -11,9 +11,9 @@ import type { PlataformaApp } from '@/api/repositories/appversion.repository';
 //
 // Toda version nueva es obligatoria: no hay "Despues". La version anterior de
 // este hook guardaba la pospuesta por 24 horas y la app vieja se seguia usando.
-// Se revisa al abrir y cada vez que la app vuelve a primer plano, porque puede
-// quedar abierta dias. Sin red, o con el servidor sin respuesta, no se bloquea:
-// la proxima revision vuelve a intentar.
+// Se revisa al abrir, cada vez que la app vuelve a primer plano (puede quedar
+// abierta dias) y al volver la conexion. Sin red, o con el servidor sin
+// respuesta, no se bloquea: la proxima revision vuelve a intentar.
 //
 // Las dos plataformas comparten la deteccion pero NO el desenlace:
 //
@@ -32,6 +32,8 @@ import type { PlataformaApp } from '@/api/repositories/appversion.repository';
 
 export interface ActualizacionDisponible {
   version: string;
+  /** La que corre en el telefono: si la instalacion falla, con esto se pide ayuda. */
+  instalada: string;
   url: string;
   /** Lo que trae la version; vacia si el release no lo dice. */
   notas: string[];
@@ -103,7 +105,7 @@ export function useActualizacion(): {
         // Sin URL no hay nada que abrir: el boton quedaria muerto.
         if (!url) return;
         if (!esVersionMasNueva(version, info.version)) return;
-        setActualizacion({ version, url, notas: notasLimpias(notes) });
+        setActualizacion({ version, instalada: info.version, url, notas: notasLimpias(notes) });
       } catch {
         // Sin red o backend caido: la proxima revision reintenta.
       }
@@ -111,8 +113,11 @@ export function useActualizacion(): {
 
     void revisar();
     const escucha = CapApp.addListener('resume', () => void revisar());
+    const alVolverLaRed = () => void revisar();
+    window.addEventListener('online', alVolverLaRed);
     return () => {
       viva = false;
+      window.removeEventListener('online', alVolverLaRed);
       void escucha.then((e) => e.remove()).catch(() => undefined);
     };
   }, [plataforma]);
