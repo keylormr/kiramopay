@@ -113,4 +113,57 @@ describe('LoginView: entrada sin contrasena', () => {
     // vez le haria perder el intento.
     expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
   });
+
+  // El acceso rapido del ultimo usuario saltaba el sondeo y pedia la
+  // contrasena siempre: una cuenta de demostracion que aparecia en "Ultimo
+  // acceso" tenia que teclear su nombre a mano para entrar sin contrasena.
+  describe('ultimo acceso', () => {
+    beforeEach(() => {
+      localStorage.setItem('kiramopay_last_cedula', 'demo');
+      localStorage.setItem('kiramopay_last_name', 'Demo KiramoPay');
+      localStorage.setItem('kiramopay_last_tipo', 'usuario');
+    });
+
+    it('una cuenta de demostracion entra de un toque', async () => {
+      mocks.login.mockImplementation(async (_id: string, password: string) => {
+        if (password) return { success: false, code: 'AUTH_FAILED' };
+        mocks.user = { firstName: 'Demo', lastName: 'KiramoPay', username: 'demo' };
+        return { success: true };
+      });
+      const user = userEvent.setup();
+      const onLogin = pintar();
+
+      await user.click(screen.getByText('Demo KiramoPay'));
+
+      await waitFor(() => expect(onLogin).toHaveBeenCalled());
+      expect(mocks.login).toHaveBeenCalledWith('demo', '');
+      expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
+    });
+
+    it('una cuenta normal pasa al campo de contrasena, sin error a la vista', async () => {
+      mocks.login.mockImplementation(async (_id: string, password: string) =>
+        password ? { success: true } : { success: false, code: 'PASSWORD_REQUIRED' },
+      );
+      const user = userEvent.setup();
+      pintar();
+
+      await user.click(screen.getByText('Demo KiramoPay'));
+
+      await waitFor(() => expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument());
+      expect(screen.queryByText('Usuario o contraseña incorrecta')).toBeNull();
+    });
+
+    it('el limitador se avisa ahi mismo y no se avanza', async () => {
+      mocks.login.mockResolvedValue({ success: false, code: 'RATE_LIMITED' });
+      const user = userEvent.setup();
+      pintar();
+
+      await user.click(screen.getByText('Demo KiramoPay'));
+
+      await waitFor(() =>
+        expect(screen.getByText('Demasiados intentos. Espera un momento e intenta de nuevo.')).toBeInTheDocument(),
+      );
+      expect(screen.queryByPlaceholderText('Contraseña')).toBeNull();
+    });
+  });
 });
