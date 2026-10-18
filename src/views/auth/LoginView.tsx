@@ -148,9 +148,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   }, []);
 
   const clasificado = clasificarIdentificador(identificador);
-  // Lo guardado es el usuario o la cedula con la que se entro; se clasifica
-  // igual que lo tecleado. Si algo viejo no clasifica, va tal cual.
-  const canonicoDelUltimo = (guardado: string) => clasificarIdentificador(guardado)?.canonico ?? guardado;
 
   const handleIdentificadorSubmit = async () => {
     if (!clasificado) {
@@ -265,8 +262,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         } else {
           // Sin contrasena en el llavero: puede ser una cuenta que entra sin
           // ella. El sondeo lo resuelve; si la pide, lleva al campo.
+          // login() del almacen clasifica y canonicaliza lo guardado.
           setIdentificador(lastUser.cedula);
-          await sondear(canonicoDelUltimo(lastUser.cedula));
+          await sondear(lastUser.cedula);
         }
       } else {
         // authenticate() resuelve con success:false, nunca lanza: sin esta
@@ -282,7 +280,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   const handleQuickLogin = () => {
     if (!lastUser) return;
     setIdentificador(lastUser.cedula);
-    void sondear(canonicoDelUltimo(lastUser.cedula));
+    void sondear(lastUser.cedula);
   };
 
   return (
@@ -400,9 +398,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-3">
                   {t('login_last_access')}
                 </p>
+                {/* Mientras consulta al servidor (con Render despertando,
+                    decenas de segundos) la tarjeta dice que esta trabajando. */}
                 <button
                   onClick={handleQuickLogin}
-                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--color-surface-3-dark)] transition-colors text-left"
+                  disabled={isLoading}
+                  aria-busy={isLoading}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--color-surface-3-dark)] transition-colors text-left disabled:cursor-wait"
                 >
                   <div className="w-12 h-12 uv-gradient-brand rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
                     {lastUser.name.charAt(0)}
@@ -413,15 +415,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                       {rotuloDelTipo(lastUser.tipo)}: {lastUser.cedula}
                     </p>
                   </div>
-                  <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
+                  {isLoading ? (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-5 w-5 shrink-0 border-2 border-[var(--color-text-muted-dark)] border-t-transparent rounded-full animate-spin"
+                    />
+                  ) : (
+                    <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
+                  )}
                 </button>
 
                 {/* Sin esto no habia forma de quitar el nombre de la pantalla.
                     En un telefono compartido, el siguiente en abrir la
                     aplicacion veia el nombre de quien entro antes, y nada
                     —ni cerrar sesion— lo borraba nunca. */}
+                {/* Espera a que termine la consulta: la respuesta llegaria
+                    despues y volveria a guardar el nombre recien olvidado. */}
                 <button
                   type="button"
+                  disabled={isLoading}
                   onClick={() => {
                     olvidarUltimoAcceso();
                     setLastUser(null);
