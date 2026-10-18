@@ -139,6 +139,9 @@ type Service struct {
 	smsSender    messaging.SMSSender
 	emailSender  messaging.EmailSender
 	publicAppURL string
+	// porEliminar responde por las cuentas con la eliminacion en curso (ver
+	// por_eliminar.go). Nil: esas cuentas se rechazan como bloqueadas.
+	porEliminar CuentasPorEliminar
 	// demoLoginEnabled habilita la entrada SIN CONTRASENA para las cuentas
 	// marcadas con users.demo_login. Nace APAGADA y se enciende solo mientras
 	// dure una demostracion: con ella encendida, cualquiera que sepa el nombre
@@ -176,6 +179,10 @@ type Options struct {
 	SMSSender    messaging.SMSSender
 	EmailSender  messaging.EmailSender
 	PublicAppURL string
+	// CuentasPorEliminar responde por las cuentas con la eliminacion en curso
+	// (lo cumple accountdeletion.Service). Tambien se puede cablear despues con
+	// SetCuentasPorEliminar.
+	CuentasPorEliminar CuentasPorEliminar
 }
 
 func NewService(
@@ -214,6 +221,7 @@ func NewService(
 		emailSender:              opts.EmailSender,
 		publicAppURL:             opts.PublicAppURL,
 		demoLoginEnabled:         opts.DemoLoginEnabled,
+		porEliminar:              opts.CuentasPorEliminar,
 	}
 }
 
@@ -238,6 +246,10 @@ type LoginRequest struct {
 	Identifier string `json:"identifier,omitempty"`
 	Cedula     string `json:"cedula,omitempty"`
 	Password   string `json:"password"`
+	// Reactivate: la persona tiene la eliminacion de su cuenta en curso y,
+	// avisada por el login anterior (ACCOUNT_PENDING_DELETION), eligio
+	// reactivarla. Sin esto el login de esa cuenta nunca emite sesion.
+	Reactivate bool `json:"reactivate,omitempty"`
 }
 
 // EffectiveIdentifier es el valor con el que se intenta entrar: identifier si

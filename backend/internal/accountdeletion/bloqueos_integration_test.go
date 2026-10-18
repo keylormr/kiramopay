@@ -52,8 +52,8 @@ func codigosDe(err error) []string {
 	return out
 }
 
-// Cada situacion que la persona puede resolver detiene la eliminacion con SU
-// codigo, y no se borra ni se anonimiza nada: la cuenta sigue entera.
+// Cada situacion que la persona puede resolver detiene la solicitud con SU
+// codigo, y no cambia nada: ni el estado, ni las sesiones, ni el libro.
 func TestEliminar_CadaBloqueoDetieneYNoTocaNada(t *testing.T) {
 	casos := []struct {
 		codigo   string
@@ -119,7 +119,7 @@ func TestEliminar_CadaBloqueoDetieneYNoTocaNada(t *testing.T) {
 			exec(t, pool, `INSERT INTO sinpe_contacts (user_id, phone, name) VALUES ($1::uuid, '+50688880000', 'Pedro')`, a.ID)
 			c.preparar(t, pool, a, otra)
 
-			_, err := nuevoServicio(pool, nil).ejecutar(context.Background(), a.ID, opciones{canal: CanalApp})
+			_, err := nuevoServicio(pool, nil).iniciar(context.Background(), a.ID, opciones{canal: CanalApp})
 			codigos := codigosDe(err)
 			encontrado := false
 			for _, x := range codigos {
@@ -130,14 +130,17 @@ func TestEliminar_CadaBloqueoDetieneYNoTocaNada(t *testing.T) {
 			if !encontrado {
 				t.Fatalf("se esperaba el bloqueo %s, salio %v (codigos %v)", c.codigo, err, codigos)
 			}
-			if cuenta1[bool](t, pool, `SELECT anonymized_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
-				t.Error("la cuenta se anonimizo pese al bloqueo")
+			if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+				t.Errorf("la cuenta quedo en %s pese al bloqueo", st)
 			}
 			if n := contar(t, pool, "sinpe_contacts", "user_id", a.ID); n != 1 {
-				t.Errorf("el bloqueo no deshizo los borrados: quedan %d contactos", n)
+				t.Errorf("el bloqueo no deshizo los cambios: quedan %d contactos", n)
 			}
-			if cuenta1[string](t, pool, `SELECT status FROM wallets WHERE user_id = $1::uuid`, a.ID) != "active" {
-				t.Error("la billetera se cerro pese al bloqueo")
+			if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM ledger_accounts WHERE user_id = $1::uuid AND closed_at IS NOT NULL`, a.ID); n != 0 {
+				t.Errorf("%d cuentas del libro se cerraron pese al bloqueo", n)
+			}
+			if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM user_sessions WHERE user_id = $1::uuid AND revoked_at IS NOT NULL`, a.ID); n != 0 {
+				t.Errorf("%d sesiones se revocaron pese al bloqueo", n)
 			}
 		})
 	}
@@ -157,7 +160,7 @@ func TestEliminar_LoResueltoNoBloquea(t *testing.T) {
 	exec(t, pool, `INSERT INTO ride_requests (user_id, partner_code, pickup, destination, estimated_price, estimated_time, distance, status)
 		VALUES ($1::uuid, 'uber', 'a', 'b', 100, '5', '1', 'completed')`, a.ID)
 
-	if _, err := nuevoServicio(pool, nil).ejecutar(context.Background(), a.ID, opciones{canal: CanalApp}); err != nil {
+	if _, err := nuevoServicio(pool, nil).iniciar(context.Background(), a.ID, opciones{canal: CanalApp}); err != nil {
 		t.Fatalf("lo resuelto no debia bloquear: %v", err)
 	}
 }
@@ -170,7 +173,7 @@ func TestEliminar_ReportaTodosLosBloqueosJuntos(t *testing.T) {
 	exec(t, pool, `INSERT INTO payouts (user_id, rail, amount_minor, destination, idempotency_key, status)
 		VALUES ($1::uuid, 'MOCK', 100, '{}', 'k3', 'pending')`, a.ID)
 
-	_, err := nuevoServicio(pool, nil).ejecutar(context.Background(), a.ID, opciones{canal: CanalApp})
+	_, err := nuevoServicio(pool, nil).iniciar(context.Background(), a.ID, opciones{canal: CanalApp})
 	got := codigosDe(err)
 	want := []string{BloqueoPayoutEnCurso, BloqueoSaldo}
 	sort.Strings(want)
@@ -186,12 +189,12 @@ func TestEliminar_Elegibilidad(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		exec(t, pool, `UPDATE users SET role = 'admin' WHERE id = $1::uuid`, a.ID)
-		_, err := nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba})
+		_, err := nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true})
 		if !errors.Is(err, ErrRolNoPermitido) {
 			t.Fatalf("se esperaba ErrRolNoPermitido, salio %v", err)
 		}
 		exec(t, pool, `UPDATE users SET role = 'support' WHERE id = $1::uuid`, a.ID)
-		_, err = nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba})
+		_, err = nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true})
 		if !errors.Is(err, ErrRolNoPermitido) {
 			t.Fatalf("soporte tampoco se autoelimina: %v", err)
 		}
@@ -201,7 +204,7 @@ func TestEliminar_Elegibilidad(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		exec(t, pool, `UPDATE users SET demo_login = true WHERE id = $1::uuid`, a.ID)
-		_, err := nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba})
+		_, err := nuevoServicio(pool, nil).EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true})
 		if !errors.Is(err, user.ErrCuentaDeDemostracion) {
 			t.Fatalf("se esperaba ErrCuentaDeDemostracion, salio %v", err)
 		}
@@ -213,19 +216,23 @@ func TestEliminar_Elegibilidad(t *testing.T) {
 		exec(t, pool, `UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'fraude confirmado' WHERE id = $1::uuid`, a.ID)
 		svc := nuevoServicio(pool, nil)
 
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba}); !errors.Is(err, ErrCuentaNoElegible) {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); !errors.Is(err, ErrCuentaNoElegible) {
 			t.Fatalf("la via de la app debia rechazarla: %v", err)
 		}
-		// La via con una persona de operaciones si la acepta, y el rastro del
-		// bloqueo SOBREVIVE (decision del abogado, ver la 077).
-		if _, err := svc.ejecutar(ctx, a.ID, opciones{canal: CanalWeb, permitirCuentaBloqueada: true}); err != nil {
+		// La via con una persona de operaciones si la acepta: el plazo empieza,
+		// pero la cuenta SIGUE bloqueada (no se desbloquea pidiendo la
+		// eliminacion) y el rastro del bloqueo no se toca.
+		if _, err := svc.iniciar(ctx, a.ID, opciones{canal: CanalWeb, permitirCuentaBloqueada: true}); err != nil {
 			t.Fatalf("la via web debia aceptarla: %v", err)
 		}
-		if cuenta1[string](t, pool, `SELECT blocked_reason FROM users WHERE id = $1::uuid`, a.ID) != "fraude confirmado" {
-			t.Error("el rastro del bloqueo se perdio al cerrar la cuenta")
+		var status, motivo, canal string
+		var conPlazo bool
+		if err := pool.QueryRow(ctx, `SELECT status, blocked_reason, deletion_channel, deletion_due_at IS NOT NULL
+			FROM users WHERE id = $1::uuid`, a.ID).Scan(&status, &motivo, &canal, &conPlazo); err != nil {
+			t.Fatal(err)
 		}
-		if cuenta1[string](t, pool, `SELECT deletion_channel FROM users WHERE id = $1::uuid`, a.ID) != "web" {
-			t.Error("el canal no quedo como web")
+		if status != "blocked" || motivo != "fraude confirmado" || canal != "web" || !conPlazo {
+			t.Errorf("status=%s motivo=%q canal=%s con plazo=%v", status, motivo, canal, conPlazo)
 		}
 	})
 
@@ -289,12 +296,12 @@ func (f totpFalso) VerifyTOTP(_ context.Context, _, _, code string) (bool, error
 func TestEliminarMiCuenta_ContrasenaIncorrectaNoTocaNada(t *testing.T) {
 	pool := testutil.TestDB(t)
 	a := sembrar(t, pool)
-	_, err := nuevoServicio(pool, nil).EliminarMiCuenta(context.Background(), a.ID, Confirmacion{Password: "otra-clave-9"})
+	_, err := nuevoServicio(pool, nil).EliminarMiCuenta(context.Background(), a.ID, Confirmacion{Password: "otra-clave-9", AceptaPlazo: true})
 	if !errors.Is(err, ErrContrasenaIncorrecta) {
 		t.Fatalf("se esperaba ErrContrasenaIncorrecta, salio %v", err)
 	}
-	if cuenta1[bool](t, pool, `SELECT anonymized_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
-		t.Fatal("se elimino con una contrasena equivocada")
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+		t.Fatalf("con una contrasena equivocada la cuenta quedo en %s", st)
 	}
 }
 
@@ -307,15 +314,15 @@ func TestEliminarMiCuenta_TopeDeIntentos(t *testing.T) {
 	svc := nuevoServicio(pool, &Options{Lockout: nuevoAlmacen(), MaxIntentos: 3})
 
 	for i := 0; i < 3; i++ {
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: "mala"}); !errors.Is(err, ErrContrasenaIncorrecta) {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: "mala", AceptaPlazo: true}); !errors.Is(err, ErrContrasenaIncorrecta) {
 			t.Fatalf("intento %d: %v", i, err)
 		}
 	}
-	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba}); !errors.Is(err, ErrEnPausa) {
+	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); !errors.Is(err, ErrEnPausa) {
 		t.Fatalf("pasado el tope ni la correcta debia entrar: %v", err)
 	}
-	if cuenta1[bool](t, pool, `SELECT anonymized_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
-		t.Fatal("se elimino estando en pausa")
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+		t.Fatalf("estando en pausa la cuenta quedo en %s", st)
 	}
 }
 
@@ -326,7 +333,7 @@ func TestEliminarMiCuenta_ElSegundoFactorSeExigeSiEstaEncendido(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		svc := nuevoServicio(pool, &Options{TOTP: totpFalso{activo: true, valido: "123456"}})
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba}); !errors.Is(err, ErrTOTPRequerido) {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); !errors.Is(err, ErrTOTPRequerido) {
 			t.Fatalf("salio %v", err)
 		}
 	})
@@ -334,18 +341,18 @@ func TestEliminarMiCuenta_ElSegundoFactorSeExigeSiEstaEncendido(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		svc := nuevoServicio(pool, &Options{TOTP: totpFalso{activo: true, valido: "123456"}})
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, TOTPCode: "000000"}); !errors.Is(err, ErrTOTPInvalido) {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, TOTPCode: "000000", AceptaPlazo: true}); !errors.Is(err, ErrTOTPInvalido) {
 			t.Fatalf("salio %v", err)
 		}
-		if cuenta1[bool](t, pool, `SELECT anonymized_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
-			t.Fatal("se elimino con un codigo equivocado")
+		if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+			t.Fatalf("con un codigo equivocado la cuenta quedo en %s", st)
 		}
 	})
 	t.Run("codigo correcto", func(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		svc := nuevoServicio(pool, &Options{TOTP: totpFalso{activo: true, valido: "123456"}})
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, TOTPCode: "123456"}); err != nil {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, TOTPCode: "123456", AceptaPlazo: true}); err != nil {
 			t.Fatalf("salio %v", err)
 		}
 	})
@@ -353,7 +360,7 @@ func TestEliminarMiCuenta_ElSegundoFactorSeExigeSiEstaEncendido(t *testing.T) {
 		pool := testutil.TestDB(t)
 		a := sembrar(t, pool)
 		svc := nuevoServicio(pool, &Options{TOTP: totpFalso{activo: false}})
-		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba}); err != nil {
+		if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); err != nil {
 			t.Fatalf("salio %v", err)
 		}
 	})

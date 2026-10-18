@@ -9,8 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kiramopay/backend/internal/auth"
 	"github.com/kiramopay/backend/internal/user"
+	"github.com/kiramopay/backend/internal/wallet"
 	"github.com/kiramopay/backend/pkg/hash"
+	jwtpkg "github.com/kiramopay/backend/pkg/jwt"
 )
 
 // claveDePrueba es la contrasena de todas las cuentas sembradas. Cumple la
@@ -133,4 +136,68 @@ func contar(t *testing.T, pool *pgxpool.Pool, tabla, columna, id string) int {
 // nuevoServicio arma el servicio contra la base de pruebas, sin Redis ni envios.
 func nuevoServicio(pool *pgxpool.Pool, opts *Options) *Service {
 	return NewService(pool, user.NewRepository(pool), opts)
+}
+
+// ── El ciclo de la eliminacion ────────────────────────────────────────────
+
+// pedir inicia el plazo de 30 dias por la via de la app, sin la
+// reautenticacion (que tiene sus propias pruebas).
+func pedir(t *testing.T, svc *Service, userID string) resultado {
+	t.Helper()
+	r, err := svc.iniciar(context.Background(), userID, opciones{canal: CanalApp})
+	if err != nil {
+		t.Fatalf("pedir la eliminacion: %v", err)
+	}
+	return r
+}
+
+// vencerPlazo corre al pasado el dia 0 y el dia 30, como si ya hubieran pasado
+// los 30 dias. Mueve las tres fechas juntas: el CHECK exige que el cierre sea
+// posterior al pedido.
+func vencerPlazo(t *testing.T, pool *pgxpool.Pool, userID string) {
+	t.Helper()
+	exec(t, pool, `UPDATE users
+		SET deletion_requested_at      = deletion_requested_at - interval '31 days',
+		    deletion_terms_accepted_at = deletion_terms_accepted_at - interval '31 days',
+		    deletion_due_at            = deletion_due_at - interval '31 days'
+		WHERE id = $1::uuid`, userID)
+}
+
+// cerrar vence el plazo y corre el barrido del dia 30. Exige que esta cuenta
+// quede cerrada.
+func cerrar(t *testing.T, pool *pgxpool.Pool, svc *Service, userID string) {
+	t.Helper()
+	vencerPlazo(t, pool, userID)
+	n, err := svc.CerrarVencidas(context.Background(), time.Now(), 100)
+	if err != nil {
+		t.Fatalf("barrido del dia 30: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("el barrido del dia 30 no cerro ninguna cuenta")
+	}
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, userID); st != "closed" {
+		t.Fatalf("tras el barrido la cuenta quedo en %q, no cerrada", st)
+	}
+}
+
+// envejecer corre el cierre y la fecha de conservacion `anos` anos y un dia al
+// pasado: es llegar al vencimiento de lo que se conserva sin esperar cinco anos.
+func envejecer(t *testing.T, pool *pgxpool.Pool, userID string, anos int) {
+	t.Helper()
+	exec(t, pool, `UPDATE users
+		SET deleted_at      = deleted_at - make_interval(years => $2, days => 1),
+		    retention_until = retention_until - make_interval(years => $2, days => 1)
+		WHERE id = $1::uuid`, userID, anos)
+}
+
+// servicioDeLogin arma el login real con el servicio de eliminacion cableado,
+// como en main.go.
+func servicioDeLogin(pool *pgxpool.Pool, porEliminar auth.CuentasPorEliminar) *auth.Service {
+	return auth.NewService(
+		auth.NewRepository(pool, nil),
+		user.NewRepository(pool),
+		wallet.NewRepository(pool),
+		jwtpkg.NewManager("test-secret-key", 15*time.Minute, 7*24*time.Hour),
+		&auth.Options{CuentasPorEliminar: porEliminar},
+	)
 }

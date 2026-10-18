@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -32,9 +33,11 @@ type opciones struct {
 // resultado de eliminar. Correo y Nombre se leen ANTES de borrarlos para poder
 // avisar a la persona despues del commit.
 type resultado struct {
-	YaEliminada bool
-	Correo      string
-	Nombre      string
+	Ya           bool
+	SolicitadaEn time.Time
+	SeEliminaEl  time.Time
+	Correo       string
+	Nombre       string
 }
 
 // eliminarEnTx hace todo el trabajo dentro de la transaccion que le dan, que el
@@ -74,7 +77,7 @@ func eliminarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (r
 	}
 	if anonimizada {
 		// Segunda orden sobre la misma cuenta (doble clic, reintento): ya esta.
-		return resultado{YaEliminada: true}, nil
+		return resultado{Ya: true}, nil
 	}
 	if role != "user" {
 		return resultado{}, ErrRolNoPermitido

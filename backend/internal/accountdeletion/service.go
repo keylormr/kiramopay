@@ -145,12 +145,18 @@ type Confirmacion struct {
 	Password string `json:"password"`
 	// TOTPCode solo se exige si la cuenta tiene el autenticador encendido.
 	TOTPCode string `json:"totp_code,omitempty"`
+	// AceptaPlazo es la aceptacion expresa del plazo de 30 dias.
+	AceptaPlazo bool `json:"accept_terms"`
 }
 
-// Eliminada es el resultado de una eliminacion que salio bien.
-type Eliminada struct {
-	// Ya es true cuando la cuenta ya estaba eliminada (reintento, doble clic).
-	Ya bool `json:"already_deleted"`
+// ErrPlazoNoAceptado: la solicitud no trae la aceptacion expresa del plazo.
+var ErrPlazoNoAceptado = errors.New("hay que aceptar el plazo de 30 dias")
+
+// Solicitud es el resultado de pedir la eliminacion.
+type Solicitud struct {
+	Ya           bool      `json:"already_requested"`
+	SolicitadaEn time.Time `json:"requested_at"`
+	SeEliminaEl  time.Time `json:"deletion_due_at"`
 }
 
 func lockoutKey(userID string) string { return "lockout:delacct:uid:" + userID }
@@ -162,7 +168,7 @@ func lockoutKey(userID string) string { return "lockout:delacct:uid:" + userID }
 // atomico de Redis, por la misma razon que en ChangePassword: leer el contador y
 // sumar despues deja que una rafaga en paralelo lo esquive. Sin Redis el tope no
 // frena, igual que en el login.
-func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirmacion) (*Eliminada, error) {
+func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirmacion) (*Solicitud, error) {
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, ErrCuentaNoEncontrada
@@ -201,7 +207,12 @@ func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirm
 		return nil, err
 	}
 	s.despues(userID, res)
-	return &Eliminada{Ya: res.YaEliminada}, nil
+	return &Solicitud{Ya: res.Ya}, nil
+}
+
+// iniciar empieza el plazo. Esqueleto: todavia elimina en el acto.
+func (s *Service) iniciar(ctx context.Context, userID string, op opciones) (resultado, error) {
+	return s.ejecutar(ctx, userID, op)
 }
 
 // ejecutar abre la transaccion SERIALIZABLE, elimina y confirma, reintentando si
@@ -265,7 +276,7 @@ const avisoTimeout = 30 * time.Second
 // WebSocket y avisar por correo. Nada de esto es critico: la base ya es
 // autoritativa y una falla aqui solo se registra.
 func (s *Service) despues(userID string, res resultado) {
-	if res.YaEliminada {
+	if res.Ya {
 		return
 	}
 	if s.disconnector != nil {

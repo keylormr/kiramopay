@@ -106,40 +106,68 @@ func TestClasificacionCubreElEsquema(t *testing.T) {
 	}
 }
 
-// Corre TODA la eliminacion contra el esquema real: si una sentencia nombra una
-// columna que produccion no tiene, o una restriccion (el CHECK de la tumba, la FK
-// de las sesiones) la rechaza, falla aqui.
+// Corre el ciclo ENTERO contra el esquema real: dia 0, reactivacion, otra vez el
+// dia 0, el cierre del dia 30 y la desasociacion. Si una sentencia nombra una
+// columna que produccion no tiene, o una restriccion (los CHECK de la 077, la FK
+// de las sesiones, una columna NOT NULL) la rechaza, falla aqui y no en el
+// primer cierre real. El nombre se conserva porque el paso del CI lo nombra.
 func TestEliminarFuncionaContraElEsquemaReal(t *testing.T) {
 	pool := poolDeLaCadena(t)
 	ctx := context.Background()
 	a, b := sembrar(t, pool), sembrar(t, pool)
 	sembrarTodo(t, pool, a, b)
-
 	asientos := cuenta1[int](t, pool, `SELECT COUNT(*) FROM journal_entries`)
 	svc := nuevoServicio(pool, nil)
-	res, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba})
+
+	// Dia 0 y reactivacion.
+	res, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true})
 	if err != nil {
-		t.Fatalf("eliminar contra el esquema real: %v", err)
+		t.Fatalf("pedir la eliminacion contra el esquema real: %v", err)
 	}
 	if res.Ya {
-		t.Fatal("no debia estar eliminada")
+		t.Fatal("no debia tener una solicitud")
 	}
-	if cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID) != "closed" {
-		t.Error("la tumba no quedo cerrada")
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "pending_deletion" {
+		t.Fatalf("el dia 0 la dejo en %s", st)
 	}
+	if ok, err := svc.Reactivar(ctx, a.ID); err != nil || !ok {
+		t.Fatalf("reactivar contra el esquema real: ok=%v err=%v", ok, err)
+	}
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "active" {
+		t.Fatalf("reactivada quedo en %s", st)
+	}
+
+	// Otra vez el dia 0, y el cierre.
+	pedir(t, svc, a.ID)
+	cerrar(t, pool, svc, a.ID)
 	if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM journal_entries`); n != asientos {
 		t.Errorf("el diario cambio: %d -> %d", asientos, n)
 	}
 	if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM ledger_accounts WHERE user_id = $1::uuid AND closed_at IS NULL`, a.ID); n != 0 {
 		t.Errorf("%d cuentas del libro siguen abiertas", n)
 	}
+	if got := descifrar(t, pool, "closed_account_records", "cedula_enc", a.ID); got != a.Cedula {
+		t.Errorf("la identidad conservada no es la de la persona: %q", got)
+	}
+	// users_masked (la vista del panel) ya no la ve.
+	if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM users_masked WHERE id = $1::uuid`, a.ID); n != 0 {
+		t.Error("la vista del panel todavia muestra la cuenta cerrada")
+	}
 
-	// La otra persona sigue usable, y la segunda orden sobre la cerrada es inocua.
+	// La desasociacion, vencida la conservacion.
+	envejecer(t, pool, a.ID, 5)
+	if _, err := svc.DesasociarVencidas(ctx, time.Now(), 100); err != nil {
+		t.Fatalf("desasociar contra el esquema real: %v", err)
+	}
+	if !cuenta1[bool](t, pool, `SELECT dissociated_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
+		t.Error("la cuenta no quedo desasociada")
+	}
+	if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM audit_logs WHERE user_id = $1::uuid AND ip_address IS NOT NULL`, a.ID); n != 0 {
+		t.Errorf("%d filas de auditoria conservan la IP", n)
+	}
+
+	// La otra persona sigue usable.
 	if cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, b.ID) != "active" {
 		t.Error("la otra persona resulto afectada")
-	}
-	r2, err := svc.ejecutar(ctx, a.ID, opciones{canal: CanalApp})
-	if err != nil || !r2.YaEliminada {
-		t.Errorf("segunda orden: %+v %v", r2, err)
 	}
 }

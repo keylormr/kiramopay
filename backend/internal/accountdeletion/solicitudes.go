@@ -81,7 +81,8 @@ func (s *Service) contacto(raw string) (identifier.Kind, string, error) {
 // Solicitar registra la solicitud y manda el codigo. Solo devuelve error si lo
 // escrito no es un correo ni un telefono, o si la base falla; que la cuenta
 // exista o no jamas se nota en la respuesta.
-func (s *Service) Solicitar(ctx context.Context, raw string) error {
+func (s *Service) Solicitar(ctx context.Context, raw string, aceptaPlazo bool) error {
+	_ = aceptaPlazo
 	kind, canonico, err := s.contacto(raw)
 	if err != nil {
 		return err

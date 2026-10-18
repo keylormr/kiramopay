@@ -104,13 +104,14 @@ func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 // forma del dato (400 si no es correo ni telefono), que no revela nada.
 func (h *Handler) Solicitar(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Contacto string `json:"contact"`
+		Contacto    string `json:"contact"`
+		AceptaPlazo bool   `json:"accept_terms"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 2<<10)).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := h.service.Solicitar(r.Context(), req.Contacto); err != nil {
+	if err := h.service.Solicitar(r.Context(), req.Contacto, req.AceptaPlazo); err != nil {
 		if errors.Is(err, ErrContactoInvalido) {
 			response.Error(w, http.StatusBadRequest, "INVALID_CONTACT", err.Error())
 			return

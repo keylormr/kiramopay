@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"time"
 )
 
 // VerificationSMS is the message body for a registration phone OTP.
@@ -236,6 +237,11 @@ func DeletionCodeEmail(code string) (subject, textBody, htmlBody string) {
 
 	htmlBody = emailShell("Confirmá la eliminación de tu cuenta", "Tu código vence en 15 minutos.", body.String())
 	return subject, text.String(), htmlBody
+}
+
+// AccountDeletionRequestedEmail es la respuesta escrita del dia 0. Esqueleto.
+func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subject, textBody, htmlBody string) {
+	return "", "", ""
 }
 
 // AccountDeletedEmail avisa que la cuenta fue eliminada. Es la unica pista que

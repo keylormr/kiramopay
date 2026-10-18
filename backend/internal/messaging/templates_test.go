@@ -1,8 +1,10 @@
 package messaging
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPasswordResetEmail(t *testing.T) {
@@ -154,3 +156,40 @@ func TestDeletionBlockedEmailListaLosMotivosYEscapaElHTML(t *testing.T) {
 		t.Error("tiene que decir que no se borro nada")
 	}
 }
+
+// La respuesta escrita del dia 0 (Ley 8968, art. 7 y Reglamento art. 22): que se
+// suprime el dia 30, que se conserva por la Ley 7786 y hasta cuando, que se puede
+// reactivar antes, y que la persona puede acudir a la PRODHAB. Nunca menciona un
+// reporte de operacion sospechosa ni a la UIF.
+func TestAccountDeletionRequestedEmailEsLaRespuestaEscrita(t *testing.T) {
+	cr := time.FixedZone("CR", -6*3600)
+	dia30 := time.Date(2026, 11, 17, 15, 4, 0, 0, cr)
+	hasta := time.Date(2031, 11, 17, 15, 4, 0, 0, cr)
+	subject, text, html := AccountDeletionRequestedEmail(dia30, hasta)
+	if subject == "" {
+		t.Fatal("sin asunto")
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		for _, debe := range []string{"17/11/2026", "17/11/2031", "7786", "PRODHAB", "reactivar", "contactos", "conversaciones"} {
+			if !strings.Contains(cuerpo, debe) {
+				t.Errorf("el %s no dice %q", nombre, debe)
+			}
+		}
+		if m := mencionProhibida.FindString(cuerpo); m != "" {
+			t.Errorf("el %s menciona %q", nombre, m)
+		}
+	}
+}
+
+// Las fechas salen en la hora de Costa Rica: un cierre a las 23:30 de Costa Rica
+// ya es el dia siguiente en UTC, y el correo debe decir el dia de la persona.
+func TestAccountDeletionRequestedEmailFechaEnHoraDeCostaRica(t *testing.T) {
+	dia30 := time.Date(2026, 11, 18, 5, 30, 0, 0, time.UTC) // 17/11 23:30 en Costa Rica
+	_, text, _ := AccountDeletionRequestedEmail(dia30, dia30.AddDate(5, 0, 0))
+	if !strings.Contains(text, "17/11/2026") || strings.Contains(text, "18/11/2026") {
+		t.Errorf("la fecha no salio en la hora de Costa Rica:\n%s", text)
+	}
+}
+
+// mencionProhibida: lo que la respuesta a la persona nunca puede nombrar.
+var mencionProhibida = regexp.MustCompile(`(?i)sospechos|\buif\b|\bros\b`)

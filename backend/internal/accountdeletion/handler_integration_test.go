@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -102,8 +103,12 @@ func TestHandler_Eliminar(t *testing.T) {
 	if rec, env := llamar(t, srv, "POST", "/users/me/delete-account", "{no es json"); rec.Code != 400 || env.Error.Code != "INVALID_BODY" {
 		t.Errorf("cuerpo invalido: %d %s", rec.Code, rec.Body.String())
 	}
+	// Sin aceptar el plazo
+	if rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{"password":"`+claveDePrueba+`"}`); rec.Code != 400 || env.Error.Code != "TERMS_NOT_ACCEPTED" {
+		t.Errorf("sin aceptar el plazo: %d %s", rec.Code, rec.Body.String())
+	}
 	// Contrasena equivocada
-	if rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{"password":"mala"}`); rec.Code != 400 || env.Error.Code != "CURRENT_PASSWORD_INVALID" {
+	if rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{"password":"mala","accept_terms":true}`); rec.Code != 400 || env.Error.Code != "CURRENT_PASSWORD_INVALID" {
 		t.Errorf("contrasena: %d %s", rec.Code, rec.Body.String())
 	}
 	if cerrada {
@@ -112,7 +117,8 @@ func TestHandler_Eliminar(t *testing.T) {
 
 	// Con saldo: 409 con la lista de lo que hay que resolver
 	fondear(t, pool, a.ID, 700)
-	rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{"password":"`+claveDePrueba+`"}`)
+	conPlazo := `{"password":"` + claveDePrueba + `","accept_terms":true}`
+	rec, env := llamar(t, srv, "POST", "/users/me/delete-account", conPlazo)
 	if rec.Code != 409 || env.Error.Code != "DELETION_BLOCKED" {
 		t.Fatalf("saldo: %d %s", rec.Code, rec.Body.String())
 	}
@@ -127,18 +133,27 @@ func TestHandler_Eliminar(t *testing.T) {
 		t.Fatal("se cerro la sesion pese al bloqueo")
 	}
 
-	// Sin saldo: elimina y le pide al navegador soltar la sesion
+	// Sin saldo: inicia el plazo, dice hasta cuando y le pide al navegador soltar
+	// la sesion
 	exec(t, pool, `UPDATE wallets SET balance_crc = 0 WHERE user_id = $1::uuid`, a.ID)
 	asentar(t, pool, a.ID, "debit", "credit", 700)
-	rec, env = llamar(t, srv, "POST", "/users/me/delete-account", `{"password":"`+claveDePrueba+`"}`)
+	rec, env = llamar(t, srv, "POST", "/users/me/delete-account", conPlazo)
 	if rec.Code != 200 || !env.Success {
 		t.Fatalf("eliminar: %d %s", rec.Code, rec.Body.String())
+	}
+	var sol struct {
+		Ya          bool      `json:"already_requested"`
+		Solicitada  time.Time `json:"requested_at"`
+		SeEliminaEl time.Time `json:"deletion_due_at"`
+	}
+	if err := json.Unmarshal(env.Data, &sol); err != nil || sol.Ya || sol.SeEliminaEl.Sub(sol.Solicitada) != 30*24*time.Hour {
+		t.Errorf("respuesta: %s (%v)", env.Data, err)
 	}
 	if !cerrada || rec.Header().Get("Clear-Site-Data") == "" {
 		t.Error("la respuesta no limpio la sesion del navegador")
 	}
-	if !cuenta1[bool](t, pool, `SELECT anonymized_at IS NOT NULL FROM users WHERE id = $1::uuid`, a.ID) {
-		t.Error("la cuenta no quedo eliminada")
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "pending_deletion" {
+		t.Errorf("la cuenta quedo en %s", st)
 	}
 }
 
@@ -146,7 +161,7 @@ func TestHandler_CodigosDeElegibilidad(t *testing.T) {
 	pool := testutil.TestDB(t)
 	svc := nuevoServicio(pool, nil)
 	h := NewHandler(svc, nil)
-	cuerpo := `{"password":"` + claveDePrueba + `"}`
+	cuerpo := `{"password":"` + claveDePrueba + `","accept_terms":true}`
 
 	admin := sembrar(t, pool)
 	exec(t, pool, `UPDATE users SET role = 'admin' WHERE id = $1::uuid`, admin.ID)
@@ -172,15 +187,23 @@ func TestHandler_Publico(t *testing.T) {
 	h := NewHandler(nuevoServicio(pool, &Options{Email: correo}), nil)
 	srv := router(h, "")
 
+	// Sin aceptar el plazo no se registra nada, exista o no la cuenta.
+	for _, contacto := range []string{a.Correo, "nadie@ejemplo.test"} {
+		if rec, env := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"`+contacto+`"}`); rec.Code != 400 || env.Error.Code != "TERMS_NOT_ACCEPTED" {
+			t.Errorf("sin aceptar el plazo (%s): %d %s", contacto, rec.Code, rec.Body.String())
+		}
+	}
+	nadaMas(t, correo.ch)
+
 	// Con cuenta y sin cuenta: la MISMA respuesta.
-	rec1, env1 := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"`+a.Correo+`"}`)
-	rec2, env2 := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"nadie@ejemplo.test"}`)
+	rec1, env1 := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"`+a.Correo+`","accept_terms":true}`)
+	rec2, env2 := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"nadie@ejemplo.test","accept_terms":true}`)
 	if rec1.Code != 202 || rec2.Code != 202 || string(env1.Data) != string(env2.Data) {
 		t.Fatalf("respuestas distintas: %d %s / %d %s", rec1.Code, rec1.Body.String(), rec2.Code, rec2.Body.String())
 	}
 	codigo := codigoDe(t, esperar(t, correo.ch))
 
-	if rec, env := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"no es un contacto"}`); rec.Code != 400 || env.Error.Code != "INVALID_CONTACT" {
+	if rec, env := llamar(t, srv, "POST", "/public/account-deletion-requests", `{"contact":"no es un contacto","accept_terms":true}`); rec.Code != 400 || env.Error.Code != "INVALID_CONTACT" {
 		t.Errorf("contacto invalido: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec, env := llamar(t, srv, "POST", "/public/account-deletion-requests/verify", `{"contact":"`+a.Correo+`","code":"000000"}`); rec.Code != 400 || env.Error.Code != "INVALID_CODE" {

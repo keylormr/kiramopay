@@ -1,38 +1,55 @@
-// Package accountdeletion elimina una cuenta sin romper el libro del dinero.
+// Package accountdeletion lleva la eliminacion de una cuenta de punta a punta
+// sin romper el libro del dinero ni lo que la ley obliga a conservar.
+//
+// La linea de tiempo (decision del dueno del 2026-10-18):
+//
+//   - Dia 0: la persona lo pide (app o web) y acepta el plazo. La cuenta queda
+//     en 'pending_deletion': sin sesiones, sin avisos, sin poder operar ni
+//     recibir dinero. No se borra nada. Recibe una respuesta escrita.
+//   - Dias 0 a 30: puede reactivarla desde el login; reactivar cancela todo.
+//   - Dia 30: el barrido la cierra segun la clasificacion de este archivo.
+//   - Dia 30 + 5 anos (10 con la marca de conservacion extendida): el barrido
+//     desasocia lo conservado.
 //
 // La fila de users no se borra nunca: el diario es append-only por trigger y
-// varias tablas la referencian con ON DELETE RESTRICT. Eliminar es dejarla como
-// TUMBA (status 'closed', PII reemplazada) y tratar cada tabla segun la
-// clasificacion de este archivo. Ver la migracion 077.
+// varias tablas la referencian con ON DELETE RESTRICT. Ver la migracion 077.
 package accountdeletion
 
-// Tratamiento es lo que se hace con las filas de una tabla cuando se elimina la
+// Tratamiento es lo que se hace con las filas de una tabla cuando se cierra la
 // cuenta que las posee.
 type Tratamiento string
 
 const (
-	// Borrar: la fila se elimina. Credenciales, sesiones, contactos, contenido
-	// libre y todo lo que no tiene funcion contable.
-	Borrar Tratamiento = "borrar"
+	// Expediente: la fila de users y la copia aislada de la identidad
+	// (closed_account_records). El dia 30 la identidad pasa de una a la otra;
+	// al vencer la conservacion se vacia. Ver pasos.go.
+	Expediente Tratamiento = "expediente"
 
-	// Anonimizar: la fila queda y se le borran los campos con datos de la
-	// persona. Se hace en SQL, en la misma transaccion.
-	Anonimizar Tratamiento = "anonimizar"
+	// Suprimir: el dia 30 la fila se borra de verdad. Es lo que la persona
+	// tiene derecho a suprimir (Ley 8968) y ninguna ley obliga a conservar:
+	// preferencias, contactos de terceros, presupuestos, recurrentes, alertas,
+	// conversaciones, avisos, tokens push, dispositivos y sesiones.
+	Suprimir Tratamiento = "suprimir"
 
-	// Conservar: rastro financiero que no se toca. Sin datos de contacto de la
-	// persona o con datos que la propia clasificacion marca aparte.
+	// Revocar: una credencial. La fila queda como rastro (regla del dueno:
+	// quitar acceso no es borrar registros) pero queda revocada y sin el
+	// secreto: nada que pudiera autenticar sobrevive.
+	Revocar Tratamiento = "revocar"
+
+	// Depurar: la fila se queda porque es parte del rastro de una operacion,
+	// pero pierde el texto o los lugares que la persona escribio.
+	Depurar Tratamiento = "depurar"
+
+	// Conservar: lo que la Ley 7786 (art. 16) y el Decreto 36948 (art. 21)
+	// obligan a guardar: identificacion, operaciones, contrapartes, auditoria,
+	// cumplimiento, UIF y fraude. Se conserva identificado y sin tocar hasta
+	// users.retention_until; ese dia se desasocia (pasosDesasociar).
 	Conservar Tratamiento = "conservar"
 
-	// ConservarAbogado: guarda PII (identificacion de contrapartes, KYC, UIF,
-	// fraude, IP) cuya conservacion o borrado depende de una decision legal que
-	// todavia no esta tomada. Mientras tanto se CONSERVA tal cual: perder un
-	// registro que la ley exige es irreversible, conservar de mas unas semanas
-	// no. Cuando el abogado defina plazos, aplicarlos es un cambio de esta tabla
-	// y un trabajo de purga, no un rediseno.
-	ConservarAbogado Tratamiento = "conservar_abogado"
-
-	// Tumba: la fila de users. Se anonimiza en sitio; ver anonimizarUsuario.
-	Tumba Tratamiento = "tumba"
+	// ConservarSinDatos: rastro contable sin datos de la persona, o registro
+	// que comparte con otra persona y sigue el plazo de esa otra. No hay nada
+	// que desasociar en las filas propias.
+	ConservarSinDatos Tratamiento = "conservar_sin_datos"
 )
 
 // Clasificacion dice que se hace con CADA tabla que apunta a una persona, ya sea
@@ -42,94 +59,102 @@ const (
 // real tras aplicar todas las migraciones y falla si una tabla nueva con
 // user_id no esta aqui, o si aqui queda una que ya no existe. Esa es la defensa
 // contra lo que de otro modo pasa solo: alguien agrega una tabla con datos
-// personales y nadie decide que se hace con ellos al eliminar una cuenta.
+// personales y nadie decide que se hace con ellos al cerrar una cuenta.
 var Clasificacion = map[string]Tratamiento{
-	"users": Tumba,
+	"users":                  Expediente,
+	"closed_account_records": Expediente,
 
-	// ── Credenciales, sesiones y dispositivos ───────────────────────────────
-	// user_sessions NO se borra: queda revocada y sin IP ni agente, para que
-	// IsAccessJTIRevoked siga viendo la sesion cerrada (ver anonimizar.go).
-	"user_sessions":         Anonimizar,
-	"refresh_tokens":        Borrar,
-	"password_reset_tokens": Borrar,
-	"mfa_challenges":        Borrar,
-	"user_totp":             Borrar,
-	"totp_recovery_codes":   Borrar,
-	"user_devices":          Borrar,
-	"push_subscriptions":    Borrar,
-	"push_dispositivos":     Borrar,
-	"api_keys":              Borrar,
-	"webhook_endpoints":     Borrar,
+	// ── Acceso: el dia 0 se revoca; el dia 30 se suprime ────────────────────
+	// Las sesiones se revocan el dia 0 (IsAccessJTIRevoked lee la fila, y una
+	// fila ausente no es lo mismo que una revocada) y se borran el dia 30,
+	// cuando ningun token de acceso de 15 minutos puede seguir vivo.
+	"user_sessions":      Suprimir,
+	"user_devices":       Suprimir,
+	"push_subscriptions": Suprimir, // el dia 0: sin avisos durante el plazo
+	"push_dispositivos":  Suprimir, // el dia 0
 
-	// ── Contactos y contenido de la persona ─────────────────────────────────
-	"sinpe_contacts":           Borrar,
-	"linked_bank_accounts":     Borrar,
-	"saved_services":           Borrar,
-	"budgets":                  Borrar,
-	"recurring_payments":       Borrar,
-	"crypto_price_alerts":      Borrar,
-	"assistant_conversations":  Borrar,
-	"notification_history":     Borrar,
-	"plan_interest":            Borrar,
-	"user_partner_connections": Borrar,
+	// ── Credenciales: la fila queda, el secreto no ──────────────────────────
+	"refresh_tokens":        Revocar,
+	"password_reset_tokens": Revocar,
+	"mfa_challenges":        Revocar,
+	"user_totp":             Revocar,
+	"totp_recovery_codes":   Revocar,
+	"api_keys":              Revocar, // el dia 0
+	"webhook_endpoints":     Revocar,
+	"merchant_staff":        Revocar, // el vinculo de cajero es un acceso
+
+	// ── Lo que la persona guardo para si ────────────────────────────────────
+	"sinpe_contacts":           Suprimir,
+	"linked_bank_accounts":     Suprimir,
+	"saved_services":           Suprimir,
+	"budgets":                  Suprimir,
+	"recurring_payments":       Suprimir,
+	"crypto_price_alerts":      Suprimir,
+	"assistant_conversations":  Suprimir,
+	"notification_history":     Suprimir, // copias de avisos; las operaciones se conservan aparte
+	"plan_interest":            Suprimir,
+	"user_partner_connections": Suprimir,
 
 	// ── Texto o lugares que la persona escribio, en filas que se quedan ─────
-	"savings_goals":    Anonimizar,       // el nombre de la meta es texto libre
-	"ride_requests":    Anonimizar,       // origen y destino son ubicaciones
-	"virtual_cards":    Anonimizar,       // numero y titular; la tarjeta se cancela
-	"qr_payment_codes": Anonimizar,       // se revocan y se les quita la nota
-	"split_groups":     Anonimizar,       // titulo y descripcion; los activos se cancelan
-	"split_shares":     Anonimizar,       // nombre y telefono de quien participo
-	"merchant_staff":   Anonimizar,       // la vinculacion queda revocada
-	"qr_merchants":     ConservarAbogado, // identidad legal del comercio; queda inactivo
+	"savings_goals":    Depurar, // el nombre de la meta es texto libre
+	"ride_requests":    Depurar, // origen, destino y datos del conductor
+	"virtual_cards":    Depurar, // se cancela y pierde el titular
+	"qr_payment_codes": Depurar, // se revocan y pierden la nota
+	"split_groups":     Depurar, // titulo y descripcion; los activos se cancelan
+	"split_shares":     Depurar, // nombre y telefono de quien participo
 
-	// ── Rastro financiero ───────────────────────────────────────────────────
-	"wallets":                Conservar, // queda cerrada y en cero
-	"regional_wallets":       Conservar, // queda inactiva y en cero
-	"ledger_accounts":        Conservar, // queda cerrada (closed_at); el diario no se toca
-	"journal_postings":       Conservar, // append-only por trigger; sin PII
-	"crypto_assets":          Conservar, // en cero
-	"crypto_staking":         Conservar, // ninguno activo
-	"crypto_platform_fees":   Conservar,
-	"loyalty_accounts":       Conservar,
-	"loyalty_transactions":   Conservar,
-	"loyalty_redemptions":    Conservar,
-	"escrow_agreements":      Conservar,        // acuerdo entre dos personas; liquidado
-	"payouts":                ConservarAbogado, // destino del pago (cuenta bancaria)
-	"qr_payments":            Conservar,        // la nota solo se borra si la escribio esta persona
-	"qr_charges":             Conservar,
-	"card_transactions":      Conservar,
-	"food_orders":            Conservar,
-	"transactions":           ConservarAbogado, // contraparte, descripcion y geolocalizacion
-	"sinpe_history":          ConservarAbogado, // telefono y nombre de la contraparte
-	"sinpe_history_archive":  ConservarAbogado,
-	"payment_history":        ConservarAbogado, // numero de cliente del servicio pagado
-	"crypto_transactions":    ConservarAbogado, // nombre de la contraparte
-	"cross_border_transfers": ConservarAbogado, // telefono del receptor
+	// ── Rastro financiero sin datos de la persona ───────────────────────────
+	"wallets":              ConservarSinDatos, // queda cerrada y en cero
+	"regional_wallets":     ConservarSinDatos, // queda inactiva y en cero
+	"ledger_accounts":      ConservarSinDatos, // cerrada desde el dia 0 (closed_at); el diario no se toca
+	"journal_postings":     ConservarSinDatos, // append-only por trigger
+	"crypto_assets":        ConservarSinDatos, // en cero
+	"crypto_staking":       ConservarSinDatos, // ninguno activo
+	"crypto_platform_fees": ConservarSinDatos,
+	"loyalty_accounts":     ConservarSinDatos,
+	"loyalty_transactions": ConservarSinDatos,
+	"loyalty_redemptions":  ConservarSinDatos,
+	"card_transactions":    ConservarSinDatos, // el comercio donde se uso no es dato de la persona
+	"food_orders":          ConservarSinDatos,
+	// El acuerdo es de dos personas y su descripcion la escribio cualquiera de
+	// las dos: sigue el plazo de la otra parte, como sus movimientos.
+	"escrow_agreements": ConservarSinDatos,
 
-	// ── Cumplimiento y seguridad (decide el abogado) ────────────────────────
-	"kyc_verifications":      ConservarAbogado,
-	"identity_verifications": ConservarAbogado,
-	"sanction_screenings":    ConservarAbogado,
-	"uif_reports":            ConservarAbogado,
-	"fraud_assessments":      ConservarAbogado,
-	"fraud_alerts":           ConservarAbogado,
-	"user_risk_profiles":     ConservarAbogado,
-	"audit_logs":             ConservarAbogado, // IP y agente de usuario
+	// ── Operaciones y contrapartes (Ley 7786) ───────────────────────────────
+	"transactions":           Conservar, // contraparte, metadatos y ubicacion
+	"sinpe_history":          Conservar, // telefono y nombre de la contraparte
+	"sinpe_history_archive":  Conservar,
+	"payment_history":        Conservar, // numero de cliente del servicio pagado
+	"crypto_transactions":    Conservar, // nombre de la contraparte
+	"cross_border_transfers": Conservar, // telefono del receptor
+	"payouts":                Conservar, // destino del retiro (cuenta bancaria)
+	"qr_payments":            Conservar, // la nota que escribio quien pago
+	"qr_charges":             Conservar, // la nota del cobro
+	"qr_merchants":           Conservar, // identidad legal del comercio; queda cerrado
 
-	// La cola de solicitudes hechas desde la web guarda solo HMAC del contacto y
-	// el resultado; no hay nada personal que borrar y es la prueba de que la
-	// solicitud se atendio.
+	// ── Cumplimiento y seguridad (Ley 7786) ─────────────────────────────────
+	"kyc_verifications":      Conservar,
+	"identity_verifications": Conservar,
+	"sanction_screenings":    Conservar,
+	"uif_reports":            Conservar,
+	"fraud_assessments":      Conservar,
+	"fraud_alerts":           Conservar,
+	"user_risk_profiles":     ConservarSinDatos, // solo contadores
+	"audit_logs":             Conservar,         // IP, agente y detalles
+
+	// La cola de solicitudes web guarda el HMAC del contacto y el resultado: es
+	// la prueba de que la solicitud se atendio, y el HMAC se vacia al desasociar.
 	"account_deletion_requests": Conservar,
 }
 
 // tablasDeApoyo son tablas que cuelgan de una de arriba SIN columna de usuario
-// propia y que la eliminacion tambien trata. Estan aqui solo para que quede
-// escrito; la prueba de cobertura no las exige porque no tienen user_id.
+// propia y que el cierre tambien trata. Estan aqui solo para que quede escrito;
+// la prueba de cobertura no las exige porque no tienen user_id.
 var tablasDeApoyo = map[string]Tratamiento{
-	"webhook_deliveries":     Borrar,           // cuelga de webhook_endpoints
-	"food_order_items":       Conservar,        // cuelga de food_orders
-	"merchant_catalog_items": ConservarAbogado, // cuelga de qr_merchants
-	"merchant_locations":     ConservarAbogado, // direccion del comercio; cuelga de qr_merchants
-	"journal_entries":        Conservar,        // append-only por trigger
+	"webhook_deliveries":     Suprimir,          // cuelga de webhook_endpoints; copias de eventos
+	"food_order_items":       ConservarSinDatos, // cuelga de food_orders
+	"merchant_catalog_items": ConservarSinDatos, // cuelga de qr_merchants; queda inactivo
+	"merchant_locations":     Conservar,         // direccion del comercio; cuelga de qr_merchants
+	"kyc_documents":          Conservar,         // referencia a la imagen del documento; cuelga de kyc_verifications
+	"journal_entries":        ConservarSinDatos, // append-only por trigger
 }
