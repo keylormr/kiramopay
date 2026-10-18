@@ -243,7 +243,7 @@ var pasos = []paso{
 // Que se conserva y por que: id, created_at y role (la identidad del registro);
 // kyc_level y kyc_status (acompanan a los registros de cumplimiento, que el
 // abogado decide); referral_code (inservible: FindByReferralCode exige cuenta
-// activa); referred_by, plan; y el rastro del bloqueo, si lo habia (la 076
+// activa); referred_by, plan; y el rastro del bloqueo, si lo habia (la 077
 // relajo el CHECK para 'closed').
 //
 // Los valores de reemplazo de cedula y telefono llevan ':' y miden menos de 64,

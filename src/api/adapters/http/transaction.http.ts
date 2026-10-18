@@ -8,6 +8,7 @@ import type {
 import type { ApiResponse } from '../../types';
 import type { Transaction } from '@/types';
 import { apiSuccess } from '../../types';
+import { estadoDelServidor } from '@/utils/estadoMovimiento';
 import { falla } from './falla';
 import { HttpClient } from './client';
 
@@ -36,7 +37,10 @@ function mapRow(tx: BackendTransactionRow): Transaction {
     description: tx.counterparty_name || parseDescription(tx.metadata),
     date: new Date(tx.created_at).toLocaleDateString('es-CR'),
     dateISO: tx.created_at, // raw ISO timestamp for filtering / charts
-    status: tx.status as 'completed' | 'pending',
+    // Los cinco estados del servidor llegan con su nombre; uno que la app no
+    // conoce, como 'unknown'. El `as` a un tipo de dos estados dejaba pasar
+    // 'failed' y la pantalla lo pintaba pendiente.
+    status: estadoDelServidor(tx.status),
     category: mapCategory(tx.type),
     // Kept so the UI can fall back to a name derived from the movement type
     // when neither counterparty nor description carries one.

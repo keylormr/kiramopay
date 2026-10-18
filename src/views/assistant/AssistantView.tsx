@@ -12,6 +12,13 @@ import {
   CLAVES_DEL_RECHAZO_DE_LA_RECARGA,
   CLAVE_GENERICA_DEL_SERVICIO,
 } from '@/views/services/rechazosDelServicio';
+import {
+  AMBITO_DEL_RECIBO,
+  AMBITO_DE_LA_RECARGA,
+  firmaDelRecibo,
+  firmaDeLaRecarga,
+  llaveNueva,
+} from '@/views/services/llaveDelServicio';
 import { useAuthStore } from '@/stores/auth.store';
 import { normalizarTelefonoCR } from '@/utils/telefono';
 import type { AssistantTurn, AssistantProposal, AssistantConversationSummary } from '@/api';
@@ -89,8 +96,9 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   // con su texto.
   const [mfaPaga, setMfaPaga] = useState(false);
   // The proposal whose confirmation hit the high-value MFA gate, retried after
-  // verify. Lleva la llave del envio: cancelar el segundo factor suelta esa.
-  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string } | null>(null);
+  // verify. Lleva la llave del envio y su ambito: cancelar el segundo factor
+  // suelta esa.
+  const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string; ambito: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -185,8 +193,11 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     // La llave del SINPE es la que las pantallas de SINPE y de Inicio le dan al
     // mismo envio: el telefono y el monto, por persona. Sin ella el servidor
     // acunaba una por llamada, y confirmar otra vez tras un corte de red
-    // mandaba la plata dos veces.
+    // mandaba la plata dos veces. La recarga y el recibo llevan la que les da
+    // la pantalla de Servicios al mismo pago (ver llaveDelServicio): no
+    // llevaban ninguna, y confirmar otra vez cobraba de nuevo.
     let llave = '';
+    let ambito = 'sinpe';
     let repetida = false;
     if (p.kind === 'sinpe_transfer') {
       // El modelo propone el numero en 8 digitos y el servidor solo acepta el
@@ -205,19 +216,33 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       repetida = envio.success && envio.data?.repetida === true;
       res = envio;
     } else if (p.kind === 'recharge') {
-      res = await api.services.recharge({ operatorId: p.operator || '', phone: p.phone || '', amount });
+      ambito = AMBITO_DE_LA_RECARGA;
+      llave = llaveDelIntento(persona, ambito, firmaDeLaRecarga(p.operator || '', p.phone || '', amount), llaveNueva);
+      const recarga = await api.services.recharge({
+        operatorId: p.operator || '',
+        phone: p.phone || '',
+        amount,
+        idempotencyKey: llave,
+      });
+      repetida = recarga.success && recarga.data?.repetida === true;
+      res = recarga;
     } else {
-      res = await api.services.payBill({
+      ambito = AMBITO_DEL_RECIBO;
+      llave = llaveDelIntento(persona, ambito, firmaDelRecibo(p.providerCode || '', p.clientId || '', amount), llaveNueva);
+      const pago = await api.services.payBill({
         providerId: p.providerCode || '',
         providerName: p.providerName || '',
         clientId: p.clientId || '',
         amount,
         period: p.period || '',
+        idempotencyKey: llave,
       });
+      repetida = pago.success && pago.data?.repetida === true;
+      res = pago;
     }
     // High-value action: prompt for a TOTP code, then retry this same proposal.
     if (!res.success && res.error?.code === MFA_REQUIRED) {
-      mfaRetryRef.current = { key, p, llave };
+      mfaRetryRef.current = { key, p, llave, ambito };
       setMfaPaga(p.kind !== 'sinpe_transfer');
       setShowMfa(true);
       setPstate((s) => ({ ...s, [key]: { status: 'idle' } }));
@@ -227,7 +252,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     // El envio salio o ya estaba hecho, o la llave es de otro envio: el
     // siguiente intento lleva otra. Ante cualquier otro error se conserva:
     // tras un corte, el envio pudo haber salido.
-    if (llave && (res.success || code === 'LLAVE_REUTILIZADA')) soltarIntento(persona, 'sinpe', llave);
+    if (llave && (res.success || code === 'LLAVE_REUTILIZADA')) soltarIntento(persona, ambito, llave);
     if (res.success) {
       // The confirmed proposal moved money (SINPE / recharge / bill payment):
       // refetch the global wallet balance so it is not left stale.
@@ -400,8 +425,18 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                       <div className="flex items-start gap-2 text-sm">
                         <Icons.CheckCircle size={16} className="text-green-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-semibold uv-text-primary">{t('sinpe_ya_hecho')}</p>
-                          <p className="text-xs uv-text-muted">{t('sinpe_ya_hecho_desc')}</p>
+                          <p className="font-semibold uv-text-primary">
+                            {t(
+                              p.kind === 'sinpe_transfer'
+                                ? 'sinpe_ya_hecho'
+                                : p.kind === 'recharge'
+                                  ? 'recharge_ya_hecho'
+                                  : 'bill_ya_hecho',
+                            )}
+                          </p>
+                          <p className="text-xs uv-text-muted">
+                            {t(p.kind === 'sinpe_transfer' ? 'sinpe_ya_hecho_desc' : 'servicio_ya_hecho_desc')}
+                          </p>
                         </div>
                       </div>
                     ) : (
@@ -489,7 +524,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           // factor antes de crear nada. Se suelta su llave, y no otra.
           const pendiente = mfaRetryRef.current;
           mfaRetryRef.current = null;
-          if (pendiente?.llave) soltarIntento(persona, 'sinpe', pendiente.llave);
+          if (pendiente?.llave) soltarIntento(persona, pendiente.ambito, pendiente.llave);
         }}
         onVerified={() => {
           setShowMfa(false);

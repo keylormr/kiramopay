@@ -295,7 +295,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- produccion. Aqui va sin CONCURRENTLY porque el esquema de pruebas se crea
 	-- en una sola consulta, que es de por si una transaccion.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-	-- Eliminacion de cuenta (migracion 076): la tumba y su coherencia. El CHECK de
+	-- Eliminacion de cuenta (migracion 077): la tumba y su coherencia. El CHECK de
 	-- bloqueo se relaja para 'closed', igual que alla.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymized_at    TIMESTAMPTZ;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel VARCHAR(16);
@@ -479,7 +479,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		metadata JSONB DEFAULT '{}',
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
-	-- Migracion 076: la cuenta de una persona eliminada deja de resolverse.
+	-- Migracion 077: la cuenta de una persona eliminada deja de resolverse.
 	ALTER TABLE ledger_accounts ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_user_currency
 		ON ledger_accounts (user_id, currency) WHERE type = 'user_wallet';
@@ -1219,6 +1219,21 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		is_active BOOLEAN DEFAULT TRUE
 	);
 
+	-- payment_history (migration 003): el historial de recibos y recargas. Sin
+	-- ella el servicio la escribia en vano (el error se descarta) y ninguna
+	-- prueba podia ver si un reintento la duplicaba.
+	CREATE TABLE IF NOT EXISTS payment_history (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		type VARCHAR(20) NOT NULL,
+		provider_code VARCHAR(20) NOT NULL,
+		provider_name VARCHAR(100) NOT NULL,
+		client_id VARCHAR(50) NOT NULL,
+		amount BIGINT NOT NULL,
+		status VARCHAR(20) DEFAULT 'completed',
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+
 	-- Marketplace (migration 005)
 	CREATE TABLE IF NOT EXISTS marketplace_partners (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1381,7 +1396,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, created_at DESC);
 
-	-- Tablas que la eliminacion de cuenta (migracion 076) toca y que este esquema
+	-- Tablas que la eliminacion de cuenta (migracion 077) toca y que este esquema
 	-- no declaraba. Mismas columnas y FK que las migraciones que las crean.
 	CREATE TABLE IF NOT EXISTS user_devices (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1531,7 +1546,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
-	-- Cola de solicitudes de eliminacion hechas desde la web (migracion 076).
+	-- Cola de solicitudes de eliminacion hechas desde la web (migracion 077).
 	CREATE TABLE IF NOT EXISTS account_deletion_requests (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		contact_kind VARCHAR(8) NOT NULL,
@@ -1600,7 +1615,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
 		"qr_payments", "qr_charges", "qr_payment_codes", "qr_merchants",
-		"service_providers",
+		"payment_history", "service_providers",
 		"food_order_items", "food_orders", "ride_requests",
 		"user_partner_connections", "marketplace_partners",
 		"savings_goals",

@@ -51,6 +51,17 @@ var (
 	ErrEstiloInvalido   = errors.New("savings: invalid icon or color")
 )
 
+// Rechazos de depositar y retirar. Cada uno tiene su codigo en el handler, y la
+// billetera sin saldo es transaction.ErrSaldoInsuficiente, el mismo motivo que
+// SINPE y el pago con QR. Antes todos salian como 400 SAVINGS_FAILED, igual que
+// una falla de la base: la pantalla no podia decir el motivo, y tomaba la falla
+// por un rechazo aunque el dinero se hubiera movido.
+var (
+	ErrMontoInvalido    = errors.New("savings: amount must be positive")
+	ErrMetaNoEncontrada = errors.New("savings: goal not found")
+	ErrExcedeLoAhorrado = errors.New("savings: amount exceeds amount saved")
+)
+
 // Los largos de la tabla savings_goals (migracion 040). Pasarlos llegaba a la
 // base y volvia como un error de Postgres con el texto crudo en la respuesta.
 const (
@@ -118,7 +129,7 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 		return err
 	}
 	if g.SavedMinor > 0 {
-		if _, err := s.move(ctx, userID, g, g.SavedMinor, false, ""); err != nil {
+		if _, _, err := s.move(ctx, userID, g, g.SavedMinor, false, ""); err != nil {
 			return err
 		}
 	}
@@ -127,45 +138,71 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 
 // Deposit/Withdraw accept an optional idemKey (the request's Idempotency-Key
 // header). When set, an exact retry of the same request is a no-op instead of a
-// second money movement.
-func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, error) {
+// second money movement, and the second return value says so.
+func (s *Service) Deposit(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, bool, error) {
 	if amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+		return nil, false, ErrMontoInvalido
 	}
 	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer unlock()
 	g, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	bal, err := s.repo.WalletBalance(ctx, userID, g.Currency)
 	if err != nil {
-		return nil, fmt.Errorf("balance check: %w", err)
+		return nil, false, fmt.Errorf("balance check: %w", err)
 	}
 	if bal < amount {
-		return nil, fmt.Errorf("insufficient balance")
+		// El saldo se lee primero y la llave solo si no alcanza: el reintento
+		// de un deposito que se llevo todo el saldo encuentra la billetera ya
+		// descontada, y eso no es "sin saldo" sino aquel deposito.
+		if hecho, err := s.yaHecho(ctx, idemKey); err != nil {
+			return nil, false, err
+		} else if hecho {
+			return g, true, nil
+		}
+		return nil, false, transaction.ErrSaldoInsuficiente
 	}
 	return s.move(ctx, userID, g, amount, true, idemKey)
 }
 
-func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, error) {
+func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64, idemKey string) (*Goal, bool, error) {
 	if amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+		return nil, false, ErrMontoInvalido
 	}
 	unlock, err := s.repo.AcquireUserSavingsLock(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer unlock()
 	g, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// The authoritative balance gate is the guarded DeductSaved inside move.
 	return s.move(ctx, userID, g, amount, false, idemKey)
+}
+
+// llaveDelLibro es la llave con que el movimiento queda en el libro.
+func llaveDelLibro(idemKey string) string {
+	return "savings:" + idemKey
+}
+
+// yaHecho dice si la llave ya tiene su asiento: este pedido es la repeticion
+// de uno que ya movio el dinero.
+func (s *Service) yaHecho(ctx context.Context, idemKey string) (bool, error) {
+	if idemKey == "" {
+		return false, nil
+	}
+	hecho, err := s.ledger.PostingExists(ctx, llaveDelLibro(idemKey))
+	if err != nil {
+		return false, fmt.Errorf("idempotency check: %w", err)
+	}
+	return hecho, nil
 }
 
 // move posts the balanced ledger transfer between the wallet and SYSTEM:SAVINGS
@@ -192,19 +229,20 @@ func (s *Service) Withdraw(ctx context.Context, userID, id string, amount int64,
 // retirar mas de lo guardado (SYSTEM:SAVINGS no tiene piso propio).
 //
 // Callers hold AcquireUserSavingsLock, so the whole sequence is serialized per user.
-func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool, idemKey string) (*Goal, error) {
+func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64, deposit bool, idemKey string) (*Goal, bool, error) {
 	// Idempotent retry: a client-supplied key whose posting already exists means
-	// this exact request was already applied — return the current goal unchanged
-	// rather than moving the money a second time. Safe under the per-user lock.
-	ledgerKey := "savings:" + uuid.NewString()
+	// this exact request was already applied — return the current goal unchanged,
+	// marked as a repetition, rather than moving the money a second time. Safe
+	// under the per-user lock.
+	ledgerKey := llaveDelLibro(uuid.NewString())
 	if idemKey != "" {
-		ledgerKey = "savings:" + idemKey
-		done, err := s.ledger.PostingExists(ctx, ledgerKey)
+		ledgerKey = llaveDelLibro(idemKey)
+		done, err := s.yaHecho(ctx, idemKey)
 		if err != nil {
-			return nil, fmt.Errorf("idempotency check: %w", err)
+			return nil, false, err
 		}
 		if done {
-			return g, nil
+			return g, true, nil
 		}
 	}
 
@@ -253,9 +291,9 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 		},
 	}); err != nil {
 		if errDelObjetivo != nil {
-			return nil, errDelObjetivo
+			return nil, false, errDelObjetivo
 		}
-		return nil, fmt.Errorf("savings ledger post: %w", err)
+		return nil, false, fmt.Errorf("savings ledger post: %w", err)
 	}
 
 	if s.history != nil {
@@ -266,5 +304,5 @@ func (s *Service) move(ctx context.Context, userID string, g *Goal, amount int64
 			Description: desc,
 		})
 	}
-	return updated, nil
+	return updated, false, nil
 }

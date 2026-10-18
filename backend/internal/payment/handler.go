@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
@@ -12,6 +13,63 @@ import (
 
 type Handler struct {
 	service *Service
+}
+
+// responderRechazo responde el error de pagar un recibo o recargar con su
+// codigo propio, el mismo que usan SINPE y el pago por QR para el mismo motivo.
+//
+// Antes todo lo que no era SIN_CONVENIO ni MFA_REQUIRED salia 400 con el error
+// tal cual ("process payment: insufficient balance"), y la pantalla, que ya no
+// pinta el texto del servidor, no podia decir por que no se pago. Lo que no se
+// reconoce es un 500 con el codigo de siempre (`generico`): es un fallo del
+// servidor, y el pago pudo haber salido (un commit que se corta termina aqui).
+// La pantalla lo dice como un pago sin confirmar y conserva la llave, asi que
+// reintentar no cobra dos veces. El detalle queda en el log: response.Error no
+// lo deja salir en un 5xx.
+func responderRechazo(w http.ResponseWriter, err error, generico string) {
+	type caso struct {
+		err    error
+		http   int
+		codigo string
+		msg    string
+	}
+	casos := []caso{
+		// Sin convenio con la empresa o el operador: no es un fallo del usuario
+		// ni de su saldo, y no se cobro nada.
+		{ErrSinConvenio, http.StatusServiceUnavailable, "SIN_CONVENIO", "el pago no se puede entregar todavia"},
+		// El gate de MFA vive en el motor de transferencias. Se verifica el
+		// codigo y se reintenta el mismo pedido, con la misma llave.
+		{transaction.ErrMFARequired, http.StatusPreconditionRequired, "MFA_REQUIRED",
+			"verified MFA challenge required for this amount"},
+		// El saldo: el de la comprobacion previa y el del asiento, que es el que
+		// frena bajo concurrencia.
+		{transaction.ErrSaldoInsuficiente, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
+			transaction.ErrSaldoInsuficiente.Error()},
+		{ledger.ErrInsufficientFunds, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
+			transaction.ErrSaldoInsuficiente.Error()},
+		{transaction.ErrDailyLimitExceeded, http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED",
+			transaction.ErrDailyLimitExceeded.Error()},
+		{transaction.ErrMonthlyLimitExceeded, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
+			transaction.ErrMonthlyLimitExceeded.Error()},
+		{transaction.ErrBloqueadoPorRiesgo, http.StatusBadRequest, "TRANSFER_BLOCKED",
+			transaction.ErrBloqueadoPorRiesgo.Error()},
+		// La llave ya es de otro pago: otro cliente, otro telefono u otro
+		// monto. Nada se movio; el pago nuevo necesita otra llave.
+		{transaction.ErrLlaveReutilizada, http.StatusConflict, "LLAVE_REUTILIZADA",
+			"idempotency key reused for a different payment"},
+		{transaction.ErrLlaveDeOtroMovimiento, http.StatusConflict, "LLAVE_REUTILIZADA",
+			"idempotency key reused for a different payment"},
+		{ErrLlaveInvalida, http.StatusBadRequest, "LLAVE_INVALIDA", ErrLlaveInvalida.Error()},
+		{ErrProveedorInvalido, http.StatusBadRequest, "INVALID_PROVIDER", ErrProveedorInvalido.Error()},
+		{ErrOperadorInvalido, http.StatusBadRequest, "INVALID_OPERATOR", ErrOperadorInvalido.Error()},
+	}
+	for _, c := range casos {
+		if errors.Is(err, c.err) {
+			response.Error(w, c.http, c.codigo, c.msg)
+			return
+		}
+	}
+	response.Error(w, http.StatusInternalServerError, generico, err.Error())
 }
 
 func NewHandler(service *Service) *Handler {
@@ -38,24 +96,7 @@ func (h *Handler) PayBill(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.PayBill(r.Context(), userID, &req)
 	if err != nil {
-		// Sin convenio con la empresa o el operador: 503 con codigo propio para
-		// que la pantalla lo explique en vez de mostrar un error generico. No es
-		// un fallo del usuario ni de su saldo.
-		if errors.Is(err, ErrSinConvenio) {
-			response.Error(w, http.StatusServiceUnavailable, "SIN_CONVENIO",
-				"el pago no se puede entregar todavia")
-			return
-		}
-		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
-		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
-		// codigo generico y mostraba el mensaje en ingles del servidor, sin
-		// ofrecer nunca el desafio: la operacion moria ahi.
-		if errors.Is(err, transaction.ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"verified MFA challenge required for this amount")
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+		responderRechazo(w, err, "PAYMENT_FAILED")
 		return
 	}
 
@@ -82,24 +123,7 @@ func (h *Handler) Recharge(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Recharge(r.Context(), userID, &req)
 	if err != nil {
-		// Sin convenio con la empresa o el operador: 503 con codigo propio para
-		// que la pantalla lo explique en vez de mostrar un error generico. No es
-		// un fallo del usuario ni de su saldo.
-		if errors.Is(err, ErrSinConvenio) {
-			response.Error(w, http.StatusServiceUnavailable, "SIN_CONVENIO",
-				"el pago no se puede entregar todavia")
-			return
-		}
-		// El gate de MFA vive en transaction.CreateTransaction, asi que esta
-		// ruta tambien puede devolverlo. Sin este mapeo el cliente recibia el
-		// codigo generico y mostraba el mensaje en ingles del servidor, sin
-		// ofrecer nunca el desafio: la operacion moria ahi.
-		if errors.Is(err, transaction.ErrMFARequired) {
-			response.Error(w, http.StatusPreconditionRequired, "MFA_REQUIRED",
-				"verified MFA challenge required for this amount")
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "RECHARGE_FAILED", err.Error())
+		responderRechazo(w, err, "RECHARGE_FAILED")
 		return
 	}
 

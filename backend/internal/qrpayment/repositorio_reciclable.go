@@ -253,16 +253,25 @@ func (r *Repository) ExpirarCobrosVencidos(ctx context.Context, lote int) (int64
 }
 
 // NombreDeSucursal para el rotulo de la hoja de pago.
-func (r *Repository) NombreDeSucursal(ctx context.Context, locationID string) string {
+//
+// Un rotulo sin sucursal, o con una que ya no esta, es "" sin error: borrar la
+// sucursal deja el location_id en NULL (ON DELETE SET NULL). No poder leerla
+// devuelve el error, porque la hoja diria el comercio sin la sucursal como si el
+// rotulo no tuviera una.
+func (r *Repository) NombreDeSucursal(ctx context.Context, locationID string) (string, error) {
 	if locationID == "" {
-		return ""
+		return "", nil
 	}
 	var nombre string
-	if err := r.db.QueryRow(ctx,
-		`SELECT name FROM merchant_locations WHERE id = $1`, locationID).Scan(&nombre); err != nil {
-		return ""
+	err := r.db.QueryRow(ctx,
+		`SELECT name FROM merchant_locations WHERE id = $1`, locationID).Scan(&nombre)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
 	}
-	return nombre
+	if err != nil {
+		return "", err
+	}
+	return nombre, nil
 }
 
 // DuracionCobroMostrador y DuracionCobroEnlace son los dos plazos.

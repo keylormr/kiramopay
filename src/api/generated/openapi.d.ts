@@ -1520,7 +1520,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pay a bill */
+        /**
+         * Pay a bill
+         * @description Repeating a completed payment with the same `idempotency_key` (same provider, client number and amount) returns the recorded payment, with its `transaction_id` and `replayed: true`, and charges nothing, even when the balance or the limits no longer cover it (that payment already consumed them). The repetition writes no second history row. Without `idempotency_key` every request is a new payment.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1534,13 +1537,67 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Bill paid */
+                /** @description Bill paid, or the recorded payment when `replayed` is true */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["PayBillResponse"];
+                    };
+                };
+                /** @description VALIDATION_ERROR or INVALID_BODY (the request cannot be read), INVALID_PROVIDER (no active provider with that code), LLAVE_INVALIDA (`idempotency_key` longer than 100 characters) or TRANSFER_BLOCKED (the risk engine stopped the payment). Nothing was charged. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different payment (another client number or amount). Nothing was charged; a new payment needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. Nothing was charged. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify the second factor and retry the same request, with the same `idempotency_key`. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — a server failure; the detail is only logged. The payment may have gone through (a commit that is cut off ends here too): retrying with the same `idempotency_key` never charges twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SIN_CONVENIO — there is no agreement with the company to deliver the payment. Nothing was charged. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -1560,7 +1617,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mobile phone recharge */
+        /**
+         * Mobile phone recharge
+         * @description Same idempotency contract as POST /api/v1/services/pay-bill: the same `idempotency_key` with the same operator, phone and amount returns the recorded top-up with `replayed: true` and charges nothing.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1574,13 +1634,67 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Recharge completed */
+                /** @description Recharge completed, or the recorded one when `replayed` is true */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["RechargeResponse"];
+                    };
+                };
+                /** @description VALIDATION_ERROR or INVALID_BODY (the request cannot be read), INVALID_OPERATOR (not kolbi, claro or movistar), LLAVE_INVALIDA (`idempotency_key` longer than 100 characters) or TRANSFER_BLOCKED (the risk engine stopped the payment). Nothing was charged. The client should translate by `error.code`, not show `error.message`. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different payment (another phone or amount). Nothing was charged; a new payment needs a new key. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. Nothing was charged. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — verify the second factor and retry the same request, with the same `idempotency_key`. */
+                428: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECHARGE_FAILED — a server failure; the detail is only logged. The payment may have gone through (a commit that is cut off ends here too): retrying with the same `idempotency_key` never charges twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SIN_CONVENIO — there is no agreement with the carrier to deliver the payment. Nothing was charged. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -3514,6 +3628,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qr/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a scanned QR before paying it
+         * @description Who is being paid, before the payment sheet offers a pay button: the business (merchant_name, location_name) or the person (payee_name), the amount (0 = open amount) and, for a charge, its id, status and expiry. Only a code that does not exist is QR_INVALIDO; a server that could not read it answers 500 RESOLVE_FAILED, and retrying is the right move.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The scanned payload (KP:...). */
+                        qr_data: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The code and who receives the payment */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            data: {
+                                /** @enum {string} */
+                                kind: "code" | "charge" | "legacy";
+                                /** @description The person who charges, for a personal code. Absent when that person no longer exists; a read that fails is a 500, never an absent name. */
+                                payee_name?: string;
+                                /** @description The business, for a merchant code. Absent when the business no longer exists. */
+                                merchant_name?: string;
+                                /** @description The business location printed on the code. Absent when the code has no location or it no longer exists. */
+                                location_name?: string;
+                                currency: string;
+                                /**
+                                 * Format: int64
+                                 * @description Minor units; 0 is an open amount.
+                                 */
+                                amount: number;
+                                note?: string;
+                                /** @description The charge's status (pending, paid, cancelled, expired, superseded). */
+                                status?: string;
+                                /** Format: date-time */
+                                expires_at?: string;
+                                charge_id?: string;
+                                qr_code_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description QR_INVALIDO — the code does not exist (or is not a code at all) — or INVALID_BODY. Retrying the same code does not change the answer. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_REVOCADO — the owner withdrew the code. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RESOLVE_FAILED — the server could not read the code or who is behind it (the person, the business or its location). The message never carries the detail; retrying may work. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/qr/pay": {
         parameters: {
             query?: never;
@@ -3570,7 +3782,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send. No money moves. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle). No money moves. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3600,6 +3812,287 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/codes/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get or create the caller's permanent receive code
+         * @description Returns the caller's permanent code in the given currency, creating it the first time. Error codes are for the client to translate; never show `error.message` to the user.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description CRC (default) or USD. */
+                    currency?: "CRC" | "USD";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The permanent code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNSUPPORTED_CURRENCY — the wallet does not handle that currency. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get or create the counter code of a business
+         * @description Any active member of the business team can ask for it. The code never changes and is the one that gets printed.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    location_id?: string;
+                    /** @description CRC (default) or USD. */
+                    currency?: "CRC" | "USD";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The counter code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNSUPPORTED_CURRENCY — the wallet does not handle that currency. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND (the business does not exist or the caller is not on its team) or LOCATION_NOT_FOUND (the location is not of this business or is closed). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_UNAVAILABLE — the business is not approved. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a charge on a permanent code
+         * @description The charge carries its own payload with the amount inside. With `replaces`, the previous charge of the same code is closed in the same transaction; if it was already paid, no new charge is created.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        qr_code_id: string;
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero. The currency is the code's.
+                         */
+                        amount: number;
+                        note?: string;
+                        /** @enum {string} */
+                        channel?: "counter" | "link";
+                        /** Format: uuid */
+                        replaces?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Charge issued */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MONTO_INVALIDO (the amount is zero or negative), QR_INVALIDO (the code does not exist or the caller cannot charge with it) or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/charges/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel a pending charge */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Charge cancelled */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description QR_INVALIDO — the charge does not exist or the caller cannot manage it. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The charge is no longer pending: COBRO_YA_PAGADO (never reported as cancelled), COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED — the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -4143,6 +4636,190 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["PlanLimitError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/savings/goals/{id}/deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from the wallet into a goal
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description INSUFFICIENT_BALANCE — the wallet does not cover the amount (the same code as POST /api/v1/sinpe/send). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/savings/goals/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move money from a goal back to the wallet
+         * @description Send an Idempotency-Key and keep it while the outcome is unknown (no answer, a dropped connection): a retry with the same key never moves the money twice and answers with the goal as it stands and `replayed: true`. Without a key, every request is a new movement.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Minor units, greater than zero, in the goal's currency.
+                         */
+                        amount_minor: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description The goal as it stands after the movement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavingsGoal"] & {
+                            /** @description Present and true when the key had already made this movement: nothing moved in this request. */
+                            replayed?: boolean;
+                        };
+                    };
+                };
+                /** @description SAVINGS_INVALID_AMOUNT — `amount_minor` is not greater than zero, or INVALID_BODY. Nothing moved. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_GOAL_NOT_FOUND — no goal of the caller has that id (another person's goal answers the same). Nothing moved. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_EXCEEDS_SAVED — the goal holds less than the amount (it changed elsewhere). Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SAVINGS_FAILED — the server failed and the movement may have gone through. Retrying the same request with the same Idempotency-Key never moves the money twice. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -9027,9 +9704,15 @@ export interface components {
         };
         PayBillRequest: {
             /** @example ICE */
-            provider: string;
-            account_number: string;
+            provider_code: string;
+            /** @description The customer number at the company. */
+            client_id: string;
+            /** @description Amount to pay, in centimos. */
             amount: number;
+            /** @description Billing period label, kept as written. */
+            period?: string;
+            /** @description Retrying with the same key, provider, client number and amount returns the recorded payment instead of charging again. */
+            idempotency_key?: string;
         };
         PayBillResponse: {
             transaction_id: string;
@@ -9039,6 +9722,8 @@ export interface components {
             amount: number;
             /** @example completed */
             status: string;
+            /** @description Present and true when this response repeats a payment already made under the same `idempotency_key`: nothing was charged now. */
+            replayed?: boolean;
         };
         RechargeResponse: {
             transaction_id: string;
@@ -9048,12 +9733,18 @@ export interface components {
             amount: number;
             /** @example completed */
             status: string;
+            /** @description Present and true when this response repeats a top-up already made under the same `idempotency_key`: nothing was charged now. */
+            replayed?: boolean;
         };
         RechargeRequest: {
-            /** @example Kolbi */
-            operator: string;
-            phone_number: string;
+            /** @enum {string} */
+            operator: "kolbi" | "claro" | "movistar";
+            /** @example 88887777 */
+            phone: string;
+            /** @description Amount to recharge, in centimos. */
             amount: number;
+            /** @description Retrying with the same key, operator, phone and amount returns the recorded top-up instead of charging again. */
+            idempotency_key?: string;
         };
         CryptoBuyRequest: {
             /** @example BTC */

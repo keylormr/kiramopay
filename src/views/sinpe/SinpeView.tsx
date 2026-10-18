@@ -17,7 +17,7 @@ import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
-import { mensajeDeCobro } from '@/utils/erroresQr';
+import { mensajeDelRechazoDelCobro } from '@/utils/erroresQr';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
 
@@ -317,7 +317,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     const codigo = await api.qrPayments.getMyCode('CRC');
     if (!codigo.success || !codigo.data) {
       setIsProcessing(false);
-      setRequestQrError(codigo.error?.message || t('qr_gen_error'));
+      setRequestQrError(mensajeDelRechazoDelCobro(t, codigo.error, 'qr_gen_error'));
       return;
     }
     const res = await api.qrPayments.createCharge({
@@ -332,7 +332,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       setRequestQr(cobroComoCodigo(res.data));
       void cargarPedidos();
     } else {
-      setRequestQrError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+      setRequestQrError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
     }
   };
 
@@ -348,7 +348,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     if (!api.qrPayments) return;
     const res = await api.qrPayments.cancelCharge(id);
     if (!res.success && res.error?.code !== 'COBRO_CANCELADO') {
-      setRequestQrError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+      setRequestQrError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
     }
     void cargarPedidos();
   };

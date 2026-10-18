@@ -12,8 +12,48 @@ import type { Transaction } from '@/types';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
+
+// La llave de depositar y retirar vive en intentoPendiente, por meta, sentido y
+// monto: la misma mientras se reintente lo mismo, aunque la app se cierre en
+// medio.
+const AMBITO_DEL_AHORRO = 'ahorro';
+
+// Sin respuesta, o con el 500 (SAVINGS_FAILED, que el servidor reserva para lo
+// que no reconoce), el movimiento pudo haberse hecho: no se puede decir que el
+// dinero sigue donde estaba. La llave se conserva, asi que reintentar ahora no
+// lo hace dos veces.
+const MOVIMIENTO_SIN_CONFIRMAR = ['NETWORK_ERROR', 'TIMEOUT', 'SAVINGS_FAILED'] as const;
+const CLAVES_SIN_CONFIRMAR: Record<string, string> = Object.fromEntries(
+  MOVIMIENTO_SIN_CONFIRMAR.map((codigo) => [codigo, 'savings_err_sin_confirmar']),
+);
+
+// Los rechazos de depositar y retirar, por codigo: en ninguno se movio dinero.
+// Un codigo que no este aqui cae al texto de siempre, nunca al del servidor.
+const CLAVES_ERROR_DEPOSITAR: Record<string, string> = {
+  ...CLAVES_SIN_CONFIRMAR,
+  INSUFFICIENT_BALANCE: 'savings_err_sin_saldo',
+  SAVINGS_INVALID_AMOUNT: 'savings_err_monto_invalido',
+  SAVINGS_GOAL_NOT_FOUND: 'savings_err_meta_no_encontrada',
+};
+const CLAVES_ERROR_RETIRAR: Record<string, string> = {
+  ...CLAVES_SIN_CONFIRMAR,
+  SAVINGS_EXCEEDS_SAVED: 'savings_err_excede_lo_guardado',
+  SAVINGS_INVALID_AMOUNT: 'savings_err_monto_invalido',
+  SAVINGS_GOAL_NOT_FOUND: 'savings_err_meta_no_encontrada',
+};
+
+// Rechazos que dicen que lo que la pantalla tiene de la meta ya no es cierto:
+// se elimino o cambio lo guardado desde otro lado.
+const META_DESACTUALIZADA: ReadonlySet<string> = new Set(['SAVINGS_GOAL_NOT_FOUND', 'SAVINGS_EXCEEDS_SAVED']);
+
+function llaveNueva(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const GOAL_ICONS = [
   { id: 'piggy-bank', Icon: Icons.PiggyBank, label: 'Ahorro' },
@@ -115,6 +155,14 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   // moneda base, que se cambia con un toque en el home.
   const cuentaCRC = state.accounts.find((a) => a.ccy === 'CRC');
 
+  // Una llave nueva en cada llamada hacia que el reintento tras un corte de red
+  // moviera el dinero otra vez. Se conserva ante cualquier error (la pantalla
+  // no sabe si el servidor llego a hacer algo) y se suelta al salir bien, o al
+  // saber que ya estaba hecho.
+  const persona = state.user?.id ?? '';
+  const llaveDelMovimiento = (goalId: string, sentido: 'deposito' | 'retiro', amount: number) =>
+    llaveDelIntento(persona, AMBITO_DEL_AHORRO, `${goalId}|${sentido}|${Math.round(amount * 100)}`, llaveNueva);
+
   // In mock mode there is no backend ledger, so the view mirrors the wallet
   // movement locally; in http mode the backend moves the money and we refresh.
   const localWalletTx = (amount: number, label: string, credit: boolean) => {
@@ -148,6 +196,28 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   const [errorHoja, setErrorHoja] = useState<string | null>(null);
   const [metaAEliminar, setMetaAEliminar] = useState<SavingsGoal | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+
+  // Trae las metas de nuevo sin el aviso de carga, y la hoja abierta toma lo
+  // que la meta tiene de verdad. Si falla, queda la lista que habia: el motivo
+  // del rechazo ya esta a la vista.
+  const recargarEnSilencio = async (goalId: string) => {
+    try {
+      const res = await getApiLayer().savings?.getGoals();
+      if (!vivo.current || !res?.success || !res.data) return;
+      setGoals(res.data);
+      const fresca = res.data.find((g) => g.id === goalId);
+      if (fresca) setSelectedGoal((actual) => (actual?.id === goalId ? fresca : actual));
+    } catch {
+      // La lista vieja sigue; no hay nada mas que decir.
+    }
+  };
+
+  // Despues de un rechazo, lo que la pantalla tenia por cierto se pone al dia:
+  // la meta (si cambio o ya no existe) o el saldo de la billetera.
+  const alRechazar = (codigo: string | undefined, goalId: string) => {
+    if (codigo && META_DESACTUALIZADA.has(codigo)) void recargarEnSilencio(goalId);
+    else if (codigo === 'INSUFFICIENT_BALANCE' && hasBackend) refreshAccounts().catch(() => {});
+  };
 
   // El tope del plan. Toda meta cuenta, igual que en el servidor: eliminar una
   // devuelve lo ahorrado y la saca. null es "sin tope".
@@ -248,26 +318,30 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     if (!api.savings) return;
     setIsDepositing(true);
     setErrorHoja(null);
+    const llave = llaveDelMovimiento(selectedGoal.id, 'deposito', amount);
     try {
-      const res = await api.savings.deposit(selectedGoal.id, amount);
+      const res = await api.savings.deposit(selectedGoal.id, amount, llave);
       // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara,
       // asi que un deposito RECHAZADO se veia igual que uno exitoso. Ahora un
       // fallo deja la hoja abierta, el monto escrito y el motivo a la vista.
       if (!res.success || !res.data) {
-        setErrorHoja(t('savings_err_deposit'));
+        setErrorHoja(mensajeDeRechazo(res.error, CLAVES_ERROR_DEPOSITAR, 'savings_err_deposit', t));
+        alRechazar(res.error?.code, selectedGoal.id);
         return;
       }
+      soltarIntento(persona, AMBITO_DEL_AHORRO, llave);
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet debit locally.
       if (hasBackend) refreshAccounts().catch(() => {});
-      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
+      if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
       setDepositAmount('');
       setShowDepositSheet(false);
       setSelectedGoal(null);
     } catch {
-      setErrorHoja(t('savings_err_deposit'));
+      setErrorHoja(t('savings_err_sin_confirmar'));
     } finally {
       setIsDepositing(false);
     }
@@ -286,26 +360,30 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
     if (!api.savings) return;
     setIsWithdrawing(true);
     setErrorHoja(null);
+    const llave = llaveDelMovimiento(selectedGoal.id, 'retiro', amount);
     try {
-      const res = await api.savings.withdraw(selectedGoal.id, amount);
+      const res = await api.savings.withdraw(selectedGoal.id, amount, llave);
       // Mismo criterio que el deposito: un retiro RECHAZADO deja la hoja
       // abierta, el monto escrito y el motivo a la vista, nunca se ve igual
       // que uno exitoso.
       if (!res.success || !res.data) {
-        setErrorHoja(t('savings_err_withdraw'));
+        setErrorHoja(mensajeDeRechazo(res.error, CLAVES_ERROR_RETIRAR, 'savings_err_withdraw', t));
+        alRechazar(res.error?.code, selectedGoal.id);
         return;
       }
+      soltarIntento(persona, AMBITO_DEL_AHORRO, llave);
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet credit locally.
       if (hasBackend) refreshAccounts().catch(() => {});
-      else localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
+      else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
+      if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
       setWithdrawAmount('');
       setShowWithdrawSheet(false);
       setSelectedGoal(null);
     } catch {
-      setErrorHoja(t('savings_err_withdraw'));
+      setErrorHoja(t('savings_err_sin_confirmar'));
     } finally {
       setIsWithdrawing(false);
     }

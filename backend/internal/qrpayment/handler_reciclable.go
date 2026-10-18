@@ -18,24 +18,26 @@ import (
 // encima lo pisaba con otro generico, asi que el motivo real —"el cajero cambio
 // el monto", "ese cobro ya lo pagaron", "el codigo fue retirado"— no llegaba
 // nunca a la pantalla. 409 para los de estado, 400 para los de forma.
+//
+// Lo que no tiene codigo propio es un fallo del servidor: 500, con el detalle
+// solo en el log (response.Error no lo deja salir). Salia 400 con el error tal
+// cual, y la pantalla lo pintaba: crear un cobro que fallaba en la base le
+// mostraba a la persona la frase del driver.
 func responderError(w http.ResponseWriter, err error) {
 	if responderConocido(w, err) {
 		return
 	}
-	response.Error(w, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+	response.Error(w, http.StatusInternalServerError, "PAYMENT_FAILED", err.Error())
 }
 
-// responderErrorDelPago es responderError para POST /qr/pay, con una
-// diferencia: lo que no se reconoce es un 500. Ahi el pago pudo haber salido
-// (un commit que se corta termina aqui), y la pantalla lo dice como un pago sin
+// responderErrorDelPago es responderError para POST /qr/pay, donde el 500 de lo
+// que no se reconoce importa por otra razon: el pago pudo haber salido (un
+// commit que se corta termina aqui), y la pantalla lo dice como un pago sin
 // confirmar y conserva la llave, asi que reintentar no cobra dos veces. Como
 // 400, la pantalla lo tomaba por un rechazo y soltaba la llave: el reintento
-// era otro pago. El detalle queda en el log (response.Error no lo deja salir).
+// era otro pago.
 func responderErrorDelPago(w http.ResponseWriter, err error) {
-	if responderConocido(w, err) {
-		return
-	}
-	response.Error(w, http.StatusInternalServerError, "PAYMENT_FAILED", err.Error())
+	responderError(w, err)
 }
 
 // responderConocido responde el error si tiene codigo propio, y dice si lo hizo.
@@ -92,6 +94,12 @@ func responderConocido(w http.ResponseWriter, err error) bool {
 			"esa operacion ya se hizo con otro monto"},
 		{ErrComercioNoEncontrado, "MERCHANT_NOT_FOUND", http.StatusNotFound, ErrComercioNoEncontrado.Error()},
 		{ErrComercioNoDisponible, "MERCHANT_UNAVAILABLE", http.StatusConflict, ErrComercioNoDisponible.Error()},
+		{ErrSucursalNoEncontrada, "LOCATION_NOT_FOUND", http.StatusNotFound, ErrSucursalNoEncontrada.Error()},
+		{ErrMonedaNoSoportada, "UNSUPPORTED_CURRENCY", http.StatusBadRequest, ErrMonedaNoSoportada.Error()},
+		// Pagar un codigo en una moneda sin tope, nacido antes de que se
+		// validara la moneda. El motor se niega antes de mover nada; caia al 500
+		// y la pantalla lo decia como un pago sin confirmar.
+		{transaction.ErrMonedaSinTope, "UNSUPPORTED_CURRENCY", http.StatusUnprocessableEntity, ErrMonedaNoSoportada.Error()},
 	}
 	for _, c := range casos {
 		if errors.Is(err, c.err) {
@@ -165,7 +173,13 @@ func (h *Handler) ResolveQR(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.service.ResolveQR(r.Context(), req.QRData)
 	if err != nil {
-		responderError(w, err)
+		// Los rechazos del codigo salen con su codigo (QR_INVALIDO solo si no
+		// existe). Lo demas es la base que no contesto: 500, con el detalle en
+		// el log y no en la respuesta. Por responderError salia 400
+		// PAYMENT_FAILED con el error tal cual.
+		if !responderConocido(w, err) {
+			response.Error(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
+		}
 		return
 	}
 	response.JSON(w, http.StatusOK, res)

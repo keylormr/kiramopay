@@ -239,7 +239,7 @@ var ErrIdempotent = errors.New("idempotent: posting already recorded")
 var ErrInsufficientFunds = errors.New("insufficient funds")
 
 // ErrCuentaCerrada: el asiento toca la cuenta de una persona o de un comercio
-// cuyo dueno elimino su cuenta (migracion 076, ledger_accounts.closed_at). No
+// cuyo dueno elimino su cuenta (migracion 077, ledger_accounts.closed_at). No
 // se puede acreditar ni debitar: el dinero que llegara ahi no tendria dueno. Se
 // resuelve aqui, en el unico lugar que traduce una persona a su cuenta, para
 // que ningun camino (transferencia, escrow, cobro QR, cripto) tenga que

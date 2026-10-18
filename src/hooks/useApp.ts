@@ -155,9 +155,8 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           date: action.payload.date,
           type: (action.payload.type === 'sent' ? 'debit' : 'credit') as 'debit' | 'credit',
           category: 'SINPE',
-          status: (action.payload.status === 'completed' ? 'completed' : 'pending') as
-            | 'completed'
-            | 'pending',
+          // El estado tal cual: uno fallido se anotaba "pending".
+          status: action.payload.status,
         };
         txStore.addTransaction(sinpeTx);
         accounts.updateAccountBalance(
@@ -225,9 +224,7 @@ export function useApp(): { state: AppState; dispatch: React.Dispatch<AppAction>
           kind: 'recharge',
           type: 'debit' as const,
           category: 'Recarga',
-          status: (action.payload.status === 'completed' ? 'completed' : 'pending') as
-            | 'completed'
-            | 'pending',
+          status: action.payload.status,
         };
         txStore.addTransaction(rechargeTx);
         accounts.updateAccountBalance('CRC', -action.payload.amount);

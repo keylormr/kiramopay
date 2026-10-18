@@ -3,7 +3,7 @@
 // La fila de users no se borra nunca: el diario es append-only por trigger y
 // varias tablas la referencian con ON DELETE RESTRICT. Eliminar es dejarla como
 // TUMBA (status 'closed', PII reemplazada) y tratar cada tabla segun la
-// clasificacion de este archivo. Ver la migracion 076.
+// clasificacion de este archivo. Ver la migracion 077.
 package accountdeletion
 
 // Tratamiento es lo que se hace con las filas de una tabla cuando se elimina la

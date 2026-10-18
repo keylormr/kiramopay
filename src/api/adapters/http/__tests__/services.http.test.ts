@@ -29,3 +29,38 @@ describe('HttpServicesRepository.getRechargeHistory', () => {
     expect(res.data?.[0].dateISO).toBe('2026-09-04T15:30:00Z');
   });
 });
+
+// Pagar un recibo o recargar no mandaba llave de idempotencia: el reintento
+// tras un corte de red era otro cobro. La llave la pone la pantalla y viaja tal
+// cual; la repeticion que marca el servidor llega como `repetida`.
+describe('HttpServicesRepository — la llave del pago y de la recarga', () => {
+  it('payBill manda la llave y marca la repeticion', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't1', receipt_number: 'RCP-t1', provider_name: 'ICE', amount: 500000, status: 'completed', replayed: true },
+    });
+    const repo = new HttpServicesRepository({ get: vi.fn(), post } as unknown as HttpClient);
+
+    const res = await repo.payBill({
+      providerId: 'ICE', providerName: 'ICE', clientId: '123', amount: 5000, period: 'octubre de 2026', idempotencyKey: 'llave-1',
+    });
+
+    expect(post.mock.calls[0][1]).toMatchObject({ idempotency_key: 'llave-1' });
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBe(true);
+  });
+
+  it('recharge manda la llave, y sin repeticion no hay marca', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { transaction_id: 't2', operator: 'Kölbi (ICE)', phone: '88887777', amount: 100000, status: 'completed' },
+    });
+    const repo = new HttpServicesRepository({ get: vi.fn(), post } as unknown as HttpClient);
+
+    const res = await repo.recharge({ operatorId: 'kolbi', phone: '88887777', amount: 1000, idempotencyKey: 'llave-2' });
+
+    expect(post.mock.calls[0][1]).toMatchObject({ idempotency_key: 'llave-2' });
+    expect(res.success).toBe(true);
+    expect(res.data?.repetida).toBeUndefined();
+  });
+});

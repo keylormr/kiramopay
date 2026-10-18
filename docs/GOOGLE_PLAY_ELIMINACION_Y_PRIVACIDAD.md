@@ -82,7 +82,7 @@ tabla en `backend/internal/accountdeletion/clasificacion.go`.
 
 ## Despliegue
 
-- La migracion `076_eliminacion_de_cuenta.sql` es solo aditiva. Se aplica con
+- La migracion `077_eliminacion_de_cuenta.sql` es solo aditiva. Se aplica con
   `RUN_MIGRATIONS=true` como las anteriores; el binario viejo la ignora.
 - Backend y frontend se pueden desplegar en cualquier orden: la app nueva consulta rutas que
   el backend viejo no tiene (el boton mostraria "no pudimos revisar tu cuenta" y reintentar).

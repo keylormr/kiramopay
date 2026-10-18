@@ -1,5 +1,6 @@
 import type { Transaction } from '@/types';
 import { etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
+import { estaCompletado, etiquetaDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
 
 /**
  * El traductor de la app (`t` de useLanguage). Lo que la persona lee del
@@ -19,6 +20,9 @@ export type Traductor = (clave: string) => string;
  * No se convierte a una moneda comun a proposito: el tipo de cambio de la
  * aplicacion no es una cotizacion de mercado, y convertir aqui seria inventar
  * una cifra con aspecto de dato.
+ *
+ * Lo fallido y lo revertido no se suman, como en las tarjetas de la pantalla:
+ * un SINPE que fallo entraba en los egresos como si hubiera salido.
  */
 export interface ResumenPorMoneda {
   moneda: string;
@@ -30,6 +34,7 @@ export interface ResumenPorMoneda {
 export function resumirPorMoneda(transactions: Transaction[]): ResumenPorMoneda[] {
   const porMoneda = new Map<string, ResumenPorMoneda>();
   for (const tx of transactions) {
+    if (noMovioDinero(tx)) continue;
     const moneda = tx.ccy || 'CRC';
     let r = porMoneda.get(moneda);
     if (!r) {
@@ -66,7 +71,9 @@ export function exportTransactionsCSV(transactions: Transaction[], t: Traductor,
     tx.ccy,
     celda(tx.type === 'credit' ? t('export_type_credit') : t('export_type_debit')),
     celda(etiquetaDeCategoria(tx.category, t)),
-    celda(estadoDe(tx, t)),
+    // Con las mismas palabras que la pantalla: escribia "Pendiente" en todo lo
+    // que no estaba completado, tambien en lo que fallo.
+    celda(etiquetaDeEstado(tx, t)),
   ]);
 
   // Summary rows at the bottom, UNA TANDA POR MONEDA. La moneda viaja en su
@@ -135,7 +142,10 @@ export async function copyTransactionsToClipboard(transactions: Transaction[], t
   for (const tx of transactions) {
     const sign = tx.amount > 0 ? '+' : '';
     lines.push(`${fechaParaArchivo(tx)}  ${tx.title}`);
-    lines.push(`  ${sign}${tx.amount.toFixed(2)} ${tx.ccy}  [${etiquetaDeCategoria(tx.category, t)}]`);
+    // Lo completado va sin rotulo, que es el caso de siempre; lo demas dice su
+    // estado. Sin el, un SINPE que fallo se copiaba como un gasto mas.
+    const estado = estaCompletado(tx) ? '' : ` · ${etiquetaDeEstado(tx, t)}`;
+    lines.push(`  ${sign}${tx.amount.toFixed(2)} ${tx.ccy}  [${etiquetaDeCategoria(tx.category, t)}]${estado}`);
   }
 
   lines.push('═'.repeat(40));
@@ -183,14 +193,6 @@ export async function shareTransactions(transactions: Transaction[], t: Traducto
 }
 
 // --- Helpers ---
-
-/**
- * El estado con la misma regla que la pantalla (TransactionsView y el detalle):
- * sin estado es un movimiento completado. El CSV lo escribia "Pendiente".
- */
-function estadoDe(tx: Transaction, t: Traductor): string {
-  return (tx.status ?? 'completed') === 'completed' ? t('tx_status_completed') : t('pending');
-}
 
 /** "Ingresos: " rellenado al ancho del rotulo mas largo, mas un espacio. */
 function alineador(rotulos: string[]): (rotulo: string) => string {
