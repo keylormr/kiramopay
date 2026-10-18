@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { CryptoView } from '../CryptoView';
+import { registrarDesplazamientos } from '@/test/desplazamientos';
 
 // El envio de cripto a otra persona de KiramoPay. Antes esta hoja pedia una
 // direccion de cadena, inventaba una comision de red del 0,01 % y descontaba el
@@ -250,7 +251,7 @@ describe('envio de cripto — codigos que no sirven', () => {
 
     expect(
       await hoja.findByText(
-        'Ese código no es de KiramoPay. Pedile a la otra persona el código de su perfil.',
+        'Ese código no es de KiramoPay. Pídele a la otra persona el código de su perfil.',
       ),
     ).toBeInTheDocument();
     expect(mocks.api.crypto.sendPreview).not.toHaveBeenCalled();
@@ -268,7 +269,7 @@ describe('envio de cripto — codigos que no sirven', () => {
 
     expect(
       await hoja.findByText(
-        'Ese es el código de un comercio, y un comercio cobra en dinero, no en cripto. Pedile a la persona su código personal.',
+        'Ese es el código de un comercio, y un comercio cobra en dinero, no en cripto. Pídele a la persona su código personal.',
       ),
     ).toBeInTheDocument();
     expect(hoja.queryByText(/merchant qr code/)).not.toBeInTheDocument();
@@ -378,5 +379,34 @@ describe('envio de cripto — el campo de monto crece con lo que se escribe', ()
     await user.type(campo, '0.12345678');
     expect(campo).toHaveValue('0.12345678');
     expect(campo.style.width).toMatch(/^\d+ch$/);
+  });
+});
+
+// La hoja de envio puede ser mas alta que un telefono chico: el rechazo
+// aparecia al fondo, sin anunciarse. Como en el envio SINPE, se anuncia y se
+// lleva a la vista.
+describe('envio de cripto — el error se anuncia y queda a la vista', () => {
+  const desplazados = registrarDesplazamientos();
+
+  it('el rechazo del envio, despues de confirmar', async () => {
+    mocks.api.crypto.sendPreview.mockResolvedValue({
+      success: true,
+      data: vistaPrevia(0.005, 0.0000125),
+    });
+    mocks.api.crypto.send.mockResolvedValue({
+      success: false,
+      error: { code: 'ALGO_NUEVO', message: 'something new' },
+    });
+    const user = userEvent.setup();
+    const hoja = await abrirEnvio(user);
+
+    await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
+    await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
+    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+
+    const aviso = await hoja.findByRole('alert');
+    expect(aviso.textContent).not.toBe('');
+    expect(desplazados).toContain(aviso);
   });
 });

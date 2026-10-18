@@ -19,6 +19,7 @@ import type {
 } from '@/types';
 import { apiSuccess } from '../../types';
 import { falla, errorPropio } from './falla';
+import { estadoCriptoDelServidor } from '@/utils/estadoCripto';
 import { HttpClient } from './client';
 import type { Schema } from '../../generated/helpers';
 
@@ -73,8 +74,6 @@ interface PosicionDelServidor {
   replayed?: true;
 }
 
-const ESTADOS: ReadonlyArray<CryptoTransaction['status']> = ['completed', 'pending', 'failed'];
-
 /**
  * Le pone a lo traducido la marca de la operacion repetida, solo si el
  * servidor la mando. Sin la marca, el campo ni aparece.
@@ -103,9 +102,9 @@ export function movimientoDesdeServidor(t: MovimientoDelServidor): CryptoTransac
     // La fecha se guarda tal cual: la pantalla la formatea en el idioma
     // activo. `new Date(x).toISOString()` lanzaba ante una fecha invalida.
     date: t.created_at,
-    status: ESTADOS.includes(t.status as CryptoTransaction['status'])
-      ? (t.status as CryptoTransaction['status'])
-      : 'completed',
+    // Un estado que la app no conoce, o ninguno, se volvia 'completed': la
+    // pantalla decia completado lo que el servidor no dijo.
+    status: estadoCriptoDelServidor(t.status),
     ...(t.counterparty_name ? { counterpartyName: t.counterparty_name } : {}),
   };
   switch (t.type) {

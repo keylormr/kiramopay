@@ -21,7 +21,20 @@ import (
 // Las personas no se backfillean en la migracion —son muchas y la mayoria nunca
 // va a cobrar—, asi que el codigo nace aqui, perezosamente.
 func (s *Service) GetOrCreateMyCode(ctx context.Context, userID, currency string) (*QRPaymentCode, error) {
+	if err := validarMonedaDelCodigo(currency); err != nil {
+		return nil, err
+	}
 	return s.repo.GetOrCreateStaticCode(ctx, userID, "", "", currency, "p2p_receive")
+}
+
+// validarMonedaDelCodigo: un codigo solo nace en una moneda de la billetera.
+// Vacia es la de siempre, colones, y la pone el repositorio.
+func validarMonedaDelCodigo(moneda string) error {
+	switch moneda {
+	case "", "CRC", "USD":
+		return nil
+	}
+	return ErrMonedaNoSoportada
 }
 
 // GetOrCreateMerchantCode devuelve el codigo del mostrador. Es el que se imprime
@@ -32,20 +45,22 @@ func (s *Service) GetOrCreateMerchantCode(
 	// Cualquier miembro del equipo puede cobrar para el local: la plata cae en
 	// la billetera DEL COMERCIO, asi que un cajero generando el rotulo no mueve
 	// nada a su propio bolsillo.
-	role, merchant, err := s.roleFor(ctx, merchantID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("merchant profile not found")
+	if err := validarMonedaDelCodigo(currency); err != nil {
+		return nil, err
 	}
-	if role == "" {
-		return nil, fmt.Errorf("merchant does not belong to user")
+	// Ajeno o inexistente es lo mismo para quien pregunta: no se le confirma
+	// que existe un comercio que no es suyo.
+	role, merchant, err := s.roleFor(ctx, merchantID, userID)
+	if err != nil || role == "" {
+		return nil, ErrComercioNoEncontrado
 	}
 	if merchant.VerificationStatus != "verified" {
-		return nil, fmt.Errorf("merchant is pending verification")
+		return nil, ErrComercioNoDisponible
 	}
 	if locationID != "" {
 		loc, err := s.repo.GetLocation(ctx, merchantID, locationID)
 		if err != nil || !loc.Active {
-			return nil, fmt.Errorf("location not found")
+			return nil, ErrSucursalNoEncontrada
 		}
 	}
 	// El creator_id del rotulo es el DUENO, no quien toco el boton: el rotulo
@@ -217,7 +232,7 @@ func (s *Service) puedeCobrarCon(ctx context.Context, userID string, code *QRPay
 		return ErrQRInvalido
 	}
 	if merchant.VerificationStatus != "verified" {
-		return fmt.Errorf("merchant is pending verification")
+		return ErrComercioNoDisponible
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { CryptoView } from '../CryptoView';
+import { registrarDesplazamientos } from '@/test/desplazamientos';
 
 // La respuesta repetida. Tras un corte de red la pantalla reintenta con la
 // misma llave y, si el primer intento ya se habia hecho, el servidor devuelve
@@ -487,5 +488,32 @@ describe('el aviso en la pagina', () => {
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SELL_CRYPTO' }));
     const [a, b] = mocks.api.crypto.sell.mock.calls.map(([req]) => req.idempotencyKey as string);
     expect(b).toBe(a);
+  });
+});
+
+// Las hojas de comprar, vender, convertir y apartar pueden ser mas altas que un
+// telefono chico: el error de la operacion aparecia al fondo, fuera de la
+// pantalla, y dos de ellas ni siquiera lo anunciaban. Como en el envio SINPE,
+// el error se anuncia y se lleva a la vista.
+describe('el error de cada hoja se anuncia y queda a la vista', () => {
+  const desplazados = registrarDesplazamientos();
+
+  it.each([
+    { nombre: 'compra', api: () => mocks.api.crypto.buy, operar: comprar },
+    { nombre: 'venta', api: () => mocks.api.crypto.sell, operar: vender },
+    { nombre: 'conversion', api: () => mocks.api.crypto.convert, operar: convertir },
+    { nombre: 'staking', api: () => mocks.api.crypto.stake, operar: apartar },
+  ])('$nombre', async (caso) => {
+    caso.api().mockResolvedValue({ success: false, error: { code: 'ALGO_NUEVO', message: 'algo nuevo' } });
+    const user = userEvent.setup();
+    montar();
+
+    await caso.operar(user);
+
+    await waitFor(() => expect(caso.api()).toHaveBeenCalled());
+    const aviso = (await screen.findAllByRole('alert')).find((el) => el.closest('[role="dialog"]'));
+    expect(aviso).toBeDefined();
+    expect(aviso?.textContent).not.toBe('');
+    expect(desplazados).toContain(aviso);
   });
 });

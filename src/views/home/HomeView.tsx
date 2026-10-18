@@ -27,6 +27,7 @@ import {
   PAGO_SIN_CONFIRMAR,
   codigoDeCobroCerrado,
   mensajeDeCobro,
+  mensajeDelRechazoDelCobro,
   minutosParaVencer,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
@@ -36,6 +37,7 @@ import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 import { BannerInicio } from '@/components/home/BannerInicio';
+import { ErrorALaVista } from '@/components/ErrorALaVista';
 import { useGastoDelMes } from './useGastoDelMes';
 
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
@@ -441,7 +443,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         const res = await api.qrPayments.getMyCode(baseAccount?.ccy ?? 'CRC');
         if (cancelado) return;
         if (res.success && res.data) setCobrarCode(res.data);
-        else setCobrarError(res.error?.message || t('qr_gen_error'));
+        else setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
       } catch {
         if (!cancelado) setCobrarError(t('qr_gen_error'));
       } finally {
@@ -475,7 +477,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         setCobrarCharge(res.data);
         setCobrarAmount('');
       } else {
-        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
         // Si el cobro viejo ya se pago, el estado en pantalla esta atrasado.
         if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
       }
@@ -499,7 +501,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       if (res.success || res.error?.code === 'COBRO_CANCELADO') {
         setCobrarCharge(null);
       } else {
-        setCobrarError(mensajeDeCobro(t, res.error?.code) || res.error?.message || t('qr_gen_error'));
+        setCobrarError(mensajeDelRechazoDelCobro(t, res.error, 'qr_gen_error'));
         if (res.error?.code === 'COBRO_YA_PAGADO') setCobrarCharge(null);
       }
     } finally {
@@ -866,9 +868,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         title={t('charge_qr')}
       >
         <div className="p-2 space-y-5">
-          {cobrarError && (
-            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{cobrarError}</p>
-          )}
+          <ErrorALaVista mensaje={cobrarError} className="text-[var(--color-danger)] text-sm text-center" />
 
           {!cobrarCode ? (
             <div className="flex items-center justify-center py-16">
@@ -1119,7 +1119,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     </div>
                   </div>
                 ) : payError ? (
-                  <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">{payError}</p>
+                  <ErrorALaVista mensaje={payError} className="text-[var(--color-danger)] text-sm text-center" />
                 ) : null}
 
                 {cobroCerrado ? (

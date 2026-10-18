@@ -675,6 +675,7 @@ export type TranslationKeys = {
   crypto_tx_gave: string;
   crypto_tx_got: string;
   crypto_status_failed: string;
+  crypto_status_unknown: string;
   crypto_onramp_cta: string;
   crypto_onramp_soon_title: string;
   crypto_onramp_soon_desc: string;
@@ -1119,6 +1120,12 @@ export type TranslationKeys = {
   savings_err_deposit: string;
   savings_withdraw_exceeds_saved: string;
   savings_err_withdraw: string;
+  savings_err_sin_confirmar: string;
+  savings_err_sin_saldo: string;
+  savings_err_monto_invalido: string;
+  savings_err_meta_no_encontrada: string;
+  savings_err_excede_lo_guardado: string;
+  savings_ya_hecho: string;
   savings_err_delete: string;
   savings_delete_title: string;
   savings_delete_warning: string;
@@ -1244,6 +1251,8 @@ export type TranslationKeys = {
   pago_err_tope_mensual: string;
   qr_err_comercio_no_disponible: string;
   qr_err_sin_confirmar: string;
+  qr_err_monto_invalido: string;
+  qr_err_moneda: string;
   home_top_cat: string;
   home_savings: string;
   home_savings_view: string;
@@ -1832,6 +1841,13 @@ export type TranslationKeys = {
   // (SIN_CONVENIO / SIN_INTEGRACION).
   bill_no_agreement: string;
   recharge_no_agreement: string;
+  // El recibo o la recarga sin respuesta (o con el 500): pudo haber salido, y
+  // la llave se conserva. Y la repeticion de uno que ya estaba hecho.
+  bill_err_sin_confirmar: string;
+  recharge_err_sin_confirmar: string;
+  bill_ya_hecho: string;
+  recharge_ya_hecho: string;
+  servicio_ya_hecho_desc: string;
   bill_invalid_amount: string;
   ride_no_integration: string;
   order_no_integration: string;

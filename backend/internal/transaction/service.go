@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -312,13 +313,28 @@ func (s *Service) repararFilaConAsiento(ctx context.Context, llave, esperado str
 // La contraparte tambien cuenta. En cripto es el activo: la misma llave y el
 // mismo monto en colones para comprar otro activo es otra compra. El nombre se
 // compara recortado como lo guarda la fila; sin eso, el reintento identico de
-// un movimiento con un nombre largo pasaria por otro.
+// un movimiento con un nombre largo pasaria por otro. Y la descripcion, cuando
+// el pedido dice que la llave la cubre (ver LlaveCubreLaDescripcion).
 func mismoMovimiento(previa *TransactionRecord, req *CreateTransactionRequest) bool {
 	return previa.Amount == req.Amount &&
 		previa.Currency == req.Currency &&
 		previa.Type == req.Type &&
 		previa.CounterpartyType == req.CounterpartyType &&
-		previa.CounterpartyName == truncateCounterpartyName(req.CounterpartyName)
+		previa.CounterpartyName == truncateCounterpartyName(req.CounterpartyName) &&
+		(!req.LlaveCubreLaDescripcion || mismaDescripcion(previa, req.Description))
+}
+
+// mismaDescripcion compara con la descripcion que CreateTx guardo en metadata.
+// Una metadata ilegible o sin descripcion no coincide con ninguna: no hay como
+// saber que describia.
+func mismaDescripcion(fila *TransactionRecord, descripcion string) bool {
+	var m struct {
+		Description *string `json:"description"`
+	}
+	if err := json.Unmarshal([]byte(fila.Metadata), &m); err != nil || m.Description == nil {
+		return false
+	}
+	return *m.Description == descripcion
 }
 
 // mismaContraparte compara a quien iba la plata. Las filas escritas antes de

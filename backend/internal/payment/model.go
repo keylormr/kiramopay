@@ -7,6 +7,10 @@ type PayBillRequest struct {
 	ClientID     string `json:"client_id"`
 	Amount       int64  `json:"amount"` // centimos
 	Period       string `json:"period,omitempty"`
+	// IdempotencyKey: la misma llave con los mismos datos contesta con el pago
+	// que ya estaba hecho en vez de cobrar otro. La pone la pantalla y la
+	// conserva mientras no sabe que paso (la red se corto, el servidor fallo).
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type PayBillResponse struct {
@@ -15,12 +19,18 @@ type PayBillResponse struct {
 	ProviderName  string `json:"provider_name"`
 	Amount        int64  `json:"amount"`
 	Status        string `json:"status"`
+	// Replayed dice que la respuesta repite un pago que ya estaba hecho bajo
+	// esa llave: esta llamada no cobro nada. La pantalla lo dice asi, en vez de
+	// celebrar un pago nuevo y anotarlo otra vez.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 type RechargeRequest struct {
 	Operator string `json:"operator"` // 'kolbi', 'claro', 'movistar'
 	Phone    string `json:"phone"`
 	Amount   int64  `json:"amount"` // centimos
+	// IdempotencyKey: como en PayBillRequest.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type RechargeResponse struct {
@@ -29,6 +39,8 @@ type RechargeResponse struct {
 	Phone         string `json:"phone"`
 	Amount        int64  `json:"amount"`
 	Status        string `json:"status"`
+	// Replayed: como en PayBillResponse.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 type SavedServiceRecord struct {

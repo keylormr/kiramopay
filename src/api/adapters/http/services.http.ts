@@ -3,11 +3,21 @@ import type {
   PayBillRequest,
   RechargeRequest,
 } from '../../repositories/services.repository';
+import type { ConMarcaDeRepeticion } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import type { SavedService, Bill, Recharge } from '@/types';
 import { apiSuccess } from '../../types';
 import { falla } from './falla';
 import { HttpClient } from './client';
+
+/**
+ * La marca de la repeticion: el servidor contesto con un pago que YA estaba
+ * hecho bajo esa llave, y esta llamada no cobro nada. Sin la marca, el campo ni
+ * aparece, y lo que se guarda en el historial no la lleva.
+ */
+function conMarca<T>(dato: T, repetido?: boolean): ConMarcaDeRepeticion<T> {
+  return repetido === true ? { ...dato, repetida: true } : (dato as ConMarcaDeRepeticion<T>);
+}
 
 export class HttpServicesRepository implements IServicesRepository {
   constructor(private client: HttpClient) {}
@@ -89,18 +99,20 @@ export class HttpServicesRepository implements IServicesRepository {
     return apiSuccess(bills);
   }
 
-  async payBill(request: PayBillRequest): Promise<ApiResponse<Bill>> {
+  async payBill(request: PayBillRequest): Promise<ApiResponse<ConMarcaDeRepeticion<Bill>>> {
     const res = await this.client.post<{
       transaction_id: string;
       receipt_number: string;
       provider_name: string;
       amount: number;
       status: string;
+      replayed?: boolean;
     }>('/api/v1/services/pay-bill', {
       provider_code: request.providerId,
       client_id: request.clientId,
       amount: Math.round(request.amount * 100),
       period: request.period,
+      idempotency_key: request.idempotencyKey || undefined,
     });
 
     if (!res.success || !res.data) {
@@ -120,7 +132,7 @@ export class HttpServicesRepository implements IServicesRepository {
       status: 'paid',
     };
 
-    return apiSuccess(bill);
+    return apiSuccess(conMarca(bill, res.data.replayed));
   }
 
   async getRechargeHistory(): Promise<ApiResponse<Recharge[]>> {
@@ -157,17 +169,19 @@ export class HttpServicesRepository implements IServicesRepository {
     return apiSuccess(recharges);
   }
 
-  async recharge(request: RechargeRequest): Promise<ApiResponse<Recharge>> {
+  async recharge(request: RechargeRequest): Promise<ApiResponse<ConMarcaDeRepeticion<Recharge>>> {
     const res = await this.client.post<{
       transaction_id: string;
       operator: string;
       phone: string;
       amount: number;
       status: string;
+      replayed?: boolean;
     }>('/api/v1/services/recharge', {
       operator: request.operatorId,
       phone: request.phone,
       amount: Math.round(request.amount * 100),
+      idempotency_key: request.idempotencyKey || undefined,
     });
 
     if (!res.success || !res.data) {
@@ -187,6 +201,6 @@ export class HttpServicesRepository implements IServicesRepository {
       status: 'completed',
     };
 
-    return apiSuccess(recharge);
+    return apiSuccess(conMarca(recharge, res.data.replayed));
   }
 }

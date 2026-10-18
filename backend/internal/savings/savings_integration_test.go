@@ -2,6 +2,7 @@ package savings_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -70,7 +71,7 @@ func TestSavings_DepositAndWithdraw_MovesMoney(t *testing.T) {
 	w0, s0 := walletCRC(t, pool, user), savingsHeldCRC(t, pool)
 	const dep int64 = 50000
 
-	g1, err := svc.Deposit(ctx, user, g.ID, dep, "")
+	g1, _, err := svc.Deposit(ctx, user, g.ID, dep, "")
 	if err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestSavings_DepositAndWithdraw_MovesMoney(t *testing.T) {
 	}
 
 	const wd int64 = 20000
-	g2, err := svc.Withdraw(ctx, user, g.ID, wd, "")
+	g2, _, err := svc.Withdraw(ctx, user, g.ID, wd, "")
 	if err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestSavings_Deposit_InsufficientBalance(t *testing.T) {
 	ctx := context.Background()
 	g := newGoal(t, svc, user)
 	tooMuch := walletCRC(t, pool, user) + 1
-	if _, err := svc.Deposit(ctx, user, g.ID, tooMuch, ""); err == nil {
+	if _, _, err := svc.Deposit(ctx, user, g.ID, tooMuch, ""); err == nil {
 		t.Fatal("expected insufficient-balance error")
 	}
 }
@@ -114,19 +115,19 @@ func TestSavings_Withdraw_ExceedsSaved(t *testing.T) {
 	svc, _, user := setupSavings(t)
 	ctx := context.Background()
 	g := newGoal(t, svc, user)
-	if _, err := svc.Deposit(ctx, user, g.ID, 10000, ""); err != nil {
+	if _, _, err := svc.Deposit(ctx, user, g.ID, 10000, ""); err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
-	_, err := svc.Withdraw(ctx, user, g.ID, 20000, "")
+	_, _, err := svc.Withdraw(ctx, user, g.ID, 20000, "")
 	if err == nil {
 		t.Fatal("expected error withdrawing more than saved")
 	}
-	// El handler devuelve este texto tal cual al usuario. Desde que la fila del
-	// objetivo se escribe dentro de la transaccion del asiento, el error viaja
-	// por dentro del motor del libro: si se dejara envolver, la persona leeria
-	// "savings ledger post: en la misma tx: ..." en vez de que retira de mas.
-	if got := err.Error(); got != "amount exceeds amount saved" {
-		t.Fatalf("el mensaje que ve el usuario se ensucio: %q", got)
+	// El handler le da codigo propio a este error (SAVINGS_EXCEEDS_SAVED). Desde
+	// que la fila del objetivo se escribe dentro de la transaccion del asiento,
+	// el error viaja por dentro del motor del libro: si se perdiera en el
+	// camino, el retiro de mas saldria como falla del servidor.
+	if !errors.Is(err, savings.ErrExcedeLoAhorrado) {
+		t.Fatalf("err = %v, se esperaba ErrExcedeLoAhorrado", err)
 	}
 }
 
@@ -138,16 +139,16 @@ func TestSavings_Withdraw_NoDoubleSpend(t *testing.T) {
 	ctx := context.Background()
 	g := newGoal(t, svc, user)
 	const amt int64 = 30000
-	if _, err := svc.Deposit(ctx, user, g.ID, amt, ""); err != nil {
+	if _, _, err := svc.Deposit(ctx, user, g.ID, amt, ""); err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
 	wMid := walletCRC(t, pool, user)
 
-	if _, err := svc.Withdraw(ctx, user, g.ID, amt, ""); err != nil {
+	if _, _, err := svc.Withdraw(ctx, user, g.ID, amt, ""); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
 	// A second withdraw of the same amount must fail — the goal is empty.
-	if _, err := svc.Withdraw(ctx, user, g.ID, amt, ""); err == nil {
+	if _, _, err := svc.Withdraw(ctx, user, g.ID, amt, ""); err == nil {
 		t.Fatal("expected second withdraw to fail (no funds to double-spend)")
 	}
 	// The wallet was credited exactly once.
@@ -169,7 +170,7 @@ func TestSavings_Deposit_Idempotent(t *testing.T) {
 	const amt int64 = 25000
 	const key = "deposit-req-abc"
 
-	g1, err := svc.Deposit(ctx, user, g.ID, amt, key)
+	g1, _, err := svc.Deposit(ctx, user, g.ID, amt, key)
 	if err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestSavings_Deposit_Idempotent(t *testing.T) {
 		t.Fatalf("saved = %d, want %d", g1.SavedMinor, amt)
 	}
 	// Same key again: a no-op, not a second debit.
-	g2, err := svc.Deposit(ctx, user, g.ID, amt, key)
+	g2, _, err := svc.Deposit(ctx, user, g.ID, amt, key)
 	if err != nil {
 		t.Fatalf("retry deposit: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestSavings_Delete_RefundsHeld(t *testing.T) {
 	g := newGoal(t, svc, user)
 
 	w0, s0 := walletCRC(t, pool, user), savingsHeldCRC(t, pool)
-	if _, err := svc.Deposit(ctx, user, g.ID, 40000, ""); err != nil {
+	if _, _, err := svc.Deposit(ctx, user, g.ID, 40000, ""); err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
 	if err := svc.Delete(ctx, user, g.ID); err != nil {

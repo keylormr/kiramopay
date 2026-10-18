@@ -100,12 +100,24 @@ describe('biometria en el telefono', () => {
     expect(res.biometryType).toBe('none');
   });
 
+  // Con el diccionario por defecto (el espanol) un 'Cancelar' fijo tambien
+  // pasaba: la prueba fija el frances, y el boton tiene que decirlo en frances.
   it('autentica con el motivo de la pantalla, tres intentos y el boton en el idioma de la app', async () => {
     nativo.verifyIdentity.mockResolvedValue(undefined);
     const bio = await servicio(true);
+    // La misma instancia que acaba de cargar el servicio, tras resetModules.
+    const { fijarDiccionarioActivo } = await import('@/i18n/mensajesDeError');
+    const fr = (await import('@/i18n/languages/fr')).default;
+    fijarDiccionarioActivo(fr);
+
     await expect(bio.authenticate('Confirmar el envio')).resolves.toEqual({ success: true });
     expect(nativo.verifyIdentity).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'Confirmar el envio', maxAttempts: 3, negativeButtonText: 'Cancelar' }),
+      expect.objectContaining({
+        reason: 'Confirmar el envio',
+        maxAttempts: 3,
+        negativeButtonText: fr.cancel,
+        subtitle: fr.bio_dialog_subtitle,
+      }),
     );
   });
 

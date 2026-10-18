@@ -1,0 +1,4 @@
+source "https://rubygems.org"
+
+# Herramienta de despliegue a Google Play (ver README.md, seccion Fastlane).
+gem "fastlane", "~> 2.241"

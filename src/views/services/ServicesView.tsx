@@ -12,7 +12,8 @@ import { Button } from '../../components/ui/Button';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
-import { refreshAccounts } from '@/services/dataSync';
+import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
+import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import {
@@ -20,6 +21,13 @@ import {
   CLAVES_DEL_RECHAZO_DE_LA_RECARGA,
   CLAVE_GENERICA_DEL_SERVICIO,
 } from './rechazosDelServicio';
+import {
+  AMBITO_DEL_RECIBO,
+  AMBITO_DE_LA_RECARGA,
+  firmaDelRecibo,
+  firmaDeLaRecarga,
+  llaveNueva,
+} from './llaveDelServicio';
 
 // Proveedores de servicios de Costa Rica
 const SERVICE_PROVIDERS = [
@@ -99,7 +107,15 @@ export const ServicesView: React.FC = () => {
   // reintentar cuando el codigo se verifica.
   const [showMfa, setShowMfa] = useState(false);
   const [pendingAction, setPendingAction] = useState<'bill' | 'recharge' | null>(null);
+  // La llave del pago que pidio el segundo factor: el reintento tras verificar
+  // la vuelve a tomar por su firma, y cancelar la suelta (el servidor lo pide
+  // antes de cobrar, asi que no se cobro nada).
+  const [llaveDelMfa, setLlaveDelMfa] = useState<{ ambito: string; llave: string } | null>(null);
   const [lastPayment, setLastPayment] = useState<{ type: string; amount: number; detail: string } | null>(null);
+  // La repeticion: el servidor contesto con un pago que YA estaba hecho bajo la
+  // llave (el reintento tras un corte). La hoja lo dice asi, no "pago exitoso".
+  const [pagoYaHecho, setPagoYaHecho] = useState(false);
+  const persona = state.user?.id ?? '';
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC' }).format(amount);
@@ -150,12 +166,21 @@ export const ServicesView: React.FC = () => {
     setIsProcessing(true);
     setActionError('');
     setActionBlocked(false);
+    // La llave va atada a lo que se paga: el mismo recibo, el mismo cliente y
+    // el mismo monto la vuelven a tomar (ver llaveDelServicio).
+    const llave = llaveDelIntento(
+      persona,
+      AMBITO_DEL_RECIBO,
+      firmaDelRecibo(selectedProvider.id, clientId, amount),
+      llaveNueva,
+    );
     const res = await getApiLayer().services.payBill({
       providerId: selectedProvider.id,
       providerName: selectedProvider.name,
       clientId,
       amount,
       period: periodoActual(),
+      idempotencyKey: llave,
     });
     setIsProcessing(false);
 
@@ -163,6 +188,7 @@ export const ServicesView: React.FC = () => {
       // Monto alto: pedir el codigo y reintentar. Antes este flujo ni siquiera
       // llamaba al servidor, asi que el desafio no tenia donde aparecer.
       if (res.error?.code === MFA_REQUIRED) {
+        setLlaveDelMfa({ ambito: AMBITO_DEL_RECIBO, llave });
         setPendingAction('bill');
         setShowMfa(true);
         return;
@@ -172,11 +198,26 @@ export const ServicesView: React.FC = () => {
         setActionError(t('bill_no_agreement'));
         return;
       }
+      // La llave ya es de otro pago: el siguiente intento necesita otra. Ante
+      // cualquier otro error se conserva: sin respuesta, el pago pudo salir.
+      if (res.error?.code === 'LLAVE_REUTILIZADA') soltarIntento(persona, AMBITO_DEL_RECIBO, llave);
       setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_RECIBO, CLAVE_GENERICA_DEL_SERVICIO, t));
       return;
     }
+    // El pago salio, o ya estaba hecho: el siguiente es otro y lleva otra llave.
+    soltarIntento(persona, AMBITO_DEL_RECIBO, llave);
 
-    dispatch({ type: 'ADD_BILL_PAYMENT', payload: res.data });
+    // La repeticion no se anota: seria la fila doble y el saldo descontado dos
+    // veces hasta la siguiente carga. La app no se habia enterado de aquel
+    // pago, asi que el saldo y los movimientos se traen del servidor.
+    const repetido = res.data.repetida === true;
+    if (repetido) {
+      refreshAccounts().catch(() => {});
+      refreshTransactions().catch(() => {});
+    } else {
+      dispatch({ type: 'ADD_BILL_PAYMENT', payload: res.data });
+    }
+    setPagoYaHecho(repetido);
     setLastPayment({
       type: 'service',
       amount,
@@ -185,7 +226,7 @@ export const ServicesView: React.FC = () => {
     setShowPaymentSheet(false);
     setShowSuccessSheet(true);
     // El pago debita la billetera: refrescar el saldo global.
-    refreshAccounts().catch(() => {});
+    if (!repetido) refreshAccounts().catch(() => {});
 
     setClientId('');
     setBillAmount('');
@@ -198,15 +239,23 @@ export const ServicesView: React.FC = () => {
     setIsProcessing(true);
     setActionError('');
     setActionBlocked(false);
+    const llave = llaveDelIntento(
+      persona,
+      AMBITO_DE_LA_RECARGA,
+      firmaDeLaRecarga(selectedOperator.id, rechargePhone, rechargeAmount),
+      llaveNueva,
+    );
     const res = await getApiLayer().services.recharge({
       operatorId: selectedOperator.id,
       phone: rechargePhone,
       amount: rechargeAmount,
+      idempotencyKey: llave,
     });
     setIsProcessing(false);
 
     if (!res.success || !res.data) {
       if (res.error?.code === MFA_REQUIRED) {
+        setLlaveDelMfa({ ambito: AMBITO_DE_LA_RECARGA, llave });
         setPendingAction('recharge');
         setShowMfa(true);
         return;
@@ -216,11 +265,21 @@ export const ServicesView: React.FC = () => {
         setActionError(t('recharge_no_agreement'));
         return;
       }
+      if (res.error?.code === 'LLAVE_REUTILIZADA') soltarIntento(persona, AMBITO_DE_LA_RECARGA, llave);
       setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DE_LA_RECARGA, CLAVE_GENERICA_DEL_SERVICIO, t));
       return;
     }
+    soltarIntento(persona, AMBITO_DE_LA_RECARGA, llave);
 
-    dispatch({ type: 'ADD_RECHARGE', payload: res.data });
+    // Como el recibo: la repeticion no se anota otra vez.
+    const repetido = res.data.repetida === true;
+    if (repetido) {
+      refreshAccounts().catch(() => {});
+      refreshTransactions().catch(() => {});
+    } else {
+      dispatch({ type: 'ADD_RECHARGE', payload: res.data });
+    }
+    setPagoYaHecho(repetido);
     setLastPayment({
       type: 'recharge',
       amount: rechargeAmount,
@@ -228,7 +287,7 @@ export const ServicesView: React.FC = () => {
     });
     setShowRechargeSheet(false);
     setShowSuccessSheet(true);
-    refreshAccounts().catch(() => {});
+    if (!repetido) refreshAccounts().catch(() => {});
 
     setRechargePhone('');
     setRechargeAmount(null);
@@ -681,11 +740,16 @@ export const ServicesView: React.FC = () => {
             <Icons.Check size={40} className="text-green-500" />
           </div>
           <h2 className="text-2xl font-black uv-text-primary mb-2">
-            {lastPayment?.type === 'recharge' ? t('recharge_success') : t('payment_success')}
+            {lastPayment?.type === 'recharge'
+              ? t(pagoYaHecho ? 'recharge_ya_hecho' : 'recharge_success')
+              : t(pagoYaHecho ? 'bill_ya_hecho' : 'payment_success')}
           </h2>
-          <p className="text-gray-500 mb-6">
+          <p className={`text-gray-500 ${pagoYaHecho ? 'mb-2' : 'mb-6'}`}>
             {lastPayment?.detail}
           </p>
+          {pagoYaHecho && (
+            <p className="text-sm uv-text-secondary mb-6">{t('servicio_ya_hecho_desc')}</p>
+          )}
 
           {lastPayment && (
             <div className="uv-surface-2 rounded-2xl p-6 mb-6">
@@ -714,11 +778,16 @@ export const ServicesView: React.FC = () => {
         onClose={() => {
           setShowMfa(false);
           setPendingAction(null);
+          // Sin verificar, el pago no salio: el servidor pide el segundo factor
+          // antes de cobrar. Se suelta su llave.
+          if (llaveDelMfa) soltarIntento(persona, llaveDelMfa.ambito, llaveDelMfa.llave);
+          setLlaveDelMfa(null);
         }}
         onVerified={() => {
           setShowMfa(false);
           const accion = pendingAction;
           setPendingAction(null);
+          setLlaveDelMfa(null);
           if (accion === 'bill') handlePayService();
           else if (accion === 'recharge') handleRecharge();
         }}
