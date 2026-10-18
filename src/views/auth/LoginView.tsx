@@ -162,6 +162,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       setError(t('login_identifier_invalid'));
       return;
     }
+    await sondear(clasificado.canonico);
+  };
+
+  // Lo comparten Continuar, el acceso rapido del ultimo usuario y la huella sin
+  // contrasena guardada. El acceso rapido iba directo al campo de contrasena, y
+  // una cuenta de demostracion que aparecia en "Ultimo acceso" tenia que
+  // escribir su nombre a mano para entrar sin ella.
+  const sondear = async (canonico: string) => {
     if (isLoading) return;
     setError('');
 
@@ -172,11 +180,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     // trata aparte a proposito, porque si contara, cinco pulsaciones de Enter
     // dejarian la cuenta bloqueada 15 minutos sin haber escrito nada.
     setIsLoading(true);
-    const res = await useAuthStore.getState().login(clasificado.canonico, '');
+    const res = await useAuthStore.getState().login(canonico, '');
     setIsLoading(false);
 
     if (res.success) {
-      await finalizarLogin(clasificado.canonico, '');
+      await finalizarLogin(canonico, '');
       return;
     }
     // El limitador, la pausa por intentos y la falta de red si se atienden
@@ -284,8 +292,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         if (credentials?.password) {
           handleLogin(lastUser.cedula, credentials.password);
         } else {
+          // Sin contrasena en el llavero: puede ser una cuenta que entra sin
+          // ella. El sondeo lo resuelve; si la pide, lleva al campo.
+          // login() del almacen clasifica y canonicaliza lo guardado.
           setIdentificador(lastUser.cedula);
-          setShowPasswordStage(true);
+          await sondear(lastUser.cedula);
         }
       } else {
         // authenticate() resuelve con success:false, nunca lanza: sin esta
@@ -299,10 +310,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   };
 
   const handleQuickLogin = () => {
-    if (lastUser) {
-      setIdentificador(lastUser.cedula);
-      setShowPasswordStage(true);
-    }
+    if (!lastUser) return;
+    setIdentificador(lastUser.cedula);
+    void sondear(lastUser.cedula);
   };
 
   return (
@@ -446,9 +456,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-3">
                   {t('login_last_access')}
                 </p>
+                {/* Mientras consulta al servidor (con Render despertando,
+                    decenas de segundos) la tarjeta dice que esta trabajando. */}
                 <button
                   onClick={handleQuickLogin}
-                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--color-surface-3-dark)] transition-colors text-left"
+                  disabled={isLoading}
+                  aria-busy={isLoading}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--color-surface-3-dark)] transition-colors text-left disabled:cursor-wait"
                 >
                   <div className="w-12 h-12 uv-gradient-brand rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
                     {lastUser.name.charAt(0)}
@@ -459,15 +473,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                       {rotuloDelTipo(lastUser.tipo)}: {lastUser.cedula}
                     </p>
                   </div>
-                  <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
+                  {isLoading ? (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-5 w-5 shrink-0 border-2 border-[var(--color-text-muted-dark)] border-t-transparent rounded-full animate-spin"
+                    />
+                  ) : (
+                    <Icons.ChevronRight size={20} className="text-[var(--color-text-muted-dark)] shrink-0" />
+                  )}
                 </button>
 
                 {/* Sin esto no habia forma de quitar el nombre de la pantalla.
                     En un telefono compartido, el siguiente en abrir la
                     aplicacion veia el nombre de quien entro antes, y nada
                     —ni cerrar sesion— lo borraba nunca. */}
+                {/* Espera a que termine la consulta: la respuesta llegaria
+                    despues y volveria a guardar el nombre recien olvidado. */}
                 <button
                   type="button"
+                  disabled={isLoading}
                   onClick={() => {
                     olvidarUltimoAcceso();
                     setLastUser(null);

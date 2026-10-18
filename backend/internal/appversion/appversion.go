@@ -17,6 +17,21 @@
 // Se intenta la API primero y se cae al segundo camino; lo que funcione se
 // cachea, para que mil telefonos no golpeen a GitHub.
 //
+// Toda version nueva es obligatoria, y el aviso dice que trae. La app instalada
+// no conoce el changelog de la version que todavia no tiene: lo lee de aca. El
+// CI adjunta a cada release un notas.json armado desde src/config/version.ts, y
+// se baja por la URL de descarga, que tampoco pasa por la API, asi que los dos
+// caminos lo traen. Sin notas (los releases anteriores a la 2.8.0, o una
+// descarga que falla) la version se ofrece igual con la lista vacia: no saber
+// que trae no es motivo para no exigirla. Una falla pasajera de las notas se
+// cachea solo un minuto, no los diez de siempre.
+//
+// Como la actualizacion es obligatoria, ofrecer una version cuyo APK no existe
+// deja a la gente frente a una barrera con un boton que da 404. Los dos
+// workflows del tag publican en el mismo release, y si iOS termina primero o el
+// de Android falla, el release queda sin .apk. La API lo rechaza sola; la
+// redireccion no ve los adjuntos, asi que confirma el APK antes de ofrecerlo.
+//
 // Las dos plataformas comparten la VERSION pero no la URL, porque no se
 // actualizan igual:
 //
@@ -32,6 +47,7 @@ package appversion
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -46,19 +62,36 @@ const (
 	apiURL      = "https://api.github.com/repos/keylormr/kiramopay/releases/latest"
 	webURL      = "https://github.com/keylormr/kiramopay/releases/latest"
 	descargaFmt = "https://github.com/keylormr/kiramopay/releases/download/%s/kiramopay.apk"
+	notasFmt    = "https://github.com/keylormr/kiramopay/releases/download/%s/notas.json"
 	cacheTTL    = 10 * time.Minute
+	// Cuando las novedades fallaron por algo pasajero (un 5xx, un corte):
+	// se vuelven a buscar pronto.
+	cacheTTLProvisional = time.Minute
+	// Un changelog son unas decenas de lineas; esto sobra y corta un adjunto
+	// equivocado antes de leerlo entero.
+	maxNotas = 64 << 10
 )
 
 type infoVersion struct {
-	Version string `json:"version"`
-	URL     string `json:"url"`
+	Version string   `json:"version"`
+	URL     string   `json:"url"`
+	Notas   []string `json:"notes"`
 }
 
 type Handler struct {
 	mu       sync.Mutex
 	cache    *infoVersion
 	cachedAt time.Time
+	// Vigencia de la cache actual; cero es cacheTTL.
+	cacheVigencia time.Duration
+	// Una sola consulta a GitHub a la vez: con la cache vacia y mil
+	// telefonos, los demas esperan y usan lo que trajo la primera.
+	refresco sync.Mutex
 	client   *http.Client
+	// Para el notas.json y para confirmar el APK: la descarga de un adjunto
+	// responde con una redireccion al almacenamiento de objetos, y este
+	// cliente si la sigue.
+	clienteDescargas *http.Client
 	// Canal de actualizacion de iOS (IOS_UPDATE_URL). Vacio mientras no exista
 	// distribucion iOS; ver el comentario del paquete.
 	iosUpdateURL string
@@ -66,6 +99,7 @@ type Handler struct {
 	apiURL      string
 	webURL      string
 	descargaFmt string
+	notasFmt    string
 	token       string
 }
 
@@ -78,9 +112,11 @@ func NewHandler() *Handler {
 			Timeout:       10 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		apiURL:      apiURL,
-		webURL:      webURL,
-		descargaFmt: descargaFmt,
+		clienteDescargas: &http.Client{Timeout: 3 * time.Second},
+		apiURL:           apiURL,
+		webURL:           webURL,
+		descargaFmt:      descargaFmt,
+		notasFmt:         notasFmt,
 		// Opcional: sube el limite de la API de 60 a 5000 por hora. Sin el, el
 		// camino web hace el trabajo igual.
 		token:        os.Getenv("GITHUB_TOKEN"),
@@ -110,14 +146,17 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.mu.Lock()
-	if h.cache != nil && time.Since(h.cachedAt) < cacheTTL {
-		info := *h.cache
-		h.mu.Unlock()
+	if info, ok := h.cacheVigente(); ok {
 		response.JSON(w, http.StatusOK, h.paraPlataforma(info, plataforma))
 		return
 	}
-	h.mu.Unlock()
+	h.refresco.Lock()
+	defer h.refresco.Unlock()
+	// Mientras se esperaba, otra peticion pudo haberla llenado.
+	if info, ok := h.cacheVigente(); ok {
+		response.JSON(w, http.StatusOK, h.paraPlataforma(info, plataforma))
+		return
+	}
 
 	info, err := h.desdeAPI(r)
 	if err != nil {
@@ -129,12 +168,32 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		h.responderCacheViejaOFallo(w, plataforma)
 		return
 	}
+	notas, definitivas := h.notasDe(r, info.Version)
+	info.Notas = notas
 
 	h.mu.Lock()
 	h.cache = info
 	h.cachedAt = time.Now()
+	h.cacheVigencia = cacheTTL
+	if !definitivas {
+		h.cacheVigencia = cacheTTLProvisional
+	}
 	h.mu.Unlock()
 	response.JSON(w, http.StatusOK, h.paraPlataforma(*info, plataforma))
+}
+
+// cacheVigente devuelve la respuesta cacheada si todavia vale.
+func (h *Handler) cacheVigente() (infoVersion, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	vigencia := h.cacheVigencia
+	if vigencia <= 0 {
+		vigencia = cacheTTL
+	}
+	if h.cache == nil || time.Since(h.cachedAt) >= vigencia {
+		return infoVersion{}, false
+	}
+	return *h.cache, true
 }
 
 // paraPlataforma adapta la respuesta cacheada (que es la de Android, con la URL
@@ -142,9 +201,84 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 // sale del tag del release.
 func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersion {
 	if plataforma == "ios" {
-		return infoVersion{Version: info.Version, URL: h.iosUpdateURL}
+		info.URL = h.iosUpdateURL
+	}
+	// Nunca null: la pantalla recorre la lista. Una cache de antes de las
+	// novedades no las trae.
+	if info.Notas == nil {
+		info.Notas = []string{}
 	}
 	return info
+}
+
+// notasDe baja el notas.json del release de esa version. Cualquier problema
+// (no existe, no es JSON, es de otra version) da una lista vacia y queda en el
+// log: la version se exige igual.
+// notasDe baja el notas.json del release de esa version. Cualquier problema da
+// una lista vacia y queda en el log: la version se exige igual. El segundo
+// valor dice si el resultado es definitivo (hay notas, o el release no las
+// tiene, o son invalidas) o si fue una falla pasajera que conviene reintentar
+// pronto (red, corte, 5xx).
+func (h *Handler) notasDe(r *http.Request, version string) ([]string, bool) {
+	if h.notasFmt == "" {
+		return []string{}, true
+	}
+	url := fmt.Sprintf(h.notasFmt, "v"+version)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		return []string{}, true
+	}
+	resp, err := h.clienteDescargas.Do(req)
+	if err != nil {
+		slog.Warn("app version: no se pudieron bajar las novedades", "version", version, "err", err)
+		return []string{}, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		slog.Warn("app version: el release no trae novedades", "version", version, "status", resp.StatusCode)
+		return []string{}, resp.StatusCode < 500
+	}
+	var notas struct {
+		Version string   `json:"version"`
+		Cambios []string `json:"cambios"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxNotas)).Decode(&notas); err != nil {
+		slog.Warn("app version: las novedades no son JSON valido", "version", version, "err", err)
+		return []string{}, true
+	}
+	// Un adjunto subido al release equivocado no puede presentarse como lo que
+	// trae esta version.
+	if notas.Version != version {
+		slog.Warn("app version: las novedades son de otra version", "release", version, "notas", notas.Version)
+		return []string{}, true
+	}
+	limpias := make([]string, 0, len(notas.Cambios))
+	for _, c := range notas.Cambios {
+		if c = strings.TrimSpace(c); c != "" {
+			limpias = append(limpias, c)
+		}
+	}
+	return limpias, true
+}
+
+// existeDescarga confirma que el adjunto esta publicado. Pide un solo byte:
+// el almacenamiento de objetos de GitHub firma la URL para GET, y un HEAD
+// podria rechazarse aunque el archivo exista.
+func (h *Handler) existeDescarga(r *http.Request, url string) error {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := h.clienteDescargas.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("la descarga %s respondio %d", url, resp.StatusCode)
+	}
+	return nil
 }
 
 // desdeAPI lee el release por la API: es la fuente autoritativa del nombre del
@@ -221,9 +355,13 @@ func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
 	if tag == "" {
 		return nil, fmt.Errorf("la redireccion no trae tag: %q", destino)
 	}
+	descarga := fmt.Sprintf(h.descargaFmt, tag)
+	if err := h.existeDescarga(r, descarga); err != nil {
+		return nil, fmt.Errorf("el release %s no tiene el APK todavia: %w", tag, err)
+	}
 	return &infoVersion{
 		Version: strings.TrimPrefix(tag, "v"),
-		URL:     fmt.Sprintf(h.descargaFmt, tag),
+		URL:     descarga,
 	}, nil
 }
 

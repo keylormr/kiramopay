@@ -4,6 +4,11 @@ import type { ApiResponse } from '../types';
 export interface VersionApp {
   version: string;
   url: string;
+  /**
+   * Lo que trae la version, del notas.json del release. Un backend anterior a
+   * la 2.8.0 no lo manda.
+   */
+  notes?: string[];
 }
 
 // Las dos plataformas comparten la version pero no la URL: Android baja el .apk
