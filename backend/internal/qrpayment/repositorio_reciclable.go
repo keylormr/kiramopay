@@ -40,6 +40,20 @@ func (r *Repository) GetOrCreateStaticCode(
 	if merchantID == "" {
 		return obtenerOCrearCodigo(ctx, r.db, creatorID, "", locationID, currency, tipo)
 	}
+	// El camino de todos los dias es mostrar el rotulo que ya existe, y ese se
+	// lee sin candado: tomar la fila del comercio FOR SHARE marca la tupla, y
+	// hacerlo en cada vista del mostrador escribia la fila sin necesidad. Si el
+	// comercio se esta cerrando, el rotulo que sale queda revocado cuando el
+	// cierre confirma y el pago lo rechaza. El candado queda para crear uno.
+	moneda := currency
+	if moneda == "" {
+		moneda = "CRC"
+	}
+	if code, err := buscarCodigoActivo(ctx, r.db, creatorID, merchantID, locationID, moneda); err == nil {
+		return code, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
 	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
@@ -258,10 +272,19 @@ func (r *Repository) ListarCobros(ctx context.Context, creatorID, estado string,
 	if limite <= 0 || limite > 100 {
 		limite = 50
 	}
+	// Los cobros de un comercio salen solo mientras quien los abrio sigue en
+	// el: su dueno o un miembro activo de su equipo, con el comercio abierto.
+	// Los personales son siempre de quien los abrio.
 	rows, err := r.db.Query(ctx,
-		`SELECT `+chargeCols+` FROM qr_charges
-		  WHERE created_by = $1 AND ($2 = '' OR status = $2)
-		  ORDER BY created_at DESC LIMIT $3`, creatorID, estado, limite)
+		`SELECT `+chargeCols+` FROM qr_charges c
+		  WHERE c.created_by = $1::uuid AND ($2 = '' OR c.status = $2)
+		    AND (c.merchant_id IS NULL OR EXISTS (
+		          SELECT 1 FROM qr_merchants m
+		           WHERE m.id = c.merchant_id AND m.closed_at IS NULL
+		             AND (m.user_id = $1::uuid OR EXISTS (
+		                   SELECT 1 FROM merchant_staff s
+		                    WHERE s.merchant_id = m.id AND s.user_id = $1::uuid AND s.status = 'active'))))
+		  ORDER BY c.created_at DESC LIMIT $3`, creatorID, estado, limite)
 	if err != nil {
 		return nil, err
 	}

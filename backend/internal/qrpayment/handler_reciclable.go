@@ -129,6 +129,18 @@ func responderErrorDeEquipo(w http.ResponseWriter, generico string, err error) {
 			"no KiramoPay account is registered with that cedula")
 		return
 	}
+	responderFalloDeGestion(w, generico, err)
+}
+
+// responderFalloDeGestion responde lo que no tiene codigo propio en las rutas de
+// gestion del comercio: un fallo de la base es 500 sin el detalle (falloInterno);
+// lo demas es de quien llama (un rol invalido, algo que no se encontro) y va en
+// el 400 de la ruta, con su mensaje.
+func responderFalloDeGestion(w http.ResponseWriter, generico string, err error) {
+	if esFalloInterno(err) {
+		response.Error(w, http.StatusInternalServerError, generico, "the change could not be saved")
+		return
+	}
 	response.Error(w, http.StatusBadRequest, generico, err.Error())
 }
 

@@ -448,8 +448,9 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(res.data.map(mapPayment));
   }
 
-  async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
-    const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments`);
+  async getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>> {
+    const desde = opciones?.antesDe ? `?before=${encodeURIComponent(opciones.antesDe)}` : '';
+    const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments${desde}`);
     if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapPayment));
   }

@@ -311,6 +311,7 @@ const hi: TranslationKeys = {
   business_report_range_7: '7 दिन',
   business_report_range_30: '30 दिन',
   business_report_range_90: '90 दिन',
+  business_report_range_365: '365 दिन',
   business_sales_today: 'आज की बिक्री',
   business_sales_total: 'कुल बिक्री',
   business_commission_paid: 'भुगतान किया कमीशन',
@@ -1767,6 +1768,9 @@ const hi: TranslationKeys = {
   business_closed_load_failed: 'आपके बंद व्यवसाय लोड नहीं हो सके।',
   business_closed_notice: '{fecha} को बंद हुआ। यह अब भुगतान नहीं लेता और इसे बदला नहीं जा सकता; इसकी बिक्री सुरक्षित है।',
   business_err_cerrado: 'यह व्यवसाय बंद है और अब इसे बदला नहीं जा सकता।',
+  business_closed_more: 'और बिक्री देखें',
+  business_closed_more_failed: 'और बिक्री लोड नहीं हो सकी।',
+  business_closed_report_until: 'दिन बंद होने तक गिने जाते हैं।',
 
   // Sesiones por dispositivo
   sessions_menu: 'जुड़े हुए डिवाइस',

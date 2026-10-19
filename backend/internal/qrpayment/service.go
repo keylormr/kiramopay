@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -194,7 +195,15 @@ func (s *Service) GetClosedMerchants(ctx context.Context, userID string) ([]Merc
 		return nil, err
 	}
 	for i := range cerrados {
-		cerrados[i].Role = RoleOwner
+		c := &cerrados[i]
+		c.Role = RoleOwner
+		// El dueno lee si lo cerro el (su motivo es un codigo fijo, el suyo o el
+		// de eliminar la cuenta) o si lo cerro la plataforma. Ni el texto del
+		// administrador ni quien fue.
+		if c.ClosedBy != c.UserID {
+			c.ClosureReason = MotivoCierrePorAdmin
+		}
+		c.ClosedBy = ""
 	}
 	return cerrados, nil
 }
@@ -630,6 +639,26 @@ func (s *Service) pagoYaHecho(ctx context.Context, obj *objetivo, payerID string
 	if obj.charge == nil && nonce == "" && time.Since(hecho.CreatedAt) > VentanaReplayLegacy {
 		return nil
 	}
+	// La venta existe, asi que el asiento confirmo. Si la caida fue entre el
+	// asiento y la marca, la fila del movimiento quedo 'pending': el reintento
+	// normal la repara al pasar por la transferencia, y este no pasa. Si no se
+	// puede reparar ahora, la venta igual es cierta: se anota y se devuelve.
+	repetida := &transaction.CreateTransferRequest{
+		FromUserID:     payerID,
+		Amount:         hecho.Amount,
+		Currency:       hecho.Currency,
+		TxType:         transaction.TypeQRPayment,
+		ReceiveType:    transaction.TypeQRReceive,
+		IdempotencyKey: llaveDePago(obj, payerID, nonce),
+	}
+	if hecho.MerchantID != "" {
+		repetida.ToMerchantID = hecho.MerchantID
+	} else {
+		repetida.ToUserID = hecho.ReceiverID
+	}
+	if err := s.tx.CompletarTransferenciaAsentada(ctx, repetida); err != nil {
+		slog.Warn("no se pudo poner al dia la fila de un pago repetido", "payment_id", hecho.ID, "error", err)
+	}
 	return hecho
 }
 
@@ -740,6 +769,13 @@ func (s *Service) MerchantBalance(ctx context.Context, merchantID, userID, curre
 // MerchantPayments is the shop's sales feed, visible to the whole team. El
 // dueno de un comercio cerrado tambien lo lee (rolParaLeer).
 func (s *Service) MerchantPayments(ctx context.Context, merchantID, userID string, limit int) ([]QRPaymentRecord, error) {
+	return s.VentasDelComercio(ctx, merchantID, userID, limit, "")
+}
+
+// VentasDelComercio es MerchantPayments por paginas: antesDe es el id de la
+// ultima venta que ya se vio. De un comercio cerrado no hay otra forma de
+// llegar a las ventas viejas, y el feed se cortaba en las ultimas 50.
+func (s *Service) VentasDelComercio(ctx context.Context, merchantID, userID string, limit int, antesDe string) ([]QRPaymentRecord, error) {
 	role, _, err := s.rolParaLeer(ctx, merchantID, userID)
 	if err != nil || role == "" {
 		return nil, fmt.Errorf("merchant not found")
@@ -747,7 +783,7 @@ func (s *Service) MerchantPayments(ctx context.Context, merchantID, userID strin
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	return s.repo.GetMerchantPayments(ctx, merchantID, limit)
+	return s.repo.GetMerchantPayments(ctx, merchantID, limit, antesDe)
 }
 
 // WithdrawToOwner moves money from the shop's balance to the owner's personal
@@ -1025,7 +1061,17 @@ func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string,
 	if err != nil {
 		return nil, err
 	}
-	return s.armarReporte(ctx, m, calcularVentana(time.Now(), days, tzOffsetMin), tzOffsetMin)
+	return s.armarReporte(ctx, m, calcularVentana(finDelReporte(m), days, tzOffsetMin), tzOffsetMin)
+}
+
+// finDelReporte es hasta donde cuenta el reporte: hoy, o el dia del cierre. Un
+// comercio cerrado ya no vende, y contar hasta hoy dejaba sus ventas fuera de
+// cualquier ventana un ano despues de cerrar.
+func finDelReporte(m *Merchant) time.Time {
+	if m.ClosedAt != nil {
+		return *m.ClosedAt
+	}
+	return time.Now()
 }
 
 // ReporteExportable es el reporte que se exporta en CSV. Mismo acceso que el
@@ -1044,7 +1090,7 @@ func (s *Service) ReporteExportable(ctx context.Context, merchantID, userID stri
 	if m.Plan != PlanComercioAnalitica && m.ClosedAt == nil {
 		return nil, ErrPlanAnaliticaRequerido
 	}
-	return s.armarReporte(ctx, m, calcularVentana(time.Now(), days, tzOffsetMin), tzOffsetMin)
+	return s.armarReporte(ctx, m, calcularVentana(finDelReporte(m), days, tzOffsetMin), tzOffsetMin)
 }
 
 func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReporte, tzOffsetMin int) (*MerchantReport, error) {

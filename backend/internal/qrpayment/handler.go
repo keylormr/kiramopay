@@ -175,12 +175,24 @@ func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
 
-// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments. The shop's
-// sales feed, visible to the whole team (owner, manager, cashier).
+// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?limit=&before=.
+// The shop's sales feed, visible to the whole team (owner, manager, cashier),
+// newest first. `before` is the id of the last payment already shown.
 func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
-	payments, err := h.service.MerchantPayments(r.Context(), merchantID, userID, 50)
+	q := r.URL.Query()
+	limite, _ := strconv.Atoi(q.Get("limit"))
+	antesDe := q.Get("before")
+	if antesDe != "" {
+		id, err := uuid.Parse(antesDe)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "INVALID_CURSOR", "before must be the id of a payment")
+			return
+		}
+		antesDe = id.String()
+	}
+	payments, err := h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -297,7 +309,7 @@ func (h *Handler) UpdateStaff(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "UPDATE_STAFF_FAILED", err.Error())
+		responderFalloDeGestion(w, "UPDATE_STAFF_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, member)
@@ -311,7 +323,7 @@ func (h *Handler) RevokeStaff(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "REVOKE_STAFF_FAILED", err.Error())
+		responderFalloDeGestion(w, "REVOKE_STAFF_FAILED", err)
 		return
 	}
 	response.NoContent(w)
@@ -347,7 +359,7 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "CREATE_LOCATION_FAILED", err.Error())
+		responderFalloDeGestion(w, "CREATE_LOCATION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, loc)
@@ -367,7 +379,7 @@ func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "UPDATE_LOCATION_FAILED", err.Error())
+		responderFalloDeGestion(w, "UPDATE_LOCATION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, loc)
@@ -403,7 +415,7 @@ func (h *Handler) CreateCatalogItem(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "CREATE_ITEM_FAILED", err.Error())
+		responderFalloDeGestion(w, "CREATE_ITEM_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, item)
@@ -423,7 +435,7 @@ func (h *Handler) UpdateCatalogItem(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "UPDATE_ITEM_FAILED", err.Error())
+		responderFalloDeGestion(w, "UPDATE_ITEM_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, item)
@@ -437,7 +449,7 @@ func (h *Handler) DeleteCatalogItem(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "DELETE_ITEM_FAILED", err.Error())
+		responderFalloDeGestion(w, "DELETE_ITEM_FAILED", err)
 		return
 	}
 	response.NoContent(w)

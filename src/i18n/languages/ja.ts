@@ -311,6 +311,7 @@ const ja: TranslationKeys = {
   business_report_range_7: '7日間',
   business_report_range_30: '30日間',
   business_report_range_90: '90日間',
+  business_report_range_365: '365日間',
   business_sales_today: '本日の売上',
   business_sales_total: '売上合計',
   business_commission_paid: '支払手数料',
@@ -1767,6 +1768,9 @@ const ja: TranslationKeys = {
   business_closed_load_failed: '閉じた店舗を読み込めませんでした。',
   business_closed_notice: '{fecha}に閉店。支払いの受け付けも編集もできません。売上は保存されています。',
   business_err_cerrado: 'この店舗は閉じられているため、変更できません。',
+  business_closed_more: 'さらに売上を表示',
+  business_closed_more_failed: 'これ以上の売上を読み込めませんでした。',
+  business_closed_report_until: '日数は閉店日までで数えます。',
 
   // Sesiones por dispositivo
   sessions_menu: 'ログイン中の端末',

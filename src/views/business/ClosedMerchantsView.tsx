@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import { Button } from '@/components/ui';
 import { getApiLayer } from '@/api';
-import type { QRMerchant, QRPayment } from '@/api/repositories/qrpayment.repository';
+import { VENTAS_POR_PAGINA, type QRMerchant, type QRPayment } from '@/api/repositories/qrpayment.repository';
 import { fechaLarga, rellenar } from '@/utils/planes';
 import { useCapa } from '@/navegacion/pilaDeCapas';
 import { BusinessMovementsView } from './BusinessMovementsView';
@@ -39,6 +40,14 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
   const [pestana, setPestana] = useState<Pestana>('movimientos');
   const [ventas, setVentas] = useState<QRPayment[] | null>(null);
   const [falloVentas, setFalloVentas] = useState(false);
+  // Las ventas llegan de a una pagina. Una llena puede tener mas detras: de un
+  // comercio cerrado no hay otra forma de llegar a las viejas.
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [falloMas, setFalloMas] = useState(false);
+  // Cada comercio que se abre es una consulta nueva: la pagina que llega tarde,
+  // de uno que ya se cerro en pantalla, no se agrega a otro.
+  const consulta = useRef(0);
 
   // Lo que se reinicia al reintentar o al abrir otro comercio se reinicia en
   // el gesto que lo pide, no aqui: el efecto solo pide y anota la respuesta.
@@ -57,8 +66,10 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
     let cancelled = false;
     Promise.resolve(getApiLayer().qrPayments?.getMerchantPayments(elegido.id)).then((res) => {
       if (cancelled) return;
-      if (res?.success && res.data) setVentas(res.data);
-      else { setVentas([]); setFalloVentas(true); }
+      if (res?.success && res.data) {
+        setVentas(res.data);
+        setHayMas(res.data.length >= VENTAS_POR_PAGINA);
+      } else { setVentas([]); setFalloVentas(true); }
     }).catch(() => { if (!cancelled) { setVentas([]); setFalloVentas(true); } });
     return () => { cancelled = true; };
   }, [elegido]);
@@ -69,12 +80,41 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
     setIntento((n) => n + 1);
   };
   const abrir = (m: QRMerchant) => {
+    consulta.current += 1;
     setVentas(null);
     setFalloVentas(false);
+    setHayMas(false);
+    setCargandoMas(false);
+    setFalloMas(false);
     setPestana('movimientos');
     setElegido(m);
   };
-  const volverALaLista = () => setElegido(null);
+  const volverALaLista = () => {
+    consulta.current += 1;
+    setElegido(null);
+  };
+
+  const pedirMas = () => {
+    const ultima = ventas?.[ventas.length - 1];
+    if (!elegido || !ultima || cargandoMas) return;
+    const esta = consulta.current;
+    setCargandoMas(true);
+    setFalloMas(false);
+    Promise.resolve(getApiLayer().qrPayments?.getMerchantPayments(elegido.id, { antesDe: ultima.id })).then((res) => {
+      if (esta !== consulta.current) return;
+      if (res?.success && res.data) {
+        const siguientes = res.data;
+        setVentas((previas) => [...(previas ?? []), ...siguientes]);
+        setHayMas(siguientes.length >= VENTAS_POR_PAGINA);
+      } else {
+        setFalloMas(true);
+      }
+    }).catch(() => {
+      if (esta === consulta.current) setFalloMas(true);
+    }).finally(() => {
+      if (esta === consulta.current) setCargandoMas(false);
+    });
+  };
 
   // Atras con un comercio abierto vuelve a la lista, igual que la flecha; la
   // pantalla entera la cierra App.
@@ -187,7 +227,21 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
         ) : ventas === null ? (
           <p className="text-sm uv-text-muted text-center py-10" role="status">{t('loading')}</p>
         ) : (
-          <BusinessMovementsView payments={ventas} paymentsFailed={falloVentas} conTitulo={false} />
+          <BusinessMovementsView
+            payments={ventas}
+            paymentsFailed={falloVentas}
+            conTitulo={false}
+            pie={hayMas && (
+              <div className="space-y-2">
+                {falloMas && (
+                  <p role="alert" className="text-sm text-center text-[var(--color-danger)]">{t('business_closed_more_failed')}</p>
+                )}
+                <Button variant="secondary" size="md" fullWidth loading={cargandoMas} onClick={pedirMas}>
+                  {t('business_closed_more')}
+                </Button>
+              </div>
+            )}
+          />
         )}
       </div>
     </div>

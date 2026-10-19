@@ -167,3 +167,27 @@ type ComercioConCobrosError struct {
 
 func (e *ComercioConCobrosError) Error() string { return ErrComercioConCobrosPendientes.Error() }
 func (e *ComercioConCobrosError) Unwrap() error { return ErrComercioConCobrosPendientes }
+
+// falloInterno marca un error de la base, o del camino hacia ella, en las rutas
+// de gestion del comercio (equipo, sucursales, catalogo): la ruta lo responde
+// como 500 y sin el detalle. No es algo que quien llama pueda corregir, y la
+// frase del driver ("failed to connect to ...") no es para la pantalla. Antes
+// salia en el 400 de cada ruta.
+type falloInterno struct{ err error }
+
+func (f falloInterno) Error() string { return f.err.Error() }
+func (f falloInterno) Unwrap() error { return f.err }
+
+// interno marca err como falloInterno. Lo que ya tiene su respuesta (el
+// comercio cerrado o que no existe) pasa tal cual.
+func interno(err error) error {
+	if err == nil || errors.Is(err, ErrComercioCerrado) || errors.Is(err, ErrComercioNoEncontrado) {
+		return err
+	}
+	return falloInterno{err: err}
+}
+
+func esFalloInterno(err error) bool {
+	var f falloInterno
+	return errors.As(err, &f)
+}

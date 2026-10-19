@@ -398,6 +398,7 @@ export type TranslationKeys = {
   business_report_range_7: string;
   business_report_range_30: string;
   business_report_range_90: string;
+  business_report_range_365: string;
   business_sales_today: string;
   business_sales_total: string;
   business_commission_paid: string;
@@ -1849,6 +1850,9 @@ export type TranslationKeys = {
   business_closed_load_failed: string;
   business_closed_notice: string;
   business_err_cerrado: string;
+  business_closed_more: string;
+  business_closed_more_failed: string;
+  business_closed_report_until: string;
 
   // Sesiones por dispositivo
   sessions_menu: string;

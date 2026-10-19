@@ -17,6 +17,7 @@ import type {
   ResolvedQR,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
+import { VENTAS_POR_PAGINA } from '../../repositories/qrpayment.repository';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
 import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 
@@ -391,9 +392,13 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(state?.qrPayments ?? []);
   }
 
-  async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
-    const payments = readList<QRPayment>('qrPayments');
-    return apiSuccess(payments.filter((p) => p.merchantId === merchantId));
+  async getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>> {
+    const ventas = readList<QRPayment>('qrPayments')
+      .filter((p) => p.merchantId === merchantId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const desde = opciones?.antesDe ? ventas.findIndex((p) => p.id === opciones.antesDe) + 1 : 0;
+    if (opciones?.antesDe && desde === 0) return apiSuccess([]);
+    return apiSuccess(ventas.slice(desde, desde + VENTAS_POR_PAGINA));
   }
 
   async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {

@@ -21,6 +21,9 @@ interface Props {
 }
 
 const RANGES = [7, 30, 90] as const;
+// Un comercio cerrado ya no vende: su reporte cuenta hasta el cierre, y se
+// puede mirar el ultimo ano entero (el tope del servidor).
+const RANGES_CERRADO = [30, 90, 365] as const;
 
 /** Local YYYY-MM-DD for a date, matching the server's client-tz bucketing. */
 const localKey = (d: Date) =>
@@ -77,7 +80,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   // utils/money y no `symbol + toFixed(2)`: el atajo perdia los miles con coma.
   const money = (v: number) => formatMoney(v, ccy as CurrencyCode, { decimals: 2 });
 
-  const [days, setDays] = useState<(typeof RANGES)[number]>(30);
+  const [days, setDays] = useState<(typeof RANGES)[number] | (typeof RANGES_CERRADO)[number]>(30);
   // La ultima respuesta buena y el rango al que corresponde. Mientras llega la
   // de otro rango se sigue viendo, atenuada y rotulada "Actualizando": antes
   // la pantalla pintaba guiones y un grafico en cero, identico a un comercio
@@ -225,7 +228,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     <div className="pb-24 pt-4 px-4 space-y-5">
       {/* Range selector */}
       <div className="flex gap-2">
-        {RANGES.map((r) => (
+        {(cerrado ? RANGES_CERRADO : RANGES).map((r) => (
           <button
             key={r}
             onClick={() => { setDays(r); if (exportacion !== 'exportando') setExportacion('quieto'); }}
@@ -240,6 +243,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </button>
         ))}
       </div>
+      {cerrado && <p className="-mt-3 text-xs uv-text-muted">{t('business_closed_report_until')}</p>}
 
       {/* Para el lector de pantalla; lo visible va dentro de cada tarjeta. */}
       <p aria-live="polite" className="sr-only">

@@ -34,6 +34,11 @@ const (
 	// MotivoCierrePropio es el motivo cuando el dueno cierra el suyo: no se le
 	// pide que escriba uno.
 	MotivoCierrePropio = "owner_request"
+	// MotivoCierrePorAdmin es lo que lee el dueno cuando lo cerro un
+	// administrador. El texto que escribio el administrador es suyo: puede ser
+	// una nota de cumplimiento, y al cliente no se le dice (Ley 7786). Queda
+	// entero en la fila y en la vista de administracion.
+	MotivoCierrePorAdmin = "admin_closure"
 
 	// Acciones en audit_logs.
 	AccionCierrePropio = "merchant_closed"
@@ -391,13 +396,20 @@ func (s *Service) reautenticar(ctx context.Context, userID, merchantID string, r
 		return fmt.Errorf("contar el intento de cierre: %w", err)
 	}
 	if intentos > int64(s.maxIntentosDeCierre) {
-		s.registrarIntentoFallido(ctx, userID, merchantID, falloEnPausa, ac)
+		// La pausa se anota una vez por ventana, en el primer intento que la
+		// encuentra: si no, un guion que insiste llenaba audit_logs a la
+		// velocidad a la que mandaba peticiones.
+		if intentos == int64(s.maxIntentosDeCierre)+1 {
+			s.registrarIntentoFallido(ctx, userID, merchantID, falloEnPausa, ac)
+		}
 		return ErrCierreEnPausa
 	}
+	inicio := time.Now()
 	valida, err := hash.VerifyPin(req.Password, u.PasswordHash)
 	if err != nil || !valida {
 		s.registrarIntentoFallido(ctx, userID, merchantID, falloContrasena, ac)
 		if conSegundoFactor {
+			esperarElPiso(ctx, inicio)
 			return ErrCredencialesIncorrectas
 		}
 		return ErrContrasenaIncorrecta
@@ -409,11 +421,36 @@ func (s *Service) reautenticar(ctx context.Context, userID, merchantID string, r
 		}
 		if !ok {
 			s.registrarIntentoFallido(ctx, userID, merchantID, falloCodigo, ac)
+			esperarElPiso(ctx, inicio)
 			return ErrCredencialesIncorrectas
 		}
 	}
 	s.reiniciarIntentosDeCierre(userID)
 	return nil
+}
+
+// PisoDelRechazoConSegundoFactor es lo minimo que tarda el rechazo de la
+// reautenticacion cuando la cuenta tiene el segundo factor encendido, contado
+// desde que se empieza a verificar la contrasena. Una contrasena equivocada se
+// rechaza sin mirar el codigo; una correcta con el codigo malo lo verifica
+// (Redis y la base). El cuerpo de las dos respuestas es el mismo, pero sin un
+// piso comun el tiempo decia cual de los dos fallo. Esta por encima de lo que
+// tarda Argon2 con los parametros de produccion mas el codigo.
+const PisoDelRechazoConSegundoFactor = time.Second
+
+// esperarElPiso duerme hasta que pase el piso desde inicio, o hasta que la
+// peticion se cancele.
+func esperarElPiso(ctx context.Context, inicio time.Time) {
+	falta := time.Until(inicio.Add(PisoDelRechazoConSegundoFactor))
+	if falta <= 0 {
+		return
+	}
+	t := time.NewTimer(falta)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
+	}
 }
 
 // Lo que fallo en un intento de confirmar el cierre, como queda en el rastro.
@@ -446,21 +483,14 @@ func (s *Service) registrarIntentoFallido(ctx context.Context, userID, merchantI
 // entrada a la persona titular.
 func cierreLockoutKey(userID string) string { return "lockout:merchantclose:uid:" + userID }
 
-// contadorEstricto lo cumple el tope de produccion (RedisLockoutStore): cuenta,
-// y si Redis no contesta lo dice. IncrLockout, en cambio, devuelve 0 y deja
-// pasar, que para el login es lo que se eligio.
-type contadorEstricto interface {
-	ContarIntento(key string) (int64, error)
-}
-
+// contarIntentoDeCierre cuenta con ContarIntento: si Redis no contesta, lo
+// dice, y el cierre no sigue. IncrLockout devuelve 0 y deja pasar, que para el
+// login es lo que se eligio.
 func (s *Service) contarIntentoDeCierre(userID string) (int64, error) {
 	if s.lockout == nil || userID == "" {
 		return 0, nil
 	}
-	if c, ok := s.lockout.(contadorEstricto); ok {
-		return c.ContarIntento(cierreLockoutKey(userID))
-	}
-	return s.lockout.IncrLockout(cierreLockoutKey(userID)), nil
+	return s.lockout.ContarIntento(cierreLockoutKey(userID))
 }
 
 func (s *Service) reiniciarIntentosDeCierre(userID string) {

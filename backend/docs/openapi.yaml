@@ -1844,7 +1844,10 @@ paths:
         were closed, the last closed first, each with role owner: they no
         longer charge and nobody administers them, but their owner still
         reads their sales, balance and report, and downloads the report CSV
-        with any plan.
+        with any plan. In that list closure_reason is owner_request (or
+        account_deletion) when the owner closed it, and admin_closure when an
+        administrator did; the administrator's text and closed_by are only in
+        the admin view.
       security:
         - bearerAuth: []
       parameters:
@@ -1919,8 +1922,9 @@ paths:
       tags: [QR Payments]
       summary: Sales report of a merchant (owner or manager)
       description: >-
-        Calendar window of `days` days in the client's timezone, up to now.
-        With the analitica plan the report also carries `comparison`: the same
+        Calendar window of `days` days in the client's timezone, up to now;
+        for a closed merchant, up to the moment it closed, since it no longer
+        sells. With the analitica plan the report also carries `comparison`: the same
         window moved `days` days back and cut at the same hour, so today's
         half day is not compared with a whole day. With the base plan
         `comparison` is absent. Anyone who is not the owner or a manager gets
@@ -1951,7 +1955,9 @@ paths:
       tags: [QR Payments]
       summary: Export the sales report as CSV (owner or manager, analitica plan)
       description: >-
-        Same window and access as the report, plus the analitica plan. The
+        Same window and access as the report, plus the analitica plan. A
+        closed merchant is the exception: its window ends when it closed, and
+        its owner exports with any plan, since the plan was for operating. The
         role is checked first: someone outside the team gets 404 and never
         learns which plan the merchant has.
       security:
@@ -2222,12 +2228,24 @@ paths:
       tags: [QR Payments]
       summary: Sales of a merchant, newest first (whole team)
       description: >-
-        The last 50 sales. The owner of a closed merchant still reads them;
-        its former staff does not.
+        Sales by pages, newest first: `limit` of them (50 by default), and with
+        `before` the ones that follow the payment with that id. A page shorter
+        than `limit` is the last one. The owner of a closed merchant still
+        reads them; its former staff does not.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ResourceId'
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Out of range (or absent), 50.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: before
+          in: query
+          required: false
+          description: Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page.
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Sales (may be empty)
@@ -2237,6 +2255,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/QRPaymentRecord'
+        '400':
+          description: INVALID_CURSOR — before is not an id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
           content:
@@ -2315,6 +2339,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/qr/merchants/{id}/staff/{staffID}:
     put:
@@ -2355,6 +2385,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags: [QR Payments]
       summary: Revoke a team member (owner only)
@@ -2379,6 +2415,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
           content:
             application/json:
               schema:
@@ -2449,6 +2491,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/qr/merchants/{id}/locations/{locationID}:
     put:
@@ -2485,6 +2533,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
           content:
             application/json:
               schema:
@@ -2555,6 +2609,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/qr/merchants/{id}/catalog/{itemID}:
     put:
@@ -2595,6 +2655,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags: [QR Payments]
       summary: Remove a product (owner or manager)
@@ -2619,6 +2685,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
           content:
             application/json:
               schema:

@@ -256,14 +256,16 @@ func (s *Service) puedeCobrarCon(ctx context.Context, userID string, code *QRPay
 }
 
 func (s *Service) puedeAdministrarCobro(ctx context.Context, userID string, cobro *QRCharge) error {
-	if cobro.CreatedBy == userID {
+	if cobro.MerchantID == "" {
+		if cobro.CreatedBy != userID {
+			return ErrQRInvalido
+		}
 		return nil
 	}
-	if cobro.MerchantID == "" {
-		return ErrQRInvalido
-	}
-	// Un cajero abre el cobro y se va; el que sigue en la caja tiene que poder
-	// cancelarlo. Cualquier miembro del equipo del local sirve.
+	// Un cobro del comercio es del comercio. Un cajero abre el cobro y se va; el
+	// que sigue en la caja tiene que poder cancelarlo: cualquier miembro activo
+	// del equipo sirve. Y haberlo abierto no alcanza: quien se fue del equipo (o
+	// el comercio cerro, y con el cierre se fue todo el equipo) ya no lo lee.
 	role, _, err := s.roleFor(ctx, cobro.MerchantID, userID)
 	if err != nil || role == "" {
 		return ErrQRInvalido

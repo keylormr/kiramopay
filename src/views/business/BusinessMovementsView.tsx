@@ -12,9 +12,11 @@ interface Props {
   paymentsFailed?: boolean;
   /** Sin el titulo cuando la pantalla que la contiene ya lo dice (una pestana "Movimientos"). */
   conTitulo?: boolean;
+  /** Lo que va debajo de la lista, como pedir las ventas que siguen. */
+  pie?: React.ReactNode;
 }
 
-export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFailed = false, conTitulo = true }) => {
+export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFailed = false, conTitulo = true, pie }) => {
   const { t, language } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
@@ -67,6 +69,7 @@ export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFaile
           ))}
         </div>
       )}
+      {pie}
     </div>
   );
 };

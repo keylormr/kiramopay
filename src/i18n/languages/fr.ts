@@ -312,6 +312,7 @@ const fr: TranslationKeys = {
   business_report_range_7: '7 jours',
   business_report_range_30: '30 jours',
   business_report_range_90: '90 jours',
+  business_report_range_365: '365 jours',
   business_sales_today: 'Ventes du jour',
   business_sales_total: 'Ventes totales',
   business_commission_paid: 'Commission payée',
@@ -1776,6 +1777,9 @@ const fr: TranslationKeys = {
   business_closed_load_failed: 'Impossible de charger vos commerces fermés.',
   business_closed_notice: "Fermé le {fecha}. Il n'encaisse plus et ne peut plus être modifié ; ce qu'il a vendu est conservé.",
   business_err_cerrado: 'Ce commerce est fermé et ne peut plus être modifié.',
+  business_closed_more: 'Voir plus de ventes',
+  business_closed_more_failed: 'Impossible de charger plus de ventes.',
+  business_closed_report_until: "Les jours sont comptés jusqu'à la fermeture.",
 
   // Sesiones por dispositivo
   sessions_menu: 'Appareils connectés',

@@ -312,6 +312,7 @@ const pt: TranslationKeys = {
   business_report_range_7: '7 dias',
   business_report_range_30: '30 dias',
   business_report_range_90: '90 dias',
+  business_report_range_365: '365 dias',
   business_sales_today: 'Vendas de hoje',
   business_sales_total: 'Vendas totais',
   business_commission_paid: 'Comissão paga',
@@ -1776,6 +1777,9 @@ const pt: TranslationKeys = {
   business_closed_load_failed: 'Não foi possível carregar seus negócios fechados.',
   business_closed_notice: 'Fechado em {fecha}. Não cobra mais e não pode ser editado; o que vendeu fica guardado.',
   business_err_cerrado: 'Este negócio está fechado e não pode mais ser alterado.',
+  business_closed_more: 'Ver mais vendas',
+  business_closed_more_failed: 'Não foi possível carregar mais vendas.',
+  business_closed_report_until: 'Os dias são contados até o fechamento.',
 
   // Sesiones por dispositivo
   sessions_menu: 'Dispositivos conectados',

@@ -312,6 +312,7 @@ const zhCn: TranslationKeys = {
   business_report_range_7: '7天',
   business_report_range_30: '30天',
   business_report_range_90: '90天',
+  business_report_range_365: '365天',
   business_sales_today: '今日销售',
   business_sales_total: '总销售额',
   business_commission_paid: '已付佣金',
@@ -1767,6 +1768,9 @@ const zhCn: TranslationKeys = {
   business_closed_load_failed: '无法加载你已关闭的商户。',
   business_closed_notice: '于 {fecha} 关闭。不再收款，也无法编辑；销售记录会保留。',
   business_err_cerrado: '该商户已关闭，无法再修改。',
+  business_closed_more: '查看更多销售记录',
+  business_closed_more_failed: '无法加载更多销售记录。',
+  business_closed_report_until: '天数计算到关闭之日为止。',
 
   // Sesiones por dispositivo
   sessions_menu: '已登录的设备',

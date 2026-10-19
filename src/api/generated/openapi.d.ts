@@ -2944,7 +2944,7 @@ export interface paths {
         };
         /**
          * List the merchants the user owns or works for
-         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging. A closed merchant is not listed, for its owner or for its former staff. With status=closed the list is instead the merchants the user owns that were closed, the last closed first, each with role owner: they no longer charge and nobody administers them, but their owner still reads their sales, balance and report, and downloads the report CSV with any plan.
+         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging. A closed merchant is not listed, for its owner or for its former staff. With status=closed the list is instead the merchants the user owns that were closed, the last closed first, each with role owner: they no longer charge and nobody administers them, but their owner still reads their sales, balance and report, and downloads the report CSV with any plan. In that list closure_reason is owner_request (or account_deletion) when the owner closed it, and admin_closure when an administrator did; the administrator's text and closed_by are only in the admin view.
          */
         get: {
             parameters: {
@@ -3066,7 +3066,7 @@ export interface paths {
         };
         /**
          * Sales report of a merchant (owner or manager)
-         * @description Calendar window of `days` days in the client's timezone, up to now. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
+         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
          */
         get: {
             parameters: {
@@ -3118,7 +3118,7 @@ export interface paths {
         };
         /**
          * Export the sales report as CSV (owner or manager, analitica plan)
-         * @description Same window and access as the report, plus the analitica plan. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
+         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
          */
         get: {
             parameters: {
@@ -3443,11 +3443,16 @@ export interface paths {
         };
         /**
          * Sales of a merchant, newest first (whole team)
-         * @description The last 50 sales. The owner of a closed merchant still reads them; its former staff does not.
+         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Page size. Out of range (or absent), 50. */
+                    limit?: number;
+                    /** @description Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page. */
+                    before?: string;
+                };
                 header?: never;
                 path: {
                     id: components["parameters"]["ResourceId"];
@@ -3463,6 +3468,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["QRPaymentRecord"][];
+                    };
+                };
+                /** @description INVALID_CURSOR — before is not an id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
@@ -3591,6 +3605,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -3654,6 +3677,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         post?: never;
@@ -3691,6 +3723,15 @@ export interface paths {
                 };
                 /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3803,6 +3844,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -3859,6 +3909,15 @@ export interface paths {
                 };
                 /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3973,6 +4032,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -4036,6 +4104,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         post?: never;
@@ -4073,6 +4150,15 @@ export interface paths {
                 };
                 /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
