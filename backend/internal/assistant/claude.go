@@ -79,11 +79,24 @@ type anthropicTool struct {
 }
 
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
-	Tools     []anthropicTool    `json:"tools,omitempty"`
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	System       string                 `json:"system,omitempty"`
+	Messages     []anthropicMessage     `json:"messages"`
+	Tools        []anthropicTool        `json:"tools,omitempty"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+}
+
+// anthropicOutputConfig lo usa solo el filtro de alcance: effort y salida
+// estructurada (output_config.format, sin encabezado beta).
+type anthropicOutputConfig struct {
+	Effort string           `json:"effort,omitempty"`
+	Format *anthropicFormat `json:"format,omitempty"`
+}
+
+type anthropicFormat struct {
+	Type   string         `json:"type"`
+	Schema map[string]any `json:"schema"`
 }
 
 type anthropicResponse struct {
@@ -117,6 +130,39 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		reqBody.Tools = decls
 	}
 
+	ar, err := c.send(ctx, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	// A safety refusal is a 200 with stop_reason "refusal" and (usually) empty
+	// content. Surface a neutral message rather than an error so the assistant
+	// can relay it to the user.
+	if ar.StopReason == "refusal" {
+		return &LLMResult{Text: "I can't help with that request."}, nil
+	}
+
+	var (
+		text  string
+		calls []ToolCall
+	)
+	for _, block := range ar.Content {
+		switch block.Type {
+		case "text":
+			text += block.Text
+		case "tool_use":
+			var args map[string]any
+			if block.Input != nil {
+				args = *block.Input
+			}
+			calls = append(calls, ToolCall{Name: block.Name, Args: args})
+		}
+	}
+	return &LLMResult{Text: text, ToolCalls: calls}, nil
+}
+
+// send hace el POST a /v1/messages y devuelve la respuesta decodificada; un
+// estado HTTP de error vuelve como error con el mensaje de la API.
+func (c *ClaudeClient) send(ctx context.Context, reqBody anthropicRequest) (*anthropicResponse, error) {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -154,30 +200,7 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		}
 		return nil, fmt.Errorf("anthropic http %d", resp.StatusCode)
 	}
-	// A safety refusal is a 200 with stop_reason "refusal" and (usually) empty
-	// content. Surface a neutral message rather than an error so the assistant
-	// can relay it to the user.
-	if ar.StopReason == "refusal" {
-		return &LLMResult{Text: "I can't help with that request."}, nil
-	}
-
-	var (
-		text  string
-		calls []ToolCall
-	)
-	for _, block := range ar.Content {
-		switch block.Type {
-		case "text":
-			text += block.Text
-		case "tool_use":
-			var args map[string]any
-			if block.Input != nil {
-				args = *block.Input
-			}
-			calls = append(calls, ToolCall{Name: block.Name, Args: args})
-		}
-	}
-	return &LLMResult{Text: text, ToolCalls: calls}, nil
+	return &ar, nil
 }
 
 // toAnthropicMessages maps provider-neutral messages to Anthropic messages.
