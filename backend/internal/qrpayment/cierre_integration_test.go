@@ -543,12 +543,25 @@ func TestComercioCerrado_NoCobraNiSeAdministra(t *testing.T) {
 // transaccion del asiento, espera, y al ver el cierre se deshace entero. Sin
 // eso, el cierre veia saldo cero, cerraba, y el pago entraba despues a un
 // comercio al que ya nadie podia entrar a retirarlo.
+//
+// El comercio ya vendio y retiro todo: su cuenta del libro existe, con saldo
+// cero, que es el caso de un local de verdad. Sin cuenta, el pago se frenaba
+// antes, al crearla (la FK a qr_merchants), y la prueba pasaba aunque el
+// asiento no pidiera la fila del comercio.
 func TestCerrarComercio_UnPagoEnVueloNoEntraAUnComercioQueSeCierra(t *testing.T) {
 	svc, pool, payer, owner := setupCierre(t, nil)
 	ctx := context.Background()
 	m := comercioVerificado(t, svc, owner)
 	rotulo := rotuloDelComercio(t, svc, owner, m.ID)
+	pagarAlComercio(t, svc, payer, owner, m.ID, 100000)
+	if _, err := svc.WithdrawToOwner(ctx, m.ID, owner, "CRC", saldoDelComercio(t, pool, m.ID, "CRC"), "vaciar-antes-de-la-carrera"); err != nil {
+		t.Fatalf("vaciar el comercio: %v", err)
+	}
+	if s := saldoDelComercio(t, pool, m.ID, "CRC"); s != 0 {
+		t.Fatalf("el comercio no quedo en cero: %d", s)
+	}
 	antes := walletCRC(t, pool, payer)
+	ventasAntes := contar(t, pool, `SELECT COUNT(*) FROM qr_payments WHERE merchant_id = $1::uuid`, m.ID)
 
 	cierre, err := pool.Begin(ctx)
 	if err != nil {
@@ -567,23 +580,7 @@ func TestCerrarComercio_UnPagoEnVueloNoEntraAUnComercioQueSeCierra(t *testing.T)
 		listo <- err
 	}()
 
-	esperando := false
-	for limite := time.Now().Add(10 * time.Second); time.Now().Before(limite) && !esperando; {
-		select {
-		case err := <-listo:
-			t.Fatalf("el pago termino sin esperar al cierre (err %v)", err)
-		default:
-		}
-		esperando = contar(t, pool, `
-			SELECT COUNT(*) FROM pg_stat_activity
-			 WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'`) > 0
-		if !esperando {
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
-	if !esperando {
-		t.Fatal("el pago nunca espero la fila del comercio")
-	}
+	esperarSentenciaBloqueada(t, pool, listo, "el pago", "FROM qr_merchants", "FOR SHARE")
 
 	if _, err := cierre.Exec(ctx, `
 		UPDATE qr_merchants
@@ -609,8 +606,8 @@ func TestCerrarComercio_UnPagoEnVueloNoEntraAUnComercioQueSeCierra(t *testing.T)
 	if s := saldoDelComercio(t, pool, m.ID, "CRC"); s != 0 {
 		t.Fatalf("el comercio cerrado recibio %d", s)
 	}
-	if n := contar(t, pool, `SELECT COUNT(*) FROM qr_payments WHERE merchant_id = $1::uuid`, m.ID); n != 0 {
-		t.Fatalf("quedaron %d ventas en el comercio cerrado", n)
+	if n := contar(t, pool, `SELECT COUNT(*) FROM qr_payments WHERE merchant_id = $1::uuid`, m.ID); n != ventasAntes {
+		t.Fatalf("el comercio cerrado gano ventas: %d -> %d", ventasAntes, n)
 	}
 }
 

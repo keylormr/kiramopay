@@ -105,6 +105,30 @@ describe('AdminMerchantsView: todos los comercios', () => {
 
     await waitFor(() => expect(mockApi.qrPayments.closeMerchantAsAdmin).toHaveBeenCalledWith('m1', 'Datos de prueba'));
     await waitFor(() => expect(mockApi.qrPayments.listAllMerchants).toHaveBeenCalledTimes(2));
+    // Un pendiente que se cierra sale tambien de la pestana de pendientes.
+    await waitFor(() => expect(mockApi.qrPayments.listPendingMerchants).toHaveBeenCalledTimes(2));
+  });
+
+  it('si la lista no carga lo dice con el texto de la app, no con el del servidor', async () => {
+    mockApi.qrPayments.listAllMerchants.mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED', message: 'server text' } });
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole('tab', { name: 'Todos' }));
+
+    expect(await screen.findByText('No se pudo completar la acción')).toBeInTheDocument();
+    expect(screen.queryByText('server text')).toBeNull();
+  });
+
+  it('aprobar un pendiente que ya cerro lo dice con el texto de la app', async () => {
+    mockApi.qrPayments.listPendingMerchants.mockResolvedValue({ success: true, data: [{ ...abierto, verificationStatus: 'pending' }] });
+    mockApi.qrPayments.approveMerchant.mockResolvedValue({ success: false, error: { code: 'MERCHANT_CLOSED', message: 'merchant is closed' } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Aprobar' }));
+
+    expect(await screen.findByText('Este comercio ya estaba cerrado.')).toBeInTheDocument();
+    expect(screen.queryByText('merchant is closed')).toBeNull();
   });
 
   it('si el comercio tiene saldo lo dice, con el texto de la app', async () => {

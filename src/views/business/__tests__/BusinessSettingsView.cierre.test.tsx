@@ -102,6 +102,7 @@ describe('BusinessSettingsView: cerrar el comercio', () => {
   it.each([
     ['MERCHANT_HAS_PENDING_CHARGES', /Hay cobros pendientes/],
     ['CURRENT_PASSWORD_INVALID', /Contraseña incorrecta/],
+    ['TOTP_INVALID', /El código no es correcto/],
     ['MERCHANT_CLOSE_LOCKED', /Demasiados intentos/],
     ['DEMO_ACCOUNT', /Una cuenta de demostración no puede cerrar comercios/],
     ['MERCHANT_CLOSED', /Este comercio ya estaba cerrado/],
@@ -132,5 +133,21 @@ describe('BusinessSettingsView: cerrar el comercio', () => {
       expect(mockApi.qrPayments.closeMerchant).toHaveBeenLastCalledWith(ID, { password: 'secreta', totpCode: '123456' }),
     );
     await waitFor(() => expect(onBackToPersonal).toHaveBeenCalled());
+  });
+
+  it('acepta un codigo de recuperacion, que es como entra quien perdio el telefono', async () => {
+    mockApi.qrPayments.closeMerchant
+      .mockResolvedValueOnce({ success: false, error: { code: 'TOTP_REQUIRED', message: 'x' } })
+      .mockResolvedValueOnce({ success: true, data: comercio({ active: false, closedAt: '2026-10-18T20:00:00Z' }) });
+    const user = userEvent.setup();
+    pintar();
+
+    await abrirYConfirmar(user);
+    await user.type(await screen.findByLabelText('Código de tu app de autenticación'), 'ABCD-EFGH');
+    await user.click(screen.getByRole('button', { name: 'Cerrar definitivamente' }));
+
+    await waitFor(() =>
+      expect(mockApi.qrPayments.closeMerchant).toHaveBeenLastCalledWith(ID, { password: 'secreta', totpCode: 'ABCD-EFGH' }),
+    );
   });
 });

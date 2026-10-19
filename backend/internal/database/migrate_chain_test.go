@@ -64,6 +64,12 @@ func TestRunAllMigrations(t *testing.T) {
 	if err := RunMigrations(ctx, poolFueraDeUTC, migracionesAntesDe(t, migracionesDir, "077_")); err != nil {
 		t.Fatalf("migration chain 075-076 failed: %v", err)
 	}
+	// Antes de la 079, un comercio cerrado como lo cierra la eliminacion de
+	// cuenta (077): la 079 tiene que completarlo, no tropezar con el.
+	if err := RunMigrations(ctx, pool, migracionesAntesDe(t, migracionesDir, "079_")); err != nil {
+		t.Fatalf("migration chain 077-078 failed: %v", err)
+	}
+	sembrarCierreSinQuien(ctx, t, pool)
 
 	if err := RunMigrations(ctx, pool, migracionesDir); err != nil {
 		t.Fatalf("migration chain failed: %v", err)
