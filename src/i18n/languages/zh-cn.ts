@@ -1843,7 +1843,7 @@ const zhCn: TranslationKeys = {
   login_pending_title: '您的账户即将被删除',
   login_pending_body: '您已申请删除账户，账户将于{date}删除。如果重新启用，删除将被取消，账户恢复正常使用。',
   login_pending_body_nodate: '您已申请删除账户，账户将在30天期限结束时删除。如果重新启用，删除将被取消，账户恢复正常使用。',
-  login_pending_body_overdue: '您已申请删除账户，但由于仍有未完成的事项，账户尚未能关闭。如果重新启用，删除将被取消，您可以处理这些事项。',
+  login_pending_body_overdue: '您已申请删除账户，期限已满，但账户尚未关闭。如果重新启用，删除将被取消，账户恢复正常使用。',
   login_pending_reactivate: '重新启用我的账户',
   login_pending_keep: '继续删除',
   login_pending_failed: '无法重新启用您的账户。请重试。',

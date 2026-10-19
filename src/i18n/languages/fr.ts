@@ -1852,7 +1852,7 @@ const fr: TranslationKeys = {
   login_pending_title: 'Votre compte va être supprimé',
   login_pending_body: 'Vous avez demandé la suppression de votre compte ; il sera supprimé le {date}. Si vous le réactivez, la suppression est annulée et votre compte fonctionne à nouveau.',
   login_pending_body_nodate: 'Vous avez demandé la suppression de votre compte ; il sera supprimé à la fin du délai de 30 jours. Si vous le réactivez, la suppression est annulée et votre compte fonctionne à nouveau.',
-  login_pending_body_overdue: "Vous avez demandé la suppression de votre compte, mais il n'a pas encore pu être fermé car il reste quelque chose en attente. Si vous le réactivez, la suppression est annulée et vous pouvez régler cela.",
+  login_pending_body_overdue: "Vous avez demandé la suppression de votre compte et le délai est écoulé, mais il n'a pas encore été fermé. Si vous le réactivez, la suppression est annulée et votre compte fonctionne à nouveau.",
   login_pending_reactivate: 'Réactiver mon compte',
   login_pending_keep: 'Maintenir la suppression',
   login_pending_failed: "Nous n'avons pas pu réactiver votre compte. Réessayez.",

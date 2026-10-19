@@ -1852,7 +1852,7 @@ const pt: TranslationKeys = {
   login_pending_title: 'Sua conta vai ser excluída',
   login_pending_body: 'Você pediu para excluir sua conta e ela será excluída em {date}. Se você a reativar, a exclusão é cancelada e sua conta volta a funcionar.',
   login_pending_body_nodate: 'Você pediu para excluir sua conta e ela será excluída ao fim do prazo de 30 dias. Se você a reativar, a exclusão é cancelada e sua conta volta a funcionar.',
-  login_pending_body_overdue: 'Você pediu para excluir sua conta, mas ela ainda não pôde ser encerrada porque há algo pendente. Se você a reativar, a exclusão é cancelada e você pode resolver isso.',
+  login_pending_body_overdue: 'Você pediu para excluir sua conta e o prazo terminou, mas ela ainda não foi encerrada. Se você a reativar, a exclusão é cancelada e sua conta volta a funcionar.',
   login_pending_reactivate: 'Reativar minha conta',
   login_pending_keep: 'Manter a exclusão',
   login_pending_failed: 'Não conseguimos reativar sua conta. Tente de novo.',

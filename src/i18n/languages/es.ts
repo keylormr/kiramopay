@@ -1855,7 +1855,7 @@ const es: TranslationKeys = {
   login_pending_title: 'Tu cuenta se va a eliminar',
   login_pending_body: 'Pediste eliminar tu cuenta y se elimina el {date}. Si la reactivas, se cancela la eliminación y tu cuenta vuelve a funcionar.',
   login_pending_body_nodate: 'Pediste eliminar tu cuenta y se elimina al terminar el plazo de 30 días. Si la reactivas, se cancela la eliminación y tu cuenta vuelve a funcionar.',
-  login_pending_body_overdue: 'Pediste eliminar tu cuenta, pero todavía no se pudo cerrar porque queda algo pendiente. Si la reactivas, se cancela la eliminación y puedes resolverlo.',
+  login_pending_body_overdue: 'Pediste eliminar tu cuenta y el plazo terminó, pero todavía no se cerró. Si la reactivas, se cancela la eliminación y tu cuenta vuelve a funcionar.',
   login_pending_reactivate: 'Reactivar mi cuenta',
   login_pending_keep: 'Mantener la eliminación',
   login_pending_failed: 'No pudimos reactivar tu cuenta. Inténtalo de nuevo.',

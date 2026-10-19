@@ -77,7 +77,13 @@ func (s *Service) loginPorEliminar(ctx context.Context, u *user.UserRecord, req 
 		return nil, fmt.Errorf("reactivar la cuenta: %w", err)
 	}
 	if !ok {
-		return rechazar()
+		// El doble clic: otra peticion la reactivo un instante antes. Con la
+		// contrasena ya verificada y la cuenta activa, es un login como
+		// cualquiera, no una cuenta bloqueada.
+		actual, err := s.userRepo.FindByID(ctx, u.ID)
+		if err != nil || actual.Status != "active" {
+			return rechazar()
+		}
 	}
 	u.Status = "active"
 	return s.emitirSesion(ctx, u, kind, canonical, lc)

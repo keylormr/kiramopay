@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -145,6 +146,13 @@ func (h *Handler) PayShare(w http.ResponseWriter, r *http.Request) {
 
 // respuestaDelPago traduce el rechazo del pago de una cuota.
 func respuestaDelPago(err error) (int, string, string) {
+	// Quien creo el reparto pidio eliminar su cuenta: el libro rechazo limpio y
+	// nada se movio. Sin el texto interno, que le diria a un tercero que esa
+	// cuenta esta cerrada.
+	if errors.Is(err, ledger.ErrCuentaCerrada) {
+		return http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE",
+			"the recipient account cannot receive money"
+	}
 	return http.StatusBadRequest, "PAY_FAILED", err.Error()
 }
 

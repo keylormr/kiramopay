@@ -481,20 +481,27 @@ WHERE id = $1::uuid`
 // sqlConservacionVencida es la condicion de una cuenta cuya conservacion ya
 // vencio en $2. La marca puesta despues del cierre lleva el vencimiento a diez
 // anos aunque retention_until diga cinco.
-const sqlConservacionVencida = `retention_until IS NOT NULL AND dissociated_at IS NULL
+var sqlConservacionVencida = `retention_until IS NOT NULL AND dissociated_at IS NULL
 	AND retention_until <= $2
 	AND (retention_extended_at IS NULL OR deleted_at + interval '` + intervaloConservacionExtensa + `' <= $2)
-	AND ` + sqlSinCasoAbierto
+	AND ` + sinCasoAbierto("$2")
 
-// sqlSinCasoAbierto deja fuera de la desasociacion a quien tiene un caso
-// abierto: un reporte que nadie reviso o una alerta de fraude en curso. La
-// desasociacion es irreversible, y un caso abierto sin persona a quien
-// atribuirlo ya no se puede cerrar. Cerrado el caso, el barrido siguiente la
-// desasocia.
-const sqlSinCasoAbierto = `NOT EXISTS (SELECT 1 FROM uif_reports r
+// sinCasoAbierto deja fuera de la desasociacion a quien tiene un caso abierto:
+// un reporte que nadie reviso o una alerta de fraude que alguien esta
+// investigando. La desasociacion es irreversible, y un caso abierto sin
+// persona a quien atribuirlo ya no se puede cerrar; cerrado el caso, el barrido
+// siguiente la desasocia. Una alerta que nadie atendio no cuenta: las alertas
+// nacen abiertas y solo las cierra una persona, asi que esperar por ellas
+// alargaria la conservacion sin que la ley ni una autoridad lo pidan. Y ningun
+// caso la detiene pasados diez anos del cierre, el tope de la conservacion.
+// fecha es el parametro con el momento del barrido.
+func sinCasoAbierto(fecha string) string {
+	return `(deleted_at + interval '` + intervaloConservacionExtensa + `' <= ` + fecha + `
+	OR (NOT EXISTS (SELECT 1 FROM uif_reports r
 	                 WHERE r.user_id = users.id AND r.status = 'pending')
-	AND NOT EXISTS (SELECT 1 FROM fraud_alerts f
-	                 WHERE f.user_id = users.id AND COALESCE(f.status, 'open') IN ('open', 'investigating'))`
+	    AND NOT EXISTS (SELECT 1 FROM fraud_alerts f
+	                     WHERE f.user_id = users.id AND f.status = 'investigating')))`
+}
 
 // desasociarEnTx deja lo conservado sin nada que identifique a la persona, de
 // forma irreversible. Las filas y los montos quedan (son rastro contable y

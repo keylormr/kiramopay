@@ -320,19 +320,6 @@ func (s *Service) marcar(userID string) {
 	}
 }
 
-// desmarcar quita la marca al reactivar. Si falla, la persona recibe
-// ACCOUNT_BLOCKED hasta que el repaso de las marcas la quite: queda en el log.
-func (s *Service) desmarcar(userID string) {
-	if s.marcas == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
-	defer cancel()
-	if err := s.marcas.ClearUserBlocked(ctx, userID); err != nil {
-		s.logger.Error("marca de la eliminacion no quitada al reactivar", "user", userID, "err", err.Error())
-	}
-}
-
 // enviarAviso manda un correo por fuera de la peticion, acotado por avisoTimeout.
 // El correo no se escribe en el log: es un dato que se va a suprimir.
 func (s *Service) enviarAviso(userID, correo, subject, text, html, siFalla string) {

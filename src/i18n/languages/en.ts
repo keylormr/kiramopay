@@ -1851,7 +1851,7 @@ const en: TranslationKeys = {
   login_pending_title: 'Your account is going to be deleted',
   login_pending_body: "You asked to delete your account and it's deleted on {date}. If you reactivate it, the deletion is cancelled and your account works again.",
   login_pending_body_nodate: "You asked to delete your account and it's deleted when the 30-day term ends. If you reactivate it, the deletion is cancelled and your account works again.",
-  login_pending_body_overdue: "You asked to delete your account, but it couldn't be closed yet because something is still pending. If you reactivate it, the deletion is cancelled and you can sort it out.",
+  login_pending_body_overdue: "You asked to delete your account and the term has ended, but it hasn't been closed yet. If you reactivate it, the deletion is cancelled and your account works again.",
   login_pending_reactivate: 'Reactivate my account',
   login_pending_keep: 'Keep the deletion',
   login_pending_failed: "We couldn't reactivate your account. Try again.",

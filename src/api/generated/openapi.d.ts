@@ -4303,6 +4303,24 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description PAY_FAILED — the share could not be paid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;

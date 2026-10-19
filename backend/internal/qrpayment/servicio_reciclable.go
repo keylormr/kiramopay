@@ -410,14 +410,18 @@ func (s *Service) PersonaDelQR(ctx context.Context, qrData string) (*PersonaDelQ
 	}
 	// Quien pidio eliminar su cuenta no recibe. El cripto no pasa por el libro,
 	// asi que la cuenta cerrada no lo frenaria: lo que le mandaran en el plazo
-	// quedaria adentro e impediria el cierre del dia 30. Para quien escanea, el
-	// codigo ya no sirve.
+	// quedaria adentro e impediria el cierre del dia 30. Una cuenta que la
+	// busqueda ya no encuentra es una cerrada (su codigo se revoca en el cierre,
+	// pero quien escaneo justo antes todavia lo tiene). Para quien escanea, en
+	// los dos casos, el codigo ya no sirve.
 	if s.users != nil {
 		u, err := s.users.FindByID(ctx, obj.code.CreatorID)
 		switch {
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrQRRevocado
+		case err != nil:
 			return nil, err
-		case err == nil && u != nil && u.Status == "pending_deletion":
+		case u == nil || u.Status == "pending_deletion":
 			return nil, ErrQRRevocado
 		}
 	}

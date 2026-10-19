@@ -2768,6 +2768,20 @@ paths:
       responses:
         '200':
           description: Share paid
+        '400':
+          description: PAY_FAILED — the share could not be paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            RECIPIENT_UNAVAILABLE — whoever created the split asked to delete
+            the account. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/splits/{id}/decline:
     post:

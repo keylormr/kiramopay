@@ -1843,7 +1843,7 @@ const ja: TranslationKeys = {
   login_pending_title: 'アカウントは削除される予定です',
   login_pending_body: 'アカウントの削除を申請されたため、{date}に削除されます。再開すると削除は取り消され、アカウントは再び使えるようになります。',
   login_pending_body_nodate: 'アカウントの削除を申請されたため、30日間の期間が終わると削除されます。再開すると削除は取り消され、アカウントは再び使えるようになります。',
-  login_pending_body_overdue: 'アカウントの削除を申請されましたが、未処理の項目が残っているため、まだ閉鎖できていません。再開すると削除は取り消され、その項目を解決できます。',
+  login_pending_body_overdue: 'アカウントの削除を申請され、期間は終了しましたが、まだ閉鎖されていません。再開すると削除は取り消され、アカウントは再び使えるようになります。',
   login_pending_reactivate: 'アカウントを再開する',
   login_pending_keep: '削除をこのまま進める',
   login_pending_failed: 'アカウントを再開できませんでした。もう一度お試しください。',
