@@ -49,12 +49,28 @@ func sesionesVigentes(t *testing.T, pool *pgxpool.Pool, id string) (int, int) {
 	return sesiones, renovaciones
 }
 
+// rolesDados cuenta las filas de auditoria del rol de administrador dado a la
+// cuenta: un cambio de privilegio no puede quedar sin rastro.
+func rolesDados(t *testing.T, pool *pgxpool.Pool, id string) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT COUNT(*) FROM audit_logs
+		 WHERE action = 'role_granted' AND resource_type = 'user' AND resource_id = $1
+		   AND details->>'role' = 'admin' AND details->>'migration' = '082'`,
+		id).Scan(&n); err != nil {
+		t.Fatalf("contar auditoria: %v", err)
+	}
+	return n
+}
+
 // Pedido del dueno (2026-10-19): keilor administra. El CHECK
 // chk_users_demo_login_no_admin no deja que un administrador entre sin
 // contrasena, asi que keilor deja de ser cuenta de demostracion. Y las sesiones
 // que tenia abiertas se cierran: el rol se lee en cada peticion, y sin eso una
 // sesion abierta con solo teclear "keilor" heredaria el panel de
-// administracion. Las demas cuentas de demostracion no se tocan.
+// administracion. El cambio de rol queda en audit_logs, y las demas cuentas de
+// demostracion no se tocan.
 func TestMigracion082_KeilorAdministraYPideContrasena(t *testing.T) {
 	ctx := context.Background()
 	svc, pool, _ := servicioConDemo(t, true)
@@ -73,6 +89,9 @@ func TestMigracion082_KeilorAdministraYPideContrasena(t *testing.T) {
 
 	if rol, demo := rolYDemo(t, pool, keilor); rol != "admin" || demo {
 		t.Fatalf("keilor quedo role=%q demo_login=%v; se esperaba admin y false", rol, demo)
+	}
+	if n := rolesDados(t, pool, keilor); n != 1 {
+		t.Errorf("el rol de administrador quedo %d veces en audit_logs; se esperaba una", n)
 	}
 	if s, r := sesionesVigentes(t, pool, keilor); s != 0 || r != 0 {
 		t.Errorf("keilor conserva %d sesiones y %d refresh tokens abiertos sin contrasena; "+
@@ -122,5 +141,8 @@ func TestMigracion082_EsIdempotenteYNoAbortaSinLaCuenta(t *testing.T) {
 	if s, r := sesionesVigentes(t, pool, keilor); s != 1 || r != 1 {
 		t.Errorf("la segunda corrida dejo a keilor con %d sesiones y %d refresh tokens vigentes; "+
 			"se esperaba 1 y 1 (no debia volver a revocar)", s, r)
+	}
+	if n := rolesDados(t, pool, keilor); n != 1 {
+		t.Errorf("tres corridas dejaron %d filas del rol en audit_logs; se esperaba una", n)
 	}
 }
