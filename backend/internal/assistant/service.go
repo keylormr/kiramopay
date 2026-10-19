@@ -39,6 +39,7 @@ type Service struct {
 	logger   *slog.Logger         // nil ⇒ no logging
 	quota    Limiter              // nil ⇒ unlimited (tests / no Redis)
 	conv     *ConversationService // nil ⇒ history disabled (ephemeral turns)
+	screen   Screener             // nil ⇒ sin filtro de alcance (Gemini, pruebas)
 	maxTurns int
 }
 

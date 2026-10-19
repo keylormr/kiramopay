@@ -24,6 +24,9 @@ type Limiter interface {
 	// Refund returns one consumed unit, called when a turn that passed Allow
 	// ultimately fails so our own error doesn't burn the user's quota.
 	Refund(ctx context.Context, userID string)
+	// RefundDeclined devuelve el turno de una pregunta que el filtro de alcance
+	// rechazo, con tope diario. Responde si devolvio.
+	RefundDeclined(ctx context.Context, userID string) bool
 }
 
 // PlanResolver returns the user's billing plan ("free"/"plus"/"pro"). On error
@@ -71,6 +74,13 @@ func (q *RedisQuota) userKey(userID string) string {
 func (q *RedisQuota) globalKey() string {
 	return fmt.Sprintf("assistant:q:global:%s", q.day())
 }
+
+func (q *RedisQuota) declinedKey(userID string) string {
+	return fmt.Sprintf("assistant:q:declined:%s:%s", userID, q.day())
+}
+
+// RefundDeclined implementa Limiter.
+func (q *RedisQuota) RefundDeclined(_ context.Context, _ string) bool { return false }
 
 // limitFor resolves the caller's daily limit from their plan, defaulting to the
 // free tier on any unknown plan or resolver error.
