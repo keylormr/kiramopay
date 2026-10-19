@@ -358,8 +358,8 @@ func TestCerrarComercio_LoQueSeEscribeEnSucursalesYCatalogoDuranteElCierreNoQued
 		carreraConElCierre(t, pool, m.ID, owner, "el borrado del producto", func() error {
 			return svc.DeleteCatalogItem(context.Background(), m.ID, owner, item.ID)
 		})
-		if n := contar(t, pool, `SELECT COUNT(*) FROM merchant_catalog_items WHERE id = $1::uuid`, item.ID); n != 1 {
-			t.Fatalf("el producto de un comercio cerrado se borro")
+		if n := contar(t, pool, `SELECT COUNT(*) FROM merchant_catalog_items WHERE id = $1::uuid AND deleted_at IS NULL AND active`, item.ID); n != 1 {
+			t.Fatalf("el producto de un comercio cerrado se saco del catalogo")
 		}
 	})
 }

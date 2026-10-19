@@ -135,10 +135,11 @@ func responderErrorDeEquipo(w http.ResponseWriter, generico string, err error) {
 // responderFalloDeGestion responde lo que no tiene codigo propio en las rutas de
 // gestion del comercio: un fallo de la base es 500 sin el detalle (falloInterno);
 // lo demas es de quien llama (un rol invalido, algo que no se encontro) y va en
-// el 400 de la ruta, con su mensaje.
+// el 400 de la ruta, con su mensaje. En el 500 la causa va al log (response.Error
+// la escribe ahi y al cliente le manda un mensaje generico).
 func responderFalloDeGestion(w http.ResponseWriter, generico string, err error) {
 	if esFalloInterno(err) {
-		response.Error(w, http.StatusInternalServerError, generico, "the change could not be saved")
+		response.Error(w, http.StatusInternalServerError, generico, err.Error())
 		return
 	}
 	response.Error(w, http.StatusBadRequest, generico, err.Error())

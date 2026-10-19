@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kiramopay/backend/internal/audit"
 )
 
 type Repository struct {
@@ -737,6 +740,10 @@ func (r *Repository) UpdateLocation(ctx context.Context, merchantID, locationID,
 
 const catalogCols = `id, merchant_id, name, price_minor, currency, active, sort_order, created_at`
 
+// AccionProductoSacado es lo que deja en audit_logs sacar un producto del
+// catalogo: quien lo saco, de que comercio y cual.
+const AccionProductoSacado = "merchant_catalog_item_removed"
+
 func scanCatalogItem(row pgx.Row) (*CatalogItem, error) {
 	var c CatalogItem
 	if err := row.Scan(&c.ID, &c.MerchantID, &c.Name, &c.PriceMinor, &c.Currency,
@@ -746,10 +753,13 @@ func scanCatalogItem(row pgx.Row) (*CatalogItem, error) {
 	return &c, nil
 }
 
+// ListCatalog trae el catalogo sin los productos sacados (deleted_at): es lo
+// que ven la gestion y la pantalla de cobro.
 func (r *Repository) ListCatalog(ctx context.Context, merchantID string) ([]CatalogItem, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+catalogCols+` FROM merchant_catalog_items
-		 WHERE merchant_id = $1::uuid ORDER BY sort_order ASC, created_at ASC`, merchantID)
+		 WHERE merchant_id = $1::uuid AND deleted_at IS NULL
+		 ORDER BY sort_order ASC, created_at ASC`, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -788,9 +798,9 @@ func (r *Repository) UpdateCatalogItem(ctx context.Context, merchantID, itemID, 
 		c, err = scanCatalogItem(tx.QueryRow(ctx,
 			`UPDATE merchant_catalog_items
 			    SET name = $3, price_minor = $4, active = $5, sort_order = $6
-			  WHERE id = $1::uuid AND merchant_id = $2::uuid
+			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
 			  RETURNING `+catalogCols, itemID, merchantID, name, priceMinor, active, sortOrder))
-		if err == pgx.ErrNoRows {
+		if noEsUnProducto(err) {
 			return fmt.Errorf("catalog item not found")
 		}
 		return interno(err)
@@ -801,18 +811,46 @@ func (r *Repository) UpdateCatalogItem(ctx context.Context, merchantID, itemID, 
 	return c, nil
 }
 
-func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID string) error {
+// noEsUnProducto: la fila no esta, o el id ni siquiera tiene forma de UUID
+// (22P02). Solo ese codigo y no toda la clase 22, como noEsUnComercio: al
+// editar, un nombre de mas de 120 caracteres tambien es clase 22 (22001), y no
+// es un producto que no existe.
+func noEsUnProducto(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && pgErr.Code == "22P02")
+}
+
+// DeleteCatalogItem saca un producto del catalogo sin borrarlo: marca la fila
+// (deleted_at) y la deja inactiva, y quien lo saco queda en audit_logs en la
+// misma transaccion. Todo borrado es logico. Uno que ya se saco no se
+// encuentra, y dos que lo sacan a la vez dejan una sola marca: el segundo
+// espera la fila y ya no la ve.
+//
+// El rastro lleva los ids como los devuelve la base, no como llegaron en la
+// ruta (Postgres acepta un UUID en mayusculas), para que se encuentre por el
+// id de la fila. No copia el nombre: es texto libre del comerciante y sigue
+// en la fila, que no se borra.
+func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID, userID string) error {
 	return r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
-		res, err := tx.Exec(ctx,
-			`DELETE FROM merchant_catalog_items WHERE id = $1::uuid AND merchant_id = $2::uuid`,
-			itemID, merchantID)
+		var producto, comercio string
+		err := tx.QueryRow(ctx,
+			`UPDATE merchant_catalog_items SET deleted_at = NOW(), active = FALSE
+			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
+			  RETURNING id::text, merchant_id::text`,
+			itemID, merchantID).Scan(&producto, &comercio)
+		if noEsUnProducto(err) {
+			return fmt.Errorf("catalog item not found")
+		}
 		if err != nil {
 			return interno(err)
 		}
-		if res.RowsAffected() == 0 {
-			return fmt.Errorf("catalog item not found")
-		}
-		return nil
+		return interno(audit.EscribirEnTx(ctx, tx, &audit.Event{
+			UserID:       userID,
+			Action:       AccionProductoSacado,
+			ResourceType: "merchant_catalog_item",
+			ResourceID:   producto,
+			Details:      map[string]interface{}{"merchant_id": comercio},
+		}))
 	})
 }
 

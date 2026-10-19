@@ -1157,8 +1157,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		active BOOLEAN NOT NULL DEFAULT TRUE,
 		sort_order INTEGER NOT NULL DEFAULT 0,
 		created_at TIMESTAMP DEFAULT NOW(),
-		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0)
+		deleted_at TIMESTAMPTZ,
+		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0),
+		CONSTRAINT chk_catalog_sacado_inactivo CHECK (deleted_at IS NULL OR active IS FALSE)
 	);
+	-- Borrado logico del catalogo (migracion 081), con el mismo respaldo que
+	-- qr_merchants para una base de pruebas persistida.
+	ALTER TABLE merchant_catalog_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+	ALTER TABLE merchant_catalog_items DROP CONSTRAINT IF EXISTS chk_catalog_sacado_inactivo;
+	ALTER TABLE merchant_catalog_items ADD CONSTRAINT chk_catalog_sacado_inactivo
+		CHECK (deleted_at IS NULL OR active IS FALSE);
 
 	CREATE TABLE IF NOT EXISTS qr_payment_codes (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

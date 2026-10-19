@@ -1034,13 +1034,14 @@ func (s *Service) UpdateCatalogItem(ctx context.Context, merchantID, userID, ite
 	return s.repo.UpdateCatalogItem(ctx, merchantID, itemID, name, price, active, sortOrder)
 }
 
-// DeleteCatalogItem — owner or manager. Payment history only stores totals and
-// a note, so removing an item never breaks past sales.
+// DeleteCatalogItem — owner or manager. Saca el producto sin borrarlo (ver
+// Repository.DeleteCatalogItem). Payment history only stores totals and a
+// note, so removing an item never breaks past sales.
 func (s *Service) DeleteCatalogItem(ctx context.Context, merchantID, userID, itemID string) error {
 	if _, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager); err != nil {
 		return err
 	}
-	return s.repo.DeleteCatalogItem(ctx, merchantID, itemID)
+	return s.repo.DeleteCatalogItem(ctx, merchantID, itemID, userID)
 }
 
 // ── Reports (phase 4) ────────────────────────────────────────────────────────
