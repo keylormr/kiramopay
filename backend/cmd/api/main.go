@@ -1232,6 +1232,9 @@ func main() {
 			// ─────────────────────────────────────────────────────────
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireAdmin(userRepo))
+				// Y solo con el token vigente de una sesion abierta: uno que ya
+				// roto, o de una sesion revocada, no abre el panel.
+				r.Use(middleware.RequireLiveSession(authRepo))
 
 				// KYC review
 				r.Post("/admin/kyc/{id}/decision", kycHandler.Decide)

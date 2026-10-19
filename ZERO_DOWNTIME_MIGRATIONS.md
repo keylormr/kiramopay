@@ -155,6 +155,17 @@ escrituras), por eso separar `NOT VALID` de `VALIDATE` es lo que evita el lock.
     (`migrations/down/079_cierre_de_comercios.down.sql`) borra quién cerró y por
     qué, y no los vuelve a cerrar; si la 077 está aplicada, conserva
     `closed_at`.
+- **082 (keilor administra).** Solo datos: da `role = 'admin'` a la cuenta
+  keilor (cédula 702650930), la saca de las cuentas de demostración y cierra lo
+  que una sesión sin contraseña pudo dejar (sesiones, refresh tokens, llaves
+  B2B, webhooks, suscripciones de avisos y teléfonos), con una fila en
+  `audit_logs`. No depende del código: el código anterior lee el rol igual, y
+  volver a él no la deshace. Lo que sí trae el mismo PR es
+  `RequireLiveSession` en el panel: con el código anterior, un token que ya
+  rotó sigue abriendo el panel hasta que vence. La bajada
+  (`migrations/down/082_keilor_administrador.down.sql`) le quita el rol, la
+  vuelve a marcar como cuenta de demostración y lo deja en `audit_logs`; no
+  reabre lo que la 082 cerró ni borra su auditoría.
 
 ---
 

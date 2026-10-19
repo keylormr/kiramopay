@@ -32,6 +32,12 @@ type TestUser struct {
 	// DemoLogin permite entrar SIN CONTRASENA (ademas exige que el servidor
 	// tenga DEMO_LOGIN_ENABLED encendida, que nace apagada).
 	DemoLogin bool
+	// Role es el rol con el que nace la cuenta ("" = user). Por la misma razon
+	// que Username: la 026 (admin.kp) y la 082 (keilor) dan el rol a cuentas que
+	// YA EXISTEN, y en una base nueva el sembrador corre despues. Un
+	// administrador nunca es cuenta de demostracion: lo prohibe el CHECK
+	// chk_users_demo_login_no_admin.
+	Role string
 }
 
 var DefaultTestUsers = []TestUser{
@@ -39,7 +45,8 @@ var DefaultTestUsers = []TestUser{
 		ID:         "a0000000-0000-0000-0000-000000000001",
 		Cedula:     "702650930",
 		Username:   "keilor",
-		DemoLogin:  true,
+		DemoLogin:  false, // administra desde la 082: entra con contrasena
+		Role:       "admin",
 		Phone:      "+50688880001",
 		FirstName:  "Keilor",
 		LastName:   "Martinez",
@@ -53,6 +60,7 @@ var DefaultTestUsers = []TestUser{
 		Cedula:     "700000000",
 		Username:   "admin.kp",
 		DemoLogin:  false,
+		Role:       "admin",
 		Phone:      "+50688880002",
 		FirstName:  "Admin",
 		LastName:   "KiramoPay",
@@ -116,8 +124,9 @@ var DefaultTestUsers = []TestUser{
 // (SEED_DEMO=true), each user's password MUST be supplied via
 // SEED_PASSWORD_<CEDULA> with no hardcoded fallback — otherwise that user is
 // skipped. This guarantees the repository never ships usable production
-// credentials (the cedula 700000000 account is promoted to admin by migration
-// 026, so a known password there is a full admin takeover).
+// credentials (the cedula 700000000 and 702650930 accounts are administrators,
+// by migrations 026 and 082 and by Role here, so a known password there is a
+// full admin takeover).
 func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) error {
 	for _, u := range DefaultTestUsers {
 		// Check if user already exists
@@ -147,10 +156,10 @@ func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) erro
 		// Insert user. referral_code is NOT NULL without a default since
 		// migration 051, so the seed generates one like the app does.
 		_, err = pool.Exec(ctx,
-			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status, referral_code, username, demo_login)
-			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified', $8, NULLIF($9,''), $10)`,
+			`INSERT INTO users (id, cedula_enc, cedula_hash, phone_enc, phone_hash, first_name, last_name, password_hash, status, kyc_level, kyc_status, referral_code, username, demo_login, role)
+			 VALUES ($1, fn_pii_encrypt($2), fn_pii_hmac($2), fn_pii_encrypt($3), fn_pii_hmac($3), $4, $5, $6, 'active', $7, 'verified', $8, NULLIF($9,''), $10, COALESCE(NULLIF($11,''), 'user'))`,
 			u.ID, u.Cedula, u.Phone, u.FirstName, u.LastName, pinHash, u.KYCLevel, user.NewReferralCode(),
-			u.Username, u.DemoLogin,
+			u.Username, u.DemoLogin, u.Role,
 		)
 		if err != nil {
 			return fmt.Errorf("insert user %s: %w", u.Cedula, err)
