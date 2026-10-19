@@ -55,7 +55,7 @@ const AVISOS_DEL_SONDEO = new Set(['RATE_LIMITED', 'ACCOUNT_LOCKED', 'NETWORK_ER
 // ofrece ahora y el que se dicta en una demostracion. La cedula sigue
 // funcionando, pero nadie la teclea si tiene un nombre mas corto.
 const CUENTAS_LOCALES = [
-  { identificador: 'keilor', password: 'Kiramopay2024!', nota: '' },
+  { identificador: 'keilor', password: 'Kiramopay2024!', nota: 'admin' },
   { identificador: 'admin.kp', password: 'Admin2024!', nota: 'admin' },
   { identificador: 'demo', password: 'DemoLocal2026!', nota: 'demo' },
   { identificador: 'victor', password: 'VictorLocal2026!', nota: '' },

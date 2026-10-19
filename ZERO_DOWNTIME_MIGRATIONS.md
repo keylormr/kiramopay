@@ -155,6 +155,13 @@ escrituras), por eso separar `NOT VALID` de `VALIDATE` es lo que evita el lock.
     (`migrations/down/079_cierre_de_comercios.down.sql`) borra quién cerró y por
     qué, y no los vuelve a cerrar; si la 077 está aplicada, conserva
     `closed_at`.
+- **082 (keilor administra).** Solo datos: da `role = 'admin'` a la cuenta
+  keilor (cédula 702650930), la saca de las cuentas de demostración, revoca sus
+  sesiones abiertas y lo deja en `audit_logs`. No depende del código: el código
+  anterior lee el rol igual, y volver a él no la deshace. La bajada
+  (`migrations/down/082_keilor_administrador.down.sql`) le quita el rol y la
+  vuelve a marcar como cuenta de demostración; no reabre las sesiones
+  revocadas ni borra la auditoría.
 
 ---
 
