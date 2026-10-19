@@ -136,10 +136,16 @@ func (h *Handler) PayShare(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "id")
 
 	if err := h.service.PayShare(r.Context(), userID, groupID); err != nil {
-		response.Error(w, http.StatusBadRequest, "PAY_FAILED", err.Error())
+		status, code, msg := respuestaDelPago(err)
+		response.Error(w, status, code, msg)
 		return
 	}
 	response.NoContent(w)
+}
+
+// respuestaDelPago traduce el rechazo del pago de una cuota.
+func respuestaDelPago(err error) (int, string, string) {
+	return http.StatusBadRequest, "PAY_FAILED", err.Error()
 }
 
 func (h *Handler) DeclineShare(w http.ResponseWriter, r *http.Request) {

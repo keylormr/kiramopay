@@ -219,3 +219,44 @@ func TestPorEliminar_SeRechazaEnCadaPeticion(t *testing.T) {
 		t.Fatalf("IsUserBlocked con Redis tras el repaso = (%v, %v), esperaba true", blocked, err)
 	}
 }
+
+// porEliminarQueOtraYaReactivo responde como cuando otra peticion (el doble
+// clic en "Reactivar") gano por un instante: al consultar la cuenta todavia se
+// podia reactivar, y al reactivar ya no habia nada que hacer porque la otra la
+// dejo activa.
+type porEliminarQueOtraYaReactivo struct{ pool *pgxpool.Pool }
+
+func (*porEliminarQueOtraYaReactivo) SeEliminaEl(context.Context, string) (time.Time, bool, error) {
+	return time.Now().Add(time.Hour), true, nil
+}
+
+func (f *porEliminarQueOtraYaReactivo) Reactivar(ctx context.Context, userID string) (bool, error) {
+	_, err := f.pool.Exec(ctx, `UPDATE users
+		SET status = 'active', deletion_requested_at = NULL, deletion_due_at = NULL,
+		    deletion_terms_accepted_at = NULL, deletion_channel = NULL
+		WHERE id = $1::uuid`, userID)
+	return false, err
+}
+
+// El doble clic en "Reactivar" entra las dos veces: la segunda encuentra la
+// cuenta ya activa, con la contrasena verificada, y no tiene por que decir
+// "cuenta bloqueada".
+func TestLoginHandler_ReactivarDosVecesEntraLaSegunda(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	resp := registerTestUser(t, env.svc)
+	marcarPorEliminar(t, env.pool, resp.User.ID)
+	env.svc.SetCuentasPorEliminar(&porEliminarQueOtraYaReactivo{pool: env.pool})
+	h := auth.NewHandler(env.svc, auth.CookieConfig{Secure: true}, false)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"identifier":"702650930","password":"Kiramopay2024!","reactivate":true}`))
+	rec := httptest.NewRecorder()
+	h.Login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, esperaba 200: %s", rec.Code, rec.Body.String())
+	}
+	if findCookie(rec, "__Host-kp_refresh") == nil {
+		t.Error("la segunda reactivacion debia emitir la sesion")
+	}
+}

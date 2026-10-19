@@ -133,7 +133,7 @@ describe('LoginView — cuenta con la eliminacion en curso', () => {
     expect(cuerpos().some((c) => c.reactivate)).toBe(false);
   });
 
-  it('vencido el plazo sin que se pudiera cerrar, explica que algo quedo pendiente y ofrece reactivar', async () => {
+  it('vencido el plazo sin que se cerrara, lo dice sin inventar la causa y ofrece reactivar', async () => {
     fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
       const c = JSON.parse(String(init?.body ?? '{}')) as Cuerpo;
       if (!c.password) return rechazo(401, { code: 'PASSWORD_REQUIRED', message: 'password required' });
@@ -143,7 +143,7 @@ describe('LoginView — cuenta con la eliminacion en curso', () => {
     await entrar();
 
     expect(await screen.findByText('Tu cuenta se va a eliminar')).toBeInTheDocument();
-    expect(screen.getByText(/todavía no se pudo cerrar/)).toBeInTheDocument();
+    expect(screen.getByText(/el plazo terminó, pero todavía no se cerró/)).toBeInTheDocument();
     expect(screen.queryByText(/se elimina el/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Reactivar mi cuenta' })).toBeInTheDocument();
   });

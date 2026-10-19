@@ -350,3 +350,108 @@ func TestVerificar_UnaCuentaYaEnPlazoRecibeOtraVezLaRespuesta(t *testing.T) {
 		t.Errorf("la respuesta escrita no llego otra vez: %+v", m)
 	}
 }
+
+// marcasQueNoSeQuitan falla al quitar la marca, como un Redis caido.
+type marcasQueNoSeQuitan struct{ marcasFalsas }
+
+func (*marcasQueNoSeQuitan) ClearUserBlocked(context.Context, string) error {
+	return errors.New("redis caido")
+}
+
+// Si la marca no se puede quitar, no se reactiva. Reactivar con la marca puesta
+// dejaria a la persona entrando a una cuenta activa que responde "bloqueada" en
+// cada peticion, sin nada que vuelva a intentar quitarla. Asi la cuenta sigue
+// en plazo y la persona reintenta.
+func TestReactivar_SinPoderQuitarLaMarcaNoReactiva(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	svc := nuevoServicio(pool, &Options{Marcas: &marcasQueNoSeQuitan{marcasFalsas{puestas: map[string]bool{}}}})
+	pedir(t, svc, a.ID)
+
+	if ok, err := svc.Reactivar(ctx, a.ID); err == nil || ok {
+		t.Fatalf("reactivar sin poder quitar la marca: ok=%v err=%v, se esperaba el error", ok, err)
+	}
+	if st := cuenta1[string](t, pool, `SELECT status FROM users WHERE id = $1::uuid`, a.ID); st != "pending_deletion" {
+		t.Fatalf("la cuenta quedo en %s", st)
+	}
+}
+
+// Una cuenta que operaciones bloqueo durante el plazo no se reactiva sola, y su
+// marca no se toca: es la del bloqueo.
+func TestReactivar_UnaCuentaBloqueadaConservaLaMarca(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	marcas := &marcasFalsas{puestas: map[string]bool{}}
+	svc := nuevoServicio(pool, &Options{Marcas: marcas})
+	pedir(t, svc, a.ID)
+	exec(t, pool, `UPDATE users SET status = 'blocked', blocked_at = NOW(), blocked_reason = 'revision'
+		WHERE id = $1::uuid`, a.ID)
+	if err := marcas.MarkUserBlocked(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := svc.Reactivar(ctx, a.ID); err != nil || ok {
+		t.Fatalf("reactivar una cuenta bloqueada: ok=%v err=%v", ok, err)
+	}
+	if !marcas.tiene(a.ID) {
+		t.Error("reactivar le quito la marca a una cuenta bloqueada")
+	}
+}
+
+// Una alerta que nadie atendio no es un caso en curso: las alertas nacen
+// abiertas y solo las cierra una persona, asi que esperar por ellas alargaria
+// la conservacion sin que la ley ni una autoridad lo pidan.
+func TestDesasociar_UnaAlertaSinAtenderNoLaDetiene(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	svc := nuevoServicio(pool, nil)
+	pedir(t, svc, a.ID)
+	cerrar(t, pool, svc, a.ID)
+	exec(t, pool, `WITH f AS (INSERT INTO fraud_assessments (user_id, tx_type, tx_id, amount, risk_score, risk_level, factors, action)
+	                          VALUES ($1::uuid, 'sinpe', 'tx-sin-atender', 100, 80, 'high', '[]', 'review') RETURNING id)
+	               INSERT INTO fraud_alerts (user_id, assessment_id, type, severity, message, status)
+	               SELECT $1::uuid, f.id, 'velocity', 'high', 'alerta sin atender', 'open' FROM f`, a.ID)
+	envejecer(t, pool, a.ID, 5)
+
+	if n, err := svc.DesasociarVencidas(ctx, time.Now(), 100); err != nil || n != 1 {
+		t.Fatalf("una alerta sin atender no debia detenerla: n=%d err=%v", n, err)
+	}
+}
+
+// Ningun caso abierto la detiene mas alla del tope de diez anos.
+func TestDesasociar_UnCasoAbiertoNoLaDetieneMasDeDiezAnos(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	svc := nuevoServicio(pool, nil)
+	pedir(t, svc, a.ID)
+	cerrar(t, pool, svc, a.ID)
+	exec(t, pool, `INSERT INTO uif_reports (user_id, report_type, amount_minor, currency, reason, status)
+		VALUES ($1::uuid, 'manual', 100, 'CRC', 'caso de prueba', 'pending')`, a.ID)
+	envejecer(t, pool, a.ID, 10)
+
+	if n, err := svc.DesasociarVencidas(ctx, time.Now(), 100); err != nil || n != 1 {
+		t.Fatalf("pasados diez anos debia desasociar: n=%d err=%v", n, err)
+	}
+}
+
+// Igual que el cierre, la desasociacion recorre por lotes: con lotes de una,
+// las dos vencidas se desasocian en la misma pasada.
+func TestDesasociar_ConLotesDeUnaRecorreTodas(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	svc := nuevoServicio(pool, nil)
+	a, b := sembrar(t, pool), sembrar(t, pool)
+	for _, c := range []cuenta{a, b} {
+		pedir(t, svc, c.ID)
+		cerrar(t, pool, svc, c.ID)
+		envejecer(t, pool, c.ID, 5)
+	}
+
+	if n, err := svc.DesasociarVencidas(ctx, time.Now(), 1); err != nil || n != 2 {
+		t.Fatalf("con lotes de una: n=%d err=%v, se esperaban 2", n, err)
+	}
+}

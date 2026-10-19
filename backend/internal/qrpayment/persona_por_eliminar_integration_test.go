@@ -34,3 +34,22 @@ func TestPersonaDelQR_UnaCuentaPorEliminarNoRecibe(t *testing.T) {
 		t.Fatalf("PersonaDelQR = %v, se esperaba ErrQRRevocado", err)
 	}
 }
+
+// Una cuenta ya cerrada tampoco recibe. Su codigo se revoca en el cierre, pero
+// quien escaneo justo antes todavia lo tiene en la pantalla: la busqueda ya no
+// la encuentra, y eso es "el codigo no sirve", no "paga igual".
+func TestPersonaDelQR_UnaCuentaCerradaNoRecibe(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+	code, err := svc.GetOrCreateMyCode(ctx, owner, "CRC")
+	if err != nil {
+		t.Fatalf("GetOrCreateMyCode: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE users SET status = 'closed', deleted_at = NOW() WHERE id = $1::uuid`, owner); err != nil {
+		t.Fatalf("cerrar la cuenta: %v", err)
+	}
+
+	if _, err := svc.PersonaDelQR(ctx, code.QRData); !errors.Is(err, qrpayment.ErrQRRevocado) {
+		t.Fatalf("PersonaDelQR = %v, se esperaba ErrQRRevocado", err)
+	}
+}

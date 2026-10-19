@@ -78,7 +78,9 @@ func sembrarTodo(t *testing.T, pool *pgxpool.Pool, c cuenta, otra cuenta) string
 		`INSERT INTO kyc_documents (verification_id, doc_type, file_ref) SELECT id, 'id_front', 'kyc/maria-frente.jpg' FROM kyc_verifications WHERE user_id = $1::uuid`,
 		`INSERT INTO identity_verifications (user_id, cedula_hash, verified_name, id_type, source, matched) VALUES ($1::uuid, 'hmac-de-la-cedula', 'MARIA ROJAS MORA', 'nacional', 'tse', true)`,
 		`INSERT INTO sanction_screenings (user_id, query_name, normalized_query, result) VALUES ($1::uuid, 'Maria Rojas Mora', 'maria rojas mora', 'clean')`,
-		`INSERT INTO uif_reports (user_id, report_type, amount_minor, currency, reason, reviewer_notes) VALUES ($1::uuid, 'manual', 100, 'USD', 'revision de Maria Rojas', 'nota del revisor')`,
+		// Un reporte ya revisado: uno sin revisar es un caso abierto y detiene la
+		// desasociacion (TestDesasociar_NoConUnCasoAbierto).
+		`INSERT INTO uif_reports (user_id, report_type, amount_minor, currency, reason, reviewer_notes, status) VALUES ($1::uuid, 'manual', 100, 'USD', 'revision de Maria Rojas', 'nota del revisor', 'reviewed')`,
 		`INSERT INTO fraud_assessments (user_id, tx_type, tx_id, amount, risk_score, risk_level, factors, action) VALUES ($1::uuid, 'sinpe', 'tx-1', 100, 10, 'low', '["ip 203.0.113.7"]', 'allow')`,
 		`INSERT INTO fraud_alerts (user_id, assessment_id, type, severity, message) SELECT $1::uuid, id, 'suspicious_tx', 'low', 'Maria hizo algo raro' FROM fraud_assessments WHERE user_id = $1::uuid`,
 		`INSERT INTO payouts (user_id, rail, amount_minor, destination, idempotency_key, status)
