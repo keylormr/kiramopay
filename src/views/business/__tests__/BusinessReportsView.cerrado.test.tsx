@@ -76,4 +76,33 @@ describe('BusinessReportsView de un comercio cerrado', () => {
     await waitFor(() => expect(mocks.api.qrPayments.exportMerchantReportCsv).toHaveBeenCalledWith('m1', 30, 'es'));
     expect(mocks.api.plans.registrarInteres).not.toHaveBeenCalled();
   });
+
+  // Un comercio cerrado ya no vende: "los ultimos 30 dias" son los 30 antes del
+  // cierre, y se dice. Y se puede mirar el ultimo ano entero.
+  it('cuenta hasta el cierre y deja ver el ultimo ano', async () => {
+    mocks.api.qrPayments.getMerchantReport.mockResolvedValue({ success: true, data: reporteBase });
+    const user = userEvent.setup();
+    render(
+      <LanguageProvider>
+        <BusinessReportsView merchant={cerrado} />
+      </LanguageProvider>,
+    );
+
+    expect(await screen.findByText('Los días se cuentan hasta el cierre.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '365 días' }));
+    await waitFor(() => expect(mocks.api.qrPayments.getMerchantReport).toHaveBeenLastCalledWith('m1', 365));
+  });
+
+  it('un comercio abierto no ofrece el ano ni habla del cierre', async () => {
+    mocks.api.qrPayments.getMerchantReport.mockResolvedValue({ success: true, data: reporteBase });
+    render(
+      <LanguageProvider>
+        <BusinessReportsView merchant={{ ...cerrado, closedAt: null, active: true }} />
+      </LanguageProvider>,
+    );
+
+    await screen.findByRole('button', { name: '30 días' });
+    expect(screen.queryByRole('button', { name: '365 días' })).toBeNull();
+    expect(screen.queryByText('Los días se cuentan hasta el cierre.')).toBeNull();
+  });
 });

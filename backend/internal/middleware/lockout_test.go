@@ -23,6 +23,10 @@ func (m *mockRedisLockout) IncrLockout(key string) int64 {
 	return m.counters[key]
 }
 
+func (m *mockRedisLockout) ContarIntento(key string) (int64, error) {
+	return m.IncrLockout(key), nil
+}
+
 func (m *mockRedisLockout) ResetLockout(key string) {
 	delete(m.counters, key)
 }

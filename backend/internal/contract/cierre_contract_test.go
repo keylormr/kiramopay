@@ -3,6 +3,7 @@ package contract_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,5 +119,39 @@ func TestComercioCerrado_LoQueSeLeeEstaEnElContrato(t *testing.T) {
 	if err := contract.ValidateData(router, http.MethodGet, base+m+"/catalog", http.StatusOK,
 		comoJSON(t, []qrpayment.CatalogItem{articulo})); err != nil {
 		t.Errorf("catalogo del comercio viola el esquema: %v", err)
+	}
+}
+
+// Las ventas se leen por paginas (limit, before) y un cursor que no es un id es
+// un 400 INVALID_CURSOR. Y el reporte y su CSV dicen que el de un comercio
+// cerrado cuenta hasta el cierre y que su dueno lo exporta con cualquier plan:
+// el spec decia "analitica plan" sin excepcion, y el handler responde 200.
+func TestVentasYReporteDeUnCerrado_EstanEnElContrato(t *testing.T) {
+	router := routerDeLaSpec(t)
+	m := base + "/api/v1/qr/merchants/" + merchUUID
+
+	ruta, _, err := router.FindRoute(httptest.NewRequest(http.MethodGet, m+"/payments", nil))
+	if err != nil {
+		t.Fatalf("GET /payments no esta en el spec: %v", err)
+	}
+	for _, nombre := range []string{"limit", "before"} {
+		if ruta.Operation.Parameters.GetByInAndName("query", nombre) == nil {
+			t.Errorf("GET /payments no documenta el parametro %s", nombre)
+		}
+	}
+	rec := httptest.NewRecorder()
+	response.Error(rec, http.StatusBadRequest, "INVALID_CURSOR", "before must be the id of a payment")
+	if err := contract.ValidateResponseBody(router, http.MethodGet, m+"/payments", http.StatusBadRequest, rec.Body.Bytes()); err != nil {
+		t.Errorf("GET /payments (400 INVALID_CURSOR) viola el esquema: %v", err)
+	}
+
+	for _, sufijo := range []string{"/report", "/report.csv"} {
+		ruta, _, err := router.FindRoute(httptest.NewRequest(http.MethodGet, m+sufijo, nil))
+		if err != nil {
+			t.Fatalf("GET %s no esta en el spec: %v", sufijo, err)
+		}
+		if d := ruta.Operation.Description; !strings.Contains(d, "closed merchant") {
+			t.Errorf("GET %s no dice como se lee el de un comercio cerrado: %q", sufijo, d)
+		}
 	}
 }

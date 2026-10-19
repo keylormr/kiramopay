@@ -100,6 +100,17 @@ describe('HttpQRPaymentRepository: cierre del comercio', () => {
     expect(res.data?.[0]).toMatchObject({ id: 'm1', role: 'owner', closedAt: '2026-10-18T20:00:00Z', closureReason: 'owner_request' });
   });
 
+  // De un comercio cerrado no hay otra forma de llegar a las ventas viejas: se
+  // piden por paginas, la siguiente desde la ultima que ya se vio.
+  it('las ventas se piden por paginas', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: [] });
+    const repo = new HttpQRPaymentRepository(fakeClient({ get }));
+    await repo.getMerchantPayments('m1');
+    expect(get).toHaveBeenLastCalledWith('/api/v1/qr/merchants/m1/payments');
+    await repo.getMerchantPayments('m1', { antesDe: 'p 5' });
+    expect(get).toHaveBeenLastCalledWith('/api/v1/qr/merchants/m1/payments?before=p%205');
+  });
+
   it('si la lista de cerrados falla, lo dice con su codigo', async () => {
     const get = vi.fn().mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED', message: 'x' } });
     const res = await new HttpQRPaymentRepository(fakeClient({ get })).listClosedMerchants();

@@ -48,6 +48,10 @@ func (t *topeDePrueba) IncrLockout(k string) int64 {
 	return t.n[k]
 }
 
+func (t *topeDePrueba) ContarIntento(k string) (int64, error) {
+	return t.IncrLockout(k), nil
+}
+
 func (t *topeDePrueba) ResetLockout(k string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -293,8 +297,8 @@ func TestCerrarMiComercio_ConSegundoFactor(t *testing.T) {
 		&qrpayment.CerrarComercioRequest{Password: claveDelDueno, TOTPCode: "000000"}, actorDePrueba)
 	_, errClave := svc.CerrarMiComercio(ctx, m.ID, owner,
 		&qrpayment.CerrarComercioRequest{Password: "otra-clave", TOTPCode: "123456"}, actorDePrueba)
-	if errCodigo == nil || errClave == nil || !errors.Is(errCodigo, errClave) || !errors.Is(errClave, errCodigo) {
-		t.Fatalf("codigo equivocado: %v; contrasena equivocada: %v; se esperaba el mismo error", errCodigo, errClave)
+	if !errors.Is(errCodigo, qrpayment.ErrCredencialesIncorrectas) || !errors.Is(errClave, qrpayment.ErrCredencialesIncorrectas) {
+		t.Fatalf("codigo equivocado: %v; contrasena equivocada: %v; se esperaba ErrCredencialesIncorrectas en los dos", errCodigo, errClave)
 	}
 	if f := leerCierre(t, pool, m.ID); f.cerradoEn != nil {
 		t.Fatalf("un intento rechazado cerro el comercio: %+v", f)

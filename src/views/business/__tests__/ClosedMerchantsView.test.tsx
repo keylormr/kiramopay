@@ -100,9 +100,59 @@ describe('ClosedMerchantsView', () => {
     await waitFor(() => expect(mockApi.qrPayments.getMerchantPayments).toHaveBeenCalledWith('m1'));
     expect(await screen.findByText('₡995.00')).toBeInTheDocument();
     expect(screen.getByText(/Ya no cobra ni se puede editar/)).toBeInTheDocument();
-    for (const accion of [/Cobrar/, /Editar/, /Retirar/, /Cerrar comercio/]) {
-      expect(screen.queryByRole('button', { name: accion })).toBeNull();
-    }
+    // Solo lectura: lo unico que se toca es volver y las dos pestanas.
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())).toEqual(['Volver']);
+    expect(screen.getAllByRole('tab').map((b) => b.textContent?.trim())).toEqual(['Movimientos', 'Reportes']);
+  });
+
+  // El feed trae 50 ventas por vez. De un comercio cerrado no hay otra forma de
+  // llegar a las anteriores, asi que se piden mas, desde la ultima que se vio.
+  it('con una pagina llena deja pedir mas ventas, y las agrega', async () => {
+    const pagina = Array.from({ length: 50 }, (_, i) => ({ ...venta, id: `p${i + 1}` }));
+    mockApi.qrPayments.listClosedMerchants.mockResolvedValue({ success: true, data: [cerrado()] });
+    mockApi.qrPayments.getMerchantPayments
+      .mockResolvedValueOnce({ success: true, data: pagina })
+      .mockResolvedValueOnce({ success: true, data: [{ ...venta, id: 'p51', amount: 2000, fee: 10 }] });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: /Cafeteria Central/ }));
+    await user.click(await screen.findByRole('button', { name: 'Ver más ventas' }));
+
+    expect(mockApi.qrPayments.getMerchantPayments).toHaveBeenLastCalledWith('m1', { antesDe: 'p50' });
+    expect(await screen.findByText('₡1,990.00')).toBeInTheDocument();
+    expect(screen.getAllByText('₡995.00')).toHaveLength(50);
+    // La ultima pagina vino incompleta: no hay mas que pedir.
+    expect(screen.queryByRole('button', { name: 'Ver más ventas' })).toBeNull();
+  });
+
+  it('con menos de una pagina no ofrece mas', async () => {
+    mockApi.qrPayments.listClosedMerchants.mockResolvedValue({ success: true, data: [cerrado()] });
+    mockApi.qrPayments.getMerchantPayments.mockResolvedValue({ success: true, data: [venta] });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: /Cafeteria Central/ }));
+    await screen.findByText('₡995.00');
+    expect(screen.queryByRole('button', { name: 'Ver más ventas' })).toBeNull();
+  });
+
+  it('si las siguientes no llegan lo dice, conserva las que ya se ven y deja reintentar', async () => {
+    const pagina = Array.from({ length: 50 }, (_, i) => ({ ...venta, id: `p${i + 1}` }));
+    mockApi.qrPayments.listClosedMerchants.mockResolvedValue({ success: true, data: [cerrado()] });
+    mockApi.qrPayments.getMerchantPayments
+      .mockResolvedValueOnce({ success: true, data: pagina })
+      .mockResolvedValueOnce({ success: false, error: { code: 'FETCH_FAILED', message: 'server text' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: /Cafeteria Central/ }));
+    await user.click(await screen.findByRole('button', { name: 'Ver más ventas' }));
+
+    expect(await screen.findByText('No se pudieron cargar más ventas.')).toBeInTheDocument();
+    expect(screen.queryByText('server text')).toBeNull();
+    expect(screen.getAllByText('₡995.00')).toHaveLength(50);
+    expect(screen.getByRole('button', { name: 'Ver más ventas' })).toBeInTheDocument();
   });
 
   it('si las ventas no se pudieron leer, no pinta "sin ventas"', async () => {
