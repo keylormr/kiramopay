@@ -204,25 +204,29 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Las novedades y el paquete de cada plataforma son descargas
-	// independientes: se piden a la vez.
+	// independientes: se piden a la vez. Las goroutines reciben solo la
+	// version y los adjuntos, no info: info se completa aca, al terminar.
 	var (
 		wg                  sync.WaitGroup
+		notas               []string
 		notasDefinitivas    bool
 		paquetesDefinitivos = make([]bool, len(plataformas))
 		paquetesPlataforma  = make([]*infoWeb, len(plataformas))
+		version, adjuntos   = info.Version, info.adjuntos
 	)
 	wg.Add(1 + len(plataformas))
 	go func() {
 		defer wg.Done()
-		info.Notas, notasDefinitivas = h.notasDe(r, info.Version)
+		notas, notasDefinitivas = h.notasDe(r, version)
 	}()
 	for i, p := range plataformas {
 		go func() {
 			defer wg.Done()
-			paquetesPlataforma[i], paquetesDefinitivos[i] = h.paqueteDe(r, info, p)
+			paquetesPlataforma[i], paquetesDefinitivos[i] = h.paqueteDe(r, version, adjuntos, p)
 		}()
 	}
 	wg.Wait()
+	info.Notas = notas
 	definitivo := notasDefinitivas
 	info.paquetes = map[string]*infoWeb{}
 	for i, p := range plataformas {
@@ -289,20 +293,20 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 // que el .zip existe. Devuelve nil si no hay paquete util, y si el resultado es
 // definitivo (no lo hay, o no sirve) o una falla pasajera que conviene
 // reintentar pronto (red, corte, 5xx).
-func (h *Handler) paqueteDe(r *http.Request, info *infoVersion, plataforma string) (*infoWeb, bool) {
+func (h *Handler) paqueteDe(r *http.Request, version string, adjuntos map[string]string, plataforma string) (*infoWeb, bool) {
 	if h.manifiestoFmt == "" || h.paqueteFmt == "" {
 		return nil, true
 	}
-	tag := "v" + info.Version
+	tag := "v" + version
 	nombreManifiesto := "actualizacion-" + plataforma + ".json"
 	nombrePaquete := "kiramopay-web-" + plataforma + ".zip"
 	urlManifiesto := fmt.Sprintf(h.manifiestoFmt, tag, plataforma)
 	urlPaquete := fmt.Sprintf(h.paqueteFmt, tag, plataforma)
 	// Por la API se sabe que adjuntos tiene el release: sin los dos, no hay
 	// paquete y no hace falta pedir nada.
-	if info.adjuntos != nil {
-		m, okM := info.adjuntos[nombreManifiesto]
-		z, okZ := info.adjuntos[nombrePaquete]
+	if adjuntos != nil {
+		m, okM := adjuntos[nombreManifiesto]
+		z, okZ := adjuntos[nombrePaquete]
 		if !okM || !okZ {
 			return nil, true
 		}
@@ -315,7 +319,7 @@ func (h *Handler) paqueteDe(r *http.Request, info *infoVersion, plataforma strin
 	}
 	resp, err := h.clienteDescargas.Do(req)
 	if err != nil {
-		slog.Warn("app version: no se pudo bajar el manifiesto del paquete", "version", info.Version, "plataforma", plataforma, "err", err)
+		slog.Warn("app version: no se pudo bajar el manifiesto del paquete", "version", version, "plataforma", plataforma, "err", err)
 		return nil, false
 	}
 	defer resp.Body.Close()
@@ -329,7 +333,7 @@ func (h *Handler) paqueteDe(r *http.Request, info *infoVersion, plataforma strin
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxManifiesto)).Decode(&publicado); err != nil ||
 		publicado.Manifiesto == "" || publicado.Firma == "" {
-		slog.Warn("app version: el manifiesto del paquete no es valido", "version", info.Version, "plataforma", plataforma, "err", err)
+		slog.Warn("app version: el manifiesto del paquete no es valido", "version", version, "plataforma", plataforma, "err", err)
 		return nil, true
 	}
 	crudo, err := base64.StdEncoding.DecodeString(publicado.Manifiesto)
@@ -339,19 +343,19 @@ func (h *Handler) paqueteDe(r *http.Request, info *infoVersion, plataforma strin
 		Paquete    string `json:"paquete"`
 	}
 	if err != nil || json.Unmarshal(crudo, &campos) != nil {
-		slog.Warn("app version: el manifiesto del paquete no se puede leer", "version", info.Version, "plataforma", plataforma)
+		slog.Warn("app version: el manifiesto del paquete no se puede leer", "version", version, "plataforma", plataforma)
 		return nil, true
 	}
 	// Un adjunto subido al release o a la plataforma equivocados no se ofrece:
 	// la app lo rechazaria igual, pero iria por el binario sin necesidad.
-	if campos.Version != info.Version || campos.Plataforma != plataforma || campos.Paquete != nombrePaquete {
-		slog.Warn("app version: el manifiesto del paquete no corresponde", "release", info.Version, "plataforma", plataforma,
+	if campos.Version != version || campos.Plataforma != plataforma || campos.Paquete != nombrePaquete {
+		slog.Warn("app version: el manifiesto del paquete no corresponde", "release", version, "plataforma", plataforma,
 			"manifiesto_version", campos.Version, "manifiesto_plataforma", campos.Plataforma)
 		return nil, true
 	}
-	if info.adjuntos == nil {
+	if adjuntos == nil {
 		if err := h.existeDescarga(r, urlPaquete); err != nil {
-			slog.Warn("app version: el release no tiene el paquete web", "version", info.Version, "plataforma", plataforma, "err", err)
+			slog.Warn("app version: el release no tiene el paquete web", "version", version, "plataforma", plataforma, "err", err)
 			return nil, false
 		}
 	}
