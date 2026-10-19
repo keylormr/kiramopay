@@ -124,8 +124,10 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (re
 
 	// Resolve conversation history server-side when enabled: an existing
 	// thread's stored messages are the context. A new thread is created only
-	// once the turn is answered (below). Otherwise fall back to the client-sent
-	// history.
+	// once the turn is answered (below), but the per-plan limit is checked
+	// here, before the paid scope screen: otherwise a user at the limit could
+	// trigger screen calls without end, each one refunded. Otherwise fall back
+	// to the client-sent history.
 	var (
 		convID string
 		prior  []Turn
@@ -138,6 +140,8 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (re
 			}
 			convID = c.ID
 			prior = toTurns(c.Messages)
+		} else if cerr := s.conv.CanCreate(ctx, userID); cerr != nil {
+			return nil, cerr
 		}
 	} else {
 		prior = req.History

@@ -295,8 +295,7 @@ func TestAlcance_EnUnaConversacionAbiertaElRechazoQuedaGuardado(t *testing.T) {
 
 // En un hilo nuevo, una pregunta ajena no crea conversacion: el plan gratuito
 // da dos, y dos preguntas ajenas en hilos nuevos las ocupaban, con lo que la
-// siguiente pregunta legitima recibia "borra una conversacion". Tampoco la
-// frena el limite de conversaciones: recibe el rechazo.
+// siguiente pregunta legitima recibia "borra una conversacion".
 func TestAlcance_EnUnHiloNuevoElRechazoNoOcupaUnaConversacion(t *testing.T) {
 	store := newMemConvStore()
 	conv := NewConversationService(store, nil, nil, nil)
@@ -314,17 +313,6 @@ func TestAlcance_EnUnHiloNuevoElRechazoNoOcupaUnaConversacion(t *testing.T) {
 		t.Errorf("respuesta = %q", res.Reply)
 	}
 
-	// Con las dos conversaciones del plan ya ocupadas.
-	_, _ = store.Create(context.Background(), "u1")
-	_, _ = store.Create(context.Background(), "u1")
-	res, err = svc.Chat(context.Background(), "u1", &ChatRequest{Message: "que es el TLC?"})
-	if err != nil {
-		t.Fatalf("en el limite de conversaciones, una pregunta ajena dio %v en vez del rechazo", err)
-	}
-	if res.Reply != outOfScopeReply("es") || len(store.convs) != 2 {
-		t.Errorf("respuesta = %q, conversaciones = %d", res.Reply, len(store.convs))
-	}
-
 	// Lo que si se contesta sigue creando su conversacion.
 	store = newMemConvStore()
 	conv = NewConversationService(store, nil, nil, nil)
@@ -336,6 +324,34 @@ func TestAlcance_EnUnHiloNuevoElRechazoNoOcupaUnaConversacion(t *testing.T) {
 	}
 	if res.ConversationID == "" || len(store.convs[res.ConversationID].Messages) != 2 {
 		t.Errorf("la pregunta contestada no quedo en una conversacion nueva: %+v", res)
+	}
+}
+
+// El limite de conversaciones se mira ANTES del filtro, que es de pago. Si se
+// mirara despues, alguien con sus conversaciones ocupadas podria mandar
+// mensajes sin fin: cada uno costaria una llamada al filtro y, al fallar la
+// creacion, la unidad de cuota volveria. Con la revision se vio: 50 intentos,
+// 50 llamadas al filtro, ninguna gastando cuota.
+func TestAlcance_ConLasConversacionesOcupadasNoSeLlamaAlFiltro(t *testing.T) {
+	store := newMemConvStore()
+	_, _ = store.Create(context.Background(), "u1")
+	_, _ = store.Create(context.Background(), "u1")
+	conv := NewConversationService(store, nil, nil, nil) // plan gratuito: 2
+	for _, mensaje := range []string{"cual es mi saldo?", "que es el TLC?"} {
+		cuota := &fakeLimiter{}
+		filtro := &fakeScreener{verdict: ScopeVerdict{InScope: true, Language: "es"}}
+		llm := &fakeLLM{}
+		svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro), WithConversations(conv), WithLimiter(cuota))
+
+		if _, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: mensaje}); !errors.Is(err, ErrConvLimit) {
+			t.Fatalf("%q: se esperaba ErrConvLimit, llego %v", mensaje, err)
+		}
+		if filtro.calls != 0 || llm.calls != 0 {
+			t.Errorf("%q: en el limite se llamo al filtro %d veces y al modelo %d", mensaje, filtro.calls, llm.calls)
+		}
+		if cuota.refunds != 1 || cuota.declinedRefunds != 0 {
+			t.Errorf("%q: devoluciones por falla=%d rechazadas=%d", mensaje, cuota.refunds, cuota.declinedRefunds)
+		}
 	}
 }
 
