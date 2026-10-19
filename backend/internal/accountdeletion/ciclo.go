@@ -208,6 +208,13 @@ func (s *Service) cerrarUna(ctx context.Context, id string, now time.Time) (bool
 		cerrada, bloqueos, err = cerrarEnTx(ctx, tx, id, now)
 		return err
 	})
+	// Lo pendiente que aparece a mitad del cierre (un comercio que no se pudo
+	// cerrar) llega como error para deshacer la transaccion, pero es lo mismo
+	// que un bloqueo visto al principio.
+	var bloqueada *ErrBloqueada
+	if errors.As(err, &bloqueada) {
+		err, bloqueos = nil, bloqueada.Bloqueos
+	}
 	if err != nil {
 		s.logger.Error("cierre de cuenta fallido", "user", id, "err", err.Error())
 		return false, fmt.Errorf("cerrar %s: %w", id, err)

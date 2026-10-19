@@ -1165,7 +1165,6 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
 	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
 	-- Cierre logico del comercio (migracion 079): la fila se marca, nunca se borra.
-	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES users(id);
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closure_reason TEXT;
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cierre;

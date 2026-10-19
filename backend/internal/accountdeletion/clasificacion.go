@@ -137,6 +137,7 @@ var Clasificacion = map[string]Tratamiento{
 	"identity_verifications": Conservar,
 	"sanction_screenings":    Conservar,
 	"uif_reports":            Conservar,
+	"uif_movimientos":        Conservar, // lo que evaluo la UIF de cada movimiento (080)
 	"fraud_assessments":      Conservar,
 	"fraud_alerts":           Conservar,
 	"user_risk_profiles":     ConservarSinDatos, // solo contadores

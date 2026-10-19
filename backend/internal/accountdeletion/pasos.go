@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/internal/user"
 )
 
@@ -204,6 +205,57 @@ var pasosDelDiaCero = []paso{
 		       OR merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid))`},
 }
 
+// motivoCierreDeComercio es el motivo con que el dia 30 cierra los comercios de
+// la persona. Es el que la 079 completa en los que cerro la 077, y el que el
+// dueno lee en "Comercios cerrados".
+const motivoCierreDeComercio = "account_deletion"
+
+// cerrarComercios cierra, con qrpayment.CerrarComercioEnTx, los comercios de la
+// persona que siguen abiertos: es la unica forma de cerrar uno (marca quien y
+// por que, revoca el equipo y los rotulos, y deja el rastro). Quien cierra es
+// la propia persona: la fila de users se conserva, y asi el dueno lo lee como
+// cerrado por el, con el motivo de la eliminacion.
+//
+// CerrarComercioEnTx pide READ COMMITTED porque, si un pago entrara mientras
+// espera la fila del comercio, una foto vieja leeria el saldo sin ese pago.
+// Aqui no puede pasar: las cuentas del libro del comercio estan cerradas desde
+// el dia 0, asi que ningun pago entra, y un pago que tomo la fila antes hace
+// fallar esta transaccion por serializacion y el reintento lo ve.
+//
+// Si un comercio no se puede cerrar (saldo o cobros vivos, que bloqueosDe ya
+// deberia haber visto), devuelve ErrBloqueada: es un error para que la
+// transaccion se deshaga entera, y el barrido lo trata como algo pendiente.
+func cerrarComercios(ctx context.Context, tx pgx.Tx, userID string) error {
+	filas, err := tx.Query(ctx, `SELECT id::text FROM qr_merchants
+		WHERE user_id = $1::uuid AND closed_at IS NULL ORDER BY id`, userID)
+	if err != nil {
+		return fmt.Errorf("leer los comercios: %w", err)
+	}
+	ids, err := pgx.CollectRows(filas, pgx.RowTo[string])
+	if err != nil {
+		return fmt.Errorf("leer los comercios: %w", err)
+	}
+	for _, id := range ids {
+		_, err := qrpayment.CerrarComercioEnTx(ctx, tx, id, qrpayment.Cierre{
+			CerradoPor: userID,
+			Motivo:     motivoCierreDeComercio,
+			Accion:     qrpayment.AccionCierrePropio,
+		})
+		var conSaldo *qrpayment.ComercioConSaldoError
+		var conCobros *qrpayment.ComercioConCobrosError
+		switch {
+		case err == nil:
+		case errors.As(err, &conSaldo):
+			return &ErrBloqueada{Bloqueos: []Bloqueo{{Codigo: BloqueoSaldoComercio}}}
+		case errors.As(err, &conCobros):
+			return &ErrBloqueada{Bloqueos: []Bloqueo{{Codigo: BloqueoCobrosAbiertos}}}
+		default:
+			return fmt.Errorf("cerrar el comercio %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 // ── Reactivar ─────────────────────────────────────────────────────────────
 
 // reactivarEnTx cancela el proceso si la cuenta esta en 'pending_deletion' y el
@@ -285,6 +337,9 @@ func cerrarEnTx(ctx context.Context, tx pgx.Tx, userID string, now time.Time) (b
 	}
 	if len(bloqueos) > 0 {
 		return false, bloqueos, nil
+	}
+	if err := cerrarComercios(ctx, tx, userID); err != nil {
+		return false, nil, err
 	}
 
 	// La identidad sale de users ANTES de la tumba, con el mismo cifrado.
@@ -410,10 +465,7 @@ var pasosDelDiaTreinta = []paso{
 		  AND group_id IN (SELECT id FROM split_groups WHERE creator_id = $1::uuid)`},
 
 	// ── El comercio y el dinero: cerrados, no borrados ──────────────────────
-	// El comercio queda cerrado e inactivo, con su identidad legal y sus cobros:
-	// son parte de lo que se conserva. El CHECK de la 077 impide reactivarlo.
-	{"cerrar comercios", `UPDATE qr_merchants SET active = false, closed_at = COALESCE(closed_at, NOW())
-		WHERE user_id = $1::uuid`},
+	// El comercio ya lo cerro cerrarComercios, antes de estos pasos.
 	{"desactivar sedes", `UPDATE merchant_locations SET active = false
 		WHERE active AND merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
 	{"desactivar catalogo", `UPDATE merchant_catalog_items SET active = false
@@ -581,10 +633,17 @@ var pasosDeLaDesasociacion = []paso{
 		WHERE user_id = $1::uuid`},
 	{"desasociar notas de pagos", `UPDATE qr_payments SET note = NULL WHERE payer_id = $1::uuid`},
 	{"desasociar notas de cobros", `UPDATE qr_charges SET note = '' WHERE created_by = $1::uuid`},
-	// El comercio cerrado deja de nombrar a nadie.
+	// El comercio cerrado deja de nombrar a nadie. El motivo que escribio un
+	// administrador es texto libre y puede nombrar a la persona: queda la marca
+	// de que lo cerro un administrador, que es lo que el dueno ya leia. Los
+	// motivos fijos (el del dueno y el de la eliminacion) no nombran a nadie.
 	{"desasociar comercios", `UPDATE qr_merchants
 		SET name = 'Comercio cerrado', cedula = '', legal_name = '', description = '',
-		    logo_url = NULL, rejection_reason = ''
+		    logo_url = NULL, rejection_reason = '',
+		    closure_reason = CASE
+		        WHEN closure_reason IS NULL OR closure_reason IN ('` + qrpayment.MotivoCierrePropio + `', '` + motivoCierreDeComercio + `')
+		        THEN closure_reason
+		        ELSE '` + qrpayment.MotivoCierrePorAdmin + `' END
 		WHERE user_id = $1::uuid`},
 	// La cola web guarda el HMAC del contacto: con el se podria volver a
 	// asociar la solicitud a un correo o un telefono. Queda el resultado.
