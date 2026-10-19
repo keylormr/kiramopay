@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -10,6 +10,7 @@ import { BusinessLocationsSheet } from './BusinessLocationsSheet';
 import { BusinessCatalogSheet } from './BusinessCatalogSheet';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
+import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -59,6 +60,17 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
   // montar: leer el reloj en cada render rompe la regla de pureza de React.
   const [ahora] = useState(() => Date.now());
 
+  // ── Cerrar el comercio (solo el dueno) ──
+  const [showClose, setShowClose] = useState(false);
+  const [clave, setClave] = useState('');
+  const [codigoTotp, setCodigoTotp] = useState('');
+  // El servidor pide el codigo del autenticador solo si la cuenta lo tiene
+  // encendido: el campo aparece cuando responde TOTP_REQUIRED.
+  const [pideTotp, setPideTotp] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+  const cerrandoRef = useRef(false);
+  const [rechazo, setRechazo] = useState<RechazoDelCierre | null>(null);
+
   // Lo que se cobra HOY lo decide el servidor (promocion incluida): esta
   // pantalla no recalcula la comision, la muestra.
   const efectivaBps = merchant.comisionEfectivaBps ?? merchant.commissionBps;
@@ -105,6 +117,45 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       onUpdated();
     } else {
       setError(res.error?.message || t('assistant_action_failed'));
+    }
+  };
+
+  const abrirCierre = () => {
+    setClave('');
+    setCodigoTotp('');
+    setPideTotp(false);
+    setRechazo(null);
+    setShowClose(true);
+  };
+
+  const cerrarComercio = async () => {
+    const api = getApiLayer().qrPayments;
+    if (!api || cerrandoRef.current || !clave) return;
+    cerrandoRef.current = true;
+    setCerrando(true);
+    setRechazo(null);
+    try {
+      const confirmacion: { password: string; totpCode?: string } = { password: clave };
+      if (pideTotp && codigoTotp.trim()) confirmacion.totpCode = codigoTotp.trim();
+      const res = await api.closeMerchant(merchant.id, confirmacion);
+      if (res.success) {
+        setShowClose(false);
+        setClave('');
+        onUpdated();
+        // El comercio ya no esta en la lista: se vuelve a la cuenta personal.
+        onBackToPersonal();
+        return;
+      }
+      if (res.error?.code === 'TOTP_REQUIRED') {
+        setPideTotp(true);
+        return;
+      }
+      setRechazo(rechazoDelCierre(t, res.error));
+    } catch {
+      setRechazo(rechazoDelCierre(t, undefined));
+    } finally {
+      cerrandoRef.current = false;
+      setCerrando(false);
     }
   };
 
@@ -220,9 +271,91 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
         </Button>
       </div>
 
+      {/* Lo destructivo va aparte y al final. */}
+      {isOwner && (
+        <div className="pt-2">
+          <Button
+            variant="ghost"
+            onClick={abrirCierre}
+            fullWidth
+            leftIcon={<Icons.XCircle size={18} />}
+            className="!text-[var(--color-danger)] hover:!bg-[var(--color-danger-soft)]"
+          >
+            {t('business_close')}
+          </Button>
+        </div>
+      )}
+
       <BusinessTeamSheet isOpen={showTeam} onClose={() => setShowTeam(false)} merchantId={merchant.id} />
       <BusinessLocationsSheet isOpen={showLocations} onClose={() => setShowLocations(false)} merchantId={merchant.id} />
       <BusinessCatalogSheet isOpen={showCatalog} onClose={() => setShowCatalog(false)} merchantId={merchant.id} currencyCode={ccy} />
+
+      <BottomSheet
+        isOpen={showClose}
+        onClose={() => { if (!cerrando) setShowClose(false); }}
+        title={t('business_close')}
+        dismissable={!cerrando}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => { e.preventDefault(); void cerrarComercio(); }}
+          noValidate
+        >
+          <p className="text-sm leading-relaxed uv-text-secondary">
+            {rellenar(t('business_close_body'), { name: merchant.name })}
+          </p>
+          <p className="text-sm leading-relaxed uv-text-secondary">{t('business_close_requisitos')}</p>
+          <div>
+            <label htmlFor="cierre-clave" className={label}>{t('business_close_password')}</label>
+            <input
+              id="cierre-clave"
+              type="password"
+              value={clave}
+              onChange={(e) => setClave(e.target.value)}
+              autoComplete="current-password"
+              className={field}
+            />
+          </div>
+          {pideTotp && (
+            <div>
+              <p className="text-xs leading-relaxed uv-text-muted mb-2">{t('business_close_totp_hint')}</p>
+              <label htmlFor="cierre-totp" className={label}>{t('business_close_totp')}</label>
+              <input
+                id="cierre-totp"
+                value={codigoTotp}
+                // Como en el reto del segundo factor: seis digitos o un codigo
+                // de recuperacion (XXXX-XXXX), que es como entra quien perdio
+                // el telefono.
+                onChange={(e) => setCodigoTotp(e.target.value.replace(/[^0-9A-Za-z-]/g, ''))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={9}
+                className={`${field} font-mono tracking-widest`}
+              />
+            </div>
+          )}
+          {rechazo && (
+            <div role="alert" className="text-sm text-[var(--color-danger)]">
+              <p>{rechazo.mensaje}</p>
+              {rechazo.saldos.length > 0 && (
+                <ul className="mt-1 font-semibold tabular-nums">
+                  {rechazo.saldos.map((s) => <li key={s}>{s}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          <Button
+            type="submit"
+            variant="danger"
+            loading={cerrando}
+            disabled={!clave || cerrando || (pideTotp && !codigoTotp.trim())}
+            size="lg"
+            fullWidth
+          >
+            {cerrando ? t('processing') : t('business_close_confirm')}
+          </Button>
+        </form>
+      </BottomSheet>
 
       {/* Edit sheet */}
       <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title={t('business_edit')}>

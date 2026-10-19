@@ -21,6 +21,9 @@ interface Props {
 }
 
 const RANGES = [7, 30, 90] as const;
+// Un comercio cerrado ya no vende: su reporte cuenta hasta el cierre, y se
+// puede mirar el ultimo ano entero (el tope del servidor).
+const RANGES_CERRADO = [30, 90, 365] as const;
 
 /** Local YYYY-MM-DD for a date, matching the server's client-tz bucketing. */
 const localKey = (d: Date) =>
@@ -77,7 +80,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   // utils/money y no `symbol + toFixed(2)`: el atajo perdia los miles con coma.
   const money = (v: number) => formatMoney(v, ccy as CurrencyCode, { decimals: 2 });
 
-  const [days, setDays] = useState<(typeof RANGES)[number]>(30);
+  const [days, setDays] = useState<(typeof RANGES)[number] | (typeof RANGES_CERRADO)[number]>(30);
   // La ultima respuesta buena y el rango al que corresponde. Mientras llega la
   // de otro rango se sigue viendo, atenuada y rotulada "Actualizando": antes
   // la pantalla pintaba guiones y un grafico en cero, identico a un comercio
@@ -124,6 +127,11 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   // El plan con el que el servidor armo el reporte manda; el del comercio
   // cargado antes es solo el respaldo mientras llega.
   const conAnalitica = (report?.plan ?? merchant.plan) === 'analitica';
+  // Un comercio cerrado se exporta con cualquier plan: lo que vendio es de su
+  // dueno, que lo necesita para sus cuentas. Y no se le ofrece Analitica a un
+  // negocio que ya no opera.
+  const cerrado = !!merchant.closedAt;
+  const puedeExportar = conAnalitica || cerrado;
 
   const exportar = async () => {
     const api = getApiLayer().qrPayments;
@@ -220,7 +228,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     <div className="pb-24 pt-4 px-4 space-y-5">
       {/* Range selector */}
       <div className="flex gap-2">
-        {RANGES.map((r) => (
+        {(cerrado ? RANGES_CERRADO : RANGES).map((r) => (
           <button
             key={r}
             onClick={() => { setDays(r); if (exportacion !== 'exportando') setExportacion('quieto'); }}
@@ -235,6 +243,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </button>
         ))}
       </div>
+      {cerrado && <p className="-mt-3 text-xs uv-text-muted">{t('business_closed_report_until')}</p>}
 
       {/* Para el lector de pantalla; lo visible va dentro de cada tarjeta. */}
       <p aria-live="polite" className="sr-only">
@@ -305,9 +314,9 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         </div>
 
         {/* ── Analitica: la comparacion y el CSV, o la vista previa honesta ── */}
-        {report && conAnalitica && (
+        {report && puedeExportar && (
           <>
-            {report.comparison && (
+            {conAnalitica && report.comparison && (
               <Comparacion comp={report.comparison} actual={report.totals} money={money} idioma={language} />
             )}
             <div>
@@ -333,7 +342,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </>
         )}
 
-        {report && !conAnalitica && tarifas.analitica && (
+        {report && !puedeExportar && tarifas.analitica && (
           <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="analitica-bloqueada">
             <div className="flex flex-wrap items-center gap-2">
               <Icons.Lock size={16} className="uv-text-secondary" aria-hidden="true" />

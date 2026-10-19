@@ -4,6 +4,7 @@ import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { CampoMonto } from '@/components/CampoMonto';
+import { mensajeDeGestion } from '@/utils/cierreDeComercio';
 import { getApiLayer } from '@/api';
 import type { CatalogItem } from '@/api/repositories/qrpayment.repository';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
@@ -77,7 +78,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
       setShowAdd(false);
       reload();
     } else {
-      setError(res.error?.message || t('assistant_action_failed'));
+      setError(mensajeDeGestion(t, res.error));
     }
   };
 
@@ -89,7 +90,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
     try {
       const res = await api.updateCatalogItem(merchantId, item.id, { active: !item.active });
       if (res.success) reload();
-      else setError(res.error?.message || t('assistant_action_failed'));
+      else setError(mensajeDeGestion(t, res.error));
     } finally {
       setBusyId(null);
     }
@@ -103,7 +104,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
     try {
       const res = await api.deleteCatalogItem(merchantId, item.id);
       if (res.success) reload();
-      else setError(res.error?.message || t('assistant_action_failed'));
+      else setError(mensajeDeGestion(t, res.error));
     } finally {
       setBusyId(null);
     }

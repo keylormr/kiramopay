@@ -53,6 +53,9 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
 		return
 	}
@@ -120,6 +123,8 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 		// distinguen, para no decirle a nadie que comercios existen.
 		case errors.Is(err, ErrComercioNoEncontrado):
 			response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		case errors.Is(err, ErrComercioCerrado):
+			response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
 		default:
 			// La base, el libro: el detalle queda en el log. Un commit que se
 			// corta tambien cae aqui, asi que la pantalla lo dice como un
@@ -131,9 +136,33 @@ func (h *Handler) WithdrawMerchant(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, retiro)
 }
 
+// responderSiCerro responde 409 MERCHANT_CLOSED cuando el comercio se cerro, y
+// dice si lo hizo. Lo usa cada ruta que administra un comercio: sin esto, uno
+// cerrado salia como un 404 o un 400 con el texto del servidor.
+func responderSiCerro(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrComercioCerrado) {
+		return false
+	}
+	response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+	return true
+}
+
+// GetMerchants — GET /api/v1/qr/merchants. Sin status (u open), los comercios
+// que la persona administra; con status=closed, los cerrados de su dueno, para
+// consultar lo que vendieron.
 func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
-	merchants, err := h.service.GetMerchants(r.Context(), userID)
+	var merchants []Merchant
+	var err error
+	switch r.URL.Query().Get("status") {
+	case "", "open":
+		merchants, err = h.service.GetMerchants(r.Context(), userID)
+	case "closed":
+		merchants, err = h.service.GetClosedMerchants(r.Context(), userID)
+	default:
+		response.Error(w, http.StatusBadRequest, "INVALID_STATUS", "status must be open or closed")
+		return
+	}
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
 		return
@@ -146,12 +175,24 @@ func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
 
-// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments. The shop's
-// sales feed, visible to the whole team (owner, manager, cashier).
+// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?limit=&before=.
+// The shop's sales feed, visible to the whole team (owner, manager, cashier),
+// newest first. `before` is the id of the last payment already shown.
 func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
-	payments, err := h.service.MerchantPayments(r.Context(), merchantID, userID, 50)
+	q := r.URL.Query()
+	limite, _ := strconv.Atoi(q.Get("limit"))
+	antesDe := q.Get("before")
+	if antesDe != "" {
+		id, err := uuid.Parse(antesDe)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "INVALID_CURSOR", "before must be the id of a payment")
+			return
+		}
+		antesDe = id.String()
+	}
+	payments, err := h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -223,6 +264,9 @@ func (h *Handler) ListStaff(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	staff, err := h.service.ListStaff(r.Context(), merchantID, userID)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
@@ -242,6 +286,9 @@ func (h *Handler) AddStaff(w http.ResponseWriter, r *http.Request) {
 	}
 	member, err := h.service.AddStaff(r.Context(), merchantID, userID, &req)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		responderErrorDeEquipo(w, "ADD_STAFF_FAILED", err)
 		return
 	}
@@ -259,7 +306,10 @@ func (h *Handler) UpdateStaff(w http.ResponseWriter, r *http.Request) {
 	}
 	member, err := h.service.UpdateStaff(r.Context(), merchantID, userID, staffID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "UPDATE_STAFF_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "UPDATE_STAFF_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, member)
@@ -270,7 +320,10 @@ func (h *Handler) RevokeStaff(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	staffID := chi.URLParam(r, "staffID")
 	if err := h.service.RevokeStaff(r.Context(), merchantID, userID, staffID); err != nil {
-		response.Error(w, http.StatusBadRequest, "REVOKE_STAFF_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "REVOKE_STAFF_FAILED", err)
 		return
 	}
 	response.NoContent(w)
@@ -281,6 +334,9 @@ func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	locations, err := h.service.ListLocations(r.Context(), merchantID, userID)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
@@ -300,7 +356,10 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	loc, err := h.service.CreateLocation(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "CREATE_LOCATION_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "CREATE_LOCATION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, loc)
@@ -317,7 +376,10 @@ func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	loc, err := h.service.UpdateLocation(r.Context(), merchantID, userID, locationID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "UPDATE_LOCATION_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "UPDATE_LOCATION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, loc)
@@ -328,6 +390,9 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	items, err := h.service.ListCatalog(r.Context(), merchantID, userID)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
@@ -347,7 +412,10 @@ func (h *Handler) CreateCatalogItem(w http.ResponseWriter, r *http.Request) {
 	}
 	item, err := h.service.CreateCatalogItem(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "CREATE_ITEM_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "CREATE_ITEM_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, item)
@@ -364,7 +432,10 @@ func (h *Handler) UpdateCatalogItem(w http.ResponseWriter, r *http.Request) {
 	}
 	item, err := h.service.UpdateCatalogItem(r.Context(), merchantID, userID, itemID, &req)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "UPDATE_ITEM_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "UPDATE_ITEM_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, item)
@@ -375,7 +446,10 @@ func (h *Handler) DeleteCatalogItem(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	itemID := chi.URLParam(r, "itemID")
 	if err := h.service.DeleteCatalogItem(r.Context(), merchantID, userID, itemID); err != nil {
-		response.Error(w, http.StatusBadRequest, "DELETE_ITEM_FAILED", err.Error())
+		if responderSiCerro(w, err) {
+			return
+		}
+		responderFalloDeGestion(w, "DELETE_ITEM_FAILED", err)
 		return
 	}
 	response.NoContent(w)
@@ -400,6 +474,9 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
 		return
 	}
@@ -414,6 +491,9 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
 		return
 	}
@@ -429,6 +509,9 @@ func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 	}
 	merchant, err := h.service.SetCommission(r.Context(), id, req.CommissionBps)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
 		return
 	}
@@ -453,6 +536,9 @@ func (h *Handler) SetMerchantPlan(w http.ResponseWriter, r *http.Request) {
 	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
 	merchant, err := h.service.AsignarPlanComercio(r.Context(), id.String(), adminID, plan, ac)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, ErrPlanComercioInvalido):
 			response.Error(w, http.StatusBadRequest, "PLAN_INVALID", "plan must be base or analitica")
@@ -478,6 +564,9 @@ func (h *Handler) CreateQRCode(w http.ResponseWriter, r *http.Request) {
 
 	qr, err := h.service.CreateQRCode(r.Context(), userID, &req)
 	if err != nil {
+		if responderSiCerro(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CREATE_FAILED", err.Error())
 		return
 	}

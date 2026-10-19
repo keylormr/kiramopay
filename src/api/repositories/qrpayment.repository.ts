@@ -6,6 +6,9 @@ export type MerchantVerificationStatus = 'pending' | 'verified' | 'rejected';
 /** How the logged-in user relates to a business (phase 3 team model). */
 export type MerchantRole = 'owner' | 'manager' | 'cashier';
 
+/** Las ventas que trae cada pagina del feed del comercio: el valor por defecto del servidor. */
+export const VENTAS_POR_PAGINA = 50;
+
 export interface QRMerchant {
   id: string;
   name: string;
@@ -31,6 +34,17 @@ export interface QRMerchant {
   plan?: PlanComercio;
   /** Role of the CURRENT user on this business; drives which UI is shown. */
   role: MerchantRole;
+  /**
+   * Cuando se cerro (ISO-8601); null mientras esta abierto. Un comercio cerrado
+   * no cobra ni se administra, y solo aparece en la vista de administracion.
+   */
+  closedAt?: string | null;
+  /** Quien lo cerro (el dueno o un administrador). */
+  closedBy?: string;
+  /** owner_request si lo cerro su dueno; si no, el motivo del administrador. */
+  closureReason?: string;
+  /** Nombre del dueno; solo viene en la lista de administracion. */
+  ownerName?: string;
 }
 
 export interface StaffMember {
@@ -291,7 +305,12 @@ export interface IQRPaymentRepository {
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;
   getPaymentHistory(): Promise<ApiResponse<QRPayment[]>>;
   /** The shop's sales feed — every charge of the business, visible to the whole team. */
-  getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>>;
+  /**
+   * Las ventas del comercio, la ultima primero, de a VENTAS_POR_PAGINA. Con
+   * antesDe (el id de la ultima venta que ya se vio) trae las que siguen; una
+   * pagina mas corta es la ultima.
+   */
+  getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>>;
   /** Aggregated sales report (daily, by location, by collector). Owner/manager. */
   getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>>;
   /**
@@ -322,4 +341,21 @@ export interface IQRPaymentRepository {
   setMerchantCommission(merchantId: string, commissionBps: number): Promise<ApiResponse<QRMerchant>>;
   /** Plan del comercio a mano, para pilotos. No cobra nada; queda en la auditoria. */
   setMerchantPlan(merchantId: string, plan: PlanComercio): Promise<ApiResponse<QRMerchant>>;
+  /** Todos los comercios, cerrados incluidos; `busqueda` filtra por nombre, razon social o id. */
+  listAllMerchants(busqueda?: string): Promise<ApiResponse<QRMerchant[]>>;
+  /**
+   * Cierre de un comercio por un administrador, con motivo. Los rechazos
+   * (MERCHANT_HAS_BALANCE, MERCHANT_HAS_PENDING_CHARGES...) traen su codigo y su detalle.
+   */
+  closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>>;
+  /**
+   * El dueno cierra su comercio confirmando su contrasena, y el codigo del
+   * autenticador si lo tiene encendido (sin el, el servidor responde TOTP_REQUIRED).
+   */
+  closeMerchant(merchantId: string, confirmacion: { password: string; totpCode?: string }): Promise<ApiResponse<QRMerchant>>;
+  /**
+   * Los comercios cerrados de quien pregunta, el ultimo cerrado primero. Ya no
+   * se administran, pero su dueno sigue leyendo sus ventas y su reporte.
+   */
+  listClosedMerchants(): Promise<ApiResponse<QRMerchant[]>>;
 }

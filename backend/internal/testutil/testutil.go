@@ -1013,10 +1013,59 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		reviewed_at TIMESTAMPTZ,
 		-- migracion 065: el acumulado de 30 dias que disparo el caso
-		acumulado_30d_minor BIGINT
+		acumulado_30d_minor BIGINT,
+		-- migracion 080: el mes calendario del caso y sus dos totales en dolares
+		mes DATE,
+		salidas_mes_usd_minor BIGINT,
+		entradas_mes_usd_minor BIGINT
 	);
+	-- Una base local persistida ya tiene la tabla y el CREATE no le agrega nada.
+	ALTER TABLE uif_reports
+		ADD COLUMN IF NOT EXISTS mes DATE,
+		ADD COLUMN IF NOT EXISTS salidas_mes_usd_minor BIGINT,
+		ADD COLUMN IF NOT EXISTS entradas_mes_usd_minor BIGINT;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_cierre
+		ON uif_reports (user_id, mes, report_type) WHERE tx_id IS NULL AND mes IS NOT NULL;
+
+	-- Migracion 080: la venta de referencia de cada dia, el registro de cada
+	-- movimiento que evalua la UIF y la marca de los meses cerrados.
+	CREATE TABLE IF NOT EXISTS tipo_de_cambio_diario (
+		moneda        VARCHAR(10)    NOT NULL,
+		fecha         DATE           NOT NULL,
+		por_dolar     NUMERIC(20,10) NOT NULL CHECK (por_dolar > 0),
+		fuente        VARCHAR(30)    NOT NULL,
+		registrado_en TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+		PRIMARY KEY (moneda, fecha)
+	);
+	CREATE TABLE IF NOT EXISTS uif_movimientos (
+		id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id     UUID NOT NULL REFERENCES users(id),
+		tx_id       UUID NOT NULL,
+		sentido     VARCHAR(10) NOT NULL CHECK (sentido IN ('salida', 'entrada')),
+		moneda      VARCHAR(10) NOT NULL,
+		monto_minor BIGINT NOT NULL,
+		usd_minor   BIGINT,
+		tasa        NUMERIC(20,10),
+		tasa_fecha  DATE,
+		tasa_fuente VARCHAR(30),
+		mes         DATE NOT NULL,
+		evaluado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT uq_uif_movimientos_tx UNIQUE (tx_id, sentido),
+		CONSTRAINT chk_uif_movimientos_tasa CHECK (
+			(usd_minor IS NULL AND tasa IS NULL AND tasa_fecha IS NULL AND tasa_fuente IS NULL)
+			OR (usd_minor IS NOT NULL AND tasa IS NOT NULL AND tasa_fecha IS NOT NULL AND tasa_fuente IS NOT NULL)
+		)
+	);
+	CREATE INDEX IF NOT EXISTS idx_uif_movimientos_mes ON uif_movimientos (user_id, mes);
+	CREATE TABLE IF NOT EXISTS uif_cierres (
+		mes        DATE PRIMARY KEY,
+		tasas      TEXT NOT NULL,
+		clientes   INTEGER NOT NULL,
+		casos      INTEGER NOT NULL,
+		cerrado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
 
 	-- Fraud (migration 010).
 	CREATE TABLE IF NOT EXISTS fraud_rules (
@@ -1115,6 +1164,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		CHECK (closed_at IS NULL OR active = false);
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
 	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
+	-- Cierre logico del comercio (migracion 079): la fila se marca, nunca se borra.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES users(id);
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closure_reason TEXT;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cierre;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cierre CHECK (
+		(closed_at IS NULL AND closed_by IS NULL AND closure_reason IS NULL)
+		OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND active IS FALSE
+			AND closure_reason IS NOT NULL AND btrim(closure_reason) <> '')
+	);
 
 	-- Phase 3 of business mode (migration 046): locations, staff, catalog.
 	CREATE TABLE IF NOT EXISTS merchant_locations (
@@ -1688,7 +1747,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"recurring_payments", "saved_services", "budgets",
 		"sinpe_history", "sinpe_contacts",
 		"crypto_price_alerts", "crypto_staking", "crypto_platform_fees", "crypto_transactions", "crypto_assets",
-		"uif_reports",
+		"uif_reports", "uif_movimientos", "uif_cierres", "tipo_de_cambio_diario",
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",

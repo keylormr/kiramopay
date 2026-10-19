@@ -2103,9 +2103,24 @@ paths:
         (the entry promotion a merchant receives on its FIRST approval, for 3
         months), and commission_bps afterwards. promo_hasta is null for a
         merchant that never had the promotion. plan is base or analitica; only
-        an administrator changes it while there is no charging.
+        an administrator changes it while there is no charging. A closed
+        merchant is not listed, for its owner or for its former staff. With
+        status=closed the list is instead the merchants the user owns that
+        were closed, the last closed first, each with role owner: they no
+        longer charge and nobody administers them, but their owner still
+        reads their sales, balance and report, and downloads the report CSV
+        with any plan. In that list closure_reason is owner_request (or
+        account_deletion) when the owner closed it, and admin_closure when an
+        administrator did; the administrator's text and closed_by are only in
+        the admin view.
       security:
         - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: open (the default) lists the merchants the user administers; closed, the ones the user owns that were closed.
+          schema: { type: string, enum: [open, closed], default: open }
       responses:
         '200':
           description: Merchants (may be empty)
@@ -2115,18 +2130,66 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Merchant'
+        '400':
+          description: INVALID_STATUS — status is neither open nor closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
           description: FETCH_FAILED
+
+  /api/v1/qr/merchants/{id}:
+    patch:
+      tags: [QR Payments]
+      summary: Edit a merchant (owner only)
+      description: >-
+        Replaces the business data. name, cedula and legal_name are required;
+        a missing cedula_type keeps the current one. Changing the cedula or
+        the legal name, or editing a rejected merchant, sends it back to
+        pending review.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantProfileRequest'
+      responses:
+        '200':
+          description: The edited merchant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: >-
+            INVALID_BODY; UPDATE_FAILED (a required field is missing, the
+            merchant does not exist or the caller is not its owner).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/qr/merchants/{id}/report:
     get:
       tags: [QR Payments]
       summary: Sales report of a merchant (owner or manager)
       description: >-
-        Calendar window of `days` days in the client's timezone, up to now.
-        With the analitica plan the report also carries `comparison`: the same
+        Calendar window of `days` days in the client's timezone, up to now;
+        for a closed merchant, up to the moment it closed, since it no longer
+        sells. With the analitica plan the report also carries `comparison`: the same
         window moved `days` days back and cut at the same hour, so today's
         half day is not compared with a whole day. With the base plan
         `comparison` is absent. Anyone who is not the owner or a manager gets
@@ -2157,7 +2220,9 @@ paths:
       tags: [QR Payments]
       summary: Export the sales report as CSV (owner or manager, analitica plan)
       description: >-
-        Same window and access as the report, plus the analitica plan. The
+        Same window and access as the report, plus the analitica plan. A
+        closed merchant is the exception: its window ends when it closed, and
+        its owner exports with any plan, since the plan was for operating. The
         role is checked first: someone outside the team gets 404 and never
         learns which plan the merchant has.
       security:
@@ -2288,7 +2353,609 @@ paths:
           description: >-
             LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different
             withdrawal (another amount, currency or shop). Nothing moved; a new
-            withdrawal needs a new key.
+            withdrawal needs a new key. MERCHANT_CLOSED — the shop was closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/close:
+    post:
+      tags: [QR Payments]
+      summary: Close a merchant (owner only)
+      description: >-
+        A logical closure: the row, its payments and its history stay. The
+        merchant stops charging, leaves the owner's and the staff's lists, its
+        staff is revoked and its counter codes are revoked; the closure is
+        written to the audit log in the same transaction. It is refused while
+        the shop holds money in any currency (withdraw it first) or has a
+        pending charge that has not expired. The owner confirms with the
+        account password, and with the authenticator code when TOTP is on;
+        failed confirmations are limited per user, and each one is written to
+        the audit log (merchant_close_reauth_failed, with what failed). The
+        balance and the pending charges are checked before the password, so
+        that refusal spends neither an attempt nor the authenticator code. A
+        closed merchant cannot be reopened: the owner registers a new one; its
+        sales and report stay readable for its owner (GET
+        /api/v1/qr/merchants?status=closed).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: The owner's account password.
+                totp_code:
+                  type: string
+                  description: Authenticator code; required when the account has TOTP on.
+      responses:
+        '200':
+          description: The closed merchant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: >-
+            INVALID_BODY; CURRENT_PASSWORD_INVALID (the account has TOTP off
+            and the password does not match); TOTP_REQUIRED (the account has
+            TOTP on and no code came: ask for it and retry, this does not count
+            as a failed attempt); CREDENTIALS_INVALID (the account has TOTP on
+            and the password or the code does not match, without saying
+            which). Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: DEMO_ACCOUNT — a demo account cannot close a merchant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >-
+            MERCHANT_NOT_FOUND — unknown merchant (including an id that is not
+            a UUID), or the caller is not its owner (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            MERCHANT_CLOSED (it was already closed); MERCHANT_HAS_BALANCE (the
+            shop still holds money: `error.details.balances` lists each
+            currency with its amount in minor units); MERCHANT_HAS_PENDING_CHARGES
+            (`error.details.pending_charges` says how many charges are still
+            waiting to be paid). Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '423':
+          description: >-
+            MERCHANT_CLOSE_LOCKED — too many failed confirmations; wait and
+            retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            CLOSE_FAILED — the server failed, or the failed-attempt counter
+            could not be reached (without it the closure is not confirmed);
+            nothing was closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/balance:
+    get:
+      tags: [QR Payments]
+      summary: Shop balance in one currency (owner or manager)
+      description: >-
+        Derived from the journal, in minor units. The owner of a closed
+        merchant still reads it; its former staff does not.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: currency
+          in: query
+          schema: { type: string, default: CRC }
+      responses:
+        '200':
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantBalance'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/payments:
+    get:
+      tags: [QR Payments]
+      summary: Sales of a merchant, newest first (whole team)
+      description: >-
+        Sales by pages, newest first: `limit` of them (50 by default), and with
+        `before` the ones that follow the payment with that id. A page shorter
+        than `limit` is the last one. The owner of a closed merchant still
+        reads them; its former staff does not.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Out of range (or absent), 50.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: before
+          in: query
+          required: false
+          description: Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Sales (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QRPaymentRecord'
+        '400':
+          description: INVALID_CURSOR — before is not an id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/staff:
+    get:
+      tags: [QR Payments]
+      summary: List the team (owner only)
+      description: >-
+        Active and revoked members: a revoked one stays listed, and adding them again reactivates them.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Team (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StaffMember'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [QR Payments]
+      summary: Add someone to the team (owner only)
+      description: >-
+        The person is found by the cedula they registered with. Adding a revoked member reactivates them with the new role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddStaffRequest'
+      responses:
+        '201':
+          description: The team member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMember'
+        '400':
+          description: INVALID_BODY; ADD_STAFF_FAILED (invalid role, missing cedula, the owner, an unknown location, or the caller is not the owner).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: STAFF_CEDULA_NOT_FOUND — no KiramoPay account is registered with that cedula.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/staff/{staffID}:
+    put:
+      tags: [QR Payments]
+      summary: Change the role or location of a team member (owner only)
+      description: >-
+        Only an active member.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: staffID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffRequest'
+      responses:
+        '200':
+          description: The team member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMember'
+        '400':
+          description: INVALID_BODY; UPDATE_STAFF_FAILED (invalid role, unknown location or member, or the caller is not the owner).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [QR Payments]
+      summary: Revoke a team member (owner only)
+      description: >-
+        The member loses access; the row stays, with the date.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: staffID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Done
+        '400':
+          description: REVOKE_STAFF_FAILED (unknown or already revoked member, or the caller is not the owner).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/locations:
+    get:
+      tags: [QR Payments]
+      summary: List the locations (whole team)
+      description: >-
+        A cashier picks their location when charging.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Locations (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchantLocation'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [QR Payments]
+      summary: Add a location (owner or manager)
+      description: >-
+        A location with sales is deactivated, never deleted, so past sales keep their attribution.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationRequest'
+      responses:
+        '201':
+          description: The location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantLocation'
+        '400':
+          description: INVALID_BODY; CREATE_LOCATION_FAILED (missing name, or the caller is not the owner or a manager).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/locations/{locationID}:
+    put:
+      tags: [QR Payments]
+      summary: Edit, deactivate or reactivate a location (owner or manager)
+      description: >-
+        Fields left out keep their value.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: locationID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationRequest'
+      responses:
+        '200':
+          description: The location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantLocation'
+        '400':
+          description: INVALID_BODY; UPDATE_LOCATION_FAILED (unknown location, or the caller is not the owner or a manager).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/catalog:
+    get:
+      tags: [QR Payments]
+      summary: List the catalog (whole team)
+      description: >-
+        The products a cashier can pick when charging, in their order.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Catalog (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogItem'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [QR Payments]
+      summary: Add a product to the catalog (owner or manager)
+      description: >-
+        price_minor in minor units.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogItemRequest'
+      responses:
+        '201':
+          description: The product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '400':
+          description: INVALID_BODY; CREATE_ITEM_FAILED (missing name or price, or the caller is not the owner or a manager).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/catalog/{itemID}:
+    put:
+      tags: [QR Payments]
+      summary: Edit a product (owner or manager)
+      description: >-
+        Fields left out keep their value.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: itemID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogItemRequest'
+      responses:
+        '200':
+          description: The product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '400':
+          description: INVALID_BODY; UPDATE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [QR Payments]
+      summary: Remove a product (owner or manager)
+      description: >-
+        Past sales keep their totals and note: they do not point to the product.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: itemID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Done
+        '400':
+          description: DELETE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: The change could not be saved (the database did not answer). The detail is not sent.
           content:
             application/json:
               schema:
@@ -2303,6 +2970,18 @@ paths:
       responses:
         '201':
           description: QR code created
+        '400':
+          description: INVALID_BODY; CREATE_FAILED (the code cannot be created as asked).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant of a merchant code was closed. Nothing was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     get:
       tags: [QR Payments]
       summary: Get user's QR codes
@@ -2397,7 +3076,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: QR_REVOCADO — the owner withdrew the code.
+          description: >-
+            QR_REVOCADO — the owner withdrew the code; MERCHANT_CLOSED — the
+            code belongs to a business that was closed.
           content:
             application/json:
               schema:
@@ -2451,8 +3132,9 @@ paths:
             The code or the charge no longer accepts this payment: QR_REVOCADO,
             COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO,
             LLAVE_REUTILIZADA (the idempotency_key belongs to a different
-            payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or
-            MERCHANT_UNAVAILABLE (the business is not approved).
+            payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO,
+            MERCHANT_UNAVAILABLE (the business is not approved) or
+            MERCHANT_CLOSED (the business was closed). No money moves.
           content:
             application/json:
               schema:
@@ -2566,7 +3248,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: MERCHANT_UNAVAILABLE — the business is not approved.
+          description: >-
+            MERCHANT_UNAVAILABLE — the business is not approved;
+            MERCHANT_CLOSED — the business was closed.
           content:
             application/json:
               schema:
@@ -2626,7 +3310,7 @@ paths:
         '409':
           description: >-
             QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved),
-            or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO
+            MERCHANT_CLOSED (the business was closed), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO
             or COBRO_REEMPLAZADO.
           content:
             application/json:
@@ -3615,6 +4299,92 @@ paths:
           description: APPROVE_FAILED
         '403':
           description: FORBIDDEN (not an administrator)
+        '409':
+          description: MERCHANT_CLOSED — a closed merchant is not reviewed again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/merchants/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Reject a merchant's verification (admin)
+      description: >-
+        Sets verification_status=rejected with an optional reason; the owner
+        can edit the merchant and it goes back to pending.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Rejected merchant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: REJECT_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '409':
+          description: MERCHANT_CLOSED — a closed merchant is not reviewed again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/merchants/{id}/commission:
+    patch:
+      tags: [Admin]
+      summary: Set a merchant's commission (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commission_bps]
+              properties:
+                commission_bps: { type: integer, minimum: 0, maximum: 10000 }
+      responses:
+        '200':
+          description: Merchant with its new commission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '409':
+          description: MERCHANT_CLOSED — a closed merchant keeps the commission it had.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/admin/merchants/{id}/plan:
     patch:
@@ -3649,8 +4419,112 @@ paths:
           description: FORBIDDEN (not an administrator)
         '404':
           description: MERCHANT_NOT_FOUND
+        '409':
+          description: MERCHANT_CLOSED — a closed merchant keeps the plan it had.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: PLAN_UPDATE_FAILED
+
+  /api/v1/admin/merchants:
+    get:
+      tags: [Admin]
+      summary: List every merchant, closed ones included (admin)
+      description: >-
+        Newest first, at most 200. Each merchant comes with its state
+        (verification_status, active, and closed_at, closed_by and
+        closure_reason when it was closed) and owner_name. `q` filters by a
+        piece of the business name or the legal name, without regard to case
+        (a LIKE wildcard is searched as text), or by the exact merchant id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Merchants (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Merchant'
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '500':
+          description: FETCH_FAILED
+
+  /api/v1/admin/merchants/{id}/close:
+    post:
+      tags: [Admin]
+      summary: Close a merchant (admin)
+      description: >-
+        The same logical closure as POST /api/v1/qr/merchants/{id}/close,
+        with a reason instead of the owner's password. The reason is stored
+        in closure_reason and in the audit log (admin_merchant_closed, high).
+        The same refusals apply: money in the shop or a pending charge that
+        has not expired.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: Why it is closed. Trimmed; it cannot be empty or longer than 500 characters.
+      responses:
+        '200':
+          description: The closed merchant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: >-
+            INVALID_ID (not a UUID), INVALID_BODY, CLOSURE_REASON_REQUIRED
+            (the reason is empty) or CLOSURE_REASON_TOO_LONG (more than 500
+            characters).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            MERCHANT_CLOSED, MERCHANT_HAS_BALANCE (with
+            `error.details.balances`) or MERCHANT_HAS_PENDING_CHARGES (with
+            `error.details.pending_charges`). Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: CLOSE_FAILED — the server failed; nothing was closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ── Admin: user management (remote block) ─────────────────────────
   /api/v1/admin/users/search:
@@ -5344,6 +6218,139 @@ components:
           type: string
           enum: [owner, manager, cashier]
           description: How the requesting user relates to the merchant (only in the user's own list)
+        closed_at:
+          type: string
+          format: date-time
+          description: >-
+            When the merchant was closed. Absent while it is open. A closed
+            merchant keeps its row and its history; it no longer charges and
+            nobody administers it.
+        closed_by:
+          type: string
+          format: uuid
+          description: Who closed it (the owner or an administrator). Absent while it is open.
+        closure_reason:
+          type: string
+          description: >-
+            Why it was closed: owner_request when its owner closed it, or the
+            reason an administrator wrote. Absent while it is open.
+        owner_name:
+          type: string
+          description: Owner's display name (only in the administrator's list)
+
+    MerchantProfileRequest:
+      type: object
+      required: [name, cedula, legal_name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        cedula: { type: string }
+        cedula_type: { type: string, enum: [fisica, juridica] }
+        legal_name: { type: string }
+
+    MerchantBalance:
+      type: object
+      additionalProperties: false
+      required: [balance, currency]
+      properties:
+        balance: { type: integer, format: int64, description: Minor units }
+        currency: { type: string, example: CRC }
+
+    QRPaymentRecord:
+      type: object
+      additionalProperties: false
+      required: [id, qr_code_id, payer_id, receiver_id, amount, fee, currency, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        qr_code_id: { type: string, format: uuid }
+        charge_id: { type: string, format: uuid, description: The charge that was paid; absent for an open-amount payment }
+        payer_id: { type: string, format: uuid }
+        receiver_id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        location_id: { type: string, format: uuid }
+        collected_by: { type: string, format: uuid, description: Team member who issued the charge }
+        amount: { type: integer, format: int64, description: 'Gross paid, in minor units' }
+        fee: { type: integer, format: int64, description: 'Merchant commission, in minor units' }
+        currency: { type: string }
+        status: { type: string, enum: [pending, completed, failed, refunded] }
+        note: { type: string }
+        tx_id: { type: string }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+
+    StaffMember:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_id, user_id, first_name, last_name, role, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        role: { type: string, enum: [cashier, manager] }
+        status: { type: string, enum: [active, revoked] }
+        location_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+
+    AddStaffRequest:
+      type: object
+      required: [cedula, role]
+      properties:
+        cedula: { type: string }
+        role: { type: string, enum: [cashier, manager] }
+        location_id: { type: string, format: uuid }
+
+    UpdateStaffRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [cashier, manager] }
+        location_id: { type: string, format: uuid }
+
+    MerchantLocation:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_id, name, address, active, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    LocationRequest:
+      type: object
+      properties:
+        name: { type: string }
+        address: { type: string }
+        active: { type: boolean, description: Only on edit; left out keeps the current value }
+
+    CatalogItem:
+      type: object
+      additionalProperties: false
+      required: [id, merchant_id, name, price_minor, currency, active, sort_order, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        name: { type: string }
+        price_minor: { type: integer, format: int64, description: Minor units }
+        currency: { type: string }
+        active: { type: boolean }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    CatalogItemRequest:
+      type: object
+      properties:
+        name: { type: string }
+        price_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        active: { type: boolean, description: Only on edit; left out keeps the current value }
+        sort_order: { type: integer, description: Only on edit; left out keeps the current value }
 
     ReportBucket:
       type: object

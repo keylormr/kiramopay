@@ -43,6 +43,10 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
       return t('qr_err_pago_no_registrado');
     case 'MFA_REQUIRED':
       return t('qr_err_mfa');
+    // El comercio se cerro: su codigo ya no cobra. Sin este caso caia al aviso
+    // generico, como si el problema fuera de quien paga.
+    case 'MERCHANT_CLOSED':
+      return t('qr_err_comercio_cerrado');
     default:
       return '';
   }

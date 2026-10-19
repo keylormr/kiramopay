@@ -272,6 +272,7 @@ func (a *almacenEnMemoria) IncrLockout(k string) int64 {
 	a.n[k]++
 	return a.n[k]
 }
+func (a *almacenEnMemoria) ContarIntento(k string) (int64, error) { return a.IncrLockout(k), nil }
 func (a *almacenEnMemoria) ResetLockout(k string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

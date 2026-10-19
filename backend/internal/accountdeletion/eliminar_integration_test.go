@@ -766,6 +766,13 @@ func TestDiaTreinta_SuprimeLoSuyoYConservaLoQueLaLeyExige(t *testing.T) {
 	if !cuenta1[bool](t, pool, `SELECT closed_at IS NOT NULL AND NOT active FROM qr_merchants WHERE id = $1::uuid`, comercio) {
 		t.Error("el comercio no quedo cerrado e inactivo")
 	}
+	// Cerrado como lo cierra su dueno (qrpayment.CerrarComercioEnTx): por la
+	// persona y con el motivo de la eliminacion, que es lo que lee en "Comercios
+	// cerrados". Su equipo pierde el acceso en el mismo acto.
+	if por, motivo := cuenta1[string](t, pool, `SELECT COALESCE(closed_by::text, '') FROM qr_merchants WHERE id = $1::uuid`, comercio),
+		cuenta1[string](t, pool, `SELECT COALESCE(closure_reason, '') FROM qr_merchants WHERE id = $1::uuid`, comercio); por != a.ID || motivo != "account_deletion" {
+		t.Errorf("el comercio quedo cerrado por %q con motivo %q", por, motivo)
+	}
 
 	// ── El dinero ───────────────────────────────────────────────────────────
 	if n := cuenta1[int](t, pool, `SELECT COUNT(*) FROM journal_entries`); n != asientosAntes {

@@ -455,3 +455,28 @@ func TestDesasociar_ConLotesDeUnaRecorreTodas(t *testing.T) {
 		t.Fatalf("con lotes de una: n=%d err=%v, se esperaban 2", n, err)
 	}
 }
+
+// El motivo que escribio un administrador al cerrar el comercio es texto libre
+// y puede nombrar a la persona. Al desasociar no queda: se reemplaza por la
+// marca de que lo cerro un administrador, que es lo que el dueno ya leia.
+func TestDesasociar_ElMotivoDelAdministradorNoQueda(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), sembrar(t, pool)
+	m := comercioDe(t, pool, a.ID)
+	exec(t, pool, `UPDATE qr_merchants
+		SET active = false, closed_at = NOW(), closed_by = $2::uuid,
+		    closure_reason = 'Denuncia contra Maria Rojas por cobros dobles'
+		WHERE id = $1::uuid`, m, admin.ID)
+	svc := nuevoServicio(pool, nil)
+	pedir(t, svc, a.ID)
+	cerrar(t, pool, svc, a.ID)
+	envejecer(t, pool, a.ID, 5)
+
+	if n, err := svc.DesasociarVencidas(ctx, time.Now(), 100); err != nil || n != 1 {
+		t.Fatalf("desasociar: n=%d err=%v", n, err)
+	}
+	if motivo := cuenta1[string](t, pool, `SELECT closure_reason FROM qr_merchants WHERE id = $1::uuid`, m); motivo != "admin_closure" {
+		t.Errorf("el motivo del cierre quedo %q", motivo)
+	}
+}
