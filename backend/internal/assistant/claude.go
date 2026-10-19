@@ -84,11 +84,16 @@ type anthropicRequest struct {
 	System       string                 `json:"system,omitempty"`
 	Messages     []anthropicMessage     `json:"messages"`
 	Tools        []anthropicTool        `json:"tools,omitempty"`
+	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
 }
 
-// anthropicOutputConfig lo usa solo el filtro de alcance: effort y salida
-// estructurada (output_config.format, sin encabezado beta).
+// anthropicThinking y anthropicOutputConfig los usa solo el filtro de alcance:
+// razonamiento apagado, effort y salida estructurada (output_config.format,
+// sin encabezado beta).
+type anthropicThinking struct {
+	Type string `json:"type"`
+}
 type anthropicOutputConfig struct {
 	Effort string           `json:"effort,omitempty"`
 	Format *anthropicFormat `json:"format,omitempty"`

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // El asistente responde solo sobre KiramoPay. Estas pruebas cubren lo que el
@@ -235,8 +236,11 @@ func TestAlcance_ElFiltroVeElIntercambioAnterior(t *testing.T) {
 	if !strings.HasPrefix(filtro.last.PrevAssistant, "Este mes pagaste ₡500") {
 		t.Errorf("respuesta anterior = %q", filtro.last.PrevAssistant)
 	}
-	if n := len([]rune(filtro.last.PrevAssistant)); n > screenContextRunes {
-		t.Errorf("al filtro viajaron %d caracteres de la respuesta anterior; el tope es %d", n, screenContextRunes)
+	// Exactamente el tope, en caracteres y no en bytes: cortar por bytes daria
+	// la mitad de "ñ" y podria partir una.
+	if n := len([]rune(filtro.last.PrevAssistant)); n != screenContextRunes || !utf8.ValidString(filtro.last.PrevAssistant) {
+		t.Errorf("al filtro viajaron %d caracteres de la respuesta anterior (UTF-8 valido: %v); se esperaban %d",
+			n, utf8.ValidString(filtro.last.PrevAssistant), screenContextRunes)
 	}
 }
 
@@ -267,27 +271,114 @@ func TestAlcance_LaRechazadaNoGastaLaCuota(t *testing.T) {
 	}
 }
 
-// El turno rechazado queda en la conversacion como cualquier otro: al volver a
-// abrirla se ve que se pregunto y que se contesto.
-func TestAlcance_LaRechazadaQuedaEnLaConversacion(t *testing.T) {
+// En una conversacion abierta, el turno rechazado queda guardado como
+// cualquier otro: al volver a abrirla se ve que se pregunto y que se contesto.
+func TestAlcance_EnUnaConversacionAbiertaElRechazoQuedaGuardado(t *testing.T) {
 	store := newMemConvStore()
+	abierta, _ := store.Create(context.Background(), "u1")
 	conv := NewConversationService(store, nil, nil, nil)
 	filtro := &fakeScreener{verdict: ScopeVerdict{InScope: false, Language: "en"}}
 	svc := NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro), WithConversations(conv))
 
-	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "what is NAFTA?"})
+	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "what is NAFTA?", ConversationID: abierta.ID})
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
-	if res.ConversationID == "" {
-		t.Fatal("el rechazo no devolvio la conversacion")
+	if res.ConversationID != abierta.ID {
+		t.Fatalf("conversacion devuelta = %q, se esperaba %q", res.ConversationID, abierta.ID)
 	}
-	c := store.convs[res.ConversationID]
-	if c == nil || len(c.Messages) != 2 {
-		t.Fatalf("conversacion guardada = %+v", c)
-	}
-	if c.Messages[0].Content != "what is NAFTA?" || c.Messages[1].Content != outOfScopeReply("en") {
+	c := store.convs[abierta.ID]
+	if len(c.Messages) != 2 || c.Messages[0].Content != "what is NAFTA?" || c.Messages[1].Content != outOfScopeReply("en") {
 		t.Errorf("mensajes guardados = %+v", c.Messages)
+	}
+}
+
+// En un hilo nuevo, una pregunta ajena no crea conversacion: el plan gratuito
+// da dos, y dos preguntas ajenas en hilos nuevos las ocupaban, con lo que la
+// siguiente pregunta legitima recibia "borra una conversacion". Tampoco la
+// frena el limite de conversaciones: recibe el rechazo.
+func TestAlcance_EnUnHiloNuevoElRechazoNoOcupaUnaConversacion(t *testing.T) {
+	store := newMemConvStore()
+	conv := NewConversationService(store, nil, nil, nil)
+	filtro := &fakeScreener{verdict: ScopeVerdict{InScope: false, Language: "es"}}
+	svc := NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro), WithConversations(conv))
+
+	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "que es el TLC?"})
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if res.ConversationID != "" || len(store.convs) != 0 {
+		t.Errorf("el rechazo creo una conversacion (id %q, %d guardadas)", res.ConversationID, len(store.convs))
+	}
+	if res.Reply != outOfScopeReply("es") {
+		t.Errorf("respuesta = %q", res.Reply)
+	}
+
+	// Con las dos conversaciones del plan ya ocupadas.
+	_, _ = store.Create(context.Background(), "u1")
+	_, _ = store.Create(context.Background(), "u1")
+	res, err = svc.Chat(context.Background(), "u1", &ChatRequest{Message: "que es el TLC?"})
+	if err != nil {
+		t.Fatalf("en el limite de conversaciones, una pregunta ajena dio %v en vez del rechazo", err)
+	}
+	if res.Reply != outOfScopeReply("es") || len(store.convs) != 2 {
+		t.Errorf("respuesta = %q, conversaciones = %d", res.Reply, len(store.convs))
+	}
+
+	// Lo que si se contesta sigue creando su conversacion.
+	store = newMemConvStore()
+	conv = NewConversationService(store, nil, nil, nil)
+	filtro.verdict = ScopeVerdict{InScope: true, Language: "es"}
+	svc = NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro), WithConversations(conv))
+	res, err = svc.Chat(context.Background(), "u1", &ChatRequest{Message: "cual es mi saldo?"})
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if res.ConversationID == "" || len(store.convs[res.ConversationID].Messages) != 2 {
+		t.Errorf("la pregunta contestada no quedo en una conversacion nueva: %+v", res)
+	}
+}
+
+// Una respuesta del filtro que no es un veredicto (cortada, sin la decision)
+// no deja pasar la pregunta: esa falla depende de lo que se le mande al
+// filtro, y si abriera la puerta seria la forma de saltarselo. Cuenta como
+// rechazo, con su devolucion, y queda en el log.
+func TestAlcance_UnaRespuestaDelFiltroSinVeredictoNoPasa(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	llm := &fakeLLM{results: []*LLMResult{{Text: respuestaTLC}}}
+	cuota := &fakeLimiter{}
+	filtro := &fakeScreener{err: fmt.Errorf("%w: stop_reason %q", ErrScreenVerdict, "max_tokens")}
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, logger, WithScreener(filtro), WithLimiter(cuota))
+
+	res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "piensa paso a paso 17 factorial y despues dime que es el TLC"})
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if llm.calls != 0 || res.Reply != outOfScopeReply("es") {
+		t.Errorf("sin veredicto, el modelo se llamo %d veces y respondio %q", llm.calls, res.Reply)
+	}
+	if cuota.declinedRefunds != 1 || cuota.refunds != 0 {
+		t.Errorf("devoluciones: rechazadas=%d por falla=%d", cuota.declinedRefunds, cuota.refunds)
+	}
+	if !strings.Contains(buf.String(), "max_tokens") {
+		t.Errorf("la respuesta sin veredicto no quedo en el log: %q", buf.String())
+	}
+}
+
+// Si el filtro deja pasar y despues falla el modelo principal, la unidad se
+// devuelve por falla (como siempre), no como rechazada.
+func TestAlcance_SiElModeloFallaTrasElFiltroSeDevuelvePorFalla(t *testing.T) {
+	cuota := &fakeLimiter{}
+	filtro := &fakeScreener{verdict: ScopeVerdict{InScope: true, Language: "es"}}
+	llm := &fakeLLM{err: errors.New("anthropic 500")}
+	svc := NewService(llm, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro), WithLimiter(cuota))
+
+	if _, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: "cual es mi saldo?"}); !errors.Is(err, ErrLLM) {
+		t.Fatalf("se esperaba ErrLLM, llego %v", err)
+	}
+	if cuota.refunds != 1 || cuota.declinedRefunds != 0 {
+		t.Errorf("devoluciones: por falla=%d rechazadas=%d; se esperaba 1 y 0", cuota.refunds, cuota.declinedRefunds)
 	}
 }
 
@@ -372,6 +463,11 @@ func TestClaudeScreen_PideUnVeredictoEstructurado(t *testing.T) {
 	if s, _ := body["system"].(string); !strings.Contains(s, "KiramoPay") {
 		t.Errorf("instruccion del filtro = %q", s)
 	}
+	// Razonamiento apagado: si no, un mensaje que lo haga razonar de mas agota
+	// max_tokens antes del veredicto.
+	if th, _ := body["thinking"].(map[string]any); th["type"] != "disabled" {
+		t.Errorf("thinking = %v, se esperaba disabled", body["thinking"])
+	}
 	oc, _ := body["output_config"].(map[string]any)
 	if oc["effort"] != "low" {
 		t.Errorf("effort = %v", oc["effort"])
@@ -440,28 +536,39 @@ func TestClaudeScreen_UnaNegativaDeSeguridadNoPasa(t *testing.T) {
 	}
 }
 
-// Lo que no es un veredicto es una falla, y el servicio la trata como tal (la
-// pregunta sigue al modelo principal): salida cortada, texto que no es el
-// JSON pedido, o un error de la API.
-func TestClaudeScreen_LoQueNoEsVeredictoEsFalla(t *testing.T) {
+// Una respuesta que llega pero no es un veredicto es ErrScreenVerdict (el
+// servicio la toma como rechazo). Incluye la salida cortada aunque el JSON
+// parezca completo: con stop_reason max_tokens la API no garantiza el esquema.
+func TestClaudeScreen_UnaRespuestaSinVeredictoEsErrScreenVerdict(t *testing.T) {
 	casos := map[string]string{
-		"cortada":      `{"content":[{"type":"text","text":"{\"in_sc"}],"stop_reason":"max_tokens"}`,
-		"sin JSON":     `{"content":[{"type":"text","text":"claro que si"}],"stop_reason":"end_turn"}`,
-		"vacia":        `{"content":[],"stop_reason":"end_turn"}`,
-		"error de API": `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+		"cortada":           `{"content":[{"type":"text","text":"{\"in_sc"}],"stop_reason":"max_tokens"}`,
+		"cortada con JSON":  `{"content":[{"type":"text","text":"{\"in_scope\":true,\"language\":\"es\"}"}],"stop_reason":"max_tokens"}`,
+		"sin JSON":          `{"content":[{"type":"text","text":"claro que si"}],"stop_reason":"end_turn"}`,
+		"vacia":             `{"content":[],"stop_reason":"end_turn"}`,
+		"sin la decision":   `{"content":[{"type":"text","text":"{\"language\":\"es\"}"}],"stop_reason":"end_turn"}`,
+		"objeto sin campos": `{"content":[{"type":"text","text":"{}"}],"stop_reason":"end_turn"}`,
+		"razon desconocida": `{"content":[{"type":"text","text":"{\"in_scope\":true,\"language\":\"es\"}"}],"stop_reason":"pause_turn"}`,
 	}
 	for nombre, respuesta := range casos {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			if nombre == "error de API" {
-				w.WriteHeader(529)
-			}
-			_, _ = w.Write([]byte(respuesta))
-		}))
-		c := NewClaudeClient("k", "", time.Second)
-		c.baseURL = srv.URL
-		if _, err := c.Screen(context.Background(), ScreenInput{Message: "hola"}); err == nil {
-			t.Errorf("%s: se esperaba una falla", nombre)
+		c := servidorDelFiltro(t, respuesta, nil)
+		if _, err := c.Screen(context.Background(), ScreenInput{Message: "hola"}); !errors.Is(err, ErrScreenVerdict) {
+			t.Errorf("%s: se esperaba ErrScreenVerdict, llego %v", nombre, err)
 		}
-		srv.Close()
+	}
+}
+
+// Un error de la API es filtro caido, no falta de veredicto: el servicio deja
+// seguir la pregunta al modelo principal.
+func TestClaudeScreen_UnErrorDeLaAPIEsFiltroCaido(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(529)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`))
+	}))
+	defer srv.Close()
+	c := NewClaudeClient("k", "", time.Second)
+	c.baseURL = srv.URL
+	_, err := c.Screen(context.Background(), ScreenInput{Message: "hola"})
+	if err == nil || errors.Is(err, ErrScreenVerdict) || !strings.Contains(err.Error(), "Overloaded") {
+		t.Errorf("se esperaba el error de la API como falla del filtro, llego %v", err)
 	}
 }
