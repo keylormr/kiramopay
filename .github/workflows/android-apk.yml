@@ -63,6 +63,19 @@ jobs:
           VITE_ANDROID_APK_URL: 'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk'
         run: npm run build
 
+      # Actualizacion interna: esta misma capa web, comprimida y firmada, para
+      # los telefonos cuyo binario ya la puede correr; el manifiesto dice desde
+      # que versionCode (scripts/paquete-web.mjs). Va ANTES de cap sync, que
+      # reescribe archivos de android/ que entran en la huella de lo nativo.
+      # Sin el secreto, o con uno que no corresponde a la llave de
+      # capacitor.config.ts, el release no sale: ningun telefono aceptaria el
+      # paquete y toda version se exigiria por APK.
+      - name: Paquete de la actualizacion interna
+        env:
+          LIVE_UPDATE_PRIVATE_KEY: ${{ secrets.LIVE_UPDATE_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/paquete-web.mjs android "$GITHUB_REF_NAME"
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -113,6 +126,17 @@ jobs:
           path: kiramopay.apk
           if-no-files-found: error
 
+      # En una corrida a mano (sin tag) no hay release: el paquete queda como
+      # artefacto para revisarlo.
+      - name: Upload live update package
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiramopay-web-android
+          path: |
+            kiramopay-web-android.zip
+            actualizacion-android.json
+          if-no-files-found: error
+
       # El AAB NO se adjunta a la release publica: no se puede instalar, y en la
       # pagina de descargas solo confundiria a quien viene por el APK. Queda como
       # artefacto de la corrida, que es de donde se sube a Play Console.
@@ -124,12 +148,26 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publish to GitHub Release
+      # En dos tandas, y el APK al final: el backend ofrece la version recien
+      # cuando ve el .apk, y para entonces las novedades y el paquete interno ya
+      # tienen que estar. Si subieran juntos (la accion los sube en paralelo),
+      # un telefono que pregunta en ese momento veria la version sin paquete y
+      # se le pediria el APK; el backend cachea esa respuesta diez minutos.
+      - name: Publish notes and live update package to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           body_path: notas-de-version.md
           files: |
-            kiramopay.apk
             notas.json
+            kiramopay-web-android.zip
+            actualizacion-android.json
+          fail_on_unmatched_files: true
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notas-de-version.md
+          files: kiramopay.apk
           fail_on_unmatched_files: true

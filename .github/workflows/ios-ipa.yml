@@ -109,6 +109,16 @@ jobs:
           VITE_ANDROID_APK_URL: 'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk'
         run: npm run build
 
+      # Actualizacion interna, igual que en android-apk.yml: esta capa web,
+      # comprimida y firmada, para los iPhone cuyo binario ya la puede correr
+      # (desde el CFBundleVersion que diga el manifiesto). Va ANTES de cap sync,
+      # que reescribe el Podfile, que entra en la huella de lo nativo.
+      - name: Paquete de la actualizacion interna
+        env:
+          LIVE_UPDATE_PRIVATE_KEY: ${{ secrets.LIVE_UPDATE_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/paquete-web.mjs ios "$GITHUB_REF_NAME"
+
       - name: Xcode en uso
         run: xcodebuild -version
 
@@ -263,6 +273,15 @@ jobs:
           path: ${{ steps.artefacto.outputs.nombre }}
           if-no-files-found: error
 
+      - name: Subir el paquete de la actualizacion interna
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiramopay-web-ios
+          path: |
+            kiramopay-web-ios.zip
+            actualizacion-ios.json
+          if-no-files-found: error
+
       - name: Subir a TestFlight
         if: >-
           inputs.upload_testflight &&
@@ -309,7 +328,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: notas-de-version.md
-          files: ${{ steps.artefacto.outputs.nombre }}
+          files: |
+            ${{ steps.artefacto.outputs.nombre }}
+            kiramopay-web-ios.zip
+            actualizacion-ios.json
           fail_on_unmatched_files: true
 
       - name: Limpiar llavero de firma

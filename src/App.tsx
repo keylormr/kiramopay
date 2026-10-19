@@ -18,6 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
 import { BarreraDeActualizacion } from './components/ActualizacionObligatoria';
 import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
+import { confirmarArranque } from './hooks/useActualizacion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
@@ -1011,6 +1012,13 @@ const AppInit = () => {
 // termina en un error incomprensible en cuanto se abre una pantalla diferida.
 const AppConGuardia: React.FC = () => {
   const { desactualizada, versionDesplegada } = useGuardiaDeVersion();
+  // La capa web que corre ya se pinto: se le confirma al plugin de la
+  // actualizacion interna. Va aca, dentro del ErrorBoundary, y no antes de
+  // montar React: un paquete nuevo que revienta al pintar no llega a este
+  // efecto, y el plugin vuelve solo al paquete del binario.
+  useEffect(() => {
+    void confirmarArranque();
+  }, []);
   if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
   // En la app instalada, una version nueva publicada se exige antes del login.
   return (

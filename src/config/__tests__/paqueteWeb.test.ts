@@ -47,7 +47,7 @@ const base = () => ({
     archivo('android/app/src/main/AndroidManifest.xml', '<manifest><uses-permission android:name="android.permission.CAMERA" /></manifest>'),
     archivo('capacitor.config.ts', "export default { appId: 'com.kiramopay.app' };"),
   ],
-  dependencias: { '@capacitor/android': '6.2.2', '@capawesome/capacitor-live-update': '6.9.2' },
+  dependencias: { '@capacitor/android': '6.2.2', '@capawesome/capacitor-live-update': '6.9.2' } as Record<string, string>,
   extras: { firebase: 'si' },
 });
 

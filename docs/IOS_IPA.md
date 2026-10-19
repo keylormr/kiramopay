@@ -189,9 +189,24 @@ Los tres son "una URL que el sistema abre": en iOS, `window.open` termina en
 `itms-apps://`, `itms-beta://` e `itms-services://`. Por eso el mecanismo del
 cliente es el mismo que en Android y lo unico que cambia es el destino.
 
-**Sin `IOS_UPDATE_URL` configurada** el endpoint responde 503 para iOS y la app
-no ofrece nada. Es deliberado: mientras no exista distribucion iOS, una hoja de
-actualizacion con un boton que no lleva a ningun lado es peor que el silencio.
+### Actualizacion por dentro
+
+La capa web (pantallas, textos, logica) si se puede actualizar por dentro en
+iOS, igual que en Android: el workflow adjunta al release
+`kiramopay-web-ios.zip` y su manifiesto firmado `actualizacion-ios.json`, y la
+barrera los baja, los verifica y reinicia la app ya actualizada. Lo nativo no:
+si cambio, el manifiesto lo dice (version nativa minima, sobre
+`CFBundleVersion`) y hace falta el canal. Detalle de las dos vias, la firma y la
+huella de lo nativo en `docs/ANDROID_APK.md`, seccion "In-app updates". Apple lo
+permite para codigo interpretado (DPLA 3.3.1(B)) mientras no cambie el
+proposito de la app; las funciones nuevas conviene mandarlas en un binario a
+revision.
+
+**Sin `IOS_UPDATE_URL` configurada** la app iOS solo se actualiza por dentro. Si
+la version no trae paquete para iOS el endpoint responde 503, y si el paquete
+necesita un binario mas nuevo la app no ofrece nada: mientras no exista
+distribucion iOS, una barrera con un boton que no lleva a ningun lado es peor
+que el silencio.
 
 ### La version de iOS tiene que subir con la de Android
 

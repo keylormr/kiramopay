@@ -153,7 +153,7 @@ describe('ActualizacionObligatoria por dentro', () => {
     expect(screen.getByText(/No tienes que instalar nada/)).toBeInTheDocument();
     const barra = screen.getByRole('progressbar');
     expect(barra).toHaveAttribute('aria-valuenow', '25');
-    expect(screen.getByText('25 %')).toBeInTheDocument();
+    expect(screen.getByText('25%')).toBeInTheDocument();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 

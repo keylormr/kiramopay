@@ -31,7 +31,7 @@ const CAMPOS = {
 };
 
 function publicado(privada: string, campos: Record<string, unknown> = CAMPOS) {
-  const texto: string = armarManifiesto(campos);
+  const texto: string = armarManifiesto(campos as Parameters<typeof armarManifiesto>[0]);
   return {
     manifest: Buffer.from(texto).toString('base64'),
     signature: firmar(Buffer.from(texto), privada),
@@ -89,7 +89,7 @@ describe('verificarManifiesto', () => {
   // WebView viejos sin crypto.subtle: sin poder verificar no se aplica nada.
   it('sin WebCrypto no acepta nada', async () => {
     const { publicKey, privateKey } = llaves();
-    expect(await verificarManifiesto(publicado(privateKey), publicKey, undefined)).toBeNull();
+    expect(await verificarManifiesto(publicado(privateKey), publicKey, null)).toBeNull();
   });
 });
 
