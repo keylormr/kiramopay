@@ -24,12 +24,12 @@ ALTER TABLE merchant_catalog_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
 -- Un producto sacado no puede quedar activo: ni la gestion ni otra ruta lo
 -- reactivan por un descuido. `active` es NOT NULL desde la 046.
 --
--- NOT VALID y despues VALIDATE, como la 079: el ALTER que agrega el CHECK solo
--- toma la tabla un instante, y la validacion la recorre sin frenar escrituras.
+-- Sin NOT VALID: el runner aplica el archivo en una sola transaccion, asi que
+-- validar aparte no soltaria el candado antes. La tabla es chica (un precio
+-- por producto y comercio) y la columna nace vacia: ninguna fila lo rompe.
 ALTER TABLE merchant_catalog_items DROP CONSTRAINT IF EXISTS chk_catalog_sacado_inactivo;
 ALTER TABLE merchant_catalog_items ADD CONSTRAINT chk_catalog_sacado_inactivo
-    CHECK (deleted_at IS NULL OR active IS FALSE) NOT VALID;
-ALTER TABLE merchant_catalog_items VALIDATE CONSTRAINT chk_catalog_sacado_inactivo;
+    CHECK (deleted_at IS NULL OR active IS FALSE);
 
 COMMENT ON COLUMN merchant_catalog_items.deleted_at IS
     'Cuando se saco el producto del catalogo (081). Sacado no se lista, no se edita ni se reactiva; la fila no se borra nunca. Quien lo saco esta en audit_logs.';

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kiramopay/backend/internal/audit"
@@ -799,7 +800,7 @@ func (r *Repository) UpdateCatalogItem(ctx context.Context, merchantID, itemID, 
 			    SET name = $3, price_minor = $4, active = $5, sort_order = $6
 			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
 			  RETURNING `+catalogCols, itemID, merchantID, name, priceMinor, active, sortOrder))
-		if err == pgx.ErrNoRows {
+		if noEsUnProducto(err) {
 			return fmt.Errorf("catalog item not found")
 		}
 		return interno(err)
@@ -810,20 +811,34 @@ func (r *Repository) UpdateCatalogItem(ctx context.Context, merchantID, itemID, 
 	return c, nil
 }
 
+// noEsUnProducto: la fila no esta, o el id ni siquiera tiene forma de UUID
+// (22P02). Solo ese codigo y no toda la clase 22, como noEsUnComercio: al
+// editar, un nombre de mas de 120 caracteres tambien es clase 22 (22001), y no
+// es un producto que no existe.
+func noEsUnProducto(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && pgErr.Code == "22P02")
+}
+
 // DeleteCatalogItem saca un producto del catalogo sin borrarlo: marca la fila
 // (deleted_at) y la deja inactiva, y quien lo saco queda en audit_logs en la
 // misma transaccion. Todo borrado es logico. Uno que ya se saco no se
 // encuentra, y dos que lo sacan a la vez dejan una sola marca: el segundo
 // espera la fila y ya no la ve.
+//
+// El rastro lleva los ids como los devuelve la base, no como llegaron en la
+// ruta (Postgres acepta un UUID en mayusculas), para que se encuentre por el
+// id de la fila. No copia el nombre: es texto libre del comerciante y sigue
+// en la fila, que no se borra.
 func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID, userID string) error {
 	return r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
-		var nombre string
+		var producto, comercio string
 		err := tx.QueryRow(ctx,
 			`UPDATE merchant_catalog_items SET deleted_at = NOW(), active = FALSE
 			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
-			  RETURNING name`,
-			itemID, merchantID).Scan(&nombre)
-		if err == pgx.ErrNoRows {
+			  RETURNING id::text, merchant_id::text`,
+			itemID, merchantID).Scan(&producto, &comercio)
+		if noEsUnProducto(err) {
 			return fmt.Errorf("catalog item not found")
 		}
 		if err != nil {
@@ -833,11 +848,8 @@ func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID, 
 			UserID:       userID,
 			Action:       AccionProductoSacado,
 			ResourceType: "merchant_catalog_item",
-			ResourceID:   itemID,
-			Details: map[string]interface{}{
-				"merchant_id": merchantID,
-				"name":        nombre,
-			},
+			ResourceID:   producto,
+			Details:      map[string]interface{}{"merchant_id": comercio},
 		}))
 	})
 }
