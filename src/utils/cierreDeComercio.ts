@@ -15,6 +15,9 @@ const CLAVES_DEL_CIERRE: Readonly<Record<string, string>> = {
   DEMO_ACCOUNT: 'business_close_err_demo',
   MERCHANT_CLOSED: 'business_close_err_closed',
   CLOSURE_REASON_REQUIRED: 'merchant_admin_close_err_reason',
+  // Solo lo responde el cierre de administrador: el comercio es del propio
+  // administrador, que lo cierra como dueno, con su contrasena.
+  ADMIN_IS_AFFECTED_PARTY: 'merchant_admin_close_err_own',
 };
 
 export interface RechazoDelCierre {

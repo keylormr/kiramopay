@@ -6425,6 +6425,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the alert is about the administrator's own account; another administrator resolves it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         trace?: never;
@@ -6456,6 +6465,144 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the account is the administrator's own, to restrict or to release; another administrator does it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/kyc/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a pending identity verification (admin)
+         * @description Approving raises the account to the level requested and applies its limits; a verification with a sanctions hit cannot be approved. Audited as kyc_approved or kyc_rejected.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        approve: boolean;
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The verification with its new status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | KYC_DECISION_FAILED (not found, not pending, or a sanctions hit) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the verification is the administrator's own; another administrator decides it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/uif/reports/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a pending UIF report (admin)
+         * @description submitted (reported to the UIF), dismissed or reviewed. Audited as uif_report_<status>.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "submitted" | "dismissed" | "reviewed";
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Reviewed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | UIF_REVIEW_FAILED (invalid status, not found or already reviewed) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the report is about the administrator's own account; another officer reviews it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -6505,12 +6652,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
@@ -6577,12 +6726,14 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
@@ -6650,12 +6801,14 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_CLOSED — a closed merchant keeps the commission it had. */
                 409: {
@@ -6718,12 +6871,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_NOT_FOUND */
                 404: {
@@ -6856,12 +7011,14 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant. They close it as its owner, with POST /api/v1/qr/merchants/{id}/close and their password. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_NOT_FOUND */
                 404: {
@@ -7333,12 +7490,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the account is the administrator's own; another administrator assigns it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description USER_NOT_FOUND */
                 404: {
@@ -9058,6 +9217,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator is the buyer or the seller of this agreement; another administrator resolves it. No money moves. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };

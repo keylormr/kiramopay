@@ -103,6 +103,8 @@ func responderErrorDelCierre(w http.ResponseWriter, err error) {
 			map[string]any{"pending_charges": conCobros.Pendientes})
 	case errors.Is(err, ErrComercioCerrado):
 		response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+	case errors.Is(err, ErrComercioPropio):
+		response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", err.Error())
 	case errors.Is(err, ErrComercioNoEncontrado):
 		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
 	case errors.Is(err, ErrMotivoDeCierreRequerido):

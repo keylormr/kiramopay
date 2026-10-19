@@ -3971,6 +3971,14 @@ paths:
       responses:
         '200':
           description: Alert resolved
+        '403':
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the alert is about the administrator's own account; another administrator resolves it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/admin/fraud/restrict/{userId}:
     post:
@@ -3988,6 +3996,95 @@ paths:
       responses:
         '200':
           description: User restricted
+        '403':
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the account is the administrator's own, to restrict or to release; another administrator does it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Admin: identity verification (KYC) ────────────────────────────
+  /api/v1/admin/kyc/{id}/decision:
+    post:
+      tags: [Admin]
+      summary: Approve or reject a pending identity verification (admin)
+      description: >-
+        Approving raises the account to the level requested and applies its
+        limits; a verification with a sanctions hit cannot be approved.
+        Audited as kyc_approved or kyc_rejected.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approve]
+              properties:
+                approve: { type: boolean }
+                notes: { type: string }
+      responses:
+        '200':
+          description: The verification with its new status
+        '400':
+          description: INVALID_BODY | KYC_DECISION_FAILED (not found, not pending, or a sanctions hit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the verification is the administrator's own; another administrator decides it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Admin: UIF review queue ───────────────────────────────────────
+  /api/v1/admin/uif/reports/{id}/review:
+    post:
+      tags: [Admin]
+      summary: Review a pending UIF report (admin)
+      description: >-
+        submitted (reported to the UIF), dismissed or reviewed. Audited as
+        uif_report_<status>.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [submitted, dismissed, reviewed] }
+                notes: { type: string }
+      responses:
+        '204':
+          description: Reviewed
+        '400':
+          description: INVALID_BODY | UIF_REVIEW_FAILED (invalid status, not found or already reviewed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the report is about the administrator's own account; another officer reviews it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ── Admin: merchants (verification and plan) ──────────────────────
   /api/v1/admin/merchants/{id}/approve:
@@ -4018,7 +4115,13 @@ paths:
         '400':
           description: APPROVE_FAILED
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator owns this merchant; another administrator reviews or manages it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — a closed merchant is not reviewed again.
           content:
@@ -4059,7 +4162,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator owns this merchant; another administrator reviews or manages it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — a closed merchant is not reviewed again.
           content:
@@ -4098,7 +4207,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator owns this merchant; another administrator reviews or manages it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: MERCHANT_CLOSED — a closed merchant keeps the commission it had.
           content:
@@ -4136,7 +4251,13 @@ paths:
         '400':
           description: INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not base or analitica, written exactly so)
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator owns this merchant; another administrator reviews or manages it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: MERCHANT_NOT_FOUND
         '409':
@@ -4223,7 +4344,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator owns this merchant. They close it as its owner, with POST /api/v1/qr/merchants/{id}/close and their password. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: MERCHANT_NOT_FOUND
           content:
@@ -4473,7 +4600,13 @@ paths:
         '400':
           description: INVALID_ID | INVALID_BODY (anything but exactly one plan field) | PLAN_INVALID (not free, plus or pro, written exactly so)
         '403':
-          description: FORBIDDEN (not an administrator)
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the account is the administrator's own; another administrator assigns it. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: USER_NOT_FOUND
         '429':
@@ -5335,6 +5468,14 @@ paths:
       responses:
         '200':
           description: Resolved
+        '403':
+          description: >-
+            FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
+            the administrator is the buyer or the seller of this agreement; another administrator resolves it. No money moves. Nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ── Payouts (JWT-authenticated) ────────────────────────────────────
   /api/v1/payouts/rails:

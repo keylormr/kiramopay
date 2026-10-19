@@ -2,6 +2,7 @@ package uif
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -38,6 +39,10 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ReviewReport(r.Context(), id, reviewerID, &req); err != nil {
+		if errors.Is(err, ErrRevisionPropia) {
+			response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", "a reviewer cannot review a case about their own account")
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "UIF_REVIEW_FAILED", err.Error())
 		return
 	}

@@ -22,8 +22,11 @@ const nombrePlan = (p: PlanComercio | undefined) => (p === 'analitica' ? 'busine
 
 // Los rechazos de aprobar o rechazar un pendiente que la pantalla explica con
 // su texto. Lo demas cae al aviso generico, nunca al texto del servidor.
+// ADMIN_IS_AFFECTED_PARTY: el comercio es del propio administrador, y lo revisa
+// otro.
 const CLAVES_DE_LA_REVISION: Readonly<Record<string, string>> = {
   MERCHANT_CLOSED: 'business_close_err_closed',
+  ADMIN_IS_AFFECTED_PARTY: 'merchant_admin_err_own',
 };
 
 // El motivo que el servidor guarda cuando el comercio lo cierra su dueno.
@@ -167,7 +170,12 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       const bps = Number.isFinite(pctVal) && pctVal >= 0 ? Math.round(pctVal * 100) : m.commissionBps;
       if (bps !== m.commissionBps) {
         const cr = await api.qrPayments.setMerchantCommission(m.id, bps);
-        if (!cr.success) { setError(cr.error?.message || t('merchant_admin_action_failed')); return; }
+        if (!cr.success) {
+          setError(cr.error?.code === 'ADMIN_IS_AFFECTED_PARTY'
+            ? t('merchant_admin_err_own')
+            : cr.error?.message || t('merchant_admin_action_failed'));
+          return;
+        }
       }
       const res = await api.qrPayments.approveMerchant(m.id);
       if (res.success) setReload((n) => n + 1);
@@ -229,7 +237,9 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
             ? 'merchant_admin_plan_not_found'
             : codigo === 'INVALID_ID'
               ? 'merchant_admin_plan_id_invalid'
-              : 'merchant_admin_plan_failed',
+              : codigo === 'ADMIN_IS_AFFECTED_PARTY'
+                ? 'merchant_admin_err_own'
+                : 'merchant_admin_plan_failed',
         );
       }
     } catch {

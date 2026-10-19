@@ -84,6 +84,8 @@ func (h *Handler) AsignarPlan(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrPlanInvalid):
 			response.Error(w, http.StatusBadRequest, "PLAN_INVALID", "plan must be free, plus or pro")
+		case errors.Is(err, ErrPlanPropio):
+			response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", ErrPlanPropio.Error())
 		case errors.Is(err, ErrUsuarioNoEncontrado):
 			response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
 		default:

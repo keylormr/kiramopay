@@ -124,7 +124,7 @@ func TestPromocion_UnaComisionMenorFijadaSeRespeta(t *testing.T) {
 	ctx := context.Background()
 	m := comercioVerificado(t, svc, owner)
 
-	menor, err := svc.SetCommission(ctx, m.ID, 10)
+	menor, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 10)
 	if err != nil {
 		t.Fatalf("fijar 10 bps: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestPromocion_UnaComisionMenorFijadaSeRespeta(t *testing.T) {
 		t.Fatalf("comision = %d, se esperaba 100 (la menor)", pay.Fee)
 	}
 
-	mayor, err := svc.SetCommission(ctx, m.ID, 100)
+	mayor, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 100)
 	if err != nil {
 		t.Fatalf("fijar 100 bps: %v", err)
 	}

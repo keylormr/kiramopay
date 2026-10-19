@@ -1526,6 +1526,7 @@ export type TranslationKeys = {
   admin_users_never: string;
   admin_users_action_failed: string;
   admin_users_err_self: string;
+  admin_users_err_own_plan: string;
   admin_users_err_admin: string;
   admin_users_err_reason: string;
   admin_users_expiry: string;
@@ -1621,6 +1622,7 @@ export type TranslationKeys = {
   admin_disputes_confirm_seller: string;
   admin_disputes_confirm: string;
   admin_disputes_failed: string;
+  admin_disputes_err_party: string;
   payout_menu: string;
   payout_menu_desc: string;
   payout_title: string;
@@ -1842,6 +1844,8 @@ export type TranslationKeys = {
   merchant_admin_close_reason: string;
   merchant_admin_close_confirm: string;
   merchant_admin_close_err_reason: string;
+  merchant_admin_err_own: string;
+  merchant_admin_close_err_own: string;
   merchant_admin_close_done: string;
   business_closed_menu: string;
   business_closed_menu_desc: string;
