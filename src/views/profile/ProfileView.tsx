@@ -45,6 +45,8 @@ interface ProfileViewProps {
   /** Opens the business profile switcher (switch to a shop or create one). */
   onOpenBusiness?: () => void;
   onOpenAdminMerchants?: () => void;
+  /** Los comercios que la persona cerro: sus ventas y su reporte, de solo lectura. */
+  onOpenClosedMerchants?: () => void;
   onOpenAdminUsers?: () => void;
   /** La cola de disputas del escrow (solo administradores). */
   onOpenAdminDisputas?: () => void;
@@ -58,7 +60,7 @@ interface ProfileViewProps {
   onOpenRecurring?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
   const { state, dispatch } = useApp();
 
   // Admin entry is gated by a server-side probe: the role lives only on the
@@ -71,6 +73,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
     if (!api.qrPayments) return;
     api.qrPayments.listPendingMerchants().then((res) => {
       if (!cancelled && res.success) setIsAdmin(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Un comercio cerrado ya no aparece en el selector de negocios: esta fila es
+  // la entrada a lo que vendio, y solo se muestra a quien tiene alguno. Si la
+  // consulta falla no se muestra; el comercio sigue cerrado y nada se pierde.
+  const [tieneCerrados, setTieneCerrados] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const api = getApiLayer();
+    if (typeof api.qrPayments?.listClosedMerchants !== 'function') return;
+    api.qrPayments.listClosedMerchants().then((res) => {
+      if (!cancelled && res.success && res.data && res.data.length > 0) setTieneCerrados(true);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -724,6 +740,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
+
+          {tieneCerrados && (
+            <button
+              onClick={() => onOpenClosedMerchants?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl flex items-center justify-center mr-3">
+                <Icons.History size={18} className="text-slate-500" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('business_closed_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('business_closed_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
 
           <button
             onClick={() => onOpenEscrow?.()}

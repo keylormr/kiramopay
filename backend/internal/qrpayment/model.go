@@ -49,6 +49,17 @@ type Merchant struct {
 	// cambio de identidad aunque reviewed_at se borre. Interna.
 	PrimeraAprobacionAt *time.Time `json:"-"`
 
+	// Cierre logico (migracion 079). Un comercio cerrado conserva su fila y todo
+	// lo que cuelga de ella; deja de cobrar y sale de las listas del dueno y del
+	// equipo. ClosureReason es MotivoCierrePropio cuando lo cerro su dueno.
+	ClosedAt      *time.Time `json:"closed_at,omitempty"`
+	ClosedBy      string     `json:"closed_by,omitempty"`
+	ClosureReason string     `json:"closure_reason,omitempty"`
+
+	// OwnerName es el nombre del dueno. Solo lo llena la lista de
+	// administracion, para que se sepa de quien es cada comercio.
+	OwnerName string `json:"owner_name,omitempty"`
+
 	// Role is how the REQUESTING user relates to this merchant (owner, manager
 	// or cashier). Filled per-caller by the service, never persisted.
 	Role string `json:"role,omitempty"`

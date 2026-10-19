@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
+import { mensajeDeGestion } from '@/utils/cierreDeComercio';
 import { getApiLayer } from '@/api';
 import type { MerchantLocation } from '@/api/repositories/qrpayment.repository';
 
@@ -71,7 +72,7 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
       setShowAdd(false);
       reload();
     } else {
-      setError(res.error?.message || t('assistant_action_failed'));
+      setError(mensajeDeGestion(t, res.error));
     }
   };
 
@@ -83,7 +84,7 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
     try {
       const res = await api.updateLocation(merchantId, loc.id, { active: !loc.active });
       if (res.success) reload();
-      else setError(res.error?.message || t('assistant_action_failed'));
+      else setError(mensajeDeGestion(t, res.error));
     } finally {
       setBusyId(null);
     }

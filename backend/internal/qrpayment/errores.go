@@ -108,3 +108,86 @@ var (
 	// ErrComercioNoEncontrado: no existe un comercio con ese id.
 	ErrComercioNoEncontrado = errors.New("merchant not found")
 )
+
+// Errores del cierre del comercio (migracion 079).
+var (
+	// ErrComercioCerrado: el comercio se cerro. Pagarle, resolver su codigo,
+	// pedir su rotulo, retirar, editarlo o volver a cerrarlo responde esto, y no
+	// "no existe": la fila esta, y quien escanea un rotulo viejo tiene que saber
+	// por que no puede pagar.
+	ErrComercioCerrado = errors.New("merchant is closed")
+
+	// ErrComercioConSaldo: el negocio tiene plata. Cerrarlo dejaria ese dinero
+	// donde nadie puede entrar a retirarlo. El detalle va en
+	// ComercioConSaldoError.
+	ErrComercioConSaldo = errors.New("merchant balance is not zero")
+
+	// ErrComercioConCobrosPendientes: hay cobros que alguien puede estar por
+	// pagar. El detalle va en ComercioConCobrosError.
+	ErrComercioConCobrosPendientes = errors.New("merchant has pending charges")
+
+	// ErrMotivoDeCierreRequerido: un cierre sin motivo, o sin quien lo hace.
+	ErrMotivoDeCierreRequerido = errors.New("a closure needs a reason")
+
+	// ErrMotivoDeCierreMuyLargo: el motivo pasa de MaxMotivoDeCierre caracteres.
+	ErrMotivoDeCierreMuyLargo = errors.New("the closure reason is too long")
+
+	// La reautenticacion del dueno. Los mismos codigos que cambiar la
+	// contrasena: la pantalla ya los sabe decir.
+	ErrContrasenaIncorrecta = errors.New("current password is incorrect")
+	ErrTOTPRequerido        = errors.New("the authenticator code is required")
+	ErrCierreEnPausa        = errors.New("too many failed attempts; try again later")
+
+	// ErrCredencialesIncorrectas: con el segundo factor encendido, la
+	// contrasena o el codigo no coinciden, sin decir cual. Distinguirlos le
+	// diria a quien tiene la sesion pero no la contrasena que ya la adivino.
+	ErrCredencialesIncorrectas = errors.New("the password or the authenticator code is not valid")
+)
+
+// SaldoDelComercio es lo que queda en una moneda, en unidades menores.
+type SaldoDelComercio struct {
+	Currency string `json:"currency"`
+	Amount   int64  `json:"amount"`
+}
+
+// ComercioConSaldoError dice cuanto queda y en que moneda, para que la pantalla
+// lo diga sin adivinar. Es un ErrComercioConSaldo.
+type ComercioConSaldoError struct {
+	Saldos []SaldoDelComercio
+}
+
+func (e *ComercioConSaldoError) Error() string { return ErrComercioConSaldo.Error() }
+func (e *ComercioConSaldoError) Unwrap() error { return ErrComercioConSaldo }
+
+// ComercioConCobrosError dice cuantos cobros siguen vivos. Es un
+// ErrComercioConCobrosPendientes.
+type ComercioConCobrosError struct {
+	Pendientes int
+}
+
+func (e *ComercioConCobrosError) Error() string { return ErrComercioConCobrosPendientes.Error() }
+func (e *ComercioConCobrosError) Unwrap() error { return ErrComercioConCobrosPendientes }
+
+// falloInterno marca un error de la base, o del camino hacia ella, en las rutas
+// de gestion del comercio (equipo, sucursales, catalogo): la ruta lo responde
+// como 500 y sin el detalle. No es algo que quien llama pueda corregir, y la
+// frase del driver ("failed to connect to ...") no es para la pantalla. Antes
+// salia en el 400 de cada ruta.
+type falloInterno struct{ err error }
+
+func (f falloInterno) Error() string { return f.err.Error() }
+func (f falloInterno) Unwrap() error { return f.err }
+
+// interno marca err como falloInterno. Lo que ya tiene su respuesta (el
+// comercio cerrado o que no existe) pasa tal cual.
+func interno(err error) error {
+	if err == nil || errors.Is(err, ErrComercioCerrado) || errors.Is(err, ErrComercioNoEncontrado) {
+		return err
+	}
+	return falloInterno{err: err}
+}
+
+func esFalloInterno(err error) bool {
+	var f falloInterno
+	return errors.As(err, &f)
+}
