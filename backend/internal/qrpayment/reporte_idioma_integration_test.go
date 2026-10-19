@@ -25,7 +25,7 @@ func pedirReporteCSV(t *testing.T) func(consulta string) *httptest.ResponseRecor
 
 	m := comercioVerificado(t, svc, owner)
 	pagarAlComercio(t, svc, payer, owner, m.ID, 20000)
-	if _, err := svc.AsignarPlanComercio(ctx, m.ID, owner, qrpayment.PlanComercioAnalitica, qrpayment.ActorContext{}); err != nil {
+	if _, err := svc.AsignarPlanComercio(ctx, m.ID, revisorDePrueba, qrpayment.PlanComercioAnalitica, qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("asignar analitica: %v", err)
 	}
 

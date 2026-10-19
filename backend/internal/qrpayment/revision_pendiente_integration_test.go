@@ -42,7 +42,7 @@ func TestUpdateMerchant_VolverAPendienteLimpiaLaRevisionAnterior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("editar sin cambiar la identidad: %v", err)
 	}
-	if m.VerificationStatus != "verified" || m.ReviewedAt == nil || revisadoPor(t, pool, qr.MerchantID) != owner {
+	if m.VerificationStatus != "verified" || m.ReviewedAt == nil || revisadoPor(t, pool, qr.MerchantID) != revisorDePrueba {
 		t.Fatalf("un comercio verificado perdio su revision sin cambiar de identidad: %+v", m)
 	}
 
@@ -62,11 +62,11 @@ func TestUpdateMerchant_VolverAPendienteLimpiaLaRevisionAnterior(t *testing.T) {
 	}
 
 	// La nueva aprobacion vuelve a dejar quien y cuando.
-	m, err = svc.ApproveMerchant(ctx, qr.MerchantID, owner)
+	m, err = svc.ApproveMerchant(ctx, qr.MerchantID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("re-aprobar: %v", err)
 	}
-	if m.VerificationStatus != "verified" || m.ReviewedAt == nil || revisadoPor(t, pool, qr.MerchantID) != owner {
+	if m.VerificationStatus != "verified" || m.ReviewedAt == nil || revisadoPor(t, pool, qr.MerchantID) != revisorDePrueba {
 		t.Fatalf("la re-aprobacion debe registrar la revision nueva: %+v", m)
 	}
 }

@@ -86,6 +86,26 @@ describe('AdminDisputasView', () => {
     await waitFor(() => expect(mocks.adminList).toHaveBeenCalledTimes(2));
   });
 
+  // Un administrador que es comprador o vendedor del acuerdo no lo arbitra: el
+  // servidor responde 403 ADMIN_IS_AFFECTED_PARTY y la pantalla lo dice en el
+  // idioma de la app, no con el texto del servidor.
+  it('si el administrador es parte del acuerdo lo dice con el texto de la app', async () => {
+    mocks.adminList.mockResolvedValue({ success: true, data: { agreements: [caso], total: 1, status: 'disputed' } });
+    mocks.adminResolve.mockResolvedValue({
+      success: false,
+      error: { code: 'ADMIN_IS_AFFECTED_PARTY', message: 'an administrator cannot resolve an agreement they are a party to' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await screen.findByText(/Luis Rojas/);
+    await user.click(screen.getByText('A favor del vendedor'));
+    await user.click(await screen.findByText('Confirmar'));
+
+    expect(await screen.findByText('Eres parte de este acuerdo: lo tiene que resolver otro administrador.')).toBeInTheDocument();
+    expect(screen.queryByText(/cannot resolve/)).not.toBeInTheDocument();
+  });
+
   it('una cola que no cargo no se muestra como cola vacia', async () => {
     mocks.adminList.mockResolvedValue({ success: false, error: { code: 'X', message: 'sin red' } });
     pintar();

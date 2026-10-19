@@ -565,7 +565,7 @@ func TestEnviarCripto_ElRotuloDeUnComercioSeRechaza(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registrar comercio: %v", err)
 	}
-	if _, err := e.qr.ApproveMerchant(ctx, m.ID, e.quienRecibe); err != nil {
+	if _, err := e.qr.ApproveMerchant(ctx, m.ID, e.quienEnvia); err != nil {
 		t.Fatalf("aprobar comercio: %v", err)
 	}
 	rotulo, err := e.qr.GetOrCreateMerchantCode(ctx, e.quienRecibe, m.ID, "", "CRC")

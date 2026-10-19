@@ -66,7 +66,7 @@ func TestCerrarComercio_UnPagoQueTomoLaFilaPrimeroFrenaElCierre(t *testing.T) {
 
 	cierre := make(chan error, 1)
 	go func() {
-		_, err := svc.CerrarComercioComoAdmin(ctx, m.ID, owner, "carrera inversa", actorDePrueba)
+		_, err := svc.CerrarComercioComoAdmin(ctx, m.ID, revisorDePrueba, "carrera inversa", actorDePrueba)
 		cierre <- err
 	}()
 	esperarSentenciaBloqueada(t, pool, cierre, "el cierre", "FROM qr_merchants", "FOR UPDATE")

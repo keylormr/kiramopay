@@ -237,7 +237,7 @@ func TestUpdateMerchant_IdentityChangeAndReverify(t *testing.T) {
 	}
 
 	// Admin re-approval restores the badge with the new identity intact.
-	m3, err := svc.ApproveMerchant(ctx, qr.MerchantID, owner)
+	m3, err := svc.ApproveMerchant(ctx, qr.MerchantID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("re-aprobar: %v", err)
 	}

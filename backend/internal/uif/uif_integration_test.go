@@ -57,8 +57,10 @@ func setupUIF(t *testing.T) (*uif.Service, *transaction.Service, *pgxpool.Pool, 
 // A single outgoing transaction above the CRC ceiling (550M centimos) is
 // flagged single_threshold, and a compliance officer can submit it.
 func TestUIF_SingleThreshold_ThenReview(t *testing.T) {
-	uifSvc, txSvc, _, userID := setupUIF(t)
+	uifSvc, txSvc, pool, userID := setupUIF(t)
 	ctx := context.Background()
+	// Quien revisa es un oficial, nunca la persona del caso.
+	oficial := testutil.SeedTestUser2(t, pool)
 
 	if _, err := txSvc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
 		Type:           transaction.TypeSinpeSend,
@@ -80,7 +82,7 @@ func TestUIF_SingleThreshold_ThenReview(t *testing.T) {
 		t.Fatalf("expected single_threshold, got %s", reports[0].ReportType)
 	}
 
-	if err := uifSvc.ReviewReport(ctx, reports[0].ID, userID, &uif.ReviewRequest{
+	if err := uifSvc.ReviewReport(ctx, reports[0].ID, oficial, &uif.ReviewRequest{
 		Status: uif.StatusSubmitted, Notes: "reported to UIF",
 	}); err != nil {
 		t.Fatalf("ReviewReport: %v", err)
@@ -91,7 +93,7 @@ func TestUIF_SingleThreshold_ThenReview(t *testing.T) {
 		t.Fatalf("expected 0 pending after review, got %d", len(pending))
 	}
 	// A second review of the same report must fail.
-	if err := uifSvc.ReviewReport(ctx, reports[0].ID, userID, &uif.ReviewRequest{Status: uif.StatusDismissed}); err == nil {
+	if err := uifSvc.ReviewReport(ctx, reports[0].ID, oficial, &uif.ReviewRequest{Status: uif.StatusDismissed}); err == nil {
 		t.Fatal("expected re-review of a settled report to fail")
 	}
 }
