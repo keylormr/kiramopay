@@ -13,6 +13,8 @@ import {
   elegirReleaseAnterior,
   leerManifiestoAnterior,
   adjuntosDe,
+  elegirNativas,
+  tagDeLaEjecucion,
 } from '../../../scripts/paquete-web.mjs';
 
 // La actualizacion interna baja solo la capa web. Un paquete web armado para
@@ -295,4 +297,57 @@ describe('adjuntosDe', () => {
     expect(adjuntosDe('android')).toEqual({ paquete: 'kiramopay-web-android.zip', manifiesto: 'actualizacion-android.json' });
     expect(adjuntosDe('ios')).toEqual({ paquete: 'kiramopay-web-ios.zip', manifiesto: 'actualizacion-ios.json' });
   });
+});
+
+describe('elegirNativas', () => {
+  const lock = {
+    packages: {
+      'node_modules/@capacitor/core': { version: '6.2.1' },
+      'node_modules/@capacitor/cli': { version: '6.2.1' },
+      'node_modules/@capawesome/capacitor-live-update': { version: '6.9.2' },
+      'node_modules/react': { version: '18.3.1' },
+      'node_modules/vitest': { version: '3.2.4' },
+    },
+  };
+  const esPlugin = (nombre: string) => nombre === '@capawesome/capacitor-live-update';
+
+  it('cuenta los plugins y Capacitor, no las dependencias web', () => {
+    const paquete = { dependencies: { '@capacitor/core': '^6.2.1', '@capawesome/capacitor-live-update': '6.9.2', react: '^18' } };
+    expect(elegirNativas(paquete, lock, esPlugin)).toEqual({
+      '@capacitor/core': '6.2.1',
+      '@capawesome/capacitor-live-update': '6.9.2',
+    });
+  });
+
+  // cap sync corre en el CI y regenera capacitor.build.gradle y
+  // capacitor.settings.gradle con la version del CLI: esa version viaja en el
+  // binario aunque sea una dependencia de desarrollo.
+  it('cuenta el CLI de Capacitor aunque sea dependencia de desarrollo', () => {
+    const paquete = { dependencies: { '@capacitor/core': '^6.2.1' }, devDependencies: { '@capacitor/cli': '^6.2.1', vitest: '^3' } };
+    expect(elegirNativas(paquete, lock, esPlugin)).toEqual({
+      '@capacitor/core': '6.2.1',
+      '@capacitor/cli': '6.2.1',
+    });
+  });
+
+  it('una nativa que no esta en package-lock frena el paquete', () => {
+    const paquete = { dependencies: { '@capacitor/haptics': '^6' } };
+    expect(() => elegirNativas(paquete, lock, esPlugin)).toThrow(/package-lock/);
+  });
+});
+
+// En un tag el workflow pasa la etiqueta; a mano (workflow_dispatch) pasa el
+// nombre de la rama, que no es una version aunque empiece con "v".
+describe('tagDeLaEjecucion', () => {
+  it('una etiqueta de version se usa tal cual', () => {
+    expect(tagDeLaEjecucion('v2.9.0', '2.9.0')).toBe('v2.9.0');
+    expect(tagDeLaEjecucion('v2.9.1', '2.9.0')).toBe('v2.9.1');
+  });
+
+  it.each(['verificacion', 'vicpay-x', 'v2.9', 'feat/actualizacion-interna', '', undefined])(
+    'una rama (%s) usa la version de package.json',
+    (arg) => {
+      expect(tagDeLaEjecucion(arg, '2.9.0')).toBe('v2.9.0');
+    },
+  );
 });

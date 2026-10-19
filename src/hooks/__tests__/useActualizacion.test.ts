@@ -31,7 +31,8 @@ vi.mock('@capawesome/capacitor-live-update', () => ({ LiveUpdate: live }));
 const firmado = vi.hoisted(() => ({ verificarManifiesto: vi.fn() }));
 vi.mock('@/utils/paqueteFirmado', () => firmado);
 
-const { esVersionMasNueva, plataformaNativa, useActualizacion, confirmarArranque, reintentos } = await import(
+const { esVersionMasNueva, plataformaNativa, useActualizacion, confirmarArranque, asegurarArranque, reintentos } =
+  await import(
   '../useActualizacion'
 );
 
@@ -241,7 +242,13 @@ const MANIFIESTO = {
   bytes: 1_000_000,
 };
 
-const WEB = { manifest: 'bWFuaWZpZXN0bw==', signature: 'ZmlybWE=', url: 'https://ejemplo/kiramopay-web-android.zip' };
+const WEB = {
+  manifest: 'bWFuaWZpZXN0bw==',
+  signature: 'ZmlybWE=',
+  url: 'https://github.com/keylormr/kiramopay/releases/download/v2.8.0/kiramopay-web-android.zip',
+};
+
+const WEB_IOS = { ...WEB, url: 'https://github.com/keylormr/kiramopay/releases/download/v2.8.0/kiramopay-web-ios.zip' };
 
 type Avance = { bundleId: string; downloadedBytes: number; totalBytes: number; progress: number };
 
@@ -249,7 +256,7 @@ describe('useActualizacion por dentro', () => {
   let alVolver: (() => void) | undefined;
   let alAvanzar: ((e: Avance) => void) | undefined;
   const getLatest = vi.fn();
-  const esperasOriginales = [...reintentos.esperasMs];
+  const originales = { ...reintentos, esperasMs: [...reintentos.esperasMs] };
 
   const conPaquete = (extra: Record<string, unknown> = {}) => ({
     success: true,
@@ -285,7 +292,7 @@ describe('useActualizacion por dentro', () => {
   });
 
   afterEach(() => {
-    reintentos.esperasMs = [...esperasOriginales];
+    Object.assign(reintentos, originales, { esperasMs: [...originales.esperasMs] });
   });
 
   it('baja el paquete firmado, lo deja listo y reinicia la app sin abrir nada', async () => {
@@ -488,10 +495,145 @@ describe('useActualizacion por dentro', () => {
     expect(live.downloadBundle).not.toHaveBeenCalled();
   });
 
+  // El efecto del hook corre antes que el de AppConGuardia: si decidiera sin
+  // esperar la confirmacion de arranque, ofreceria otra vez por dentro la
+  // version que el plugin acaba de revertir por segunda vez. La prueba arranca
+  // con el modulo recien cargado, como una pagina nueva, y monta el hook
+  // primero.
+  it('la revision espera la confirmacion de arranque antes de decidir', async () => {
+    vi.resetModules();
+    const fresco = await import('../useActualizacion');
+    let soltar: (r: unknown) => void = () => undefined;
+    live.ready.mockReturnValue(
+      new Promise((r) => {
+        soltar = r;
+      }),
+    );
+    getLatest.mockResolvedValue(conPaquete());
+    const { result } = renderHook(() => fresco.useActualizacion());
+    // Despues, el efecto de AppConGuardia.
+    const confirmado = fresco.asegurarArranque();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(getLatest).not.toHaveBeenCalled();
+    expect(live.ready).toHaveBeenCalledTimes(1);
+
+    localStorage.setItem('kiramopay-actualizacion-fallos', JSON.stringify({ '2.8.0': 1 }));
+    soltar({ previousBundleId: 'v2.8.0', currentBundleId: null, rollback: true });
+    await confirmado;
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+    expect(live.ready).toHaveBeenCalledTimes(1);
+  });
+
+  // Un pendiente de otra version (se instalo un APK entre el reinicio y el
+  // arranque, por ejemplo) se cuenta sin borrar lo que llevaba la version en
+  // curso.
+  it('una falla de otra version no borra la cuenta de la version en curso', async () => {
+    localStorage.setItem('kiramopay-actualizacion-fallos', JSON.stringify({ '2.8.0': 1 }));
+    localStorage.setItem('kiramopay-actualizacion-pendiente', '2.7.9');
+    await confirmarArranque();
+    live.ready.mockResolvedValue({ previousBundleId: 'v2.8.0', currentBundleId: null, rollback: true });
+    await confirmarArranque();
+    getLatest.mockResolvedValue(conPaquete());
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+  });
+
+  // Si el plugin revierte sin decir que paquete fallo, el que se dejo listo es
+  // el que fallo.
+  it('una reversion sin id del paquete cuenta la version que se dejo lista', async () => {
+    live.ready.mockResolvedValue({ previousBundleId: null, currentBundleId: null, rollback: true });
+    for (let i = 0; i < 2; i++) {
+      localStorage.setItem('kiramopay-actualizacion-pendiente', '2.8.0');
+      await confirmarArranque();
+    }
+    getLatest.mockResolvedValue(conPaquete());
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+  });
+
+  // El paquete solo se baja del release de esa version: un servidor que apunta
+  // a otro lado no recibe el pedido del telefono (ni su identificador).
+  it.each([
+    ['otro host', 'https://otro.ejemplo/kiramopay-web-android.zip'],
+    ['sin https', 'http://github.com/keylormr/kiramopay/releases/download/v2.8.0/kiramopay-web-android.zip'],
+    ['otro repositorio', 'https://github.com/otro/kiramopay/releases/download/v2.8.0/kiramopay-web-android.zip'],
+    ['otra version', 'https://github.com/keylormr/kiramopay/releases/download/v2.7.9/kiramopay-web-android.zip'],
+    ['otra plataforma', 'https://github.com/keylormr/kiramopay/releases/download/v2.8.0/kiramopay-web-ios.zip'],
+  ])('un paquete fuera del release de la version (%s) no se baja: va por el APK', async (_caso, url) => {
+    getLatest.mockResolvedValue(conPaquete({ web: { ...WEB, url } }));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+  });
+
+  // Si el backend respondio sin paquete por una falla pasajera, la barrera del
+  // APK no queda para siempre: revisa de nuevo y pasa a la interna.
+  it('con la barrera del APK revisa de nuevo y pasa a la interna cuando aparece el paquete', async () => {
+    reintentos.revisarExternaMs = 30;
+    getLatest.mockResolvedValue(conPaquete({ web: undefined }));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    getLatest.mockResolvedValue(conPaquete());
+    await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion?.via).toBe('interna');
+  });
+
+  // reload() del plugin resuelve enseguida y recien despues se recarga el
+  // WebView. Si la pagina sigue viva, no se reinicio: se ofrece reintentar.
+  it('si despues de reiniciar la app sigue aca, ofrece reintentar', async () => {
+    reintentos.esperaReinicioMs = 30;
+    live.reload.mockResolvedValue(undefined);
+    getLatest.mockResolvedValue(conPaquete());
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).toMatchObject({ via: 'interna', fase: 'error' }));
+    expect(live.reload).toHaveBeenCalledTimes(1);
+
+    live.getBundles.mockResolvedValue({ bundleIds: ['v2.8.0'] });
+    await act(async () => {
+      result.current.reintentar();
+    });
+    await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(2));
+    expect(live.downloadBundle).toHaveBeenCalledTimes(1);
+  });
+
+  it('dos ciclos de descarga fallidos ofrecen el APK', async () => {
+    live.downloadBundle.mockRejectedValue(new Error('Bundle could not be downloaded.'));
+    getLatest.mockResolvedValue(conPaquete());
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).toMatchObject({ via: 'interna', fase: 'error' }));
+    await act(async () => {
+      result.current.reintentar();
+    });
+    await waitFor(() =>
+      expect(result.current.actualizacion).toMatchObject({ via: 'externa', url: 'https://ejemplo/kiramopay.apk' }),
+    );
+  });
+
+  // Sin canal de iOS no hay APK al que mandar: la barrera se queda con el
+  // reintento a mano (decision pendiente del dueno: ver docs/IOS_IPA.md).
+  it('iOS sin canal con las fallas agotadas ofrece reintentar a mano, sin ciclos solos', async () => {
+    mockCapacitor.getPlatform.mockReturnValue('ios');
+    firmado.verificarManifiesto.mockResolvedValue({ ...MANIFIESTO, plataforma: 'ios', paquete: 'kiramopay-web-ios.zip' });
+    localStorage.setItem('kiramopay-actualizacion-fallos', JSON.stringify({ '2.8.0': 2 }));
+    getLatest.mockResolvedValue(conPaquete({ url: '', web: WEB_IOS }));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).toMatchObject({ via: 'interna', fase: 'error' }));
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+    await act(async () => {
+      result.current.reintentar();
+    });
+    await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
+  });
+
   it('iOS sin canal tambien se actualiza por dentro', async () => {
     mockCapacitor.getPlatform.mockReturnValue('ios');
     firmado.verificarManifiesto.mockResolvedValue({ ...MANIFIESTO, plataforma: 'ios', paquete: 'kiramopay-web-ios.zip' });
-    getLatest.mockResolvedValue(conPaquete({ url: '' }));
+    getLatest.mockResolvedValue(conPaquete({ url: '', web: WEB_IOS }));
     renderHook(() => useActualizacion());
     await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
     expect(getLatest).toHaveBeenCalledWith('ios');
@@ -527,6 +669,15 @@ describe('confirmarArranque', () => {
     mockCapacitor.getPlatform.mockReturnValue('web');
     await confirmarArranque();
     expect(live.ready).not.toHaveBeenCalled();
+  });
+
+  // AppConGuardia y la revision del hook la piden: el plugin recibe un solo
+  // ready() por carga de pagina.
+  it('asegurarArranque confirma una sola vez', async () => {
+    await confirmarArranque();
+    await asegurarArranque();
+    await asegurarArranque();
+    expect(live.ready).toHaveBeenCalledTimes(1);
   });
 
   it('sin el plugin (un APK viejo) no se rompe', async () => {

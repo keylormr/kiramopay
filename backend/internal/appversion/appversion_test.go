@@ -1,6 +1,7 @@
 package appversion
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -834,6 +835,51 @@ func TestPaqueteWeb_FallaPasajeraSeReintentaPronto(t *testing.T) {
 	h.mu.Unlock()
 	if _, info := pedir(t, h); info.Web == nil || info.Web.Manifest != manifiesto {
 		t.Fatalf("segunda: web=%+v, la falla pasajera no debia quedar diez minutos en cache", info.Web)
+	}
+}
+
+// El refresco de la cache sirve a todos: si el telefono que lo disparo corta la
+// conexion a mitad, los demas no pueden quedarse un minuto sin el paquete (en
+// Android eso es la barrera del APK).
+func TestPaqueteWeb_UnTelefonoQueCortaNoDejaATodosSinPaquete(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	cuerpo, manifiesto := manifiestoPublicado("2.3.6", "android")
+	llego := make(chan struct{}, 1)
+	cortado := make(chan struct{})
+	adj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/actualizacion-android.json"):
+			select {
+			case llego <- struct{}{}:
+			default:
+			}
+			// GitHub contesta recien despues de que el telefono corto.
+			<-cortado
+			_, _ = w.Write([]byte(cuerpo))
+		case strings.HasSuffix(r.URL.Path, "/kiramopay-web-android.zip"):
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("P"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer adj.Close()
+	h := conPaquetes(api.URL, web.URL, adj.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-llego
+		cancel()
+		close(cortado)
+	}()
+	rec := httptest.NewRecorder()
+	h.GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version?platform=android", nil).WithContext(ctx))
+
+	if _, info := pedir(t, h); info.Web == nil || info.Web.Manifest != manifiesto {
+		t.Fatalf("otro telefono: web=%+v, el corte de uno no puede dejar a todos sin el paquete", info.Web)
 	}
 }
 
