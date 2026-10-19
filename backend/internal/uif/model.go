@@ -48,11 +48,12 @@ type Report struct {
 	Acumulado30Minor int64 `json:"rolling_30d_total_minor,omitempty"`
 	// Mes es el mes calendario de Costa Rica del caso ('2026-10-01'), y los
 	// dos totales del mes en centavos de dolar, cada movimiento con la venta de
-	// su dia (con la del ultimo dia del mes en un cierre_mes). Vacios en los
-	// casos anteriores a la migracion 080.
+	// su dia (con la del ultimo dia del mes en un cierre_mes). Sin mes en los
+	// casos anteriores a la migracion 080. Los totales van siempre, aunque sean
+	// cero: un cliente que solo recibio tiene salidas en cero, y eso es un dato.
 	Mes            string     `json:"mes,omitempty"`
-	SalidasMesUSD  int64      `json:"salidas_mes_usd_minor,omitempty"`
-	EntradasMesUSD int64      `json:"entradas_mes_usd_minor,omitempty"`
+	SalidasMesUSD  int64      `json:"salidas_mes_usd_minor"`
+	EntradasMesUSD int64      `json:"entradas_mes_usd_minor"`
 	Reason         string     `json:"reason"`
 	Status         string     `json:"status"`
 	ReviewerID     string     `json:"reviewer_id,omitempty"`

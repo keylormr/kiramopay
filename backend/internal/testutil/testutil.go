@@ -979,6 +979,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		ADD COLUMN IF NOT EXISTS entradas_mes_usd_minor BIGINT;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_cierre
+		ON uif_reports (user_id, mes, report_type) WHERE tx_id IS NULL AND mes IS NOT NULL;
 
 	-- Migracion 080: la venta de referencia de cada dia, el registro de cada
 	-- movimiento que evalua la UIF y la marca de los meses cerrados.

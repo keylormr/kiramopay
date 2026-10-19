@@ -281,10 +281,13 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	// guarda una fila solo cuando la tasa cambia, y con la hora en que se trajo:
 	// no dice cual era la venta de un dia dado, que es lo que la UIF necesita
 	// (el total del mes se convierte con la del ultimo dia del mes).
+	// Si no se puede guardar, el dolar ya quedo y se sigue: el cobro no depende
+	// de esta tabla, y para un dia sin venta guardada la UIF usa el historial de
+	// exchange_rates. El diagnostico lo dice.
+	var errDelDia string
 	if err := a.repo.RegistrarCotizacionDelDia(ctx, "CRC", c.Fecha, c.Venta, "hacienda"); err != nil {
-		a.anotarError(err)
+		errDelDia = "venta del dia: " + err.Error()
 		a.logger.Error("tipo de cambio: no se pudo guardar la venta del dia", "error", err)
-		return err
 	}
 	if fe, ok := a.fuente.(FuenteEuro); ok {
 		a.actualizarEuro(ctx, fe)
@@ -295,6 +298,7 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	a.estado = DiagnosticoTipoDeCambio{
 		Fuente: "hacienda", UsdCrc: c.Venta, Compra: c.Compra,
 		FechaFuente: c.Fecha.Format("2006-01-02"), UltimaConfirmacion: &ahora,
+		UltimoError: errDelDia,
 	}
 	a.mu.Unlock()
 	a.logger.Info("tipo de cambio actualizado", "usd_crc", c.Venta, "compra", c.Compra,

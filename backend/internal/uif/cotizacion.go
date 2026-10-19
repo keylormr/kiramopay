@@ -43,7 +43,7 @@ const (
 )
 
 // errSinTipoDeCambio: no hay tipo de cambio para la moneda, o el que hay no
-// sirve (cero o negativo).
+// sirve (cero o negativo). Lo que toque esa moneda va a revision manual.
 var errSinTipoDeCambio = errors.New("sin tipo de cambio")
 
 type claveTasa struct {
@@ -61,6 +61,11 @@ type conversion struct {
 	userID string
 	cots   map[claveTasa]Cotizacion
 	fallas map[claveTasa]error
+	// fallo es la primera vez que la base no respondio al leer una tasa. No es
+	// una moneda sin tasa: con el, las cuentas de esta conversion no sirven y
+	// quien las hace se detiene (la evaluacion queda para el reintento, el
+	// cierre para la proxima hora).
+	fallo error
 }
 
 func (s *Service) nuevaConversion(ctx context.Context, userID string) *conversion {
@@ -90,10 +95,16 @@ func (c *conversion) cotizar(moneda string, dia time.Time) (Cotizacion, error) {
 	cot, err := c.consultar(moneda, dia)
 	if err != nil {
 		// Error y no Warn: sin tipo de cambio el control de cumplimiento no
-		// puede comparar, y lo que toque esa moneda termina en la cola manual.
-		// El motivo de origen (una tabla sin la fila, un corte de la base) solo
-		// queda aqui.
-		slog.Error("uif: sin tipo de cambio", "user", c.userID, "moneda", moneda, "dia", fecha(dia), "err", err.Error())
+		// puede comparar.
+		if errors.Is(err, errSinTipoDeCambio) {
+			slog.Error("uif: sin tipo de cambio", "user", c.userID, "moneda", moneda, "dia", fecha(dia), "err", err.Error())
+		} else {
+			slog.Error("uif: no se pudo leer el tipo de cambio", "user", c.userID, "moneda", moneda, "dia", fecha(dia),
+				"err", err.Error())
+			if c.fallo == nil {
+				c.fallo = err
+			}
+		}
 		c.fallas[k] = err
 		return Cotizacion{}, err
 	}
@@ -106,12 +117,13 @@ func (c *conversion) consultar(moneda string, dia time.Time) (Cotizacion, error)
 	var err error
 	if c.s.tipoDeCambio != nil {
 		cot = Cotizacion{Fecha: dia, Fuente: fuenteFija}
-		cot.PorDolar, err = c.s.tipoDeCambio(c.ctx, moneda)
-	} else {
-		cot, err = c.s.repo.VentaDeReferencia(c.ctx, moneda, dia)
-	}
-	if err != nil {
-		return Cotizacion{}, fmt.Errorf("%w: %v", errSinTipoDeCambio, err)
+		if cot.PorDolar, err = c.s.tipoDeCambio(c.ctx, moneda); err != nil {
+			return Cotizacion{}, fmt.Errorf("%w: %v", errSinTipoDeCambio, err)
+		}
+	} else if cot, err = c.s.repo.VentaDeReferencia(c.ctx, moneda, dia); err != nil {
+		// Sin envolver: si es errSinTipoDeCambio ya lo dice, y si no lo es, es
+		// la base que no respondio.
+		return Cotizacion{}, err
 	}
 	if cot.PorDolar <= 0 {
 		return Cotizacion{}, fmt.Errorf("%w: %v %s por dolar", errSinTipoDeCambio, cot.PorDolar, moneda)
@@ -152,9 +164,58 @@ type total struct {
 	partes []string
 }
 
+// precargar trae de una vez, por moneda, las ventas de los dias que aparecen en
+// las filas: dia por dia eran hasta 31 consultas por moneda en cada pago. Un dia
+// que no se pueda precargar (la consulta fallo, la tabla diaria no tiene una
+// venta anterior) se consulta despues solo, como antes.
+func (c *conversion) precargar(filas []sumaDia) {
+	if c.s.tipoDeCambio != nil {
+		return
+	}
+	type rango struct{ desde, hasta time.Time }
+	rangos := map[string]*rango{}
+	for _, f := range filas {
+		k := claveTasa{moneda: f.moneda, dia: f.dia}
+		if _, ya := c.cots[k]; ya || f.moneda == "USD" {
+			continue
+		}
+		if _, ya := c.fallas[k]; ya {
+			continue
+		}
+		r := rangos[f.moneda]
+		if r == nil {
+			rangos[f.moneda] = &rango{desde: f.dia, hasta: f.dia}
+			continue
+		}
+		if f.dia.Before(r.desde) {
+			r.desde = f.dia
+		}
+		if f.dia.After(r.hasta) {
+			r.hasta = f.dia
+		}
+	}
+	for moneda, r := range rangos {
+		ventas, err := c.s.repo.ventasDelRango(c.ctx, moneda, r.desde, r.hasta)
+		if err != nil {
+			continue
+		}
+		i := -1
+		for d := r.desde; !d.After(r.hasta); d = d.AddDate(0, 0, 1) {
+			for i+1 < len(ventas) && !ventas[i+1].Fecha.After(d) {
+				i++
+			}
+			k := claveTasa{moneda: moneda, dia: d}
+			if _, ya := c.cots[k]; !ya && i >= 0 && ventas[i].PorDolar > 0 {
+				c.cots[k] = ventas[i]
+			}
+		}
+	}
+}
+
 // sumar convierte lo que se movio, cada dia con su cotizacion, y lo junta por
 // moneda para la razon.
 func (c *conversion) sumar(filas []sumaDia) total {
+	c.precargar(filas)
 	type deMoneda struct {
 		minor, usd int64
 		tasas      []float64

@@ -25,7 +25,14 @@ import (
 // de un mes al cerrarlo.
 func diaDeLaVentaDelCierre(mes Mes) time.Time { return mes.UltimoDia() }
 
-// ErrMesSinTerminar: no se cierra un mes que todavia no termino.
+// MargenDelCierre es cuanto se espera despues del fin del mes para cerrarlo. Lo
+// que se creo el ultimo dia a ultima hora y se completa despues (un envio que
+// queda procesando) tiene ese tiempo para entrar a la cuenta, y el actualizador
+// del tipo de cambio para guardar la venta del ultimo dia.
+const MargenDelCierre = 24 * time.Hour
+
+// ErrMesSinTerminar: no se cierra un mes que todavia no termino, ni antes de
+// MargenDelCierre.
 var ErrMesSinTerminar = errors.New("el mes todavia no termino")
 
 // ResumenDelCierre dice que dejo el cierre de un mes.
@@ -45,11 +52,14 @@ type ResumenDelCierre struct {
 // ultimo dia del mes y abre un caso cierre_mes por cada cliente cuyas salidas,
 // entradas o bruto igualen o superen el umbral. Un cliente con una moneda sin
 // tipo de cambio que sin ella no llega va a revision manual. Un mes se cierra
-// una sola vez: los casos y la marca del mes quedan juntos o no queda nada.
+// una sola vez: los casos y la marca del mes quedan juntos o no queda nada. Si
+// la base no responde al leer una tasa, no se cierra: el error vuelve y el
+// proximo intento lo rehace.
 func (s *Service) CerrarMes(ctx context.Context, mes Mes) (*ResumenDelCierre, error) {
 	res := &ResumenDelCierre{Mes: mes.String()}
-	if s.ahora().Before(mes.Fin) {
-		return nil, fmt.Errorf("%w: %s", ErrMesSinTerminar, mes)
+	if s.ahora().Before(mes.Fin.Add(MargenDelCierre)) {
+		return nil, fmt.Errorf("%w: %s se cierra desde %s", ErrMesSinTerminar, mes,
+			mes.Fin.Add(MargenDelCierre).In(zonaCR).Format("2006-01-02 15:04"))
 	}
 	ya, err := s.repo.mesCerrado(ctx, mes)
 	if err != nil {
@@ -87,6 +97,9 @@ func (s *Service) CerrarMes(ctx context.Context, mes Mes) (*ResumenDelCierre, er
 
 	conv := s.nuevaConversion(ctx, "")
 	tasas := s.tasasDelCierre(conv, monedas, dia)
+	if conv.fallo != nil {
+		return nil, fmt.Errorf("uif: cierre de %s: %w", mes, conv.fallo)
+	}
 
 	var casos []*Report
 	for _, userID := range orden {
@@ -131,8 +144,11 @@ func (s *Service) CerrarMes(ctx context.Context, mes Mes) (*ResumenDelCierre, er
 		}
 		casos = append(casos, rep)
 	}
+	if conv.fallo != nil {
+		return nil, fmt.Errorf("uif: cierre de %s: %w", mes, conv.fallo)
+	}
 
-	ya, err = s.repo.guardarCierre(ctx, mes, tasas, len(orden), casos)
+	ya, nuevos, err := s.repo.guardarCierre(ctx, mes, tasas, len(orden), casos)
 	if err != nil {
 		return nil, err
 	}
@@ -140,10 +156,10 @@ func (s *Service) CerrarMes(ctx context.Context, mes Mes) (*ResumenDelCierre, er
 		res.YaCerrado = true
 		return res, nil
 	}
-	for _, rep := range casos {
+	for _, rep := range nuevos {
 		s.auditarCaso(rep)
 	}
-	res.Clientes, res.Casos, res.Tasas = len(orden), len(casos), tasas
+	res.Clientes, res.Casos, res.Tasas = len(orden), len(nuevos), tasas
 	slog.Info("uif: mes cerrado", "mes", res.Mes, "clientes", res.Clientes, "casos", res.Casos, "tasas", tasas)
 	return res, nil
 }
@@ -192,8 +208,9 @@ func (s *Service) razonDelCierre(ctx context.Context, userID string, mes Mes, di
 	return r
 }
 
-// IniciarCierres cierra el mes anterior en cuanto empieza uno nuevo, y lo
-// vuelve a intentar cada `cada` mientras no quede cerrado (la base no
+// IniciarCierres cierra el mes anterior en cuanto pasa MargenDelCierre desde
+// que empezo uno nuevo, y lo vuelve a intentar cada `cada` mientras no quede
+// cerrado (la base no
 // respondia, la instancia se reinicio). Un mes cerrado no se vuelve a cerrar,
 // asi que revisar cada hora cuesta una consulta.
 func (s *Service) IniciarCierres(ctx context.Context, cada time.Duration) {
@@ -216,7 +233,7 @@ func (s *Service) IniciarCierres(ctx context.Context, cada time.Duration) {
 }
 
 func (s *Service) cerrarMesAnterior(ctx context.Context) {
-	mes := MesDe(s.ahora()).Anterior()
+	mes := MesDe(s.ahora().Add(-MargenDelCierre)).Anterior()
 	if _, err := s.CerrarMes(ctx, mes); err != nil {
 		// Error y no Warn: un mes sin cerrar es un registro ante SUGEF que no se
 		// sabe si hay que hacer.

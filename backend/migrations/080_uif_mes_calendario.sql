@@ -67,6 +67,12 @@ ALTER TABLE uif_reports
     ADD COLUMN IF NOT EXISTS salidas_mes_usd_minor BIGINT,
     ADD COLUMN IF NOT EXISTS entradas_mes_usd_minor BIGINT;
 
+-- Reprocesar un mes (borrar su marca a mano y volver a cerrarlo) no duplica los
+-- casos del cierre: uno de cada tipo por cliente y mes. Los casos de un
+-- movimiento ya tienen el suyo (uq_uif_reports_tx_single).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_cierre
+    ON uif_reports (user_id, mes, report_type) WHERE tx_id IS NULL AND mes IS NOT NULL;
+
 -- Un mes se cierra una sola vez: esta fila se escribe en la misma transaccion
 -- que los casos del cierre.
 CREATE TABLE IF NOT EXISTS uif_cierres (

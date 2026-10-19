@@ -176,8 +176,18 @@ type registro struct {
 	cot                           Cotizacion
 }
 
-// registrarMovimiento guarda el registro. Devuelve false si ese movimiento ya
-// estaba registrado: ya se evaluo, y evaluarlo otra vez lo contaria dos veces.
+// yaEvaluado dice si el movimiento ya tiene su registro: su evaluacion termino,
+// y evaluarlo otra vez lo contaria dos veces.
+func (r *Repository) yaEvaluado(ctx context.Context, txID, sentido string) (bool, error) {
+	var ya bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM uif_movimientos WHERE tx_id = $1::uuid AND sentido = $2)`,
+		txID, sentido).Scan(&ya)
+	return ya, err
+}
+
+// registrarMovimiento guarda el registro cuando la evaluacion termino. Devuelve
+// false si ya estaba: dos evaluaciones del mismo movimiento corrieron a la vez.
 func (r *Repository) registrarMovimiento(ctx context.Context, g registro) (bool, error) {
 	var usd *int64
 	var tasa *float64
@@ -205,7 +215,11 @@ func (r *Repository) registrarMovimiento(ctx context.Context, g registro) (bool,
 // tipo_de_cambio_diario nacio con la migracion 080. Para un dia sin ninguna fila
 // ahi —los anteriores a esa migracion, o los primeros segundos despues de
 // desplegarla— se usa el historial de exchange_rates: la tasa vigente al final
-// de ese dia, con la fecha en que entro en vigor.
+// de ese dia.
+//
+// Si no hay ninguna tasa, el error es errSinTipoDeCambio. Cualquier otro es la
+// base que no respondio, y quien convierte no lo puede tratar como una moneda
+// sin tasa.
 func (r *Repository) VentaDeReferencia(ctx context.Context, moneda string, dia time.Time) (Cotizacion, error) {
 	var c Cotizacion
 	err := r.db.QueryRow(ctx, `
@@ -217,16 +231,63 @@ func (r *Repository) VentaDeReferencia(ctx context.Context, moneda string, dia t
 	}
 	// El final del dia civil de Costa Rica, como instante.
 	finDelDia := dia.AddDate(0, 0, 1).Add(-time.Duration(desfaseCR) * time.Second)
-	var desde time.Time
+	var confirmada time.Time
 	err = r.db.QueryRow(ctx, `
-		SELECT rate::float8, effective_from FROM exchange_rates
+		SELECT rate::float8, updated_at FROM exchange_rates
 		 WHERE from_currency = 'USD' AND to_currency = $1 AND effective_from < $2
-		 ORDER BY effective_from DESC LIMIT 1`, moneda, finDelDia.UTC()).Scan(&c.PorDolar, &desde)
+		 ORDER BY effective_from DESC LIMIT 1`, moneda, finDelDia.UTC()).Scan(&c.PorDolar, &confirmada)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Cotizacion{}, fmt.Errorf("%w: ninguna tasa de %s hasta el %s", errSinTipoDeCambio, moneda, fecha(dia))
+	}
 	if err != nil {
 		return Cotizacion{}, err
 	}
-	c.Fecha, c.Fuente = diaCR(desde), FuenteHistorial
+	// exchange_rates agrega una fila solo cuando la tasa cambia, y sella
+	// updated_at cada vez que la fuente la confirma igual: la tasa vale hasta su
+	// ultima confirmacion. Fechada el dia en que entro en vigor, una tasa que no
+	// se movio en semanas parecia vieja y daba la alarma.
+	c.Fecha, c.Fuente = diaCR(confirmada), FuenteHistorial
+	if c.Fecha.After(dia) {
+		c.Fecha = dia
+	}
 	return c, nil
+}
+
+// ventasDelRango trae de una vez las ventas de la tabla diaria que sirven para
+// los dias de `desde` a `hasta`: las de esos dias y la ultima anterior a
+// `desde`, en orden.
+func (r *Repository) ventasDelRango(ctx context.Context, moneda string, desde, hasta time.Time) ([]Cotizacion, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT por_dolar::float8, fecha, fuente FROM tipo_de_cambio_diario
+		 WHERE moneda = $1 AND fecha <= $3::date
+		   AND fecha >= COALESCE((SELECT max(fecha) FROM tipo_de_cambio_diario
+		                           WHERE moneda = $1 AND fecha <= $2::date), $2::date)
+		 ORDER BY fecha`, moneda, fecha(desde), fecha(hasta))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Cotizacion
+	for rows.Next() {
+		var c Cotizacion
+		if err := rows.Scan(&c.PorDolar, &c.Fecha, &c.Fuente); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// hayMesIncompleto dice si el cliente ya tiene, en ese mes, el caso manual de
+// un total del mes que no se pudo sumar entero.
+func (r *Repository) hayMesIncompleto(ctx context.Context, userID, mes string) (bool, error) {
+	var ya bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM uif_reports
+		                WHERE user_id = $1::uuid AND mes = $2::date AND report_type = $3
+		                  AND tx_id IS NOT NULL AND starts_with(reason, $4))`,
+		userID, mes, TypeManual, prefijoMesIncompleto).Scan(&ya)
+	return ya, err
 }
 
 // casosDelMes cuenta los casos de un tipo que un cliente ya tiene en un mes.
@@ -251,49 +312,59 @@ func (r *Repository) mesCerrado(ctx context.Context, mes Mes) (bool, error) {
 // transaccion: o queda todo, o no queda nada y el proximo intento lo rehace.
 // Durante un despliegue corren dos instancias a la vez; el candado consultivo
 // hace que una sola cierre el mes y que la otra encuentre la marca. Devuelve
-// true si el mes ya estaba cerrado.
-func (r *Repository) guardarCierre(ctx context.Context, mes Mes, tasas string, clientes int, casos []*Report) (bool, error) {
+// true si el mes ya estaba cerrado, y los casos que se abrieron: al reprocesar
+// un mes (su marca borrada a mano), los que ya existian no se repiten.
+func (r *Repository) guardarCierre(ctx context.Context, mes Mes, tasas string, clientes int, casos []*Report) (bool, []*Report, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	primer := fecha(mes.PrimerDia())
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('uif_cierre:' || $1::text))`, primer); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	var ya bool
 	if err := tx.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM uif_cierres WHERE mes = $1::date)`, primer).Scan(&ya); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if ya {
-		return true, nil
+		return true, nil, nil
 	}
+	var nuevos []*Report
 	for _, rep := range casos {
-		if err := insertarCaso(ctx, tx, rep); err != nil {
-			return false, err
+		nuevo, err := insertarCaso(ctx, tx, rep)
+		if err != nil {
+			return false, nil, err
+		}
+		if nuevo {
+			nuevos = append(nuevos, rep)
 		}
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO uif_cierres (mes, tasas, clientes, casos) VALUES ($1::date, $2, $3, $4)`,
-		primer, tasas, clientes, len(casos)); err != nil {
-		return false, err
+		primer, tasas, clientes, len(nuevos)); err != nil {
+		return false, nil, err
 	}
-	return false, tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return false, nil, err
+	}
+	return false, nuevos, nil
 }
 
 type ejecutor interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// CreateReport inserts a report. A report of one type for the same tx is
-// deduplicated by the partial unique index (ON CONFLICT DO NOTHING).
-func (r *Repository) CreateReport(ctx context.Context, rep *Report) error {
+// CreateReport guarda un caso. Devuelve false si ya existia: uno de cada tipo
+// por movimiento (uq_uif_reports_tx_single) y, en los del cierre, que no tienen
+// movimiento, uno de cada tipo por cliente y mes (uq_uif_reports_cierre).
+func (r *Repository) CreateReport(ctx context.Context, rep *Report) (bool, error) {
 	return insertarCaso(ctx, r.db, rep)
 }
 
-func insertarCaso(ctx context.Context, q ejecutor, rep *Report) error {
+func insertarCaso(ctx context.Context, q ejecutor, rep *Report) (bool, error) {
 	if rep.ID == "" {
 		rep.ID = uuid.New().String()
 	}
@@ -304,18 +375,21 @@ func insertarCaso(ctx context.Context, q ejecutor, rep *Report) error {
 	if rep.Mes != "" {
 		salidasMes, entradasMes = &rep.SalidasMesUSD, &rep.EntradasMesUSD
 	}
-	_, err := q.Exec(ctx,
+	ct, err := q.Exec(ctx,
 		`INSERT INTO uif_reports
 		   (id, user_id, tx_id, report_type, amount_minor, currency, daily_total_minor, reason, status,
 		    acumulado_30d_minor, mes, salidas_mes_usd_minor, entradas_mes_usd_minor)
 		 VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4, $5, $6, $7, $8, $9, NULLIF($10, 0),
 		         NULLIF($11, '')::date, $12, $13)
-		 ON CONFLICT (tx_id, report_type) WHERE tx_id IS NOT NULL DO NOTHING`,
+		 ON CONFLICT DO NOTHING`,
 		rep.ID, rep.UserID, rep.TxID, rep.ReportType, rep.AmountMinor,
 		rep.Currency, rep.DailyTotalMinor, rep.Reason, rep.Status, rep.Acumulado30Minor,
 		rep.Mes, salidasMes, entradasMes,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() == 1, nil
 }
 
 const reportCols = `id::text, user_id::text, COALESCE(tx_id::text,''), report_type,

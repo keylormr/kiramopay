@@ -99,7 +99,23 @@ func (s *Service) ReportCripto(ctx context.Context, userID, txID string, usdMino
 //
 // La lista definitiva de lo que hay que registrar por mes la arma el cierre
 // (CerrarMes), con la venta del ultimo dia del mes.
+//
+// El movimiento queda registrado cuando la evaluacion termina, y solo entonces:
+// si algo falla a mitad de camino (la base no responde, el contexto del pago se
+// cancela), el aviso repetido de un reintento la rehace. Si el reintento no
+// llega, el cierre lo cuenta.
 func (s *Service) evaluar(ctx context.Context, m movimiento) {
+	if m.txID != "" {
+		ya, err := s.repo.yaEvaluado(ctx, m.txID, m.sentido)
+		if err != nil {
+			slog.Warn("uif: no se pudo saber si el movimiento ya se evaluo", "user", m.userID, "tx", m.txID,
+				"err", err.Error())
+			return
+		}
+		if ya {
+			return
+		}
+	}
 	ahora := s.ahora()
 	hoy := diaCR(ahora)
 	mes := MesDe(ahora)
@@ -113,13 +129,17 @@ func (s *Service) evaluar(ctx context.Context, m movimiento) {
 	} else if amountUSD, cot, errTasa = conv.aDolares(m.moneda, m.monto, hoy); errTasa == nil {
 		alarmarSiEsVieja(m.userID, m.moneda, cot, hoy)
 	}
-	if !s.registrar(ctx, m, mes, amountUSD, cot, errTasa) {
+	if cortada(conv, m) {
 		return
+	}
+	reg := registro{
+		userID: m.userID, txID: m.txID, sentido: m.sentido, moneda: m.moneda, monto: m.monto,
+		mes: mes.PrimerDia(), conTasa: errTasa == nil, usd: amountUSD, cot: cot,
 	}
 	if errTasa != nil {
 		// Nunca silencio: si no se puede comparar con el umbral, lo decide una
 		// persona.
-		s.crearCaso(ctx, &Report{
+		s.cerrarConCaso(ctx, reg, &Report{
 			UserID:      m.userID,
 			TxID:        m.txID,
 			ReportType:  TypeManual,
@@ -140,6 +160,9 @@ func (s *Service) evaluar(ctx context.Context, m movimiento) {
 	}
 	salidasMes := conv.sumar(soloSentido(filasMes, sentidoSalida))
 	entradasMes := conv.sumar(soloSentido(filasMes, sentidoEntrada))
+	if cortada(conv, m) {
+		return
+	}
 	cruces, salUSD, entUSD := s.crucesDelMes(m.sentido, amountUSD, salidasMes, entradasMes)
 
 	rep := &Report{
@@ -178,6 +201,9 @@ func (s *Service) evaluar(ctx context.Context, m movimiento) {
 				rep.Acumulado30Minor = montoEn(salidas30, m.moneda)
 			}
 		}
+		if cortada(conv, m) {
+			return
+		}
 	}
 
 	switch {
@@ -185,7 +211,9 @@ func (s *Service) evaluar(ctx context.Context, m movimiento) {
 	case len(cruces) > 0:
 		res = Result{Reportable: true, Type: TypeMultiplesMes, Reason: s.razonDelMes(mes, cruces, salidasMes, entradasMes)}
 	default:
-		s.siFaltaUnaMoneda(ctx, rep, dia, salidasMes, entradasMes, treinta)
+		if s.siFaltaUnaMoneda(ctx, rep, dia, salidasMes, entradasMes, treinta) {
+			s.registrar(ctx, reg)
+		}
 		return
 	}
 
@@ -216,25 +244,39 @@ func (s *Service) evaluar(ctx context.Context, m movimiento) {
 			cot.Fuente, fecha(cot.Fecha))
 	}
 	rep.Reason = razon
-	s.crearCaso(ctx, rep)
+	s.cerrarConCaso(ctx, reg, rep)
 }
 
-// registrar guarda el registro del movimiento. Devuelve false solo si ya estaba
-// registrado: ya se evaluo. Si el registro falla por otra cosa, la evaluacion
-// sigue: un caso de menos es peor que un registro de menos.
-func (s *Service) registrar(ctx context.Context, m movimiento, mes Mes, usd int64, cot Cotizacion, errTasa error) bool {
-	if m.txID == "" {
-		return true
+// cortada dice si la evaluacion se tiene que detener porque la base no
+// respondio al leer una tasa. No es una moneda sin tasa: el movimiento queda sin
+// registrar para que un reintento lo evalue.
+func cortada(conv *conversion, m movimiento) bool {
+	if conv.fallo == nil {
+		return false
 	}
-	nuevo, err := s.repo.registrarMovimiento(ctx, registro{
-		userID: m.userID, txID: m.txID, sentido: m.sentido, moneda: m.moneda, monto: m.monto,
-		mes: mes.PrimerDia(), conTasa: errTasa == nil, usd: usd, cot: cot,
-	})
-	if err != nil {
-		slog.Warn("uif: no se pudo registrar el movimiento", "user", m.userID, "tx", m.txID, "err", err.Error())
-		return true
+	slog.Warn("uif: evaluacion cortada, queda para el reintento", "user", m.userID, "tx", m.txID,
+		"err", conv.fallo.Error())
+	return true
+}
+
+// cerrarConCaso abre el caso y, si quedo guardado, registra el movimiento: la
+// evaluacion termino.
+func (s *Service) cerrarConCaso(ctx context.Context, reg registro, rep *Report) {
+	if s.crearCaso(ctx, rep) {
+		s.registrar(ctx, reg)
 	}
-	return nuevo
+}
+
+// registrar guarda el registro del movimiento al terminar su evaluacion. Si
+// falla, el caso ya quedo: un reintento evalua otra vez y el caso repetido no se
+// inserta.
+func (s *Service) registrar(ctx context.Context, reg registro) {
+	if reg.txID == "" {
+		return
+	}
+	if _, err := s.repo.registrarMovimiento(ctx, reg); err != nil {
+		slog.Warn("uif: no se pudo registrar el movimiento", "user", reg.userID, "tx", reg.txID, "err", err.Error())
+	}
 }
 
 // crucesDelMes mide las tres cosas del mes que se comparan con el umbral
@@ -291,8 +333,8 @@ func deQueEstaHecho(t total) string {
 // a alguno le falta una moneda que no se pudo convertir. Un total que no se
 // pudo sumar entero no dice que no cruzo: hoy salieron ₡500.000 sin tipo de
 // cambio para el colon y despues US$9.900, y el servicio solo veia los
-// US$9.900.
-func (s *Service) siFaltaUnaMoneda(ctx context.Context, rep *Report, dia, salidasMes, entradasMes, treinta total) {
+// US$9.900. Devuelve false si el caso no se pudo guardar.
+func (s *Service) siFaltaUnaMoneda(ctx context.Context, rep *Report, dia, salidasMes, entradasMes, treinta total) bool {
 	var cual string
 	var t total
 	var umbral int64
@@ -300,13 +342,18 @@ func (s *Service) siFaltaUnaMoneda(ctx context.Context, rep *Report, dia, salida
 	case len(dia.faltan) > 0:
 		cual, t, umbral = "las salidas del dia", dia, s.thresholds.DailyUSD
 	case len(salidasMes.faltan) > 0 || len(entradasMes.faltan) > 0:
-		cual, umbral = "los movimientos del mes "+rep.Mes[:7], s.thresholds.MensualUSD
+		// Uno por cliente y mes: mientras falte la tasa, cada movimiento que
+		// sigue en el mes diria lo mismo.
+		if ya, err := s.repo.hayMesIncompleto(ctx, rep.UserID, rep.Mes); err == nil && ya {
+			return true
+		}
+		cual, umbral = prefijoMesIncompleto+rep.Mes[:7], s.thresholds.MensualUSD
 		t = total{usd: salidasMes.usd + entradasMes.usd, faltan: unirFaltan(salidasMes, entradasMes),
 			partes: append(append([]string{}, salidasMes.partes...), entradasMes.partes...)}
 	case len(treinta.faltan) > 0:
 		cual, t, umbral = "las salidas de los ultimos 30 dias", treinta, s.thresholds.Acumulado30USD
 	default:
-		return
+		return true
 	}
 	sin := "nada"
 	if len(t.partes) > 0 {
@@ -316,16 +363,25 @@ func (s *Service) siFaltaUnaMoneda(ctx context.Context, rep *Report, dia, salida
 	rep.Reason = fmt.Sprintf("%s no se pudieron sumar enteras: no hay tipo de cambio oficial para %s. "+
 		"Sin esa moneda suman US$%s (%s), y el umbral es US$%s. Revisarlo a mano.",
 		cual, strings.Join(t.faltan, ", "), dolares(t.usd), sin, dolares(umbral))
-	s.crearCaso(ctx, rep)
+	return s.crearCaso(ctx, rep)
 }
 
-// crearCaso guarda el caso pendiente y deja la huella en la auditoria.
-func (s *Service) crearCaso(ctx context.Context, rep *Report) {
-	if err := s.repo.CreateReport(ctx, rep); err != nil {
+// prefijoMesIncompleto empieza la razon del caso manual de un mes que no se
+// pudo sumar entero; hayMesIncompleto lo busca por el.
+const prefijoMesIncompleto = "los movimientos del mes "
+
+// crearCaso guarda el caso pendiente y deja la huella en la auditoria. Devuelve
+// false si no se pudo guardar; un caso que ya existia cuenta como guardado.
+func (s *Service) crearCaso(ctx context.Context, rep *Report) bool {
+	nuevo, err := s.repo.CreateReport(ctx, rep)
+	if err != nil {
 		slog.Warn("uif: create report failed", "user", rep.UserID, "tx", rep.TxID, "err", err.Error())
-		return
+		return false
 	}
-	s.auditarCaso(rep)
+	if nuevo {
+		s.auditarCaso(rep)
+	}
+	return true
 }
 
 func (s *Service) auditarCaso(rep *Report) {

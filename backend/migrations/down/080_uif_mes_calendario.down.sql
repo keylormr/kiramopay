@@ -10,6 +10,7 @@
 -- resolverlos antes de revertir, sabiendo que son rastro de cumplimiento.
 
 DROP TABLE IF EXISTS uif_cierres;
+DROP INDEX IF EXISTS uq_uif_reports_cierre;
 
 ALTER TABLE uif_reports
     DROP COLUMN IF EXISTS entradas_mes_usd_minor,
