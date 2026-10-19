@@ -17,6 +17,7 @@ import type {
   ResolvedQR,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
+import { VENTAS_POR_PAGINA } from '../../repositories/qrpayment.repository';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
 import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 
@@ -156,7 +157,8 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   }
 
   async getMerchants(): Promise<ApiResponse<QRMerchant[]>> {
-    return apiSuccess(readMerchants());
+    // Como el servidor: un comercio cerrado ya no aparece en la lista propia.
+    return apiSuccess(readMerchants().filter((m) => !m.closedAt));
   }
 
   async getMerchantBalance(merchantId: string): Promise<ApiResponse<number>> {
@@ -390,9 +392,13 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(state?.qrPayments ?? []);
   }
 
-  async getMerchantPayments(merchantId: string): Promise<ApiResponse<QRPayment[]>> {
-    const payments = readList<QRPayment>('qrPayments');
-    return apiSuccess(payments.filter((p) => p.merchantId === merchantId));
+  async getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>> {
+    const ventas = readList<QRPayment>('qrPayments')
+      .filter((p) => p.merchantId === merchantId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const desde = opciones?.antesDe ? ventas.findIndex((p) => p.id === opciones.antesDe) + 1 : 0;
+    if (opciones?.antesDe && desde === 0) return apiSuccess([]);
+    return apiSuccess(ventas.slice(desde, desde + VENTAS_POR_PAGINA));
   }
 
   async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {
@@ -593,7 +599,7 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   // ── Admin ──────────────────────────────────────────────────────────────────
 
   async listPendingMerchants(): Promise<ApiResponse<QRMerchant[]>> {
-    return apiSuccess(readMerchants().filter((m) => m.verificationStatus === 'pending'));
+    return apiSuccess(readMerchants().filter((m) => m.verificationStatus === 'pending' && !m.closedAt));
   }
 
   async approveMerchant(merchantId: string): Promise<ApiResponse<QRMerchant>> {
@@ -618,6 +624,56 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     const idx = merchants.findIndex((m) => m.id === merchantId);
     if (idx === -1) return apiError('MERCHANT_NOT_FOUND', 'merchant not found');
     merchants[idx] = { ...merchants[idx], plan };
+    saveField('qrMerchants', merchants);
+    return apiSuccess(merchants[idx]);
+  }
+
+  async listAllMerchants(busqueda?: string): Promise<ApiResponse<QRMerchant[]>> {
+    const q = busqueda?.trim().toLowerCase() ?? '';
+    const todos = readMerchants();
+    if (!q) return apiSuccess(todos);
+    return apiSuccess(todos.filter((m) =>
+      m.name.toLowerCase().includes(q) || m.legalName.toLowerCase().includes(q) || m.id.toLowerCase() === q));
+  }
+
+  async listClosedMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    const cerrados = readMerchants().filter((m) => !!m.closedAt);
+    cerrados.sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)));
+    return apiSuccess(cerrados.map((m) => ({ ...m, role: 'owner' as const })));
+  }
+
+  async closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
+    const motivo = reason.trim();
+    if (!motivo) return apiError('CLOSURE_REASON_REQUIRED', 'a reason is required to close a merchant');
+    return this.cerrar(merchantId, motivo, 'admin');
+  }
+
+  async closeMerchant(merchantId: string, confirmacion: { password: string }): Promise<ApiResponse<QRMerchant>> {
+    // El mock no guarda contrasenas: solo exige que se escriba una.
+    if (!confirmacion.password) return apiError('CURRENT_PASSWORD_INVALID', 'current password is incorrect');
+    return this.cerrar(merchantId, 'owner_request', 'owner');
+  }
+
+  // Las mismas reglas que el servidor: con saldo no se cierra, y cerrado no se
+  // cierra dos veces. El comercio se marca; nunca se borra.
+  private async cerrar(merchantId: string, motivo: string, quien: string): Promise<ApiResponse<QRMerchant>> {
+    const merchants = readMerchants();
+    const idx = merchants.findIndex((m) => m.id === merchantId);
+    if (idx === -1) return apiError('MERCHANT_NOT_FOUND', 'merchant not found');
+    if (merchants[idx].closedAt) return apiError('MERCHANT_CLOSED', 'merchant is closed');
+    const saldo = await this.getMerchantBalance(merchantId);
+    if (saldo.success && (saldo.data ?? 0) > 0) {
+      return apiErrorConDetalle('MERCHANT_HAS_BALANCE', 'the business balance must be withdrawn before closing', {
+        balances: [{ currency: 'CRC', amount: Math.round((saldo.data ?? 0) * 100) }],
+      });
+    }
+    merchants[idx] = {
+      ...merchants[idx],
+      active: false,
+      closedAt: new Date().toISOString(),
+      closedBy: quien,
+      closureReason: motivo,
+    };
     saveField('qrMerchants', merchants);
     return apiSuccess(merchants[idx]);
   }

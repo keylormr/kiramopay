@@ -893,6 +893,38 @@ type CreateTransferRequest struct {
 	FeeFromReceiver bool
 }
 
+// CompletarTransferenciaAsentada pone al dia las filas de una transferencia
+// cuyo asiento ya confirmo, para el modulo que reconoce el reintento por su
+// cuenta y no vuelve a pedirla: un pago QR a un comercio que cerro, o a un
+// codigo que se retiro, despues de cobrar. El reintento normal pasa por
+// TransferirOReconocer, que ya las repara; este no, y sin esto la fila que una
+// caida dejo 'pending' entre el asiento y la marca quedaba asi para siempre.
+//
+// No mueve dinero: sin asiento no marca nada, y una fila que describe otro
+// movimiento no se toca.
+func (s *Service) CompletarTransferenciaAsentada(ctx context.Context, req *CreateTransferRequest) error {
+	if req.IdempotencyKey == "" {
+		return nil
+	}
+	previa, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey)
+	if previa == nil || !mismaTransferencia(previa, req) {
+		return nil
+	}
+	ids := []string{previa.ID}
+	completas := previa.Status == StatusCompleted
+	if req.ToMerchantID == "" {
+		if recv := s.recepcionDe(ctx, req); recv != nil {
+			ids = append(ids, recv.ID)
+			completas = completas && recv.Status == StatusCompleted
+		}
+	}
+	if completas {
+		return nil
+	}
+	_, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, previa.ID, ids...)
+	return err
+}
+
 // recepcionDe trae la fila de quien recibe que cuelga de la llave. Una fila
 // que describe otro movimiento —la llave choco con la de otra persona— no es
 // de esta transferencia: no se devuelve, no se repara ni se reusa.

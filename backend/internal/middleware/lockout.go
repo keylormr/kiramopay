@@ -14,8 +14,14 @@ import (
 )
 
 // LockoutStore abstracts lockout counter operations.
+//
+// ContarIntento es IncrLockout con el error a la vista. El login usa IncrLockout
+// y, si Redis no contesta, deja pasar; el cierre de un comercio, que no se
+// deshace, usa ContarIntento y no sigue sin contar. Esta en la interfaz para que
+// un tope envuelto (metricas, un decorador) no lo pierda en silencio.
 type LockoutStore interface {
 	IncrLockout(key string) int64
+	ContarIntento(key string) (int64, error)
 	ResetLockout(key string)
 	GetLockout(key string) int64
 }
@@ -50,6 +56,13 @@ func (s *RedisLockoutStore) IncrLockout(key string) int64 {
 		return 0
 	}
 	return count
+}
+
+// ContarIntento es IncrLockout para quien no puede seguir sin contar: si Redis
+// no contesta, devuelve el error en vez del 0 que deja pasar. Lo usa el cierre
+// de un comercio, que no se deshace; el login sigue dejando pasar.
+func (s *RedisLockoutStore) ContarIntento(key string) (int64, error) {
+	return ventanaredis.Contar(context.Background(), s.client, key, s.ttl)
 }
 
 func (s *RedisLockoutStore) ResetLockout(key string) {

@@ -487,6 +487,12 @@ func main() {
 		Notifier: notifService,
 		// Cambiar el plan de un comercio es una accion de administrador.
 		AuditLogger: auditLogger,
+		// Cerrar el comercio se confirma con la contrasena y, si la persona lo
+		// tiene encendido, el codigo del autenticador; con el mismo tope que
+		// cambiar la contrasena.
+		TOTP:                mfaSvc,
+		Lockout:             lockoutStore,
+		MaxIntentosDeCierre: 5,
 	})
 	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
@@ -1112,6 +1118,8 @@ func main() {
 			r.Post("/qr/merchant", qrHandler.RegisterMerchant)
 			r.Get("/qr/merchants", qrHandler.GetMerchants)
 			r.Patch("/qr/merchants/{id}", qrHandler.UpdateMerchant)
+			// Cierre logico del comercio: la fila se marca, nunca se borra.
+			r.Post("/qr/merchants/{id}/close", qrHandler.CloseMerchant)
 			r.Get("/qr/merchants/{id}/balance", qrHandler.GetMerchantBalance)
 			r.Post("/qr/merchants/{id}/withdraw", qrHandler.WithdrawMerchant)
 			r.Get("/qr/merchants/{id}/payments", qrHandler.GetMerchantPayments)
@@ -1236,6 +1244,9 @@ func main() {
 				// Plan del comercio (base|analitica) asignado a mano mientras no
 				// exista cobro. Auditado con riesgo alto.
 				r.Patch("/admin/merchants/{id}/plan", qrHandler.SetMerchantPlan)
+				// Todos los comercios, cerrados incluidos, y el cierre con motivo.
+				r.Get("/admin/merchants", qrHandler.AdminListMerchants)
+				r.Post("/admin/merchants/{id}/close", qrHandler.AdminCloseMerchant)
 
 				// El rastro de auditoria. Se escribia desde el arranque del
 				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
