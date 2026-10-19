@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
@@ -102,7 +102,7 @@ describe('BusinessSettingsView: cerrar el comercio', () => {
   it.each([
     ['MERCHANT_HAS_PENDING_CHARGES', /Hay cobros pendientes/],
     ['CURRENT_PASSWORD_INVALID', /Contraseña incorrecta/],
-    ['TOTP_INVALID', /El código no es correcto/],
+    ['CREDENTIALS_INVALID', /La contraseña o el código no son correctos/],
     ['MERCHANT_CLOSE_LOCKED', /Demasiados intentos/],
     ['DEMO_ACCOUNT', /Una cuenta de demostración no puede cerrar comercios/],
     ['MERCHANT_CLOSED', /Este comercio ya estaba cerrado/],
@@ -149,5 +149,24 @@ describe('BusinessSettingsView: cerrar el comercio', () => {
     await waitFor(() =>
       expect(mockApi.qrPayments.closeMerchant).toHaveBeenLastCalledWith(ID, { password: 'secreta', totpCode: 'ABCD-EFGH' }),
     );
+  });
+
+  it('dos toques seguidos en confirmar mandan un solo cierre', async () => {
+    let soltar: (v: unknown) => void = () => {};
+    mockApi.qrPayments.closeMerchant.mockReturnValue(new Promise((r) => { soltar = r; }));
+    const user = userEvent.setup();
+    pintar();
+    await user.click(screen.getByRole('button', { name: 'Cerrar comercio' }));
+    await user.type(await screen.findByLabelText('Tu contraseña'), 'secreta');
+
+    // Los dos en la misma vuelta, antes de que React pinte el boton deshabilitado.
+    const confirmar = screen.getByRole('button', { name: 'Cerrar definitivamente' });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+
+    await waitFor(() => expect(mockApi.qrPayments.closeMerchant).toHaveBeenCalledTimes(1));
+    soltar({ success: false, error: { code: 'CLOSE_FAILED', message: 'x' } });
+    expect(await screen.findByText(/No se pudo cerrar el comercio/)).toBeInTheDocument();
+    expect(mockApi.qrPayments.closeMerchant).toHaveBeenCalledTimes(1);
   });
 });

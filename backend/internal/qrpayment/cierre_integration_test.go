@@ -277,25 +277,24 @@ func TestCerrarMiComercio_PideLaContrasenaYTieneTope(t *testing.T) {
 	}
 }
 
-// Con el segundo factor encendido, la contrasena sola no alcanza.
+// Con el segundo factor encendido, la contrasena sola no alcanza. Y el rechazo
+// no dice cual de los dos fallo: el mismo error para la contrasena equivocada y
+// para el codigo equivocado.
 func TestCerrarMiComercio_ConSegundoFactor(t *testing.T) {
 	svc, pool, _, owner := setupCierre(t, &qrpayment.Options{TOTP: autenticadorDePrueba{codigo: "123456"}})
 	ctx := context.Background()
 	m := comercioVerificado(t, svc, owner)
 
-	casos := []struct {
-		req  qrpayment.CerrarComercioRequest
-		want error
-	}{
-		{qrpayment.CerrarComercioRequest{Password: claveDelDueno}, qrpayment.ErrTOTPRequerido},
-		{qrpayment.CerrarComercioRequest{Password: claveDelDueno, TOTPCode: "000000"}, qrpayment.ErrTOTPInvalido},
-		{qrpayment.CerrarComercioRequest{Password: "otra-clave", TOTPCode: "123456"}, qrpayment.ErrContrasenaIncorrecta},
+	if _, err := svc.CerrarMiComercio(ctx, m.ID, owner,
+		&qrpayment.CerrarComercioRequest{Password: claveDelDueno}, actorDePrueba); !errors.Is(err, qrpayment.ErrTOTPRequerido) {
+		t.Fatalf("sin el codigo: err = %v, se esperaba ErrTOTPRequerido", err)
 	}
-	for _, c := range casos {
-		req := c.req
-		if _, err := svc.CerrarMiComercio(ctx, m.ID, owner, &req, actorDePrueba); !errors.Is(err, c.want) {
-			t.Fatalf("%+v: err = %v, se esperaba %v", c.req, err, c.want)
-		}
+	_, errCodigo := svc.CerrarMiComercio(ctx, m.ID, owner,
+		&qrpayment.CerrarComercioRequest{Password: claveDelDueno, TOTPCode: "000000"}, actorDePrueba)
+	_, errClave := svc.CerrarMiComercio(ctx, m.ID, owner,
+		&qrpayment.CerrarComercioRequest{Password: "otra-clave", TOTPCode: "123456"}, actorDePrueba)
+	if errCodigo == nil || errClave == nil || !errors.Is(errCodigo, errClave) || !errors.Is(errClave, errCodigo) {
+		t.Fatalf("codigo equivocado: %v; contrasena equivocada: %v; se esperaba el mismo error", errCodigo, errClave)
 	}
 	if f := leerCierre(t, pool, m.ID); f.cerradoEn != nil {
 		t.Fatalf("un intento rechazado cerro el comercio: %+v", f)
@@ -897,7 +896,7 @@ func TestCerrarComercio_PorHTTP_DemoTopeYSegundoFactor(t *testing.T) {
 		t.Fatalf("sin el codigo: %d %s", rec.Code, rec.Body.String())
 	}
 	tope.vaciar()
-	if rec := cerrar(owner, m.ID, `{"password":"`+claveDelDueno+`","totp_code":"999999"}`); rec.Code != http.StatusBadRequest || codigoDeError(t, rec) != "TOTP_INVALID" {
+	if rec := cerrar(owner, m.ID, `{"password":"`+claveDelDueno+`","totp_code":"999999"}`); rec.Code != http.StatusBadRequest || codigoDeError(t, rec) != "CREDENTIALS_INVALID" {
 		t.Fatalf("codigo equivocado: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := cerrar(owner, m.ID, `{"password":"`+claveDelDueno+`","totp_code":"123456"}`); rec.Code != http.StatusLocked || codigoDeError(t, rec) != "MERCHANT_CLOSE_LOCKED" {

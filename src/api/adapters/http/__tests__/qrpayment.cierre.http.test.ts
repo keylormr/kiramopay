@@ -91,4 +91,19 @@ describe('HttpQRPaymentRepository: cierre del comercio', () => {
     expect(res.data?.[0].closedAt).toBeNull();
     expect(res.data?.[0].closureReason).toBeUndefined();
   });
+
+  it('el dueno lista sus comercios cerrados, con su rol', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: [{ ...cerrado, closure_reason: 'owner_request', role: 'owner' }] });
+    const res = await new HttpQRPaymentRepository(fakeClient({ get })).listClosedMerchants();
+    expect(get).toHaveBeenCalledWith('/api/v1/qr/merchants?status=closed');
+    expect(res.success).toBe(true);
+    expect(res.data?.[0]).toMatchObject({ id: 'm1', role: 'owner', closedAt: '2026-10-18T20:00:00Z', closureReason: 'owner_request' });
+  });
+
+  it('si la lista de cerrados falla, lo dice con su codigo', async () => {
+    const get = vi.fn().mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED', message: 'x' } });
+    const res = await new HttpQRPaymentRepository(fakeClient({ get })).listClosedMerchants();
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('FETCH_FAILED');
+  });
 });
