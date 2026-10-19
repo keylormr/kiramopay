@@ -196,6 +196,15 @@ export function leerManifiestoAnterior(adjunto, llavePublicaPem, plataforma) {
   }
 }
 
+/**
+ * La etiqueta del release. En un tag el workflow pasa la etiqueta; a mano
+ * (workflow_dispatch) pasa el nombre de la rama, que no es una version aunque
+ * empiece con "v": ahi vale la de package.json.
+ */
+export function tagDeLaEjecucion(arg, version) {
+  return typeof arg === 'string' && /^v\d+\.\d+\.\d+$/.test(arg) ? arg : `v${version}`;
+}
+
 // ── Lo que solo corre en CI ──────────────────────────────────────────────────
 
 // Se resuelve al usarse: bajo vitest import.meta.url no es un file:// y las
@@ -213,19 +222,33 @@ function versionCodeDe(plataforma) {
 
 // Los plugins nativos, con la version exacta instalada: los @capacitor/* y toda
 // dependencia que se declare plugin de Capacitor en su package.json.
-function dependenciasNativas() {
-  const paquete = JSON.parse(leer('package.json'));
-  const lock = JSON.parse(leer('package-lock.json'));
+/**
+ * Las dependencias que viajan en el binario, con su version exacta del lock:
+ * Capacitor, los plugins y el CLI de Capacitor. El CLI es de desarrollo, pero
+ * cap sync corre en el CI y regenera con el capacitor.build.gradle y el
+ * capacitor.settings.gradle que entran en el APK.
+ */
+export function elegirNativas(paquete, lock, esPlugin) {
+  const nombres = [
+    ...Object.keys(paquete.dependencies ?? {}),
+    ...Object.keys(paquete.devDependencies ?? {}).filter((n) => n.startsWith('@capacitor/')),
+  ];
   const nativas = {};
-  for (const nombre of Object.keys(paquete.dependencies ?? {})) {
-    const manifiestoDep = path.join(raizDelRepo(), 'node_modules', nombre, 'package.json');
-    const esPlugin = existsSync(manifiestoDep) && JSON.parse(readFileSync(manifiestoDep)).capacitor;
-    if (!nombre.startsWith('@capacitor/') && !esPlugin) continue;
+  for (const nombre of nombres) {
+    if (!nombre.startsWith('@capacitor/') && !esPlugin(nombre)) continue;
     const version = lock.packages?.[`node_modules/${nombre}`]?.version;
     if (!version) throw new Error(`${nombre} no esta en package-lock.json`);
     nativas[nombre] = version;
   }
   return nativas;
+}
+
+function dependenciasNativas() {
+  const esPlugin = (nombre) => {
+    const manifiestoDep = path.join(raizDelRepo(), 'node_modules', nombre, 'package.json');
+    return existsSync(manifiestoDep) && Boolean(JSON.parse(readFileSync(manifiestoDep)).capacitor);
+  };
+  return elegirNativas(JSON.parse(leer('package.json')), JSON.parse(leer('package-lock.json')), esPlugin);
 }
 
 function archivosVersionados(plataforma) {
@@ -258,7 +281,7 @@ async function principal() {
   if (plataforma !== 'android' && plataforma !== 'ios') throw new Error('uso: node scripts/paquete-web.mjs <android|ios> [tag]');
 
   const version = JSON.parse(leer('package.json')).version;
-  const tag = tagArg && tagArg.startsWith('v') ? tagArg : `v${version}`;
+  const tag = tagDeLaEjecucion(tagArg, version);
   if (tag !== `v${version}`) throw new Error(`el tag ${tag} no es la version de package.json (${version})`);
   const versionCode = versionCodeDe(plataforma);
   if (!esEnteroPositivo(versionCode)) throw new Error(`no se pudo leer el numero de build de ${plataforma}`);
@@ -311,10 +334,17 @@ async function principal() {
     throw new Error('LIVE_UPDATE_PRIVATE_KEY no corresponde a la publicKey de capacitor.config.ts: ningun telefono aceptaria el paquete');
   }
 
+  const rutaManifiesto = path.join(raizDelRepo(), archivoManifiesto);
   writeFileSync(
-    path.join(raizDelRepo(), archivoManifiesto),
+    rutaManifiesto,
     JSON.stringify({ manifiesto: Buffer.from(manifiesto).toString('base64'), firma }, null, 2) + '\n',
   );
+  // Lo publicado se relee como lo va a leer el proximo release: si no pasa, no
+  // se publica.
+  const releido = leerManifiestoAnterior(JSON.parse(readFileSync(rutaManifiesto, 'utf8')), llavePublica, plataforma);
+  if (releido?.version !== version || releido.paquete !== paquete || releido.bytes !== statSync(zip).size) {
+    throw new Error(`${archivoManifiesto} no se pudo releer como se publico`);
+  }
 
   console.log(`Paquete ${plataforma} ${version}: ${statSync(zip).size} bytes, huella ${huella.slice(0, 12)}.`);
   console.log(

@@ -18,7 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
 import { BarreraDeActualizacion } from './components/ActualizacionObligatoria';
 import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
-import { confirmarArranque } from './hooks/useActualizacion';
+import { asegurarArranque } from './hooks/useActualizacion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
@@ -1017,7 +1017,7 @@ const AppConGuardia: React.FC = () => {
   // montar React: un paquete nuevo que revienta al pintar no llega a este
   // efecto, y el plugin vuelve solo al paquete del binario.
   useEffect(() => {
-    void confirmarArranque();
+    void asegurarArranque();
   }, []);
   if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
   // En la app instalada, una version nueva publicada se exige antes del login.

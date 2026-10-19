@@ -41,6 +41,12 @@ import { verificarManifiesto, type ManifiestoPaquete } from '@/utils/paqueteFirm
 //   - Si el paquete nuevo no arranca, el plugin vuelve al del binario (ver
 //     confirmarArranque) y eso se cuenta; a la segunda falla de la misma
 //     version se ofrece el APK.
+//   - Con la barrera del APK se pregunta de nuevo cada minuto: si el backend
+//     respondio sin paquete por una falla pasajera, se pasa a la interna.
+//
+// El paquete solo se baja del release de su version en GitHub: lo que diga el
+// servidor fuera de eso no llega al plugin (ni el identificador del telefono
+// que el plugin manda con la descarga).
 
 type Comun = {
   version: string;
@@ -59,8 +65,8 @@ export type ActualizacionDisponible =
 // Lo que se pospuso con una version vieja de este hook: ya no significa nada y
 // se borra al revisar.
 const CLAVE_POSPUESTA_VIEJA = 'kiramopay-update-pospuesta';
-// { [version]: veces que fallo por dentro }. Solo se guarda la ultima version
-// intentada: lo de las anteriores ya no importa.
+// { [version]: veces que fallo por dentro }. Se descartan las versiones que ya
+// no son mas nuevas que la que corre.
 const CLAVE_FALLOS = 'kiramopay-actualizacion-fallos';
 // La version que se dejo lista antes de reiniciar, para saber al arrancar si
 // quedo corriendo.
@@ -69,20 +75,30 @@ const CLAVE_PENDIENTE = 'kiramopay-actualizacion-pendiente';
 /** Fallas por dentro con la misma version antes de ofrecer el APK. */
 export const MAX_FALLOS = 2;
 
-/** Esperas entre reintentos automaticos de una descarga que fallo. */
-export const reintentos = { esperasMs: [3_000, 10_000, 30_000] };
+/** Los tiempos de la barrera. Un objeto para que las pruebas los acorten. */
+export const reintentos = {
+  /** Esperas entre reintentos automaticos de una descarga que fallo. */
+  esperasMs: [3_000, 10_000, 30_000],
+  /** Con la barrera del APK, cada cuanto se pregunta si ya hay paquete. */
+  revisarExternaMs: 60_000,
+  /** Si despues de reiniciar la pagina sigue aca, algo no anduvo. */
+  esperaReinicioMs: 15_000,
+};
 
 /** El plugin avisa cada 8 KiB: la pantalla no necesita tanto. */
 const INTERVALO_AVANCE_MS = 100;
-
-/** Si despues de reiniciar la pagina sigue aca, algo no anduvo. */
-const ESPERA_REINICIO_MS = 15_000;
 
 // El plugin usa el id tal cual como nombre de carpeta: solo pasa uno armado y
 // validado aca, nunca lo que diga el servidor.
 const ID_VALIDO = /^v\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const idDePaquete = (version: string) => `v${version}`;
 const versionDeId = (id: string | null | undefined) => (id && ID_VALIDO.test(id) ? id.slice(1) : null);
+
+// Donde publica los paquetes el workflow del tag (backend/internal/appversion
+// arma la misma URL).
+const RELEASES = 'https://github.com/keylormr/kiramopay/releases/download/';
+const urlDelPaquete = (version: string, plataforma: PlataformaApp) =>
+  `${RELEASES}${idDePaquete(version)}/kiramopay-web-${plataforma}.zip`;
 
 function leerFallos(): Record<string, unknown> {
   try {
@@ -100,7 +116,12 @@ function fallosDe(version: string): number {
 
 function sumarFallo(version: string): void {
   try {
-    localStorage.setItem(CLAVE_FALLOS, JSON.stringify({ [version]: fallosDe(version) + 1 }));
+    const fallos: Record<string, number> = {};
+    for (const [v, n] of Object.entries(leerFallos())) {
+      if (typeof n === 'number' && Number.isInteger(n) && n > 0 && esVersionMasNueva(v, BUILD_VERSION)) fallos[v] = n;
+    }
+    fallos[version] = fallosDe(version) + 1;
+    localStorage.setItem(CLAVE_FALLOS, JSON.stringify(fallos));
   } catch {
     /* sin storage no se cuenta: se reintenta por dentro */
   }
@@ -165,16 +186,33 @@ export function plataformaNativa(): PlataformaApp | null {
   return p === 'ios' || p === 'android' ? p : null;
 }
 
+// La confirmacion de esta carga de pagina. La revision del hook la espera antes
+// de decidir: su efecto corre antes que el de AppConGuardia (React corre
+// primero los efectos de los hijos), y sin esperar podia ofrecer otra vez por
+// dentro una version que acababa de revertirse.
+let arranque: Promise<void> | null = null;
+
 /**
  * Le confirma al plugin que la capa web que corre arranco. Va en cada arranque,
- * en cuanto la app se pinto (AppConGuardia): sin esta llamada, pasado el
+ * en cuanto la app se pinto (AppConGuardia y la revision de este hook, por
+ * asegurarArranque): sin esta llamada, pasado el
  * readyTimeout de capacitor.config.ts el plugin cree que el paquete no anda y
  * vuelve al del binario.
  *
  * Tambien cuenta como falla de la version que se intento aplicar: la que el
  * plugin tuvo que revertir, o la que se dejo lista y no quedo corriendo.
  */
-export async function confirmarArranque(): Promise<void> {
+export function confirmarArranque(): Promise<void> {
+  arranque = confirmar();
+  return arranque;
+}
+
+/** Confirma el arranque una sola vez por carga de pagina. */
+export function asegurarArranque(): Promise<void> {
+  return arranque ?? confirmarArranque();
+}
+
+async function confirmar(): Promise<void> {
   if (!plataformaNativa()) return;
   let resultado: { rollback: boolean; previousBundleId: string | null } | null = null;
   try {
@@ -184,7 +222,8 @@ export async function confirmarArranque(): Promise<void> {
   }
   const pendiente = tomarPendiente();
   if (resultado?.rollback) {
-    const v = versionDeId(resultado.previousBundleId);
+    // Si el plugin no dice cual revirtio, fue la que se dejo lista.
+    const v = versionDeId(resultado.previousBundleId) ?? versionDeId(pendiente && idDePaquete(pendiente));
     if (v) sumarFallo(v);
     return;
   }
@@ -253,7 +292,7 @@ export function useActualizacion(): {
         if (!viva.current) return;
         bajando.current = false;
         fase('error');
-      }, ESPERA_REINICIO_MS);
+      }, reintentos.esperaReinicioMs);
     } catch {
       if (!viva.current) return;
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -286,6 +325,7 @@ export function useActualizacion(): {
   const revisar = useCallback(async () => {
     if (!plataforma) return;
     try {
+      await asegurarArranque();
       const [info, res] = await Promise.all([
         CapApp.getInfo(),
         getApiLayer().appVersion?.getLatest(plataforma) ??
@@ -308,7 +348,8 @@ export function useActualizacion(): {
           manifiesto.version === version &&
           manifiesto.plataforma === plataforma &&
           manifiesto.nativaMinima <= build &&
-          ID_VALIDO.test(idDePaquete(version));
+          ID_VALIDO.test(idDePaquete(version)) &&
+          web.url === urlDelPaquete(version, plataforma);
         const agotada = fallosDe(version) >= MAX_FALLOS;
         if (sirve && (!agotada || !externa)) {
           destino.current = { comun, url: web.url, manifiesto, externa };
@@ -358,6 +399,16 @@ export function useActualizacion(): {
       void escucha.then((e) => e.remove()).catch(() => undefined);
     };
   }, [plataforma, revisar]);
+
+  // Con la barrera del APK se sigue preguntando: si el backend no trajo el
+  // paquete por una falla pasajera, la proxima respuesta lo trae y se pasa a la
+  // via interna sin esperar a que la app vuelva a primer plano.
+  const viaExterna = actualizacion?.via === 'externa';
+  useEffect(() => {
+    if (!viaExterna) return;
+    const id = window.setInterval(() => void revisar(), reintentos.revisarExternaMs);
+    return () => window.clearInterval(id);
+  }, [viaExterna, revisar]);
 
   const actualizar = () => {
     if (actualizacion?.via !== 'externa') return;

@@ -476,7 +476,12 @@ describe('useActualizacion por dentro', () => {
     await confirmarArranque();
     await confirmarArranque();
     firmado.verificarManifiesto.mockResolvedValue({ ...MANIFIESTO, version: '2.8.1' });
-    getLatest.mockResolvedValue(conPaquete({ version: '2.8.1' }));
+    getLatest.mockResolvedValue(
+      conPaquete({
+        version: '2.8.1',
+        web: { ...WEB, url: 'https://github.com/keylormr/kiramopay/releases/download/v2.8.1/kiramopay-web-android.zip' },
+      }),
+    );
     renderHook(() => useActualizacion());
     await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
     expect(live.downloadBundle).toHaveBeenCalledWith(expect.objectContaining({ bundleId: 'v2.8.1' }));

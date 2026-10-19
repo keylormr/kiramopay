@@ -208,6 +208,17 @@ necesita un binario mas nuevo la app no ofrece nada: mientras no exista
 distribucion iOS, una barrera con un boton que no lleva a ningun lado es peor
 que el silencio.
 
+Dos limites de iOS, abiertos para decidir:
+
+- **Un paquete que falla dos veces deja la barrera sin salida.** En Android la
+  salida es el APK; en iOS sin `IOS_UPDATE_URL` la barrera se queda con
+  "Reintentar" hasta que se publique otra version. La alternativa es dejar
+  entrar con la version que funciona despues de la segunda reversion, a costa
+  de que esa version deje de ser obligatoria en ese telefono.
+- **iOS depende del .apk.** El backend ofrece una version recien cuando el
+  release tiene el `.apk` de Android: si el job de Android falla, los iPhone
+  tampoco la ven aunque su paquete este publicado.
+
 ### La version de iOS tiene que subir con la de Android
 
 `MARKETING_VERSION` y `CURRENT_PROJECT_VERSION` de `project.pbxproj` son el

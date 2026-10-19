@@ -67,10 +67,14 @@ jobs:
       # los telefonos cuyo binario ya la puede correr; el manifiesto dice desde
       # que versionCode (scripts/paquete-web.mjs). Va ANTES de cap sync, que
       # reescribe archivos de android/ que entran en la huella de lo nativo.
-      # Sin el secreto, o con uno que no corresponde a la llave de
-      # capacitor.config.ts, el release no sale: ningun telefono aceptaria el
-      # paquete y toda version se exigiria por APK.
+      # Si falla (falta el secreto, no corresponde a la llave de
+      # capacitor.config.ts, cualquier error), el release sale igual con el APK
+      # y el AAB, sin paquete: esa version se instala por APK. El APK es la
+      # salida de emergencia y no puede depender de este paso. La corrida
+      # termina en rojo para que se note (ultimo paso).
       - name: Paquete de la actualizacion interna
+        id: paquete
+        continue-on-error: true
         env:
           LIVE_UPDATE_PRIVATE_KEY: ${{ secrets.LIVE_UPDATE_PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -129,6 +133,7 @@ jobs:
       # En una corrida a mano (sin tag) no hay release: el paquete queda como
       # artefacto para revisarlo.
       - name: Upload live update package
+        if: steps.paquete.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: kiramopay-web-android
@@ -153,13 +158,20 @@ jobs:
       # tienen que estar. Si subieran juntos (la accion los sube en paralelo),
       # un telefono que pregunta en ese momento veria la version sin paquete y
       # se le pediria el APK; el backend cachea esa respuesta diez minutos.
-      - name: Publish notes and live update package to GitHub Release
+      - name: Publish notes to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           body_path: notas-de-version.md
+          files: notas.json
+          fail_on_unmatched_files: true
+
+      - name: Publish live update package to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && steps.paquete.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notas-de-version.md
           files: |
-            notas.json
             kiramopay-web-android.zip
             actualizacion-android.json
           fail_on_unmatched_files: true
@@ -171,3 +183,9 @@ jobs:
           body_path: notas-de-version.md
           files: kiramopay.apk
           fail_on_unmatched_files: true
+
+      - name: Falta el paquete de la actualizacion interna
+        if: steps.paquete.outcome == 'failure'
+        run: |
+          echo "::error::No se armo el paquete de la actualizacion interna (ver el paso 'Paquete de la actualizacion interna'). El APK salio igual: esta version se instala por APK."
+          exit 1

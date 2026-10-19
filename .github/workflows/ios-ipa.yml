@@ -112,8 +112,12 @@ jobs:
       # Actualizacion interna, igual que en android-apk.yml: esta capa web,
       # comprimida y firmada, para los iPhone cuyo binario ya la puede correr
       # (desde el CFBundleVersion que diga el manifiesto). Va ANTES de cap sync,
-      # que reescribe el Podfile, que entra en la huella de lo nativo.
+      # que reescribe el Podfile, que entra en la huella de lo nativo. Si falla,
+      # el .ipa sale igual, sin paquete, y la corrida termina en rojo (ultimo
+      # paso).
       - name: Paquete de la actualizacion interna
+        id: paquete
+        continue-on-error: true
         env:
           LIVE_UPDATE_PRIVATE_KEY: ${{ secrets.LIVE_UPDATE_PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -274,6 +278,7 @@ jobs:
           if-no-files-found: error
 
       - name: Subir el paquete de la actualizacion interna
+        if: steps.paquete.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: kiramopay-web-ios
@@ -323,15 +328,22 @@ jobs:
           rm -rf "$RUNNER_TEMP/asc"
           exit "$estado"
 
+      - name: Publicar el paquete de la actualizacion interna en el GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && steps.paquete.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notas-de-version.md
+          files: |
+            kiramopay-web-ios.zip
+            actualizacion-ios.json
+          fail_on_unmatched_files: true
+
       - name: Publicar en el GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           body_path: notas-de-version.md
-          files: |
-            ${{ steps.artefacto.outputs.nombre }}
-            kiramopay-web-ios.zip
-            actualizacion-ios.json
+          files: ${{ steps.artefacto.outputs.nombre }}
           fail_on_unmatched_files: true
 
       - name: Limpiar llavero de firma
@@ -339,3 +351,9 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/firma.keychain-db" || true
           rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision || true
+
+      - name: Falta el paquete de la actualizacion interna
+        if: steps.paquete.outcome == 'failure'
+        run: |
+          echo "::error::No se armo el paquete de la actualizacion interna (ver el paso 'Paquete de la actualizacion interna'). El .ipa salio igual, sin paquete."
+          exit 1

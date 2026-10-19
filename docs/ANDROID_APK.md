@@ -125,8 +125,17 @@ downloading anything (`src/utils/paqueteFirmado.ts`), and the plugin verifies
 the zip natively, before unzipping, with `plugins.LiveUpdate.publicKey` from
 `capacitor.config.ts`. That key ships inside the binary and JavaScript cannot
 change it: a zip without a valid signature is rejected even if foreign code
-asks the plugin for it. The workflow fails if the secret does not match that
-public key.
+asks the plugin for it.
+
+If the secret is missing or does not match that public key (or the step fails
+for any other reason), the release still goes out with the APK and the AAB, but
+without a package: that version installs by APK. The APK is the emergency exit
+and does not depend on this step. The run ends red so it gets noticed.
+
+The app only downloads a package from
+`https://github.com/keylormr/kiramopay/releases/download/v<version>/kiramopay-web-<platform>.zip`.
+Any other URL the server sends goes the APK way: the plugin never contacts
+another host (it sends a device id with the download).
 
 **Rotating the key** (only if the private key leaked): generate a new pair,
 replace the secret and both copies of the public key (`capacitor.config.ts` and
@@ -139,8 +148,28 @@ within the 20 s `readyTimeout`), the plugin goes back to the package inside the
 APK and the app counts the failure; the second failure of the same version
 offers the APK.
 
+While the APK barrier is up the app asks again every minute: if the backend
+answered without a package because of a transient failure (GitHub slow, a
+5xx), the next answer brings it and the barrier switches to the in-app path.
+The backend refresh that fills its cache no longer depends on the phone that
+triggered it staying connected.
+
 The first version that carries the plugin has to be installed by APK: binaries
 up to 2.8.0 do not have it.
+
+### Known limits (accepted, open to the owner)
+
+- **Freshness.** The backend decides which version is the latest. Signatures
+  stop foreign code, not an older signed version: a compromised backend could
+  hold phones on a previous release that is still newer than the installed one.
+- **`ready()` comes early.** The app confirms the package as soon as it first
+  renders. A package that breaks later (after the login, on a lazy screen) is
+  not rolled back by the plugin; the fix is a new release.
+- **Restart mid-use.** A new version found when the app comes back to the
+  foreground raises the barrier and restarts the app when the download ends,
+  even with a form open. Idempotency keys prevent duplicated money operations.
+- **The private key is a repository secret**, like the keystore. A GitHub
+  environment limited to `v*` tags, with approval, would narrow who can use it.
 
 ## Uploading to Google Play
 

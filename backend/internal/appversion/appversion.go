@@ -56,6 +56,7 @@
 package appversion
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -87,6 +88,9 @@ const (
 	maxNotas = 64 << 10
 	// Un manifiesto firmado ocupa menos de 2 KiB.
 	maxManifiesto = 16 << 10
+	// Tope del refresco entero. Cada pedido ya tiene el suyo (los clientes
+	// HTTP); esto acota la suma.
+	tiempoRefresco = 30 * time.Second
 )
 
 var plataformas = []string{"android", "ios"}
@@ -192,10 +196,16 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := h.desdeAPI(r)
+	// El refresco llena la cache de todos: no se corta porque el telefono que lo
+	// disparo se desconecte. Sin esto, su corte dejaba a los demas un minuto sin
+	// paquete, y en Android eso es la barrera del APK.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), tiempoRefresco)
+	defer cancel()
+
+	info, err := h.desdeAPI(ctx)
 	if err != nil {
 		slog.Warn("app version: la API de GitHub no sirvio, se prueba la redireccion web", "err", err)
-		info, err = h.desdeRedireccion(r)
+		info, err = h.desdeRedireccion(ctx)
 	}
 	if err != nil {
 		slog.Warn("app version: ningun camino a GitHub funciono", "err", err)
@@ -217,12 +227,12 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1 + len(plataformas))
 	go func() {
 		defer wg.Done()
-		notas, notasDefinitivas = h.notasDe(r, version)
+		notas, notasDefinitivas = h.notasDe(ctx, version)
 	}()
 	for i, p := range plataformas {
 		go func() {
 			defer wg.Done()
-			paquetesPlataforma[i], paquetesDefinitivos[i] = h.paqueteDe(r, version, adjuntos, p)
+			paquetesPlataforma[i], paquetesDefinitivos[i] = h.paqueteDe(ctx, version, adjuntos, p)
 		}()
 	}
 	wg.Wait()
@@ -293,7 +303,7 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 // que el .zip existe. Devuelve nil si no hay paquete util, y si el resultado es
 // definitivo (no lo hay, o no sirve) o una falla pasajera que conviene
 // reintentar pronto (red, corte, 5xx).
-func (h *Handler) paqueteDe(r *http.Request, version string, adjuntos map[string]string, plataforma string) (*infoWeb, bool) {
+func (h *Handler) paqueteDe(ctx context.Context, version string, adjuntos map[string]string, plataforma string) (*infoWeb, bool) {
 	if h.manifiestoFmt == "" || h.paqueteFmt == "" {
 		return nil, true
 	}
@@ -313,7 +323,7 @@ func (h *Handler) paqueteDe(r *http.Request, version string, adjuntos map[string
 		urlManifiesto, urlPaquete = m, z
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, urlManifiesto, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlManifiesto, nil)
 	if err != nil {
 		return nil, true
 	}
@@ -354,7 +364,7 @@ func (h *Handler) paqueteDe(r *http.Request, version string, adjuntos map[string
 		return nil, true
 	}
 	if adjuntos == nil {
-		if err := h.existeDescarga(r, urlPaquete); err != nil {
+		if err := h.existeDescarga(ctx, urlPaquete); err != nil {
 			slog.Warn("app version: el release no tiene el paquete web", "version", version, "plataforma", plataforma, "err", err)
 			return nil, false
 		}
@@ -370,12 +380,12 @@ func (h *Handler) paqueteDe(r *http.Request, version string, adjuntos map[string
 // valor dice si el resultado es definitivo (hay notas, o el release no las
 // tiene, o son invalidas) o si fue una falla pasajera que conviene reintentar
 // pronto (red, corte, 5xx).
-func (h *Handler) notasDe(r *http.Request, version string) ([]string, bool) {
+func (h *Handler) notasDe(ctx context.Context, version string) ([]string, bool) {
 	if h.notasFmt == "" {
 		return []string{}, true
 	}
 	url := fmt.Sprintf(h.notasFmt, "v"+version)
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return []string{}, true
 	}
@@ -415,8 +425,8 @@ func (h *Handler) notasDe(r *http.Request, version string) ([]string, bool) {
 // existeDescarga confirma que el adjunto esta publicado. Pide un solo byte:
 // el almacenamiento de objetos de GitHub firma la URL para GET, y un HEAD
 // podria rechazarse aunque el archivo exista.
-func (h *Handler) existeDescarga(r *http.Request, url string) error {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+func (h *Handler) existeDescarga(ctx context.Context, url string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -435,8 +445,8 @@ func (h *Handler) existeDescarga(r *http.Request, url string) error {
 // desdeAPI lee el release por la API: es la fuente autoritativa del nombre del
 // archivo adjunto (la release lleva tambien el .ipa de iOS, asi que hay que
 // elegir el .apk, no el primero).
-func (h *Handler) desdeAPI(r *http.Request) (*infoVersion, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.apiURL, nil)
+func (h *Handler) desdeAPI(ctx context.Context) (*infoVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -484,8 +494,8 @@ func (h *Handler) desdeAPI(r *http.Request) (*infoVersion, error) {
 
 // desdeRedireccion saca el tag de la cabecera Location de la pagina de releases
 // y arma la URL del APK. No pasa por la API, asi que no tiene su limite por IP.
-func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.webURL, nil)
+func (h *Handler) desdeRedireccion(ctx context.Context) (*infoVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.webURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +517,7 @@ func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
 		return nil, fmt.Errorf("la redireccion no trae tag: %q", destino)
 	}
 	descarga := fmt.Sprintf(h.descargaFmt, tag)
-	if err := h.existeDescarga(r, descarga); err != nil {
+	if err := h.existeDescarga(ctx, descarga); err != nil {
 		return nil, fmt.Errorf("el release %s no tiene el APK todavia: %w", tag, err)
 	}
 	return &infoVersion{
