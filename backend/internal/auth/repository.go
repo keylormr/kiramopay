@@ -131,6 +131,24 @@ func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, 
 	return revokedAt != nil, nil
 }
 
+// IsLiveSession dice si accessJTI es el token de acceso VIGENTE de una sesion
+// abierta de userID. Es mas estricto que IsAccessJTIRevoked: un token sin fila
+// (uno que ya roto, porque MoverSesionAlRotar paso la fila al nuevo) cuenta
+// como no vigente. Lo usa RequireLiveSession en el panel de administracion.
+// Todo token que se emite deja su fila (persistTokenRollout), asi que el
+// vigente siempre la tiene.
+func (r *Repository) IsLiveSession(ctx context.Context, userID, accessJTI string) (bool, error) {
+	var viva bool
+	if err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM user_sessions
+		                 WHERE user_id = $1::uuid AND access_jti = $2::uuid AND revoked_at IS NULL)`,
+		userID, accessJTI,
+	).Scan(&viva); err != nil {
+		return false, fmt.Errorf("live session lookup: %w", err)
+	}
+	return viva, nil
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 //  refresh_tokens (rotation + family revocation)
 // ─────────────────────────────────────────────────────────────────────────
