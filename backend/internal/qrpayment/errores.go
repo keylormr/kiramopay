@@ -1,6 +1,9 @@
 package qrpayment
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Errores tipados del camino de pago por QR.
 //
@@ -107,6 +110,20 @@ var (
 
 	// ErrComercioNoEncontrado: no existe un comercio con ese id.
 	ErrComercioNoEncontrado = errors.New("merchant not found")
+)
+
+// Errores del administrador que es dueno del comercio (PR 295 en adelante: una
+// cuenta personal administra).
+var (
+	// ErrComercioPropio: el administrador que aprueba, rechaza o le cambia la
+	// comision o el plan a un comercio es su dueno. Lo revisa otro
+	// administrador. El handler responde 403 ADMIN_IS_AFFECTED_PARTY.
+	ErrComercioPropio = errors.New("an administrator cannot review or manage a merchant they own")
+
+	// ErrCierreDelPropioComercio: el administrador quiere cerrar por la ruta de
+	// administracion, con un motivo y sin contrasena, un comercio suyo. Lo
+	// cierra como cualquier dueno, reautenticandose. Es un ErrComercioPropio.
+	ErrCierreDelPropioComercio = fmt.Errorf("%w; close it as its owner, with your password", ErrComercioPropio)
 )
 
 // Errores del cierre del comercio (migracion 079).

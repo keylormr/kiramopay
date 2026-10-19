@@ -173,6 +173,9 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusForbidden, "ESCROW_BUYER_ONLY", "only the buyer may perform this action")
 	case errors.Is(err, ErrNotSeller):
 		response.Error(w, http.StatusForbidden, "ESCROW_SELLER_ONLY", "only the seller may perform this action")
+	case errors.Is(err, ErrArbitroEsParte):
+		response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY",
+			"an administrator cannot resolve an agreement they are a party to")
 	case errors.Is(err, ErrBadTransition):
 		response.Error(w, http.StatusConflict, "ESCROW_INVALID_STATE", "action not allowed in the current status")
 	case errors.Is(err, ErrInsufficient):

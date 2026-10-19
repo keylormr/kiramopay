@@ -1172,6 +1172,9 @@ func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID strin
 }
 
 func (s *Service) decidirVerificacion(ctx context.Context, merchantID, status, adminID, reason string) (*Merchant, error) {
+	if err := s.administradorNoEsElDueno(ctx, merchantID, adminID); err != nil {
+		return nil, err
+	}
 	m, err := s.repo.UpdateVerification(ctx, merchantID, status, adminID, reason)
 	if err != nil && s.estaCerrado(ctx, merchantID) {
 		return nil, ErrComercioCerrado
@@ -1185,6 +1188,9 @@ func (s *Service) decidirVerificacion(ctx context.Context, merchantID, status, a
 func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, plan string, ac ActorContext) (*Merchant, error) {
 	if plan != PlanComercioBase && plan != PlanComercioAnalitica {
 		return nil, ErrPlanComercioInvalido
+	}
+	if err := s.administradorNoEsElDueno(ctx, merchantID, adminID); err != nil {
+		return nil, err
 	}
 	m, anterior, err := s.repo.UpdateMerchantPlan(ctx, merchantID, plan)
 	if errors.Is(err, ErrComercioNoEncontrado) && s.estaCerrado(ctx, merchantID) {
@@ -1217,16 +1223,41 @@ func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reaso
 }
 
 // SetCommission updates a merchant's commission rate (basis points). The platform
-// sets the rate, so this is an admin action.
-func (s *Service) SetCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
+// sets the rate, so this is an admin action, and never by the merchant's owner.
+func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string, bps int) (*Merchant, error) {
 	if bps < 0 || bps > 10000 {
 		return nil, fmt.Errorf("commission must be between 0 and 10000 bps")
+	}
+	if err := s.administradorNoEsElDueno(ctx, merchantID, adminID); err != nil {
+		return nil, err
 	}
 	m, err := s.repo.UpdateCommission(ctx, merchantID, bps)
 	if err != nil && s.estaCerrado(ctx, merchantID) {
 		return nil, ErrComercioCerrado
 	}
 	return m, err
+}
+
+// administradorNoEsElDueno rechaza al administrador que actua sobre un comercio
+// propio. El dueno de un comercio no cambia nunca (ninguna sentencia escribe
+// user_id), asi que leerlo antes del cambio no abre una carrera. Si el comercio
+// no existe se sigue: cada cambio ya dice "no encontrado" a su manera. Tampoco
+// frena a uno cerrado: un cierre no se deshace, y cada cambio lo rechaza con
+// ErrComercioCerrado, como al de cualquier otro dueno. Cualquier otra falla al
+// leerlo frena el cambio: sin saber de quien es, no se decide.
+func (s *Service) administradorNoEsElDueno(ctx context.Context, merchantID, adminID string) error {
+	m, err := s.repo.GetMerchant(ctx, merchantID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("read merchant owner: %w", err)
+	case m.ClosedAt != nil:
+		return nil
+	case m.UserID == adminID:
+		return ErrComercioPropio
+	}
+	return nil
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

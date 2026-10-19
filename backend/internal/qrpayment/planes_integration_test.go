@@ -72,7 +72,7 @@ func TestPromocion_LaPrimeraAprobacionLaOtorga(t *testing.T) {
 	}
 
 	antes := time.Now()
-	aprobado, err := svc.ApproveMerchant(ctx, m.ID, owner)
+	aprobado, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("aprobar: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestPromocion_UnaComisionMenorFijadaSeRespeta(t *testing.T) {
 	ctx := context.Background()
 	m := comercioVerificado(t, svc, owner)
 
-	menor, err := svc.SetCommission(ctx, m.ID, 10)
+	menor, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 10)
 	if err != nil {
 		t.Fatalf("fijar 10 bps: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestPromocion_UnaComisionMenorFijadaSeRespeta(t *testing.T) {
 		t.Fatalf("comision = %d, se esperaba 100 (la menor)", pay.Fee)
 	}
 
-	mayor, err := svc.SetCommission(ctx, m.ID, 100)
+	mayor, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 100)
 	if err != nil {
 		t.Fatalf("fijar 100 bps: %v", err)
 	}
@@ -159,10 +159,10 @@ func TestPromocion_NoSeRenuevaNiSeAlargaAlReaprobar(t *testing.T) {
 	terminarPromocion(t, pool, m.ID)
 	_, vencida := marcasDePromocion(t, pool, m.ID)
 
-	if _, err := svc.RejectMerchant(ctx, m.ID, owner, "documento ilegible"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, m.ID, revisorDePrueba, "documento ilegible"); err != nil {
 		t.Fatalf("rechazar: %v", err)
 	}
-	re, err := svc.ApproveMerchant(ctx, m.ID, owner)
+	re, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("re-aprobar: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestPromocion_NoSeRenuevaNiSeAlargaAlReaprobar(t *testing.T) {
 	if marca, _ := marcasDePromocion(t, pool, m.ID); marca == nil {
 		t.Fatal("el cambio de identidad borro la marca de la primera aprobacion")
 	}
-	re2, err := svc.ApproveMerchant(ctx, m.ID, owner)
+	re2, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("re-aprobar tras cambio de identidad: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestPromocion_UnComercioYaAprobadoAntesNoLaRecibe(t *testing.T) {
 		`UPDATE qr_merchants SET primera_aprobacion_at = NOW() - INTERVAL '90 days' WHERE id = $1::uuid`, m.ID); err != nil {
 		t.Fatalf("marcar: %v", err)
 	}
-	a, err := svc.ApproveMerchant(ctx, m.ID, owner)
+	a, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba)
 	if err != nil {
 		t.Fatalf("aprobar: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	}
 	// Solo rechazado, nunca aprobado. Es el costo aceptado de mirar reviewed_at:
 	// un rechazo lo llena igual que una aprobacion.
-	if _, err := svc.RejectMerchant(ctx, rechazado.ID, owner, "documento ilegible"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, rechazado.ID, revisorDePrueba, "documento ilegible"); err != nil {
 		t.Fatalf("rechazar: %v", err)
 	}
 	// Rechazado y despues corregido con el codigo de hoy: la edicion lo devuelve a
@@ -263,7 +263,7 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 	// datos, y queda igual que un comercio que nunca se reviso. La migracion no
 	// puede distinguirlo de uno aprobado, rechazado y corregido en la misma
 	// ventana (ver el comentario de la 068): lo trata como nuevo.
-	if _, err := svc.RejectMerchant(ctx, corregido.ID, owner, "cedula ilegible"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, corregido.ID, revisorDePrueba, "cedula ilegible"); err != nil {
 		t.Fatalf("rechazar el que se corrige: %v", err)
 	}
 	corr, err := svc.UpdateMerchant(ctx, corregido.ID, owner, &qrpayment.RegisterMerchantRequest{
@@ -362,7 +362,7 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 		{"de antes de la 038", legado.ID},
 		{"rechazado antes del despliegue", rechazado.ID},
 	} {
-		a, err := svc.ApproveMerchant(ctx, c.id, owner)
+		a, err := svc.ApproveMerchant(ctx, c.id, revisorDePrueba)
 		if err != nil {
 			t.Fatalf("aprobar %s: %v", c.nombre, err)
 		}
@@ -374,7 +374,7 @@ func TestMigracion068_MarcaSoloALosQueYaEstuvieronAprobados(t *testing.T) {
 		{"nuevo", nuevo.ID},
 		{"rechazado y corregido", corregido.ID},
 	} {
-		b, err := svc.ApproveMerchant(ctx, c.id, owner)
+		b, err := svc.ApproveMerchant(ctx, c.id, revisorDePrueba)
 		if err != nil {
 			t.Fatalf("aprobar %s: %v", c.nombre, err)
 		}
@@ -419,7 +419,7 @@ func TestPromocion_VerificadoSinMarcaNoLaRecibeAlSalirYVolver(t *testing.T) {
 	}
 	aprobarSinPromocion := func(nombre, id string) {
 		t.Helper()
-		a, err := svc.ApproveMerchant(ctx, id, owner)
+		a, err := svc.ApproveMerchant(ctx, id, revisorDePrueba)
 		if err != nil {
 			t.Fatalf("aprobar %s: %v", nombre, err)
 		}
@@ -442,7 +442,7 @@ func TestPromocion_VerificadoSinMarcaNoLaRecibeAlSalirYVolver(t *testing.T) {
 
 	// Un rechazo pisa reviewed_at con la fecha de hoy: la marca toma la anterior.
 	rechazado := aprobadoSinMarca("Rechazado")
-	if _, err := svc.RejectMerchant(ctx, rechazado.ID, owner, "documento vencido"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, rechazado.ID, revisorDePrueba, "documento vencido"); err != nil {
 		t.Fatalf("rechazar: %v", err)
 	}
 	conLaFechaDeSuRevision("rechazado", rechazado.ID)
@@ -465,7 +465,7 @@ func TestPromocion_VerificadoSinMarcaNoLaRecibeAlSalirYVolver(t *testing.T) {
 	// desde 'pending', corregido y aprobado recibe la promocion como cualquier
 	// comercio nuevo.
 	nunca := registrarComercio(t, svc, owner, "Nunca aprobado")
-	if _, err := svc.RejectMerchant(ctx, nunca.ID, owner, "falta la cedula"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, nunca.ID, revisorDePrueba, "falta la cedula"); err != nil {
 		t.Fatalf("rechazar el nunca aprobado: %v", err)
 	}
 	if _, err := svc.UpdateMerchant(ctx, nunca.ID, owner, &qrpayment.RegisterMerchantRequest{
@@ -476,7 +476,7 @@ func TestPromocion_VerificadoSinMarcaNoLaRecibeAlSalirYVolver(t *testing.T) {
 	if marca, _ := marcasDePromocion(t, pool, nunca.ID); marca != nil {
 		t.Fatalf("nunca aprobado: quedo marcado (%v) al rechazarse y corregirse", *marca)
 	}
-	a, err := svc.ApproveMerchant(ctx, nunca.ID, owner)
+	a, err := svc.ApproveMerchant(ctx, nunca.ID, revisorDePrueba)
 	if err != nil || a.PromoHasta == nil || a.ComisionEfectivaBps != qrpayment.PromoEntradaBps {
 		t.Fatalf("nunca aprobado: %+v (err %v); se esperaba la promocion", a, err)
 	}
@@ -509,7 +509,7 @@ func TestReporte_LaComparacionEsDelPlanAnalitica(t *testing.T) {
 		t.Fatalf("reporte base: %+v", base)
 	}
 
-	if _, err := svc.AsignarPlanComercio(ctx, m.ID, owner, qrpayment.PlanComercioAnalitica, qrpayment.ActorContext{}); err != nil {
+	if _, err := svc.AsignarPlanComercio(ctx, m.ID, revisorDePrueba, qrpayment.PlanComercioAnalitica, qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("asignar analitica: %v", err)
 	}
 	rep, err := svc.MerchantReport(ctx, m.ID, owner, 7, 0)
@@ -556,10 +556,10 @@ func TestAsignarPlanComercio_AuditaConRiesgoAlto(t *testing.T) {
 	m := registrarComercio(t, svc, owner, "Soda Auditada")
 
 	ac := qrpayment.ActorContext{IPAddress: "127.0.0.1", UserAgent: "test"}
-	if _, err := svc.AsignarPlanComercio(ctx, m.ID, owner, "premium", ac); err == nil {
+	if _, err := svc.AsignarPlanComercio(ctx, m.ID, revisorDePrueba, "premium", ac); err == nil {
 		t.Fatal("un plan de comercio inventado se acepto")
 	}
-	got, err := svc.AsignarPlanComercio(ctx, m.ID, owner, qrpayment.PlanComercioAnalitica, ac)
+	got, err := svc.AsignarPlanComercio(ctx, m.ID, revisorDePrueba, qrpayment.PlanComercioAnalitica, ac)
 	if err != nil {
 		t.Fatalf("asignar analitica: %v", err)
 	}
@@ -575,7 +575,7 @@ func TestAsignarPlanComercio_AuditaConRiesgoAlto(t *testing.T) {
 	).Scan(&risk, &actorID, &recurso, &anterior, &nuevo); err != nil {
 		t.Fatalf("leer auditoria (debe haber exactamente una fila): %v", err)
 	}
-	if risk != "high" || actorID != owner || recurso != m.ID || anterior != "base" || nuevo != "analitica" {
+	if risk != "high" || actorID != revisorDePrueba || recurso != m.ID || anterior != "base" || nuevo != "analitica" {
 		t.Fatalf("rastro: risk=%s actor=%s recurso=%s %s->%s", risk, actorID, recurso, anterior, nuevo)
 	}
 }
@@ -684,7 +684,8 @@ func TestReporteCSV_YPlanDelComercio_PorHTTP(t *testing.T) {
 		t.Fatalf("un cuerpo rechazado habilito la analitica: %d", rec.Code)
 	}
 
-	rec = pedir(http.MethodPatch, rutaPlan, owner, `{"plan":"analitica"}`)
+	// Lo asigna otro administrador: el dueno no administra su propio comercio.
+	rec = pedir(http.MethodPatch, rutaPlan, otroAdministrador(t, pool), `{"plan":"analitica"}`)
 	if e := leer(rec); rec.Code != http.StatusOK || e.Data.Plan != "analitica" || e.Data.ComisionEfectivaBps != qrpayment.PromoEntradaBps {
 		t.Fatalf("asignar analitica: %d %s", rec.Code, rec.Body.String())
 	}

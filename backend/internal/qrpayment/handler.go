@@ -147,6 +147,16 @@ func responderSiCerro(w http.ResponseWriter, err error) bool {
 	return true
 }
 
+// responderSiEsPropio responde 403 ADMIN_IS_AFFECTED_PARTY cuando el
+// administrador actua sobre un comercio del que es dueno. Devuelve si respondio.
+func responderSiEsPropio(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrComercioPropio) {
+		return false
+	}
+	response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", err.Error())
+	return true
+}
+
 // GetMerchants — GET /api/v1/qr/merchants. Sin status (u open), los comercios
 // que la persona administra; con status=closed, los cerrados de su dueno, para
 // consultar lo que vendieron.
@@ -474,7 +484,7 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
 	if err != nil {
-		if responderSiCerro(w, err) {
+		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
@@ -491,7 +501,7 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
 	if err != nil {
-		if responderSiCerro(w, err) {
+		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
@@ -501,15 +511,16 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
+	adminID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var req SetCommissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	merchant, err := h.service.SetCommission(r.Context(), id, req.CommissionBps)
+	merchant, err := h.service.SetCommission(r.Context(), id, adminID, req.CommissionBps)
 	if err != nil {
-		if responderSiCerro(w, err) {
+		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
@@ -536,7 +547,7 @@ func (h *Handler) SetMerchantPlan(w http.ResponseWriter, r *http.Request) {
 	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
 	merchant, err := h.service.AsignarPlanComercio(r.Context(), id.String(), adminID, plan, ac)
 	if err != nil {
-		if responderSiCerro(w, err) {
+		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
 		switch {

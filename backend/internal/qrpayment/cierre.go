@@ -512,6 +512,14 @@ func (s *Service) CerrarComercioComoAdmin(
 	if utf8.RuneCountInString(motivo) > MaxMotivoDeCierre {
 		return nil, ErrMotivoDeCierreMuyLargo
 	}
+	// Su propio comercio no lo cierra por aqui, con un motivo: lo cierra como
+	// dueno, con la contrasena (CerrarMiComercio).
+	if err := s.administradorNoEsElDueno(ctx, merchantID, adminID); err != nil {
+		if errors.Is(err, ErrComercioPropio) {
+			return nil, ErrCierreDelPropioComercio
+		}
+		return nil, err
+	}
 	return s.cerrar(ctx, merchantID, Cierre{
 		CerradoPor: adminID,
 		Motivo:     motivo,

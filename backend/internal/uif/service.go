@@ -2,6 +2,7 @@ package uif
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -400,11 +401,26 @@ func (s *Service) ListReports(ctx context.Context, status string) ([]Report, err
 	return s.repo.ListByStatus(ctx, status, 100)
 }
 
+// ErrRevisionPropia: quien revisa el caso es la persona del caso. Desde el PR
+// 295 administra una cuenta personal, con movimientos que pueden abrir un caso;
+// descartarse su propio caso es justo lo que la revision tiene que impedir. Lo
+// revisa otro oficial.
+var ErrRevisionPropia = errors.New("uif: a reviewer cannot review a case about their own account")
+
 func (s *Service) ReviewReport(ctx context.Context, id, reviewerID string, req *ReviewRequest) error {
 	switch req.Status {
 	case StatusSubmitted, StatusDismissed, StatusReviewed:
 	default:
 		return fmt.Errorf("invalid review status %q", req.Status)
+	}
+	// La persona de un caso no cambia, asi que leerla antes del UPDATE no abre
+	// una carrera. Un caso que no existe sigue: Review dice que no esta.
+	persona, err := s.repo.PersonaDelCaso(ctx, id)
+	if err != nil {
+		return fmt.Errorf("read report: %w", err)
+	}
+	if persona != "" && persona == reviewerID {
+		return ErrRevisionPropia
 	}
 	if err := s.repo.Review(ctx, id, reviewerID, req.Status, req.Notes); err != nil {
 		return err

@@ -154,7 +154,7 @@ func TestRestrictUser(t *testing.T) {
 	}
 
 	// Restrict
-	err = svc.RestrictUser(ctx, userID, true)
+	err = svc.RestrictUser(ctx, userID, "otro-administrador", true)
 	if err != nil {
 		t.Fatalf("RestrictUser(true) error: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestRestrictUser(t *testing.T) {
 	}
 
 	// Unrestrict
-	err = svc.RestrictUser(ctx, userID, false)
+	err = svc.RestrictUser(ctx, userID, "otro-administrador", false)
 	if err != nil {
 		t.Fatalf("RestrictUser(false) error: %v", err)
 	}

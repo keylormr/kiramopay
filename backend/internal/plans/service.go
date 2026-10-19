@@ -25,6 +25,11 @@ import (
 // contratar.
 var ErrPlanInvalid = errors.New("plan invalido")
 
+// ErrPlanPropio: el administrador se asigna su propio plan. Desde el PR 295
+// administra una cuenta personal; mientras no exista el cobro, asignarse Pro es
+// darselo gratis sin que nadie lo revise. Lo asigna otro administrador.
+var ErrPlanPropio = errors.New("an administrator cannot assign their own plan")
+
 // planesConInteres son los planes en los que se puede anotar interes desde el
 // 13-09-2026: los dos personales de pago y la analitica de comercio. Los
 // valores viejos 'negocio' y 'cima' se retiraron (prometian umbrales y
@@ -133,6 +138,9 @@ func (s *Service) Register(ctx context.Context, userID, plan string, ac ActorCon
 func (s *Service) AsignarPlan(ctx context.Context, targetID, adminID, plan string, ac ActorContext) (*PlanAsignado, error) {
 	if !PlanPersonalValido(plan) {
 		return nil, ErrPlanInvalid
+	}
+	if targetID == adminID {
+		return nil, ErrPlanPropio
 	}
 
 	out := PlanAsignado{UserID: targetID}

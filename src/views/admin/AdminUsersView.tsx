@@ -36,6 +36,8 @@ function errorKey(code?: string | null): string {
     case 'RATE_LIMITED': return 'admin_users_err_rate';
     case 'PLAN_INVALID':
     case 'PLAN_UPDATE_FAILED': return 'admin_users_err_plan';
+    // Aqui solo lo responde el plan: un administrador no se asigna el suyo.
+    case 'ADMIN_IS_AFFECTED_PARTY': return 'admin_users_err_own_plan';
     default: return 'admin_users_action_failed';
   }
 }

@@ -3,8 +3,10 @@ package fraud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -105,6 +107,16 @@ func (r *Repository) GetOpenAlerts(ctx context.Context) ([]FraudAlert, error) {
 		alerts = append(alerts, alert)
 	}
 	return alerts, nil
+}
+
+// CuentaDeLaAlerta devuelve la cuenta de la alerta, o "" si la alerta no existe.
+func (r *Repository) CuentaDeLaAlerta(ctx context.Context, alertID string) (string, error) {
+	var userID string
+	err := r.db.QueryRow(ctx, `SELECT user_id::text FROM fraud_alerts WHERE id = $1::uuid`, alertID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return userID, err
 }
 
 func (r *Repository) ResolveAlert(ctx context.Context, alertID, resolvedBy, status string) error {
