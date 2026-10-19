@@ -11,7 +11,9 @@ import (
 
 // La cola de cumplimiento no podia recibir un caso: los umbrales legales se
 // comparaban contra un movimiento y contra un dia, y los topes de KYC cortan
-// antes. Repartido en dias, el dinero no se veia.
+// antes. Repartido en dias, el dinero no se veia. La regla de 30 dias que lo
+// arreglo quedo como alerta interna (TestUIF_LosTreintaDiasSonUnaAlertaInterna):
+// el acumulado regulatorio es el mes calendario.
 
 // salida inserta una salida completada de hace `dias` dias.
 func salida(t *testing.T, pool *pgxpool.Pool, userID string, monto int64, dias int) string {
@@ -54,56 +56,8 @@ func casosDe(t *testing.T, pool *pgxpool.Pool, userID, tipo string) []int64 {
 	return out
 }
 
-func TestUnMesRepartidoEnDiasLlegaALaCola(t *testing.T) {
-	svc, _, pool, userID := setupUIF(t)
-	ctx := context.Background()
-	// En colones, al tipo de cambio de setupUIF (550): ₡5.500.000.
-	umbral := uif.DefaultThresholds().Acumulado30USD * 550
-
-	// Veinte dias de ₡250.000 (₡5.000.000): ningun dia llega a nada, y el
-	// acumulado queda por debajo del umbral de ₡5.500.000.
-	for d := 20; d >= 1; d-- {
-		salida(t, pool, userID, 25_000_000, d)
-	}
-	// Una salida de hace 40 dias NO cuenta: esta fuera de la ventana.
-	salida(t, pool, userID, 300_000_000, 40)
-
-	// Hoy, ₡600.000 mas: el acumulado de 30 dias cruza.
-	hoy := salida(t, pool, userID, 60_000_000, 0)
-	svc.Report(ctx, userID, hoy, "CRC", 60_000_000)
-
-	casos := casosDe(t, pool, userID, uif.TypeAcumulado30)
-	if len(casos) != 1 {
-		t.Fatalf("casos acumulado_30d = %d, se esperaba 1", len(casos))
-	}
-	if want := int64(20*25_000_000 + 60_000_000); casos[0] != want {
-		t.Fatalf("acumulado registrado = %d, se esperaba %d (la salida de hace 40 dias no cuenta)", casos[0], want)
-	}
-	if casos[0] < umbral {
-		t.Fatalf("se abrio un caso con %d, por debajo del umbral %d", casos[0], umbral)
-	}
-
-	// Una salida mas, ya por encima: no se repite el caso.
-	otra := salida(t, pool, userID, 1_000_000, 0)
-	svc.Report(ctx, userID, otra, "CRC", 1_000_000)
-	if n := len(casosDe(t, pool, userID, uif.TypeAcumulado30)); n != 1 {
-		t.Fatalf("casos tras seguir por encima = %d, se esperaba 1", n)
-	}
-
-	// Y es un caso para REVISAR: nace pendiente, nadie lo envio a la UIF.
-	var estado string
-	if err := pool.QueryRow(ctx,
-		`SELECT status FROM uif_reports WHERE user_id = $1::uuid AND report_type = $2`,
-		userID, uif.TypeAcumulado30).Scan(&estado); err != nil {
-		t.Fatalf("leer estado: %v", err)
-	}
-	if estado != uif.StatusPending {
-		t.Fatalf("estado = %q, se esperaba pending", estado)
-	}
-}
-
-// Si el dia ya cruzo, ese caso es mas especifico que el del mes: uno por
-// movimiento alcanza.
+// Si un movimiento solo ya supera el umbral, ese es su caso: uno por movimiento
+// alcanza, y la alerta de 30 dias no se abre encima.
 func TestSiElDiaCruzaNoSeDuplicaConElMes(t *testing.T) {
 	svc, _, pool, userID := setupUIF(t)
 	ctx := context.Background()

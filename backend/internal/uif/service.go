@@ -2,12 +2,10 @@ package uif
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kiramopay/backend/internal/audit"
 )
@@ -17,16 +15,22 @@ type Service struct {
 	thresholds   Thresholds
 	auditLogger  *audit.Logger
 	tipoDeCambio func(ctx context.Context, moneda string) (float64, error)
+	ahora        func() time.Time
 }
 
 type Options struct {
 	Thresholds  *Thresholds
 	AuditLogger *audit.Logger
-	// TipoDeCambio dice cuantas unidades de la moneda vale un dolar, con el
-	// tipo de cambio oficial. El dolar no lo necesita. Sin el (nil o con error),
-	// un movimiento en otra moneda no se puede comparar con el umbral y se abre
-	// un caso manual: nunca se deja pasar en silencio.
+	// TipoDeCambio reemplaza la venta de referencia del BCCR por un numero fijo
+	// por moneda (unidades de la moneda por dolar), el mismo para cualquier dia.
+	// Es para las pruebas. Sin el, el servicio dolariza cada monto con la venta
+	// de referencia del dia en que ocurrio (Repository.VentaDeReferencia). Sin
+	// tipo de cambio un movimiento en otra moneda no se puede comparar con el
+	// umbral y se abre un caso manual: nunca se deja pasar en silencio.
 	TipoDeCambio func(ctx context.Context, moneda string) (float64, error)
+	// Ahora es el reloj del servicio; nil es time.Now. Decide el dia y el mes
+	// calendario de cada evaluacion y que mes cierra el cierre automatico.
+	Ahora func() time.Time
 }
 
 func NewService(repo *Repository, opts *Options) *Service {
@@ -37,257 +41,353 @@ func NewService(repo *Repository, opts *Options) *Service {
 	if opts.Thresholds != nil {
 		th = opts.Thresholds.conLosDeLey()
 	}
-	return &Service{repo: repo, thresholds: th, auditLogger: opts.AuditLogger, tipoDeCambio: opts.TipoDeCambio}
+	ahora := opts.Ahora
+	if ahora == nil {
+		ahora = time.Now
+	}
+	return &Service{repo: repo, thresholds: th, auditLogger: opts.AuditLogger,
+		tipoDeCambio: opts.TipoDeCambio, ahora: ahora}
 }
 
-// errSinTipoDeCambio: no hay tipo de cambio para la moneda, o el que hay no
-// sirve (cero o negativo).
-var errSinTipoDeCambio = errors.New("sin tipo de cambio")
+const (
+	sentidoSalida  = "salida"
+	sentidoEntrada = "entrada"
+)
 
-// conversion lleva las cuentas en dolares de UNA evaluacion. Consulta el tipo
-// de cambio de cada moneda una sola vez: consultandolo para cada suma, una
-// falla pasajera entre la primera consulta y la siguiente dejaba fuera del
-// total la moneda del propio movimiento, y nadie se enteraba.
-type conversion struct {
-	s      *Service
-	ctx    context.Context
-	userID string
-	tasas  map[string]float64
-	fallas map[string]error
-}
-
-func (s *Service) nuevaConversion(ctx context.Context, userID string) *conversion {
-	return &conversion{s: s, ctx: ctx, userID: userID, tasas: map[string]float64{}, fallas: map[string]error{}}
-}
-
-// aDolares da el equivalente en centavos de dolar y el tipo de cambio usado
-// (1 para el dolar).
-func (c *conversion) aDolares(moneda string, minor int64) (int64, float64, error) {
-	if moneda == "USD" {
-		return minor, 1, nil
-	}
-	if err, ya := c.fallas[moneda]; ya {
-		return 0, 0, err
-	}
-	tasa, ya := c.tasas[moneda]
-	if !ya {
-		var err error
-		if tasa, err = c.consultar(moneda); err != nil {
-			// Error y no Warn: sin tipo de cambio el control de cumplimiento no
-			// puede comparar, y lo que toque esa moneda termina en la cola
-			// manual. El motivo de origen (una tabla sin la fila, un corte de la
-			// base) solo queda aqui.
-			slog.Error("uif: sin tipo de cambio", "user", c.userID, "moneda", moneda, "err", err.Error())
-			c.fallas[moneda] = err
-			return 0, 0, err
-		}
-		c.tasas[moneda] = tasa
-	}
-	return enCentavosDeDolar(minor, tasa), tasa, nil
-}
-
-func (c *conversion) consultar(moneda string) (float64, error) {
-	if c.s.tipoDeCambio == nil {
-		return 0, errSinTipoDeCambio
-	}
-	tasa, err := c.s.tipoDeCambio(c.ctx, moneda)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", errSinTipoDeCambio, err)
-	}
-	if tasa <= 0 {
-		return 0, fmt.Errorf("%w: %v %s por dolar", errSinTipoDeCambio, tasa, moneda)
-	}
-	return tasa, nil
-}
-
-// total es lo que salio en una ventana (el dia o los 30 dias), en dolares.
-type total struct {
-	usd int64
-	// faltan son las monedas que no se pudieron convertir: el total va sin
-	// ellas, y por eso no sirve para decir que NO cruzo.
-	faltan []string
-	// partes dice de que esta hecho, moneda por moneda, para la razon del caso.
-	partes []string
-}
-
-func (c *conversion) sumar(porMoneda map[string]int64) total {
-	monedas := make([]string, 0, len(porMoneda))
-	for m := range porMoneda {
-		monedas = append(monedas, m)
-	}
-	sort.Strings(monedas)
-	var t total
-	for _, m := range monedas {
-		minor := porMoneda[m]
-		usd, tasa, err := c.aDolares(m, minor)
-		if err != nil {
-			t.faltan = append(t.faltan, m)
-			continue
-		}
-		t.usd += usd
-		if m == "USD" {
-			t.partes = append(t.partes, "US$"+dolares(minor))
-		} else {
-			t.partes = append(t.partes, fmt.Sprintf("%s %s = US$%s a %s %s por dolar",
-				dolares(minor), m, dolares(usd), tasaLegible(tasa), m))
-		}
-	}
-	return t
-}
-
-// previo es el total de la ventana SIN este movimiento.
-func previo(t total, amountUSD int64) int64 {
-	if p := t.usd - amountUSD; p > 0 {
-		return p
-	}
-	return 0
-}
-
-// tasaLegible escribe el tipo de cambio entero, con al menos dos decimales: con
-// "%.2f" una tasa de mas decimales salia redondeada y la cuenta no se podia
-// rehacer a mano.
-func tasaLegible(tasa float64) string {
-	s := strconv.FormatFloat(tasa, 'f', -1, 64)
-	punto := strings.IndexByte(s, '.')
-	if punto < 0 || len(s)-punto-1 < 2 {
-		return fmt.Sprintf("%.2f", tasa)
-	}
-	return s
+// movimiento es lo que se evalua.
+type movimiento struct {
+	userID, txID, sentido, moneda string
+	monto                         int64
+	// precioDeEjecucion: el monto ya esta en dolares al precio al que se ejecuto
+	// la operacion (cripto). No pasa por un tipo de cambio.
+	precioDeEjecucion bool
 }
 
 // Report implements transaction.UIFReporter. It is called best-effort AFTER an
-// outgoing transaction is posted; the running same-day total already includes
-// this transaction, so the prior total is (daily - amount). Failures are logged,
+// outgoing transaction is posted; the running totals already include this
+// transaction, so the prior total is (total - amount). Failures are logged,
 // never propagated — UIF recording must not roll back a settled payment, but a
 // failure to record is a compliance gap worth surfacing.
-//
-// Todo se compara en dolares: el movimiento y los agregados (todas las monedas
-// juntas) por su equivalente con el tipo de cambio oficial. El caso guarda el
-// monto y los totales en la moneda del movimiento, como siempre, y la razon
-// dice a cuantos dolares y con que tipo de cambio se comparo.
 func (s *Service) Report(ctx context.Context, userID, txID, currency string, amountMinor int64) {
-	conv := s.nuevaConversion(ctx, userID)
-	amountUSD, tasa, err := conv.aDolares(currency, amountMinor)
-	if err != nil {
+	s.evaluar(ctx, movimiento{userID: userID, txID: txID, sentido: sentidoSalida, moneda: currency, monto: amountMinor})
+}
+
+// ReportEntrada es Report para lo que ENTRA a la billetera. Las transacciones
+// multiples cuentan cualquier medio de pago (SUGEF 13-19 art. 20) y, mientras
+// no se decida si entradas y salidas se suman, se miden las dos por separado y
+// el bruto.
+func (s *Service) ReportEntrada(ctx context.Context, userID, txID, currency string, amountMinor int64) {
+	s.evaluar(ctx, movimiento{userID: userID, txID: txID, sentido: sentidoEntrada, moneda: currency, monto: amountMinor})
+}
+
+// ReportCripto es Report para un envio de cripto: el monto es su valor en
+// dolares al precio de ejecucion de la operacion, y asi queda registrado.
+func (s *Service) ReportCripto(ctx context.Context, userID, txID string, usdMinor int64) {
+	s.evaluar(ctx, movimiento{userID: userID, txID: txID, sentido: sentidoSalida, moneda: "USD", monto: usdMinor,
+		precioDeEjecucion: true})
+}
+
+// evaluar registra el movimiento con su equivalente en dolares y lo compara con
+// el umbral en cada regla. Un caso por movimiento, el de la regla mas fuerte:
+//
+//  1. single_threshold: el movimiento solo iguala o supera el umbral.
+//  2. structuring: las salidas del dia cruzan el umbral con el.
+//  3. multiples_mes: salidas, entradas o bruto del mes calendario cruzan el
+//     umbral con el. Es el acumulado regulatorio; si dispara junto con una de
+//     las dos de arriba, la razon de ese caso lo dice y el caso guarda el mes.
+//  4. estructuracion_30d: alerta interna, las salidas de 30 dias moviles.
+//
+// La lista definitiva de lo que hay que registrar por mes la arma el cierre
+// (CerrarMes), con la venta del ultimo dia del mes.
+//
+// El movimiento queda registrado cuando la evaluacion termina, y solo entonces:
+// si algo falla a mitad de camino (la base no responde, el contexto del pago se
+// cancela), el aviso repetido de un reintento la rehace. Si el reintento no
+// llega, el cierre lo cuenta.
+func (s *Service) evaluar(ctx context.Context, m movimiento) {
+	if m.txID != "" {
+		ya, err := s.repo.yaEvaluado(ctx, m.txID, m.sentido)
+		if err != nil {
+			slog.Warn("uif: no se pudo saber si el movimiento ya se evaluo", "user", m.userID, "tx", m.txID,
+				"err", err.Error())
+			return
+		}
+		if ya {
+			return
+		}
+	}
+	ahora := s.ahora()
+	hoy := diaCR(ahora)
+	mes := MesDe(ahora)
+	conv := s.nuevaConversion(ctx, m.userID)
+
+	var amountUSD int64
+	var cot Cotizacion
+	var errTasa error
+	if m.precioDeEjecucion {
+		amountUSD, cot = m.monto, Cotizacion{PorDolar: 1, Fecha: hoy, Fuente: FuentePrecioDeEjecucion}
+	} else if amountUSD, cot, errTasa = conv.aDolares(m.moneda, m.monto, hoy); errTasa == nil {
+		alarmarSiEsVieja(m.userID, m.moneda, cot, hoy)
+	}
+	if cortada(conv, m) {
+		return
+	}
+	reg := registro{
+		userID: m.userID, txID: m.txID, sentido: m.sentido, moneda: m.moneda, monto: m.monto,
+		mes: mes.PrimerDia(), conTasa: errTasa == nil, usd: amountUSD, cot: cot,
+	}
+	if errTasa != nil {
 		// Nunca silencio: si no se puede comparar con el umbral, lo decide una
 		// persona.
-		s.crearCaso(ctx, &Report{
-			UserID:      userID,
-			TxID:        txID,
+		s.cerrarConCaso(ctx, reg, &Report{
+			UserID:      m.userID,
+			TxID:        m.txID,
 			ReportType:  TypeManual,
-			AmountMinor: amountMinor,
-			Currency:    currency,
+			AmountMinor: m.monto,
+			Currency:    m.moneda,
 			Reason: fmt.Sprintf("no hay tipo de cambio oficial para %s: el movimiento de %s %s no se pudo "+
-				"comparar con el umbral de US$%s. Revisarlo a mano.", currency, dolares(amountMinor), currency,
+				"comparar con el umbral de US$%s. Revisarlo a mano.", m.moneda, dolares(m.monto), m.moneda,
 				dolares(s.thresholds.SingleUSD)),
 			Status: StatusPending,
 		})
 		return
 	}
 
-	delDia, err := s.repo.SalidasDelDiaPorMoneda(ctx, userID)
+	filasMes, err := s.repo.movimientosPorDia(ctx, m.userID, mes.Inicio, mes.Fin)
 	if err != nil {
-		slog.Warn("uif: daily total query failed", "user", userID, "err", err.Error())
+		slog.Warn("uif: movimientos del mes fallaron", "user", m.userID, "err", err.Error())
 		return
 	}
-	dailyTotal := delDia[currency]
-	dia := conv.sumar(delDia)
-	res := s.thresholds.Evaluate(amountUSD, previo(dia, amountUSD))
-	ventana := dia
-	if !res.Reportable && len(dia.faltan) > 0 {
-		s.casoPorTotalIncompleto(ctx, userID, txID, currency, amountMinor, "del dia", dia, s.thresholds.DailyUSD,
-			dailyTotal, 0)
+	salidasMes := conv.sumar(soloSentido(filasMes, sentidoSalida))
+	entradasMes := conv.sumar(soloSentido(filasMes, sentidoEntrada))
+	if cortada(conv, m) {
+		return
+	}
+	cruces, salUSD, entUSD := s.crucesDelMes(m.sentido, amountUSD, salidasMes, entradasMes)
+
+	rep := &Report{
+		UserID:         m.userID,
+		TxID:           m.txID,
+		AmountMinor:    m.monto,
+		Currency:       m.moneda,
+		Mes:            fecha(mes.PrimerDia()),
+		SalidasMesUSD:  salUSD,
+		EntradasMesUSD: entUSD,
+		Status:         StatusPending,
+	}
+
+	var res Result
+	var dia, treinta total
+	if m.sentido == sentidoSalida {
+		delDiaPorMoneda, err := s.repo.salidasDelDia(ctx, m.userID, ahora)
+		if err != nil {
+			slog.Warn("uif: daily total query failed", "user", m.userID, "err", err.Error())
+			return
+		}
+		rep.DailyTotalMinor = delDiaPorMoneda[m.moneda]
+		dia = conv.sumar(delDia(delDiaPorMoneda, hoy))
+		res = s.thresholds.Evaluate(amountUSD, previo(dia, amountUSD))
+
+		if !res.Reportable && len(cruces) == 0 {
+			filas30, err := s.repo.movimientosPorDia(ctx, m.userID, ahora.Add(-30*24*time.Hour), ahora.Add(24*time.Hour))
+			if err != nil {
+				slog.Warn("uif: salidas de 30 dias fallaron", "user", m.userID, "err", err.Error())
+				return
+			}
+			salidas30 := soloSentido(filas30, sentidoSalida)
+			treinta = conv.sumar(salidas30)
+			if r30 := s.thresholds.EvaluateAcumulado(amountUSD, previo(treinta, amountUSD)); r30.Reportable {
+				res = r30
+				rep.Acumulado30Minor = montoEn(salidas30, m.moneda)
+			}
+		}
+		if cortada(conv, m) {
+			return
+		}
+	}
+
+	switch {
+	case res.Reportable:
+	case len(cruces) > 0:
+		res = Result{Reportable: true, Type: TypeMultiplesMes, Reason: s.razonDelMes(mes, cruces, salidasMes, entradasMes)}
+	default:
+		if s.siFaltaUnaMoneda(ctx, rep, dia, salidasMes, entradasMes, treinta) {
+			s.registrar(ctx, reg)
+		}
 		return
 	}
 
-	// Si ni el movimiento ni el dia cruzan el umbral, se mira el MES. Con los
-	// topes diarios de KYC las dos primeras reglas no pueden dispararse; esta
-	// si. Va despues porque un caso por movimiento alcanza: si el dia ya
-	// disparo, ese caso es mas especifico que el del mes.
-	var acumulado int64
-	if !res.Reportable {
-		de30, err := s.repo.SalidasDe30DiasPorMoneda(ctx, userID)
-		if err != nil {
-			slog.Warn("uif: acumulado de 30 dias fallo", "user", userID, "err", err.Error())
-			return
-		}
-		treinta := conv.sumar(de30)
-		res = s.thresholds.EvaluateAcumulado(amountUSD, previo(treinta, amountUSD))
-		acumulado = de30[currency]
-		ventana = treinta
-		if !res.Reportable && len(treinta.faltan) > 0 {
-			s.casoPorTotalIncompleto(ctx, userID, txID, currency, amountMinor, "de los ultimos 30 dias", treinta,
-				s.thresholds.Acumulado30USD, dailyTotal, acumulado)
-			return
-		}
-	}
-	if !res.Reportable {
-		return
-	}
+	rep.ReportType = res.Type
 	razon := res.Reason
 	// Si disparo un total, de que esta hecho: las columnas del caso guardan
 	// solo la moneda del movimiento, y sin esto el oficial no podia rehacer la
 	// cuenta de un total que junta dolares y colones.
-	if res.Type != TypeSingleThreshold {
-		razon += "; el total: " + strings.Join(ventana.partes, " + ")
-		if len(ventana.faltan) > 0 {
-			razon += "; sin contar " + strings.Join(ventana.faltan, ", ") + ", que no tiene tipo de cambio oficial"
+	switch res.Type {
+	case TypeStructuring:
+		razon += deQueEstaHecho(dia)
+	case TypeEstructuracion30:
+		razon += deQueEstaHecho(treinta)
+	}
+	if res.Type != TypeMultiplesMes {
+		if len(cruces) > 0 {
+			razon += "; ademas, " + s.razonDelMes(mes, cruces, salidasMes, entradasMes)
+		} else if faltan := unirFaltan(salidasMes, entradasMes); len(faltan) > 0 {
+			// El acumulado regulatorio no se pudo medir entero: que no se pierda
+			// detras de un caso de otra regla.
+			razon += "; los movimientos del mes " + mes.String() + " no se pudieron sumar enteros: no hay tipo de " +
+				"cambio oficial para " + strings.Join(faltan, ", ")
 		}
 	}
-	if currency != "USD" {
-		razon += fmt.Sprintf("; el movimiento: %s %s = US$%s al tipo de cambio oficial de %s %s por dolar",
-			dolares(amountMinor), currency, dolares(amountUSD), tasaLegible(tasa), currency)
+	if m.moneda != "USD" {
+		razon += fmt.Sprintf("; el movimiento: %s %s = US$%s al tipo de cambio oficial de %s %s por dolar (%s del %s)",
+			dolares(m.monto), m.moneda, dolares(amountUSD), tasaLegible(cot.PorDolar), m.moneda,
+			cot.Fuente, fecha(cot.Fecha))
 	}
-
-	rep := &Report{
-		UserID:           userID,
-		TxID:             txID,
-		ReportType:       res.Type,
-		AmountMinor:      amountMinor,
-		Currency:         currency,
-		DailyTotalMinor:  dailyTotal,
-		Acumulado30Minor: acumulado,
-		Reason:           razon,
-		Status:           StatusPending,
-	}
-	s.crearCaso(ctx, rep)
+	rep.Reason = razon
+	s.cerrarConCaso(ctx, reg, rep)
 }
 
-// casoPorTotalIncompleto abre un caso manual cuando un total no cruza el umbral
-// pero le falta una moneda que no se pudo convertir. Un total que no se pudo
-// sumar entero no dice que no cruzo: hoy salieron ₡500.000 sin tipo de cambio
-// para el colon y despues US$9.900, y el servicio solo veia los US$9.900.
-func (s *Service) casoPorTotalIncompleto(ctx context.Context, userID, txID, currency string, amountMinor int64,
-	cual string, t total, umbral, dailyTotal, acumulado int64) {
+// cortada dice si la evaluacion se tiene que detener porque la base no
+// respondio al leer una tasa. No es una moneda sin tasa: el movimiento queda sin
+// registrar para que un reintento lo evalue.
+func cortada(conv *conversion, m movimiento) bool {
+	if conv.fallo == nil {
+		return false
+	}
+	slog.Warn("uif: evaluacion cortada, queda para el reintento", "user", m.userID, "tx", m.txID,
+		"err", conv.fallo.Error())
+	return true
+}
+
+// cerrarConCaso abre el caso y, si quedo guardado, registra el movimiento: la
+// evaluacion termino.
+func (s *Service) cerrarConCaso(ctx context.Context, reg registro, rep *Report) {
+	if s.crearCaso(ctx, rep) {
+		s.registrar(ctx, reg)
+	}
+}
+
+// registrar guarda el registro del movimiento al terminar su evaluacion. Si
+// falla, el caso ya quedo: un reintento evalua otra vez y el caso repetido no se
+// inserta.
+func (s *Service) registrar(ctx context.Context, reg registro) {
+	if reg.txID == "" {
+		return
+	}
+	if _, err := s.repo.registrarMovimiento(ctx, reg); err != nil {
+		slog.Warn("uif: no se pudo registrar el movimiento", "user", reg.userID, "tx", reg.txID, "err", err.Error())
+	}
+}
+
+// crucesDelMes mide las tres cosas del mes que se comparan con el umbral
+// —salidas, entradas y bruto— y dice cuales cruzan con este movimiento. Solo
+// puede cruzar lo que el movimiento mueve: una salida no cambia las entradas.
+// Devuelve tambien los dos totales del mes, con el movimiento.
+func (s *Service) crucesDelMes(sentido string, amountUSD int64, sal, ent total) ([]string, int64, int64) {
+	u := s.thresholds.MensualUSD
+	var cruces []string
+	salidas, entradas := sal.usd, ent.usd
+	if sentido == sentidoSalida {
+		antes := previo(sal, amountUSD)
+		salidas = antes + amountUSD
+		if cruza(antes, salidas, u) {
+			cruces = append(cruces, fmt.Sprintf("las salidas del mes (US$%s)", dolares(salidas)))
+		}
+	} else {
+		antes := previo(ent, amountUSD)
+		entradas = antes + amountUSD
+		if cruza(antes, entradas, u) {
+			cruces = append(cruces, fmt.Sprintf("las entradas del mes (US$%s)", dolares(entradas)))
+		}
+	}
+	if bruto := salidas + entradas; cruza(bruto-amountUSD, bruto, u) {
+		cruces = append(cruces, fmt.Sprintf("el bruto del mes, salidas mas entradas (US$%s)", dolares(bruto)))
+	}
+	return cruces, salidas, entradas
+}
+
+func (s *Service) razonDelMes(mes Mes, cruces []string, sal, ent total) string {
+	r := fmt.Sprintf("transacciones multiples del mes %s (SUGEF 13-19 art. 20): %s igualan o superan el umbral de US$%s",
+		mes, strings.Join(cruces, " y "), dolares(s.thresholds.MensualUSD))
+	if len(sal.partes) > 0 {
+		r += "; salieron " + strings.Join(sal.partes, " + ")
+	}
+	if len(ent.partes) > 0 {
+		r += "; entraron " + strings.Join(ent.partes, " + ")
+	}
+	if faltan := unirFaltan(sal, ent); len(faltan) > 0 {
+		r += "; sin contar " + strings.Join(faltan, ", ") + ", que no tiene tipo de cambio oficial"
+	}
+	return r
+}
+
+func deQueEstaHecho(t total) string {
+	r := "; el total: " + strings.Join(t.partes, " + ")
+	if len(t.faltan) > 0 {
+		r += "; sin contar " + strings.Join(t.faltan, ", ") + ", que no tiene tipo de cambio oficial"
+	}
+	return r
+}
+
+// siFaltaUnaMoneda abre un caso manual cuando ningun total cruza el umbral pero
+// a alguno le falta una moneda que no se pudo convertir. Un total que no se
+// pudo sumar entero no dice que no cruzo: hoy salieron ₡500.000 sin tipo de
+// cambio para el colon y despues US$9.900, y el servicio solo veia los
+// US$9.900. Devuelve false si el caso no se pudo guardar.
+func (s *Service) siFaltaUnaMoneda(ctx context.Context, rep *Report, dia, salidasMes, entradasMes, treinta total) bool {
+	var cual string
+	var t total
+	var umbral int64
+	switch {
+	case len(dia.faltan) > 0:
+		cual, t, umbral = "las salidas del dia", dia, s.thresholds.DailyUSD
+	case len(salidasMes.faltan) > 0 || len(entradasMes.faltan) > 0:
+		// Uno por cliente y mes: mientras falte la tasa, cada movimiento que
+		// sigue en el mes diria lo mismo.
+		if ya, err := s.repo.hayMesIncompleto(ctx, rep.UserID, rep.Mes); err == nil && ya {
+			return true
+		}
+		cual, umbral = prefijoMesIncompleto+rep.Mes[:7], s.thresholds.MensualUSD
+		t = total{usd: salidasMes.usd + entradasMes.usd, faltan: unirFaltan(salidasMes, entradasMes),
+			partes: append(append([]string{}, salidasMes.partes...), entradasMes.partes...)}
+	case len(treinta.faltan) > 0:
+		cual, t, umbral = "las salidas de los ultimos 30 dias", treinta, s.thresholds.Acumulado30USD
+	default:
+		return true
+	}
 	sin := "nada"
 	if len(t.partes) > 0 {
 		sin = strings.Join(t.partes, " + ")
 	}
-	s.crearCaso(ctx, &Report{
-		UserID:           userID,
-		TxID:             txID,
-		ReportType:       TypeManual,
-		AmountMinor:      amountMinor,
-		Currency:         currency,
-		DailyTotalMinor:  dailyTotal,
-		Acumulado30Minor: acumulado,
-		Reason: fmt.Sprintf("las salidas %s no se pudieron sumar enteras: no hay tipo de cambio oficial para %s. "+
-			"Sin esa moneda suman US$%s (%s), y el umbral es US$%s. Revisarlo a mano.",
-			cual, strings.Join(t.faltan, ", "), dolares(t.usd), sin, dolares(umbral)),
-		Status: StatusPending,
-	})
+	rep.ReportType = TypeManual
+	rep.Reason = fmt.Sprintf("%s no se pudieron sumar enteras: no hay tipo de cambio oficial para %s. "+
+		"Sin esa moneda suman US$%s (%s), y el umbral es US$%s. Revisarlo a mano.",
+		cual, strings.Join(t.faltan, ", "), dolares(t.usd), sin, dolares(umbral))
+	return s.crearCaso(ctx, rep)
 }
 
-// crearCaso guarda el caso pendiente y deja la huella en la auditoria.
-func (s *Service) crearCaso(ctx context.Context, rep *Report) {
-	userID, txID := rep.UserID, rep.TxID
-	if err := s.repo.CreateReport(ctx, rep); err != nil {
-		slog.Warn("uif: create report failed", "user", userID, "tx", txID, "err", err.Error())
-		return
+// prefijoMesIncompleto empieza la razon del caso manual de un mes que no se
+// pudo sumar entero; hayMesIncompleto lo busca por el.
+const prefijoMesIncompleto = "los movimientos del mes "
+
+// crearCaso guarda el caso pendiente y deja la huella en la auditoria. Devuelve
+// false si no se pudo guardar; un caso que ya existia cuenta como guardado.
+func (s *Service) crearCaso(ctx context.Context, rep *Report) bool {
+	nuevo, err := s.repo.CreateReport(ctx, rep)
+	if err != nil {
+		slog.Warn("uif: create report failed", "user", rep.UserID, "tx", rep.TxID, "err", err.Error())
+		return false
 	}
+	if nuevo {
+		s.auditarCaso(rep)
+	}
+	return true
+}
+
+func (s *Service) auditarCaso(rep *Report) {
 	if s.auditLogger != nil {
 		s.auditLogger.Log(audit.Event{
-			UserID:       userID,
+			UserID:       rep.UserID,
 			Action:       "uif_report_created",
 			ResourceType: "uif_report",
 			ResourceID:   rep.ID,
