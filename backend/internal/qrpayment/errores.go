@@ -129,6 +129,9 @@ var (
 	// ErrMotivoDeCierreRequerido: un cierre sin motivo, o sin quien lo hace.
 	ErrMotivoDeCierreRequerido = errors.New("a closure needs a reason")
 
+	// ErrMotivoDeCierreMuyLargo: el motivo pasa de MaxMotivoDeCierre caracteres.
+	ErrMotivoDeCierreMuyLargo = errors.New("the closure reason is too long")
+
 	// La reautenticacion del dueno. Los mismos codigos que cambiar la
 	// contrasena: la pantalla ya los sabe decir.
 	ErrContrasenaIncorrecta = errors.New("current password is incorrect")

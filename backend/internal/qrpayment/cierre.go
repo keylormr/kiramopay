@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -44,6 +45,11 @@ const (
 	// maxIntentosDeCierrePorDefecto: el mismo tope que el login y que cambiar la
 	// contrasena.
 	maxIntentosDeCierrePorDefecto = 5
+
+	// MaxMotivoDeCierre es el largo maximo del motivo, en caracteres. Es texto
+	// que queda para siempre en la fila y en el rastro; la pantalla lo limita
+	// igual.
+	MaxMotivoDeCierre = 500
 )
 
 // TOTPChecker es lo que el cierre necesita del segundo factor. Lo cumple
@@ -104,6 +110,9 @@ func CerrarComercioEnTx(ctx context.Context, tx pgx.Tx, merchantID string, c Cie
 	if motivo == "" || c.CerradoPor == "" {
 		return nil, ErrMotivoDeCierreRequerido
 	}
+	if utf8.RuneCountInString(motivo) > MaxMotivoDeCierre {
+		return nil, ErrMotivoDeCierreMuyLargo
+	}
 	accion := c.Accion
 	if accion == "" {
 		accion = AccionCierrePropio
@@ -121,30 +130,16 @@ func CerrarComercioEnTx(ctx context.Context, tx pgx.Tx, merchantID string, c Cie
 		return nil, ErrComercioCerrado
 	}
 
-	saldos, err := saldosDelComercioEnTx(ctx, tx, merchantID)
-	if err != nil {
+	if err := sePuedeCerrar(ctx, tx, merchantID); err != nil {
 		return nil, err
 	}
-	if len(saldos) > 0 {
-		return nil, &ComercioConSaldoError{Saldos: saldos}
-	}
 
-	// Un cobro vencido que el barrido todavia no marco no frena: el reclamo ya
-	// se niega a pagarlo (`expires_at > NOW()`), y mas abajo queda vencido.
-	var pendientes int
-	if err := tx.QueryRow(ctx,
-		`SELECT COUNT(*) FROM qr_charges
-		  WHERE merchant_id = $1::uuid AND status = 'pending' AND expires_at > NOW()`,
-		merchantID).Scan(&pendientes); err != nil {
-		return nil, fmt.Errorf("contar los cobros pendientes: %w", err)
-	}
-	if pendientes > 0 {
-		return nil, &ComercioConCobrosError{Pendientes: pendientes}
-	}
-
+	// clock_timestamp y no NOW(): NOW() es la hora en que empezo la
+	// transaccion, y si el cierre espero la fila detras de un retiro, quedaria
+	// cerrado antes de ese retiro.
 	cerrado, err := scanMerchant(tx.QueryRow(ctx,
 		`UPDATE qr_merchants
-		    SET active = FALSE, closed_at = NOW(), closed_by = $2::uuid, closure_reason = $3
+		    SET active = FALSE, closed_at = clock_timestamp(), closed_by = $2::uuid, closure_reason = $3
 		  WHERE id = $1::uuid
 		  RETURNING `+merchantCols, merchantID, c.CerradoPor, motivo))
 	if err != nil {
@@ -194,11 +189,38 @@ func CerrarComercioEnTx(ctx context.Context, tx pgx.Tx, merchantID string, c Cie
 	return cerrado, nil
 }
 
-// saldosDelComercioEnTx son los saldos distintos de cero, por moneda. Es la
-// misma suma que ledger.MerchantBalance, leida en la transaccion del cierre y
-// despues de tomar la fila del comercio.
-func saldosDelComercioEnTx(ctx context.Context, tx pgx.Tx, merchantID string) ([]SaldoDelComercio, error) {
-	filas, err := tx.Query(ctx,
+// sePuedeCerrar rechaza un comercio con saldo en alguna moneda o con cobros
+// que todavia se pueden pagar. Dentro del cierre se lee con la fila del
+// comercio tomada; antes de reautenticar al dueno, sin candado, para no gastarle
+// el codigo del autenticador en un cierre que igual no iba a pasar.
+//
+// Un cobro vencido que el barrido todavia no marco no frena: el reclamo ya se
+// niega a pagarlo (`expires_at > NOW()`), y el cierre lo deja vencido.
+func sePuedeCerrar(ctx context.Context, q pgxQuerier, merchantID string) error {
+	saldos, err := saldosDelComercio(ctx, q, merchantID)
+	if err != nil {
+		return err
+	}
+	if len(saldos) > 0 {
+		return &ComercioConSaldoError{Saldos: saldos}
+	}
+	var pendientes int
+	if err := q.QueryRow(ctx,
+		`SELECT COUNT(*) FROM qr_charges
+		  WHERE merchant_id = $1::uuid AND status = 'pending' AND expires_at > NOW()`,
+		merchantID).Scan(&pendientes); err != nil {
+		return fmt.Errorf("contar los cobros pendientes: %w", err)
+	}
+	if pendientes > 0 {
+		return &ComercioConCobrosError{Pendientes: pendientes}
+	}
+	return nil
+}
+
+// saldosDelComercio son los saldos distintos de cero, por moneda. Es la misma
+// suma que ledger.MerchantBalance.
+func saldosDelComercio(ctx context.Context, q pgxQuerier, merchantID string) ([]SaldoDelComercio, error) {
+	filas, err := q.Query(ctx,
 		`SELECT la.currency,
 		        COALESCE(SUM(CASE WHEN je.direction = 'credit' THEN je.amount_minor
 		                          ELSE -je.amount_minor END), 0) AS saldo
@@ -296,6 +318,13 @@ func (s *Service) CerrarMiComercio(
 	if m.ClosedAt != nil {
 		return nil, ErrComercioCerrado
 	}
+	// El saldo y los cobros se miran antes de la contrasena: el rechazo mas
+	// comun (quedo plata adentro) no le gasta a la persona un intento ni el
+	// codigo del autenticador, que puede ser uno de recuperacion, de un solo
+	// uso. Dentro del cierre se vuelven a mirar, ya con la fila tomada.
+	if err := sePuedeCerrar(ctx, s.repo.db, merchantID); err != nil {
+		return nil, err
+	}
 	if err := s.reautenticar(ctx, userID, req); err != nil {
 		return nil, err
 	}
@@ -316,9 +345,12 @@ func (s *Service) CerrarMiComercio(
 // limpiarlo con la contrasena sola dejaria probar codigos del autenticador sin
 // limite a quien ya la sabe.
 //
-// Que falte el codigo se dice antes de mirar la contrasena: asi la respuesta no
-// revela si la contrasena era la correcta, y el primer intento de la pantalla
-// (que todavia no sabe si hace falta) no gasta uno.
+// Que falte el codigo se dice antes de mirar la contrasena y sin contar un
+// intento: el primer envio de la pantalla todavia no sabe si hace falta. Con un
+// codigo escrito, la contrasena se mira primero, como en el login, que tambien
+// dice si es la correcta antes de pedir el segundo factor; mirarla despues
+// dejaria a quien tiene la sesion pero no la contrasena gastar los intentos del
+// autenticador, que se comparten con el login.
 func (s *Service) reautenticar(ctx context.Context, userID string, req *CerrarComercioRequest) error {
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -391,6 +423,9 @@ func (s *Service) CerrarComercioComoAdmin(
 	motivo = strings.TrimSpace(motivo)
 	if motivo == "" {
 		return nil, ErrMotivoDeCierreRequerido
+	}
+	if utf8.RuneCountInString(motivo) > MaxMotivoDeCierre {
+		return nil, ErrMotivoDeCierreMuyLargo
 	}
 	return s.cerrar(ctx, merchantID, Cierre{
 		CerradoPor: adminID,

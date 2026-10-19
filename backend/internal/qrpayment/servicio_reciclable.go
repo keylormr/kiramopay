@@ -107,6 +107,11 @@ func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateCh
 		return nil, ErrQRInvalido
 	}
 	if code.Status != EstadoCodigoActivo {
+		// El cierre retira todos los rotulos del comercio: "ese codigo fue
+		// retirado" no le explica al cajero que el local cerro.
+		if code.MerchantID != "" && s.estaCerrado(ctx, code.MerchantID) {
+			return nil, ErrComercioCerrado
+		}
 		return nil, ErrQRRevocado
 	}
 	if err := s.puedeCobrarCon(ctx, userID, code); err != nil {

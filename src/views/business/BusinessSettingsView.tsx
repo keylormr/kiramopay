@@ -279,7 +279,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
             onClick={abrirCierre}
             fullWidth
             leftIcon={<Icons.XCircle size={18} />}
-            className="text-[var(--color-danger)] dark:text-[var(--color-danger)]"
+            className="!text-[var(--color-danger)] hover:!bg-[var(--color-danger-soft)]"
           >
             {t('business_close')}
           </Button>
@@ -323,10 +323,13 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
               <input
                 id="cierre-totp"
                 value={codigoTotp}
-                onChange={(e) => setCodigoTotp(e.target.value.replace(/\D/g, ''))}
+                // Como en el reto del segundo factor: seis digitos o un codigo
+                // de recuperacion (XXXX-XXXX), que es como entra quien perdio
+                // el telefono.
+                onChange={(e) => setCodigoTotp(e.target.value.replace(/[^0-9A-Za-z-]/g, ''))}
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={8}
+                maxLength={9}
                 className={`${field} font-mono tracking-widest`}
               />
             </div>

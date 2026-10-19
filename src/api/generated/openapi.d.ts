@@ -3213,7 +3213,7 @@ export interface paths {
         put?: never;
         /**
          * Close a merchant (owner only)
-         * @description A logical closure: the row, its payments and its history stay. The merchant stops charging, leaves the owner's and the staff's lists, its staff is revoked and its counter codes are revoked; the closure is written to the audit log in the same transaction. It is refused while the shop holds money in any currency (withdraw it first) or has a pending charge that has not expired. The owner confirms with the account password, and with the authenticator code when TOTP is on; failed confirmations are limited per user. A closed merchant cannot be reopened: the owner registers a new one.
+         * @description A logical closure: the row, its payments and its history stay. The merchant stops charging, leaves the owner's and the staff's lists, its staff is revoked and its counter codes are revoked; the closure is written to the audit log in the same transaction. It is refused while the shop holds money in any currency (withdraw it first) or has a pending charge that has not expired. The owner confirms with the account password, and with the authenticator code when TOTP is on; failed confirmations are limited per user. The balance and the pending charges are checked before the password, so that refusal spends neither an attempt nor the authenticator code. A closed merchant cannot be reopened: the owner registers a new one.
          */
         post: {
             parameters: {
@@ -5796,7 +5796,7 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        /** @description Why it is closed. Trimmed; it cannot be empty. */
+                        /** @description Why it is closed. Trimmed; it cannot be empty or longer than 500 characters. */
                         reason: string;
                     };
                 };
@@ -5811,7 +5811,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_ID (not a UUID), INVALID_BODY or CLOSURE_REASON_REQUIRED (the reason is empty). */
+                /** @description INVALID_ID (not a UUID), INVALID_BODY, CLOSURE_REASON_REQUIRED (the reason is empty) or CLOSURE_REASON_TOO_LONG (more than 500 characters). */
                 400: {
                     headers: {
                         [name: string]: unknown;

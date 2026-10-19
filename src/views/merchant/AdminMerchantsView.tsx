@@ -8,6 +8,7 @@ import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
 import type { PlanComercio } from '@/api/repositories/plans.repository';
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 
 type Pestana = 'pending' | 'all' | 'plan';
 
@@ -18,6 +19,12 @@ const PLANES_COMERCIO: readonly PlanComercio[] = ['base', 'analitica'];
 const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const nombrePlan = (p: PlanComercio | undefined) => (p === 'analitica' ? 'business_plan_analitica' : 'business_plan_base');
+
+// Los rechazos de aprobar o rechazar un pendiente que la pantalla explica con
+// su texto. Lo demas cae al aviso generico, nunca al texto del servidor.
+const CLAVES_DE_LA_REVISION: Readonly<Record<string, string>> = {
+  MERCHANT_CLOSED: 'business_close_err_closed',
+};
 
 // El motivo que el servidor guarda cuando el comercio lo cierra su dueno.
 const CIERRE_PROPIO = 'owner_request';
@@ -99,7 +106,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       const res = await api.qrPayments.listAllMerchants(busquedaAplicada);
       if (cancelled) return;
       if (res.success && res.data) setTodos(res.data);
-      else setErrorTodos(res.error?.message || t('merchant_admin_action_failed'));
+      else setErrorTodos(mensajeDeRechazo(res.error, {}, 'merchant_admin_action_failed', t));
       setCargandoTodos(false);
     };
     void run();
@@ -136,6 +143,8 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
         setACerrar(null);
         setCerradoAhora(m.name);
         setRecargaTodos((n) => n + 1);
+        // Un pendiente que se cierra sale tambien de la pestana de pendientes.
+        setReload((n) => n + 1);
       } else {
         setRechazoCierre(rechazoDelCierre(t, res.error));
       }
@@ -162,7 +171,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       }
       const res = await api.qrPayments.approveMerchant(m.id);
       if (res.success) setReload((n) => n + 1);
-      else setError(res.error?.message || t('merchant_admin_action_failed'));
+      else setError(mensajeDeRechazo(res.error, CLAVES_DE_LA_REVISION, 'merchant_admin_action_failed', t));
     } catch {
       setError(t('merchant_admin_action_failed'));
     } finally {
@@ -182,7 +191,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
         setReason('');
         setReload((n) => n + 1);
       } else {
-        setError(res.error?.message || t('merchant_admin_action_failed'));
+        setError(mensajeDeRechazo(res.error, CLAVES_DE_LA_REVISION, 'merchant_admin_action_failed', t));
       }
     } catch {
       setError(t('merchant_admin_action_failed'));
@@ -233,7 +242,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
   };
 
   const tabClass = (active: boolean) =>
-    `flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+    `min-w-0 flex-1 px-1 py-2.5 rounded-lg text-xs font-bold leading-tight text-center transition-all flex items-center justify-center gap-1.5 ${
       active ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm' : 'text-gray-500'
     }`;
 
@@ -251,15 +260,15 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
         <div className="px-4 pt-3">
           <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist" aria-label={t('merchant_admin_title')}>
             <button type="button" role="tab" aria-selected={pestana === 'pending'} onClick={() => setPestana('pending')} className={tabClass(pestana === 'pending')}>
-              <Icons.Shield size={14} aria-hidden="true" />
+              <Icons.Shield size={14} aria-hidden="true" className="hidden shrink-0 sm:block" />
               {t('merchant_admin_tab_pending')}
             </button>
             <button type="button" role="tab" aria-selected={pestana === 'all'} onClick={() => setPestana('all')} className={tabClass(pestana === 'all')}>
-              <Icons.Search size={14} aria-hidden="true" />
+              <Icons.Search size={14} aria-hidden="true" className="hidden shrink-0 sm:block" />
               {t('merchant_admin_tab_all')}
             </button>
             <button type="button" role="tab" aria-selected={pestana === 'plan'} onClick={() => setPestana('plan')} className={tabClass(pestana === 'plan')}>
-              <Icons.TrendingUp size={14} aria-hidden="true" />
+              <Icons.TrendingUp size={14} aria-hidden="true" className="hidden shrink-0 sm:block" />
               {t('merchant_admin_tab_plan')}
             </button>
           </div>

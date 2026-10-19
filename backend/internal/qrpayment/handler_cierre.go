@@ -28,12 +28,15 @@ func (h *Handler) CloseMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Un id sin forma de UUID es un comercio que no existe, como en el retiro.
-	if _, err := uuid.Parse(merchantID); err != nil {
+	// El que si la tiene sigue en su forma canonica: uuid.Parse acepta
+	// mayusculas y llaves, y el rastro tiene que poder buscarse por el UUID.
+	id, err := uuid.Parse(merchantID)
+	if err != nil {
 		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
 		return
 	}
 	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
-	m, err := h.service.CerrarMiComercio(r.Context(), merchantID, userID, &req, ac)
+	m, err := h.service.CerrarMiComercio(r.Context(), id.String(), userID, &req, ac)
 	if err != nil {
 		responderErrorDelCierre(w, err)
 		return
@@ -104,6 +107,8 @@ func responderErrorDelCierre(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
 	case errors.Is(err, ErrMotivoDeCierreRequerido):
 		response.Error(w, http.StatusBadRequest, "CLOSURE_REASON_REQUIRED", "a reason is required to close a merchant")
+	case errors.Is(err, ErrMotivoDeCierreMuyLargo):
+		response.Error(w, http.StatusBadRequest, "CLOSURE_REASON_TOO_LONG", ErrMotivoDeCierreMuyLargo.Error())
 	case errors.Is(err, ErrContrasenaIncorrecta):
 		response.Error(w, http.StatusBadRequest, "CURRENT_PASSWORD_INVALID", ErrContrasenaIncorrecta.Error())
 	case errors.Is(err, ErrTOTPRequerido):

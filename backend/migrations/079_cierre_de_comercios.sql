@@ -28,19 +28,28 @@ ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at      TIMESTAMPTZ;
 ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_by      UUID REFERENCES users(id);
 ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closure_reason TEXT;
 
+-- Si la 077 entro antes y su barrido ya cerro comercios, esas filas tienen
+-- closed_at sin quien ni por que, y el CHECK de abajo no validaria: con
+-- RUN_MIGRATIONS eso no deja arrancar la API. Las cerro la eliminacion de la
+-- cuenta de su dueno, asi que se completan con eso. Sin la 077 no hay ninguna.
+UPDATE qr_merchants
+   SET closed_by = user_id, closure_reason = 'account_deletion', active = FALSE
+ WHERE closed_at IS NOT NULL AND closed_by IS NULL;
+
 -- Un cierre es entero o no es: o no hay ninguna de las tres marcas, o estan
 -- las tres, con un motivo que dice algo y el comercio inactivo. `active` es
 -- nullable desde la 007, y `active = FALSE` sobre un NULL da NULL, que un
 -- CHECK deja pasar: por eso IS FALSE.
 --
--- No hay filas cerradas todavia, asi que la validacion no tiene nada que
--- revisar y no bloquea la tabla mas que un instante.
+-- NOT VALID y despues VALIDATE, como la 077: el ALTER que agrega el CHECK solo
+-- toma la tabla un instante, y la validacion la recorre sin frenar escrituras.
 ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cierre;
 ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cierre CHECK (
     (closed_at IS NULL AND closed_by IS NULL AND closure_reason IS NULL)
     OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND active IS FALSE
         AND closure_reason IS NOT NULL AND btrim(closure_reason) <> '')
-);
+) NOT VALID;
+ALTER TABLE qr_merchants VALIDATE CONSTRAINT chk_qr_merchants_cierre;
 
 COMMENT ON COLUMN qr_merchants.closed_at IS
     'Cierre logico del comercio (079). Un comercio cerrado no cobra ni aparece en las listas del dueno ni del equipo; la fila no se borra nunca.';

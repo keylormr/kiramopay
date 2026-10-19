@@ -2042,8 +2042,10 @@ paths:
         the shop holds money in any currency (withdraw it first) or has a
         pending charge that has not expired. The owner confirms with the
         account password, and with the authenticator code when TOTP is on;
-        failed confirmations are limited per user. A closed merchant cannot be
-        reopened: the owner registers a new one.
+        failed confirmations are limited per user. The balance and the pending
+        charges are checked before the password, so that refusal spends
+        neither an attempt nor the authenticator code. A closed merchant cannot
+        be reopened: the owner registers a new one.
       security:
         - bearerAuth: []
       parameters:
@@ -3527,7 +3529,8 @@ paths:
               properties:
                 reason:
                   type: string
-                  description: Why it is closed. Trimmed; it cannot be empty.
+                  maxLength: 500
+                  description: Why it is closed. Trimmed; it cannot be empty or longer than 500 characters.
       responses:
         '200':
           description: The closed merchant
@@ -3537,8 +3540,9 @@ paths:
                 $ref: '#/components/schemas/Merchant'
         '400':
           description: >-
-            INVALID_ID (not a UUID), INVALID_BODY or CLOSURE_REASON_REQUIRED
-            (the reason is empty).
+            INVALID_ID (not a UUID), INVALID_BODY, CLOSURE_REASON_REQUIRED
+            (the reason is empty) or CLOSURE_REASON_TOO_LONG (more than 500
+            characters).
           content:
             application/json:
               schema:
