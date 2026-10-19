@@ -2,6 +2,7 @@ package qrpayment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -72,6 +73,19 @@ func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([
 	rows, err := r.db.Query(ctx,
 		`SELECT `+merchantCols+` FROM qr_merchants
 		  WHERE user_id = $1 AND closed_at IS NULL ORDER BY created_at ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectMerchants(rows)
+}
+
+// GetClosedMerchantsByUserID son los comercios cerrados de un dueno, el ultimo
+// cerrado primero.
+func (r *Repository) GetClosedMerchantsByUserID(ctx context.Context, userID string) ([]Merchant, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+merchantCols+` FROM qr_merchants
+		  WHERE user_id = $1 AND closed_at IS NOT NULL ORDER BY closed_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +213,7 @@ func (r *Repository) UpdateMerchantProfile(
 
 func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
 	m, err := scanMerchant(r.db.QueryRow(ctx,
-		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 RETURNING `+merchantCols,
+		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 AND closed_at IS NULL RETURNING `+merchantCols,
 		merchantID, bps))
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -223,7 +237,7 @@ func (r *Repository) UpdateMerchantPlan(ctx context.Context, merchantID, plan st
 		`WITH previo AS (
 		     SELECT id AS previo_id, plan AS plan_anterior
 		       FROM qr_merchants
-		      WHERE id = $1::uuid
+		      WHERE id = $1::uuid AND closed_at IS NULL
 		        FOR UPDATE
 		 )
 		 UPDATE qr_merchants
@@ -273,10 +287,14 @@ func scanCode(row pgx.Row) (*QRPaymentCode, error) {
 }
 
 func (r *Repository) CreateQRCode(ctx context.Context, qr *QRPaymentCode) error {
+	return crearCodigo(ctx, r.db, qr)
+}
+
+func crearCodigo(ctx context.Context, q pgxQuerier, qr *QRPaymentCode) error {
 	if qr.Status == "" {
 		qr.Status = EstadoCodigoActivo
 	}
-	_, err := r.db.Exec(ctx,
+	_, err := q.Exec(ctx,
 		`INSERT INTO qr_payment_codes (id, creator_id, type, amount, currency, merchant_id, location_id, note, qr_data, single_use, expires_at, status)
 		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9, $10, $11, $12)`,
 		qr.ID, qr.CreatorID, qr.Type, qr.Amount, qr.Currency, qr.MerchantID, qr.LocationID,
@@ -406,6 +424,24 @@ func (r *Repository) GetPaymentByTxID(ctx context.Context, txID string) (*QRPaym
 		`SELECT `+paymentCols+` FROM qr_payments WHERE tx_id = $1`, txID))
 }
 
+// PagoPorLlave es la venta que dejo el intento de pago con esa llave de
+// idempotencia, o nil si ese intento no pago. La fila de qr_payments se escribe
+// dentro de la transaccion del asiento (EnLaMismaTx): si esta, la plata se
+// movio.
+func (r *Repository) PagoPorLlave(ctx context.Context, payerID, llave string) (*QRPaymentRecord, error) {
+	p, err := scanPayment(r.db.QueryRow(ctx,
+		`SELECT `+paymentCols+` FROM qr_payments
+		  WHERE payer_id = $1::uuid
+		    AND tx_id IN (SELECT id::text FROM transactions
+		                   WHERE user_id = $1::uuid AND idempotency_key = $2)
+		  ORDER BY created_at DESC
+		  LIMIT 1`, payerID, llave))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return p, err
+}
+
 func (r *Repository) GetUserPayments(ctx context.Context, userID string, limit int) ([]QRPaymentRecord, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+paymentCols+` FROM qr_payments WHERE payer_id = $1 OR receiver_id = $1
@@ -491,9 +527,24 @@ func (r *Repository) ListStaff(ctx context.Context, merchantID string) ([]StaffM
 // UpsertStaff adds a user to the team, or reactivates (and re-roles) them if a
 // revoked row already exists — the UNIQUE (merchant_id, user_id) pair makes
 // "add the same person again" an update, not a duplicate.
+//
+// Entra con la fila del comercio tomada FOR SHARE, como el pago
+// (comercioAbiertoEnTx): si el comercio se esta cerrando, espera, ve el cierre y
+// no suma a nadie. Sin eso el INSERT esperaba en la clave foranea, que se suelta
+// cuando el cierre confirma, y la persona quedaba activa en un comercio cerrado;
+// y la reactivacion ni siquiera esperaba, porque un UPDATE que no cambia
+// merchant_id no pasa por la clave foranea.
 func (r *Repository) UpsertStaff(ctx context.Context, merchantID, userID, role, locationID, addedBy string) (*StaffMember, error) {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := comercioAbiertoEnTx(ctx, tx, merchantID); err != nil {
+		return nil, err
+	}
 	var id string
-	err := r.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO merchant_staff (merchant_id, user_id, role, status, location_id, added_by)
 		 VALUES ($1::uuid, $2::uuid, $3, 'active', NULLIF($4, '')::uuid, $5::uuid)
 		 ON CONFLICT (merchant_id, user_id) DO UPDATE
@@ -502,6 +553,9 @@ func (r *Repository) UpsertStaff(ctx context.Context, merchantID, userID, role, 
 		 RETURNING id::text`,
 		merchantID, userID, role, locationID, addedBy).Scan(&id)
 	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return r.getStaffByID(ctx, id)

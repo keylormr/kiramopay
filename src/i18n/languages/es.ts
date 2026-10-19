@@ -1750,7 +1750,7 @@ const es: TranslationKeys = {
   business_close_err_balance: 'El negocio todavía tiene saldo. Antes de cerrarlo hay que retirarlo a la cuenta del dueño:',
   business_close_err_pending: 'Hay cobros pendientes sin pagar. Se puede cerrar cuando se cancelen o venzan.',
   business_close_err_password: 'Contraseña incorrecta.',
-  business_close_err_totp: 'El código no es correcto. Revisa tu app y vuelve a intentarlo.',
+  business_close_err_credentials: 'La contraseña o el código no son correctos.',
   business_close_err_locked: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.',
   business_close_err_demo: 'Una cuenta de demostración no puede cerrar comercios.',
   business_close_err_closed: 'Este comercio ya estaba cerrado.',
@@ -1772,6 +1772,13 @@ const es: TranslationKeys = {
   merchant_admin_close_confirm: 'Cerrar {name}',
   merchant_admin_close_err_reason: 'Escribe el motivo del cierre.',
   merchant_admin_close_done: '{name} quedó cerrado.',
+  business_closed_menu: 'Comercios cerrados',
+  business_closed_menu_desc: 'Consulta sus ventas y descarga el reporte',
+  business_closed_intro: 'Ya no cobran ni se pueden editar. Lo que vendieron sigue siendo tuyo: puedes ver las ventas y descargar el reporte.',
+  business_closed_empty: 'No tienes comercios cerrados.',
+  business_closed_load_failed: 'No se pudieron cargar tus comercios cerrados.',
+  business_closed_notice: 'Cerrado el {fecha}. Ya no cobra ni se puede editar; lo que vendió se conserva.',
+  business_err_cerrado: 'Este comercio está cerrado y ya no se puede modificar.',
 
   // Sesiones por dispositivo
   sessions_menu: 'Dispositivos conectados',

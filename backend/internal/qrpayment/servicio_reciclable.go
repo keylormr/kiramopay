@@ -153,41 +153,48 @@ func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateCh
 	// impide que una aplicacion vieja pague algo que no vio.
 	cobro.QRData = fmt.Sprintf("KP:%s:%s:%d:%s:x%s", tipo, cobro.ID[:8], cobro.Amount, moneda, generateQRToken())
 
-	if req.Replaces == "" {
-		if err := s.repo.CrearCobro(ctx, s.repo.db, cobro); err != nil {
-			return nil, err
+	if req.Replaces != "" {
+		// El cobro que se reemplaza tiene que colgar del MISMO codigo. Sin esta
+		// comprobacion, cualquiera con un codigo propio podria cerrar el cobro
+		// de otro con solo conocer su id.
+		viejo, err := s.repo.GetCharge(ctx, req.Replaces)
+		if err != nil || viejo.QRCodeID != code.ID {
+			return nil, ErrQRInvalido
 		}
-		return cobro, nil
 	}
 
-	// El cobro que se reemplaza tiene que colgar del MISMO codigo. Sin esta
-	// comprobacion, cualquiera con un codigo propio podria cerrar el cobro de
-	// otro con solo conocer su id.
-	viejo, err := s.repo.GetCharge(ctx, req.Replaces)
-	if err != nil || viejo.QRCodeID != code.ID {
-		return nil, ErrQRInvalido
-	}
-
-	// Reemplazo, en una transaccion. Si el viejo ya se pago, NO queda cobro
-	// nuevo — decirle "cancelado" al cajero sobre una venta que acaba de entrar
-	// es como se llega a cobrar dos veces.
+	// En una transaccion. El cobro de un comercio nace con la fila del comercio
+	// tomada FOR SHARE, como el pago (comercioAbiertoEnTx): si el comercio se
+	// esta cerrando, espera, ve el cierre y no nace. Sin eso el INSERT esperaba
+	// en la clave foranea, que se suelta cuando el cierre confirma, y quedaba un
+	// cobro pendiente en un comercio cerrado.
 	//
-	// El orden es INSERT y despues UPDATE, y no al reves: `superseded_by`
-	// apunta al cobro nuevo con una clave foranea, asi que cerrarlo primero
-	// referencia una fila que todavia no existe. Lo que garantiza que el nuevo
-	// no sobreviva a un rechazo no es el orden sino la transaccion: si el UPDATE
-	// guardado no matchea, el rollback se lleva el INSERT.
-	tx, err := s.repo.db.Begin(ctx)
+	// En un reemplazo, si el viejo ya se pago, NO queda cobro nuevo: decirle
+	// "cancelado" al cajero sobre una venta que acaba de entrar es como se llega
+	// a cobrar dos veces. El orden es INSERT y despues UPDATE, y no al reves:
+	// `superseded_by` apunta al cobro nuevo con una clave foranea, asi que
+	// cerrarlo primero referencia una fila que todavia no existe. Lo que
+	// garantiza que el nuevo no sobreviva a un rechazo no es el orden sino la
+	// transaccion: si el UPDATE guardado no matchea, el rollback se lleva el
+	// INSERT.
+	tx, err := s.repo.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if code.MerchantID != "" {
+		if err := comercioAbiertoEnTx(ctx, tx, code.MerchantID); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.CrearCobro(ctx, tx, cobro); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
-		return nil, err
+	if req.Replaces != "" {
+		if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err

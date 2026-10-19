@@ -1738,7 +1738,7 @@ const zhCn: TranslationKeys = {
   business_close_err_balance: '商户仍有余额。关闭前需要提现到店主的账户：',
   business_close_err_pending: '还有未支付的待处理收款。在它们被取消或过期后才能关闭。',
   business_close_err_password: '密码不正确。',
-  business_close_err_totp: '验证码不正确。请检查你的应用后重试。',
+  business_close_err_credentials: '密码或验证码不正确。',
   business_close_err_locked: '尝试次数过多。请等待几分钟后重试。',
   business_close_err_demo: '演示账户无法关闭商户。',
   business_close_err_closed: '该商户已经关闭。',
@@ -1760,6 +1760,13 @@ const zhCn: TranslationKeys = {
   merchant_admin_close_confirm: '关闭 {name}',
   merchant_admin_close_err_reason: '请填写关闭原因。',
   merchant_admin_close_done: '{name} 已关闭。',
+  business_closed_menu: '已关闭的商户',
+  business_closed_menu_desc: '查看销售记录并下载报表',
+  business_closed_intro: '这些商户已不再收款，也无法编辑。它们的销售记录仍然属于你：你可以查看销售记录并下载报表。',
+  business_closed_empty: '你没有已关闭的商户。',
+  business_closed_load_failed: '无法加载你已关闭的商户。',
+  business_closed_notice: '于 {fecha} 关闭。不再收款，也无法编辑；销售记录会保留。',
+  business_err_cerrado: '该商户已关闭，无法再修改。',
 
   // Sesiones por dispositivo
   sessions_menu: '已登录的设备',

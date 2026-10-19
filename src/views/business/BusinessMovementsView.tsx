@@ -10,9 +10,11 @@ interface Props {
   payments: QRPayment[];
   /** La consulta fallo: una lista vacia no significa que no haya movimientos. */
   paymentsFailed?: boolean;
+  /** Sin el titulo cuando la pantalla que la contiene ya lo dice (una pestana "Movimientos"). */
+  conTitulo?: boolean;
 }
 
-export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFailed = false }) => {
+export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFailed = false, conTitulo = true }) => {
   const { t, language } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
@@ -24,7 +26,7 @@ export const BusinessMovementsView: React.FC<Props> = ({ payments, paymentsFaile
 
   return (
     <div className="pb-24 pt-4 px-4 space-y-4">
-      <h2 className="text-lg font-bold uv-text-primary">{t('business_movements')}</h2>
+      {conTitulo && <h2 className="text-lg font-bold uv-text-primary">{t('business_movements')}</h2>}
 
       {paymentsFailed ? (
         <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">

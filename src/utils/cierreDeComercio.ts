@@ -10,7 +10,7 @@ const CLAVES_DEL_CIERRE: Readonly<Record<string, string>> = {
   MERCHANT_HAS_BALANCE: 'business_close_err_balance',
   MERCHANT_HAS_PENDING_CHARGES: 'business_close_err_pending',
   CURRENT_PASSWORD_INVALID: 'business_close_err_password',
-  TOTP_INVALID: 'business_close_err_totp',
+  CREDENTIALS_INVALID: 'business_close_err_credentials',
   MERCHANT_CLOSE_LOCKED: 'business_close_err_locked',
   DEMO_ACCOUNT: 'business_close_err_demo',
   MERCHANT_CLOSED: 'business_close_err_closed',
@@ -43,4 +43,17 @@ function saldosDelDetalle(details: Record<string, unknown> | undefined): string[
     if (!saldo || typeof saldo.currency !== 'string' || typeof saldo.amount !== 'number') return [];
     return [formatMoney(saldo.amount / 100, saldo.currency as CurrencyCode, { decimals: 2 })];
   });
+}
+
+/**
+ * El rechazo de una hoja de gestion del comercio (locales, catalogo). Si el
+ * comercio se cerro con la hoja abierta (desde otro telefono, o lo cerro un
+ * administrador), se dice en el idioma de la app; lo demas sigue como estaba.
+ */
+export function mensajeDeGestion(
+  t: (clave: string) => string,
+  error: { code?: string; message?: string } | undefined,
+): string {
+  if (error?.code === 'MERCHANT_CLOSED') return t('business_err_cerrado');
+  return error?.message || t('assistant_action_failed');
 }

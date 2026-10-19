@@ -1820,7 +1820,7 @@ export type TranslationKeys = {
   business_close_err_balance: string;
   business_close_err_pending: string;
   business_close_err_password: string;
-  business_close_err_totp: string;
+  business_close_err_credentials: string;
   business_close_err_locked: string;
   business_close_err_demo: string;
   business_close_err_closed: string;
@@ -1842,6 +1842,13 @@ export type TranslationKeys = {
   merchant_admin_close_confirm: string;
   merchant_admin_close_err_reason: string;
   merchant_admin_close_done: string;
+  business_closed_menu: string;
+  business_closed_menu_desc: string;
+  business_closed_intro: string;
+  business_closed_empty: string;
+  business_closed_load_failed: string;
+  business_closed_notice: string;
+  business_err_cerrado: string;
 
   // Sesiones por dispositivo
   sessions_menu: string;

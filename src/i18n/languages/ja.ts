@@ -1738,7 +1738,7 @@ const ja: TranslationKeys = {
   business_close_err_balance: '店舗にまだ残高があります。閉じる前にオーナーの口座へ引き出す必要があります：',
   business_close_err_pending: '未払いの請求があります。取り消されるか期限が切れた後に閉じることができます。',
   business_close_err_password: 'パスワードが正しくありません。',
-  business_close_err_totp: 'コードが正しくありません。アプリを確認して、もう一度お試しください。',
+  business_close_err_credentials: 'パスワードまたはコードが正しくありません。',
   business_close_err_locked: '試行回数が多すぎます。数分待ってから、もう一度お試しください。',
   business_close_err_demo: 'デモアカウントでは店舗を閉じられません。',
   business_close_err_closed: 'この店舗はすでに閉じられています。',
@@ -1760,6 +1760,13 @@ const ja: TranslationKeys = {
   merchant_admin_close_confirm: '{name}を閉じる',
   merchant_admin_close_err_reason: '閉店の理由を入力してください。',
   merchant_admin_close_done: '{name}を閉じました。',
+  business_closed_menu: '閉じた店舗',
+  business_closed_menu_desc: '売上を確認し、レポートをダウンロードできます',
+  business_closed_intro: 'これらの店舗は支払いを受け付けず、編集もできません。売上は引き続きあなたのものです。売上を確認し、レポートをダウンロードできます。',
+  business_closed_empty: '閉じた店舗はありません。',
+  business_closed_load_failed: '閉じた店舗を読み込めませんでした。',
+  business_closed_notice: '{fecha}に閉店。支払いの受け付けも編集もできません。売上は保存されています。',
+  business_err_cerrado: 'この店舗は閉じられているため、変更できません。',
 
   // Sesiones por dispositivo
   sessions_menu: 'ログイン中の端末',

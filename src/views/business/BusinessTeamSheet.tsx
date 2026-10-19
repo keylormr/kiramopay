@@ -13,6 +13,7 @@ import type { StaffMember, MerchantLocation } from '@/api/repositories/qrpayment
 // renglon salia en espanol en medio de una pantalla en ingles o en japones.
 const CLAVES_ERROR: Readonly<Record<string, string>> = {
   STAFF_CEDULA_NOT_FOUND: 'business_team_err_cedula',
+  MERCHANT_CLOSED: 'business_err_cerrado',
 };
 
 interface Props {

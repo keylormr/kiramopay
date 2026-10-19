@@ -345,4 +345,9 @@ export interface IQRPaymentRepository {
    * autenticador si lo tiene encendido (sin el, el servidor responde TOTP_REQUIRED).
    */
   closeMerchant(merchantId: string, confirmacion: { password: string; totpCode?: string }): Promise<ApiResponse<QRMerchant>>;
+  /**
+   * Los comercios cerrados de quien pregunta, el ultimo cerrado primero. Ya no
+   * se administran, pero su dueno sigue leyendo sus ventas y su reporte.
+   */
+  listClosedMerchants(): Promise<ApiResponse<QRMerchant[]>>;
 }

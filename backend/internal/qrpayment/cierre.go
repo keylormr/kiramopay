@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -37,6 +38,9 @@ const (
 	// Acciones en audit_logs.
 	AccionCierrePropio = "merchant_closed"
 	AccionCierreAdmin  = "admin_merchant_closed"
+	// AccionCierreFallido es cada intento fallido de confirmar el cierre: la
+	// senal de una sesion robada probando contrasenas.
+	AccionCierreFallido = "merchant_close_reauth_failed"
 
 	// propositoTOTPCierre es el proposito con el que queda registrado el codigo
 	// del autenticador que confirmo un cierre.
@@ -325,7 +329,7 @@ func (s *Service) CerrarMiComercio(
 	if err := sePuedeCerrar(ctx, s.repo.db, merchantID); err != nil {
 		return nil, err
 	}
-	if err := s.reautenticar(ctx, userID, req); err != nil {
+	if err := s.reautenticar(ctx, userID, m.ID, req, ac); err != nil {
 		return nil, err
 	}
 	return s.cerrar(ctx, merchantID, Cierre{
@@ -347,11 +351,17 @@ func (s *Service) CerrarMiComercio(
 //
 // Que falte el codigo se dice antes de mirar la contrasena y sin contar un
 // intento: el primer envio de la pantalla todavia no sabe si hace falta. Con un
-// codigo escrito, la contrasena se mira primero, como en el login, que tambien
-// dice si es la correcta antes de pedir el segundo factor; mirarla despues
-// dejaria a quien tiene la sesion pero no la contrasena gastar los intentos del
-// autenticador, que se comparten con el login.
-func (s *Service) reautenticar(ctx context.Context, userID string, req *CerrarComercioRequest) error {
+// codigo escrito, la contrasena se mira primero: mirarla despues dejaria a quien
+// tiene la sesion pero no la contrasena gastar los intentos del autenticador,
+// que se comparten con el login. Pero el rechazo no dice cual de los dos fallo
+// (ErrCredencialesIncorrectas): si dijera "el codigo", le confirmaria que la
+// contrasena era la correcta.
+//
+// Sin con que contar el intento (Redis caido), no se confirma: un cierre no se
+// deshace, y sin tope se podrian probar contrasenas sin limite.
+//
+// Cada intento fallido queda en audit_logs, con que fallo.
+func (s *Service) reautenticar(ctx context.Context, userID, merchantID string, req *CerrarComercioRequest, ac ActorContext) error {
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("leer la cuenta: %w", err)
@@ -376,11 +386,20 @@ func (s *Service) reautenticar(ctx context.Context, userID string, req *CerrarCo
 		return ErrTOTPRequerido
 	}
 
-	if s.contarIntentoDeCierre(userID) > int64(s.maxIntentosDeCierre) {
+	intentos, err := s.contarIntentoDeCierre(userID)
+	if err != nil {
+		return fmt.Errorf("contar el intento de cierre: %w", err)
+	}
+	if intentos > int64(s.maxIntentosDeCierre) {
+		s.registrarIntentoFallido(ctx, userID, merchantID, falloEnPausa, ac)
 		return ErrCierreEnPausa
 	}
 	valida, err := hash.VerifyPin(req.Password, u.PasswordHash)
 	if err != nil || !valida {
+		s.registrarIntentoFallido(ctx, userID, merchantID, falloContrasena, ac)
+		if conSegundoFactor {
+			return ErrCredencialesIncorrectas
+		}
 		return ErrContrasenaIncorrecta
 	}
 	if conSegundoFactor {
@@ -389,11 +408,37 @@ func (s *Service) reautenticar(ctx context.Context, userID string, req *CerrarCo
 			return fmt.Errorf("verificar el segundo factor: %w", err)
 		}
 		if !ok {
-			return ErrTOTPInvalido
+			s.registrarIntentoFallido(ctx, userID, merchantID, falloCodigo, ac)
+			return ErrCredencialesIncorrectas
 		}
 	}
 	s.reiniciarIntentosDeCierre(userID)
 	return nil
+}
+
+// Lo que fallo en un intento de confirmar el cierre, como queda en el rastro.
+const (
+	falloContrasena = "password"
+	falloCodigo     = "totp"
+	falloEnPausa    = "locked"
+)
+
+// registrarIntentoFallido escribe el intento en audit_logs. Si el rastro no se
+// puede escribir, el rechazo sigue igual: se anota en el log y no se le cambia
+// la respuesta a la persona.
+func (s *Service) registrarIntentoFallido(ctx context.Context, userID, merchantID, fallo string, ac ActorContext) {
+	if err := audit.EscribirEnTx(ctx, s.repo.db, &audit.Event{
+		UserID:       userID,
+		Action:       AccionCierreFallido,
+		ResourceType: "merchant",
+		ResourceID:   merchantID,
+		IPAddress:    ac.IPAddress,
+		UserAgent:    ac.UserAgent,
+		RiskLevel:    "medium",
+		Details:      map[string]interface{}{"failure": fallo},
+	}); err != nil {
+		slog.Warn("no se pudo registrar el intento fallido de cierre", "merchant_id", merchantID, "error", err)
+	}
 }
 
 // Contador propio, como el de cambiar la contrasena: no se comparte con el del
@@ -401,11 +446,21 @@ func (s *Service) reautenticar(ctx context.Context, userID string, req *CerrarCo
 // entrada a la persona titular.
 func cierreLockoutKey(userID string) string { return "lockout:merchantclose:uid:" + userID }
 
-func (s *Service) contarIntentoDeCierre(userID string) int64 {
+// contadorEstricto lo cumple el tope de produccion (RedisLockoutStore): cuenta,
+// y si Redis no contesta lo dice. IncrLockout, en cambio, devuelve 0 y deja
+// pasar, que para el login es lo que se eligio.
+type contadorEstricto interface {
+	ContarIntento(key string) (int64, error)
+}
+
+func (s *Service) contarIntentoDeCierre(userID string) (int64, error) {
 	if s.lockout == nil || userID == "" {
-		return 0
+		return 0, nil
 	}
-	return s.lockout.IncrLockout(cierreLockoutKey(userID))
+	if c, ok := s.lockout.(contadorEstricto); ok {
+		return c.ContarIntento(cierreLockoutKey(userID))
+	}
+	return s.lockout.IncrLockout(cierreLockoutKey(userID)), nil
 }
 
 func (s *Service) reiniciarIntentosDeCierre(userID string) {

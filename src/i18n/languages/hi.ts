@@ -1738,7 +1738,7 @@ const hi: TranslationKeys = {
   business_close_err_balance: 'व्यवसाय में अभी भी बैलेंस है। बंद करने से पहले इसे मालिक के खाते में निकालना होगा:',
   business_close_err_pending: 'कुछ लंबित वसूलियाँ अभी चुकाई नहीं गई हैं। उनके रद्द होने या समाप्त होने के बाद इसे बंद किया जा सकता है।',
   business_close_err_password: 'गलत पासवर्ड।',
-  business_close_err_totp: 'कोड सही नहीं है। अपना ऐप जाँचें और फिर से कोशिश करें।',
+  business_close_err_credentials: 'पासवर्ड या कोड सही नहीं है।',
   business_close_err_locked: 'बहुत अधिक प्रयास। कुछ मिनट रुककर फिर से कोशिश करें।',
   business_close_err_demo: 'डेमो खाता व्यवसाय बंद नहीं कर सकता।',
   business_close_err_closed: 'यह व्यवसाय पहले से बंद था।',
@@ -1760,6 +1760,13 @@ const hi: TranslationKeys = {
   merchant_admin_close_confirm: '{name} बंद करें',
   merchant_admin_close_err_reason: 'बंद करने का कारण लिखें।',
   merchant_admin_close_done: '{name} बंद हो गया।',
+  business_closed_menu: 'बंद व्यवसाय',
+  business_closed_menu_desc: 'उनकी बिक्री देखें और रिपोर्ट डाउनलोड करें',
+  business_closed_intro: 'ये अब भुगतान नहीं लेते और इन्हें बदला नहीं जा सकता। इनकी बिक्री अब भी आपकी है: आप बिक्री देख सकते हैं और रिपोर्ट डाउनलोड कर सकते हैं।',
+  business_closed_empty: 'आपका कोई बंद व्यवसाय नहीं है।',
+  business_closed_load_failed: 'आपके बंद व्यवसाय लोड नहीं हो सके।',
+  business_closed_notice: '{fecha} को बंद हुआ। यह अब भुगतान नहीं लेता और इसे बदला नहीं जा सकता; इसकी बिक्री सुरक्षित है।',
+  business_err_cerrado: 'यह व्यवसाय बंद है और अब इसे बदला नहीं जा सकता।',
 
   // Sesiones por dispositivo
   sessions_menu: 'जुड़े हुए डिवाइस',

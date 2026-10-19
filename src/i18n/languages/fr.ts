@@ -1747,7 +1747,7 @@ const fr: TranslationKeys = {
   business_close_err_balance: 'Le commerce a encore un solde. Il faut le retirer vers le compte du propriétaire avant de fermer :',
   business_close_err_pending: 'Des encaissements en attente ne sont pas payés. Il pourra être fermé une fois ceux-ci annulés ou expirés.',
   business_close_err_password: 'Mot de passe incorrect.',
-  business_close_err_totp: "Le code n'est pas correct. Vérifiez votre application et réessayez.",
+  business_close_err_credentials: "Le mot de passe ou le code n'est pas correct.",
   business_close_err_locked: 'Trop de tentatives. Attendez quelques minutes et réessayez.',
   business_close_err_demo: 'Un compte de démonstration ne peut pas fermer de commerce.',
   business_close_err_closed: 'Ce commerce était déjà fermé.',
@@ -1769,6 +1769,13 @@ const fr: TranslationKeys = {
   merchant_admin_close_confirm: 'Fermer {name}',
   merchant_admin_close_err_reason: 'Indiquez le motif de la fermeture.',
   merchant_admin_close_done: '{name} est maintenant fermé.',
+  business_closed_menu: 'Commerces fermés',
+  business_closed_menu_desc: 'Consultez leurs ventes et téléchargez le rapport',
+  business_closed_intro: "Ils n'encaissent plus et ne peuvent plus être modifiés. Ce qu'ils ont vendu vous appartient toujours : vous pouvez voir les ventes et télécharger le rapport.",
+  business_closed_empty: "Vous n'avez aucun commerce fermé.",
+  business_closed_load_failed: 'Impossible de charger vos commerces fermés.',
+  business_closed_notice: "Fermé le {fecha}. Il n'encaisse plus et ne peut plus être modifié ; ce qu'il a vendu est conservé.",
+  business_err_cerrado: 'Ce commerce est fermé et ne peut plus être modifié.',
 
   // Sesiones por dispositivo
   sessions_menu: 'Appareils connectés',

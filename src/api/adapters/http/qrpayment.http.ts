@@ -673,6 +673,12 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(res.data.map(mapMerchant));
   }
 
+  async listClosedMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    const res = await this.client.get<MerchantDTO[]>('/api/v1/qr/merchants?status=closed');
+    if (!res.success || !Array.isArray(res.data)) return falla(res, 'FETCH_FAILED');
+    return apiSuccess(res.data.map(mapMerchant));
+  }
+
   async closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
     const res = await this.client.post<MerchantDTO>(
       `/api/v1/admin/merchants/${encodeURIComponent(merchantId)}/close`,

@@ -61,7 +61,7 @@ describe('Hojas de gestion de un comercio que se cerro', () => {
 
   it('el catalogo', async () => {
     mockApi.qrPayments.createCatalogItem.mockResolvedValue(CERRADO);
-    pintar(<BusinessCatalogSheet isOpen onClose={vi.fn()} merchantId="m1" />);
+    pintar(<BusinessCatalogSheet isOpen onClose={vi.fn()} merchantId="m1" currencyCode="CRC" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }));
     const campos = screen.getAllByRole('textbox');

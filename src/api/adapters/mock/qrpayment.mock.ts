@@ -631,6 +631,12 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
       m.name.toLowerCase().includes(q) || m.legalName.toLowerCase().includes(q) || m.id.toLowerCase() === q));
   }
 
+  async listClosedMerchants(): Promise<ApiResponse<QRMerchant[]>> {
+    const cerrados = readMerchants().filter((m) => !!m.closedAt);
+    cerrados.sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)));
+    return apiSuccess(cerrados.map((m) => ({ ...m, role: 'owner' as const })));
+  }
+
   async closeMerchantAsAdmin(merchantId: string, reason: string): Promise<ApiResponse<QRMerchant>> {
     const motivo = reason.trim();
     if (!motivo) return apiError('CLOSURE_REASON_REQUIRED', 'a reason is required to close a merchant');

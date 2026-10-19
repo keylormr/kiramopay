@@ -136,8 +136,12 @@ var (
 	// contrasena: la pantalla ya los sabe decir.
 	ErrContrasenaIncorrecta = errors.New("current password is incorrect")
 	ErrTOTPRequerido        = errors.New("the authenticator code is required")
-	ErrTOTPInvalido         = errors.New("the authenticator code is not valid")
 	ErrCierreEnPausa        = errors.New("too many failed attempts; try again later")
+
+	// ErrCredencialesIncorrectas: con el segundo factor encendido, la
+	// contrasena o el codigo no coinciden, sin decir cual. Distinguirlos le
+	// diria a quien tiene la sesion pero no la contrasena que ya la adivino.
+	ErrCredencialesIncorrectas = errors.New("the password or the authenticator code is not valid")
 )
 
 // SaldoDelComercio es lo que queda en una moneda, en unidades menores.

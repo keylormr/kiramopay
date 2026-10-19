@@ -124,6 +124,11 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
   // El plan con el que el servidor armo el reporte manda; el del comercio
   // cargado antes es solo el respaldo mientras llega.
   const conAnalitica = (report?.plan ?? merchant.plan) === 'analitica';
+  // Un comercio cerrado se exporta con cualquier plan: lo que vendio es de su
+  // dueno, que lo necesita para sus cuentas. Y no se le ofrece Analitica a un
+  // negocio que ya no opera.
+  const cerrado = !!merchant.closedAt;
+  const puedeExportar = conAnalitica || cerrado;
 
   const exportar = async () => {
     const api = getApiLayer().qrPayments;
@@ -305,9 +310,9 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         </div>
 
         {/* ── Analitica: la comparacion y el CSV, o la vista previa honesta ── */}
-        {report && conAnalitica && (
+        {report && puedeExportar && (
           <>
-            {report.comparison && (
+            {conAnalitica && report.comparison && (
               <Comparacion comp={report.comparison} actual={report.totals} money={money} idioma={language} />
             )}
             <div>
@@ -333,7 +338,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </>
         )}
 
-        {report && !conAnalitica && tarifas.analitica && (
+        {report && !puedeExportar && tarifas.analitica && (
           <section className="uv-surface-1 rounded-3xl uv-shadow-soft p-5" aria-labelledby="analitica-bloqueada">
             <div className="flex flex-wrap items-center gap-2">
               <Icons.Lock size={16} className="uv-text-secondary" aria-hidden="true" />

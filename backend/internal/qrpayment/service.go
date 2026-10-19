@@ -185,6 +185,20 @@ func (s *Service) GetMerchants(ctx context.Context, userID string) ([]Merchant, 
 	return append(owned, staffed...), nil
 }
 
+// GetClosedMerchants son los comercios cerrados de su dueno, el ultimo cerrado
+// primero. Ya no se administran, pero lo que vendieron sigue siendo suyo: desde
+// aqui los consulta. Su equipo quedo revocado al cerrarlos y no los ve.
+func (s *Service) GetClosedMerchants(ctx context.Context, userID string) ([]Merchant, error) {
+	cerrados, err := s.repo.GetClosedMerchantsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range cerrados {
+		cerrados[i].Role = RoleOwner
+	}
+	return cerrados, nil
+}
+
 // roleFor resolves how a user relates to a merchant: "owner", an active staff
 // role ("manager"/"cashier"), or "" when they have no business acting on it.
 //
@@ -207,6 +221,18 @@ func (s *Service) roleFor(ctx context.Context, merchantID, userID string) (strin
 		return "", m, ErrComercioCerrado
 	}
 	return role, m, nil
+}
+
+// rolParaLeer es roleFor para lo que solo lee: las ventas, el saldo y el
+// reporte. Un comercio cerrado ya no se administra, pero lo que vendio sigue
+// siendo de su dueno, que lo necesita para sus cuentas. Solo el dueno: su
+// equipo quedo revocado al cerrarlo.
+func (s *Service) rolParaLeer(ctx context.Context, merchantID, userID string) (string, *Merchant, error) {
+	role, m, err := s.roleFor(ctx, merchantID, userID)
+	if errors.Is(err, ErrComercioCerrado) && m != nil && m.UserID == userID {
+		return RoleOwner, m, nil
+	}
+	return role, m, err
 }
 
 // ── QR Codes ─────────────────────────────────────────────────────────────────
@@ -323,10 +349,18 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	// explica a quien escanea un rotulo viejo que el local cerro. El resto de lo
 	// que se le pide al comercio se mira mas abajo, en el mismo orden de antes.
 	merchant, errComercio := s.comercioDelCodigo(ctx, obj.code)
-	if merchant != nil && merchant.ClosedAt != nil {
-		return nil, ErrComercioCerrado
-	}
-	if obj.code.Status == EstadoCodigoRevocado {
+	cerrado := merchant != nil && merchant.ClosedAt != nil
+	if cerrado || obj.code.Status == EstadoCodigoRevocado {
+		// Antes de rechazar, el reintento de un pago que ya entro: la respuesta
+		// no llego y mientras tanto el comercio retiro todo y cerro, o el dueno
+		// retiro el codigo. Ese reintento no es un pago nuevo, y decirle "cerro"
+		// le haria creer que su pago no paso.
+		if hecho := s.pagoYaHecho(ctx, obj, payerID, req); hecho != nil {
+			return hecho, nil
+		}
+		if cerrado {
+			return nil, ErrComercioCerrado
+		}
 		return nil, ErrQRRevocado
 	}
 
@@ -549,6 +583,56 @@ func (s *Service) ScanAndPay(ctx context.Context, payerID string, req *ScanQRPay
 	return existente, nil
 }
 
+// pagoYaHecho busca la venta que este mismo intento ya hizo, para un codigo que
+// ya no cobra (comercio cerrado o codigo retirado). Es la reproduccion que el
+// camino normal le pide al libro, hecha antes de rechazar, con las mismas
+// comprobaciones: la llave del intento (llaveDePago) y el mismo monto, moneda,
+// codigo y cobro. Lo que no es el reintento de aquel pago devuelve nil, y se
+// rechaza como un pago nuevo; tambien el de una aplicacion vieja sin nonce
+// fuera de VentanaReplayLegacy, que el camino normal tampoco reproduce.
+func (s *Service) pagoYaHecho(ctx context.Context, obj *objetivo, payerID string, req *ScanQRPaymentRequest) *QRPaymentRecord {
+	nonce, chargeID := "", ""
+	var monto int64
+	if obj.charge != nil {
+		if req.ChargeID != "" && req.ChargeID != obj.charge.ID {
+			return nil
+		}
+		if obj.charge.Status != EstadoCobroPagado || obj.charge.PaidBy != payerID {
+			return nil
+		}
+		monto, chargeID = obj.charge.Amount, obj.charge.ID
+	} else {
+		if req.ChargeID != "" {
+			return nil
+		}
+		if req.IdempotencyKey != "" {
+			if !nonceValido(req.IdempotencyKey) {
+				return nil
+			}
+			nonce = req.IdempotencyKey
+		}
+		monto = obj.code.Amount
+		if monto <= 0 {
+			monto = req.Amount
+		}
+	}
+	if monto <= 0 {
+		return nil
+	}
+	hecho, err := s.repo.PagoPorLlave(ctx, payerID, llaveDePago(obj, payerID, nonce))
+	if err != nil || hecho == nil {
+		return nil
+	}
+	if hecho.Amount != monto || hecho.Currency != obj.code.Currency ||
+		hecho.QRCodeID != obj.code.ID || hecho.ChargeID != chargeID {
+		return nil
+	}
+	if obj.charge == nil && nonce == "" && time.Since(hecho.CreatedAt) > VentanaReplayLegacy {
+		return nil
+	}
+	return hecho
+}
+
 // comercioDelCodigo lee el comercio de un codigo de comercio. Un codigo personal
 // no tiene comercio: (nil, nil).
 func (s *Service) comercioDelCodigo(ctx context.Context, code *QRPaymentCode) (*Merchant, error) {
@@ -643,17 +727,20 @@ func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string,
 // MerchantBalance returns the shop's own balance (minor units), derived from
 // the journal. Owner and manager only — a cashier collects but does not see
 // the till.
+//
+// El dueno de un comercio cerrado tambien lo lee (rolParaLeer).
 func (s *Service) MerchantBalance(ctx context.Context, merchantID, userID, currency string) (int64, error) {
-	role, _, err := s.roleFor(ctx, merchantID, userID)
+	role, _, err := s.rolParaLeer(ctx, merchantID, userID)
 	if err != nil || (role != RoleOwner && role != RoleManager) {
 		return 0, fmt.Errorf("merchant not found")
 	}
 	return s.tx.MerchantBalance(ctx, merchantID, currency)
 }
 
-// MerchantPayments is the shop's sales feed, visible to the whole team.
+// MerchantPayments is the shop's sales feed, visible to the whole team. El
+// dueno de un comercio cerrado tambien lo lee (rolParaLeer).
 func (s *Service) MerchantPayments(ctx context.Context, merchantID, userID string, limit int) ([]QRPaymentRecord, error) {
-	role, _, err := s.roleFor(ctx, merchantID, userID)
+	role, _, err := s.rolParaLeer(ctx, merchantID, userID)
 	if err != nil || role == "" {
 		return nil, fmt.Errorf("merchant not found")
 	}
@@ -712,6 +799,17 @@ func (s *Service) WithdrawToOwner(
 // unless it is one of the allowed roles.
 func (s *Service) requireRole(ctx context.Context, merchantID, userID string, allowed ...string) (*Merchant, error) {
 	role, m, err := s.roleFor(ctx, merchantID, userID)
+	return conRol(role, m, err, allowed)
+}
+
+// requireRoleParaLeer es requireRole para lo que solo lee: el dueno de un
+// comercio cerrado tambien pasa (rolParaLeer).
+func (s *Service) requireRoleParaLeer(ctx context.Context, merchantID, userID string, allowed ...string) (*Merchant, error) {
+	role, m, err := s.rolParaLeer(ctx, merchantID, userID)
+	return conRol(role, m, err, allowed)
+}
+
+func conRol(role string, m *Merchant, err error, allowed []string) (*Merchant, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -923,7 +1021,7 @@ func (s *Service) DeleteCatalogItem(ctx context.Context, merchantID, userID, ite
 // With the 'analitica' plan the report also carries Comparison: the previous
 // window of equal length. The 'base' plan gets the same report without it.
 func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string, days, tzOffsetMin int) (*MerchantReport, error) {
-	m, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager)
+	m, err := s.requireRoleParaLeer(ctx, merchantID, userID, RoleOwner, RoleManager)
 	if err != nil {
 		return nil, err
 	}
@@ -934,12 +1032,16 @@ func (s *Service) MerchantReport(ctx context.Context, merchantID, userID string,
 // reporte (dueno o gerente) y ademas exige el plan analitica: sin el devuelve
 // ErrPlanAnaliticaRequerido, DESPUES de comprobar el rol, para no revelarle a
 // quien no es del equipo que plan tiene un comercio.
+//
+// Un comercio cerrado no lo exige: su dueno descarga lo que vendio con
+// cualquier plan. Es el registro de su negocio y lo necesita para sus cuentas;
+// el plan era para operar, y el comercio ya no opera.
 func (s *Service) ReporteExportable(ctx context.Context, merchantID, userID string, days, tzOffsetMin int) (*MerchantReport, error) {
-	m, err := s.requireRole(ctx, merchantID, userID, RoleOwner, RoleManager)
+	m, err := s.requireRoleParaLeer(ctx, merchantID, userID, RoleOwner, RoleManager)
 	if err != nil {
 		return nil, err
 	}
-	if m.Plan != PlanComercioAnalitica {
+	if m.Plan != PlanComercioAnalitica && m.ClosedAt == nil {
 		return nil, ErrPlanAnaliticaRequerido
 	}
 	return s.armarReporte(ctx, m, calcularVentana(time.Now(), days, tzOffsetMin), tzOffsetMin)
@@ -1038,6 +1140,9 @@ func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, 
 		return nil, ErrPlanComercioInvalido
 	}
 	m, anterior, err := s.repo.UpdateMerchantPlan(ctx, merchantID, plan)
+	if errors.Is(err, ErrComercioNoEncontrado) && s.estaCerrado(ctx, merchantID) {
+		return nil, ErrComercioCerrado
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1070,7 +1175,11 @@ func (s *Service) SetCommission(ctx context.Context, merchantID string, bps int)
 	if bps < 0 || bps > 10000 {
 		return nil, fmt.Errorf("commission must be between 0 and 10000 bps")
 	}
-	return s.repo.UpdateCommission(ctx, merchantID, bps)
+	m, err := s.repo.UpdateCommission(ctx, merchantID, bps)
+	if err != nil && s.estaCerrado(ctx, merchantID) {
+		return nil, ErrComercioCerrado
+	}
+	return m, err
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

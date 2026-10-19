@@ -1746,7 +1746,7 @@ const en: TranslationKeys = {
   business_close_err_balance: "The business still has a balance. It must be withdrawn to the owner's account before closing:",
   business_close_err_pending: 'There are unpaid pending charges. It can be closed once they are cancelled or expire.',
   business_close_err_password: 'Incorrect password.',
-  business_close_err_totp: 'The code is not correct. Check your app and try again.',
+  business_close_err_credentials: 'The password or the code is not correct.',
   business_close_err_locked: 'Too many attempts. Wait a few minutes and try again.',
   business_close_err_demo: 'A demo account cannot close businesses.',
   business_close_err_closed: 'This business was already closed.',
@@ -1768,6 +1768,13 @@ const en: TranslationKeys = {
   merchant_admin_close_confirm: 'Close {name}',
   merchant_admin_close_err_reason: 'Write the reason for closing.',
   merchant_admin_close_done: '{name} is now closed.',
+  business_closed_menu: 'Closed businesses',
+  business_closed_menu_desc: 'See their sales and download the report',
+  business_closed_intro: 'They no longer charge and cannot be edited. What they sold is still yours: you can see the sales and download the report.',
+  business_closed_empty: 'You have no closed businesses.',
+  business_closed_load_failed: 'Your closed businesses could not be loaded.',
+  business_closed_notice: 'Closed on {fecha}. It no longer charges and cannot be edited; what it sold is kept.',
+  business_err_cerrado: 'This business is closed and can no longer be changed.',
 
   // Sesiones por dispositivo
   sessions_menu: 'Connected devices',

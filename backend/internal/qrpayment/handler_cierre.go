@@ -113,8 +113,8 @@ func responderErrorDelCierre(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusBadRequest, "CURRENT_PASSWORD_INVALID", ErrContrasenaIncorrecta.Error())
 	case errors.Is(err, ErrTOTPRequerido):
 		response.Error(w, http.StatusBadRequest, "TOTP_REQUIRED", ErrTOTPRequerido.Error())
-	case errors.Is(err, ErrTOTPInvalido):
-		response.Error(w, http.StatusBadRequest, "TOTP_INVALID", ErrTOTPInvalido.Error())
+	case errors.Is(err, ErrCredencialesIncorrectas):
+		response.Error(w, http.StatusBadRequest, "CREDENTIALS_INVALID", ErrCredencialesIncorrectas.Error())
 	case errors.Is(err, ErrCierreEnPausa):
 		response.Error(w, http.StatusLocked, "MERCHANT_CLOSE_LOCKED", ErrCierreEnPausa.Error())
 	case errors.Is(err, user.ErrCuentaDeDemostracion):
