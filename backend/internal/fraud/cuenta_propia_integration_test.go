@@ -99,14 +99,20 @@ func TestFraude_UnAdministradorNoSeRestringeNiSeLiberaASiMismo(t *testing.T) {
 		t.Fatalf("restringir la cuenta: %v", err)
 	}
 
-	ruta := "/api/v1/admin/fraud/restrict/" + userID
-	for _, cuerpo := range []string{`{"restricted":false}`, `{"restricted":true}`} {
-		rec := httptest.NewRecorder()
-		h.RestrictUser(rec, pedidoDe(userID, http.MethodPost, ruta, cuerpo, "userId", userID))
-		if rec.Code != http.StatusForbidden || codigoDe(rec) != "ADMIN_IS_AFFECTED_PARTY" {
-			t.Errorf("%s sobre si mismo: %d %s, se esperaba 403 ADMIN_IS_AFFECTED_PARTY", cuerpo, rec.Code, rec.Body.String())
+	// El id de la ruta lo escribe quien llama: Postgres lo acepta en mayusculas
+	// o entre llaves, y sigue siendo la misma cuenta.
+	for _, comoViene := range []string{userID, strings.ToUpper(userID), "{" + userID + "}"} {
+		ruta := "/api/v1/admin/fraud/restrict/" + comoViene
+		for _, cuerpo := range []string{`{"restricted":false}`, `{"restricted":true}`} {
+			rec := httptest.NewRecorder()
+			h.RestrictUser(rec, pedidoDe(userID, http.MethodPost, ruta, cuerpo, "userId", comoViene))
+			if rec.Code != http.StatusForbidden || codigoDe(rec) != "ADMIN_IS_AFFECTED_PARTY" {
+				t.Errorf("%s sobre si mismo, con el id %q: %d %s, se esperaba 403 ADMIN_IS_AFFECTED_PARTY",
+					cuerpo, comoViene, rec.Code, rec.Body.String())
+			}
 		}
 	}
+	ruta := "/api/v1/admin/fraud/restrict/" + userID
 	perfil, err := svc.GetUserRiskProfile(ctx, userID)
 	if err != nil {
 		t.Fatalf("GetUserRiskProfile: %v", err)
@@ -115,9 +121,16 @@ func TestFraude_UnAdministradorNoSeRestringeNiSeLiberaASiMismo(t *testing.T) {
 		t.Fatal("la cuenta se quito su propia restriccion")
 	}
 
+	// Un id que no es un UUID no llega a la base.
+	rec := httptest.NewRecorder()
+	h.RestrictUser(rec, pedidoDe(userID, http.MethodPost, "/api/v1/admin/fraud/restrict/abc", `{"restricted":false}`, "userId", "abc"))
+	if rec.Code != http.StatusBadRequest || codigoDe(rec) != "INVALID_ID" {
+		t.Errorf("id que no es UUID: %d %s, se esperaba 400 INVALID_ID", rec.Code, rec.Body.String())
+	}
+
 	// Otro administrador si la libera.
 	otro := testutil.SeedTestUser2(t, pool)
-	rec := httptest.NewRecorder()
+	rec = httptest.NewRecorder()
 	h.RestrictUser(rec, pedidoDe(otro, http.MethodPost, ruta, `{"restricted":false}`, "userId", userID))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("otro administrador: %d %s", rec.Code, rec.Body.String())

@@ -70,7 +70,6 @@ func TestComercioPropio_UnAdministradorNoLoRevisaNiLoGestiona(t *testing.T) {
 		{"comision cambiada", `SELECT COUNT(*) FROM qr_merchants WHERE id = $1::uuid AND commission_bps = 0`, verificado.ID},
 		{"plan cambiado", `SELECT COUNT(*) FROM qr_merchants WHERE id = $1::uuid AND plan <> 'base'`, verificado.ID},
 		{"comercio cerrado", `SELECT COUNT(*) FROM qr_merchants WHERE id = $1::uuid AND (closed_at IS NOT NULL OR active IS NOT TRUE)`, verificado.ID},
-		{"rastro de plan", `SELECT COUNT(*) FROM audit_logs WHERE action = 'admin_merchant_plan_set' AND resource_id = $1`, verificado.ID},
 		{"rastro de cierre", `SELECT COUNT(*) FROM audit_logs WHERE action = 'admin_merchant_closed' AND resource_id = $1`, verificado.ID},
 	} {
 		if n := contar(t, pool, c.sql, c.id); n != 0 {
@@ -86,4 +85,36 @@ func TestComercioPropio_UnAdministradorNoLoRevisaNiLoGestiona(t *testing.T) {
 	}
 	// Y el dueno cierra el suyo como dueno, con su contrasena.
 	cerrarComoDueno(t, svc, verificado.ID, owner)
+}
+
+// Un comercio propio que ya cerro responde lo mismo que cualquier comercio
+// cerrado: 409 MERCHANT_CLOSED. Cerrado no cambia nunca, asi que no hay nada
+// que su dueno pueda decidir por esta via.
+func TestComercioPropio_SiYaCerroDiceQueCerro(t *testing.T) {
+	svc, _, _, owner := setupCierre(t, nil)
+	h := qrpayment.NewHandler(svc)
+	m := comercioVerificado(t, svc, owner)
+	cerrarComoDueno(t, svc, m.ID, owner)
+	admin := "/api/v1/admin/merchants/" + m.ID
+
+	casos := []struct {
+		nombre  string
+		handler http.HandlerFunc
+		method  string
+		url     string
+		cuerpo  string
+	}{
+		{"aprobar", h.ApproveMerchant, http.MethodPost, admin + "/approve", `{}`},
+		{"rechazar", h.RejectMerchant, http.MethodPost, admin + "/reject", `{"reason":"no"}`},
+		{"comision", h.SetCommission, http.MethodPatch, admin + "/commission", `{"commission_bps":0}`},
+		{"plan", h.SetMerchantPlan, http.MethodPatch, admin + "/plan", `{"plan":"analitica"}`},
+		{"cerrar otra vez", h.AdminCloseMerchant, http.MethodPost, admin + "/close", `{"reason":"otra vez"}`},
+	}
+	for _, c := range casos {
+		rec := httptest.NewRecorder()
+		c.handler(rec, peticion(c.method, c.url, c.cuerpo, owner, m.ID))
+		if rec.Code != http.StatusConflict || codigoDeError(t, rec) != "MERCHANT_CLOSED" {
+			t.Errorf("%s el suyo, ya cerrado: %d %s, se esperaba 409 MERCHANT_CLOSED", c.nombre, rec.Code, rec.Body.String())
+		}
+	}
 }

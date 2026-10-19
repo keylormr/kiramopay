@@ -25,7 +25,7 @@ const UUID = '5b0e7c1e-2a3f-4d5b-9c8e-1f2a3b4c5d6e';
 const TEXTO_DEL_SERVIDOR = 'an administrator cannot act on a merchant they own';
 const rechazo = { success: false, error: { code: 'ADMIN_IS_AFFECTED_PARTY', message: TEXTO_DEL_SERVIDOR } };
 
-const ES_TUYO = 'Este comercio es tuyo: lo tiene que revisar otro administrador.';
+const ES_TUYO = 'Este comercio es tuyo: de eso se encarga otro administrador.';
 const CIERRALO_COMO_DUENO = 'Este comercio es tuyo. Ciérralo desde sus ajustes, en Cerrar comercio, que te pide tu contraseña.';
 
 const pendiente = {
@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe('AdminMerchantsView: el comercio del propio administrador', () => {
-  it('aprobar el suyo dice que lo revisa otro administrador', async () => {
+  it('aprobar el suyo dice que se encarga otro administrador', async () => {
     mockApi.qrPayments.approveMerchant.mockResolvedValue(rechazo);
     const user = userEvent.setup();
     setup();
@@ -77,7 +77,10 @@ describe('AdminMerchantsView: el comercio del propio administrador', () => {
     expect(mockApi.qrPayments.approveMerchant).not.toHaveBeenCalled();
   });
 
-  it('rechazar el suyo dice que lo revisa otro administrador', async () => {
+  // La hoja de rechazo sigue abierta tras el 403 (el motivo escrito no se
+  // pierde), asi que el aviso tiene que estar dentro de ella: detras del fondo
+  // de la hoja no lo ve nadie.
+  it('rechazar el suyo lo dice dentro de la hoja, que es lo que se ve', async () => {
     mockApi.qrPayments.rejectMerchant.mockResolvedValue(rechazo);
     const user = userEvent.setup();
     setup();
@@ -87,11 +90,11 @@ describe('AdminMerchantsView: el comercio del propio administrador', () => {
     await user.type(within(hoja).getByRole('textbox'), 'pruebo');
     await user.click(within(hoja).getByRole('button', { name: /Rechazar/ }));
 
-    expect(await screen.findByText(ES_TUYO)).toBeInTheDocument();
+    expect(await within(hoja).findByText(ES_TUYO)).toBeInTheDocument();
     expect(screen.queryByText(TEXTO_DEL_SERVIDOR)).toBeNull();
   });
 
-  it('asignarle el plan al suyo dice que lo revisa otro administrador', async () => {
+  it('asignarle el plan al suyo dice que se encarga otro administrador', async () => {
     mockApi.qrPayments.setMerchantPlan.mockResolvedValue(rechazo);
     const user = userEvent.setup();
     setup();
