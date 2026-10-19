@@ -278,6 +278,11 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		DespuesDeMover: s.anotarEnElHistorial(userID, envio, valorMinor, comision.Mul(usd)),
 	})
 	if err != nil {
+		if errors.Is(err, errDestinatarioNoRecibe) {
+			// Pidio eliminar su cuenta despues de que se leyo su codigo: para quien
+			// escanea es lo mismo que contesta PersonaDelQR, el codigo ya no sirve.
+			return nil, qrpayment.ErrQRRevocado
+		}
 		return nil, fmt.Errorf("send %s: %w", activo, err)
 	}
 	if repetido {
