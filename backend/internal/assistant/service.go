@@ -155,7 +155,7 @@ func (s *Service) Chat(ctx context.Context, userID string, req *ChatRequest) (re
 	// pregunta ajena no ocupe uno de los hilos que da el plan.
 	if v, ok := s.screenMessage(ctx, msg, prior); ok && !v.InScope {
 		declined = true
-		resp = s.decline(userID, v.Language)
+		resp = s.decline(userID, replyLanguage(msg, v.Language))
 		if s.quota != nil {
 			s.quota.RefundDeclined(ctx, userID)
 		}

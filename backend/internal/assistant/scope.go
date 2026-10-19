@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Filtro de alcance: el asistente responde solo sobre KiramoPay.
@@ -91,6 +92,46 @@ func outOfScopeReply(lang string) string {
 		return r
 	}
 	return outOfScopeReplies["es"]
+}
+
+// replyLanguage es el idioma del rechazo. Para hindi, japones y chino manda la
+// escritura del mensaje, que se distingue sin modelo; para el resto, el
+// veredicto del filtro. En la evaluacion en vivo el filtro dio "zh" para una
+// pregunta en japones (kanji con hiragana), y la negativa de seguridad no trae
+// idioma: la escritura cubre los dos casos.
+func replyLanguage(msg, verdictLang string) string {
+	if l := scriptLanguage(msg); l != "" {
+		return l
+	}
+	return verdictLang
+}
+
+// scriptLanguage reconoce la escritura dominante del mensaje: kana (con o sin
+// kanji) es japones, ideogramas sin kana es chino, devanagari es hindi. Con
+// mayoria de letras latinas no decide: es, en, fr y pt comparten alfabeto.
+func scriptLanguage(msg string) string {
+	var latin, kana, han, deva int
+	for _, r := range msg {
+		switch {
+		case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+			kana++
+		case unicode.Is(unicode.Han, r):
+			han++
+		case unicode.Is(unicode.Devanagari, r):
+			deva++
+		case unicode.Is(unicode.Latin, r):
+			latin++
+		}
+	}
+	switch {
+	case kana > 0 && kana+han > latin:
+		return "ja"
+	case han > latin:
+		return "zh"
+	case deva > latin:
+		return "hi"
+	}
+	return ""
 }
 
 // truncateRunes recorta s a n caracteres sin partir uno de varios bytes.

@@ -147,8 +147,10 @@ func TestEvalAlcanceEnVivo(t *testing.T) {
 			t.Errorf("%q: en alcance = %v, se esperaba %v", caso.mensaje, v.InScope, caso.enAlcance)
 			fallos++
 		}
-		if caso.idioma != "" && v.Language != caso.idioma {
-			t.Errorf("%q: idioma = %q, se esperaba %q", caso.mensaje, v.Language, caso.idioma)
+		// Se mide el idioma del rechazo que veria la persona, no solo el del
+		// veredicto: para hindi, japones y chino manda la escritura del mensaje.
+		if idioma := replyLanguage(caso.mensaje, v.Language); caso.idioma != "" && idioma != caso.idioma {
+			t.Errorf("%q: idioma = %q (filtro: %q), se esperaba %q", caso.mensaje, idioma, v.Language, caso.idioma)
 			fallos++
 		}
 	}

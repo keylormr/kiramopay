@@ -588,3 +588,30 @@ func TestClaudeScreen_UnErrorDeLaAPIEsFiltroCaido(t *testing.T) {
 		t.Errorf("se esperaba el error de la API como falla del filtro, llego %v", err)
 	}
 }
+
+// El idioma del rechazo para hindi, japones y chino sale de la escritura del
+// mensaje, no del filtro. En la evaluacion en vivo el filtro dio "zh" para una
+// pregunta en japones; y la negativa de seguridad no trae idioma.
+func TestAlcance_ElIdiomaDelRechazoSigueLaEscrituraDelMensaje(t *testing.T) {
+	casos := []struct {
+		mensaje, filtro, quiere string
+	}{
+		{"自由貿易協定とは何ですか？", "zh", "ja"}, // el caso de la evaluacion en vivo
+		{"什么是自由贸易协定？", "ja", "zh"},
+		{"मुक्त व्यापार समझौता क्या है?", "", "hi"}, // negativa de seguridad, sin idioma
+		{"What does 自由貿易 mean?", "en", "en"},        // mayoria latina: decide el filtro
+		{"que es el TLC?", "es", "es"},
+		{"Qu'est-ce que le TLC ?", "fr", "fr"},
+	}
+	for _, c := range casos {
+		filtro := &fakeScreener{verdict: ScopeVerdict{InScope: false, Language: c.filtro}}
+		svc := NewService(&fakeLLM{}, newTestTools(&fakeWallet{}, &fakeTx{}), nil, nil, WithScreener(filtro))
+		res, err := svc.Chat(context.Background(), "u1", &ChatRequest{Message: c.mensaje})
+		if err != nil {
+			t.Fatalf("%q: %v", c.mensaje, err)
+		}
+		if res.Reply != outOfScopeReply(c.quiere) {
+			t.Errorf("%q (filtro %q): rechazo = %q, se esperaba el de %q", c.mensaje, c.filtro, res.Reply, c.quiere)
+		}
+	}
+}
