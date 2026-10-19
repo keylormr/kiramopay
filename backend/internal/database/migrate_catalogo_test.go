@@ -15,8 +15,8 @@ import (
 // sembrarFechasSinZona, dentro de una transaccion que despues se deshace.
 //
 // El producto que ya estaba no queda sacado. La marca es con zona. Un producto
-// sacado no puede quedar activo. Y la bajada se lleva la columna sin borrar
-// ninguna fila.
+// sacado no puede quedar activo, y el CHECK queda validado contra lo que ya
+// habia. Y la bajada se lleva la columna sin borrar ninguna fila.
 func exigirCatalogoConBorradoLogico(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	const comercio = "07500000-0000-4000-8000-0000000000c0"
@@ -30,6 +30,17 @@ func exigirCatalogoConBorradoLogico(ctx context.Context, t *testing.T, pool *pgx
 	}
 	if tipo != "timestamp with time zone" {
 		t.Errorf("merchant_catalog_items.deleted_at es %q, se esperaba con zona", tipo)
+	}
+
+	var validado bool
+	if err := pool.QueryRow(ctx, `
+		SELECT convalidated FROM pg_constraint
+		 WHERE conrelid = 'merchant_catalog_items'::regclass AND conname = 'chk_catalog_sacado_inactivo'`,
+	).Scan(&validado); err != nil {
+		t.Fatalf("leer el CHECK chk_catalog_sacado_inactivo: %v", err)
+	}
+	if !validado {
+		t.Error("el CHECK chk_catalog_sacado_inactivo quedo sin validar contra las filas que ya estaban")
 	}
 
 	var producto string

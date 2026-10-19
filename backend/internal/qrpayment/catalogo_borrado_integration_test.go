@@ -288,3 +288,134 @@ func TestSacarDelCatalogo_LaRutaRespondeComoAntes(t *testing.T) {
 		t.Errorf("despues de la ruta la fila quedo %+v; se esperaba marcada y no borrada", f)
 	}
 }
+
+// ── Lo que encontro la revision ──────────────────────────────────────────────
+
+// La marca y el rastro van en la misma transaccion: si el rastro no se puede
+// escribir, el producto no queda sacado. Un userID que no es UUID hace fallar
+// el INSERT en audit_logs (user_id es UUID) sin romper nada mas.
+func TestSacarDelCatalogo_SiElRastroFallaNoQuedaLaMarca(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+	m := comercioVerificado(t, svc, owner)
+	cafe := crearProducto(t, svc, m.ID, owner, "Cafe", 120000)
+
+	repo := qrpayment.NewRepository(pool)
+	err := repo.DeleteCatalogItem(ctx, m.ID, cafe.ID, "no-es-un-uuid")
+	if err == nil || noEncontrado(err) {
+		t.Fatalf("el rastro no se pudo escribir y el borrado respondio %v; se esperaba un fallo interno", err)
+	}
+	if f := leerProducto(t, pool, cafe.ID); !f.existe || f.sacadoEn != nil || !f.activo {
+		t.Errorf("el rastro fallo pero la marca quedo: %+v", f)
+	}
+	if n := contar(t, pool, `SELECT COUNT(*) FROM audit_logs WHERE action = $1`, accionProductoSacado); n != 0 {
+		t.Errorf("entradas en el rastro = %d, se esperaba 0", n)
+	}
+	if ids := idsDelCatalogo(t, svc, m.ID, owner); len(ids) != 1 || ids[0] != cafe.ID {
+		t.Errorf("el producto salio del catalogo sin rastro: %v", ids)
+	}
+}
+
+// El rastro guarda los ids como los tiene la base, no como los escribio el
+// cliente: Postgres acepta un UUID en mayusculas, y quien busque quien saco el
+// producto lo busca por el id de la fila. Y no copia el nombre, que es texto
+// libre del comerciante y sigue en la fila.
+func TestSacarDelCatalogo_ElRastroGuardaLosIdsDeLaBase(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+	m := comercioVerificado(t, svc, owner)
+	cafe := crearProducto(t, svc, m.ID, owner, "Cafe", 120000)
+
+	if err := svc.DeleteCatalogItem(ctx, m.ID, owner, strings.ToUpper(cafe.ID)); err != nil {
+		t.Fatalf("sacar el producto con el id en mayusculas: %v", err)
+	}
+	var recurso, comercio string
+	var conNombre bool
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(resource_id, ''), COALESCE(details->>'merchant_id', ''), details ? 'name'
+		  FROM audit_logs WHERE action = $1`, accionProductoSacado,
+	).Scan(&recurso, &comercio, &conNombre); err != nil {
+		t.Fatalf("leer el rastro: %v", err)
+	}
+	if recurso != cafe.ID || comercio != m.ID {
+		t.Errorf("el rastro dice recurso=%q comercio=%q; la base los tiene como %q y %q", recurso, comercio, cafe.ID, m.ID)
+	}
+	if conNombre {
+		t.Error("el rastro copia el nombre del producto")
+	}
+}
+
+// Un id que no tiene forma de UUID es un producto que no existe: 400
+// DELETE_ITEM_FAILED, como dice el contrato, y no un 500 que cualquiera puede
+// provocar.
+func TestSacarDelCatalogo_UnIdQueNoEsUUIDNoSeEncuentra(t *testing.T) {
+	svc, _, _, owner := setupQR(t)
+	h := qrpayment.NewHandler(svc)
+	m := comercioVerificado(t, svc, owner)
+	const malo = "no-es-un-uuid"
+
+	rec := httptest.NewRecorder()
+	h.DeleteCatalogItem(rec, peticionCon(http.MethodDelete, "/api/v1/qr/merchants/"+m.ID+"/catalog/"+malo, "", owner,
+		map[string]string{"id": m.ID, "itemID": malo}))
+	if rec.Code != http.StatusBadRequest || codigoDeError(t, rec) != "DELETE_ITEM_FAILED" ||
+		!strings.Contains(rec.Body.String(), "catalog item not found") {
+		t.Errorf("sacar %q: %d %s, se esperaba 400 DELETE_ITEM_FAILED con catalog item not found", malo, rec.Code, rec.Body.String())
+	}
+}
+
+// Dos que sacan el mismo producto a la vez dejan una sola marca y un solo
+// rastro: el segundo espera la fila y ya no la ve.
+func TestSacarDelCatalogo_DosALaVezDejanUnaSolaMarca(t *testing.T) {
+	svc, pool, _, owner := setupQR(t)
+	ctx := context.Background()
+	m := comercioVerificado(t, svc, owner)
+	cafe := crearProducto(t, svc, m.ID, owner, "Cafe", 120000)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("abrir la transaccion: %v", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM merchant_catalog_items WHERE id = $1::uuid FOR UPDATE`, cafe.ID); err != nil {
+		t.Fatalf("tomar la fila del producto: %v", err)
+	}
+
+	resultados := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { resultados <- svc.DeleteCatalogItem(context.Background(), m.ID, owner, cafe.ID) }()
+	}
+	esperando := `SELECT COUNT(*) FROM pg_stat_activity
+		WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'
+		  AND query LIKE '%merchant_catalog_items%' AND query LIKE '%deleted_at = NOW()%'`
+	for limite := time.Now().Add(10 * time.Second); contar(t, pool, esperando) < 2; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(limite) {
+			t.Fatal("los dos borrados nunca esperaron en la fila del producto")
+		}
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("soltar la fila: %v", err)
+	}
+
+	var bien, noEstaba int
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-resultados:
+			switch {
+			case err == nil:
+				bien++
+			case noEncontrado(err):
+				noEstaba++
+			default:
+				t.Errorf("borrado a la vez: %v", err)
+			}
+		case <-time.After(15 * time.Second):
+			t.Fatal("un borrado no termino")
+		}
+	}
+	if bien != 1 || noEstaba != 1 {
+		t.Errorf("resultados: %d bien y %d no encontrado; se esperaba uno de cada uno", bien, noEstaba)
+	}
+	if n := contar(t, pool, `SELECT COUNT(*) FROM audit_logs WHERE action = $1`, accionProductoSacado); n != 1 {
+		t.Errorf("entradas en el rastro = %d, se esperaba 1", n)
+	}
+}
