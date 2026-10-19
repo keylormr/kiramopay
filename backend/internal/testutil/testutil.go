@@ -1108,7 +1108,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		active BOOLEAN NOT NULL DEFAULT TRUE,
 		sort_order INTEGER NOT NULL DEFAULT 0,
 		created_at TIMESTAMP DEFAULT NOW(),
-		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0)
+		deleted_at TIMESTAMPTZ,
+		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0),
+		CONSTRAINT chk_catalog_sacado_inactivo CHECK (deleted_at IS NULL OR active IS FALSE)
 	);
 
 	CREATE TABLE IF NOT EXISTS qr_payment_codes (
