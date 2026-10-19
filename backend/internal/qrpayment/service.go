@@ -1240,8 +1240,10 @@ func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string,
 // administradorNoEsElDueno rechaza al administrador que actua sobre un comercio
 // propio. El dueno de un comercio no cambia nunca (ninguna sentencia escribe
 // user_id), asi que leerlo antes del cambio no abre una carrera. Si el comercio
-// no existe se sigue: cada cambio ya dice "no encontrado" a su manera. Cualquier
-// otra falla al leerlo frena el cambio: sin saber de quien es, no se decide.
+// no existe se sigue: cada cambio ya dice "no encontrado" a su manera. Tampoco
+// frena a uno cerrado: un cierre no se deshace, y cada cambio lo rechaza con
+// ErrComercioCerrado, como al de cualquier otro dueno. Cualquier otra falla al
+// leerlo frena el cambio: sin saber de quien es, no se decide.
 func (s *Service) administradorNoEsElDueno(ctx context.Context, merchantID, adminID string) error {
 	m, err := s.repo.GetMerchant(ctx, merchantID)
 	switch {
@@ -1249,6 +1251,8 @@ func (s *Service) administradorNoEsElDueno(ctx context.Context, merchantID, admi
 		return nil
 	case err != nil:
 		return fmt.Errorf("read merchant owner: %w", err)
+	case m.ClosedAt != nil:
+		return nil
 	case m.UserID == adminID:
 		return ErrComercioPropio
 	}

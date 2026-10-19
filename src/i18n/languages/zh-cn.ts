@@ -1762,7 +1762,7 @@ const zhCn: TranslationKeys = {
   merchant_admin_close_reason: '关闭原因',
   merchant_admin_close_confirm: '关闭 {name}',
   merchant_admin_close_err_reason: '请填写关闭原因。',
-  merchant_admin_err_own: '这是你自己的商户，需要由其他管理员审核。',
+  merchant_admin_err_own: '这是你自己的商户，由其他管理员处理。',
   merchant_admin_close_err_own: '这是你自己的商户。请在它的设置中点击“关闭商户”，输入你的密码后关闭。',
   merchant_admin_close_done: '{name} 已关闭。',
   business_closed_menu: '已关闭的商户',

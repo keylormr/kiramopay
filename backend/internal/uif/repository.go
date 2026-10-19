@@ -446,7 +446,6 @@ func (r *Repository) ListByStatus(ctx context.Context, status string, limit int)
 	return out, rows.Err()
 }
 
-// Review records a compliance decision (submitted/dismissed/reviewed).
 // PersonaDelCaso devuelve la cuenta del caso, o "" si el caso no existe.
 func (r *Repository) PersonaDelCaso(ctx context.Context, id string) (string, error) {
 	var userID string
@@ -457,6 +456,7 @@ func (r *Repository) PersonaDelCaso(ctx context.Context, id string) (string, err
 	return userID, err
 }
 
+// Review records a compliance decision (submitted/dismissed/reviewed).
 func (r *Repository) Review(ctx context.Context, id, reviewerID, status, notes string) error {
 	ct, err := r.db.Exec(ctx,
 		`UPDATE uif_reports

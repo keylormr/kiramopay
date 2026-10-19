@@ -1771,7 +1771,7 @@ const fr: TranslationKeys = {
   merchant_admin_close_reason: 'Motif de la fermeture',
   merchant_admin_close_confirm: 'Fermer {name}',
   merchant_admin_close_err_reason: 'Indiquez le motif de la fermeture.',
-  merchant_admin_err_own: 'Ce commerce est à vous : un autre administrateur doit le vérifier.',
+  merchant_admin_err_own: 'Ce commerce est à vous : un autre administrateur s’en charge.',
   merchant_admin_close_err_own: 'Ce commerce est à vous. Fermez-le depuis ses paramètres, dans Fermer le commerce, qui vous demande votre mot de passe.',
   merchant_admin_close_done: '{name} est maintenant fermé.',
   business_closed_menu: 'Commerces fermés',

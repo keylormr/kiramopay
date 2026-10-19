@@ -3996,6 +3996,12 @@ paths:
       responses:
         '200':
           description: User restricted
+        '400':
+          description: INVALID_ID (userId is not a UUID) | INVALID_BODY | RESTRICT_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: >-
             FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
@@ -4052,8 +4058,8 @@ paths:
       tags: [Admin]
       summary: Review a pending UIF report (admin)
       description: >-
-        submitted (reported to the UIF), dismissed or reviewed. Audited as
-        uif_report_<status>.
+        Settles a pending report as submitted (reported to the UIF),
+        dismissed or reviewed. Audited as uif_report_<status>.
       security:
         - bearerAuth: []
       parameters:

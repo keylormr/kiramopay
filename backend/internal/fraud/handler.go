@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -98,7 +99,15 @@ func (h *Handler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RestrictUser(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	targetUserID := chi.URLParam(r, "userId")
+	// El id llega como lo escribe quien llama, y Postgres acepta el mismo UUID
+	// en mayusculas o entre llaves. Sin pasarlo a su forma canonica, la guarda
+	// de la cuenta propia comparaba cadenas distintas de la misma cuenta.
+	objetivo, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "userId must be a UUID")
+		return
+	}
+	targetUserID := objetivo.String()
 	var body struct {
 		Restricted bool `json:"restricted"`
 	}

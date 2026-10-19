@@ -6466,6 +6466,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description INVALID_ID (userId is not a UUID) | INVALID_BODY | RESTRICT_FAILED */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the account is the administrator's own, to restrict or to release; another administrator does it. Nothing changed. */
                 403: {
                     headers: {
@@ -6558,7 +6567,7 @@ export interface paths {
         put?: never;
         /**
          * Review a pending UIF report (admin)
-         * @description submitted (reported to the UIF), dismissed or reviewed. Audited as uif_report_<status>.
+         * @description Settles a pending report as submitted (reported to the UIF), dismissed or reviewed. Audited as uif_report_<status>.
          */
         post: {
             parameters: {

@@ -1770,7 +1770,7 @@ const en: TranslationKeys = {
   merchant_admin_close_reason: 'Reason for closing',
   merchant_admin_close_confirm: 'Close {name}',
   merchant_admin_close_err_reason: 'Write the reason for closing.',
-  merchant_admin_err_own: 'This business is yours: another administrator has to review it.',
+  merchant_admin_err_own: 'This business is yours: another administrator takes care of that.',
   merchant_admin_close_err_own: 'This business is yours. Close it from its settings, under Close business, which asks for your password.',
   merchant_admin_close_done: '{name} is now closed.',
   business_closed_menu: 'Closed businesses',

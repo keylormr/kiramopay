@@ -229,14 +229,14 @@ func (s *Service) Submit(ctx context.Context, userID string, req *SubmitRequest,
 	return v, nil
 }
 
-// Decide approves or rejects a pending verification. Approval bumps the user's
-// KYC level and scales their wallet limits. A screening_hit can never be
-// approved.
 // ErrDecisionPropia: quien decide la verificacion es la persona verificada.
 // Desde el PR 295 administra una cuenta personal; aprobarse le subiria los
 // topes, y rechazarse tampoco le toca. La decide otro administrador.
 var ErrDecisionPropia = errors.New("kyc: an administrator cannot decide on their own verification")
 
+// Decide approves or rejects a pending verification. Approval bumps the user's
+// KYC level and scales their wallet limits. A screening_hit can never be
+// approved, and nobody decides their own (ErrDecisionPropia).
 func (s *Service) Decide(ctx context.Context, verificationID, adminID string, req *DecisionRequest, ipAddr string) (*Verification, error) {
 	v, err := s.repo.GetVerificationByID(ctx, verificationID)
 	if err != nil {

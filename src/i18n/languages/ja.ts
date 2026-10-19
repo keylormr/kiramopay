@@ -1762,7 +1762,7 @@ const ja: TranslationKeys = {
   merchant_admin_close_reason: '閉店の理由',
   merchant_admin_close_confirm: '{name}を閉じる',
   merchant_admin_close_err_reason: '閉店の理由を入力してください。',
-  merchant_admin_err_own: 'これはあなたの店舗です。別の管理者が審査する必要があります。',
+  merchant_admin_err_own: 'これはあなたの店舗です。別の管理者が対応します。',
   merchant_admin_close_err_own: 'これはあなたの店舗です。店舗の設定の「店舗を閉じる」から、パスワードを入力して閉じてください。',
   merchant_admin_close_done: '{name}を閉じました。',
   business_closed_menu: '閉じた店舗',
