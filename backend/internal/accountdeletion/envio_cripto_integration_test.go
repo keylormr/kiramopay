@@ -221,6 +221,22 @@ func TestEnvioDeCripto_ElDiaCeroConfirmadoAntesDelAbonoLoRechaza(t *testing.T) {
 // la cuenta por eliminar y no abonar. Si mirara el estado sin esperarlo, lo
 // veria activo y abonaria igual en cuanto el dia 0 terminara.
 func TestEnvioDeCripto_EsperaAlDiaCeroYNoAbonaALaCuentaPorEliminar(t *testing.T) {
+	momentos := []struct{ nombre, marca string }{
+		// La solicitud ya bloqueo la fila de la persona y su billetera, y empieza
+		// a revisar los bloqueos.
+		{"revisando los bloqueos", "FROM crypto_assets WHERE user_id = $1::uuid AND balance > 0"},
+		// La cuenta ya esta marcada por eliminar, sin confirmar, y empiezan los
+		// pasos del dia 0. Aqui la fila de la persona ya tiene una version nueva.
+		{"con la cuenta ya marcada", "UPDATE refresh_tokens SET revoked_at = NOW()"},
+	}
+	for _, m := range momentos {
+		t.Run(m.nombre, func(t *testing.T) { envioQueEsperaAlDiaCero(t, m.marca) })
+	}
+}
+
+// envioQueEsperaAlDiaCero lanza el envio cuando el dia 0 llega a la consulta que
+// contiene marca, y exige que no abone.
+func envioQueEsperaAlDiaCero(t *testing.T, marca string) {
 	pool := testutil.TestDB(t)
 	ctx := context.Background()
 	a, b := sembrar(t, pool), sembrar(t, pool)
@@ -230,9 +246,7 @@ func TestEnvioDeCripto_EsperaAlDiaCeroYNoAbonaALaCuentaPorEliminar(t *testing.T)
 	listo := make(chan struct{})
 	var errEnvio error
 	z := &trazadorQueSeMete{
-		// La solicitud ya bloqueo la fila de la persona y su billetera, y empieza
-		// a revisar los bloqueos.
-		marca: "FROM crypto_assets WHERE user_id = $1::uuid AND balance > 0",
+		marca: marca,
 		f: func() {
 			go func() {
 				defer close(listo)
