@@ -107,6 +107,14 @@ func TestLoad_DefaultEnvironmentIsProduction(t *testing.T) {
 	}
 }
 
+func TestLoad_ElAsistentePorDefectoEsHaiku55(t *testing.T) {
+	// Si el despliegue no fija ANTHROPIC_MODEL, el asistente corre en este.
+	t.Setenv("ANTHROPIC_MODEL", "")
+	if m := Load().Anthropic.Model; m != "claude-haiku-5-5" {
+		t.Errorf("ANTHROPIC_MODEL por defecto = %q, se esperaba claude-haiku-5-5", m)
+	}
+}
+
 func TestDSN_IncludesSSLRootCert(t *testing.T) {
 	cfg := DatabaseConfig{
 		Host:        "db.example.com",

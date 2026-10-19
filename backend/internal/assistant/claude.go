@@ -26,12 +26,28 @@ type ClaudeClient struct {
 }
 
 const (
-	defaultClaudeModel   = "claude-haiku-4-5"
-	anthropicVersion     = "2023-06-01"
-	claudeMaxOutputToken = 1024
+	defaultClaudeModel = "claude-haiku-5-5"
+	anthropicVersion   = "2023-06-01"
+	// claudeMaxOutputToken era 1024 con Haiku 4.5. Haiku 5.5 gasta cerca de un
+	// 30% mas de tokens por el mismo texto, asi que se sube en esa proporcion
+	// para que una respuesta alcance el mismo largo que con Haiku 4.5.
+	claudeMaxOutputToken = 1400
 )
 
-// NewClaudeClient wires the client. model defaults to Haiku (fast and cheap —
+// sinRazonamiento devuelve el campo thinking para los modelos que razonan por
+// defecto y aceptan apagarlo. Haiku 5.5 razona por defecto: ese razonamiento
+// cuenta contra max_tokens y, en el ciclo de herramientas, la API pide devolver
+// esos bloques tal cual, cosa que la historia neutral (Message) no guarda. El
+// asistente contesta preguntas cortas con datos de las herramientas; no le
+// hace falta. Otros modelos no reciben el campo: Opus 5.5 rechaza "disabled".
+func sinRazonamiento(model string) *anthropicThinking {
+	if model == "claude-haiku-5-5" {
+		return &anthropicThinking{Type: "disabled"}
+	}
+	return nil
+}
+
+// NewClaudeClient wires the client. model defaults to Haiku 5.5 (fast and cheap —
 // the assistant is a short-turn Q&A helper, not a reasoning workload) and is
 // allowlist-validated (reusing safeModel from gemini.go). The caller must
 // ensure apiKey is non-empty.
@@ -88,9 +104,9 @@ type anthropicRequest struct {
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
 }
 
-// anthropicThinking y anthropicOutputConfig los usa solo el filtro de alcance:
-// razonamiento apagado, effort y salida estructurada (output_config.format,
-// sin encabezado beta).
+// anthropicThinking apaga el razonamiento (asistente en Haiku 5.5 y filtro de
+// alcance). anthropicOutputConfig lo usa solo el filtro: effort y salida
+// estructurada (output_config.format, sin encabezado beta).
 type anthropicThinking struct {
 	Type string `json:"type"`
 }
@@ -120,6 +136,7 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		MaxTokens: claudeMaxOutputToken,
 		System:    system,
 		Messages:  toAnthropicMessages(history),
+		Thinking:  sinRazonamiento(c.model),
 	}
 	// Sampling params (temperature/top_p) are intentionally omitted: Opus 4.7+
 	// reject them, and they are unnecessary for grounded tool-calling.
