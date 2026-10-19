@@ -41,15 +41,13 @@ var seEnviaCripto = decimal.RequireFromString("0.01")
 // envioDeCripto es el envio de cripto de verdad, con el lector de QR de verdad.
 type envioDeCripto struct {
 	svc          *crypto.Service
-	quienEnvia   string
 	qrDeQuienRec string
 }
 
-// montarEnvioDeCripto arma el servicio de envio sobre pool, le da un bitcoin a
-// quien envia y saca el codigo QR personal de quien recibe.
-func montarEnvioDeCripto(t *testing.T, pool *pgxpool.Pool, quienEnvia, quienRecibe string) *envioDeCripto {
+// montarEnvioDeCripto arma el servicio de envio sobre pool y saca el codigo QR
+// personal de quien recibe.
+func montarEnvioDeCripto(t *testing.T, pool *pgxpool.Pool, quienRecibe string) *envioDeCripto {
 	t.Helper()
-	ctx := context.Background()
 	txSvc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), ledger.NewEngine(pool, nil), nil)
 	qrSvc := qrpayment.NewService(qrpayment.NewRepository(pool), txSvc, user.NewRepository(pool), nil)
 	precios := crypto.NewPriceService()
@@ -58,20 +56,25 @@ func montarEnvioDeCripto(t *testing.T, pool *pgxpool.Pool, quienEnvia, quienReci
 		func(context.Context, string, string) (float64, error) { return 500, nil },
 		&crypto.Opciones{Destinatarios: qrSvc})
 
-	exec(t, pool, `INSERT INTO crypto_assets (user_id, symbol, name, balance, avg_cost)
-		VALUES ($1::uuid, 'BTC', 'Bitcoin', 1, 1000)`, quienEnvia)
-	codigo, err := qrSvc.GetOrCreateMyCode(ctx, quienRecibe, "CRC")
+	codigo, err := qrSvc.GetOrCreateMyCode(context.Background(), quienRecibe, "CRC")
 	if err != nil {
 		t.Fatalf("codigo QR de quien recibe: %v", err)
 	}
-	return &envioDeCripto{svc: svc, quienEnvia: quienEnvia, qrDeQuienRec: codigo.QRData}
+	return &envioDeCripto{svc: svc, qrDeQuienRec: codigo.QRData}
 }
 
-func (e *envioDeCripto) enviar(ctx context.Context) error {
-	_, err := e.svc.Send(ctx, e.quienEnvia, &crypto.SendRequest{
+func (e *envioDeCripto) enviar(ctx context.Context, quienEnvia string) error {
+	_, err := e.svc.Send(ctx, quienEnvia, &crypto.SendRequest{
 		Asset: "BTC", Amount: seEnviaCripto, QRData: e.qrDeQuienRec,
 	})
 	return err
+}
+
+// darleUnBitcoin siembra un bitcoin para quien va a enviar.
+func darleUnBitcoin(t *testing.T, pool *pgxpool.Pool, userID string) {
+	t.Helper()
+	exec(t, pool, `INSERT INTO crypto_assets (user_id, symbol, name, balance, avg_cost)
+		VALUES ($1::uuid, 'BTC', 'Bitcoin', 1, 1000)`, userID)
 }
 
 // stubDePrecios responde la forma de coins/markets de CoinGecko desde la
@@ -122,26 +125,48 @@ func exigirQueElEnvioNoEntro(t *testing.T, pool *pgxpool.Pool, quienEnvia, quien
 	}
 }
 
-// El envio confirma despues de que el dia 0 tomo su foto y antes de que bloquee
-// la billetera. La foto vieja no ve el cripto; si el dia 0 pasara igual, la
-// cuenta quedaria por eliminar con cripto adentro. El dia 0 tiene que enterarse
-// y negarse por el cripto, como si hubiera llegado antes.
+// El envio ya valido a quien recibe, abrio su transaccion y va a abonar cuando
+// la persona confirma el dia 0. El dia 0 toma su foto, que no ve el cripto
+// porque el envio todavia no confirmo, y el envio confirma despues. Si el dia 0
+// siguiera con esa foto, la cuenta quedaria por eliminar con cripto adentro.
+// Tiene que enterarse y negarse por el cripto, como si hubiera llegado antes.
 func TestDiaCero_UnEnvioDeCriptoEnElMedioNoQuedaVarado(t *testing.T) {
 	pool := testutil.TestDB(t)
 	ctx := context.Background()
 	a, b := sembrar(t, pool), sembrar(t, pool)
-	e := montarEnvioDeCripto(t, pool, b.ID, a.ID)
+	darleUnBitcoin(t, pool, b.ID)
+	svc := nuevoServicio(pool, nil)
 
-	var errEnvio error
+	listo := make(chan struct{})
+	var errPedido error
 	z := &trazadorQueSeMete{
-		// La solicitud ya leyo la fila de la persona (la foto esta tomada) y va
-		// a bloquear su billetera.
-		marca: "FROM wallets WHERE user_id = $1::uuid FOR UPDATE",
-		f:     func() { errEnvio = e.enviar(ctx) },
+		// El envio ya tomo lo que toma antes de mover saldos y va a abonar.
+		marca: "INSERT INTO crypto_assets",
+		f: func() {
+			go func() {
+				defer close(listo)
+				_, errPedido = svc.iniciar(ctx, a.ID, opciones{canal: CanalApp})
+			}()
+			// El envio sigue cuando el dia 0 tomo su foto y quedo esperando un
+			// candado, o cuando ya termino. Sin el arreglo no espera nada.
+			esperarHasta(t, "el dia 0 espera al envio o termina", func() bool {
+				select {
+				case <-listo:
+					return true
+				default:
+				}
+				return alguienEsperaUnCandado(t, pool)
+			})
+		},
 	}
-	svc := nuevoServicio(testutil.PoolTrazado(t, z), nil)
-	_, errPedido := svc.iniciar(ctx, a.ID, opciones{canal: CanalApp})
+	e := montarEnvioDeCripto(t, testutil.PoolTrazado(t, z), a.ID)
+	errEnvio := e.enviar(ctx, b.ID)
 
+	select {
+	case <-listo:
+	case <-time.After(10 * time.Second):
+		t.Fatal("el dia 0 nunca termino")
+	}
 	if errEnvio != nil {
 		t.Fatalf("el envio del medio fallo: %v", errEnvio)
 	}
@@ -175,8 +200,9 @@ func TestEnvioDeCripto_ElDiaCeroConfirmadoAntesDelAbonoLoRechaza(t *testing.T) {
 			_, errPedido = svc.iniciar(ctx, a.ID, opciones{canal: CanalApp})
 		},
 	}
-	e := montarEnvioDeCripto(t, testutil.PoolTrazado(t, z), b.ID, a.ID)
-	errEnvio := e.enviar(ctx)
+	darleUnBitcoin(t, pool, b.ID)
+	e := montarEnvioDeCripto(t, testutil.PoolTrazado(t, z), a.ID)
+	errEnvio := e.enviar(ctx, b.ID)
 
 	if errPedido != nil {
 		t.Fatalf("el dia 0 del medio fallo: %v", errPedido)
@@ -190,15 +216,16 @@ func TestEnvioDeCripto_ElDiaCeroConfirmadoAntesDelAbonoLoRechaza(t *testing.T) {
 	}
 }
 
-// El envio llega cuando el dia 0 ya bloqueo la billetera de la persona y todavia
-// no confirmo. Tiene que esperarlo y, cuando confirma, ver la cuenta por
-// eliminar y no abonar. Si mirara el estado antes de esperar, lo veria activo y
-// abonaria igual en cuanto el dia 0 soltara la billetera.
+// El envio llega cuando el dia 0 ya bloqueo la fila de la persona y su
+// billetera, y todavia no confirmo. Tiene que esperarlo y, cuando confirma, ver
+// la cuenta por eliminar y no abonar. Si mirara el estado sin esperarlo, lo
+// veria activo y abonaria igual en cuanto el dia 0 terminara.
 func TestEnvioDeCripto_EsperaAlDiaCeroYNoAbonaALaCuentaPorEliminar(t *testing.T) {
 	pool := testutil.TestDB(t)
 	ctx := context.Background()
 	a, b := sembrar(t, pool), sembrar(t, pool)
-	e := montarEnvioDeCripto(t, pool, b.ID, a.ID)
+	darleUnBitcoin(t, pool, b.ID)
+	e := montarEnvioDeCripto(t, pool, a.ID)
 
 	listo := make(chan struct{})
 	var errEnvio error
@@ -209,7 +236,7 @@ func TestEnvioDeCripto_EsperaAlDiaCeroYNoAbonaALaCuentaPorEliminar(t *testing.T)
 		f: func() {
 			go func() {
 				defer close(listo)
-				errEnvio = e.enviar(ctx)
+				errEnvio = e.enviar(ctx, b.ID)
 			}()
 			// Se sigue cuando el envio quedo esperando un candado o ya termino.
 			// Sin el arreglo no espera nada: abona y confirma.
