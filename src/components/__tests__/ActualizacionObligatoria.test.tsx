@@ -15,6 +15,7 @@ const hook = vi.hoisted(() => ({
   actualizacion: null as ActualizacionDisponible | null,
   plataforma: 'android' as 'android' | 'ios' | null,
   actualizar: vi.fn(),
+  reintentar: vi.fn(),
 }));
 vi.mock('../../hooks/useActualizacion', () => ({ useActualizacion: () => hook }));
 
@@ -43,6 +44,7 @@ beforeEach(() => {
   hook.actualizacion = null;
   hook.plataforma = 'android';
   hook.actualizar.mockReset();
+  hook.reintentar.mockReset();
 });
 
 describe('ActualizacionObligatoria', () => {
@@ -107,7 +109,13 @@ describe('BarreraDeActualizacion', () => {
   }
 
   it('con una version nueva no deja ver la app, ni siquiera el login', () => {
-    hook.actualizacion = { version: '2.8.0', instalada: '2.7.0', url: 'https://ejemplo/kiramopay.apk', notas: NOTAS };
+    hook.actualizacion = {
+      via: 'externa',
+      version: '2.8.0',
+      instalada: '2.7.0',
+      url: 'https://ejemplo/kiramopay.apk',
+      notas: NOTAS,
+    };
     app();
     expect(screen.queryByText('pantalla de ingreso')).toBeNull();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
@@ -121,9 +129,89 @@ describe('BarreraDeActualizacion', () => {
   });
 
   it('el boton actualiza con la plataforma que corresponde', async () => {
-    hook.actualizacion = { version: '2.8.0', instalada: '2.7.0', url: 'https://ejemplo/kiramopay.apk', notas: [] };
+    hook.actualizacion = {
+      via: 'externa',
+      version: '2.8.0',
+      instalada: '2.7.0',
+      url: 'https://ejemplo/kiramopay.apk',
+      notas: [],
+    };
     app();
     await userEvent.click(screen.getByRole('button', { name: 'Descargar' }));
     expect(hook.actualizar).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Por dentro ───────────────────────────────────────────────────────────────
+// Cuando alcanza con la capa web, la barrera baja la version nueva ella misma y
+// muestra el avance: no hay boton que descargar ni APK que instalar.
+
+describe('ActualizacionObligatoria por dentro', () => {
+  it('muestra el avance y no ofrece botones mientras baja', () => {
+    montar({ interna: { fase: 'descargando', recibidos: 250_000, total: 1_000_000 } });
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText(/No tienes que instalar nada/)).toBeInTheDocument();
+    const barra = screen.getByRole('progressbar');
+    expect(barra).toHaveAttribute('aria-valuenow', '25');
+    expect(screen.getByText('25 %')).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('dice cuanto lleva bajado', () => {
+    montar({ interna: { fase: 'descargando', recibidos: 500_000, total: 2_000_000 } });
+    expect(screen.getByText(/0,5 MB de 2 MB/)).toBeInTheDocument();
+  });
+
+  it('antes del primer avance no inventa un porcentaje', () => {
+    montar({ interna: { fase: 'preparando', recibidos: 0, total: null } });
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+    expect(screen.queryByText(/%/)).toBeNull();
+  });
+
+  it('al aplicar avisa que se reinicia sola', () => {
+    montar({ interna: { fase: 'aplicando', recibidos: 1_000_000, total: 1_000_000 } });
+    expect(screen.getByText(/Aplicando la actualización/)).toBeInTheDocument();
+  });
+
+  it('sin conexion dice que sigue sola cuando vuelva la red', () => {
+    montar({ interna: { fase: 'sin_red', recibidos: 0, total: null } });
+    expect(screen.getByText(/Sin conexión/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('si no se pudo, ofrece reintentar y sigue sin dejar pasar', async () => {
+    const onReintentar = vi.fn();
+    montar({ interna: { fase: 'error', recibidos: 0, total: null }, onReintentar });
+    expect(screen.getByText(/No se pudo descargar la actualización/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(onReintentar).toHaveBeenCalledOnce();
+  });
+
+  it('dice que trae la version y cual esta instalada', () => {
+    montar({ interna: { fase: 'descargando', recibidos: 1, total: 10 } });
+    expect(screen.getByText('Qué trae la versión 2.8.0')).toBeInTheDocument();
+    expect(screen.getByText('Tienes la versión 2.7.0.')).toBeInTheDocument();
+  });
+
+  it('en la barrera, la descarga interna tapa la app', () => {
+    hook.actualizacion = {
+      via: 'interna',
+      version: '2.8.0',
+      instalada: '2.7.0',
+      notas: NOTAS,
+      fase: 'descargando',
+      recibidos: 10,
+      total: 100,
+    };
+    render(
+      <LanguageProvider>
+        <BarreraDeActualizacion>
+          <p>pantalla de ingreso</p>
+        </BarreraDeActualizacion>
+      </LanguageProvider>,
+    );
+    expect(screen.queryByText('pantalla de ingreso')).toBeNull();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
   });
 });
