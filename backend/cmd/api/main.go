@@ -257,11 +257,11 @@ func main() {
 	// topes bajos— pero un control que no puede dispararse y no lo dice se lee
 	// como un control que funciona y no encuentra nada.
 	{
-		// Desde la migracion 065 hay una tercera regla —el acumulado de 30
-		// dias— que SI es alcanzable con el tope mensual del nivel mas alto.
-		// El aviso solo se da si ninguna de las reglas de una moneda puede
-		// dispararse: antes gritaba siempre, y un aviso que no cambia deja de
-		// leerse.
+		// Las transacciones multiples del mes calendario (migracion 080; antes
+		// los 30 dias de la 065) SI son alcanzables con el tope mensual del
+		// nivel mas alto, y las entradas no tienen tope. El aviso solo se da si
+		// ninguna de las reglas puede dispararse: antes gritaba siempre, y un
+		// aviso que no cambia deja de leerse.
 		//
 		// El umbral es uno, en dolares, y los agregados juntan las monedas: los
 		// topes de cada moneda se suman por su equivalente con el tipo de cambio
@@ -280,7 +280,7 @@ func main() {
 			"USD": maxKYC.DailyMinorUSD,
 		}, porDolar)
 		if !diario.Alcanzable && !mensual.Alcanzable {
-			log.Printf("AVISO UIF: diario %s; 30 dias %s: la cola de cumplimiento no puede recibir un caso. "+
+			log.Printf("AVISO UIF: diario %s; mes %s: la cola de cumplimiento no puede recibir un caso. "+
 				"Revisar con el area de cumplimiento.", diario, mensual)
 		}
 	}
@@ -350,17 +350,12 @@ func main() {
 		Hacienda: kyc.NewHaciendaClient("", ""),
 	})
 	// La UIF compara cada movimiento por su equivalente en dolares (la ley fija
-	// US$10.000 o su equivalente) con el ultimo tipo de cambio oficial, aunque la
-	// fuente no lo haya confirmado en las ultimas horas: para comparar con el
-	// umbral, el ultimo oficial es mejor que ninguno. Sin ninguno, abre un caso
-	// manual.
-	uifService := uif.NewService(uifRepo, &uif.Options{
-		AuditLogger: auditLogger,
-		TipoDeCambio: func(ctx context.Context, moneda string) (float64, error) {
-			tasa, _, err := countryRepo.TipoDeCambioConEdad(ctx, "USD", moneda)
-			return tasa, err
-		},
-	})
+	// US$10.000 o su equivalente) con la venta de referencia del BCCR del dia en
+	// que ocurrio, que guarda el actualizador del tipo de cambio. Una venta vieja
+	// se usa igual y da la alarma; sin ninguna, abre un caso manual. El mes
+	// anterior se cierra solo, con la venta del ultimo dia del mes.
+	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
+	uifService.IniciarCierres(context.Background(), time.Hour)
 	adminUsersService := adminusers.NewService(userRepo, authRepo, &adminusers.Options{AuditLogger: auditLogger})
 	// Loyalty nace ANTES que auth: el registro con codigo de invitacion le
 	// acredita el bono al referidor a traves de Referrals. Si se construyera

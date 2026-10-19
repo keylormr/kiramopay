@@ -166,6 +166,21 @@ func (r *Repository) RegistrarTipoDeCambio(ctx context.Context, from, to string,
 	return tx.Commit(ctx)
 }
 
+// RegistrarCotizacionDelDia guarda cuantas unidades de la moneda vale un dolar
+// el dia `fecha`, la fecha que publica el BCCR (no la hora en que se trajo). Se
+// guarda en cada pasada: la misma fecha se sobrescribe, una fecha nueva es una
+// fila nueva.
+func (r *Repository) RegistrarCotizacionDelDia(ctx context.Context, moneda string, fecha time.Time,
+	porDolar float64, fuente string) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO tipo_de_cambio_diario (moneda, fecha, por_dolar, fuente)
+		VALUES ($1, $2::date, $3, $4)
+		ON CONFLICT (moneda, fecha) DO UPDATE
+		   SET por_dolar = EXCLUDED.por_dolar, fuente = EXCLUDED.fuente, registrado_en = NOW()`,
+		moneda, fecha.Format("2006-01-02"), porDolar, fuente)
+	return err
+}
+
 // TipoDeCambioConEdad devuelve la tasa vigente del par y cuanto hace que la
 // fuente la confirmo.
 //
