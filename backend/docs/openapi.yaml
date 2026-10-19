@@ -2549,7 +2549,8 @@ paths:
       tags: [QR Payments]
       summary: List the catalog (whole team)
       description: >-
-        The products a cashier can pick when charging, in their order.
+        The products a cashier can pick when charging, in their order. Removed
+        products are not listed.
       security:
         - bearerAuth: []
       parameters:
@@ -2644,7 +2645,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CatalogItem'
         '400':
-          description: INVALID_BODY; UPDATE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager).
+          description: INVALID_BODY; UPDATE_ITEM_FAILED (unknown or removed product, or the caller is not the owner or a manager). A removed product cannot be edited or reactivated.
           content:
             application/json:
               schema:
@@ -2665,6 +2666,9 @@ paths:
       tags: [QR Payments]
       summary: Remove a product (owner or manager)
       description: >-
+        Logical removal: the product leaves the catalog (it is no longer listed,
+        edited or reactivated) but its row is kept, marked and inactive, and who
+        removed it stays in the audit trail. To sell it again, create it anew.
         Past sales keep their totals and note: they do not point to the product.
       security:
         - bearerAuth: []
@@ -2678,7 +2682,7 @@ paths:
         '204':
           description: Done
         '400':
-          description: DELETE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager).
+          description: DELETE_ITEM_FAILED (unknown or already removed product, or the caller is not the owner or a manager).
           content:
             application/json:
               schema:

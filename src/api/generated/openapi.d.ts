@@ -3943,7 +3943,7 @@ export interface paths {
         };
         /**
          * List the catalog (whole team)
-         * @description The products a cashier can pick when charging, in their order.
+         * @description The products a cashier can pick when charging, in their order. Removed products are not listed.
          */
         get: {
             parameters: {
@@ -4086,7 +4086,7 @@ export interface paths {
                         "application/json": components["schemas"]["CatalogItem"];
                     };
                 };
-                /** @description INVALID_BODY; UPDATE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager). */
+                /** @description INVALID_BODY; UPDATE_ITEM_FAILED (unknown or removed product, or the caller is not the owner or a manager). A removed product cannot be edited or reactivated. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -4118,7 +4118,7 @@ export interface paths {
         post?: never;
         /**
          * Remove a product (owner or manager)
-         * @description Past sales keep their totals and note: they do not point to the product.
+         * @description Logical removal: the product leaves the catalog (it is no longer listed, edited or reactivated) but its row is kept, marked and inactive, and who removed it stays in the audit trail. To sell it again, create it anew. Past sales keep their totals and note: they do not point to the product.
          */
         delete: {
             parameters: {
@@ -4139,7 +4139,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description DELETE_ITEM_FAILED (unknown product, or the caller is not the owner or a manager). */
+                /** @description DELETE_ITEM_FAILED (unknown or already removed product, or the caller is not the owner or a manager). */
                 400: {
                     headers: {
                         [name: string]: unknown;
