@@ -63,12 +63,13 @@ func TestUIF_ElBordeDelMesEsLaMedianocheDeCostaRica(t *testing.T) {
 	ahora := enCR(2026, time.March, 31, 23, 30)
 	svc := servicioA(pool, ahora, map[string]float64{"CRC": 550})
 
-	movimientoEn(t, pool, userID, "sinpe_send", "USD", 500_000, enCR(2026, time.February, 28, 23, 59))
+	movimientoEn(t, pool, userID, "sinpe_send", "USD", 520_000, enCR(2026, time.February, 28, 23, 59))
 	movimientoEn(t, pool, userID, "sinpe_send", "USD", 470_000, enCR(2026, time.March, 1, 0, 1))
 	tx := movimientoEn(t, pool, userID, "sinpe_send", "USD", 20_000, ahora)
 	svc.Report(ctx, userID, tx, "USD", 20_000)
 
-	// Marzo: US$4.700 + US$200. Febrero no entra: no hay caso.
+	// Marzo: US$4.700 + US$200. Febrero no entra: no hay caso. (Contado en UTC,
+	// los US$5.200 de febrero serian de marzo y el mes cruzaria aqui.)
 	if casos := casosConMes(t, pool, userID); len(casos) != 0 {
 		t.Fatalf("casos = %+v: el ultimo minuto de febrero (hora de CR) no es de marzo", casos)
 	}
@@ -164,7 +165,7 @@ func TestUIF_ElCierreUsaLaVentaDelUltimoDiaDelMes(t *testing.T) {
 	ventaDelDia(t, pool, "CRC", "2026-04-01", 520)
 	movimientoEn(t, pool, userID, "sinpe_send", "CRC", 500_000_000, enCR(2026, time.March, 3, 9, 0))
 
-	svc := servicioA(pool, enCR(2026, time.April, 1, 10, 0), nil)
+	svc := servicioA(pool, enCR(2026, time.April, 2, 10, 0), nil)
 	marzo := uif.MesDe(enCR(2026, time.March, 15, 0, 0))
 	res, err := svc.CerrarMes(ctx, marzo)
 	if err != nil {
@@ -235,7 +236,7 @@ func TestUIF_ElCierreSinTipoDeCambioEsManual(t *testing.T) {
 	movimientoEn(t, pool, userID, "sinpe_receive", "GTQ", 5_000_000, enCR(2026, time.March, 5, 9, 0))
 	movimientoEn(t, pool, userID, "sinpe_send", "USD", 100_000, enCR(2026, time.March, 6, 9, 0))
 
-	svc := servicioA(pool, enCR(2026, time.April, 1, 10, 0), nil)
+	svc := servicioA(pool, enCR(2026, time.April, 2, 10, 0), nil)
 	res, err := svc.CerrarMes(ctx, uif.MesDe(enCR(2026, time.March, 15, 0, 0)))
 	if err != nil {
 		t.Fatalf("CerrarMes: %v", err)
@@ -249,13 +250,20 @@ func TestUIF_ElCierreSinTipoDeCambioEsManual(t *testing.T) {
 	}
 }
 
-// Un mes que todavia no termino no se cierra.
+// Un mes que todavia no termino no se cierra, y tampoco el primer dia del mes
+// siguiente: lo que se creo el 31 a ultima hora y completa despues tiene un dia
+// para entrar a la cuenta.
 func TestUIF_NoSeCierraUnMesSinTerminar(t *testing.T) {
 	_, _, pool, _ := setupUIF(t)
-	ahora := enCR(2026, time.March, 31, 23, 59)
-	svc := servicioA(pool, ahora, nil)
-	if _, err := svc.CerrarMes(context.Background(), uif.MesDe(ahora)); !errors.Is(err, uif.ErrMesSinTerminar) {
-		t.Fatalf("err = %v, se esperaba ErrMesSinTerminar", err)
+	marzo := uif.MesDe(enCR(2026, time.March, 15, 0, 0))
+	for _, ahora := range []time.Time{enCR(2026, time.March, 31, 23, 59), enCR(2026, time.April, 1, 23, 59)} {
+		svc := servicioA(pool, ahora, nil)
+		if _, err := svc.CerrarMes(context.Background(), marzo); !errors.Is(err, uif.ErrMesSinTerminar) {
+			t.Fatalf("a las %s: err = %v, se esperaba ErrMesSinTerminar", ahora, err)
+		}
+	}
+	if _, err := servicioA(pool, enCR(2026, time.April, 2, 0, 0), nil).CerrarMes(context.Background(), marzo); err != nil {
+		t.Fatalf("el 2 de abril: %v", err)
 	}
 }
 
@@ -263,7 +271,7 @@ func TestUIF_NoSeCierraUnMesSinTerminar(t *testing.T) {
 func TestUIF_ElMesAnteriorSeCierraSolo(t *testing.T) {
 	_, _, pool, userID := setupUIF(t)
 	movimientoEn(t, pool, userID, "deposit", "USD", 1_200_000, enCR(2026, time.March, 20, 9, 0))
-	svc := servicioA(pool, enCR(2026, time.April, 1, 0, 30), nil)
+	svc := servicioA(pool, enCR(2026, time.April, 2, 0, 30), nil)
 
 	ctx, cancelar := context.WithCancel(context.Background())
 	defer cancelar()
@@ -297,7 +305,7 @@ func TestUIF_ElCierreEsPorCliente(t *testing.T) {
 	movimientoEn(t, pool, uno, "sinpe_send", "USD", 600_000, enCR(2026, time.March, 2, 9, 0))
 	movimientoEn(t, pool, otro, "sinpe_send", "USD", 600_000, enCR(2026, time.March, 2, 9, 0))
 
-	svc := servicioA(pool, enCR(2026, time.April, 1, 10, 0), nil)
+	svc := servicioA(pool, enCR(2026, time.April, 2, 10, 0), nil)
 	res, err := svc.CerrarMes(ctx, uif.MesDe(enCR(2026, time.March, 15, 0, 0)))
 	if err != nil {
 		t.Fatalf("CerrarMes: %v", err)

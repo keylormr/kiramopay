@@ -34,10 +34,6 @@ func inicioDelMesCR(t time.Time) time.Time {
 
 func diaCR(t time.Time) string { return t.In(horaCR).Format(time.DateOnly) }
 
-func mismoDiaUTC(a, b time.Time) bool {
-	return a.UTC().Format(time.DateOnly) == b.UTC().Format(time.DateOnly)
-}
-
 // movimientoEn inserta un movimiento completado del tipo dado en un instante
 // dado. created_date lleva la fecha del servidor (UTC), como en produccion.
 func movimientoEn(t *testing.T, pool *pgxpool.Pool, userID, tipo, moneda string, monto int64, cuando time.Time) string {
@@ -86,15 +82,11 @@ func contarCasos(t *testing.T, pool *pgxpool.Pool, userID, tipo string) int {
 // hora de Costa Rica: el dia no los ve, el mes si.
 func TestUIF_ElMesCalendarioAbreElCasoRegulatorio(t *testing.T) {
 	_, _, pool, userID := setupUIF(t)
-	svc := servicioConTasa(pool, map[string]float64{"CRC": 550})
+	ahora := enCR(2026, time.October, 18, 12, 0)
+	svc := servicioA(pool, ahora, map[string]float64{"CRC": 550})
 	ctx := context.Background()
 
-	ahora := time.Now()
-	primerMinuto := inicioDelMesCR(ahora).Add(time.Minute)
-	if !primerMinuto.Before(ahora) || mismoDiaUTC(primerMinuto, ahora) {
-		t.Skip("hoy es el primer dia del mes: el dia y el mes coinciden y el caso seria el del dia")
-	}
-	movimientoEn(t, pool, userID, "sinpe_send", "USD", 950_000, primerMinuto)
+	movimientoEn(t, pool, userID, "sinpe_send", "USD", 950_000, enCR(2026, time.October, 1, 0, 1))
 	tx := movimientoEn(t, pool, userID, "sinpe_send", "USD", 60_000, ahora)
 	svc.Report(ctx, userID, tx, "USD", 60_000)
 
@@ -107,8 +99,8 @@ func TestUIF_ElMesCalendarioAbreElCasoRegulatorio(t *testing.T) {
 		`SELECT mes::text FROM uif_reports WHERE user_id = $1::uuid`, userID).Scan(&mes); err != nil {
 		t.Fatalf("leer el mes del caso: %v", err)
 	}
-	if want := inicioDelMesCR(ahora).Format(time.DateOnly); mes != want {
-		t.Fatalf("mes del caso = %s, se esperaba %s", mes, want)
+	if mes != "2026-10-01" {
+		t.Fatalf("mes del caso = %s, se esperaba 2026-10-01", mes)
 	}
 }
 
@@ -118,15 +110,11 @@ func TestUIF_ElMesCalendarioAbreElCasoRegulatorio(t *testing.T) {
 // propio. En UTC ese minuto ya es de este mes: una cuenta en UTC lo sumaria.
 func TestUIF_ElMesPasadoNoEntraEnElCasoRegulatorio(t *testing.T) {
 	_, _, pool, userID := setupUIF(t)
-	svc := servicioConTasa(pool, map[string]float64{"CRC": 550})
+	ahora := enCR(2026, time.October, 18, 12, 0)
+	svc := servicioA(pool, ahora, map[string]float64{"CRC": 550})
 	ctx := context.Background()
 
-	ahora := time.Now()
-	ultimoMinuto := inicioDelMesCR(ahora).Add(-time.Minute)
-	if mismoDiaUTC(ultimoMinuto, ahora) || ahora.Sub(ultimoMinuto) >= 30*24*time.Hour {
-		t.Skip("hoy el ultimo minuto del mes pasado cae en el mismo dia UTC o fuera de los 30 dias")
-	}
-	movimientoEn(t, pool, userID, "sinpe_send", "USD", 950_000, ultimoMinuto)
+	movimientoEn(t, pool, userID, "sinpe_send", "USD", 950_000, enCR(2026, time.September, 30, 23, 59))
 	tx := movimientoEn(t, pool, userID, "sinpe_send", "USD", 60_000, ahora)
 	svc.Report(ctx, userID, tx, "USD", 60_000)
 
@@ -255,17 +243,13 @@ func TestUIF_CadaMovimientoGuardaSuEquivalente(t *testing.T) {
 // cruzarian.
 func TestUIF_CadaDiaSeConvierteConSuVenta(t *testing.T) {
 	_, _, pool, userID := setupUIF(t)
-	svc := uif.NewService(uif.NewRepository(pool), nil)
+	ahora := enCR(2026, time.October, 18, 12, 0)
+	svc := servicioA(pool, ahora, nil)
 	ctx := context.Background()
 
-	ahora := time.Now()
-	primerMinuto := inicioDelMesCR(ahora).Add(time.Minute)
-	if diaCR(primerMinuto) == diaCR(ahora) || mismoDiaUTC(primerMinuto, ahora) {
-		t.Skip("hoy es el primer dia del mes: no hay otro dia del mes con el que comparar")
-	}
-	ventaDelDia(t, pool, "CRC", diaCR(primerMinuto), 500)
-	ventaDelDia(t, pool, "CRC", diaCR(ahora), 560)
-	movimientoEn(t, pool, userID, "sinpe_send", "CRC", 475_000_000, primerMinuto)
+	ventaDelDia(t, pool, "CRC", "2026-10-01", 500)
+	ventaDelDia(t, pool, "CRC", "2026-10-18", 560)
+	movimientoEn(t, pool, userID, "sinpe_send", "CRC", 475_000_000, enCR(2026, time.October, 1, 0, 1))
 	tx := movimientoEn(t, pool, userID, "sinpe_send", "USD", 60_000, ahora)
 	svc.Report(ctx, userID, tx, "USD", 60_000)
 

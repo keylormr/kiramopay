@@ -3,6 +3,7 @@ package country_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,5 +265,35 @@ func TestSinEuroElDolarSeActualizaIgual(t *testing.T) {
 	}
 	if _, _, ok := ventaGuardada(t, pool, "CRC", hoy().Format(time.DateOnly)); !ok {
 		t.Fatal("sin euro no se guardo la venta del dolar del dia")
+	}
+}
+
+// Si no se puede guardar la venta del dia (la tabla no esta, la base fallo), el
+// dolar con que se cobra igual queda actualizado, el diagnostico lo muestra y
+// dice que fallo.
+func TestSinLaVentaDelDiaElDolarSeActualizaIgual(t *testing.T) {
+	pool := testutil.TestDB(t)
+	repo := country.NewRepository(pool)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `ALTER TABLE tipo_de_cambio_diario RENAME TO tipo_de_cambio_diario_escondida`); err != nil {
+		t.Fatalf("esconder la tabla: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`ALTER TABLE IF EXISTS tipo_de_cambio_diario_escondida RENAME TO tipo_de_cambio_diario`); err != nil {
+			t.Fatalf("devolver la tabla: %v", err)
+		}
+	})
+
+	f := &fuente{c: &country.Cotizacion{Compra: 444.22, Venta: 450.06, Fecha: hoy()}}
+	a := country.NewActualizador(repo, f, time.Hour, nil)
+	if err := a.ActualizarUnaVez(ctx); err != nil {
+		t.Fatalf("ActualizarUnaVez: %v", err)
+	}
+	if tasa, err := repo.TipoDeCambioParaCobrar(ctx, "USD", "CRC"); err != nil || tasa != 450.06 {
+		t.Fatalf("USD/CRC = %v (%v), se esperaba 450.06", tasa, err)
+	}
+	if d := a.Diagnostico(); d.UsdCrc != 450.06 || !strings.Contains(d.UltimoError, "venta del dia") {
+		t.Fatalf("diagnostico = %+v: tiene que mostrar el dolar y decir que fallo la venta del dia", d)
 	}
 }
