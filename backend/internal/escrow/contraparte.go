@@ -63,7 +63,7 @@ func (s *Service) resolverVendedor(ctx context.Context, req *CreateRequest) erro
 			return ErrInvalidRequest
 		}
 		u, err := s.cuentas.FindByPhone(ctx, canonico)
-		if err != nil || u == nil {
+		if err != nil || u == nil || porEliminar(u.Status) {
 			return ErrVendedorSinCuenta
 		}
 		req.SellerID = u.ID
@@ -77,9 +77,15 @@ func (s *Service) resolverVendedor(ctx context.Context, req *CreateRequest) erro
 		return ErrInvalidRequest
 	}
 	u, err := s.cuentas.FindByID(ctx, id)
-	if err != nil || u == nil {
+	if err != nil || u == nil || porEliminar(u.Status) {
 		return ErrVendedorSinCuenta
 	}
 	req.SellerID = u.ID
 	return nil
 }
+
+// porEliminar: la cuenta tiene la eliminacion en curso. Para abrir un acuerdo es
+// como si no tuviera cuenta: un acuerdo pendiente no vence y solo el comprador
+// lo cancela, asi que cualquiera que conozca el telefono podria impedir el
+// cierre del dia 30.
+func porEliminar(status string) bool { return status == "pending_deletion" }

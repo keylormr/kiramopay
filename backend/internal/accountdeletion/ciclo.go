@@ -1,0 +1,270 @@
+package accountdeletion
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/kiramopay/backend/internal/messaging"
+)
+
+// La linea de tiempo despues del dia 0: la reactivacion (dias 0 a 30), el cierre
+// efectivo (dia 30) y la desasociacion (al vencer la conservacion). Los dos
+// barridos los corre Poller; aqui va lo que hace cada uno.
+
+// SeEliminaEl devuelve el dia 30 de la cuenta y si todavia se puede reactivar:
+// la cuenta esta en 'pending_deletion' y el barrido no la cerro. Una cuenta sin
+// solicitud responde la fecha cero y false. Lo usa el login (auth) para ofrecer
+// la reactivacion.
+//
+// Vencido el dia 30 la puerta sigue abierta mientras la cuenta no se cierre: si
+// el barrido no pudo cerrarla (aparecio algo pendiente: dinero que alguien
+// mando, un acuerdo que otro abrio), la persona tiene que poder entrar a
+// resolverlo. Cerrar esa puerta la dejaria sin acceso, con lo pendiente adentro
+// y sin cierre. Una cuenta limpia la cierra el barrido a los minutos.
+func (s *Service) SeEliminaEl(ctx context.Context, userID string) (time.Time, bool, error) {
+	var (
+		vence       *time.Time
+		reactivable bool
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT deletion_due_at,
+		       COALESCE(status = 'pending_deletion' AND deleted_at IS NULL, false)
+		  FROM users WHERE id = $1::uuid`, userID,
+	).Scan(&vence, &reactivable)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("leer la solicitud: %w", err)
+	}
+	if vence == nil {
+		return time.Time{}, false, nil
+	}
+	return *vence, reactivable, nil
+}
+
+// Reactivar cancela el proceso de una cuenta que el barrido no cerro: vuelve a
+// 'active', reabre el libro, cancela la solicitud web si la habia y avisa por
+// correo. false sin error si ya no se puede (la cerro el barrido, operaciones la
+// bloqueo mientras tanto) o no habia nada que reactivar.
+//
+// La marca del middleware se quita ANTES de tocar la base, como en el
+// desbloqueo (auth/blocking.go): si quitarla falla, la cuenta sigue en plazo y
+// la persona reintenta. Al reves, entraria a una cuenta activa que responde
+// "bloqueada" en cada peticion, y nada volveria a intentar quitarla. Si despues
+// la base no reactiva, la marca no se repone aqui: una cuenta en plazo no tiene
+// sesiones, y el repaso de las marcas la vuelve a poner.
+func (s *Service) Reactivar(ctx context.Context, userID string) (bool, error) {
+	if err := s.desmarcarSiEstaEnPlazo(ctx, userID); err != nil {
+		return false, err
+	}
+	var (
+		ok     bool
+		correo string
+	)
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		var err error
+		correo = correoDe(ctx, tx, userID)
+		ok, err = reactivarEnTx(ctx, tx, userID)
+		return err
+	})
+	if err != nil || !ok {
+		return ok, err
+	}
+	subject, text, html := messaging.AccountReactivatedEmail()
+	s.enviarAviso(userID, correo, subject, text, html, "aviso de reactivacion no enviado")
+	return true, nil
+}
+
+// desmarcarSiEstaEnPlazo quita la marca de una cuenta con la eliminacion en
+// curso. La de una cuenta bloqueada por operaciones no se toca: es la del
+// bloqueo.
+func (s *Service) desmarcarSiEstaEnPlazo(ctx context.Context, userID string) error {
+	if s.marcas == nil {
+		return nil
+	}
+	var enPlazo bool
+	err := s.pool.QueryRow(ctx, `SELECT status = 'pending_deletion' AND deleted_at IS NULL
+		FROM users WHERE id = $1::uuid`, userID).Scan(&enPlazo)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("leer la cuenta: %w", err)
+	}
+	if !enPlazo {
+		return nil
+	}
+	if err := s.marcas.ClearUserBlocked(ctx, userID); err != nil {
+		return fmt.Errorf("quitar la marca: %w", err)
+	}
+	return nil
+}
+
+// maxPaginasPorBarrido acota cuantos lotes recorre un barrido: con lotes de
+// 100, dos mil cuentas por pasada.
+const maxPaginasPorBarrido = 20
+
+// idCero es el id desde el que empieza un barrido: menor que cualquier otro.
+const idCero = "00000000-0000-0000-0000-000000000000"
+
+// CerrarVencidas cierra las cuentas cuyo dia 30 ya llego en now, en lotes de
+// limite. Devuelve cuantas cerro. Cada cuenta va en su propia transaccion: una
+// que falla no frena a las demas, y el error de la primera que fallo se devuelve
+// al final. Una cuenta con algo pendiente no se cierra y queda en el log para
+// operaciones.
+//
+// Recorre por id y por paginas, no "las mas viejas primero": una cuenta que no
+// se puede cerrar seguiria siendo la mas vieja en cada pasada, y con un lote
+// entero de ellas ninguna otra se cerraria nunca.
+func (s *Service) CerrarVencidas(ctx context.Context, now time.Time, limite int) (int, error) {
+	return s.barrer(ctx, now, limite, `SELECT id::text FROM users
+		 WHERE deletion_requested_at IS NOT NULL AND deleted_at IS NULL AND deletion_due_at <= $1
+		   AND id > $2::uuid
+		 ORDER BY id
+		 LIMIT $3`, s.cerrarUna)
+}
+
+// DesasociarVencidas desasocia lo conservado de las cuentas cuya conservacion
+// vencio en now. Devuelve cuantas desasocio. Mismo recorrido que CerrarVencidas.
+func (s *Service) DesasociarVencidas(ctx context.Context, now time.Time, limite int) (int, error) {
+	return s.barrer(ctx, now, limite, `SELECT id::text FROM users
+		 WHERE `+sqlConservacionVencidaEn1+`
+		   AND id > $2::uuid
+		 ORDER BY id
+		 LIMIT $3`, s.desasociarUna)
+}
+
+// barrer recorre por paginas las cuentas que devuelve la consulta (now en $1,
+// el ultimo id visto en $2 y el limite en $3) y le pasa cada una a hacer, que
+// usa su propia transaccion. Devuelve cuantas hizo y el error de la primera que
+// fallo.
+func (s *Service) barrer(ctx context.Context, now time.Time, limite int, sql string,
+	hacer func(ctx context.Context, id string, now time.Time) (bool, error)) (int, error) {
+	if limite <= 0 {
+		limite = 100
+	}
+	hechas := 0
+	var primero error
+	desde := idCero
+	for pagina := 0; pagina < maxPaginasPorBarrido; pagina++ {
+		ids, err := s.idsDesde(ctx, sql, now, desde, limite)
+		if err != nil {
+			return hechas, err
+		}
+		for _, id := range ids {
+			hecha, err := hacer(ctx, id, now)
+			if err != nil {
+				if primero == nil {
+					primero = err
+				}
+				continue
+			}
+			if hecha {
+				hechas++
+			}
+		}
+		if len(ids) < limite {
+			break
+		}
+		desde = ids[len(ids)-1]
+	}
+	return hechas, primero
+}
+
+// idsDesde lee un lote de ids de un barrido.
+func (s *Service) idsDesde(ctx context.Context, sql string, now time.Time, desde string, limite int) ([]string, error) {
+	filas, err := s.pool.Query(ctx, sql, now, desde, limite)
+	if err != nil {
+		return nil, fmt.Errorf("leer candidatas: %w", err)
+	}
+	defer filas.Close()
+	var ids []string
+	for filas.Next() {
+		var id string
+		if err := filas.Scan(&id); err != nil {
+			return nil, fmt.Errorf("leer candidata: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, filas.Err()
+}
+
+// cerrarUna hace el cierre del dia 30 de una cuenta y, si cerro, manda el aviso.
+func (s *Service) cerrarUna(ctx context.Context, id string, now time.Time) (bool, error) {
+	var (
+		cerrada  bool
+		bloqueos []Bloqueo
+		correo   string
+	)
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		var err error
+		// El correo se lee antes de la tumba, para el aviso del cierre.
+		correo = correoDe(ctx, tx, id)
+		cerrada, bloqueos, err = cerrarEnTx(ctx, tx, id, now)
+		return err
+	})
+	// Lo pendiente que aparece a mitad del cierre (un comercio que no se pudo
+	// cerrar) llega como error para deshacer la transaccion, pero es lo mismo
+	// que un bloqueo visto al principio.
+	var bloqueada *ErrBloqueada
+	if errors.As(err, &bloqueada) {
+		err, bloqueos = nil, bloqueada.Bloqueos
+	}
+	if err != nil {
+		s.logger.Error("cierre de cuenta fallido", "user", id, "err", err.Error())
+		return false, fmt.Errorf("cerrar %s: %w", id, err)
+	}
+	if len(bloqueos) > 0 {
+		s.logger.Warn("cuenta por eliminar con algo pendiente: no se cierra", "user", id, "blockers", codigosDeBloqueo(bloqueos))
+		return false, nil
+	}
+	if cerrada {
+		subject, text, html := messaging.AccountDeletedEmail()
+		s.enviarAviso(id, correo, subject, text, html, "aviso de cuenta eliminada no enviado")
+	}
+	return cerrada, nil
+}
+
+// desasociarUna desasocia lo conservado de una cuenta.
+func (s *Service) desasociarUna(ctx context.Context, id string, now time.Time) (bool, error) {
+	var hecha bool
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		var err error
+		hecha, err = desasociarEnTx(ctx, tx, id, now)
+		return err
+	})
+	if err != nil {
+		s.logger.Error("desasociacion fallida", "user", id, "err", err.Error())
+		return false, fmt.Errorf("desasociar %s: %w", id, err)
+	}
+	return hecha, nil
+}
+
+// sqlConservacionVencidaEn1 es sqlConservacionVencida con la fecha en $1, para
+// la consulta de candidatas (que lleva el ultimo id en $2 y el limite en $3).
+var sqlConservacionVencidaEn1 = `retention_until IS NOT NULL AND dissociated_at IS NULL
+	AND retention_until <= $1
+	AND (retention_extended_at IS NULL OR deleted_at + interval '` + intervaloConservacionExtensa + `' <= $1)
+	AND ` + sinCasoAbierto("$1")
+
+// correoDe descifra el correo de la cuenta; vacio si no tiene o no se puede.
+func correoDe(ctx context.Context, tx pgx.Tx, userID string) string {
+	var correo *string
+	if err := tx.QueryRow(ctx, `SELECT fn_pii_decrypt(email_enc) FROM users WHERE id = $1::uuid`, userID).Scan(&correo); err != nil || correo == nil {
+		return ""
+	}
+	return *correo
+}
+
+func codigosDeBloqueo(bloqueos []Bloqueo) []string {
+	out := make([]string, 0, len(bloqueos))
+	for _, b := range bloqueos {
+		out = append(out, b.Codigo)
+	}
+	return out
+}

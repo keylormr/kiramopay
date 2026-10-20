@@ -121,6 +121,18 @@ func (r *Repository) ListEndpoints(ctx context.Context, userID string) ([]Webhoo
 
 // ActiveEndpointsFor returns the user's active endpoints subscribed to eventType.
 func (r *Repository) ActiveEndpointsFor(ctx context.Context, userID, eventType string) ([]WebhookEndpoint, error) {
+	// Mientras corre el plazo de la eliminacion la cuenta no recibe avisos, y un
+	// webhook es uno: no se encola nada. El endpoint no se toca; al reactivar
+	// vuelve a recibir.
+	var porEliminar bool
+	if err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1::uuid AND status = 'pending_deletion')`,
+		userID).Scan(&porEliminar); err != nil {
+		return nil, err
+	}
+	if porEliminar {
+		return nil, nil
+	}
 	all, err := r.ListEndpoints(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -191,6 +203,10 @@ func (r *Repository) DueDeliveries(ctx context.Context, limit int) ([]DueDeliver
 			JOIN webhook_endpoints e2 ON e2.id = d2.endpoint_id
 			WHERE d2.status = 'pending' AND d2.next_attempt_at <= NOW()
 			  AND e2.status = 'active'
+			  -- Lo encolado antes del pedido de eliminacion espera: sale si la
+			  -- persona reactiva, y el cierre del dia 30 lo borra si no.
+			  AND NOT EXISTS (SELECT 1 FROM users u
+			                   WHERE u.id = e2.user_id AND u.status = 'pending_deletion')
 			ORDER BY d2.next_attempt_at
 			LIMIT $1
 			FOR UPDATE OF d2 SKIP LOCKED

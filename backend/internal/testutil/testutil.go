@@ -276,9 +276,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_by     UUID REFERENCES users(id) ON DELETE SET NULL;
 	CREATE INDEX IF NOT EXISTS idx_users_blocked ON users (blocked_at DESC) WHERE status = 'blocked';
-	DO $$ BEGIN
-		ALTER TABLE users ADD CONSTRAINT chk_users_status CHECK (status IN ('active','suspended','blocked','closed'));
-	EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+	-- El CHECK de estado es el de la 077, que agrega 'pending_deletion' (la
+	-- cuenta con la eliminacion en curso) a los de la 018.
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_status;
+	ALTER TABLE users ADD CONSTRAINT chk_users_status
+		CHECK (status IN ('active','suspended','blocked','closed','pending_deletion'));
 	-- Espejo de los CHECK de la 052: sin ellos una escritura incoherente
 	-- (blocked sin fecha ni motivo) pasaria verde en tests y fallaria en prod.
 	DO $$ BEGIN
@@ -295,6 +297,48 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- produccion. Aqui va sin CONCURRENTLY porque el esquema de pruebas se crea
 	-- en una sola consulta, que es de por si una transaccion.
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+	-- Eliminacion de cuenta (migracion 077): la solicitud, el plazo, la
+	-- conservacion y sus CHECK, iguales que alla. El CHECK de bloqueo se relaja
+	-- para 'closed'.
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS biometric_public_key TEXT;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at      TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_due_at            TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_terms_accepted_at TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_channel           VARCHAR(16);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS retention_until            TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS retention_extended_at      TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS dissociated_at             TIMESTAMPTZ;
+	-- Una base de pruebas que sobrevivio a la version anterior de la 077.
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_anonimizada_coherente;
+	ALTER TABLE users DROP COLUMN IF EXISTS anonymized_at;
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_deletion_channel;
+	ALTER TABLE users ADD CONSTRAINT chk_users_deletion_channel
+		CHECK (deletion_channel IS NULL OR deletion_channel IN ('in_app', 'web', 'admin'));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_solicitud_completa;
+	ALTER TABLE users ADD CONSTRAINT chk_users_solicitud_completa CHECK (
+		(deletion_requested_at IS NULL AND deletion_due_at IS NULL
+		 AND deletion_terms_accepted_at IS NULL AND deletion_channel IS NULL)
+		OR (deletion_requested_at IS NOT NULL AND deletion_due_at > deletion_requested_at
+		    AND deletion_terms_accepted_at IS NOT NULL AND deletion_channel IS NOT NULL));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_por_eliminar_coherente;
+	ALTER TABLE users ADD CONSTRAINT chk_users_por_eliminar_coherente CHECK (
+		(status = 'pending_deletion' AND deletion_requested_at IS NOT NULL AND deleted_at IS NULL)
+		OR (status <> 'pending_deletion'
+		    AND (deletion_requested_at IS NULL OR status IN ('blocked', 'suspended', 'closed'))));
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_conservacion_coherente;
+	ALTER TABLE users ADD CONSTRAINT chk_users_conservacion_coherente CHECK (
+		(retention_until IS NULL AND dissociated_at IS NULL)
+		OR (retention_until IS NOT NULL AND status = 'closed' AND deleted_at IS NOT NULL
+		    AND deletion_requested_at IS NOT NULL));
+	CREATE INDEX IF NOT EXISTS idx_users_por_eliminar ON users (deletion_due_at)
+		WHERE deletion_requested_at IS NOT NULL AND deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_users_por_desasociar ON users (retention_until)
+		WHERE retention_until IS NOT NULL AND dissociated_at IS NULL;
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_blocked_coherente;
+	ALTER TABLE users ADD CONSTRAINT chk_users_blocked_coherente CHECK (
+		(status = 'blocked' AND blocked_at IS NOT NULL AND blocked_reason IS NOT NULL)
+		OR status = 'closed'
+		OR (status NOT IN ('blocked', 'closed') AND blocked_at IS NULL));
 	CREATE INDEX IF NOT EXISTS idx_users_expires_at ON users (expires_at)
 		WHERE expires_at IS NOT NULL AND status <> 'blocked' AND deleted_at IS NULL;
 
@@ -459,6 +503,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		metadata JSONB DEFAULT '{}',
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
+	-- Migracion 077: la cuenta de quien pidio cerrarla deja de resolverse.
+	ALTER TABLE ledger_accounts ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_user_currency
 		ON ledger_accounts (user_id, currency) WHERE type = 'user_wallet';
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_accounts_merchant_ccy
@@ -925,7 +971,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		doc_type VARCHAR(30) NOT NULL,
 		file_ref TEXT NOT NULL,
 		sha256 VARCHAR(64),
-		uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_kyc_doc_type CHECK (doc_type IN ('id_front','id_back','proof_of_address','selfie'))
 	);
 
 	CREATE TABLE IF NOT EXISTS sanction_list (
@@ -966,10 +1013,59 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		reviewed_at TIMESTAMPTZ,
 		-- migracion 065: el acumulado de 30 dias que disparo el caso
-		acumulado_30d_minor BIGINT
+		acumulado_30d_minor BIGINT,
+		-- migracion 080: el mes calendario del caso y sus dos totales en dolares
+		mes DATE,
+		salidas_mes_usd_minor BIGINT,
+		entradas_mes_usd_minor BIGINT
 	);
+	-- Una base local persistida ya tiene la tabla y el CREATE no le agrega nada.
+	ALTER TABLE uif_reports
+		ADD COLUMN IF NOT EXISTS mes DATE,
+		ADD COLUMN IF NOT EXISTS salidas_mes_usd_minor BIGINT,
+		ADD COLUMN IF NOT EXISTS entradas_mes_usd_minor BIGINT;
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_tx_single
 		ON uif_reports(tx_id, report_type) WHERE tx_id IS NOT NULL;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_uif_reports_cierre
+		ON uif_reports (user_id, mes, report_type) WHERE tx_id IS NULL AND mes IS NOT NULL;
+
+	-- Migracion 080: la venta de referencia de cada dia, el registro de cada
+	-- movimiento que evalua la UIF y la marca de los meses cerrados.
+	CREATE TABLE IF NOT EXISTS tipo_de_cambio_diario (
+		moneda        VARCHAR(10)    NOT NULL,
+		fecha         DATE           NOT NULL,
+		por_dolar     NUMERIC(20,10) NOT NULL CHECK (por_dolar > 0),
+		fuente        VARCHAR(30)    NOT NULL,
+		registrado_en TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+		PRIMARY KEY (moneda, fecha)
+	);
+	CREATE TABLE IF NOT EXISTS uif_movimientos (
+		id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id     UUID NOT NULL REFERENCES users(id),
+		tx_id       UUID NOT NULL,
+		sentido     VARCHAR(10) NOT NULL CHECK (sentido IN ('salida', 'entrada')),
+		moneda      VARCHAR(10) NOT NULL,
+		monto_minor BIGINT NOT NULL,
+		usd_minor   BIGINT,
+		tasa        NUMERIC(20,10),
+		tasa_fecha  DATE,
+		tasa_fuente VARCHAR(30),
+		mes         DATE NOT NULL,
+		evaluado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT uq_uif_movimientos_tx UNIQUE (tx_id, sentido),
+		CONSTRAINT chk_uif_movimientos_tasa CHECK (
+			(usd_minor IS NULL AND tasa IS NULL AND tasa_fecha IS NULL AND tasa_fuente IS NULL)
+			OR (usd_minor IS NOT NULL AND tasa IS NOT NULL AND tasa_fecha IS NOT NULL AND tasa_fuente IS NOT NULL)
+		)
+	);
+	CREATE INDEX IF NOT EXISTS idx_uif_movimientos_mes ON uif_movimientos (user_id, mes);
+	CREATE TABLE IF NOT EXISTS uif_cierres (
+		mes        DATE PRIMARY KEY,
+		tasas      TEXT NOT NULL,
+		clientes   INTEGER NOT NULL,
+		casos      INTEGER NOT NULL,
+		cerrado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
 
 	-- Fraud (migration 010).
 	CREATE TABLE IF NOT EXISTS fraud_rules (
@@ -1061,8 +1157,22 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS plan VARCHAR(16) NOT NULL DEFAULT 'base';
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS promo_hasta TIMESTAMPTZ;
 	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS primera_aprobacion_at TIMESTAMPTZ;
+	-- Migracion 077: el comercio de una cuenta cerrada queda cerrado e inactivo.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cerrado_inactivo;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cerrado_inactivo
+		CHECK (closed_at IS NULL OR active = false);
 	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_plan;
 	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_plan CHECK (plan IN ('base', 'analitica'));
+	-- Cierre logico del comercio (migracion 079): la fila se marca, nunca se borra.
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES users(id);
+	ALTER TABLE qr_merchants ADD COLUMN IF NOT EXISTS closure_reason TEXT;
+	ALTER TABLE qr_merchants DROP CONSTRAINT IF EXISTS chk_qr_merchants_cierre;
+	ALTER TABLE qr_merchants ADD CONSTRAINT chk_qr_merchants_cierre CHECK (
+		(closed_at IS NULL AND closed_by IS NULL AND closure_reason IS NULL)
+		OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND active IS FALSE
+			AND closure_reason IS NOT NULL AND btrim(closure_reason) <> '')
+	);
 
 	-- Phase 3 of business mode (migration 046): locations, staff, catalog.
 	CREATE TABLE IF NOT EXISTS merchant_locations (
@@ -1098,8 +1208,16 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		active BOOLEAN NOT NULL DEFAULT TRUE,
 		sort_order INTEGER NOT NULL DEFAULT 0,
 		created_at TIMESTAMP DEFAULT NOW(),
-		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0)
+		deleted_at TIMESTAMPTZ,
+		CONSTRAINT chk_catalog_price_positive CHECK (price_minor > 0),
+		CONSTRAINT chk_catalog_sacado_inactivo CHECK (deleted_at IS NULL OR active IS FALSE)
 	);
+	-- Borrado logico del catalogo (migracion 081), con el mismo respaldo que
+	-- qr_merchants para una base de pruebas persistida.
+	ALTER TABLE merchant_catalog_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+	ALTER TABLE merchant_catalog_items DROP CONSTRAINT IF EXISTS chk_catalog_sacado_inactivo;
+	ALTER TABLE merchant_catalog_items ADD CONSTRAINT chk_catalog_sacado_inactivo
+		CHECK (deleted_at IS NULL OR active IS FALSE);
 
 	CREATE TABLE IF NOT EXISTS qr_payment_codes (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1373,6 +1491,232 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_date  DATE NOT NULL DEFAULT CURRENT_DATE
 	);
 	CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, created_at DESC);
+
+	-- Tablas que la eliminacion de cuenta (migracion 077) toca y que este esquema
+	-- no declaraba. Mismas columnas y FK que las migraciones que las crean.
+	CREATE TABLE IF NOT EXISTS user_devices (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		device_id VARCHAR(255) NOT NULL,
+		device_name VARCHAR(100),
+		device_type VARCHAR(50),
+		device_model VARCHAR(100),
+		os_version VARCHAR(50),
+		app_version VARCHAR(20),
+		push_token TEXT,
+		is_trusted BOOLEAN DEFAULT FALSE,
+		last_used_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		UNIQUE (user_id, device_id)
+	);
+	-- Migracion 001: la sesion apunta al dispositivo desde el que se abrio (sin
+	-- ON DELETE, como alla). El CREATE de user_sessions de arriba no la traia.
+	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES user_devices(id);
+	CREATE TABLE IF NOT EXISTS linked_bank_accounts (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		bank_code VARCHAR(10) NOT NULL,
+		bank_name VARCHAR(100) NOT NULL,
+		account_type VARCHAR(20),
+		account_number_encrypted BYTEA,
+		iban_encrypted BYTEA,
+		sinpe_phone VARCHAR(15),
+		is_primary BOOLEAN DEFAULT FALSE,
+		is_verified BOOLEAN DEFAULT FALSE,
+		nickname VARCHAR(50),
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		verified_at TIMESTAMPTZ,
+		sinpe_phone_hash VARCHAR(64)
+	);
+	CREATE TABLE IF NOT EXISTS budgets (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		label VARCHAR(100) NOT NULL,
+		amount_limit BIGINT NOT NULL DEFAULT 0,
+		amount_spent BIGINT NOT NULL DEFAULT 0,
+		currency VARCHAR(3) NOT NULL DEFAULT 'CRC',
+		icon VARCHAR(50),
+		color VARCHAR(20),
+		period VARCHAR(20),
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS saved_services (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		provider_id UUID REFERENCES service_providers(id),
+		client_id VARCHAR(50) NOT NULL,
+		nickname VARCHAR(100),
+		auto_pay_enabled BOOLEAN DEFAULT FALSE,
+		auto_pay_max_amount BIGINT,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS payment_history (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		type VARCHAR(30) NOT NULL,
+		provider_code VARCHAR(20) NOT NULL,
+		provider_name VARCHAR(100) NOT NULL,
+		client_id VARCHAR(50) NOT NULL,
+		amount BIGINT NOT NULL,
+		status VARCHAR(20),
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS recurring_payments (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		label VARCHAR(200) NOT NULL,
+		type VARCHAR(20) NOT NULL,
+		amount BIGINT NOT NULL,
+		currency VARCHAR(3) DEFAULT 'CRC',
+		frequency VARCHAR(20) NOT NULL,
+		next_date DATE NOT NULL,
+		last_paid_date DATE,
+		recipient_phone VARCHAR(15),
+		recipient_name VARCHAR(100),
+		service_provider_id VARCHAR(20),
+		client_id VARCHAR(50),
+		enabled BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS regional_wallets (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		country_code VARCHAR(2) NOT NULL,
+		currency VARCHAR(3) NOT NULL,
+		balance BIGINT DEFAULT 0,
+		active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW(),
+		UNIQUE (user_id, country_code)
+	);
+	CREATE TABLE IF NOT EXISTS cross_border_transfers (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		sender_id UUID NOT NULL REFERENCES users(id),
+		receiver_id UUID REFERENCES users(id),
+		receiver_phone VARCHAR(20) NOT NULL,
+		from_country VARCHAR(2) NOT NULL,
+		to_country VARCHAR(2) NOT NULL,
+		from_currency VARCHAR(3) NOT NULL,
+		to_currency VARCHAR(3) NOT NULL,
+		from_amount BIGINT NOT NULL,
+		to_amount BIGINT NOT NULL,
+		exchange_rate NUMERIC NOT NULL,
+		fee BIGINT NOT NULL DEFAULT 0,
+		status VARCHAR(20) DEFAULT 'pending',
+		compliance_status VARCHAR(20) DEFAULT 'pending',
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		completed_at TIMESTAMPTZ,
+		exchange_rate_id UUID,
+		spread_bps_at_time INTEGER
+	);
+	CREATE TABLE IF NOT EXISTS card_transactions (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		card_id UUID NOT NULL REFERENCES virtual_cards(id) ON DELETE CASCADE,
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		amount BIGINT NOT NULL,
+		currency VARCHAR(10) DEFAULT 'CRC',
+		merchant_name VARCHAR(200) NOT NULL,
+		category VARCHAR(30) NOT NULL,
+		status VARCHAR(20) NOT NULL,
+		decline_reason VARCHAR(200),
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS assistant_conversations (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		title VARCHAR(120) NOT NULL DEFAULT '',
+		messages JSONB NOT NULL DEFAULT '[]',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS identity_verifications (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		cedula_hash TEXT NOT NULL,
+		verified_name TEXT,
+		id_type TEXT,
+		source TEXT NOT NULL,
+		matched BOOLEAN NOT NULL,
+		checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	-- Solicitudes de eliminacion hechas desde la web (migracion 077). Una base
+	-- que sobrevivio a la version anterior de la 077 la trae sin la aceptacion
+	-- del plazo: se recrea.
+	DO $$ BEGIN
+		IF to_regclass('public.account_deletion_requests') IS NOT NULL
+		   AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+		                    WHERE table_name = 'account_deletion_requests' AND column_name = 'terms_accepted_at') THEN
+			DROP TABLE account_deletion_requests;
+		END IF;
+	END $$;
+	CREATE TABLE IF NOT EXISTS account_deletion_requests (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		contact_kind VARCHAR(8) NOT NULL,
+		contact_hash VARCHAR(64) NOT NULL,
+		user_id UUID REFERENCES users(id),
+		status VARCHAR(24) NOT NULL DEFAULT 'pending_verification',
+		verification_hash VARCHAR(64),
+		verification_attempts INTEGER NOT NULL DEFAULT 0,
+		verification_expires_at TIMESTAMPTZ,
+		terms_accepted_at TIMESTAMPTZ NOT NULL,
+		result_code VARCHAR(40),
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		verified_at TIMESTAMPTZ,
+		processed_at TIMESTAMPTZ,
+		processed_by UUID REFERENCES users(id),
+		CONSTRAINT chk_adr_contact_kind CHECK (contact_kind IN ('email', 'phone')),
+		CONSTRAINT chk_adr_status CHECK (status IN
+			('pending_verification', 'verified', 'scheduled', 'blocked', 'rejected', 'expired', 'cancelled')),
+		CONSTRAINT chk_adr_attempts CHECK (verification_attempts >= 0)
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_adr_contacto_abierto
+		ON account_deletion_requests (contact_hash)
+		WHERE status IN ('pending_verification', 'verified');
+
+	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
+	CREATE TABLE IF NOT EXISTS closed_account_records (
+		user_id        UUID PRIMARY KEY REFERENCES users(id),
+		first_name     VARCHAR(100),
+		last_name      VARCHAR(100),
+		birth_date     DATE,
+		birth_date_enc BYTEA,
+		cedula_hash    VARCHAR(64),
+		cedula_enc     BYTEA,
+		phone_hash     VARCHAR(64),
+		phone_enc      BYTEA,
+		email_hash     VARCHAR(64),
+		email_enc      BYTEA,
+		closed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		dissociated_at TIMESTAMPTZ,
+		CONSTRAINT chk_car_desasociada_vacia CHECK (
+			dissociated_at IS NULL
+			OR (first_name IS NULL AND last_name IS NULL AND birth_date IS NULL
+			    AND birth_date_enc IS NULL AND cedula_hash IS NULL AND cedula_enc IS NULL
+			    AND phone_hash IS NULL AND phone_enc IS NULL
+			    AND email_hash IS NULL AND email_enc IS NULL))
+	);
+
+	-- Columnas y tabla de produccion que la desasociacion vacia y que este
+	-- esquema no declaraba: transactions las trae desde la 001, y
+	-- sinpe_history_archive es la copia plana que dejo la 023.
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS counterparty_account VARCHAR(50);
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS location_lat DECIMAL(10,8);
+	ALTER TABLE transactions ADD COLUMN IF NOT EXISTS location_lng DECIMAL(11,8);
+	CREATE TABLE IF NOT EXISTS sinpe_history_archive (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL,
+		phone VARCHAR(15) NOT NULL,
+		contact_name VARCHAR(100) NOT NULL,
+		amount BIGINT NOT NULL,
+		fee BIGINT DEFAULT 0,
+		type VARCHAR(20) NOT NULL,
+		status VARCHAR(20) DEFAULT 'completed',
+		description TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
 	`
 
 	if _, err := pool.Exec(ctx, schema); err != nil {
@@ -1403,9 +1747,14 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	tables := []string{
+		"account_deletion_requests", "closed_account_records", "sinpe_history_archive",
+		"identity_verifications", "payment_history",
+		"assistant_conversations", "card_transactions", "cross_border_transfers",
+		"regional_wallets", "user_devices", "linked_bank_accounts",
+		"recurring_payments", "saved_services", "budgets",
 		"sinpe_history", "sinpe_contacts",
 		"crypto_price_alerts", "crypto_staking", "crypto_platform_fees", "crypto_transactions", "crypto_assets",
-		"uif_reports",
+		"uif_reports", "uif_movimientos", "uif_cierres", "tipo_de_cambio_diario",
 		"fraud_alerts", "fraud_assessments", "user_risk_profiles", "fraud_rules",
 		"sanction_screenings", "kyc_documents", "kyc_verifications",
 		"webhook_deliveries", "webhook_endpoints", "api_keys",

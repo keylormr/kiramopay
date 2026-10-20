@@ -1,8 +1,10 @@
 package messaging
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPasswordResetEmail(t *testing.T) {
@@ -93,5 +95,139 @@ func TestRegistrationOTPEmail(t *testing.T) {
 	}
 	if !strings.Contains(texto, "10 minutos") || !strings.Contains(htmlCuerpo, "10 minutos") {
 		t.Error("falta el vencimiento de 10 minutos")
+	}
+}
+
+func TestDeletionCodeEmailLlevaElCodigoYElVencimiento(t *testing.T) {
+	subject, text, html := DeletionCodeEmail("481516")
+	if !strings.Contains(subject, "eliminar") {
+		t.Errorf("el asunto no dice de que se trata: %q", subject)
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		if !strings.Contains(cuerpo, "481516") {
+			t.Errorf("el cuerpo %s no lleva el codigo", nombre)
+		}
+		if !strings.Contains(cuerpo, "15 minutos") {
+			t.Errorf("el cuerpo %s no dice cuando vence", nombre)
+		}
+	}
+}
+
+// El SMS entra en una sola parte solo si es ASCII y cabe en 160 caracteres (ver
+// VerificationSMS); una tilde lo parte en dos.
+func TestDeletionCodeSMSEsAsciiYCabeEnUnaParte(t *testing.T) {
+	sms := DeletionCodeSMS("123456")
+	if len(sms) > 160 {
+		t.Errorf("el SMS mide %d, mas que una parte", len(sms))
+	}
+	for _, r := range sms {
+		if r > 127 {
+			t.Fatalf("el SMS lleva un caracter no ASCII: %q", r)
+		}
+	}
+	if !strings.Contains(sms, "123456") {
+		t.Error("el SMS no lleva el codigo")
+	}
+}
+
+// El aviso de cuenta eliminada llega a un buzon que se borra en el mismo acto:
+// no debe repetir ningun dato de la cuenta.
+func TestAccountDeletedEmailNoLlevaDatosDeLaCuenta(t *testing.T) {
+	_, text, html := AccountDeletedEmail()
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		if strings.Contains(cuerpo, "@") && nombre == "texto" {
+			t.Errorf("el %s lleva algo con forma de correo", nombre)
+		}
+		if !strings.Contains(cuerpo, "eliminada") {
+			t.Errorf("el %s no dice que la cuenta fue eliminada", nombre)
+		}
+	}
+}
+
+func TestDeletionBlockedEmailListaLosMotivosYEscapaElHTML(t *testing.T) {
+	_, text, html := DeletionBlockedEmail([]string{"Tienes saldo en tu billetera.", "Un <script> en el texto"})
+	if !strings.Contains(text, "- Tienes saldo en tu billetera.") {
+		t.Errorf("el texto no lista el motivo: %q", text)
+	}
+	if !strings.Contains(html, "Tienes saldo en tu billetera.") || strings.Contains(html, "<script>") {
+		t.Errorf("el html no escapa o no lista: %q", html)
+	}
+	if !strings.Contains(text, "No se borró nada") {
+		t.Error("tiene que decir que no se borro nada")
+	}
+}
+
+// La respuesta escrita del dia 0 (Ley 8968, art. 7 y Reglamento art. 22): que se
+// suprime el dia 30, que se conserva por la Ley 7786 y hasta cuando, que se puede
+// reactivar antes, y que la persona puede acudir a la PRODHAB. Nunca menciona un
+// reporte de operacion sospechosa ni a la UIF.
+func TestAccountDeletionRequestedEmailEsLaRespuestaEscrita(t *testing.T) {
+	cr := time.FixedZone("CR", -6*3600)
+	dia30 := time.Date(2026, 11, 17, 15, 4, 0, 0, cr)
+	hasta := time.Date(2031, 11, 17, 15, 4, 0, 0, cr)
+	subject, text, html := AccountDeletionRequestedEmail(dia30, hasta)
+	if subject == "" {
+		t.Fatal("sin asunto")
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		for _, debe := range []string{"17/11/2026", "17/11/2031", "7786", "PRODHAB", "reactivar", "contactos", "conversaciones"} {
+			if !strings.Contains(cuerpo, debe) {
+				t.Errorf("el %s no dice %q", nombre, debe)
+			}
+		}
+		if m := mencionProhibida.FindString(cuerpo); m != "" {
+			t.Errorf("el %s menciona %q", nombre, m)
+		}
+	}
+}
+
+// Las fechas salen en la hora de Costa Rica: un cierre a las 23:30 de Costa Rica
+// ya es el dia siguiente en UTC, y el correo debe decir el dia de la persona.
+func TestAccountDeletionRequestedEmailFechaEnHoraDeCostaRica(t *testing.T) {
+	dia30 := time.Date(2026, 11, 18, 5, 30, 0, 0, time.UTC) // 17/11 23:30 en Costa Rica
+	_, text, _ := AccountDeletionRequestedEmail(dia30, dia30.AddDate(5, 0, 0))
+	if !strings.Contains(text, "17/11/2026") || strings.Contains(text, "18/11/2026") {
+		t.Errorf("la fecha no salio en la hora de Costa Rica:\n%s", text)
+	}
+}
+
+// mencionProhibida: lo que la respuesta a la persona nunca puede nombrar.
+var mencionProhibida = regexp.MustCompile(`(?i)sospechos|\buif\b|\bros\b`)
+
+// Ningun correo de la eliminacion nombra lo que la persona no puede saber: ni el
+// de la respuesta, ni el del cierre, ni el de lo pendiente, ni el de la
+// reactivacion.
+func TestCorreosDeLaEliminacionNoMencionanElReporte(t *testing.T) {
+	dia30 := time.Date(2026, 11, 17, 15, 4, 0, 0, time.UTC)
+	correos := map[string][2]string{}
+	_, a, b := AccountDeletionRequestedEmail(dia30, dia30.AddDate(5, 0, 0))
+	correos["respuesta"] = [2]string{a, b}
+	_, a, b = AccountDeletedEmail()
+	correos["cierre"] = [2]string{a, b}
+	_, a, b = DeletionBlockedEmail([]string{"Tienes saldo en tu billetera."})
+	correos["pendiente"] = [2]string{a, b}
+	_, a, b = AccountReactivatedEmail()
+	correos["reactivacion"] = [2]string{a, b}
+	for nombre, c := range correos {
+		for _, cuerpo := range c {
+			if m := mencionProhibida.FindString(cuerpo); m != "" {
+				t.Errorf("el correo de %s menciona %q", nombre, m)
+			}
+		}
+	}
+}
+
+// La reactivacion avisa por correo y dice que hacer si no fue la persona.
+func TestAccountReactivatedEmail(t *testing.T) {
+	subject, text, html := AccountReactivatedEmail()
+	if subject == "" {
+		t.Fatal("sin asunto")
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		for _, debe := range []string{"reactiv", "contraseña"} {
+			if !strings.Contains(cuerpo, debe) {
+				t.Errorf("el %s no dice %q", nombre, debe)
+			}
+		}
 	}
 }

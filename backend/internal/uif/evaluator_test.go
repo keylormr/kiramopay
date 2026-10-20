@@ -39,10 +39,11 @@ func TestThresholds_Evaluate(t *testing.T) {
 	}
 }
 
-// Las tres reglas usan el MISMO numero legal; lo que cambia es la ventana.
-func TestElUmbralEsElMismoEnLasTresReglas(t *testing.T) {
+// Las cuatro reglas usan el MISMO numero legal; lo que cambia es la ventana.
+func TestElUmbralEsElMismoEnLasCuatroReglas(t *testing.T) {
 	th := DefaultThresholds()
-	if th.SingleUSD != 1_000_000 || th.DailyUSD != 1_000_000 || th.Acumulado30USD != 1_000_000 {
-		t.Fatalf("umbrales = %+v, se esperaba US$10.000 (1_000_000 centavos) en las tres reglas", th)
+	if th.SingleUSD != 1_000_000 || th.DailyUSD != 1_000_000 || th.MensualUSD != 1_000_000 ||
+		th.Acumulado30USD != 1_000_000 {
+		t.Fatalf("umbrales = %+v, se esperaba US$10.000 (1_000_000 centavos) en las cuatro reglas", th)
 	}
 }

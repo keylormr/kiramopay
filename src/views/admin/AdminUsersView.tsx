@@ -7,8 +7,9 @@ import type { AdminUser, AdminUserStatus } from '@/api/repositories/admin.reposi
 import type { PlanPersonal } from '@/api/repositories/plans.repository';
 import { PLANES_PERSONALES, rellenar } from '@/utils/planes';
 import { localeDe } from '@/utils/periodos';
+import { SolicitudesDeEliminacion } from './SolicitudesDeEliminacion';
 
-type Tab = 'search' | 'blocked';
+type Tab = 'search' | 'blocked' | 'deletions';
 type Translate = (key: string) => string;
 
 const MIN_TERM = 3;
@@ -19,6 +20,7 @@ const CHIP_BY_STATUS: Record<AdminUserStatus, string> = {
   blocked: 'uv-chip-danger',
   suspended: 'uv-chip-warning',
   closed: 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-muted',
+  pending_deletion: 'uv-chip-warning',
 };
 
 // Contract error codes map to app-language copy; anything unknown falls back to
@@ -36,6 +38,8 @@ function errorKey(code?: string | null): string {
     case 'RATE_LIMITED': return 'admin_users_err_rate';
     case 'PLAN_INVALID':
     case 'PLAN_UPDATE_FAILED': return 'admin_users_err_plan';
+    // Aqui solo lo responde el plan: un administrador no se asigna el suyo.
+    case 'ADMIN_IS_AFFECTED_PARTY': return 'admin_users_err_own_plan';
     default: return 'admin_users_action_failed';
   }
 }
@@ -471,6 +475,10 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
               <Icons.Lock size={14} aria-hidden="true" />
               {t('admin_users_tab_blocked')}
             </button>
+            <button type="button" role="tab" aria-selected={tab === 'deletions'} onClick={() => setTab('deletions')} className={tabClass(tab === 'deletions')}>
+              <Icons.Trash size={14} aria-hidden="true" />
+              {t('admin_del_tab')}
+            </button>
           </div>
         </div>
 
@@ -521,6 +529,8 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 : list(results)}
           </>
         )}
+
+        {tab === 'deletions' && <SolicitudesDeEliminacion />}
 
         {tab === 'blocked' && (
           <>

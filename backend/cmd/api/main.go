@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/kiramopay/backend/internal/accountdeletion"
 	"github.com/kiramopay/backend/internal/adminusers"
 	"github.com/kiramopay/backend/internal/appversion"
 	"github.com/kiramopay/backend/internal/assistant"
@@ -257,11 +258,11 @@ func main() {
 	// topes bajos— pero un control que no puede dispararse y no lo dice se lee
 	// como un control que funciona y no encuentra nada.
 	{
-		// Desde la migracion 065 hay una tercera regla —el acumulado de 30
-		// dias— que SI es alcanzable con el tope mensual del nivel mas alto.
-		// El aviso solo se da si ninguna de las reglas de una moneda puede
-		// dispararse: antes gritaba siempre, y un aviso que no cambia deja de
-		// leerse.
+		// Las transacciones multiples del mes calendario (migracion 080; antes
+		// los 30 dias de la 065) SI son alcanzables con el tope mensual del
+		// nivel mas alto, y las entradas no tienen tope. El aviso solo se da si
+		// ninguna de las reglas puede dispararse: antes gritaba siempre, y un
+		// aviso que no cambia deja de leerse.
 		//
 		// El umbral es uno, en dolares, y los agregados juntan las monedas: los
 		// topes de cada moneda se suman por su equivalente con el tipo de cambio
@@ -280,7 +281,7 @@ func main() {
 			"USD": maxKYC.DailyMinorUSD,
 		}, porDolar)
 		if !diario.Alcanzable && !mensual.Alcanzable {
-			log.Printf("AVISO UIF: diario %s; 30 dias %s: la cola de cumplimiento no puede recibir un caso. "+
+			log.Printf("AVISO UIF: diario %s; mes %s: la cola de cumplimiento no puede recibir un caso. "+
 				"Revisar con el area de cumplimiento.", diario, mensual)
 		}
 	}
@@ -350,17 +351,12 @@ func main() {
 		Hacienda: kyc.NewHaciendaClient("", ""),
 	})
 	// La UIF compara cada movimiento por su equivalente en dolares (la ley fija
-	// US$10.000 o su equivalente) con el ultimo tipo de cambio oficial, aunque la
-	// fuente no lo haya confirmado en las ultimas horas: para comparar con el
-	// umbral, el ultimo oficial es mejor que ninguno. Sin ninguno, abre un caso
-	// manual.
-	uifService := uif.NewService(uifRepo, &uif.Options{
-		AuditLogger: auditLogger,
-		TipoDeCambio: func(ctx context.Context, moneda string) (float64, error) {
-			tasa, _, err := countryRepo.TipoDeCambioConEdad(ctx, "USD", moneda)
-			return tasa, err
-		},
-	})
+	// US$10.000 o su equivalente) con la venta de referencia del BCCR del dia en
+	// que ocurrio, que guarda el actualizador del tipo de cambio. Una venta vieja
+	// se usa igual y da la alarma; sin ninguna, abre un caso manual. El mes
+	// anterior se cierra solo, con la venta del ultimo dia del mes.
+	uifService := uif.NewService(uifRepo, &uif.Options{AuditLogger: auditLogger})
+	uifService.IniciarCierres(context.Background(), time.Hour)
 	adminUsersService := adminusers.NewService(userRepo, authRepo, &adminusers.Options{AuditLogger: auditLogger})
 	// Loyalty nace ANTES que auth: el registro con codigo de invitacion le
 	// acredita el bono al referidor a traves de Referrals. Si se construyera
@@ -492,6 +488,12 @@ func main() {
 		Notifier: notifService,
 		// Cambiar el plan de un comercio es una accion de administrador.
 		AuditLogger: auditLogger,
+		// Cerrar el comercio se confirma con la contrasena y, si la persona lo
+		// tiene encendido, el codigo del autenticador; con el mismo tope que
+		// cambiar la contrasena.
+		TOTP:                mfaSvc,
+		Lockout:             lockoutStore,
+		MaxIntentosDeCierre: 5,
 	})
 	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
@@ -637,6 +639,23 @@ func main() {
 	kycHandler := kyc.NewHandler(kycService)
 	uifHandler := uif.NewHandler(uifService)
 	adminUsersHandler := adminusers.NewHandler(adminUsersService)
+	// Eliminar la cuenta: la persona la pide desde la app (reautenticada) o
+	// desde la pagina web (con codigo). El dia 0 queda bloqueada y el libro
+	// cerrado; durante 30 dias puede reactivarla al entrar; el dia 30 el barrido
+	// la cierra, y al vencer la conservacion legal la desasocia. La fila de
+	// users nunca se borra; el diario del dinero no se toca.
+	accountDeletionService := accountdeletion.NewService(pool, userRepo, &accountdeletion.Options{
+		TOTP:        mfaSvc,
+		Lockout:     lockoutStore,
+		MaxIntentos: 5,
+		Email:       emailSender,
+		SMS:         smsSender,
+		Marcas:      authRepo,
+		Logger:      logger,
+	})
+	accountDeletionHandler := accountdeletion.NewHandler(accountDeletionService, authHandler.EndSession)
+	// El login ofrece la reactivacion durante el plazo.
+	authService.SetCuentasPorEliminar(accountDeletionService)
 	transparencyHandler := transparency.NewHandler(pool)
 	// /fees publica los MISMOS topes que aplican los servicios, no una copia.
 	planesPublicados := transparency.PlanesPublicados{Metas: topesMetas, Tarjetas: topesTarjetas}
@@ -678,6 +697,7 @@ func main() {
 	// despues que el servicio de administracion, asi que se cablea aqui, igual
 	// que el broadcaster de arriba.
 	adminUsersService.SetDisconnector(wsHub)
+	accountDeletionService.SetDisconnector(wsHub)
 
 	// ── Reconciliation worker ────────────────────────────────────────────
 	// Auto-fix snaps the wallets cache to the journal (source of truth) under
@@ -732,6 +752,14 @@ func main() {
 	// Cobros QR vencidos. Cosmetico para la correctitud —el reclamo ya filtra
 	// por vencimiento dentro del asiento—, pero sin el la pantalla del cajero
 	// muestra como "esperando pago" algo que ya no se puede pagar.
+	// ── Barrido de la eliminacion de cuentas ─────────────────────────────
+	// Cierra las cuentas cuyo dia 30 ya llego y desasocia lo conservado cuando
+	// vence la conservacion legal. Bajo el lock de cluster, como los demas.
+	accountDeletionPoller := accountdeletion.NewPoller(accountDeletionService, pool, 5*time.Minute, logger)
+	accountDeletionPollerCtx, accountDeletionPollerCancel := context.WithCancel(context.Background())
+	defer accountDeletionPollerCancel()
+	go accountDeletionPoller.Run(accountDeletionPollerCtx)
+
 	qrChargePoller := qrpayment.NewPoller(qrService, pool, 60*time.Second, logger)
 	qrChargePollerCtx, qrChargePollerCancel := context.WithCancel(context.Background())
 	defer qrChargePollerCancel()
@@ -966,6 +994,11 @@ func main() {
 			r.Post("/auth/register/otp/verify", authHandler.RegisterVerifyOTP)
 			r.Post("/auth/forgot-password", authHandler.ForgotPassword)
 			r.Post("/auth/reset-password", authHandler.ResetPassword)
+			// Eliminacion de cuenta desde la pagina web, para quien ya no tiene la
+			// app. Mismo limite por IP que el resto de lo anonimo; el tope por
+			// contacto (un codigo por minuto) lo pone el servicio.
+			r.Post("/public/account-deletion-requests", accountDeletionHandler.Solicitar)
+			r.Post("/public/account-deletion-requests/verify", accountDeletionHandler.Verificar)
 		})
 
 		// ─────────────────────────────────────────────────────────────
@@ -1001,6 +1034,10 @@ func main() {
 			// User
 			r.Get("/users/me", userHandler.GetProfile)
 			r.Patch("/users/me", userHandler.UpdateProfile)
+			// Eliminar la cuenta. El preflight dice que hay que resolver antes; el
+			// POST reautentica con la contrasena (y el autenticador si lo hay).
+			r.Get("/users/me/delete-account/preflight", accountDeletionHandler.Preflight)
+			r.Post("/users/me/delete-account", accountDeletionHandler.Eliminar)
 			r.Put("/users/me/language", userHandler.SetLanguage)
 
 			// KYC
@@ -1127,6 +1164,8 @@ func main() {
 			r.Post("/qr/merchant", qrHandler.RegisterMerchant)
 			r.Get("/qr/merchants", qrHandler.GetMerchants)
 			r.Patch("/qr/merchants/{id}", qrHandler.UpdateMerchant)
+			// Cierre logico del comercio: la fila se marca, nunca se borra.
+			r.Post("/qr/merchants/{id}/close", qrHandler.CloseMerchant)
 			r.Get("/qr/merchants/{id}/balance", qrHandler.GetMerchantBalance)
 			r.Post("/qr/merchants/{id}/withdraw", qrHandler.WithdrawMerchant)
 			r.Get("/qr/merchants/{id}/payments", qrHandler.GetMerchantPayments)
@@ -1239,6 +1278,9 @@ func main() {
 			// ─────────────────────────────────────────────────────────
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireAdmin(userRepo))
+				// Y solo con el token vigente de una sesion abierta: uno que ya
+				// roto, o de una sesion revocada, no abre el panel.
+				r.Use(middleware.RequireLiveSession(authRepo))
 
 				// KYC review
 				r.Post("/admin/kyc/{id}/decision", kycHandler.Decide)
@@ -1251,6 +1293,9 @@ func main() {
 				// Plan del comercio (base|analitica) asignado a mano mientras no
 				// exista cobro. Auditado con riesgo alto.
 				r.Patch("/admin/merchants/{id}/plan", qrHandler.SetMerchantPlan)
+				// Todos los comercios, cerrados incluidos, y el cierre con motivo.
+				r.Get("/admin/merchants", qrHandler.AdminListMerchants)
+				r.Post("/admin/merchants/{id}/close", qrHandler.AdminCloseMerchant)
 
 				// El rastro de auditoria. Se escribia desde el arranque del
 				// proyecto y NO habia una sola ruta para leerlo: para SUGEF
@@ -1315,6 +1360,11 @@ func main() {
 					r.Get("/admin/users/{id}/sessions", adminUsersHandler.Sessions)
 					r.Post("/admin/users/{id}/sessions/revoke-all", adminUsersHandler.RevokeAllSessions)
 					r.Post("/admin/users/{id}/sessions/{sid}/revoke", adminUsersHandler.RevokeSession)
+					// Cola de solicitudes de eliminacion hechas desde la web: ya
+					// verificadas, esperando a que una persona las atienda.
+					r.Get("/admin/account-deletion-requests", accountDeletionHandler.ListarSolicitudes)
+					r.Post("/admin/account-deletion-requests/{id}/process", accountDeletionHandler.Procesar)
+					r.Post("/admin/account-deletion-requests/{id}/reject", accountDeletionHandler.Rechazar)
 				})
 
 				// Lista de espera de los planes de pago, con la PII enmascarada.

@@ -279,7 +279,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). */
+                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). ACCOUNT_PENDING_DELETION, also only after the password was verified, when the person asked to delete the account and the account is not closed yet: `error.details.deletion_due_at` is the day it closes, or the day it was due when the sweep could not close it because something was still pending. Repeating the login with `reactivate: true` cancels the deletion and signs in. Once the account is closed, or while it is blocked, the answer is ACCOUNT_BLOCKED. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -332,7 +332,15 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
-                403: components["responses"]["AccountBlocked"];
+                /** @description ACCOUNT_BLOCKED, or ACCOUNT_PENDING_DELETION (with `error.details.deletion_due_at`) when the person asked to delete the account: the session is not renewed and the way back is the login. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -693,6 +701,389 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/delete-account/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Can this account be deleted right now?
+         * @description Answers without touching anything. `eligible` is true when nothing stands in the way. `blockers` lists what the person can resolve first (a positive balance in any wallet, pending money in flight, an open escrow, and so on); it is always an array, never null. `reason` is set instead when the account cannot use this path at all: `DEMO_ACCOUNT`, `ADMIN_ACCOUNT` or `ACCOUNT_NOT_ELIGIBLE` (blocked or suspended accounts are handled by the web request, with a person in the loop). `requires_totp` says whether the confirmation will also ask for the authenticator code. Not cacheable.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Eligibility */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: components["schemas"]["AccountDeletionPreflight"];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["AccountBlocked"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/delete-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for the signed-in person's account to be deleted
+         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and requires `accept_terms`, the express acceptance of the 30-day term. Day 0 (this call): the account moves to `pending_deletion` and is blocked at once; sessions, API keys and push subscriptions are revoked and the ledger accounts are closed, so no money moves in or out. A written answer goes to the email on file. Days 0 to 30: signing in with the password offers to reactivate the account, which cancels the process (see the login); during the term the account is not a valid recipient (SINPE, QR, escrow) and gets no webhooks. Day 30: a scheduled sweep closes the account. One that cannot be closed (something is pending) stays reactivable until it is. What the person may delete is suppressed and credentials are revoked by overwriting them; what Costa Rica's Law 7786 requires (identity data and documents, the record of operations) is kept, isolated, for 5 years after the closure. When that period ends a second sweep dissociates it irreversibly. The user row is NEVER removed: the ledger is append-only and other tables reference it. Merchants end closed and inactive, not deleted. Day 0 runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the block. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call is harmless: the term does not restart.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Term started. `already_requested` is true on a repeat, and then the dates are the ones of the first request. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                already_requested?: boolean;
+                                /** Format: date-time */
+                                requested_at?: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Day 30, when the account is closed
+                                 */
+                                deletion_due_at?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description DEMO_ACCOUNT | ADMIN_ACCOUNT | ACCOUNT_NOT_ELIGIBLE */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DELETION_BLOCKED. `error.details.blockers` lists the codes to resolve first (BALANCE_POSITIVE, SAVINGS_BALANCE, CRYPTO_BALANCE, STAKING_ACTIVE, REGIONAL_BALANCE, MERCHANT_BALANCE, MERCHANT_PENDING_CHARGES, TX_PENDING, ESCROW_OPEN, PAYOUT_PENDING, CROSS_BORDER_PENDING, MARKETPLACE_IN_PROGRESS). Nothing was changed and the term did not start. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description DELETION_LOCKED (too many failed confirmations) */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for an account to be deleted, from the public web page
+         * @description For people who no longer have the app. `contact` is the email or phone the account was registered with; anything else (a cedula, a username) is rejected with 400 INVALID_CONTACT. The answer is IDENTICAL whether or not an account exists, so the form cannot be used to find out who is registered. When an account matches, a 6-digit code goes to that contact (SMS when a provider is configured, otherwise the email on file), valid 15 minutes, at most one per minute per contact. A request that is already verified is never reopened. Only HMACs of the contact and the code are stored. `accept_terms` is the express acceptance of the 30-day term, and its time is stored with the request.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Registered email or phone */
+                        contact: string;
+                        /** @description Anything but true answers 400 TERMS_NOT_ACCEPTED */
+                        accept_terms: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Received (always, when the contact is well formed) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | INVALID_CONTACT */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove control of the contact with the code that was sent
+         * @description With the right code the 30-day term starts at once, exactly as from the app (day 0: the account is blocked and the written answer goes out by email), and the request ends `scheduled`, or `blocked` when something is pending (the person is told by email what to resolve). An account that is blocked or suspended does not start by itself: the request stays `verified`, in the operations queue. Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        contact: string;
+                        /** @example 123456 */
+                        code: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Verified */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | INVALID_CONTACT | INVALID_CODE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Web deletion requests waiting for a person (verified contact)
+         * @description Oldest first. Only requests of accounts under review (blocked or suspended) wait here; the rest start the term when the code is verified. The account is shown masked from SQL, like the rest of the admin panel.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Queue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountDeletionRequestAdmin"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the deletion term for a verified web request
+         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the administrator as actor.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a verified request without starting the term */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Closed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1068,7 +1459,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits). Nothing moved. */
+                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits), or RECIPIENT_UNAVAILABLE (the recipient asked to delete the account while the transfer was being made). Nothing moved. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -2944,11 +3335,14 @@ export interface paths {
         };
         /**
          * List the merchants the user owns or works for
-         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging.
+         * @description Merchants the user owns come with role owner; the ones they work for, with their staff role. commission_bps is the rate the platform set. comision_efectiva_bps is the rate charged on a payment made now: the lower of commission_bps and 25 while promo_hasta is in the future (the entry promotion a merchant receives on its FIRST approval, for 3 months), and commission_bps afterwards. promo_hasta is null for a merchant that never had the promotion. plan is base or analitica; only an administrator changes it while there is no charging. A closed merchant is not listed, for its owner or for its former staff. With status=closed the list is instead the merchants the user owns that were closed, the last closed first, each with role owner: they no longer charge and nobody administers them, but their owner still reads their sales, balance and report, and downloads the report CSV with any plan. In that list closure_reason is owner_request (or account_deletion) when the owner closed it, and admin_closure when an administrator did; the administrator's text and closed_by are only in the admin view.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description open (the default) lists the merchants the user administers; closed, the ones the user owns that were closed. */
+                    status?: "open" | "closed";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2962,6 +3356,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Merchant"][];
+                    };
+                };
+                /** @description INVALID_STATUS — status is neither open nor closed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 401: components["responses"]["Unauthorized"];
@@ -2982,6 +3385,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qr/merchants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a merchant (owner only)
+         * @description Replaces the business data. name, cedula and legal_name are required; a missing cedula_type keeps the current one. Changing the cedula or the legal name, or editing a rejected merchant, sends it back to pending review.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MerchantProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description The edited merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_BODY; UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/v1/qr/merchants/{id}/report": {
         parameters: {
             query?: never;
@@ -2991,7 +3457,7 @@ export interface paths {
         };
         /**
          * Sales report of a merchant (owner or manager)
-         * @description Calendar window of `days` days in the client's timezone, up to now. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
+         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
          */
         get: {
             parameters: {
@@ -3043,7 +3509,7 @@ export interface paths {
         };
         /**
          * Export the sales report as CSV (owner or manager, analitica plan)
-         * @description Same window and access as the report, plus the analitica plan. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
+         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
          */
         get: {
             parameters: {
@@ -3167,7 +3633,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. */
+                /** @description LLAVE_REUTILIZADA — the `idempotency_key` belongs to a different withdrawal (another amount, currency or shop). Nothing moved; a new withdrawal needs a new key. MERCHANT_CLOSED — the shop was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3197,6 +3663,902 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a merchant (owner only)
+         * @description A logical closure: the row, its payments and its history stay. The merchant stops charging, leaves the owner's and the staff's lists, its staff is revoked and its counter codes are revoked; the closure is written to the audit log in the same transaction. It is refused while the shop holds money in any currency (withdraw it first) or has a pending charge that has not expired. The owner confirms with the account password, and with the authenticator code when TOTP is on; failed confirmations are limited per user, and each one is written to the audit log (merchant_close_reauth_failed, with what failed). The balance and the pending charges are checked before the password, so that refusal spends neither an attempt nor the authenticator code. A closed merchant cannot be reopened: the owner registers a new one; its sales and report stay readable for its owner (GET /api/v1/qr/merchants?status=closed).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The owner's account password. */
+                        password: string;
+                        /** @description Authenticator code; required when the account has TOTP on. */
+                        totp_code?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The closed merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_BODY; CURRENT_PASSWORD_INVALID (the account has TOTP off and the password does not match); TOTP_REQUIRED (the account has TOTP on and no code came: ask for it and retry, this does not count as a failed attempt); CREDENTIALS_INVALID (the account has TOTP on and the password or the code does not match, without saying which). Nothing changed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description DEMO_ACCOUNT — a demo account cannot close a merchant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND — unknown merchant (including an id that is not a UUID), or the caller is not its owner (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED (it was already closed); MERCHANT_HAS_BALANCE (the shop still holds money: `error.details.balances` lists each currency with its amount in minor units); MERCHANT_HAS_PENDING_CHARGES (`error.details.pending_charges` says how many charges are still waiting to be paid). Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSE_LOCKED — too many failed confirmations; wait and retry. */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CLOSE_FAILED — the server failed, or the failed-attempt counter could not be reached (without it the closure is not confirmed); nothing was closed. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shop balance in one currency (owner or manager)
+         * @description Derived from the journal, in minor units. The owner of a closed merchant still reads it; its former staff does not.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    currency?: string;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Balance */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantBalance"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales of a merchant, newest first (whole team)
+         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page size. Out of range (or absent), 50. */
+                    limit?: number;
+                    /** @description Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page. */
+                    before?: string;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sales (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["QRPaymentRecord"][];
+                    };
+                };
+                /** @description INVALID_CURSOR — before is not an id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the team (owner only)
+         * @description Active and revoked members: a revoked one stays listed, and adding them again reactivates them.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Team (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StaffMember"][];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add someone to the team (owner only)
+         * @description The person is found by the cedula they registered with. Adding a revoked member reactivates them with the new role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AddStaffRequest"];
+                };
+            };
+            responses: {
+                /** @description The team member */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StaffMember"];
+                    };
+                };
+                /** @description INVALID_BODY; ADD_STAFF_FAILED (invalid role, missing cedula, the owner, an unknown location, or the caller is not the owner). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description STAFF_CEDULA_NOT_FOUND — no KiramoPay account is registered with that cedula. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/staff/{staffID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change the role or location of a team member (owner only)
+         * @description Only an active member.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    staffID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateStaffRequest"];
+                };
+            };
+            responses: {
+                /** @description The team member */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StaffMember"];
+                    };
+                };
+                /** @description INVALID_BODY; UPDATE_STAFF_FAILED (invalid role, unknown location or member, or the caller is not the owner). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Revoke a team member (owner only)
+         * @description The member loses access; the row stays, with the date.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    staffID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Done */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description REVOKE_STAFF_FAILED (unknown or already revoked member, or the caller is not the owner). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the locations (whole team)
+         * @description A cashier picks their location when charging.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Locations (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantLocation"][];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add a location (owner or manager)
+         * @description A location with sales is deactivated, never deleted, so past sales keep their attribution.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LocationRequest"];
+                };
+            };
+            responses: {
+                /** @description The location */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantLocation"];
+                    };
+                };
+                /** @description INVALID_BODY; CREATE_LOCATION_FAILED (missing name, or the caller is not the owner or a manager). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/locations/{locationID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit, deactivate or reactivate a location (owner or manager)
+         * @description Fields left out keep their value.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    locationID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LocationRequest"];
+                };
+            };
+            responses: {
+                /** @description The location */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantLocation"];
+                    };
+                };
+                /** @description INVALID_BODY; UPDATE_LOCATION_FAILED (unknown location, or the caller is not the owner or a manager). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the catalog (whole team)
+         * @description The products a cashier can pick when charging, in their order. Removed products are not listed.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Catalog (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CatalogItem"][];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add a product to the catalog (owner or manager)
+         * @description price_minor in minor units.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CatalogItemRequest"];
+                };
+            };
+            responses: {
+                /** @description The product */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CatalogItem"];
+                    };
+                };
+                /** @description INVALID_BODY; CREATE_ITEM_FAILED (missing name or price, or the caller is not the owner or a manager). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/catalog/{itemID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a product (owner or manager)
+         * @description Fields left out keep their value.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    itemID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CatalogItemRequest"];
+                };
+            };
+            responses: {
+                /** @description The product */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CatalogItem"];
+                    };
+                };
+                /** @description INVALID_BODY; UPDATE_ITEM_FAILED (unknown or removed product, or the caller is not the owner or a manager). A removed product cannot be edited or reactivated. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Remove a product (owner or manager)
+         * @description Logical removal: the product leaves the catalog (it is no longer listed, edited or reactivated) but its row is kept, marked and inactive, and who removed it stays in the audit trail. To sell it again, create it anew. Past sales keep their totals and note: they do not point to the product.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                    itemID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Done */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DELETE_ITEM_FAILED (unknown or already removed product, or the caller is not the owner or a manager). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The change could not be saved (the database did not answer). The detail is not sent. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -3245,6 +4607,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description INVALID_BODY; CREATE_FAILED (the code cannot be created as asked). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant of a merchant code was closed. Nothing was created. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -3326,7 +4706,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description QR_REVOCADO — the owner withdrew the code. */
+                /** @description QR_REVOCADO — the owner withdrew the code; MERCHANT_CLOSED — the code belongs to a business that was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3399,7 +4779,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO or MERCHANT_UNAVAILABLE (the business is not approved). */
+                /** @description The code or the charge no longer accepts this payment: QR_REVOCADO, COBRO_REEMPLAZADO, COBRO_YA_PAGADO, COBRO_VENCIDO, COBRO_CANCELADO, LLAVE_REUTILIZADA (the idempotency_key belongs to a different payment), COBRO_DUPLICADO_APP_VIEJA, PAGO_NO_REGISTRADO, MERCHANT_UNAVAILABLE (the business is not approved) or MERCHANT_CLOSED (the business was closed). No money moves. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3408,7 +4788,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle). No money moves. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle), or RECIPIENT_UNAVAILABLE (whoever charges asked to delete the account). No money moves. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3552,7 +4932,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_UNAVAILABLE — the business is not approved. */
+                /** @description MERCHANT_UNAVAILABLE — the business is not approved; MERCHANT_CLOSED — the business was closed. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3635,7 +5015,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                /** @description QR_REVOCADO, MERCHANT_UNAVAILABLE (the business is not approved), MERCHANT_CLOSED (the business was closed), or, when replacing, COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3911,6 +5291,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description PAY_FAILED — the share could not be paid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -5436,6 +6834,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the alert is about the administrator's own account; another administrator resolves it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         trace?: never;
@@ -5467,6 +6874,153 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description INVALID_ID (userId is not a UUID) | INVALID_BODY | RESTRICT_FAILED */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the account is the administrator's own, to restrict or to release; another administrator does it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/kyc/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a pending identity verification (admin)
+         * @description Approving raises the account to the level requested and applies its limits; a verification with a sanctions hit cannot be approved. Audited as kyc_approved or kyc_rejected.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        approve: boolean;
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The verification with its new status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | KYC_DECISION_FAILED (not found, not pending, or a sanctions hit) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the verification is the administrator's own; another administrator decides it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/uif/reports/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a pending UIF report (admin)
+         * @description Settles a pending report as submitted (reported to the UIF), dismissed or reviewed. Audited as uif_report_<status>.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "submitted" | "dismissed" | "reviewed";
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Reviewed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | UIF_REVIEW_FAILED (invalid status, not found or already reviewed) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the report is about the administrator's own account; another officer reviews it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -5516,12 +7070,23 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -5529,6 +7094,151 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a merchant's verification (admin)
+         * @description Sets verification_status=rejected with an optional reason; the owner can edit the merchant and it goes back to pending.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        reason?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Rejected merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description REJECT_FAILED */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/commission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set a merchant's commission (admin) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        commission_bps: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Merchant with its new commission */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — a closed merchant keeps the commission it had. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/api/v1/admin/merchants/{id}/plan": {
@@ -5579,12 +7289,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description MERCHANT_NOT_FOUND */
                 404: {
@@ -5592,6 +7304,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description MERCHANT_CLOSED — a closed merchant keeps the plan it had. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description PLAN_UPDATE_FAILED */
                 500: {
@@ -5602,6 +7323,154 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/admin/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every merchant, closed ones included (admin)
+         * @description Newest first, at most 200. Each merchant comes with its state (verification_status, active, and closed_at, closed_by and closure_reason when it was closed) and owner_name. `q` filters by a piece of the business name or the legal name, without regard to case (a LIKE wildcard is searched as text), or by the exact merchant id.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    q?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Merchants (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"][];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FETCH_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/merchants/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a merchant (admin)
+         * @description The same logical closure as POST /api/v1/qr/merchants/{id}/close, with a reason instead of the owner's password. The reason is stored in closure_reason and in the audit log (admin_merchant_closed, high). The same refusals apply: money in the shop or a pending charge that has not expired.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Why it is closed. Trimmed; it cannot be empty or longer than 500 characters. */
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The closed merchant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Merchant"];
+                    };
+                };
+                /** @description INVALID_ID (not a UUID), INVALID_BODY, CLOSURE_REASON_REQUIRED (the reason is empty) or CLOSURE_REASON_TOO_LONG (more than 500 characters). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant. They close it as its owner, with POST /api/v1/qr/merchants/{id}/close and their password. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED, MERCHANT_HAS_BALANCE (with `error.details.balances`) or MERCHANT_HAS_PENDING_CHARGES (with `error.details.pending_charges`). Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description CLOSE_FAILED — the server failed; nothing was closed. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users/search": {
@@ -6039,12 +7908,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description FORBIDDEN (not an administrator) */
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the account is the administrator's own; another administrator assigns it. Nothing changed. */
                 403: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description USER_NOT_FOUND */
                 404: {
@@ -7765,6 +9636,15 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator is the buyer or the seller of this agreement; another administrator resolves it. No money moves. Nothing changed. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -8471,6 +10351,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountDeletionPreflight: {
+            eligible: boolean;
+            /** @enum {string} */
+            reason?: "DEMO_ACCOUNT" | "ADMIN_ACCOUNT" | "ACCOUNT_NOT_ELIGIBLE";
+            blockers: {
+                /** @example BALANCE_POSITIVE */
+                code: string;
+            }[];
+            requires_totp: boolean;
+        };
+        DeleteAccountRequest: {
+            /** Format: password */
+            password: string;
+            /** @description Express acceptance of the 30-day term; anything but true answers 400 TERMS_NOT_ACCEPTED */
+            accept_terms: boolean;
+            /** @description Required only when the authenticator is turned on */
+            totp_code?: string;
+        };
+        AccountDeletionRequestAdmin: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            contact_kind?: "email" | "phone";
+            /** @example verified */
+            status?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            verified_at?: string | null;
+            account?: components["schemas"]["AdminUser"] | null;
+        };
         /** @description Administrative card of an account. PII is masked in SQL: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain. */
         AdminUser: {
             /** Format: uuid */
@@ -8615,6 +10526,158 @@ export interface components {
              * @enum {string}
              */
             role?: "owner" | "manager" | "cashier";
+            /**
+             * Format: date-time
+             * @description When the merchant was closed. Absent while it is open. A closed merchant keeps its row and its history; it no longer charges and nobody administers it.
+             */
+            closed_at?: string;
+            /**
+             * Format: uuid
+             * @description Who closed it (the owner or an administrator). Absent while it is open.
+             */
+            closed_by?: string;
+            /** @description Why it was closed: owner_request when its owner closed it, or the reason an administrator wrote. Absent while it is open. */
+            closure_reason?: string;
+            /** @description Owner's display name (only in the administrator's list) */
+            owner_name?: string;
+        };
+        MerchantProfileRequest: {
+            name: string;
+            description?: string;
+            category?: string;
+            cedula: string;
+            /** @enum {string} */
+            cedula_type?: "fisica" | "juridica";
+            legal_name: string;
+        };
+        MerchantBalance: {
+            /**
+             * Format: int64
+             * @description Minor units
+             */
+            balance: number;
+            /** @example CRC */
+            currency: string;
+        };
+        QRPaymentRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            qr_code_id: string;
+            /**
+             * Format: uuid
+             * @description The charge that was paid; absent for an open-amount payment
+             */
+            charge_id?: string;
+            /** Format: uuid */
+            payer_id: string;
+            /** Format: uuid */
+            receiver_id: string;
+            /** Format: uuid */
+            merchant_id?: string;
+            /** Format: uuid */
+            location_id?: string;
+            /**
+             * Format: uuid
+             * @description Team member who issued the charge
+             */
+            collected_by?: string;
+            /**
+             * Format: int64
+             * @description Gross paid, in minor units
+             */
+            amount: number;
+            /**
+             * Format: int64
+             * @description Merchant commission, in minor units
+             */
+            fee: number;
+            currency: string;
+            /** @enum {string} */
+            status: "pending" | "completed" | "failed" | "refunded";
+            note?: string;
+            tx_id?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string;
+        };
+        StaffMember: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            merchant_id: string;
+            /** Format: uuid */
+            user_id: string;
+            first_name: string;
+            last_name: string;
+            /** @enum {string} */
+            role: "cashier" | "manager";
+            /** @enum {string} */
+            status: "active" | "revoked";
+            /** Format: uuid */
+            location_id?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string;
+        };
+        AddStaffRequest: {
+            cedula: string;
+            /** @enum {string} */
+            role: "cashier" | "manager";
+            /** Format: uuid */
+            location_id?: string;
+        };
+        UpdateStaffRequest: {
+            /** @enum {string} */
+            role: "cashier" | "manager";
+            /** Format: uuid */
+            location_id?: string;
+        };
+        MerchantLocation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            merchant_id: string;
+            name: string;
+            address: string;
+            active: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LocationRequest: {
+            name?: string;
+            address?: string;
+            /** @description Only on edit; left out keeps the current value */
+            active?: boolean;
+        };
+        CatalogItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            merchant_id: string;
+            name: string;
+            /**
+             * Format: int64
+             * @description Minor units
+             */
+            price_minor: number;
+            currency: string;
+            active: boolean;
+            sort_order: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CatalogItemRequest: {
+            name?: string;
+            /** Format: int64 */
+            price_minor?: number;
+            currency?: string;
+            /** @description Only on edit; left out keeps the current value */
+            active?: boolean;
+            /** @description Only on edit; left out keeps the current value */
+            sort_order?: number;
         };
         ReportBucket: {
             /** @description Location or collector id; absent for the unattributed bucket */
@@ -9156,6 +11219,8 @@ export interface components {
             cedula?: string;
             /** @example MiClave2024! */
             password: string;
+            /** @description Only for an account with the deletion term running: with the right password it cancels the deletion and signs in. Ignored otherwise. */
+            reactivate?: boolean;
         };
         AuthResponse: {
             success?: boolean;

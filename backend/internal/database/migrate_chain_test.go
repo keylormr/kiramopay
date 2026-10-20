@@ -64,6 +64,12 @@ func TestRunAllMigrations(t *testing.T) {
 	if err := RunMigrations(ctx, poolFueraDeUTC, migracionesAntesDe(t, migracionesDir, "077_")); err != nil {
 		t.Fatalf("migration chain 075-076 failed: %v", err)
 	}
+	// Antes de la 079, un comercio cerrado como lo cierra la eliminacion de
+	// cuenta (077): la 079 tiene que completarlo, no tropezar con el.
+	if err := RunMigrations(ctx, pool, migracionesAntesDe(t, migracionesDir, "079_")); err != nil {
+		t.Fatalf("migration chain 077-078 failed: %v", err)
+	}
+	sembrarCierreSinQuien(ctx, t, pool)
 
 	if err := RunMigrations(ctx, pool, migracionesDir); err != nil {
 		t.Fatalf("migration chain failed: %v", err)
@@ -79,6 +85,8 @@ func TestRunAllMigrations(t *testing.T) {
 	exigirFechasSembradas(ctx, t, pool)
 	exigirTasaPorInstante(ctx, t, pool)
 	exigirBajadaDeLa075(ctx, t, pool, vistasEnLa074)
+	exigirCierreDeComercios(ctx, t, pool)
+	exigirCatalogoConBorradoLogico(ctx, t, pool)
 }
 
 // sesion es lo que estas pruebas usan de un pool o de una transaccion.
@@ -491,6 +499,7 @@ func mismasColumnas(a, b []string) bool {
 // lea esas columnas desde una vista o las cambie lleva su bajada aca, antes de
 // la de la 075.
 var bajadasHastaLa075 = []string{
+	"077_eliminacion_de_cuenta.down.sql",
 	"076_fn_fx_rate_at_con_zona.down.sql",
 	"075_fechas_con_zona.down.sql",
 }

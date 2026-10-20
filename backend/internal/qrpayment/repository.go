@@ -2,11 +2,15 @@ package qrpayment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kiramopay/backend/internal/audit"
 )
 
 type Repository struct {
@@ -27,7 +31,8 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 const merchantCols = `id, user_id, name, description, category, COALESCE(logo_url, ''),
 	qr_code, active, cedula, cedula_type, legal_name, verification_status,
 	rejection_reason, reviewed_at, commission_bps, created_at,
-	plan, promo_hasta, primera_aprobacion_at`
+	plan, promo_hasta, primera_aprobacion_at,
+	closed_at, COALESCE(closed_by::text, ''), COALESCE(closure_reason, '')`
 
 // merchantDest son los destinos del Scan en el orden de merchantCols. Existe
 // para que las consultas que agregan una columna antes o despues (el plan
@@ -36,7 +41,8 @@ func merchantDest(m *Merchant) []any {
 	return []any{&m.ID, &m.UserID, &m.Name, &m.Description, &m.Category, &m.LogoURL,
 		&m.QRCode, &m.Active, &m.Cedula, &m.CedulaType, &m.LegalName, &m.VerificationStatus,
 		&m.RejectionReason, &m.ReviewedAt, &m.CommissionBps, &m.CreatedAt,
-		&m.Plan, &m.PromoHasta, &m.PrimeraAprobacionAt}
+		&m.Plan, &m.PromoHasta, &m.PrimeraAprobacionAt,
+		&m.ClosedAt, &m.ClosedBy, &m.ClosureReason}
 }
 
 func scanMerchant(row pgx.Row) (*Merchant, error) {
@@ -64,10 +70,12 @@ func (r *Repository) GetMerchant(ctx context.Context, merchantID string) (*Merch
 }
 
 // GetMerchantsByUserID returns every merchant profile a user owns (a user may run
-// several businesses).
+// several businesses). Un comercio cerrado no esta: su dueno ya no lo administra,
+// y la fila solo la ve la lista de administracion.
 func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([]Merchant, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+merchantCols+` FROM qr_merchants WHERE user_id = $1 ORDER BY created_at ASC`, userID)
+		`SELECT `+merchantCols+` FROM qr_merchants
+		  WHERE user_id = $1 AND closed_at IS NULL ORDER BY created_at ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +83,26 @@ func (r *Repository) GetMerchantsByUserID(ctx context.Context, userID string) ([
 	return collectMerchants(rows)
 }
 
-// ListPendingMerchants returns merchants awaiting admin review (oldest first).
+// GetClosedMerchantsByUserID son los comercios cerrados de un dueno, el ultimo
+// cerrado primero.
+func (r *Repository) GetClosedMerchantsByUserID(ctx context.Context, userID string) ([]Merchant, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+merchantCols+` FROM qr_merchants
+		  WHERE user_id = $1 AND closed_at IS NOT NULL ORDER BY closed_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectMerchants(rows)
+}
+
+// ListPendingMerchants returns merchants awaiting admin review (oldest first). Un
+// pendiente que se cerro ya no espera nada.
 func (r *Repository) ListPendingMerchants(ctx context.Context) ([]Merchant, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+merchantCols+` FROM qr_merchants
-		 WHERE verification_status = 'pending' ORDER BY created_at ASC LIMIT 200`)
+		 WHERE verification_status = 'pending' AND closed_at IS NULL
+		 ORDER BY created_at ASC LIMIT 200`)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +151,7 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 		                                     WHEN $2::text = 'verified'
 		                                     THEN COALESCE(primera_aprobacion_at, NOW())
 		                                     ELSE primera_aprobacion_at END
-		  WHERE id = $1
+		  WHERE id = $1 AND closed_at IS NULL
 		  RETURNING `+merchantCols, merchantID, status, reviewedBy, reason, PromoEntradaMeses))
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -179,7 +202,7 @@ func (r *Repository) UpdateMerchantProfile(
 		        rejection_reason      = CASE WHEN $8::text = 'pending' THEN '' ELSE rejection_reason END,
 		        reviewed_at           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_at END,
 		        reviewed_by           = CASE WHEN $8::text = 'pending' THEN NULL ELSE reviewed_by END
-		  WHERE id = $1
+		  WHERE id = $1 AND closed_at IS NULL
 		  RETURNING `+merchantCols,
 		merchantID, name, description, category, cedula, cedulaType, legalName, status))
 	if err != nil {
@@ -193,7 +216,7 @@ func (r *Repository) UpdateMerchantProfile(
 
 func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bps int) (*Merchant, error) {
 	m, err := scanMerchant(r.db.QueryRow(ctx,
-		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 RETURNING `+merchantCols,
+		`UPDATE qr_merchants SET commission_bps = $2 WHERE id = $1 AND closed_at IS NULL RETURNING `+merchantCols,
 		merchantID, bps))
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -217,7 +240,7 @@ func (r *Repository) UpdateMerchantPlan(ctx context.Context, merchantID, plan st
 		`WITH previo AS (
 		     SELECT id AS previo_id, plan AS plan_anterior
 		       FROM qr_merchants
-		      WHERE id = $1::uuid
+		      WHERE id = $1::uuid AND closed_at IS NULL
 		        FOR UPDATE
 		 )
 		 UPDATE qr_merchants
@@ -267,10 +290,14 @@ func scanCode(row pgx.Row) (*QRPaymentCode, error) {
 }
 
 func (r *Repository) CreateQRCode(ctx context.Context, qr *QRPaymentCode) error {
+	return crearCodigo(ctx, r.db, qr)
+}
+
+func crearCodigo(ctx context.Context, q pgxQuerier, qr *QRPaymentCode) error {
 	if qr.Status == "" {
 		qr.Status = EstadoCodigoActivo
 	}
-	_, err := r.db.Exec(ctx,
+	_, err := q.Exec(ctx,
 		`INSERT INTO qr_payment_codes (id, creator_id, type, amount, currency, merchant_id, location_id, note, qr_data, single_use, expires_at, status)
 		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9, $10, $11, $12)`,
 		qr.ID, qr.CreatorID, qr.Type, qr.Amount, qr.Currency, qr.MerchantID, qr.LocationID,
@@ -400,6 +427,24 @@ func (r *Repository) GetPaymentByTxID(ctx context.Context, txID string) (*QRPaym
 		`SELECT `+paymentCols+` FROM qr_payments WHERE tx_id = $1`, txID))
 }
 
+// PagoPorLlave es la venta que dejo el intento de pago con esa llave de
+// idempotencia, o nil si ese intento no pago. La fila de qr_payments se escribe
+// dentro de la transaccion del asiento (EnLaMismaTx): si esta, la plata se
+// movio.
+func (r *Repository) PagoPorLlave(ctx context.Context, payerID, llave string) (*QRPaymentRecord, error) {
+	p, err := scanPayment(r.db.QueryRow(ctx,
+		`SELECT `+paymentCols+` FROM qr_payments
+		  WHERE payer_id = $1::uuid
+		    AND tx_id IN (SELECT id::text FROM transactions
+		                   WHERE user_id = $1::uuid AND idempotency_key = $2)
+		  ORDER BY created_at DESC
+		  LIMIT 1`, payerID, llave))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return p, err
+}
+
 func (r *Repository) GetUserPayments(ctx context.Context, userID string, limit int) ([]QRPaymentRecord, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+paymentCols+` FROM qr_payments WHERE payer_id = $1 OR receiver_id = $1
@@ -416,11 +461,20 @@ func (r *Repository) GetUserPayments(ctx context.Context, userID string, limit i
 // the per-business sales feed. Regardless of WHO generated each charge (owner
 // or staff), the whole team reads the same list; access is enforced by the
 // service via roleFor.
-func (r *Repository) GetMerchantPayments(ctx context.Context, merchantID string, limit int) ([]QRPaymentRecord, error) {
+// GetMerchantPayments trae las ventas del comercio, la ultima primero. Con
+// antesDe (el id de la ultima venta de la pagina anterior) trae las que siguen.
+// El orden incluye el id: dos ventas en el mismo instante no se saltan ni se
+// repiten entre paginas. Un antesDe que no es una venta de este comercio no trae
+// nada.
+func (r *Repository) GetMerchantPayments(ctx context.Context, merchantID string, limit int, antesDe string) ([]QRPaymentRecord, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+paymentCols+` FROM qr_payments WHERE merchant_id = $1::uuid
-		 ORDER BY created_at DESC LIMIT $2`,
-		merchantID, limit)
+		`SELECT `+paymentCols+` FROM qr_payments
+		  WHERE merchant_id = $1::uuid
+		    AND ($3 = '' OR (created_at, id) < (
+		          SELECT created_at, id FROM qr_payments
+		           WHERE id = NULLIF($3, '')::uuid AND merchant_id = $1::uuid))
+		 ORDER BY created_at DESC, id DESC LIMIT $2`,
+		merchantID, limit, antesDe)
 	if err != nil {
 		return nil, err
 	}
@@ -485,20 +539,53 @@ func (r *Repository) ListStaff(ctx context.Context, merchantID string) ([]StaffM
 // UpsertStaff adds a user to the team, or reactivates (and re-roles) them if a
 // revoked row already exists — the UNIQUE (merchant_id, user_id) pair makes
 // "add the same person again" an update, not a duplicate.
+//
+// Entra con la fila del comercio tomada FOR SHARE, como el pago
+// (comercioAbiertoEnTx): si el comercio se esta cerrando, espera, ve el cierre y
+// no suma a nadie. Sin eso el INSERT esperaba en la clave foranea, que se suelta
+// cuando el cierre confirma, y la persona quedaba activa en un comercio cerrado;
+// y la reactivacion ni siquiera esperaba, porque un UPDATE que no cambia
+// merchant_id no pasa por la clave foranea.
 func (r *Repository) UpsertStaff(ctx context.Context, merchantID, userID, role, locationID, addedBy string) (*StaffMember, error) {
 	var id string
-	err := r.db.QueryRow(ctx,
-		`INSERT INTO merchant_staff (merchant_id, user_id, role, status, location_id, added_by)
-		 VALUES ($1::uuid, $2::uuid, $3, 'active', NULLIF($4, '')::uuid, $5::uuid)
-		 ON CONFLICT (merchant_id, user_id) DO UPDATE
-		   SET role = EXCLUDED.role, status = 'active',
-		       location_id = EXCLUDED.location_id, revoked_at = NULL
-		 RETURNING id::text`,
-		merchantID, userID, role, locationID, addedBy).Scan(&id)
+	err := r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		return interno(tx.QueryRow(ctx,
+			`INSERT INTO merchant_staff (merchant_id, user_id, role, status, location_id, added_by)
+			 VALUES ($1::uuid, $2::uuid, $3, 'active', NULLIF($4, '')::uuid, $5::uuid)
+			 ON CONFLICT (merchant_id, user_id) DO UPDATE
+			   SET role = EXCLUDED.role, status = 'active',
+			       location_id = EXCLUDED.location_id, revoked_at = NULL
+			 RETURNING id::text`,
+			merchantID, userID, role, locationID, addedBy).Scan(&id))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return r.getStaffByID(ctx, id)
+	miembro, err := r.getStaffByID(ctx, id)
+	return miembro, interno(err)
+}
+
+// enComercioAbierto corre escribir con la fila del comercio tomada FOR SHARE,
+// como el pago, el cobro y el rotulo: lo que llega mientras el comercio se
+// cierra espera al cierre, lo ve y sale con ErrComercioCerrado. Sin eso, un
+// INSERT esperaba en la clave foranea, que se suelta cuando el cierre confirma,
+// y la fila nacia en un comercio cerrado; un UPDATE ni siquiera esperaba.
+//
+// escribir devuelve sus errores ya marcados: los de la base con interno, los de
+// quien llama (no se encontro) tal cual.
+func (r *Repository) enComercioAbierto(ctx context.Context, merchantID string, escribir func(tx pgx.Tx) error) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return interno(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := comercioAbiertoEnTx(ctx, tx, merchantID); err != nil {
+		return interno(err)
+	}
+	if err := escribir(tx); err != nil {
+		return err
+	}
+	return interno(tx.Commit(ctx))
 }
 
 func (r *Repository) getStaffByID(ctx context.Context, staffID string) (*StaffMember, error) {
@@ -521,9 +608,10 @@ func (r *Repository) UpdateStaff(ctx context.Context, merchantID, staffID, role,
 		return nil, fmt.Errorf("staff member not found")
 	}
 	if err != nil {
-		return nil, err
+		return nil, interno(err)
 	}
-	return r.getStaffByID(ctx, id)
+	miembro, err := r.getStaffByID(ctx, id)
+	return miembro, interno(err)
 }
 
 // RevokeStaff removes a member from the team. The row is kept for history and
@@ -534,7 +622,7 @@ func (r *Repository) RevokeStaff(ctx context.Context, merchantID, staffID string
 		  WHERE id = $1::uuid AND merchant_id = $2::uuid AND status = 'active'`,
 		staffID, merchantID)
 	if err != nil {
-		return err
+		return interno(err)
 	}
 	if res.RowsAffected() == 0 {
 		return fmt.Errorf("staff member not found")
@@ -550,10 +638,11 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 		`SELECT m.id, m.user_id, m.name, m.description, m.category, COALESCE(m.logo_url, ''),
 		        m.qr_code, m.active, m.cedula, m.cedula_type, m.legal_name, m.verification_status,
 		        m.rejection_reason, m.reviewed_at, m.commission_bps, m.created_at,
-		        m.plan, m.promo_hasta, m.primera_aprobacion_at, s.role
+		        m.plan, m.promo_hasta, m.primera_aprobacion_at,
+		        m.closed_at, COALESCE(m.closed_by::text, ''), COALESCE(m.closure_reason, ''), s.role
 		   FROM merchant_staff s
 		   JOIN qr_merchants m ON m.id = s.merchant_id
-		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE
+		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE AND m.closed_at IS NULL
 		  ORDER BY m.created_at ASC`, userID)
 	if err != nil {
 		return nil, err
@@ -609,27 +698,51 @@ func (r *Repository) GetLocation(ctx context.Context, merchantID, locationID str
 		 WHERE id = $1::uuid AND merchant_id = $2::uuid`, locationID, merchantID))
 }
 
+// Sucursales y catalogo se escriben con el comercio abierto (enComercioAbierto):
+// un cierre en curso los frena igual que a un cobro.
+
 func (r *Repository) CreateLocation(ctx context.Context, merchantID, name, address string) (*Location, error) {
-	return scanLocation(r.db.QueryRow(ctx,
-		`INSERT INTO merchant_locations (merchant_id, name, address)
-		 VALUES ($1::uuid, $2, $3)
-		 RETURNING `+locationCols, merchantID, name, address))
+	var l *Location
+	err := r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		var err error
+		l, err = scanLocation(tx.QueryRow(ctx,
+			`INSERT INTO merchant_locations (merchant_id, name, address)
+			 VALUES ($1::uuid, $2, $3)
+			 RETURNING `+locationCols, merchantID, name, address))
+		return interno(err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
 }
 
 func (r *Repository) UpdateLocation(ctx context.Context, merchantID, locationID, name, address string, active bool) (*Location, error) {
-	l, err := scanLocation(r.db.QueryRow(ctx,
-		`UPDATE merchant_locations SET name = $3, address = $4, active = $5
-		  WHERE id = $1::uuid AND merchant_id = $2::uuid
-		  RETURNING `+locationCols, locationID, merchantID, name, address, active))
-	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("location not found")
+	var l *Location
+	err := r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		var err error
+		l, err = scanLocation(tx.QueryRow(ctx,
+			`UPDATE merchant_locations SET name = $3, address = $4, active = $5
+			  WHERE id = $1::uuid AND merchant_id = $2::uuid
+			  RETURNING `+locationCols, locationID, merchantID, name, address, active))
+		if err == pgx.ErrNoRows {
+			return fmt.Errorf("location not found")
+		}
+		return interno(err)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return l, err
+	return l, nil
 }
 
 // ── Catalog ──────────────────────────────────────────────────────────────────
 
 const catalogCols = `id, merchant_id, name, price_minor, currency, active, sort_order, created_at`
+
+// AccionProductoSacado es lo que deja en audit_logs sacar un producto del
+// catalogo: quien lo saco, de que comercio y cual.
+const AccionProductoSacado = "merchant_catalog_item_removed"
 
 func scanCatalogItem(row pgx.Row) (*CatalogItem, error) {
 	var c CatalogItem
@@ -640,10 +753,13 @@ func scanCatalogItem(row pgx.Row) (*CatalogItem, error) {
 	return &c, nil
 }
 
+// ListCatalog trae el catalogo sin los productos sacados (deleted_at): es lo
+// que ven la gestion y la pantalla de cobro.
 func (r *Repository) ListCatalog(ctx context.Context, merchantID string) ([]CatalogItem, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+catalogCols+` FROM merchant_catalog_items
-		 WHERE merchant_id = $1::uuid ORDER BY sort_order ASC, created_at ASC`, merchantID)
+		 WHERE merchant_id = $1::uuid AND deleted_at IS NULL
+		 ORDER BY sort_order ASC, created_at ASC`, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -660,35 +776,82 @@ func (r *Repository) ListCatalog(ctx context.Context, merchantID string) ([]Cata
 }
 
 func (r *Repository) CreateCatalogItem(ctx context.Context, merchantID, name string, priceMinor int64, currency string, sortOrder int) (*CatalogItem, error) {
-	return scanCatalogItem(r.db.QueryRow(ctx,
-		`INSERT INTO merchant_catalog_items (merchant_id, name, price_minor, currency, sort_order)
-		 VALUES ($1::uuid, $2, $3, $4, $5)
-		 RETURNING `+catalogCols, merchantID, name, priceMinor, currency, sortOrder))
+	var c *CatalogItem
+	err := r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		var err error
+		c, err = scanCatalogItem(tx.QueryRow(ctx,
+			`INSERT INTO merchant_catalog_items (merchant_id, name, price_minor, currency, sort_order)
+			 VALUES ($1::uuid, $2, $3, $4, $5)
+			 RETURNING `+catalogCols, merchantID, name, priceMinor, currency, sortOrder))
+		return interno(err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (r *Repository) UpdateCatalogItem(ctx context.Context, merchantID, itemID, name string, priceMinor int64, active bool, sortOrder int) (*CatalogItem, error) {
-	c, err := scanCatalogItem(r.db.QueryRow(ctx,
-		`UPDATE merchant_catalog_items
-		    SET name = $3, price_minor = $4, active = $5, sort_order = $6
-		  WHERE id = $1::uuid AND merchant_id = $2::uuid
-		  RETURNING `+catalogCols, itemID, merchantID, name, priceMinor, active, sortOrder))
-	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("catalog item not found")
+	var c *CatalogItem
+	err := r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		var err error
+		c, err = scanCatalogItem(tx.QueryRow(ctx,
+			`UPDATE merchant_catalog_items
+			    SET name = $3, price_minor = $4, active = $5, sort_order = $6
+			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
+			  RETURNING `+catalogCols, itemID, merchantID, name, priceMinor, active, sortOrder))
+		if noEsUnProducto(err) {
+			return fmt.Errorf("catalog item not found")
+		}
+		return interno(err)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return c, err
+	return c, nil
 }
 
-func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID string) error {
-	res, err := r.db.Exec(ctx,
-		`DELETE FROM merchant_catalog_items WHERE id = $1::uuid AND merchant_id = $2::uuid`,
-		itemID, merchantID)
-	if err != nil {
-		return err
-	}
-	if res.RowsAffected() == 0 {
-		return fmt.Errorf("catalog item not found")
-	}
-	return nil
+// noEsUnProducto: la fila no esta, o el id ni siquiera tiene forma de UUID
+// (22P02). Solo ese codigo y no toda la clase 22, como noEsUnComercio: al
+// editar, un nombre de mas de 120 caracteres tambien es clase 22 (22001), y no
+// es un producto que no existe.
+func noEsUnProducto(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && pgErr.Code == "22P02")
+}
+
+// DeleteCatalogItem saca un producto del catalogo sin borrarlo: marca la fila
+// (deleted_at) y la deja inactiva, y quien lo saco queda en audit_logs en la
+// misma transaccion. Todo borrado es logico. Uno que ya se saco no se
+// encuentra, y dos que lo sacan a la vez dejan una sola marca: el segundo
+// espera la fila y ya no la ve.
+//
+// El rastro lleva los ids como los devuelve la base, no como llegaron en la
+// ruta (Postgres acepta un UUID en mayusculas), para que se encuentre por el
+// id de la fila. No copia el nombre: es texto libre del comerciante y sigue
+// en la fila, que no se borra.
+func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID, userID string) error {
+	return r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		var producto, comercio string
+		err := tx.QueryRow(ctx,
+			`UPDATE merchant_catalog_items SET deleted_at = NOW(), active = FALSE
+			  WHERE id = $1::uuid AND merchant_id = $2::uuid AND deleted_at IS NULL
+			  RETURNING id::text, merchant_id::text`,
+			itemID, merchantID).Scan(&producto, &comercio)
+		if noEsUnProducto(err) {
+			return fmt.Errorf("catalog item not found")
+		}
+		if err != nil {
+			return interno(err)
+		}
+		return interno(audit.EscribirEnTx(ctx, tx, &audit.Event{
+			UserID:       userID,
+			Action:       AccionProductoSacado,
+			ResourceType: "merchant_catalog_item",
+			ResourceID:   producto,
+			Details:      map[string]interface{}{"merchant_id": comercio},
+		}))
+	})
 }
 
 // ── Reports (phase 4) ────────────────────────────────────────────────────────

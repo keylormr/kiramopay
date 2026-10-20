@@ -28,13 +28,64 @@ type pgxQuerier interface {
 // repetir el predicado entero en la sentencia, y eso se desincroniza en la
 // primera vez que alguien toca el indice. La carrera se resuelve como siempre:
 // si el INSERT choca con 23505, gano otro y se relee el suyo.
+//
+// El rotulo de un comercio nace con la fila del comercio tomada FOR SHARE, como
+// el pago (comercioAbiertoEnTx): si el comercio se esta cerrando, espera, ve el
+// cierre y no nace. Sin eso el INSERT esperaba en la clave foranea, que se
+// suelta cuando el cierre confirma, y quedaba un rotulo vivo en un comercio
+// cerrado.
 func (r *Repository) GetOrCreateStaticCode(
 	ctx context.Context, creatorID, merchantID, locationID, currency, tipo string,
+) (*QRPaymentCode, error) {
+	if merchantID == "" {
+		return obtenerOCrearCodigo(ctx, r.db, creatorID, "", locationID, currency, tipo)
+	}
+	// El camino de todos los dias es mostrar el rotulo que ya existe, y ese se
+	// lee sin candado: tomar la fila del comercio FOR SHARE marca la tupla, y
+	// hacerlo en cada vista del mostrador escribia la fila sin necesidad. Si el
+	// comercio se esta cerrando, el rotulo que sale queda revocado cuando el
+	// cierre confirma y el pago lo rechaza. El candado queda para crear uno.
+	moneda := currency
+	if moneda == "" {
+		moneda = "CRC"
+	}
+	if code, err := buscarCodigoActivo(ctx, r.db, creatorID, merchantID, locationID, moneda); err == nil {
+		return code, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := comercioAbiertoEnTx(ctx, tx, merchantID); err != nil {
+		return nil, err
+	}
+	code, err := obtenerOCrearCodigo(ctx, tx, creatorID, merchantID, locationID, currency, tipo)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return code, nil
+}
+
+// consultorAnidable lo cumplen *pgxpool.Pool y pgx.Tx. Begin sobre el pool abre
+// una transaccion; sobre una transaccion, un SAVEPOINT.
+type consultorAnidable interface {
+	pgxQuerier
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+func obtenerOCrearCodigo(
+	ctx context.Context, q consultorAnidable, creatorID, merchantID, locationID, currency, tipo string,
 ) (*QRPaymentCode, error) {
 	if currency == "" {
 		currency = "CRC"
 	}
-	if code, err := r.buscarCodigoActivo(ctx, creatorID, merchantID, locationID, currency); err == nil {
+	if code, err := buscarCodigoActivo(ctx, q, creatorID, merchantID, locationID, currency); err == nil {
 		return code, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
@@ -54,22 +105,32 @@ func (r *Repository) GetOrCreateStaticCode(
 	// cobra. Ningun parser lee ese campo, asi que la forma no cambia para nadie.
 	code.QRData = fmt.Sprintf("KP:%s:%s:0:%s:i%s", tipo, code.ID[:8], currency, generateQRToken())
 
-	err := r.CreateQRCode(ctx, code)
-	if err == nil {
-		return code, nil
+	// El INSERT va aparte (un SAVEPOINT dentro de una transaccion): si choca
+	// con 23505, el error no aborta la transaccion de afuera y se puede releer
+	// el codigo del que gano.
+	sub, err := q.Begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		return r.buscarCodigoActivo(ctx, creatorID, merchantID, locationID, currency)
+	if err := crearCodigo(ctx, sub, code); err != nil {
+		_ = sub.Rollback(ctx)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return buscarCodigoActivo(ctx, q, creatorID, merchantID, locationID, currency)
+		}
+		return nil, err
 	}
-	return nil, err
+	if err := sub.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return code, nil
 }
 
-func (r *Repository) buscarCodigoActivo(
-	ctx context.Context, creatorID, merchantID, locationID, currency string,
+func buscarCodigoActivo(
+	ctx context.Context, q pgxQuerier, creatorID, merchantID, locationID, currency string,
 ) (*QRPaymentCode, error) {
 	if merchantID == "" {
-		return scanCode(r.db.QueryRow(ctx,
+		return scanCode(q.QueryRow(ctx,
 			`SELECT `+codeCols+` FROM qr_payment_codes
 			  WHERE creator_id = $1 AND currency = $2
 			    AND merchant_id IS NULL AND status = 'active'`,
@@ -77,7 +138,7 @@ func (r *Repository) buscarCodigoActivo(
 	}
 	// El COALESCE espeja el del indice unico: sin el, dos codigos generales del
 	// mismo comercio (location_id NULL) no se encontrarian entre si.
-	return scanCode(r.db.QueryRow(ctx,
+	return scanCode(q.QueryRow(ctx,
 		`SELECT `+codeCols+` FROM qr_payment_codes
 		  WHERE merchant_id = $1::uuid
 		    AND COALESCE(location_id, '00000000-0000-0000-0000-000000000000'::uuid)
@@ -211,10 +272,19 @@ func (r *Repository) ListarCobros(ctx context.Context, creatorID, estado string,
 	if limite <= 0 || limite > 100 {
 		limite = 50
 	}
+	// Los cobros de un comercio salen solo mientras quien los abrio sigue en
+	// el: su dueno o un miembro activo de su equipo, con el comercio abierto.
+	// Los personales son siempre de quien los abrio.
 	rows, err := r.db.Query(ctx,
-		`SELECT `+chargeCols+` FROM qr_charges
-		  WHERE created_by = $1 AND ($2 = '' OR status = $2)
-		  ORDER BY created_at DESC LIMIT $3`, creatorID, estado, limite)
+		`SELECT `+chargeCols+` FROM qr_charges c
+		  WHERE c.created_by = $1::uuid AND ($2 = '' OR c.status = $2)
+		    AND (c.merchant_id IS NULL OR EXISTS (
+		          SELECT 1 FROM qr_merchants m
+		           WHERE m.id = c.merchant_id AND m.closed_at IS NULL
+		             AND (m.user_id = $1::uuid OR EXISTS (
+		                   SELECT 1 FROM merchant_staff s
+		                    WHERE s.merchant_id = m.id AND s.user_id = $1::uuid AND s.status = 'active'))))
+		  ORDER BY c.created_at DESC LIMIT $3`, creatorID, estado, limite)
 	if err != nil {
 		return nil, err
 	}

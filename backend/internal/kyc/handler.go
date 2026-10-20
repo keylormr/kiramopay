@@ -100,6 +100,10 @@ func (h *Handler) Decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.service.Decide(r.Context(), id, adminID, &req, clientIP(r))
+	if errors.Is(err, ErrDecisionPropia) {
+		response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", "an administrator cannot decide on their own verification")
+		return
+	}
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "KYC_DECISION_FAILED", err.Error())
 		return

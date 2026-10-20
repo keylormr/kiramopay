@@ -51,6 +51,9 @@ func (s *Service) GetOrCreateMerchantCode(
 	// Ajeno o inexistente es lo mismo para quien pregunta: no se le confirma
 	// que existe un comercio que no es suyo.
 	role, merchant, err := s.roleFor(ctx, merchantID, userID)
+	if errors.Is(err, ErrComercioCerrado) {
+		return nil, err
+	}
 	if err != nil || role == "" {
 		return nil, ErrComercioNoEncontrado
 	}
@@ -104,6 +107,11 @@ func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateCh
 		return nil, ErrQRInvalido
 	}
 	if code.Status != EstadoCodigoActivo {
+		// El cierre retira todos los rotulos del comercio: "ese codigo fue
+		// retirado" no le explica al cajero que el local cerro.
+		if code.MerchantID != "" && s.estaCerrado(ctx, code.MerchantID) {
+			return nil, ErrComercioCerrado
+		}
 		return nil, ErrQRRevocado
 	}
 	if err := s.puedeCobrarCon(ctx, userID, code); err != nil {
@@ -145,41 +153,48 @@ func (s *Service) CreateCharge(ctx context.Context, userID string, req *CreateCh
 	// impide que una aplicacion vieja pague algo que no vio.
 	cobro.QRData = fmt.Sprintf("KP:%s:%s:%d:%s:x%s", tipo, cobro.ID[:8], cobro.Amount, moneda, generateQRToken())
 
-	if req.Replaces == "" {
-		if err := s.repo.CrearCobro(ctx, s.repo.db, cobro); err != nil {
-			return nil, err
+	if req.Replaces != "" {
+		// El cobro que se reemplaza tiene que colgar del MISMO codigo. Sin esta
+		// comprobacion, cualquiera con un codigo propio podria cerrar el cobro
+		// de otro con solo conocer su id.
+		viejo, err := s.repo.GetCharge(ctx, req.Replaces)
+		if err != nil || viejo.QRCodeID != code.ID {
+			return nil, ErrQRInvalido
 		}
-		return cobro, nil
 	}
 
-	// El cobro que se reemplaza tiene que colgar del MISMO codigo. Sin esta
-	// comprobacion, cualquiera con un codigo propio podria cerrar el cobro de
-	// otro con solo conocer su id.
-	viejo, err := s.repo.GetCharge(ctx, req.Replaces)
-	if err != nil || viejo.QRCodeID != code.ID {
-		return nil, ErrQRInvalido
-	}
-
-	// Reemplazo, en una transaccion. Si el viejo ya se pago, NO queda cobro
-	// nuevo — decirle "cancelado" al cajero sobre una venta que acaba de entrar
-	// es como se llega a cobrar dos veces.
+	// En una transaccion. El cobro de un comercio nace con la fila del comercio
+	// tomada FOR SHARE, como el pago (comercioAbiertoEnTx): si el comercio se
+	// esta cerrando, espera, ve el cierre y no nace. Sin eso el INSERT esperaba
+	// en la clave foranea, que se suelta cuando el cierre confirma, y quedaba un
+	// cobro pendiente en un comercio cerrado.
 	//
-	// El orden es INSERT y despues UPDATE, y no al reves: `superseded_by`
-	// apunta al cobro nuevo con una clave foranea, asi que cerrarlo primero
-	// referencia una fila que todavia no existe. Lo que garantiza que el nuevo
-	// no sobreviva a un rechazo no es el orden sino la transaccion: si el UPDATE
-	// guardado no matchea, el rollback se lleva el INSERT.
-	tx, err := s.repo.db.Begin(ctx)
+	// En un reemplazo, si el viejo ya se pago, NO queda cobro nuevo: decirle
+	// "cancelado" al cajero sobre una venta que acaba de entrar es como se llega
+	// a cobrar dos veces. El orden es INSERT y despues UPDATE, y no al reves:
+	// `superseded_by` apunta al cobro nuevo con una clave foranea, asi que
+	// cerrarlo primero referencia una fila que todavia no existe. Lo que
+	// garantiza que el nuevo no sobreviva a un rechazo no es el orden sino la
+	// transaccion: si el UPDATE guardado no matchea, el rollback se lleva el
+	// INSERT.
+	tx, err := s.repo.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if code.MerchantID != "" {
+		if err := comercioAbiertoEnTx(ctx, tx, code.MerchantID); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.CrearCobro(ctx, tx, cobro); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
-		return nil, err
+	if req.Replaces != "" {
+		if err := s.repo.CerrarCobro(ctx, tx, req.Replaces, EstadoCobroReemplazado, cobro.ID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -228,6 +243,9 @@ func (s *Service) puedeCobrarCon(ctx context.Context, userID string, code *QRPay
 		return nil
 	}
 	role, merchant, err := s.roleFor(ctx, code.MerchantID, userID)
+	if errors.Is(err, ErrComercioCerrado) {
+		return err
+	}
 	if err != nil || role == "" {
 		return ErrQRInvalido
 	}
@@ -238,14 +256,16 @@ func (s *Service) puedeCobrarCon(ctx context.Context, userID string, code *QRPay
 }
 
 func (s *Service) puedeAdministrarCobro(ctx context.Context, userID string, cobro *QRCharge) error {
-	if cobro.CreatedBy == userID {
+	if cobro.MerchantID == "" {
+		if cobro.CreatedBy != userID {
+			return ErrQRInvalido
+		}
 		return nil
 	}
-	if cobro.MerchantID == "" {
-		return ErrQRInvalido
-	}
-	// Un cajero abre el cobro y se va; el que sigue en la caja tiene que poder
-	// cancelarlo. Cualquier miembro del equipo del local sirve.
+	// Un cobro del comercio es del comercio. Un cajero abre el cobro y se va; el
+	// que sigue en la caja tiene que poder cancelarlo: cualquier miembro activo
+	// del equipo sirve. Y haberlo abierto no alcanza: quien se fue del equipo (o
+	// el comercio cerro, y con el cierre se fue todo el equipo) ya no lo lee.
 	role, _, err := s.roleFor(ctx, cobro.MerchantID, userID)
 	if err != nil || role == "" {
 		return ErrQRInvalido
@@ -325,6 +345,12 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 	if err != nil {
 		return nil, err
 	}
+	// Como en el pago: un comercio cerrado se dice antes que el rotulo revocado,
+	// y se mira el comercio aunque el codigo siga vivo.
+	merchant, errComercio := s.comercioDelCodigo(ctx, obj.code)
+	if merchant != nil && merchant.ClosedAt != nil {
+		return nil, ErrComercioCerrado
+	}
 	if obj.code.Status == EstadoCodigoRevocado {
 		return nil, ErrQRRevocado
 	}
@@ -354,12 +380,11 @@ func (s *Service) ResolveQR(ctx context.Context, qrData string) (*ResolvedQR, er
 		// pagar. Un comercio que ya no existe deja el codigo sin nombre, como
 		// siempre, y el pago lo rechaza; no poder leerlo es un fallo del
 		// servidor, como en el pago (#271), y no un codigo sin a quien pagarle.
-		m, err := s.repo.GetMerchant(ctx, obj.code.MerchantID)
 		switch {
-		case err == nil:
-			res.MerchantName = m.Name
-		case !errors.Is(err, pgx.ErrNoRows):
-			return nil, fmt.Errorf("leer el comercio: %w", err)
+		case errComercio == nil:
+			res.MerchantName = merchant.Name
+		case !errors.Is(errComercio, pgx.ErrNoRows):
+			return nil, fmt.Errorf("leer el comercio: %w", errComercio)
 		}
 		if res.LocationName, err = s.repo.NombreDeSucursal(ctx, obj.code.LocationID); err != nil {
 			return nil, fmt.Errorf("leer la sucursal: %w", err)
@@ -407,6 +432,23 @@ func (s *Service) PersonaDelQR(ctx context.Context, qrData string) (*PersonaDelQ
 	}
 	if obj.code.MerchantID != "" {
 		return nil, ErrQRDeComercio
+	}
+	// Quien pidio eliminar su cuenta no recibe. El cripto no pasa por el libro,
+	// asi que la cuenta cerrada no lo frenaria: lo que le mandaran en el plazo
+	// quedaria adentro e impediria el cierre del dia 30. Una cuenta que la
+	// busqueda ya no encuentra es una cerrada (su codigo se revoca en el cierre,
+	// pero quien escaneo justo antes todavia lo tiene). Para quien escanea, en
+	// los dos casos, el codigo ya no sirve.
+	if s.users != nil {
+		u, err := s.users.FindByID(ctx, obj.code.CreatorID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrQRRevocado
+		case err != nil:
+			return nil, err
+		case u == nil || u.Status == "pending_deletion":
+			return nil, ErrQRRevocado
+		}
 	}
 	return &PersonaDelQR{
 		UserID: obj.code.CreatorID,
@@ -561,6 +603,16 @@ func (s *Service) ganchoEnLaMismaTx(
 ) func(context.Context, pgx.Tx, string) error {
 	return func(ctx context.Context, tx pgx.Tx, txID string) error {
 		payment.TxID = txID
+		// El comercio se vuelve a mirar aqui, con su fila pedida FOR SHARE: la
+		// lectura del principio de ScanAndPay es de antes del asiento, y un
+		// cierre que confirmo entre las dos dejaria entrar el pago a un
+		// comercio cerrado. Ver CerrarComercioEnTx.
+		if obj.code.MerchantID != "" {
+			if err := comercioAbiertoEnTx(ctx, tx, obj.code.MerchantID); err != nil {
+				*errDelModulo = err
+				return err
+			}
+		}
 		if obj.charge != nil {
 			if err := ReclamarCobroEnTx(ctx, tx, obj.charge.ID, payerID, txID); err != nil {
 				*errDelModulo = err

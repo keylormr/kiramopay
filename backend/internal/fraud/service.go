@@ -2,6 +2,7 @@ package fraud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -170,12 +171,27 @@ func (s *Service) GetOpenAlerts(ctx context.Context) ([]FraudAlert, error) {
 	return s.repo.GetOpenAlerts(ctx)
 }
 
+// ErrCuentaPropia: el administrador resuelve una alerta de fraude sobre su
+// propia cuenta, o se pone o se quita a si mismo la restriccion. Desde el PR 295
+// administra una cuenta personal; darse por falso positivo o liberarse es justo
+// lo que la revision tiene que impedir. Lo hace otro administrador.
+var ErrCuentaPropia = errors.New("fraud: an administrator cannot act on their own account")
+
 func (s *Service) ResolveAlert(ctx context.Context, alertID, resolvedBy, status string) error {
 	validStatuses := map[string]bool{
 		"resolved": true, "false_positive": true, "investigating": true,
 	}
 	if !validStatuses[status] {
 		return fmt.Errorf("invalid status: %s", status)
+	}
+	// La cuenta de una alerta no cambia, asi que leerla antes del UPDATE no
+	// abre una carrera. Una alerta que no existe sigue: ResolveAlert lo dice.
+	cuenta, err := s.repo.CuentaDeLaAlerta(ctx, alertID)
+	if err != nil {
+		return fmt.Errorf("read alert: %w", err)
+	}
+	if cuenta != "" && cuenta == resolvedBy {
+		return ErrCuentaPropia
 	}
 	return s.repo.ResolveAlert(ctx, alertID, resolvedBy, status)
 }
@@ -184,7 +200,10 @@ func (s *Service) GetUserAssessments(ctx context.Context, userID string) ([]Risk
 	return s.repo.ListUserAssessments(ctx, userID, 50)
 }
 
-func (s *Service) RestrictUser(ctx context.Context, userID string, restricted bool) error {
+func (s *Service) RestrictUser(ctx context.Context, userID, adminID string, restricted bool) error {
+	if userID == adminID {
+		return ErrCuentaPropia
+	}
 	return s.repo.RestrictUser(ctx, userID, restricted)
 }
 

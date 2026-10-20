@@ -137,6 +137,36 @@ escrituras), por eso separar `NOT VALID` de `VALIDATE` es lo que evita el lock.
   → la red de seguridad real es el **backup/DR** (ver [DR_RUNBOOK.md](DR_RUNBOOK.md))
   más el propio orden expand-contract.
 
+### Notas por migración
+
+- **079 (cierre de comercios).** Es *expand*: agrega `closed_at`, `closed_by`,
+  `closure_reason` y un `CHECK`, y el código anterior sigue arrancando contra
+  ella. Dos cuidados:
+  - **Durante el despliegue escalonado**, una instancia vieja no sabe que un
+    comercio está cerrado: le puede emitir un rótulo nuevo o un cobro, y
+    cobrarle. El cierre exige saldo cero y ningún cobro pendiente, así que el
+    riesgo se limita a los minutos que conviven las dos versiones. No cerrar
+    comercios hasta que todas las instancias corran el código nuevo.
+  - **Volver al código anterior reabre en la práctica los comercios
+    cerrados**: ese código no mira `closed_at` ni `active`, así que su dueño
+    los vuelve a ver en su lista, puede pedir un rótulo nuevo y cobrar. Antes
+    de un rollback del código, revisar si hay comercios cerrados
+    (`closed_at IS NOT NULL`). La bajada
+    (`migrations/down/079_cierre_de_comercios.down.sql`) borra quién cerró y por
+    qué, y no los vuelve a cerrar; si la 077 está aplicada, conserva
+    `closed_at`.
+- **082 (keilor administra).** Solo datos: da `role = 'admin'` a la cuenta
+  keilor (cédula 702650930), la saca de las cuentas de demostración y cierra lo
+  que una sesión sin contraseña pudo dejar (sesiones, refresh tokens, llaves
+  B2B, webhooks, suscripciones de avisos y teléfonos), con una fila en
+  `audit_logs`. No depende del código: el código anterior lee el rol igual, y
+  volver a él no la deshace. Lo que sí trae el mismo PR es
+  `RequireLiveSession` en el panel: con el código anterior, un token que ya
+  rotó sigue abriendo el panel hasta que vence. La bajada
+  (`migrations/down/082_keilor_administrador.down.sql`) le quita el rol, la
+  vuelve a marcar como cuenta de demostración y lo deja en `audit_logs`; no
+  reabre lo que la 082 cerró ni borra su auditoría.
+
 ---
 
 ## 7. Coreografía de deploy

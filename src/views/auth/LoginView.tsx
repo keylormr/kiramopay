@@ -18,6 +18,8 @@ import { User } from '../../types';
 import { RecoverPasswordView } from './RecoverPasswordView';
 import { Capacitor } from '@capacitor/core';
 import { resolveApiBaseUrl } from '@/api/baseUrl';
+import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
+import { fechaLarga } from '@/utils/planes';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -41,6 +43,15 @@ const CLAVES_ERROR_LOGIN: Readonly<Record<string, string>> = {
   VALIDATION_ERROR: 'login_identifier_invalid',
 };
 
+// Una cuenta con el dia 30 ya pasado que el servidor todavia ofrece reactivar
+// es una que no se pudo cerrar: queda algo pendiente. "Se elimina el" con una
+// fecha que ya paso no le diria nada.
+function plazoVencido(iso: string | undefined): boolean {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) && t <= Date.now();
+}
+
 // Rechazos que el intento con contrasena repetiria igual: el sondeo del
 // identificador los avisa ahi, sin pedir la contrasena. La pausa por intentos
 // no delata cuentas: el servidor cuenta los intentos por identificador, exista
@@ -55,7 +66,7 @@ const AVISOS_DEL_SONDEO = new Set(['RATE_LIMITED', 'ACCOUNT_LOCKED', 'NETWORK_ER
 // ofrece ahora y el que se dicta en una demostracion. La cedula sigue
 // funcionando, pero nadie la teclea si tiene un nombre mas corto.
 const CUENTAS_LOCALES = [
-  { identificador: 'keilor', password: 'Kiramopay2024!', nota: '' },
+  { identificador: 'keilor', password: 'Kiramopay2024!', nota: 'admin' },
   { identificador: 'admin.kp', password: 'Admin2024!', nota: 'admin' },
   { identificador: 'demo', password: 'DemoLocal2026!', nota: 'demo' },
   { identificador: 'victor', password: 'VictorLocal2026!', nota: '' },
@@ -93,10 +104,12 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Expulsion remota: si la sesion anterior se cerro porque un administrador
   // bloqueo la cuenta, esta pantalla lo dice en vez de parecer un logout mudo.
   const logoutReason = useAuthStore((s) => s.logoutReason);
+  // El dia 30 de la eliminacion que la persona acaba de pedir desde la app.
+  const seEliminaEl = useAuthStore((s) => s.seEliminaEl);
   const clearLogoutReason = useAuthStore((s) => s.clearLogoutReason);
   // Sesion sin confirmar: el arranque no pudo hablar con el servidor y NO la
   // cerro. Esta pantalla lo explica y ofrece reintentar sin teclear nada.
@@ -113,6 +126,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  // Cuenta con la eliminacion en curso: el servidor ya verifico la contrasena y
+  // respondio la fecha del cierre. Se guarda lo tecleado para reactivar sin
+  // pedirlo de nuevo; vive solo en memoria, como el campo de la contrasena.
+  const [porEliminar, setPorEliminar] = useState<{ identificador: string; password: string; fecha?: string } | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
   const [lastUser, setLastUser] = useState<{ cedula: string; name: string; tipo: TipoIdentificador } | null>(() => {
@@ -240,10 +257,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
     const res = await useAuthStore.getState().login(userIdentificador, userPassword);
     if (res.success) {
       await finalizarLogin(userIdentificador, userPassword);
+    } else if (res.code === 'ACCOUNT_PENDING_DELETION') {
+      // No es un error: la persona pidio eliminar la cuenta y todavia puede
+      // volver. La pantalla lo dice y ofrece reactivarla.
+      setPorEliminar({ identificador: userIdentificador, password: userPassword, fecha: res.seEliminaEl });
     } else {
       setError(t(CLAVES_ERROR_LOGIN[res.code ?? ''] ?? 'login_failed'));
       // Solo se borra la que el servidor dijo que era la equivocada: sin red,
       // con el limitador o en pausa, se reintenta con la misma.
+      if (res.code === 'AUTH_FAILED') setPassword('');
+    }
+    setIsLoading(false);
+  };
+
+  // Reactivar repite el login con reactivate: el servidor cancela la
+  // eliminacion y emite la sesion. Si ya no se puede (vencio el plazo,
+  // operaciones bloqueo la cuenta) responde como a cualquier cuenta que no puede
+  // entrar, y la pantalla vuelve al formulario con ese aviso.
+  const reactivar = async () => {
+    if (!porEliminar || isLoading) return;
+    const { identificador: id, password: clave } = porEliminar;
+    setIsLoading(true);
+    setError('');
+    const res = await useAuthStore.getState().login(id, clave, { reactivar: true });
+    setPorEliminar(null);
+    if (res.success) {
+      await finalizarLogin(id, clave);
+    } else {
+      setError(t(CLAVES_ERROR_LOGIN[res.code ?? ''] ?? 'login_pending_failed'));
       if (res.code === 'AUTH_FAILED') setPassword('');
     }
     setIsLoading(false);
@@ -319,6 +360,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             <p className="font-bold text-white">{t('account_blocked_title')}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
               {t('account_blocked_body')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearLogoutReason}
+            aria-label={t('close')}
+            className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Icons.X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Aviso de cuenta eliminada: la persona la elimino y volvio al login */}
+      {logoutReason === 'deleted' && (
+        <div
+          role="status"
+          className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-4 animate-slide-up"
+        >
+          <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-white">{t('account_deleted_title')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+              {fechaLarga(seEliminaEl, language)
+                ? t('account_deleted_body').replace('{date}', fechaLarga(seEliminaEl, language))
+                : t('account_deleted_body_nodate')}
             </p>
           </div>
           <button
@@ -597,9 +664,47 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               <span className="text-white">{identificador}</span>
             </p>
 
-            {/* Password form — a real <form> so browsers/password managers can
+            {/* Eliminacion en curso: en lugar del formulario, cuando se elimina
+                y la puerta de vuelta. */}
+            {porEliminar ? (
+              <div
+                role="alert"
+                className="rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-5 animate-slide-up"
+              >
+                <div className="flex items-start gap-3">
+                  <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="font-bold text-white">{t('login_pending_title')}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+                      {plazoVencido(porEliminar.fecha)
+                        ? t('login_pending_body_overdue')
+                        : fechaLarga(porEliminar.fecha, language)
+                          ? t('login_pending_body').replace('{date}', fechaLarga(porEliminar.fecha, language))
+                          : t('login_pending_body_nodate')}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 space-y-2.5">
+                  <Button type="button" size="lg" fullWidth loading={isLoading} disabled={isLoading} onClick={() => void reactivar()}>
+                    {t('login_pending_reactivate')}
+                  </Button>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => {
+                      setPorEliminar(null);
+                      setPassword('');
+                    }}
+                    className="w-full py-3 text-center text-sm font-semibold text-[var(--color-text-secondary-dark)] hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {t('login_pending_keep')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+            /* Password form — a real <form> so browsers/password managers can
                 offer autofill and save (and to drop the "field not in a form"
-                warning). The cedula rides along as the hidden username. */}
+                warning). The cedula rides along as the hidden username. */
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -662,6 +767,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 {isLoading ? t('login_verifying') : t('login_enter')}
               </Button>
             </form>
+            )}
 
             <button
               type="button"
@@ -717,6 +823,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         <p className="text-[var(--color-text-muted-dark)]/70 text-[11px] text-center mt-6 leading-relaxed">
           {t('login_terms')}
         </p>
+        {/* Google Play exige la politica de privacidad enlazada dentro de la app.
+            La frase de arriba la nombra; este enlace la abre. */}
+        <button
+          type="button"
+          onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
+          className="mx-auto mt-2 block text-xs font-semibold text-[var(--color-text-secondary-dark)] underline underline-offset-2 hover:text-white transition-colors"
+        >
+          {t('privacy_policy')}
+        </button>
       </footer>
 
       {showRecover && (

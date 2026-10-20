@@ -72,9 +72,10 @@ type MFAEnforcer interface {
 }
 
 // UIFReporter recibe el aviso, sin poder fallar la operacion, de que salio
-// valor de una cuenta (umbrales de la UIF).
+// valor de una cuenta (umbrales de la UIF). La cripto se valua al precio de
+// ejecucion de la operacion, en dolares: no pasa por un tipo de cambio.
 type UIFReporter interface {
-	Report(ctx context.Context, userID, txID, currency string, amountMinor int64)
+	ReportCripto(ctx context.Context, userID, txID string, usdMinor int64)
 }
 
 // Avisos le dice a quien recibe que le llego algo. Lo satisface
@@ -294,7 +295,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 
 	s.avisarDelEnvio(ctx, envio)
 	if s.uif != nil {
-		s.uif.Report(ctx, userID, envio.ID, "USD", valorMinor)
+		s.uif.ReportCripto(ctx, userID, envio.ID, valorMinor)
 	}
 	return envio, nil
 }

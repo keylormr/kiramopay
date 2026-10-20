@@ -4,6 +4,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/privacidad", "destination": "/privacidad/index.html" },
+    { "source": "/eliminar-cuenta", "destination": "/eliminar-cuenta/index.html" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -39,6 +39,9 @@ var (
 	KeyDemoExpiry   = lockKey("worker:demo-expiry")
 	KeyQRCharges    = lockKey("worker:qr-charges")
 	KeyPriceAlerts  = lockKey("worker:price-alerts")
+	// KeyAccountDeletion: el cierre del dia 30 y la desasociacion de lo
+	// conservado (accountdeletion.Poller).
+	KeyAccountDeletion = lockKey("worker:account-deletion")
 )
 
 // lockKey derives a stable int64 advisory-lock key from a namespace string.

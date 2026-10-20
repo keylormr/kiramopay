@@ -33,6 +33,20 @@ func noStore(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 }
 
+// responderPorEliminar contesta ACCOUNT_PENDING_DELETION con la fecha del
+// cierre si err es una cuenta con la eliminacion en curso. Devuelve si respondio.
+func responderPorEliminar(w http.ResponseWriter, err error) bool {
+	var porEliminar *CuentaPorEliminarError
+	if !errors.As(err, &porEliminar) {
+		return false
+	}
+	noStore(w)
+	response.ErrorConDetalle(w, http.StatusForbidden, "ACCOUNT_PENDING_DELETION",
+		"account pending deletion",
+		map[string]any{"deletion_due_at": porEliminar.SeEliminaEl.UTC()})
+	return true
+}
+
 func loginContext(r *http.Request) LoginContext {
 	// La IP se valida antes de salir: acaba en NULLIF($6,'')::inet al crear la
 	// sesion, y un valor no parseable —"unknown" es real, lo emiten varios
@@ -65,6 +79,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.Login(r.Context(), &req, loginContext(r))
 	if err != nil {
+		// Eliminacion en curso: 403 con la fecha del cierre, para que la pantalla
+		// ofrezca reactivar. Tambien solo con la contrasena correcta.
+		if responderPorEliminar(w, err) {
+			return
+		}
 		// Cuenta bloqueada: 403 con codigo propio para que el cliente lo
 		// muestre. Solo se llega aqui con la contrasena correcta (Service.Login).
 		if errors.Is(err, ErrAccountBlocked) {
@@ -273,6 +292,9 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 			h.cookies.clearRefreshCookie(w)
 		}
 		noStore(w)
+		if responderPorEliminar(w, err) {
+			return
+		}
 		// Cuenta bloqueada: la cookie tambien se limpia (sus sesiones ya estan
 		// revocadas) y el cliente recibe el codigo distinguible.
 		if errors.Is(err, ErrAccountBlocked) {
@@ -340,13 +362,21 @@ func (h *Handler) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]int{"revoked": n})
 }
 
+// EndSession limpia la cookie de sesion y le pide al navegador que suelte los
+// datos del sitio. Es lo que hace Logout antes de revocar nada, y lo reusa la
+// eliminacion de cuenta: la persona acaba de cerrar la cuenta y su navegador no
+// debe conservar nada.
+func (h *Handler) EndSession(w http.ResponseWriter) {
+	h.cookies.clearRefreshCookie(w)
+	w.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
+	noStore(w)
+}
+
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Clear the session cookie and ask the browser to drop cached site data,
 	// regardless of the backend revocation outcome below — the client intends to
 	// be logged out.
-	h.cookies.clearRefreshCookie(w)
-	w.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
-	noStore(w)
+	h.EndSession(w)
 
 	jti := middleware.GetAccessJTI(r.Context())
 	exp := middleware.GetAccessExp(r.Context())

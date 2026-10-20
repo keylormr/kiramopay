@@ -82,7 +82,7 @@ func verifiedMerchantQR(t *testing.T, svc *qrpayment.Service, owner string, amou
 	if err != nil {
 		t.Fatalf("register merchant: %v", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, m.ID, owner); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba); err != nil {
 		t.Fatalf("approve merchant: %v", err)
 	}
 	qr, err := svc.CreateQRCode(ctx, owner, &qrpayment.CreateQRCodeRequest{
@@ -280,13 +280,13 @@ func TestSetCommission_AppliesToNextPayment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, m.ID, owner); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	// Fuera de la promocion de entrada, que cobraria la menor (25 bps).
 	terminarPromocion(t, pool, m.ID)
 	// Bump the commission to 1.00% (100 bps).
-	updated, err := svc.SetCommission(ctx, m.ID, 100)
+	updated, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 100)
 	if err != nil {
 		t.Fatalf("set commission: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestSetCommission_RejectsOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if _, err := svc.SetCommission(ctx, m.ID, 20000); err == nil {
+	if _, err := svc.SetCommission(ctx, m.ID, revisorDePrueba, 20000); err == nil {
 		t.Fatal("expected error for out-of-range commission (>10000 bps)")
 	}
 }
@@ -335,7 +335,7 @@ func TestCreateQRCode_RejectsForeignMerchant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, m.ID, owner); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	// payer (not the owner) tries to issue a code for owner's merchant.

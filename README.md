@@ -708,7 +708,7 @@ En el frontend, el hook `useNotificationsWs` maneja la conexion, autenticacion y
 
 | Nombre | Cedula | Contraseña | Rol |
 |--------|--------|------------|-----|
-| Keilor Martinez | `702650930` | `Kiramopay2024!` | Usuario normal |
+| Keilor Martinez | `702650930` | `Kiramopay2024!` | Administrador (migracion 082) |
 | Administrador | `700000000` | `Admin2024!` | Administrador |
 
 Balance inicial: 2,500,000 CRC + 500 USD.

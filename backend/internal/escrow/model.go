@@ -145,4 +145,8 @@ var (
 	// la base y no lo comparaba nadie; ahora que si frena, tiene que llegar a la
 	// pantalla con su propio codigo en vez de caer en el 500 generico.
 	ErrMonthlyLimitExceeded = errors.New("escrow: monthly spending limit exceeded")
+	// ErrArbitroEsParte: el administrador que resuelve la disputa es el
+	// comprador o el vendedor. Desde el PR 295 administra una cuenta personal
+	// que compra y vende con escrow; arbitrarse a si misma es darse la razon.
+	ErrArbitroEsParte = errors.New("escrow: an administrator cannot resolve an agreement they are a party to")
 )

@@ -82,7 +82,10 @@ export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }
     const res = await getApiLayer().escrow.adminResolve(confirmando.caso.id, confirmando.veredicto);
     setResolviendo(false);
     if (!res.success) {
-      setErrorResolver(res.error?.message || t('admin_disputes_failed'));
+      // El administrador es comprador o vendedor del acuerdo: lo arbitra otro.
+      setErrorResolver(res.error?.code === 'ADMIN_IS_AFFECTED_PARTY'
+        ? t('admin_disputes_err_party')
+        : res.error?.message || t('admin_disputes_failed'));
       return;
     }
     setConfirmando(null);

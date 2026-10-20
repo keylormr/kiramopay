@@ -1,6 +1,7 @@
 package qrpayment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/transaction"
 )
@@ -103,6 +105,8 @@ func TestResponderError_LosRechazosDeLaTransferenciaTienenCodigoPropio(t *testin
 		{transaction.ErrSaldoInsuficiente, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
 		// El del asiento, que es el que frena bajo concurrencia.
 		{ledger.ErrInsufficientFunds, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
+		// Quien cobra pidio eliminar su cuenta: el asiento se rechazo limpio.
+		{ledger.ErrCuentaCerrada, http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE"},
 		{transaction.ErrDailyLimitExceeded, http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED"},
 		{transaction.ErrMonthlyLimitExceeded, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED"},
 		{transaction.ErrBloqueadoPorRiesgo, http.StatusBadRequest, "TRANSFER_BLOCKED"},
@@ -119,5 +123,30 @@ func TestResponderError_LosRechazosDeLaTransferenciaTienenCodigoPropio(t *testin
 		if strings.Contains(msg, "qr payment transfer") {
 			t.Errorf("%v: el texto lleva los prefijos internos: %q", c.err, msg)
 		}
+	}
+}
+
+// Un fallo de la base al sumar a alguien al equipo no es un error de quien
+// llama: sale como 500, sin el texto del driver. Caia en el 400 de siempre con
+// la frase del pool ("failed to connect to ...") a la vista.
+func TestResponderErrorDeEquipo_UnFalloDeLaBaseEs500(t *testing.T) {
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, "postgres://nadie@127.0.0.1:1/nada?connect_timeout=1")
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	defer pool.Close()
+	_, err = NewRepository(pool).UpsertStaff(ctx,
+		"00000000-0000-0000-0000-0000000000c1", "00000000-0000-0000-0000-000000000002",
+		RoleCashier, "", "00000000-0000-0000-0000-000000000001")
+	if err == nil {
+		t.Fatal("sin base, UpsertStaff no fallo")
+	}
+	rec := httptest.NewRecorder()
+	responderErrorDeEquipo(rec, "ADD_STAFF_FAILED", err)
+	codigo, msg := codigoDe(t, rec)
+	if rec.Code != http.StatusInternalServerError || codigo != "ADD_STAFF_FAILED" ||
+		strings.Contains(msg, "127.0.0.1") || strings.Contains(msg, "connect") {
+		t.Fatalf("%d %s %q, se esperaba 500 ADD_STAFF_FAILED sin el detalle", rec.Code, codigo, msg)
 	}
 }

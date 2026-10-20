@@ -2,9 +2,11 @@ package fraud
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/pkg/response"
 )
@@ -86,6 +88,9 @@ func (h *Handler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.ResolveAlert(r.Context(), alertID, reviewerID, body.Status); err != nil {
+		if responderSiEsPropia(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "RESOLVE_FAILED", err.Error())
 		return
 	}
@@ -93,7 +98,16 @@ func (h *Handler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RestrictUser(w http.ResponseWriter, r *http.Request) {
-	targetUserID := chi.URLParam(r, "userId")
+	adminID := middleware.GetUserID(r.Context())
+	// El id llega como lo escribe quien llama, y Postgres acepta el mismo UUID
+	// en mayusculas o entre llaves. Sin pasarlo a su forma canonica, la guarda
+	// de la cuenta propia comparaba cadenas distintas de la misma cuenta.
+	objetivo, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "userId must be a UUID")
+		return
+	}
+	targetUserID := objetivo.String()
 	var body struct {
 		Restricted bool `json:"restricted"`
 	}
@@ -102,9 +116,22 @@ func (h *Handler) RestrictUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.RestrictUser(r.Context(), targetUserID, body.Restricted); err != nil {
+	if err := h.service.RestrictUser(r.Context(), targetUserID, adminID, body.Restricted); err != nil {
+		if responderSiEsPropia(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "RESTRICT_FAILED", err.Error())
 		return
 	}
 	response.NoContent(w)
+}
+
+// responderSiEsPropia responde 403 ADMIN_IS_AFFECTED_PARTY cuando el
+// administrador actua sobre su propia cuenta. Devuelve si respondio.
+func responderSiEsPropia(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrCuentaPropia) {
+		return false
+	}
+	response.Error(w, http.StatusForbidden, "ADMIN_IS_AFFECTED_PARTY", "an administrator cannot act on their own account")
+	return true
 }

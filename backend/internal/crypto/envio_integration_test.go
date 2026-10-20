@@ -91,12 +91,20 @@ type uifDePrueba struct {
 	montoMinor  int64
 	deQuien     string
 	movimientos []string
+	// precioDeEjecucion cuenta los avisos que llegaron valuados al precio de
+	// ejecucion de la operacion, que es como la UIF tiene que valuar la cripto.
+	precioDeEjecucion int
 }
 
 func (u *uifDePrueba) Report(_ context.Context, userID, txID, currency string, amountMinor int64) {
 	u.veces++
 	u.deQuien, u.moneda, u.montoMinor = userID, currency, amountMinor
 	u.movimientos = append(u.movimientos, txID)
+}
+
+func (u *uifDePrueba) ReportCripto(ctx context.Context, userID, txID string, usdMinor int64) {
+	u.Report(ctx, userID, txID, "USD", usdMinor)
+	u.precioDeEjecucion++
 }
 
 type entornoDeEnvio struct {
@@ -408,6 +416,11 @@ func TestEnviarCripto_QuedaEnElHistorialYLoVeLaUIF(t *testing.T) {
 	if len(e.uif.movimientos) != 1 || e.uif.movimientos[0] != envio.ID {
 		t.Fatalf("la UIF no quedo apuntando al movimiento del envio: %v", e.uif.movimientos)
 	}
+	// La cripto se valua al precio de ejecucion de la operacion, no con un tipo
+	// de cambio: el aviso tiene que decirlo para que el registro lo guarde asi.
+	if e.uif.precioDeEjecucion != 1 {
+		t.Fatalf("la UIF recibio %d avisos al precio de ejecucion, esperaba 1", e.uif.precioDeEjecucion)
+	}
 }
 
 // El aviso es lo UNICO que tiene quien recibe para enterarse: no hay nada que
@@ -552,7 +565,7 @@ func TestEnviarCripto_ElRotuloDeUnComercioSeRechaza(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registrar comercio: %v", err)
 	}
-	if _, err := e.qr.ApproveMerchant(ctx, m.ID, e.quienRecibe); err != nil {
+	if _, err := e.qr.ApproveMerchant(ctx, m.ID, e.quienEnvia); err != nil {
 		t.Fatalf("aprobar comercio: %v", err)
 	}
 	rotulo, err := e.qr.GetOrCreateMerchantCode(ctx, e.quienRecibe, m.ID, "", "CRC")

@@ -375,6 +375,11 @@ func (s *Service) Resolve(ctx context.Context, adminID, id string, outcome Statu
 	if err != nil {
 		return nil, err
 	}
+	// Las partes no cambian despues de crear el acuerdo, asi que mirarlas aqui,
+	// antes de la transaccion que mueve la plata, no abre una carrera.
+	if adminID == a.BuyerID || adminID == a.SellerID {
+		return nil, ErrArbitroEsParte
+	}
 	switch outcome {
 	case StatusReleased:
 		return s.moveAndTransition(ctx, a, StatusDisputed, StatusReleased, "release",

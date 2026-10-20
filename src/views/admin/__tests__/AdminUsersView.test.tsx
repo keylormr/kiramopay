@@ -99,6 +99,17 @@ describe('AdminUsersView', () => {
     expect(screen.getByText('Activa')).toBeInTheDocument();
   });
 
+  it('shows an account with the deletion in progress as such, not as active', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [{ ...keilor, status: 'pending_deletion' }] });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+
+    expect(await screen.findByText('Eliminación en curso')).toBeInTheDocument();
+    expect(screen.queryByText('Activa')).toBeNull();
+  });
+
   it('does not call the API with fewer than 3 characters', async () => {
     const user = userEvent.setup();
     setup();
@@ -304,6 +315,25 @@ describe('AdminUsersView', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Esa cuenta ya no existe');
     expect(screen.getByRole('button', { name: 'Asignar el plan Pro' })).toBeInTheDocument();
+  });
+
+  // Un administrador no se asigna su propio plan: el servidor responde 403
+  // ADMIN_IS_AFFECTED_PARTY y la hoja lo explica en el idioma de la app.
+  it('explains ADMIN_IS_AFFECTED_PARTY when the admin changes their own plan', async () => {
+    mockApi.admin.searchUsers.mockResolvedValue({ success: true, data: [keilor] });
+    mockApi.admin.setUserPlan.mockResolvedValue({
+      success: false,
+      error: { code: 'ADMIN_IS_AFFECTED_PARTY', message: 'an administrator cannot assign their own plan' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    await search(user, 'keil');
+    await user.click(await screen.findByRole('button', { name: /Plan\s*Gratis/ }));
+    await user.click(screen.getByRole('radio', { name: 'Pro' }));
+    await user.click(screen.getByRole('button', { name: 'Asignar el plan Pro' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No puedes cambiar tu propio plan: lo tiene que hacer otro administrador.');
   });
 
   it('lists the blocked accounts on the second tab', async () => {

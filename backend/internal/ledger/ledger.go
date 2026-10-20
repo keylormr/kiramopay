@@ -238,6 +238,15 @@ var ErrIdempotent = errors.New("idempotent: posting already recorded")
 // guarantee from the CHECK constraints on their cached balance row.
 var ErrInsufficientFunds = errors.New("insufficient funds")
 
+// ErrCuentaCerrada: el asiento toca la cuenta de una persona o de un comercio
+// cuyo dueno elimino su cuenta (migracion 077, ledger_accounts.closed_at). No
+// se puede acreditar ni debitar: el dinero que llegara ahi no tendria dueno. Se
+// resuelve aqui, en el unico lugar que traduce una persona a su cuenta, para
+// que ningun camino que pase por el libro (transferencia, escrow, cobro QR)
+// tenga que acordarse de comprobarlo. El cripto no pasa por el libro: lo frena
+// la busqueda de quien recibe (qrpayment.PersonaDelQR).
+var ErrCuentaCerrada = errors.New("la cuenta esta cerrada")
+
 // errIdempotencyRace is an internal, retryable signal: a concurrent posting
 // won the idempotency-key race. Retrying lets the top-level lookup return the
 // winner's posting id as ErrIdempotent.
@@ -304,6 +313,14 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	// Zero rows locked is fine: the account may not exist yet — a first-ever
 	// credit provisions it inside this tx, and a debit against a still-missing
 	// account fails the negativity check anyway.
+	//
+	// La fila se toma con un UPDATE que no cambia nada, no con FOR UPDATE: el
+	// dia 0 de la eliminacion de cuenta corre SERIALIZABLE, lee el saldo del
+	// comercio en el diario y cierra esta misma fila. Un FOR UPDATE de otra
+	// transaccion que ya confirmo no le causa conflicto, asi que un cobro que
+	// entrara entre su lectura y su cierre dejaria el comercio cerrado con
+	// dinero adentro. Con una version nueva de la fila, su UPDATE falla por
+	// serializacion, reintenta y ve el cobro.
 	type merchantAccountKey struct{ merchantID, currency string }
 	lockMerchants := make([]merchantAccountKey, 0, len(p.Entries))
 	seenMerchant := make(map[merchantAccountKey]bool, len(p.Entries))
@@ -326,9 +343,9 @@ func (e *Engine) postOnce(ctx context.Context, p *Posting) (string, error) {
 	})
 	for _, k := range lockMerchants {
 		if _, err := tx.Exec(ctx,
-			`SELECT 1 FROM ledger_accounts
-			  WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'
-			  FOR UPDATE`, k.merchantID, k.currency,
+			`UPDATE ledger_accounts SET closed_at = closed_at
+			  WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'`,
+			k.merchantID, k.currency,
 		); err != nil {
 			return "", fmt.Errorf("lock merchant account %s/%s: %w", k.merchantID, k.currency, err)
 		}
@@ -461,27 +478,37 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 		// to apply a delta to the users' `wallets` cache — a merchant balance is
 		// derived from the journal instead.
 		var id, nb string
+		var cerrada bool
 		err := tx.QueryRow(ctx,
-			`SELECT id::text, normal_balance FROM ledger_accounts
+			`SELECT id::text, normal_balance, closed_at IS NOT NULL FROM ledger_accounts
 			 WHERE merchant_id = $1::uuid AND currency = $2 AND type = 'merchant_wallet'`,
 			en.Account.MerchantID, en.Currency,
-		).Scan(&id, &nb)
+		).Scan(&id, &nb, &cerrada)
 		if err == nil {
+			if cerrada {
+				return "", false, "", ErrCuentaCerrada
+			}
 			return id, false, nb, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return "", false, "", err
 		}
+		// El conflicto devuelve la fila que ya existia, que pudo haberla creado
+		// cerrada otra transaccion entre el SELECT y este INSERT (la solicitud de
+		// eliminacion provisiona cerradas las que faltan): se vuelve a mirar.
 		code := fmt.Sprintf("MERCHANT:%s:%s", en.Account.MerchantID, en.Currency)
 		err = tx.QueryRow(ctx,
 			`INSERT INTO ledger_accounts (code, type, merchant_id, currency, normal_balance)
 			 VALUES ($1, 'merchant_wallet', $2::uuid, $3, 'credit')
 			 ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
-			 RETURNING id::text, normal_balance`,
+			 RETURNING id::text, normal_balance, closed_at IS NOT NULL`,
 			code, en.Account.MerchantID, en.Currency,
-		).Scan(&id, &nb)
+		).Scan(&id, &nb, &cerrada)
 		if err != nil {
 			return "", false, "", fmt.Errorf("provision merchant account: %w", err)
+		}
+		if cerrada {
+			return "", false, "", ErrCuentaCerrada
 		}
 		return id, false, nb, nil
 	}
@@ -501,12 +528,16 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 	}
 	// User wallet account
 	var id, nb string
+	var cerrada bool
 	err := tx.QueryRow(ctx,
-		`SELECT id::text, normal_balance FROM ledger_accounts
+		`SELECT id::text, normal_balance, closed_at IS NOT NULL FROM ledger_accounts
 		 WHERE user_id = $1::uuid AND currency = $2 AND type = 'user_wallet'`,
 		en.Account.UserID, en.Currency,
-	).Scan(&id, &nb)
+	).Scan(&id, &nb, &cerrada)
 	if err == nil {
+		if cerrada {
+			return "", false, "", ErrCuentaCerrada
+		}
 		return id, true, nb, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -518,11 +549,14 @@ func (e *Engine) resolveAccount(ctx context.Context, tx pgx.Tx, en Entry) (strin
 		`INSERT INTO ledger_accounts (code, type, user_id, currency, normal_balance)
 		 VALUES ($1, 'user_wallet', $2::uuid, $3, 'credit')
 		 ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
-		 RETURNING id::text, normal_balance`,
+		 RETURNING id::text, normal_balance, closed_at IS NOT NULL`,
 		code, en.Account.UserID, en.Currency,
-	).Scan(&id, &nb)
+	).Scan(&id, &nb, &cerrada)
 	if err != nil {
 		return "", false, "", fmt.Errorf("provision user account: %w", err)
+	}
+	if cerrada {
+		return "", false, "", ErrCuentaCerrada
 	}
 	return id, true, nb, nil
 }

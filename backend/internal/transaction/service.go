@@ -26,8 +26,13 @@ type MFAEnforcer interface {
 // UIFReporter (optional) is notified, best-effort, after an outgoing
 // transaction posts, so it can evaluate AML/UIF reporting thresholds. It must
 // not block or fail the transaction.
+//
+// ReportEntrada es lo mismo para lo que ENTRA a la billetera (los tipos de
+// TiposDeEntrada). Las transacciones multiples se acumulan "en efectivo o por
+// cualquier otro medio de pago" (SUGEF 13-19 art. 20), no solo las salidas.
 type UIFReporter interface {
 	Report(ctx context.Context, userID, txID, currency string, amountMinor int64)
+	ReportEntrada(ctx context.Context, userID, txID, currency string, amountMinor int64)
 }
 
 // RiskAssessor (optional) evalua una salida de dinero ANTES de moverla y
@@ -689,6 +694,8 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 		if s.uif != nil {
 			s.uif.Report(ctx, userID, tx.ID, req.Currency, req.Amount)
 		}
+	} else if s.uif != nil && EsEntrada(req.Type) {
+		s.uif.ReportEntrada(ctx, userID, tx.ID, req.Currency, req.Amount)
 	}
 	return tx, repetido, nil
 }
@@ -884,6 +891,38 @@ type CreateTransferRequest struct {
 	// Amount - Fee, and Fee is booked to SYSTEM:FEES. Either way the posting is
 	// balanced and Fee always lands in SYSTEM:FEES.
 	FeeFromReceiver bool
+}
+
+// CompletarTransferenciaAsentada pone al dia las filas de una transferencia
+// cuyo asiento ya confirmo, para el modulo que reconoce el reintento por su
+// cuenta y no vuelve a pedirla: un pago QR a un comercio que cerro, o a un
+// codigo que se retiro, despues de cobrar. El reintento normal pasa por
+// TransferirOReconocer, que ya las repara; este no, y sin esto la fila que una
+// caida dejo 'pending' entre el asiento y la marca quedaba asi para siempre.
+//
+// No mueve dinero: sin asiento no marca nada, y una fila que describe otro
+// movimiento no se toca.
+func (s *Service) CompletarTransferenciaAsentada(ctx context.Context, req *CreateTransferRequest) error {
+	if req.IdempotencyKey == "" {
+		return nil
+	}
+	previa, _ := s.repo.FindByIdempotencyKey(ctx, req.FromUserID, req.IdempotencyKey)
+	if previa == nil || !mismaTransferencia(previa, req) {
+		return nil
+	}
+	ids := []string{previa.ID}
+	completas := previa.Status == StatusCompleted
+	if req.ToMerchantID == "" {
+		if recv := s.recepcionDe(ctx, req); recv != nil {
+			ids = append(ids, recv.ID)
+			completas = completas && recv.Status == StatusCompleted
+		}
+	}
+	if completas {
+		return nil
+	}
+	_, err := s.repararFilaConAsiento(ctx, req.IdempotencyKey, previa.ID, ids...)
+	return err
 }
 
 // recepcionDe trae la fila de quien recibe que cuelga de la llave. Una fila
@@ -1219,6 +1258,11 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 	}
 	if s.uif != nil {
 		s.uif.Report(ctx, req.FromUserID, sender.ID, req.Currency, req.Amount)
+		// Lo que sale de uno entra al otro. El cobro de un comercio no tiene
+		// fila de quien recibe: el comercio lleva su cuenta en el libro.
+		if receiver != nil {
+			s.uif.ReportEntrada(ctx, req.ToUserID, receiver.ID, req.Currency, req.Amount)
+		}
 	}
 	return sender, receiver, repetido, nil
 }
