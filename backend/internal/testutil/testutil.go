@@ -1684,6 +1684,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		deletion_due_at TIMESTAMPTZ,
 		blockers        TEXT[] NOT NULL DEFAULT '{}',
 		email_enc       BYTEA,
+		email_unconfirmed BOOLEAN NOT NULL DEFAULT false,
 		respond_by      TIMESTAMPTZ NOT NULL,
 		attempts        INTEGER NOT NULL DEFAULT 0,
 		next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1695,7 +1696,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		delivery_note   TEXT,
 		cancelled_at    TIMESTAMPTZ,
 		created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked')),
+		CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected')),
 		CONSTRAINT chk_adresp_fecha CHECK (kind <> 'scheduled' OR deletion_due_at IS NOT NULL),
 		CONSTRAINT chk_adresp_intentos CHECK (attempts >= 0),
 		CONSTRAINT chk_adresp_error CHECK (last_error IS NULL OR last_error IN ('no_channel', 'send_failed')),
@@ -1704,6 +1705,10 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		CONSTRAINT chk_adresp_manual CHECK (delivered_via IS DISTINCT FROM 'manual' OR delivered_by IS NOT NULL),
 		CONSTRAINT chk_adresp_una_salida CHECK (delivered_at IS NULL OR cancelled_at IS NULL)
 	);
+	-- Una base de pruebas que sobrevivio a la primera version de la 083.
+	ALTER TABLE account_deletion_responses ADD COLUMN IF NOT EXISTS email_unconfirmed BOOLEAN NOT NULL DEFAULT false;
+	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_kind;
+	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected'));
 
 	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
 	CREATE TABLE IF NOT EXISTS closed_account_records (

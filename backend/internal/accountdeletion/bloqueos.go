@@ -161,6 +161,7 @@ var (
 	// que trae no es un correo.
 	ErrCorreoParaRespuesta         = errors.New("tu cuenta no tiene correo: escribe uno para enviarte la respuesta")
 	ErrCorreoParaRespuestaInvalido = errors.New("el correo para la respuesta no es valido")
-	// ErrCorreoParaRespuestaNoCoincide: el correo repetido no es el mismo.
+	// ErrCorreoParaRespuestaNoCoincide: el correo para la respuesta se escribe
+	// dos veces y no son el mismo.
 	ErrCorreoParaRespuestaNoCoincide = errors.New("los dos correos no coinciden")
 )

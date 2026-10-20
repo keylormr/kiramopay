@@ -30,7 +30,12 @@ import (
 //     un formulario abierto seria una puerta para cerrar cuentas ajenas.
 //  3. Solo una cuenta bajo revision (bloqueada o suspendida) espera a una
 //     persona: operaciones la atiende con Procesar, que inicia el plazo sin
-//     desbloquearla.
+//     desbloquearla, o con Rechazar.
+//
+// Toda solicitud verificada recibe su respuesta escrita por la bandeja: plazo
+// iniciado, que resolver o que no se atiende por esta via. El plazo legal corre
+// desde la verificacion, no desde que operaciones la atiende (decision del dueno
+// del 2026-10-20).
 
 const (
 	vigenciaCodigo    = 15 * time.Minute
@@ -238,13 +243,14 @@ func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*Respuesta
 	// despues responder ErrCodigoInvalido; devolver el error desde dentro la
 	// desharia y el tope de intentos nunca se alcanzaria.
 	var (
-		fallido bool
-		cuenta  string
-		out     *Atendida
-		res     resultado
+		fallido    bool
+		cuenta     string
+		out        *Atendida
+		res        resultado
+		verificada time.Time
 	)
 	err = s.conReintentos(ctx, func(tx pgx.Tx) error {
-		fallido, cuenta, out, res = false, "", nil, resultado{}
+		fallido, cuenta, out, res, verificada = false, "", nil, resultado{}, time.Time{}
 		var (
 			id       string
 			guardado *string
@@ -278,10 +284,11 @@ func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*Respuesta
 			return nil
 		}
 		cuenta = *cuentaDe
-		_, err = tx.Exec(ctx, `
+		err = tx.QueryRow(ctx, `
 			UPDATE account_deletion_requests
 			   SET status = 'verified', verified_at = NOW(), verification_hash = NULL
-			 WHERE id = $1::uuid`, id)
+			 WHERE id = $1::uuid
+			RETURNING verified_at`, id).Scan(&verificada)
 		if err != nil {
 			return fmt.Errorf("marcar verificada: %w", err)
 		}
@@ -306,6 +313,11 @@ func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*Respuesta
 	s.despuesDeAtender(ctx, cuenta, out, res)
 
 	web := &RespuestaWeb{Resultado: "received"}
+	if out == nil {
+		// La atiende una persona: la pagina dice hasta cuando, no por que.
+		antesDe := responderAntesDe(verificada)
+		web.ResponderAntesDe = &antesDe
+	}
 	if out != nil {
 		switch out.Estado {
 		case "scheduled":
@@ -338,6 +350,27 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		return nil
 	}
 
+	// El plazo legal de la respuesta corre desde la verificacion.
+	var verificada *time.Time
+	if err := tx.QueryRow(ctx, `SELECT verified_at FROM account_deletion_requests WHERE id = $1::uuid`,
+		solicitudID).Scan(&verificada); err != nil {
+		return nil, resultado{}, fmt.Errorf("leer la solicitud: %w", err)
+	}
+	if verificada != nil {
+		op.solicitadaEn = *verificada
+	}
+	// rechazar cierra la solicitud y le deja su respuesta: no se atiende por
+	// esta via. No dice por que.
+	var respuestaDelRechazo string
+	rechazar := func(codigo string) error {
+		id, err := encolarRespuesta(ctx, tx, userID, nuevaRespuesta{tipo: RespuestaRechazada, desde: op.solicitadaEn})
+		if err != nil {
+			return err
+		}
+		respuestaDelRechazo = id
+		return cerrar("rejected", codigo)
+	}
+
 	op.actor = adminID
 	res, err := iniciarEnTx(ctx, tx, userID, op)
 	var bloqueada *ErrBloqueada
@@ -347,7 +380,9 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		// anterior todavia no salio, es esa misma.
 		if res.Respuesta, err = respuestaPendiente(ctx, tx, userID, RespuestaPlazoIniciado); err == nil && res.Respuesta == "" {
 			dia30 := res.SeEliminaEl
-			res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30})
+			res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
+				tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, desde: op.solicitadaEn,
+			})
 		}
 		if err == nil {
 			err = cerrar("scheduled", "ALREADY_REQUESTED")
@@ -359,30 +394,34 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		// que resolver. Va por la bandeja como la del dia 0.
 		res = resultado{}
 		if res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
-			tipo: RespuestaBloqueada, bloqueos: codigosDeBloqueo(bloqueada.Bloqueos),
+			tipo: RespuestaBloqueada, bloqueos: codigosDeBloqueo(bloqueada.Bloqueos), desde: op.solicitadaEn,
 		}); err == nil {
 			if err = cerrar("blocked", bloqueada.Bloqueos[0].Codigo); err == nil {
 				out.Bloqueos = bloqueada.Bloqueos
 			}
 		}
 	case errors.Is(err, ErrRolNoPermitido):
-		err = cerrar("rejected", "ROLE_NOT_ALLOWED")
+		res, err = resultado{}, rechazar("ROLE_NOT_ALLOWED")
 	case errors.Is(err, user.ErrCuentaDeDemostracion):
-		err = cerrar("rejected", "DEMO_ACCOUNT")
+		res, err = resultado{}, rechazar("DEMO_ACCOUNT")
 	case errors.Is(err, ErrCuentaNoElegible):
-		err = cerrar("rejected", "NOT_ELIGIBLE")
+		res, err = resultado{}, rechazar("NOT_ELIGIBLE")
 	case errors.Is(err, ErrCuentaNoEncontrada):
+		// Sin la cuenta no hay a quien responder.
 		err = cerrar("rejected", "NOT_FOUND")
 	}
 	if err != nil {
 		return nil, resultado{}, err
 	}
+	if respuestaDelRechazo != "" {
+		res.Respuesta = respuestaDelRechazo
+	}
 	return out, res, nil
 }
 
 // despuesDeAtender hace lo que va tras el commit: si empezo el plazo, lo mismo
-// que la via de la app; si ya estaba en plazo o quedo bloqueada, el primer
-// intento de la respuesta que quedo en la bandeja.
+// que la via de la app; si ya estaba en plazo, quedo bloqueada o se rechazo, el
+// primer intento de la respuesta que quedo en la bandeja.
 func (s *Service) despuesDeAtender(_ context.Context, userID string, out *Atendida, res resultado) {
 	if userID == "" || out == nil {
 		return
@@ -394,7 +433,7 @@ func (s *Service) despuesDeAtender(_ context.Context, userID string, out *Atendi
 			return
 		}
 		s.despues(userID, res)
-	case "blocked":
+	case "blocked", "rejected":
 		s.entregarAhora(res.Respuesta)
 	}
 }
@@ -438,6 +477,11 @@ func (s *Service) ListarVerificadas(ctx context.Context, limite int) ([]Solicitu
 		if err := filas.Scan(&r.ID, &r.ContactKind, &r.Estado, &r.CreadaEn, &r.VerificadaEn, &userID); err != nil {
 			return nil, fmt.Errorf("leer solicitud: %w", err)
 		}
+		desde := r.CreadaEn
+		if r.VerificadaEn != nil {
+			desde = *r.VerificadaEn
+		}
+		r.ResponderAntesDe = responderAntesDe(desde)
 		if userID != "" {
 			// Si la cuenta ya no se puede leer (eliminada por otra via), la fila
 			// sale sin ficha y el panel la ve como "sin cuenta".
@@ -534,18 +578,41 @@ var frasesDeBloqueo = map[string]string{
 }
 
 // Rechazar cierra una solicitud de la cola sin iniciar nada (por ejemplo, cuando
-// la persona se arrepintio).
+// la persona se arrepintio). Tambien se responde por escrito, en la misma
+// transaccion, con el plazo contado desde la verificacion.
 func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE account_deletion_requests
-		   SET status = 'rejected', result_code = 'REJECTED_BY_ADMIN',
-		       processed_at = NOW(), processed_by = $2::uuid
-		 WHERE id = $1::uuid AND status = 'verified'`, solicitudID, adminID)
+	var respuesta string
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		respuesta = ""
+		var (
+			userID     *string
+			verificada *time.Time
+		)
+		err := tx.QueryRow(ctx, `
+			UPDATE account_deletion_requests
+			   SET status = 'rejected', result_code = 'REJECTED_BY_ADMIN',
+			       processed_at = NOW(), processed_by = $2::uuid
+			 WHERE id = $1::uuid AND status = 'verified'
+			RETURNING user_id::text, verified_at`, solicitudID, adminID).Scan(&userID, &verificada)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrSolicitudNoPendiente
+		}
+		if err != nil {
+			return fmt.Errorf("rechazar solicitud: %w", err)
+		}
+		if userID == nil {
+			return nil
+		}
+		r := nuevaRespuesta{tipo: RespuestaRechazada}
+		if verificada != nil {
+			r.desde = *verificada
+		}
+		respuesta, err = encolarRespuesta(ctx, tx, *userID, r)
+		return err
+	})
 	if err != nil {
-		return fmt.Errorf("rechazar solicitud: %w", err)
+		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrSolicitudNoPendiente
-	}
+	s.entregarAhora(respuesta)
 	return nil
 }

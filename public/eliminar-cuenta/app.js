@@ -176,16 +176,21 @@
   }
 
   // La atiende una persona: nada sobre la cuenta, ni siquiera que algo la frena.
-  function respuestaEnRevision() {
+  // Si el servidor la trae, la fecha limite de la respuesta, contada desde que
+  // se verifico el codigo.
+  function respuestaEnRevision(datos) {
+    var plazo = fecha(datos && datos.respond_by);
     return [
       elemento('h3', 'Solicitud recibida'),
       elemento('p',
-        'Listo. Tu solicitud la revisa una persona del equipo, que te responde por escrito. ' +
-        'Revisa también la carpeta de correo no deseado.'),
+        'Listo. Tu solicitud la revisa una persona del equipo, que te responde por escrito' +
+        (plazo ? ' a más tardar el ' + plazo : '') + '. Revisa también la carpeta de correo no deseado.'),
     ];
   }
 
-  // Esa cuenta no se elimina por esta via: se la lleva al contacto de privacidad.
+  // Esa cuenta no se elimina por esta via: se la lleva al contacto de privacidad,
+  // sin decir por que. Tambien es una respuesta escrita: no se borro nada y la
+  // persona puede acudir a la PRODHAB.
   function respuestaNoDisponible() {
     var contactoPrivacidad = elemento('a', 'contacto de privacidad');
     contactoPrivacidad.href = '/privacidad/#contacto';
@@ -194,8 +199,14 @@
     aviso.appendChild(document.createTextNode('.'));
     return [
       elemento('h3', 'Esta solicitud no se puede completar aquí'),
-      elemento('p', 'Esta cuenta no se puede eliminar desde esta página.'),
+      elemento('p', 'Esta cuenta no se puede eliminar desde esta página. No se borró nada.'),
       aviso,
+      elemento('p',
+        'Si consideras que no se respetaron tus derechos sobre tus datos, puedes acudir a la Agencia de ' +
+        'Protección de Datos de los Habitantes (PRODHAB), según la Ley 8968.'),
+      elemento('p',
+        'Esta respuesta también te llega por escrito al correo de tu cuenta; si la cuenta no tiene correo, una ' +
+        'persona del equipo te la hace llegar por otro medio. Si no la ves, revisa la carpeta de correo no deseado.'),
     ];
   }
 

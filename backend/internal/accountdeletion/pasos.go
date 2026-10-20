@@ -51,6 +51,10 @@ type opciones struct {
 	// respuesta es la respuesta escrita sobre la que actua operaciones. Solo va
 	// a la auditoria.
 	respuesta string
+	// solicitadaEn es cuando se verifico la solicitud web: de ahi corre el plazo
+	// legal de la respuesta, aunque operaciones la atienda despues. Vacio en la
+	// via de la app, que pide y responde en el mismo acto.
+	solicitadaEn time.Time
 }
 
 // resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
@@ -176,7 +180,7 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	}
 	dia30 := res.SeEliminaEl
 	if res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
-		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado,
+		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado, desde: op.solicitadaEn,
 	}); err != nil {
 		return resultado{}, err
 	}

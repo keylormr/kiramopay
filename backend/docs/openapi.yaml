@@ -553,7 +553,8 @@ paths:
           description: >-
             INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID |
             TOTP_REQUIRED | TOTP_INVALID | RESPONSE_EMAIL_REQUIRED (the account
-            has no email and none was given) | RESPONSE_EMAIL_INVALID
+            has no email and none was given) | RESPONSE_EMAIL_INVALID |
+            RESPONSE_EMAIL_MISMATCH (the repeated email is not the same)
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -623,8 +624,11 @@ paths:
         presents the right code has proven the contact is theirs, so the 200
         carries the same answer for the page: `outcome` is `scheduled` (with
         the dates), `blocked` (with the codes), `rejected` (this account is not
-        deleted through this path) or `received` (a person handles it; the
-        reason is never given, so an account under review is not disclosed).
+        deleted through this path; the written answer goes through the queue
+        too, without the reason) or `received` (a person handles it; the
+        reason is never given, so an account under review is not disclosed,
+        and `respond_by` says until when the written answer is due, 5
+        business days from this verification).
         Every failure (wrong, expired, reused, no request) answers the same 400
         INVALID_CODE; five wrong codes exhaust the request. Not cacheable.
       security: []
@@ -665,6 +669,10 @@ paths:
                         type: array
                         items: { type: string, example: BALANCE_POSITIVE }
                         description: Only when `blocked`
+                      respond_by:
+                        type: string
+                        format: date-time
+                        description: Only when `received`
         '400':
           description: INVALID_BODY | INVALID_CONTACT | INVALID_CODE
         '429':
@@ -678,7 +686,8 @@ paths:
         Oldest first. Only requests of accounts under review (blocked or
         suspended) wait here; the rest start the term when the code is
         verified. The account is shown masked from SQL, like the rest of the
-        admin panel.
+        admin panel. `respond_by` is the legal deadline of the written answer,
+        counted from the verification however late the request is handled.
       security:
         - bearerAuth: []
       parameters:
@@ -709,8 +718,9 @@ paths:
         the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED
         when the term was already running), `blocked` (with the first blocker
         as `result_code`; the full list is in the response) or `rejected`
-        (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the
-        administrator as actor.
+        (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Every outcome with an
+        account queues its written answer, due 5 business days after the
+        verification. Audited with the administrator as actor.
       security:
         - bearerAuth: []
       parameters:
@@ -727,6 +737,11 @@ paths:
     post:
       tags: [Admin]
       summary: Close a verified request without starting the term
+      description: >-
+        Nothing is deleted. The written answer (the request is not handled
+        this way, nothing was deleted, the privacy contact and the right to go
+        to PRODHAB; never the reason) is queued in the same transaction, due 5
+        business days after the verification.
       security:
         - bearerAuth: []
       parameters:
@@ -746,11 +761,14 @@ paths:
       description: >-
         The answers Law 8968 requires that moved to operations: the account
         has nowhere to send them (`no_channel`) or the email kept failing for
-        48 hours (`send_failed`). The nearest `respond_by` (5 business days
-        from the request) first. Each one carries what to tell the person: the
-        dates (`scheduled`) or what to resolve (`blocked`). The account is
-        masked from SQL, and null when it can no longer be read. Not
-        cacheable.
+        48 hours (`send_failed`), or sooner when fewer than 3 days are left
+        before `respond_by`. The nearest `respond_by` (5 business days from the
+        request, or from the verification of a web request) first. Each one
+        carries what to tell the person: the dates (`scheduled`), what to
+        resolve (`blocked`) or that the request is not handled this way
+        (`rejected`). The account is masked from SQL, and null when it can no
+        longer be read; the full contact is only given by
+        /admin/account-deletion-responses/{id}/contact. Not cacheable.
       security:
         - bearerAuth: []
       parameters:
@@ -800,6 +818,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: NOT_PENDING (already delivered or cancelled)
+
+  /api/v1/admin/account-deletion-responses/{id}/contact:
+    post:
+      tags: [Admin]
+      summary: Full contact of a written answer in the operations panel
+      description: >-
+        Unmasked phone, account email and the email given only for the answer
+        (while it exists), so the answer can be delivered another way. Only for
+        answers in the panel (escalated and not delivered). It is a POST
+        because every view is audited (who and when, with the answer id) in
+        the same transaction; without the audit row nothing is returned. Not
+        cacheable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Full contact; empty strings for what is missing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      phone: { type: string }
+                      email: { type: string }
+                      response_email: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: NOT_PENDING (not in the panel)
 
   # ── Wallets ────────────────────────────────────────────────────────────
   /api/v1/wallets/me:
@@ -6302,11 +6359,18 @@ components:
             Required only when the account has no email: where to send the
             written answer. It is not added to the profile, and it is erased
             once the answer is delivered
+        response_email_confirmation:
+          type: string
+          format: email
+          description: >-
+            The same email, typed again. Required with `response_email`; it
+            must match, ignoring case, or the answer is 400
+            RESPONSE_EMAIL_MISMATCH
     AccountDeletionResponseAdmin:
       type: object
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [scheduled, blocked] }
+        kind: { type: string, enum: [scheduled, blocked, rejected] }
         reason: { type: string, enum: [no_channel, send_failed] }
         attempts: { type: integer }
         created_at: { type: string, format: date-time }
@@ -6322,6 +6386,11 @@ components:
           description: >-
             The account was already closed (day 30): `account` is null and the
             answer is no longer retried; operations finds it by `user_id`
+        unconfirmed_email:
+          type: boolean
+          description: >-
+            The answer goes to the email the person gave only for it, which
+            nobody confirmed
         account:
           nullable: true
           allOf:
@@ -6334,6 +6403,10 @@ components:
         status: { type: string, example: verified }
         created_at: { type: string, format: date-time }
         verified_at: { type: string, format: date-time, nullable: true }
+        respond_by:
+          type: string
+          format: date-time
+          description: Deadline of the written answer, 5 business days from the verification
         account:
           nullable: true
           allOf:

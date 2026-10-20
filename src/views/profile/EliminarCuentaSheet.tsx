@@ -55,6 +55,7 @@ const CLAVE_DEL_RECHAZO: Record<string, keyof TranslationKeys> = {
   TERMS_NOT_ACCEPTED: 'del_err_terms',
   RESPONSE_EMAIL_REQUIRED: 'del_err_response_email_required',
   RESPONSE_EMAIL_INVALID: 'del_err_response_email_invalid',
+  RESPONSE_EMAIL_MISMATCH: 'del_err_response_email_mismatch',
 };
 
 // La misma forma que valida el servidor (pkg/validator): uno que pase aqui y
@@ -102,6 +103,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const idError = useId();
   const idPlazo = useId();
   const idCorreo = useId();
+  const idRepetido = useId();
 
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
   const [intento, setIntento] = useState(0);
@@ -111,6 +113,10 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const [totp, setTotp] = useState('');
   const [aceptaPlazo, setAceptaPlazo] = useState(false);
   const [correo, setCorreo] = useState('');
+  // Se escribe dos veces: nadie lo confirma, y un error de tipeo mandaria la
+  // respuesta a otra persona. El aviso sale al dejar el campo, no a cada letra.
+  const [correoRepetido, setCorreoRepetido] = useState('');
+  const [repetidoTocado, setRepetidoTocado] = useState(false);
   const [enviando, setEnviandoLocal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,12 +153,14 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const palabraCorrecta = palabra.trim().toLocaleUpperCase() === palabraEsperada.toLocaleUpperCase();
   const pideTotp = fase.tipo === 'confirmar' && fase.pideTotp;
   const pideCorreo = fase.tipo === 'confirmar' && fase.pideCorreo;
+  const coinciden = correo.trim().toLowerCase() === correoRepetido.trim().toLowerCase();
+  const noCoinciden = pideCorreo && repetidoTocado && correoRepetido.trim() !== '' && !coinciden;
   const puedeEnviar =
     palabraCorrecta &&
     clave.length > 0 &&
     aceptaPlazo &&
     (!pideTotp || totp.length === 6) &&
-    (!pideCorreo || CORREO_VALIDO.test(correo.trim())) &&
+    (!pideCorreo || (CORREO_VALIDO.test(correo.trim()) && coinciden)) &&
     !enviando;
 
   const eliminar = async () => {
@@ -164,7 +172,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
       totpCode: fase.pideTotp ? totp : undefined,
       acceptTerms: aceptaPlazo,
       // Solo una cuenta sin correo da uno, y solo para la respuesta escrita.
-      ...(fase.pideCorreo ? { responseEmail: correo.trim() } : {}),
+      ...(fase.pideCorreo ? { responseEmail: correo.trim(), responseEmailConfirmation: correoRepetido.trim() } : {}),
     });
     if (res.success) {
       // La sesion ya esta revocada en el servidor: se suelta todo lo local sin
@@ -405,6 +413,28 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
                 <p id={`${idCorreo}-ayuda`} className="mt-1.5 text-xs uv-text-muted leading-relaxed">
                   {t('del_response_email_hint')}
                 </p>
+                <label htmlFor={idRepetido} className="text-sm text-gray-500 font-medium mb-2 mt-4 block">
+                  {t('del_response_email_confirm_label')}
+                </label>
+                <input
+                  id={idRepetido}
+                  type="email"
+                  value={correoRepetido}
+                  onChange={(e) => { setCorreoRepetido(e.target.value); setError(null); }}
+                  onBlur={() => setRepetidoTocado(true)}
+                  inputMode="email"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-invalid={noCoinciden ? true : undefined}
+                  aria-describedby={noCoinciden ? `${idRepetido}-error` : undefined}
+                  className={CAMPO}
+                />
+                {noCoinciden && (
+                  <p id={`${idRepetido}-error`} role="alert" className="mt-1.5 text-xs text-[var(--color-danger)]">
+                    {t('del_err_response_email_mismatch')}
+                  </p>
+                )}
               </div>
             )}
 

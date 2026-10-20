@@ -106,7 +106,11 @@ func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBo
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("smtp close data: %w", err)
 	}
-	return c.Quit()
+	// Con el 250 de DATA el relevo ya acepto el mensaje: un QUIT que no se
+	// contesta (o vence el plazo) no lo deshace, y reportarlo como fallo haria
+	// que quien reintenta lo mande dos veces.
+	_ = c.Quit()
+	return nil
 }
 
 // buildMessage assembles an RFC 5322 message. Subject is RFC 2047 encoded so

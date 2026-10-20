@@ -72,6 +72,8 @@ func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "RESPONSE_EMAIL_REQUIRED", err.Error())
 		case errors.Is(err, ErrCorreoParaRespuestaInvalido):
 			response.Error(w, http.StatusBadRequest, "RESPONSE_EMAIL_INVALID", err.Error())
+		case errors.Is(err, ErrCorreoParaRespuestaNoCoincide):
+			response.Error(w, http.StatusBadRequest, "RESPONSE_EMAIL_MISMATCH", err.Error())
 		case errors.As(err, &bloqueada):
 			response.ErrorConDetalle(w, http.StatusConflict, "DELETION_BLOCKED",
 				"la cuenta tiene algo pendiente que resolver antes de eliminarla",
@@ -269,6 +271,27 @@ func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Reques
 }
 
 // VerContactoDeRespuesta — POST /admin/account-deletion-responses/{id}/contact (admin)
-func (h *Handler) VerContactoDeRespuesta(w http.ResponseWriter, _ *http.Request) {
-	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "sin hacer")
+//
+// El contacto completo de una respuesta del panel, para entregarla por otro
+// medio. Es POST porque cada vista deja una fila en la auditoria.
+func (h *Handler) VerContactoDeRespuesta(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := uuid.Parse(id); err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "response not found")
+		return
+	}
+	c, err := h.service.ContactoDeRespuesta(r.Context(), id, middleware.GetUserID(r.Context()))
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrRespuestaNoEncontrada):
+			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		case errors.Is(err, ErrRespuestaFueraDelPanel):
+			response.Error(w, http.StatusConflict, "NOT_PENDING", err.Error())
+		default:
+			response.Error(w, http.StatusInternalServerError, "CONTACT_FAILED", err.Error())
+		}
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response.JSON(w, http.StatusOK, c)
 }

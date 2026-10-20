@@ -803,7 +803,7 @@ export interface paths {
                         };
                     };
                 };
-                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID | RESPONSE_EMAIL_REQUIRED (the account has no email and none was given) | RESPONSE_EMAIL_INVALID */
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID | RESPONSE_EMAIL_REQUIRED (the account has no email and none was given) | RESPONSE_EMAIL_INVALID | RESPONSE_EMAIL_MISMATCH (the repeated email is not the same) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -913,7 +913,7 @@ export interface paths {
         put?: never;
         /**
          * Prove control of the contact with the code that was sent
-         * @description With the right code the 30-day term starts at once, exactly as from the app (day 0: the account is blocked and the written answer is queued), and the request ends `scheduled`, or `blocked` when something is pending (the written answer says what to resolve, and goes through the same queue). An account that is blocked or suspended does not start by itself: the request stays `verified`, in the operations queue. Whoever presents the right code has proven the contact is theirs, so the 200 carries the same answer for the page: `outcome` is `scheduled` (with the dates), `blocked` (with the codes), `rejected` (this account is not deleted through this path) or `received` (a person handles it; the reason is never given, so an account under review is not disclosed). Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request. Not cacheable.
+         * @description With the right code the 30-day term starts at once, exactly as from the app (day 0: the account is blocked and the written answer is queued), and the request ends `scheduled`, or `blocked` when something is pending (the written answer says what to resolve, and goes through the same queue). An account that is blocked or suspended does not start by itself: the request stays `verified`, in the operations queue. Whoever presents the right code has proven the contact is theirs, so the 200 carries the same answer for the page: `outcome` is `scheduled` (with the dates), `blocked` (with the codes), `rejected` (this account is not deleted through this path; the written answer goes through the queue too, without the reason) or `received` (a person handles it; the reason is never given, so an account under review is not disclosed, and `respond_by` says until when the written answer is due, 5 business days from this verification). Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request. Not cacheable.
          */
         post: {
             parameters: {
@@ -957,6 +957,11 @@ export interface paths {
                                 retained_until?: string;
                                 /** @description Only when `blocked` */
                                 blockers?: string[];
+                                /**
+                                 * Format: date-time
+                                 * @description Only when `received`
+                                 */
+                                respond_by?: string;
                             };
                         };
                     };
@@ -992,7 +997,7 @@ export interface paths {
         };
         /**
          * Web deletion requests waiting for a person (verified contact)
-         * @description Oldest first. Only requests of accounts under review (blocked or suspended) wait here; the rest start the term when the code is verified. The account is shown masked from SQL, like the rest of the admin panel.
+         * @description Oldest first. Only requests of accounts under review (blocked or suspended) wait here; the rest start the term when the code is verified. The account is shown masked from SQL, like the rest of the admin panel. `respond_by` is the legal deadline of the written answer, counted from the verification however late the request is handled.
          */
         get: {
             parameters: {
@@ -1037,7 +1042,7 @@ export interface paths {
         put?: never;
         /**
          * Start the deletion term for a verified web request
-         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the administrator as actor.
+         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Every outcome with an account queues its written answer, due 5 business days after the verification. Audited with the administrator as actor.
          */
         post: {
             parameters: {
@@ -1082,7 +1087,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Close a verified request without starting the term */
+        /**
+         * Close a verified request without starting the term
+         * @description Nothing is deleted. The written answer (the request is not handled this way, nothing was deleted, the privacy contact and the right to go to PRODHAB; never the reason) is queued in the same transaction, due 5 business days after the verification.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1126,7 +1134,7 @@ export interface paths {
         };
         /**
          * Written deletion answers that could not go out by themselves
-         * @description The answers Law 8968 requires that moved to operations: the account has nowhere to send them (`no_channel`) or the email kept failing for 48 hours (`send_failed`). The nearest `respond_by` (5 business days from the request) first. Each one carries what to tell the person: the dates (`scheduled`) or what to resolve (`blocked`). The account is masked from SQL, and null when it can no longer be read. Not cacheable.
+         * @description The answers Law 8968 requires that moved to operations: the account has nowhere to send them (`no_channel`) or the email kept failing for 48 hours (`send_failed`), or sooner when fewer than 3 days are left before `respond_by`. The nearest `respond_by` (5 business days from the request, or from the verification of a web request) first. Each one carries what to tell the person: the dates (`scheduled`), what to resolve (`blocked`) or that the request is not handled this way (`rejected`). The account is masked from SQL, and null when it can no longer be read; the full contact is only given by /admin/account-deletion-responses/{id}/contact. Not cacheable.
          */
         get: {
             parameters: {
@@ -1206,6 +1214,64 @@ export interface paths {
                 };
                 404: components["responses"]["NotFound"];
                 /** @description NOT_PENDING (already delivered or cancelled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-responses/{id}/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Full contact of a written answer in the operations panel
+         * @description Unmasked phone, account email and the email given only for the answer (while it exists), so the answer can be delivered another way. Only for answers in the panel (escalated and not delivered). It is a POST because every view is audited (who and when, with the answer id) in the same transaction; without the audit row nothing is returned. Not cacheable.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Full contact; empty strings for what is missing */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                phone?: string;
+                                email?: string;
+                                response_email?: string;
+                            };
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (not in the panel) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -10505,12 +10571,17 @@ export interface components {
              * @description Required only when the account has no email: where to send the written answer. It is not added to the profile, and it is erased once the answer is delivered
              */
             response_email?: string;
+            /**
+             * Format: email
+             * @description The same email, typed again. Required with `response_email`; it must match, ignoring case, or the answer is 400 RESPONSE_EMAIL_MISMATCH
+             */
+            response_email_confirmation?: string;
         };
         AccountDeletionResponseAdmin: {
             /** Format: uuid */
             id?: string;
             /** @enum {string} */
-            kind?: "scheduled" | "blocked";
+            kind?: "scheduled" | "blocked" | "rejected";
             /** @enum {string} */
             reason?: "no_channel" | "send_failed";
             attempts?: number;
@@ -10533,6 +10604,8 @@ export interface components {
             user_id?: string;
             /** @description The account was already closed (day 30): `account` is null and the answer is no longer retried; operations finds it by `user_id` */
             account_closed?: boolean;
+            /** @description The answer goes to the email the person gave only for it, which nobody confirmed */
+            unconfirmed_email?: boolean;
             account?: components["schemas"]["AdminUser"] | null;
         };
         AccountDeletionRequestAdmin: {
@@ -10546,6 +10619,11 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             verified_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Deadline of the written answer, 5 business days from the verification
+             */
+            respond_by?: string;
             account?: components["schemas"]["AdminUser"] | null;
         };
         /** @description Administrative card of an account. PII is masked in SQL: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain. */

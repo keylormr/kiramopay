@@ -19,9 +19,14 @@
 --     cuando operaciones la entrego. No dice que llego al buzon.
 --   * email_enc es el correo que dio, solo para esta respuesta, una persona cuya
 --     cuenta no tiene correo. Va cifrado como el resto de la PII y se borra al
---     entregarla, al cancelarla y el dia 30.
+--     entregarla, al cancelarla y el dia 30. Se pide dos veces, pero nadie lo
+--     confirma: email_unconfirmed lo marca, y la marca queda despues de borrarlo
+--     para que el panel sepa a que se dio por entregada.
 --   * last_error guarda un codigo y nunca el texto del proveedor: un rebote de
 --     SMTP trae la direccion adentro.
+--   * Toda solicitud web verificada tiene la suya, tambien la rechazada
+--     (rejected), y respond_by se cuenta desde la verificacion aunque
+--     operaciones la atienda dias despues.
 --
 -- No apunta a account_deletion_requests: la bajada de la 077 borra esa tabla.
 CREATE TABLE IF NOT EXISTS account_deletion_responses (
@@ -31,6 +36,7 @@ CREATE TABLE IF NOT EXISTS account_deletion_responses (
     deletion_due_at TIMESTAMPTZ,
     blockers        TEXT[] NOT NULL DEFAULT '{}',
     email_enc       BYTEA,
+    email_unconfirmed BOOLEAN NOT NULL DEFAULT false,
     respond_by      TIMESTAMPTZ NOT NULL,
     attempts        INTEGER NOT NULL DEFAULT 0,
     next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -43,8 +49,9 @@ CREATE TABLE IF NOT EXISTS account_deletion_responses (
     cancelled_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- scheduled: empezo el plazo de 30 dias. blocked: la solicitud web no pudo
-    -- empezar y se le dice a la persona que resolver.
-    CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked')),
+    -- empezar y se le dice a la persona que resolver. rejected: la solicitud web
+    -- no se atiende por esta via, sin decir por que.
+    CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected')),
     CONSTRAINT chk_adresp_fecha CHECK (kind <> 'scheduled' OR deletion_due_at IS NOT NULL),
     CONSTRAINT chk_adresp_intentos CHECK (attempts >= 0),
     CONSTRAINT chk_adresp_error CHECK (last_error IS NULL OR last_error IN ('no_channel', 'send_failed')),

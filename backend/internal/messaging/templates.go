@@ -374,7 +374,29 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 	return subject, text.String(), htmlBody
 }
 
-// DeletionRejectedEmail es la respuesta a una solicitud web que no se atiende.
+// DeletionRejectedEmail es la respuesta escrita a una solicitud de eliminacion
+// desde la web que no se atiende por esa via (Ley 8968, art. 7, y su
+// Reglamento, art. 22): no se borro nada, a donde escribir para tratar el caso,
+// y el derecho a acudir a la PRODHAB. Nunca dice por que: la cuenta puede estar
+// bajo revision, y eso no se le comunica a la persona.
 func DeletionRejectedEmail() (subject, textBody, htmlBody string) {
-	return "", "", ""
+	subject = "No pudimos atender tu solicitud para eliminar tu cuenta de KiramoPay"
+	recibida := "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero no la podemos atender por " +
+		"esta vía. No se borró nada."
+	contacto := "Para tratar tu caso, escribinos al contacto de privacidad que aparece en la política de " +
+		"privacidad de KiramoPay."
+	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
+		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
+	ajeno := "Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."
+
+	text := recibida + "\n\n" + contacto + "\n\n" + prodhab + "\n\n" + ajeno + "\n"
+
+	body := new(strings.Builder)
+	body.WriteString(paragraph(recibida))
+	body.WriteString(paragraph(contacto))
+	body.WriteString(paragraph("<strong>Tus derechos.</strong> " + prodhab))
+	body.WriteString(note(ajeno))
+
+	htmlBody = emailShell("No pudimos atender tu solicitud", "No se borró nada.", body.String())
+	return subject, text, htmlBody
 }

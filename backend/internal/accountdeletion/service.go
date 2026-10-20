@@ -167,7 +167,8 @@ type Confirmacion struct {
 	// CorreoParaRespuesta solo cuenta si la cuenta no tiene correo: es adonde va
 	// la respuesta escrita. No se guarda en el perfil.
 	CorreoParaRespuesta string `json:"response_email,omitempty"`
-	// ConfirmacionCorreo es el mismo correo, escrito otra vez.
+	// ConfirmacionCorreo es el mismo correo, escrito otra vez. Tienen que
+	// coincidir, sin mirar mayusculas.
 	ConfirmacionCorreo string `json:"response_email_confirmation,omitempty"`
 }
 
@@ -217,6 +218,11 @@ func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirm
 		}
 		if validator.ValidateEmail(correoDado) != nil {
 			return nil, ErrCorreoParaRespuestaInvalido
+		}
+		// Se pide dos veces: nadie lo confirma, y un error de tipeo mandaria la
+		// respuesta a otra persona. Las mayusculas no cuentan.
+		if !strings.EqualFold(correoDado, strings.TrimSpace(c.ConfirmacionCorreo)) {
+			return nil, ErrCorreoParaRespuestaNoCoincide
 		}
 	}
 	if s.lockout != nil && s.lockout.IncrLockout(lockoutKey(userID)) > int64(s.maxIntentos) {

@@ -3,7 +3,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '@/components/Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { getApiLayer } from '@/api';
-import type { RespuestaPorEntregar, SolicitudDeEliminacion } from '@/api/repositories/admin.repository';
+import type { ContactoDeRespuesta, RespuestaPorEntregar, SolicitudDeEliminacion } from '@/api/repositories/admin.repository';
 import type { TranslationKeys } from '@/i18n/translations';
 import { fechaYHora } from '@/utils/fechaPlazo';
 import { fechaLarga } from '@/utils/planes';
@@ -21,6 +21,9 @@ import { fechaLarga } from '@/utils/planes';
 // Arriba, las respuestas escritas (Ley 8968) que no pudieron salir solas por
 // correo: la persona del equipo la entrega por otro medio antes del plazo legal
 // y deja constancia de como. Sin ninguna pendiente, la seccion no aparece.
+//
+// Para entregarla puede ver el contacto completo de cada una: lo pide al
+// servidor, que deja la vista en la auditoria, y nunca viene en la lista.
 
 // La nota de la entrega; el servidor guarda hasta 500 caracteres.
 const NOTA_MAX = 500;
@@ -59,6 +62,9 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   const [entregando, setEntregando] = useState<RespuestaPorEntregar | null>(null);
   const [nota, setNota] = useState('');
   const [errorNota, setErrorNota] = useState<string | null>(null);
+  // El contacto completo de las que se pidio ver, o 'falla' si no se pudo leer.
+  const [contactos, setContactos] = useState<Record<string, ContactoDeRespuesta | 'falla'>>({});
+  const [viendo, setViendo] = useState<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
@@ -88,8 +94,17 @@ export const SolicitudesDeEliminacion: React.FC = () => {
 
   const releer = useCallback(() => {
     setCargando(true);
+    // Lo que se vio no queda en pantalla mas de lo necesario.
+    setContactos({});
     setRecarga((n) => n + 1);
   }, []);
+
+  const verContacto = async (r: RespuestaPorEntregar) => {
+    setViendo(r.id);
+    const res = await getApiLayer().admin?.viewDeletionResponseContact(r.id);
+    setViendo(null);
+    setContactos((antes) => ({ ...antes, [r.id]: res?.success && res.data ? res.data : 'falla' }));
+  };
 
   const procesar = async (s: SolicitudDeEliminacion) => {
     setActuando(s.id);
@@ -141,8 +156,9 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       return;
     }
     const codigo = res?.error?.code;
-    if (codigo === 'NOTE_REQUIRED') {
-      setErrorNota(t('admin_resp_note_required'));
+    if (codigo === 'NOTE_REQUIRED' || codigo === 'NOTE_TOO_LONG') {
+      // La nota queda escrita para corregirla.
+      setErrorNota(t(codigo === 'NOTE_REQUIRED' ? 'admin_resp_note_required' : 'admin_resp_note_too_long'));
       return;
     }
     setEntregando(null);
@@ -150,9 +166,12 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     releer();
   };
 
-  // Lo que hay que decirle a la persona: las fechas, o que resolver.
+  // Lo que hay que decirle a la persona: las fechas, que resolver, o que no se
+  // atiende por esta via.
   const loQueHayQueDecir = (r: RespuestaPorEntregar) =>
-    r.tipo === 'scheduled' ? (
+    r.tipo === 'rejected' ? (
+      <p className="text-sm uv-text-secondary leading-relaxed">{t('admin_resp_rejected')}</p>
+    ) : r.tipo === 'scheduled' ? (
       <p className="text-sm uv-text-secondary leading-relaxed">
         {t('admin_resp_scheduled')
           .replace('{date}', fechaLarga(r.seEliminaEl, language))
@@ -185,6 +204,45 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         )}
       </div>
     );
+
+  // El contacto completo, solo despues de pedirlo: el boton avisa que la vista
+  // queda registrada.
+  const contacto = (r: RespuestaPorEntregar) => {
+    const c = contactos[r.id];
+    if (c && c !== 'falla') {
+      const lineas = [
+        c.telefono && t('admin_resp_contact_phone').replace('{v}', c.telefono),
+        c.correo && t('admin_resp_contact_email').replace('{v}', c.correo),
+        c.correoParaRespuesta && t('admin_resp_contact_response_email').replace('{v}', c.correoParaRespuesta),
+      ].filter((l): l is string => !!l);
+      return (
+        <div className="rounded-xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 py-2 space-y-0.5">
+          {lineas.length > 0 ? (
+            lineas.map((l) => <p key={l} className="text-sm uv-text-primary break-all">{l}</p>)
+          ) : (
+            <p className="text-sm uv-text-muted">{t('admin_resp_contact_none')}</p>
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-1">
+        <button
+          type="button"
+          onClick={() => void verContacto(r)}
+          disabled={viendo !== null || actuando !== null}
+          className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors"
+        >
+          {t('admin_resp_view_contact')}
+        </button>
+        {c === 'falla' ? (
+          <p role="alert" className="text-xs text-[var(--color-danger)]">{t('admin_resp_contact_failed')}</p>
+        ) : (
+          <p className="text-xs uv-text-muted">{t('admin_resp_contact_hint')}</p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="px-4 py-4 space-y-3">
@@ -235,6 +293,14 @@ export const SolicitudesDeEliminacion: React.FC = () => {
           {respuestas.map((r) => (
             <article key={r.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
               {persona(r.account, r)}
+              {r.correoSinConfirmar && (
+                <div>
+                  <p className="inline-block rounded-full uv-chip-warning px-2 py-0.5 text-[11px] font-bold">
+                    {t('admin_resp_unconfirmed')}
+                  </p>
+                  <p className="text-xs uv-text-muted mt-1">{t('admin_resp_unconfirmed_hint')}</p>
+                </div>
+              )}
               <p className="text-xs font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
                 {r.motivo === 'send_failed'
                   ? t('admin_resp_send_failed').replace('{n}', String(r.intentos))
@@ -243,6 +309,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 {t('admin_resp_due').replace('{date}', fechaLarga(r.responderAntesDe, language))}
               </p>
               {loQueHayQueDecir(r)}
+              {contacto(r)}
               <button
                 type="button"
                 onClick={() => abrirEntrega(r)}
@@ -288,6 +355,11 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               {' · '}
               {t('admin_del_verified_at').replace('{when}', fechaYHora(s.verifiedAt ?? s.createdAt, language))}
             </p>
+            {s.responderAntesDe && (
+              <p className="text-xs font-semibold uv-text-secondary">
+                {t('admin_resp_due').replace('{date}', fechaLarga(s.responderAntesDe, language))}
+              </p>
+            )}
             <div className="flex gap-2.5">
               <button
                 type="button"

@@ -207,6 +207,7 @@ export class HttpAuthRepository implements IAuthRepository {
       accept_terms: request.acceptTerms,
       // Igual: solo viaja si la cuenta no tiene correo y la persona dio uno.
       ...(request.responseEmail ? { response_email: request.responseEmail } : {}),
+      ...(request.responseEmailConfirmation ? { response_email_confirmation: request.responseEmailConfirmation } : {}),
     });
     if (!res.success) {
       // El codigo y el detalle pasan: la pantalla elige el texto por codigo y,

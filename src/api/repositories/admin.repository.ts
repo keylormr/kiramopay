@@ -51,6 +51,8 @@ export interface SolicitudDeEliminacion {
   contactKind: 'email' | 'phone';
   createdAt: string;
   verifiedAt: string | null;
+  /** Hasta cuando hay que responderle: cinco dias habiles desde la verificacion. */
+  responderAntesDe: string | null;
   account: AdminUser | null;
 }
 
@@ -62,8 +64,11 @@ export interface SolicitudDeEliminacion {
  */
 export interface RespuestaPorEntregar {
   id: string;
-  /** scheduled: empezo el plazo (lleva las fechas); blocked: que resolver. */
-  tipo: 'scheduled' | 'blocked';
+  /**
+   * scheduled: empezo el plazo (lleva las fechas); blocked: que resolver;
+   * rejected: la solicitud no se atiende por esta via (sin decir por que).
+   */
+  tipo: 'scheduled' | 'blocked' | 'rejected';
   motivo: 'no_channel' | 'send_failed';
   intentos: number;
   creadaEn: string;
@@ -74,7 +79,17 @@ export interface RespuestaPorEntregar {
   /** Siempre viene: con la cuenta ya cerrada no hay tarjeta y el panel muestra el id. */
   userId: string;
   cuentaCerrada: boolean;
+  /** Va al correo que la persona dio solo para la respuesta, que nadie confirmo. */
+  correoSinConfirmar: boolean;
   account: AdminUser | null;
+}
+
+/** El contacto completo de una respuesta del panel. Vacio lo que no hay. */
+export interface ContactoDeRespuesta {
+  telefono: string;
+  correo: string;
+  /** El que la persona dio solo para la respuesta, mientras exista. */
+  correoParaRespuesta: string;
 }
 
 /** Lo que paso al atender una solicitud. */
@@ -131,6 +146,11 @@ export interface IAdminRepository {
    * se entrego) es obligatoria; queda en la auditoria con el administrador.
    */
   markDeletionResponseDelivered(id: string, nota: string): Promise<ApiResponse<{ delivered: boolean }>>;
+  /**
+   * El contacto sin enmascarar de una respuesta del panel, para entregarla por
+   * otro medio. Cada vista queda en la auditoria con el administrador.
+   */
+  viewDeletionResponseContact(id: string): Promise<ApiResponse<ContactoDeRespuesta>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

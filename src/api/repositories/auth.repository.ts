@@ -131,6 +131,11 @@ export interface EliminarCuentaRequest {
    * RESPONSE_EMAIL_INVALID.
    */
   responseEmail?: string;
+  /**
+   * El mismo correo, escrito otra vez: nadie lo confirma. Si no coincide (sin
+   * mirar mayusculas), el servidor responde RESPONSE_EMAIL_MISMATCH.
+   */
+  responseEmailConfirmation?: string;
 }
 
 /** La solicitud de eliminacion ya registrada: el dia 0 y el dia 30, en ISO. */

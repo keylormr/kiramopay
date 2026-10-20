@@ -26,7 +26,11 @@ import (
 //     escalada, o con el primer intento y el barrido a la vez, no sale dos veces.
 //   - Sin a donde mandarla, o si a las 48 horas sigue sin salir, pasa a
 //     operaciones (RespuestasSinEntregar), que la entrega por otro medio y deja
-//     constancia de como (MarcarRespuestaEntregada).
+//     constancia de como (MarcarRespuestaEntregada). Para eso puede ver el
+//     contacto completo (ContactoDeRespuesta), y cada vista queda auditada.
+//   - Toda solicitud web verificada tiene su respuesta, tambien la rechazada, y
+//     el plazo legal se cuenta desde la verificacion aunque operaciones la
+//     atienda dias despues (decision del dueno del 2026-10-20).
 
 // Tipos de respuesta.
 const (
@@ -34,7 +38,8 @@ const (
 	RespuestaPlazoIniciado = "scheduled"
 	// RespuestaBloqueada: la solicitud web no pudo empezar; se dice que resolver.
 	RespuestaBloqueada = "blocked"
-	// RespuestaRechazada: la solicitud web no se atiende por esta via.
+	// RespuestaRechazada: la solicitud web no se atiende por esta via. No dice
+	// por que: la cuenta puede estar bajo revision.
 	RespuestaRechazada = "rejected"
 )
 
@@ -49,6 +54,10 @@ const (
 	// plazoParaOperaciones: a las 48 horas sin salir se ocupa una persona. Le
 	// deja tres de los cinco dias habiles para entregarla por otro medio.
 	plazoParaOperaciones = 48 * time.Hour
+	// margenParaOperaciones son esos tres dias contados hacia atras desde el
+	// plazo: una respuesta que nace con menos (la atendieron dias despues de la
+	// verificacion) pasa a operaciones al primer fallo.
+	margenParaOperaciones = 72 * time.Hour
 	// reservaDeEnvio aparta la fila mientras se manda. Es mas que avisoTimeout:
 	// nadie la toma mientras el envio sigue vivo.
 	reservaDeEnvio = 2 * time.Minute
@@ -112,7 +121,8 @@ var (
 	ErrNotaRequerida = errors.New("escribe como se entrego la respuesta")
 	// ErrNotaLarga: la nota pasa de maxNota caracteres.
 	ErrNotaLarga = errors.New("la nota es demasiado larga")
-	// ErrRespuestaFueraDelPanel: la respuesta no esta pendiente en el panel.
+	// ErrRespuestaFueraDelPanel: la respuesta no esta pendiente en el panel (ya
+	// salio, se cancelo, o el barrido todavia la esta reintentando).
 	ErrRespuestaFueraDelPanel = errors.New("la respuesta no esta pendiente en el panel")
 )
 
@@ -122,8 +132,11 @@ type nuevaRespuesta struct {
 	seEliminaEl *time.Time
 	bloqueos    []string
 	// correoDado es el que dio una persona cuya cuenta no tiene correo, solo
-	// para esta respuesta. Va cifrado.
+	// para esta respuesta. Va cifrado, y nadie lo confirmo: la fila lo marca.
 	correoDado string
+	// desde es cuando se pidio, de donde corre el plazo legal: la verificacion
+	// de la solicitud web. Vacio, ahora.
+	desde time.Time
 }
 
 // encolarRespuesta deja la respuesta en la bandeja, dentro de la transaccion de
@@ -133,12 +146,18 @@ func encolarRespuesta(ctx context.Context, tx pgx.Tx, userID string, r nuevaResp
 	if bloqueos == nil {
 		bloqueos = []string{}
 	}
+	desde := r.desde
+	if desde.IsZero() {
+		desde = time.Now()
+	}
 	var id string
 	err := tx.QueryRow(ctx, `
-		INSERT INTO account_deletion_responses (user_id, kind, deletion_due_at, blockers, email_enc, respond_by)
-		VALUES ($1::uuid, $2, $3, $4, CASE WHEN $5::text = '' THEN NULL ELSE fn_pii_encrypt($5::text) END, $6)
+		INSERT INTO account_deletion_responses
+		       (user_id, kind, deletion_due_at, blockers, email_enc, email_unconfirmed, respond_by)
+		VALUES ($1::uuid, $2, $3, $4, CASE WHEN $5::text = '' THEN NULL ELSE fn_pii_encrypt($5::text) END,
+		        $5::text <> '', $6)
 		RETURNING id::text`,
-		userID, r.tipo, r.seEliminaEl, bloqueos, r.correoDado, responderAntesDe(time.Now()),
+		userID, r.tipo, r.seEliminaEl, bloqueos, r.correoDado, responderAntesDe(desde),
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("encolar la respuesta escrita: %w", err)
@@ -191,7 +210,8 @@ func (s *Service) EntregarRespuestas(ctx context.Context, now time.Time, limite 
 	}
 	entregadas := 0
 	var primero error
-	hasta := time.Now().Add(presupuestoDelBarrido)
+	inicio := time.Now()
+	hasta := inicio.Add(presupuestoDelBarrido)
 	for pagina := 0; pagina < maxPaginasPorBarrido; pagina++ {
 		// Cada fila que se intenta corre su turno hacia adelante, asi que la
 		// pagina siguiente ya no la trae.
@@ -211,7 +231,9 @@ func (s *Service) EntregarRespuestas(ctx context.Context, now time.Time, limite 
 			if time.Now().After(hasta) {
 				return entregadas, primero
 			}
-			ok, err := s.entregarUna(ctx, id, now)
+			// La reserva y la constancia se miden desde este envio, no desde el
+			// inicio del barrido: con envios lentos la diferencia llega a minutos.
+			ok, err := s.entregarUna(ctx, id, now.Add(time.Since(inicio)))
 			if err != nil {
 				if primero == nil {
 					primero = err
@@ -238,6 +260,7 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		dia30      *time.Time
 		bloqueos   []string
 		creada     time.Time
+		vence      time.Time
 		intentos   int
 		yaEscalada bool
 		cerrada    bool
@@ -254,11 +277,11 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		 WHERE r.id = $1::uuid AND u.id = r.user_id
 		   AND r.delivered_at IS NULL AND r.cancelled_at IS NULL
 		   AND (r.next_attempt_at <= $2 OR r.attempts = 0)
-		RETURNING r.kind, r.deletion_due_at, r.blockers, r.created_at, r.attempts, r.escalated_at IS NOT NULL,
-		          u.deleted_at IS NOT NULL,
+		RETURNING r.kind, r.deletion_due_at, r.blockers, r.created_at, r.respond_by, r.attempts,
+		          r.escalated_at IS NOT NULL, u.deleted_at IS NOT NULL,
 		          COALESCE(NULLIF(fn_pii_decrypt(r.email_enc), ''), NULLIF(fn_pii_decrypt(u.email_enc), ''), '')`,
 		id, now, fmt.Sprintf("%d seconds", int(reservaDeEnvio.Seconds())),
-	).Scan(&tipo, &dia30, &bloqueos, &creada, &intentos, &yaEscalada, &cerrada, &destino)
+	).Scan(&tipo, &dia30, &bloqueos, &creada, &vence, &intentos, &yaEscalada, &cerrada, &destino)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -283,7 +306,9 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		// El error del proveedor puede traer la direccion; al log va sin ella.
 		s.logger.Warn("respuesta escrita no enviada; se reintenta", "response", id, "attempt", intentos,
 			"err", sinDireccion(errEnvio.Error(), destino))
-		escalar := now.Sub(creada) >= plazoParaOperaciones
+		// A las 48 horas, o antes si el plazo legal ya no deja a operaciones sus
+		// tres dias: la que se atendio tarde nace con el plazo encima.
+		escalar := now.Sub(creada) >= plazoParaOperaciones || !now.Before(vence.Add(-margenParaOperaciones))
 		return false, s.registrarFallo(ctx, id, now, MotivoEnvioFallido, escalar, yaEscalada, now.Add(esperaTras(intentos)))
 	}
 	// Si esto falla, la respuesta vuelve a salir en su proximo turno: mejor dos
@@ -325,7 +350,10 @@ func (s *Service) registrarFallo(ctx context.Context, id string, now time.Time, 
 
 // contenidoDeLaRespuesta arma el correo segun el tipo.
 func contenidoDeLaRespuesta(tipo string, dia30 *time.Time, bloqueos []string) (subject, text, html string) {
-	if tipo == RespuestaBloqueada || dia30 == nil {
+	switch {
+	case tipo == RespuestaRechazada:
+		return messaging.DeletionRejectedEmail()
+	case tipo == RespuestaBloqueada || dia30 == nil:
 		return messaging.DeletionBlockedEmail(motivosDe(bloqueos))
 	}
 	return messaging.AccountDeletionRequestedEmail(*dia30, conservaHasta(*dia30))
@@ -361,21 +389,72 @@ type RespuestaPendiente struct {
 	// tiene tarjeta enmascarada.
 	UserID        string `json:"user_id"`
 	CuentaCerrada bool   `json:"account_closed"`
-	// CorreoSinConfirmar: va al correo que la persona dio solo para la respuesta.
+	// CorreoSinConfirmar: va al correo que la persona dio solo para la
+	// respuesta, que nadie confirmo. Que el proveedor lo acepte no dice que sea
+	// suyo.
 	CorreoSinConfirmar bool                `json:"unconfirmed_email"`
 	Cuenta             *user.AdminUserView `json:"account"`
 }
 
-// ContactoCompleto es el contacto sin enmascarar de una respuesta del panel.
+// ContactoCompleto es el contacto sin enmascarar de una respuesta del panel:
+// con lo enmascarado no se puede entregar por otro medio. Vacio lo que no hay.
 type ContactoCompleto struct {
-	Telefono            string `json:"phone"`
-	Correo              string `json:"email"`
+	Telefono string `json:"phone"`
+	Correo   string `json:"email"`
+	// CorreoParaRespuesta es el que la persona dio solo para la respuesta,
+	// mientras exista: se borra al entregarla, al reactivar y el dia 30.
 	CorreoParaRespuesta string `json:"response_email"`
 }
 
-// ContactoDeRespuesta devuelve el contacto completo de una respuesta del panel.
-func (s *Service) ContactoDeRespuesta(_ context.Context, _, _ string) (*ContactoCompleto, error) {
-	return nil, errors.New("sin hacer")
+// ContactoDeRespuesta devuelve el contacto completo de una respuesta que esta en
+// el panel (escalada y sin entregar), para que operaciones la entregue por otro
+// medio. Cada vista queda en la auditoria, en la misma transaccion: sin el
+// registro no se devuelve nada.
+func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (*ContactoCompleto, error) {
+	var out *ContactoCompleto
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		out = nil
+		var (
+			userID                 string
+			enElPanel              bool
+			telefono, correo, dado *string
+		)
+		err := tx.QueryRow(ctx, `
+			SELECT r.user_id::text,
+			       r.escalated_at IS NOT NULL AND r.delivered_at IS NULL AND r.cancelled_at IS NULL,
+			       fn_pii_decrypt(u.phone_enc), fn_pii_decrypt(u.email_enc), fn_pii_decrypt(r.email_enc)
+			  FROM account_deletion_responses r
+			  JOIN users u ON u.id = r.user_id
+			 WHERE r.id = $1::uuid
+			   FOR SHARE OF r`, id,
+		).Scan(&userID, &enElPanel, &telefono, &correo, &dado)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrRespuestaNoEncontrada
+		}
+		if err != nil {
+			return fmt.Errorf("leer el contacto: %w", err)
+		}
+		if !enElPanel {
+			return ErrRespuestaFueraDelPanel
+		}
+		if err := auditar(ctx, tx, userID, "account_deletion_response_contact_viewed", opciones{actor: adminID, respuesta: id}); err != nil {
+			return err
+		}
+		out = &ContactoCompleto{Telefono: valorDe(telefono), Correo: valorDe(correo), CorreoParaRespuesta: valorDe(dado)}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// valorDe es el texto de una columna que puede venir NULL.
+func valorDe(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // RespuestasSinEntregar lista las que pasaron a operaciones, la de plazo mas
@@ -386,7 +465,7 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 	}
 	filas, err := s.pool.Query(ctx, `
 		SELECT r.id::text, r.kind, r.created_at, r.respond_by, r.attempts, COALESCE(r.last_error, ''),
-		       r.deletion_due_at, r.blockers, r.user_id::text, u.deleted_at IS NOT NULL
+		       r.deletion_due_at, r.blockers, r.user_id::text, u.deleted_at IS NOT NULL, r.email_unconfirmed
 		  FROM account_deletion_responses r
 		  JOIN users u ON u.id = r.user_id
 		 WHERE r.escalated_at IS NOT NULL AND r.delivered_at IS NULL AND r.cancelled_at IS NULL
@@ -399,7 +478,7 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 	for filas.Next() {
 		var r RespuestaPendiente
 		if err := filas.Scan(&r.ID, &r.Tipo, &r.CreadaEn, &r.ResponderAntesDe, &r.Intentos, &r.Motivo,
-			&r.SeEliminaEl, &r.Bloqueos, &r.UserID, &r.CuentaCerrada); err != nil {
+			&r.SeEliminaEl, &r.Bloqueos, &r.UserID, &r.CuentaCerrada, &r.CorreoSinConfirmar); err != nil {
 			filas.Close()
 			return nil, fmt.Errorf("leer la respuesta: %w", err)
 		}
