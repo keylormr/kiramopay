@@ -178,7 +178,7 @@ func TestSacarDelCatalogo_LoQueNoSeEncuentra(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registrar el segundo comercio: %v", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, otro.ID, owner); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, otro.ID, revisorDePrueba); err != nil {
 		t.Fatalf("aprobar el segundo comercio: %v", err)
 	}
 	cafe := crearProducto(t, svc, m.ID, owner, "Cafe", 120000)

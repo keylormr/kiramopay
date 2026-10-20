@@ -566,10 +566,17 @@ func main() {
 	// provider key is set, so the service reports itself unavailable instead of
 	// wrapping a nil pointer. Claude (Anthropic) takes precedence over Gemini
 	// when both keys are present.
-	var assistantLLM assistant.LLM
+	var (
+		assistantLLM    assistant.LLM
+		assistantScreen assistant.Screener
+	)
 	switch {
 	case cfg.Anthropic.APIKey != "":
-		assistantLLM = assistant.NewClaudeClient(cfg.Anthropic.APIKey, cfg.Anthropic.Model, 20*time.Second)
+		claudeClient := assistant.NewClaudeClient(cfg.Anthropic.APIKey, cfg.Anthropic.Model, 20*time.Second)
+		assistantLLM = claudeClient
+		// Filtro de alcance (solo KiramoPay) antes de cada turno, con la misma
+		// llave y Claude Haiku 5.5; ver internal/assistant/scope.go.
+		assistantScreen = claudeClient
 	case cfg.Gemini.APIKey != "":
 		assistantLLM = assistant.NewGeminiClient(cfg.Gemini.APIKey, cfg.Gemini.Model, 20*time.Second)
 	}
@@ -597,6 +604,9 @@ func main() {
 		}
 		cuotaAsistente = assistant.NewRedisQuota(redisClient, planLimits, cfg.Anthropic.GlobalDailyLimit, userRepo.GetPlan)
 		assistantOpts = append(assistantOpts, assistant.WithLimiter(cuotaAsistente))
+	}
+	if assistantScreen != nil {
+		assistantOpts = append(assistantOpts, assistant.WithScreener(assistantScreen))
 	}
 	assistantService := assistant.NewService(
 		assistantLLM,

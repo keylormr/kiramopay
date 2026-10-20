@@ -108,15 +108,25 @@ func (c *ConversationService) Delete(ctx context.Context, userID, id string) err
 	return c.store.Delete(ctx, userID, id)
 }
 
+// CanCreate dice, sin crear nada, si el usuario puede abrir otra conversacion:
+// ErrConvLimit si ya tiene el maximo de su plan. El chat lo consulta antes del
+// filtro de alcance, que es de pago, y crea la conversacion despues.
+func (c *ConversationService) CanCreate(ctx context.Context, userID string) error {
+	count, err := c.store.Count(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if count >= limitFrom(c.convLimits, c.plan(ctx, userID)) {
+		return ErrConvLimit
+	}
+	return nil
+}
+
 // Create makes a new empty conversation, rejecting with ErrConvLimit when the
 // user is already at their plan's maximum.
 func (c *ConversationService) Create(ctx context.Context, userID string) (*Conversation, error) {
-	count, err := c.store.Count(ctx, userID)
-	if err != nil {
+	if err := c.CanCreate(ctx, userID); err != nil {
 		return nil, err
-	}
-	if count >= limitFrom(c.convLimits, c.plan(ctx, userID)) {
-		return nil, ErrConvLimit
 	}
 	return c.store.Create(ctx, userID)
 }

@@ -122,6 +122,64 @@ func TestClaudeGenerateToolUseAndRequestShape(t *testing.T) {
 	}
 }
 
+// El asistente corre por defecto en Claude Haiku 5.5. Ese modelo razona por
+// defecto: el razonamiento cuenta contra max_tokens y, en el ciclo de
+// herramientas, la API pide devolver esos bloques tal cual, cosa que la
+// historia neutral no guarda. Por eso el pedido lo apaga, y la respuesta se lee
+// por tipo de bloque: un bloque de razonamiento no se mezcla con el texto.
+func TestClaudeGenerate_Haiku55VaSinRazonamiento(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_, _ = w.Write([]byte(`{"content":[{"type":"thinking","thinking":"","signature":"sig"},{"type":"text","text":"Tienes 1500 colones."}],"stop_reason":"end_turn"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClaudeClient("k", "", time.Second)
+	c.baseURL = srv.URL
+	res, err := c.Generate(context.Background(), "system", []Message{{Role: RoleUser, Text: "saldo?"}}, nil)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if gotBody["model"] != "claude-haiku-5-5" {
+		t.Errorf("model = %v, se esperaba claude-haiku-5-5 por defecto", gotBody["model"])
+	}
+	if th, _ := gotBody["thinking"].(map[string]any); th["type"] != "disabled" {
+		t.Errorf("thinking = %v, se esperaba {type: disabled}", gotBody["thinking"])
+	}
+	// Haiku 5.5 gasta cerca de un 30% mas de tokens por el mismo texto: el tope
+	// sube para que una respuesta no se corte antes que con Haiku 4.5.
+	if mt, _ := gotBody["max_tokens"].(float64); mt < 1331 {
+		t.Errorf("max_tokens = %v, se esperaba al menos 1331 (1024 de Haiku 4.5 mas un 30%%)", gotBody["max_tokens"])
+	}
+	if res.Text != "Tienes 1500 colones." {
+		t.Errorf("texto = %q", res.Text)
+	}
+}
+
+// Otro modelo elegido por la operacion no recibe el campo: los que razonan sin
+// poder apagarlo (Opus 5.5) rechazan "disabled", y a los que no razonan por
+// defecto no les hace falta.
+func TestClaudeGenerate_OtroModeloNoRecibeThinking(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClaudeClient("k", "claude-opus-4-8", time.Second)
+	c.baseURL = srv.URL
+	if _, err := c.Generate(context.Background(), "", []Message{{Role: RoleUser, Text: "hola"}}, nil); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if _, ok := gotBody["thinking"]; ok {
+		t.Errorf("thinking = %v, no se esperaba el campo para claude-opus-4-8", gotBody["thinking"])
+	}
+}
+
 func TestClaudeGenerateSurfacesHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
