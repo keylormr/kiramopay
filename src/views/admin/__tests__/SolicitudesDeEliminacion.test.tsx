@@ -315,6 +315,17 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     expect(screen.queryByText(/\+50688881234/)).toBeNull();
   });
 
+  it('la cola lleva su propio titulo, aparte de las respuestas por entregar', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [solicitud] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    pintar();
+
+    const cola = await screen.findByRole('region', { name: 'Solicitudes por atender' });
+    expect(within(cola).getByRole('button', { name: 'Iniciar el plazo' })).toBeInTheDocument();
+    const respuestas = screen.getByRole('region', { name: 'Respuestas por entregar' });
+    expect(within(respuestas).queryByRole('button', { name: 'Iniciar el plazo' })).toBeNull();
+  });
+
   it('sin respuestas pendientes la seccion no aparece', async () => {
     api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
     pintar();
