@@ -148,8 +148,8 @@
         'guarda hasta el ' + conserva + ' (más tiempo únicamente si la ley o una autoridad competente lo exige) y ' +
         'después se desasocia de ti de forma irreversible.'),
       elemento('p',
-        'Si no estás conforme, puedes acudir a la Agencia de Protección de Datos de los Habitantes (PRODHAB), ' +
-        'conforme a la Ley 8968.'),
+        'Si consideras que no se respetaron tus derechos sobre tus datos, puedes acudir a la Agencia de ' +
+        'Protección de Datos de los Habitantes (PRODHAB), según la Ley 8968.'),
       elemento('p',
         'Esta respuesta también te llega por escrito al correo de tu cuenta; si la cuenta no tiene correo, una ' +
         'persona del equipo te la hace llegar por otro medio. Si no la ves, revisa la carpeta de correo no deseado.'),
