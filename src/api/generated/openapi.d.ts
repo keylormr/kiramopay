@@ -1042,7 +1042,7 @@ export interface paths {
         put?: never;
         /**
          * Start the deletion term for a verified web request
-         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Every outcome with an account queues its written answer, due 5 business days after the verification. Audited with the administrator as actor.
+         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (ROLE_NOT_ALLOWED, DEMO_ACCOUNT, NOT_ELIGIBLE, or NO_ACCOUNT and NOT_FOUND when no account is left). Every outcome with an account queues its written answer, due 5 business days after the verification; NO_ACCOUNT and NOT_FOUND have no one to answer. Audited with the administrator as actor.
          */
         post: {
             parameters: {

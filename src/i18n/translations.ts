@@ -2019,6 +2019,9 @@ export type TranslationKeys = {
   admin_del_confirm_title: string;
   admin_del_confirm_body: string;
   admin_del_confirm_button: string;
+  admin_del_reject_title: string;
+  admin_del_reject_body: string;
+  admin_del_reject_button: string;
   admin_del_done: string;
   admin_del_blocked: string;
   admin_del_rejected: string;

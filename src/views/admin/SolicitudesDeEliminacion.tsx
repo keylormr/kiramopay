@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '@/components/Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -55,6 +55,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   const [falla, setFalla] = useState(false);
   const [recarga, setRecarga] = useState(0);
   const [confirmando, setConfirmando] = useState<SolicitudDeEliminacion | null>(null);
+  const [rechazando, setRechazando] = useState<SolicitudDeEliminacion | null>(null);
   const [actuando, setActuando] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [respuestas, setRespuestas] = useState<RespuestaPorEntregar[]>([]);
@@ -65,6 +66,9 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   // El contacto completo de las que se pidio ver, o 'falla' si no se pudo leer.
   const [contactos, setContactos] = useState<Record<string, ContactoDeRespuesta | 'falla'>>({});
   const [viendo, setViendo] = useState<string | null>(null);
+  // Cuenta las relecturas: un contacto que llega despues de releer es de una
+  // lista que ya no esta en pantalla, y no se pinta.
+  const lectura = useRef(0);
 
   useEffect(() => {
     let vigente = true;
@@ -96,13 +100,16 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     setCargando(true);
     // Lo que se vio no queda en pantalla mas de lo necesario.
     setContactos({});
+    lectura.current += 1;
     setRecarga((n) => n + 1);
   }, []);
 
   const verContacto = async (r: RespuestaPorEntregar) => {
     setViendo(r.id);
+    const deLaLectura = lectura.current;
     const res = await getApiLayer().admin?.viewDeletionResponseContact(r.id);
     setViendo(null);
+    if (deLaLectura !== lectura.current) return;
     setContactos((antes) => ({ ...antes, [r.id]: res?.success && res.data ? res.data : 'falla' }));
   };
 
@@ -130,6 +137,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     setAviso(null);
     const res = await getApiLayer().admin?.rejectDeletionRequest(s.id);
     setActuando(null);
+    setRechazando(null);
     setAviso(
       res?.success
         ? { tipo: 'ok', texto: t('admin_del_rejected') }
@@ -208,6 +216,10 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   // El contacto completo, solo despues de pedirlo: el boton avisa que la vista
   // queda registrada.
   const contacto = (r: RespuestaPorEntregar) => {
+    // De una cuenta cerrada ya no hay contacto guardado que ver.
+    if (r.cuentaCerrada) {
+      return <p className="text-sm uv-text-muted">{t('admin_resp_contact_none')}</p>;
+    }
     const c = contactos[r.id];
     if (c && c !== 'falla') {
       const lineas = [
@@ -309,7 +321,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 {t('admin_resp_due').replace('{date}', fechaLarga(r.responderAntesDe, language))}
               </p>
               {loQueHayQueDecir(r)}
-              {contacto(r)}
+              <div aria-live="polite">{contacto(r)}</div>
               <button
                 type="button"
                 onClick={() => abrirEntrega(r)}
@@ -371,7 +383,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => void rechazar(s)}
+                onClick={() => setRechazando(s)}
                 disabled={actuando !== null}
                 className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors"
               >
@@ -409,6 +421,37 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 t('admin_del_confirm_button')
+              )}
+            </button>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={rechazando !== null}
+        onClose={() => { if (actuando === null) setRechazando(null); }}
+        title={t('admin_del_reject_title')}
+        dismissable={actuando === null}
+      >
+        {rechazando && (
+          <div className="space-y-4">
+            {rechazando.account && (
+              <div>
+                <p className="font-bold uv-text-primary">{`${rechazando.account.firstName} ${rechazando.account.lastName}`.trim()}</p>
+                <p className="text-xs uv-text-muted tabular-nums mt-0.5">{rechazando.account.cedulaMasked}</p>
+              </div>
+            )}
+            <p className="text-sm uv-text-secondary leading-relaxed">{t('admin_del_reject_body')}</p>
+            <button
+              type="button"
+              onClick={() => void rechazar(rechazando)}
+              disabled={actuando !== null}
+              className="w-full bg-[var(--color-primary)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              {actuando ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                t('admin_del_reject_button')
               )}
             </button>
           </div>

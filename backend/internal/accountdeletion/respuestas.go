@@ -54,9 +54,10 @@ const (
 	// plazoParaOperaciones: a las 48 horas sin salir se ocupa una persona. Le
 	// deja tres de los cinco dias habiles para entregarla por otro medio.
 	plazoParaOperaciones = 48 * time.Hour
-	// margenParaOperaciones son esos tres dias contados hacia atras desde el
-	// plazo: una respuesta que nace con menos (la atendieron dias despues de la
-	// verificacion) pasa a operaciones al primer fallo.
+	// margenParaOperaciones son esos tres dias, corridos y no habiles, contados
+	// hacia atras desde el plazo: una respuesta que nace con menos (la atendieron
+	// dias despues de la verificacion) pasa a operaciones al primer fallo.
+	// Corridos a proposito: con un fin de semana en medio escala antes, no despues.
 	margenParaOperaciones = 72 * time.Hour
 	// reservaDeEnvio aparta la fila mientras se manda. Es mas que avisoTimeout:
 	// nadie la toma mientras el envio sigue vivo.
@@ -413,25 +414,28 @@ type ContactoCompleto struct {
 // ContactoDeRespuesta devuelve el contacto completo de una respuesta que esta en
 // el panel (escalada y sin entregar), para que operaciones la entregue por otro
 // medio. Cada vista queda en la auditoria, en la misma transaccion: sin el
-// registro no se devuelve nada.
+// registro no se devuelve nada. De una cuenta ya cerrada no hay contacto: users
+// guarda marcadores y el cierre borro el correo de la respuesta. Se devuelve
+// vacio y sin auditar, porque esa vista no revela nada.
 func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (*ContactoCompleto, error) {
 	var out *ContactoCompleto
 	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
 		out = nil
 		var (
 			userID                 string
-			enElPanel              bool
+			enElPanel, cerrada     bool
 			telefono, correo, dado *string
 		)
 		err := tx.QueryRow(ctx, `
 			SELECT r.user_id::text,
 			       r.escalated_at IS NOT NULL AND r.delivered_at IS NULL AND r.cancelled_at IS NULL,
+			       u.deleted_at IS NOT NULL,
 			       fn_pii_decrypt(u.phone_enc), fn_pii_decrypt(u.email_enc), fn_pii_decrypt(r.email_enc)
 			  FROM account_deletion_responses r
 			  JOIN users u ON u.id = r.user_id
 			 WHERE r.id = $1::uuid
 			   FOR SHARE OF r`, id,
-		).Scan(&userID, &enElPanel, &telefono, &correo, &dado)
+		).Scan(&userID, &enElPanel, &cerrada, &telefono, &correo, &dado)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRespuestaNoEncontrada
 		}
@@ -440,6 +444,10 @@ func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (
 		}
 		if !enElPanel {
 			return ErrRespuestaFueraDelPanel
+		}
+		if cerrada {
+			out = &ContactoCompleto{}
+			return nil
 		}
 		if err := auditar(ctx, tx, userID, "account_deletion_response_contact_viewed", opciones{actor: adminID, respuesta: id}); err != nil {
 			return err

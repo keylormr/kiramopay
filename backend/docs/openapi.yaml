@@ -718,9 +718,11 @@ paths:
         the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED
         when the term was already running), `blocked` (with the first blocker
         as `result_code`; the full list is in the response) or `rejected`
-        (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Every outcome with an
-        account queues its written answer, due 5 business days after the
-        verification. Audited with the administrator as actor.
+        (ROLE_NOT_ALLOWED, DEMO_ACCOUNT, NOT_ELIGIBLE, or NO_ACCOUNT and
+        NOT_FOUND when no account is left). Every outcome with an account
+        queues its written answer, due 5 business days after the
+        verification; NO_ACCOUNT and NOT_FOUND have no one to answer.
+        Audited with the administrator as actor.
       security:
         - bearerAuth: []
       parameters:

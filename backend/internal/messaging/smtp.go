@@ -46,6 +46,10 @@ func newSMTPEmail(cfg EmailConfig) *smtpEmail {
 // smtpTimeout acota un envio cuyo contexto no trae plazo.
 const smtpTimeout = 60 * time.Second
 
+// esperaDelQuit acota la despedida: con el mensaje aceptado no hay por que
+// esperar el QUIT hasta el plazo de toda la conversacion.
+const esperaDelQuit = 5 * time.Second
+
 func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBody string) error {
 	msg, err := buildMessage(s.from, to, subject, textBody, htmlBody)
 	if err != nil {
@@ -108,7 +112,11 @@ func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBo
 	}
 	// Con el 250 de DATA el relevo ya acepto el mensaje: un QUIT que no se
 	// contesta (o vence el plazo) no lo deshace, y reportarlo como fallo haria
-	// que quien reintenta lo mande dos veces.
+	// que quien reintenta lo mande dos veces. Tampoco se espera mas que unos
+	// segundos: el barrido tiene otras respuestas que mandar.
+	if limite := time.Now().Add(esperaDelQuit); limite.Before(plazo) {
+		_ = conn.SetDeadline(limite)
+	}
 	_ = c.Quit()
 	return nil
 }

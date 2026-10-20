@@ -184,12 +184,13 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	}); err != nil {
 		return resultado{}, err
 	}
-	// Una solicitud anterior que habia quedado bloqueada ya no tiene nada que
-	// resolver: su respuesta (que no se borro nada) no debe salir despues de esta.
+	// Una solicitud anterior que habia quedado bloqueada o rechazada ya no tiene
+	// nada que resolver: su respuesta (que no se borro nada) no debe salir
+	// despues de esta.
 	if _, err := tx.Exec(ctx, `
 		UPDATE account_deletion_responses SET cancelled_at = NOW(), email_enc = NULL
-		 WHERE user_id = $1::uuid AND kind = $2 AND delivered_at IS NULL AND cancelled_at IS NULL`,
-		userID, RespuestaBloqueada); err != nil {
+		 WHERE user_id = $1::uuid AND kind IN ($2, $3) AND delivered_at IS NULL AND cancelled_at IS NULL`,
+		userID, RespuestaBloqueada, RespuestaRechazada); err != nil {
 		return resultado{}, fmt.Errorf("cancelar la respuesta de la solicitud bloqueada: %w", err)
 	}
 	return res, nil
