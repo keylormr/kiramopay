@@ -17,7 +17,8 @@ import { BottomSheet } from './components/BottomSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppDesactualizada } from './components/AppDesactualizada';
 import { BarreraDeActualizacion } from './components/ActualizacionObligatoria';
-import { useGuardiaDeVersion } from './hooks/useGuardiaDeVersion';
+import { useGuardiaDeVersion, useRecargaAutomaticaDeVersion } from './hooks/useGuardiaDeVersion';
+import { asegurarArranque } from './hooks/useActualizacion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
 import { Icons } from './components/Icons';
@@ -1006,12 +1007,32 @@ const AppInit = () => {
 };
 
 // Envoltura que corta el paso cuando el bundle que corre ya no es el
-// desplegado. Va DENTRO de LanguageProvider (la pantalla habla el idioma de la
-// persona) y por encima de todo lo demas: seguir usando una version vieja
-// termina en un error incomprensible en cuanto se abre una pantalla diferida.
+// desplegado. Va DENTRO de LanguageProvider (la pantalla de respaldo habla el
+// idioma de la persona) y por encima de todo lo demas: seguir usando una
+// version vieja termina en un error incomprensible en cuanto se abre una
+// pantalla diferida.
+//
+// En la web la recarga es automatica: nadie tiene que ver una pantalla ni
+// tocar un boton, igual que cuando el navegador refresca una pagina. Mientras
+// esta en curso no hay nada que pintar. Solo si esta pestana ya se quedo sin
+// intentos (useRecargaAutomaticaDeVersion, por una cache intermedia que nunca
+// suelta la version vieja) se cae a la pantalla con el boton manual — esa
+// pantalla sigue teniendo su propia cuenta regresiva y recarga sola cada 10s
+// si nadie toca el boton; a proposito, para no depender de que la persona
+// este mirando en ese momento, pero ya de forma visible y no silenciosa.
 const AppConGuardia: React.FC = () => {
   const { desactualizada, versionDesplegada } = useGuardiaDeVersion();
-  if (desactualizada) return <AppDesactualizada version={versionDesplegada} />;
+  // La capa web que corre ya se pinto: se le confirma al plugin de la
+  // actualizacion interna. Va aca, dentro del ErrorBoundary, y no antes de
+  // montar React: un paquete nuevo que revienta al pintar no llega a este
+  // efecto, y el plugin vuelve solo al paquete del binario.
+  useEffect(() => {
+    void asegurarArranque();
+  }, []);
+  const agotada = useRecargaAutomaticaDeVersion(desactualizada);
+  if (desactualizada) {
+    return agotada ? <AppDesactualizada version={versionDesplegada} /> : null;
+  }
   // En la app instalada, una version nueva publicada se exige antes del login.
   return (
     <BarreraDeActualizacion>

@@ -9,6 +9,19 @@ export interface VersionApp {
    * la 2.8.0 no lo manda.
    */
   notes?: string[];
+  /**
+   * La capa web de esta version para actualizar por dentro, sin otro APK: el
+   * manifiesto firmado (base64), su firma y la URL del .zip. Solo si el release
+   * lo trae para la plataforma que pregunta; la app verifica la firma antes de
+   * usarlo (utils/paqueteFirmado).
+   */
+  web?: PaqueteWeb;
+}
+
+export interface PaqueteWeb {
+  manifest: string;
+  signature: string;
+  url: string;
 }
 
 // Las dos plataformas comparten la version pero no la URL: Android baja el .apk

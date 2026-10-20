@@ -48,6 +48,31 @@ const config: CapacitorConfig = {
       style: 'dark',
       backgroundColor: '#FFFFFF',
     },
+    // Actualizacion interna de la capa web (@capawesome/capacitor-live-update),
+    // autoalojada: el paquete y su manifiesto firmado son adjuntos del release
+    // de GitHub (scripts/paquete-web.mjs) y la app decide cuando bajarlos
+    // (src/hooks/useActualizacion.ts). Sin appId ni autoUpdateStrategy: el
+    // plugin nunca habla con los servidores de Capawesome.
+    //
+    // publicKey: con ella el plugin rechaza en nativo, antes de descomprimir,
+    // todo .zip sin una firma valida de la llave privada del CI (secreto
+    // LIVE_UPDATE_PRIVATE_KEY), aunque lo pida JS ajeno. Viaja en el binario y
+    // el JS no la puede cambiar: cambiarla obliga a publicar un APK. Tiene que
+    // ser la misma que LLAVE_PUBLICA_PAQUETES (src/utils/paqueteFirmado.ts).
+    //
+    // readyTimeout: si el paquete nuevo no confirma que arranco (ready(), en
+    // AppConGuardia) en ese plazo, el plugin vuelve al paquete del binario. El
+    // plazo cuenta desde que arranca lo nativo; 20 s dejan margen a un telefono
+    // lento sin dejar a nadie mucho tiempo frente a un paquete roto.
+    //
+    // autoDeleteBundles: despues de cada ready() borra los paquetes que ya no
+    // se usan.
+    LiveUpdate: {
+      publicKey:
+        '-----BEGIN PUBLIC KEY-----MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAinaoOAWrdZndWTRl6kg8sD/fWUjNVXtbApeJAUR6V1c0gRMLlfQUFzQ5WkdNA2nODA3Rqq7Jw4j71caG+EsafRDZ96Y2T9jH9mgl17pFGGZmAjzQICnC04X2r3iQQzlC0vuBsEAeNCEN2ZClSds9YZUim9UakI1SviU0qhVYPrfjDydb7/64JSh5EJUNoJsZfNwC6oXa0QPhQ7HktYhOVpiZFQGEDVCQ5SvfgXoAUjEXDWAmaYirTqBRQBc/5bSNYEbelBWMoYTJV8f+8A4CcxfWCCTsSMhmnN7sLKV7GSnyl67GXclvfL9qj1HOLiUgh8DdD+7Jjo2ywT55N4lnTQIDAQAB-----END PUBLIC KEY-----',
+      readyTimeout: 20000,
+      autoDeleteBundles: true,
+    },
   },
 };
 

@@ -2,13 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { recargarSaltandoCaches } from '../hooks/useGuardiaDeVersion';
 
-// Pantalla que bloquea el uso de una version vieja.
+// Pantalla de RESPALDO cuando la recarga automatica no alcanzo.
 //
-// Es a proposito una barrera y no un aviso que se pueda ignorar: un bundle
-// desactualizado pide archivos que el despliegue actual ya borro, asi que la
-// aplicacion no se puede usar de forma fiable — se rompe al abrir la primera
-// pantalla diferida, y lo hace con un "Algo salio mal" que no le dice nada a
-// nadie. Antes de eso, se recarga sola.
+// La recarga normal (useRecargaAutomaticaDeVersion) es invisible: la pestana
+// se refresca sola, sin que nadie vea nada, igual que un refresh cualquiera.
+// Esta pantalla solo aparece cuando esa via ya agoto sus intentos en esta
+// pestana — tipicamente una cache intermedia (CDN, Cloudflare) que sigue
+// sirviendo el mismo despliegue viejo y a la que ninguna recarga le gana. Ahi
+// hay que dejar de insistir en silencio: un bundle desactualizado pide
+// archivos que el despliegue actual ya borro, asi que la aplicacion no se
+// puede usar de forma fiable — se rompe al abrir la primera pantalla
+// diferida, y lo hace con un "Algo salio mal" que no le dice nada a nadie. Es
+// a proposito una barrera y no un aviso que se pueda ignorar, con su propia
+// cuenta regresiva y boton por si la persona insiste manualmente.
 
 /** Segundos antes de recargar sin que nadie toque nada. */
 export const SEGUNDOS_PARA_RECARGAR = 10;
