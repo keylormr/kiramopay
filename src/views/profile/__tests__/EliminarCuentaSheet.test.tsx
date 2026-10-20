@@ -312,6 +312,20 @@ describe('EliminarCuentaSheet — a donde va la respuesta escrita', () => {
     });
   });
 
+  it('el correo para la respuesta se valida como en el servidor: uno con tilde no habilita el envio', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'josé@ejemplo.com');
+    expect(screen.getByRole('button', { name: BOTON })).toBeDisabled();
+    await user.clear(screen.getByLabelText(CAMPO_CORREO));
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'jose@ejemplo.com');
+    expect(screen.getByRole('button', { name: BOTON })).toBeEnabled();
+  });
+
   it('si el servidor rechaza el correo para la respuesta, lo dice en el formulario', async () => {
     api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
     api.auth.deleteAccount

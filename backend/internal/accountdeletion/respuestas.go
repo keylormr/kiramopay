@@ -99,6 +99,8 @@ var (
 	ErrRespuestaCerrada = errors.New("la respuesta ya no esta pendiente")
 	// ErrNotaRequerida: marcarla entregada a mano exige decir como.
 	ErrNotaRequerida = errors.New("escribe como se entrego la respuesta")
+	// ErrNotaLarga: la nota pasa de maxNota caracteres.
+	ErrNotaLarga = errors.New("la nota es demasiado larga")
 )
 
 // nuevaRespuesta es lo que se encola.
@@ -312,16 +314,20 @@ func motivosDe(bloqueos []string) []string {
 // panel: lo que hay que decirle a la persona, el plazo, y la cuenta
 // enmascarada (null si ya no se puede leer, por ejemplo cerrada).
 type RespuestaPendiente struct {
-	ID               string              `json:"id"`
-	Tipo             string              `json:"kind"`
-	CreadaEn         time.Time           `json:"created_at"`
-	ResponderAntesDe time.Time           `json:"respond_by"`
-	Intentos         int                 `json:"attempts"`
-	Motivo           string              `json:"reason"`
-	SeEliminaEl      *time.Time          `json:"deletion_due_at,omitempty"`
-	ConservaHasta    *time.Time          `json:"retained_until,omitempty"`
-	Bloqueos         []string            `json:"blockers"`
-	Cuenta           *user.AdminUserView `json:"account"`
+	ID               string     `json:"id"`
+	Tipo             string     `json:"kind"`
+	CreadaEn         time.Time  `json:"created_at"`
+	ResponderAntesDe time.Time  `json:"respond_by"`
+	Intentos         int        `json:"attempts"`
+	Motivo           string     `json:"reason"`
+	SeEliminaEl      *time.Time `json:"deletion_due_at,omitempty"`
+	ConservaHasta    *time.Time `json:"retained_until,omitempty"`
+	Bloqueos         []string   `json:"blockers"`
+	// UserID y CuentaCerrada dejan atender la de una cuenta ya cerrada, que no
+	// tiene tarjeta enmascarada.
+	UserID        string              `json:"user_id"`
+	CuentaCerrada bool                `json:"account_closed"`
+	Cuenta        *user.AdminUserView `json:"account"`
 }
 
 // RespuestasSinEntregar lista las que pasaron a operaciones, la de plazo mas

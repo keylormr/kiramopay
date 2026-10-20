@@ -169,6 +169,19 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     expect(await screen.findByText('Quedó la constancia de la entrega.')).toBeInTheDocument();
   });
 
+  it('la de una cuenta ya cerrada dice que se cerro y da el id de la cuenta', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...respuesta, id: 'd3', account: null, userId: 'u-cerrada-9', cuentaCerrada: true }],
+    });
+    pintar();
+
+    expect(await screen.findByText(/Cuenta cerrada/)).toBeInTheDocument();
+    expect(screen.getByText(/u-cerrada-9/)).toBeInTheDocument();
+    expect(screen.queryByText('No se pudo leer la cuenta.')).toBeNull();
+  });
+
   it('sin respuestas pendientes la seccion no aparece', async () => {
     api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
     pintar();

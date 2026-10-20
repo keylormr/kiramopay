@@ -77,6 +77,24 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     });
   });
 
+  it('la de una cuenta ya cerrada trae el id de la cuenta, para atenderla sin la tarjeta', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: 'd3', kind: 'scheduled', reason: 'no_channel', attempts: 2,
+            created_at: '2026-10-19T15:00:00Z', respond_by: '2026-10-26T15:00:00Z',
+            deletion_due_at: '2026-11-18T15:00:00Z', retained_until: '2031-11-18T15:00:00Z', blockers: [],
+            user_id: 'u-cerrada-9', account_closed: true, account: null,
+          },
+        ],
+      }),
+    });
+    const res = await new HttpAdminRepository(client).listDeletionResponses();
+    expect(res.data?.[0]).toMatchObject({ id: 'd3', userId: 'u-cerrada-9', cuentaCerrada: true, account: null });
+  });
+
   it('marcar una respuesta entregada manda la nota', async () => {
     const client = fakeClient({ post: vi.fn().mockResolvedValue({ success: true, data: null }) });
     const res = await new HttpAdminRepository(client).markDeletionResponseDelivered('d 1', 'Se la leimos por telefono');
