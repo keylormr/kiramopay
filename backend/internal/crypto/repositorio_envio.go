@@ -24,6 +24,11 @@ import (
 // (otro activo, otro monto u otro destinatario). No es un reintento.
 var ErrLlaveDeOtroEnvio = errors.New("idempotency key reused for a different transfer")
 
+// errDestinatarioNoRecibe: quien recibe pidio eliminar su cuenta, o ya no esta,
+// entre que se leyo su codigo y que el envio llego a la base. Send lo contesta
+// como qrpayment.ErrQRRevocado, lo mismo que si se hubiera escaneado despues.
+var errDestinatarioNoRecibe = errors.New("recipient can no longer receive")
+
 // codigoLlaveDuplicada es el SQLSTATE de unique_violation, e indiceDeLaLlave el
 // indice unico parcial de la 072 que lo levanta cuando la llave ya tiene
 // movimiento. Hacen falta los dos: la llave primaria tambien da 23505, y un id
@@ -60,15 +65,19 @@ type DatosDelEnvio struct {
 // EnviarEnUnaTx mueve el activo de una persona a otra y anota las dos patas, la
 // comision y el historial, todo junto.
 //
-// Devuelve ErrSaldoDeActivoInsuficiente si el saldo no alcanza, y la fila que
-// ya existe (con repetido=true) si la llave de idempotencia describe un envio
-// que ya se hizo.
+// Devuelve ErrSaldoDeActivoInsuficiente si el saldo no alcanza,
+// errDestinatarioNoRecibe si quien recibe ya no puede recibir, y la fila que ya
+// existe (con repetido=true) si la llave de idempotencia describe un envio que
+// ya se hizo.
 func (r *Repository) EnviarEnUnaTx(ctx context.Context, d *DatosDelEnvio) (previo *TransactionRecord, repetido bool, err error) {
 	if d.Envio.ID == "" {
 		d.Envio.ID = uuid.New().String()
 	}
 
-	tx, err := r.db.Begin(ctx)
+	// Read committed a proposito, como el libro: tomarDestinatarioYBilleteras
+	// cuenta con que, despues de esperar un candado, la sentencia siguiente vea
+	// lo que la otra transaccion confirmo.
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, false, err
 	}
@@ -79,6 +88,10 @@ func (r *Repository) EnviarEnUnaTx(ctx context.Context, d *DatosDelEnvio) (previ
 	// se sale sin haber tocado un solo saldo.
 	if hecho, repetido, err := r.anotarConLlave(ctx, tx, d.Envio); err != nil || repetido {
 		return hecho, repetido, err
+	}
+
+	if err := tomarDestinatarioYBilleteras(ctx, tx, d.Envio.UserID, d.Recibo.UserID); err != nil {
+		return nil, false, err
 	}
 
 	if d.AntesDeMover != nil {
@@ -119,6 +132,69 @@ func (r *Repository) EnviarEnUnaTx(ctx context.Context, d *DatosDelEnvio) (previ
 		return nil, false, err
 	}
 	return d.Envio, false, nil
+}
+
+// tomarDestinatarioYBilleteras toma la fila de quien recibe y las dos
+// billeteras, y despues comprueba que quien recibe todavia pueda recibir. Va en
+// el mismo orden que el dia 0 de la eliminacion de cuenta, primero la fila de
+// la persona y despues su billetera, asi que no se pueden trabar entre si.
+//
+// La fila de quien recibe se toma FOR KEY SHARE, el candado mas debil que choca
+// con el FOR UPDATE del dia 0 (y el mismo que toma la llave foranea al escribir
+// el abono). Si el dia 0 la tiene, el envio lo espera.
+//
+// Si el envio la toma primero, el dia 0 espera, pero su foto ya esta tomada y
+// la fila de la persona no cambio, asi que al seguir no veria el cripto. Para
+// eso es la billetera de quien recibe, que se toma con un UPDATE que no cambia
+// nada, no con FOR UPDATE, por la misma razon que el libro toma asi la cuenta
+// de un comercio: con una version nueva de la fila, el FOR UPDATE del dia 0
+// falla por serializacion, reintenta y ve el cripto. Sin eso la cuenta quedaria
+// por eliminar con cripto adentro, y el barrido del dia 30 no la cerraria.
+//
+// La billetera de quien envia la vuelve a pedir el tope (toparElGasto), que ya
+// la tiene. Tomarla aqui es lo que deja las dos en el orden del libro (por id):
+// tomando cada envio primero la suya, dos personas enviandose cripto a la vez
+// quedarian cada una con la billetera que la otra espera.
+//
+// El estado se lee al final, con todo tomado. Un dia 0 que ya tenia la fila o
+// la billetera de quien recibe termino antes de que el envio llegara aqui, y en
+// read committed esta lectura ve lo que confirmo: la cuenta por eliminar, y el
+// envio se rechaza. Leido antes de esperarlo, diria 'active' y el abono
+// entraria en cuanto el dia 0 terminara. La condicion es la de
+// qrpayment.PersonaDelQR: ni por eliminar ni cerrada.
+func tomarDestinatarioYBilleteras(ctx context.Context, tx pgx.Tx, emisor, receptor string) error {
+	if _, err := tx.Exec(ctx,
+		`SELECT 1 FROM users WHERE id = $1::uuid FOR KEY SHARE`, receptor,
+	); err != nil {
+		return fmt.Errorf("tomar a quien recibe: %w", err)
+	}
+
+	orden := []string{emisor, receptor}
+	if receptor < emisor {
+		orden[0], orden[1] = receptor, emisor
+	}
+	for _, id := range orden {
+		sql := `SELECT 1 FROM wallets WHERE user_id = $1::uuid FOR UPDATE`
+		if id == receptor {
+			sql = `UPDATE wallets SET updated_at = updated_at WHERE user_id = $1::uuid`
+		}
+		if _, err := tx.Exec(ctx, sql, id); err != nil {
+			return fmt.Errorf("tomar la billetera de %s: %w", id, err)
+		}
+	}
+
+	var recibe bool
+	err := tx.QueryRow(ctx,
+		`SELECT COALESCE(status, 'active') <> 'pending_deletion'
+		   FROM users WHERE id = $1::uuid AND deleted_at IS NULL`, receptor,
+	).Scan(&recibe)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !recibe) {
+		return errDestinatarioNoRecibe
+	}
+	if err != nil {
+		return fmt.Errorf("leer a quien recibe: %w", err)
+	}
+	return nil
 }
 
 // moverLosDosSaldos aplica el descuento y el abono SIEMPRE en el mismo orden
