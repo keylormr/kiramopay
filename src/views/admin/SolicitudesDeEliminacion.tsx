@@ -3,7 +3,12 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '@/components/Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { getApiLayer } from '@/api';
-import type { ContactoDeRespuesta, RespuestaPorEntregar, SolicitudDeEliminacion } from '@/api/repositories/admin.repository';
+import type {
+  ContactoDeRespuesta,
+  RespuestaEnviadaSinConfirmar,
+  RespuestaPorEntregar,
+  SolicitudDeEliminacion,
+} from '@/api/repositories/admin.repository';
 import type { TranslationKeys } from '@/i18n/translations';
 import { fechaYHora } from '@/utils/fechaPlazo';
 import { fechaLarga } from '@/utils/planes';
@@ -24,6 +29,10 @@ import { fechaLarga } from '@/utils/planes';
 //
 // Para entregarla puede ver el contacto completo de cada una: lo pide al
 // servidor, que deja la vista en la auditoria, y nunca viene en la lista.
+//
+// Al final, solo para leer, las que ya salieron en los ultimos 30 dias a un correo
+// que la persona dio solo para la respuesta y nadie confirmo: que salieran no
+// prueba que le llegaron.
 
 // La nota de la entrega; el servidor guarda hasta 500 caracteres.
 const NOTA_MAX = 500;
@@ -43,6 +52,13 @@ const CLAVE_DEL_BLOQUEO: Record<string, keyof TranslationKeys> = {
   MARKETPLACE_IN_PROGRESS: 'del_block_MARKETPLACE_IN_PROGRESS',
 };
 
+// Lo que decia una respuesta que ya salio.
+const LO_QUE_DECIA: Record<RespuestaEnviadaSinConfirmar['tipo'], keyof TranslationKeys> = {
+  scheduled: 'admin_sent_kind_scheduled',
+  blocked: 'admin_sent_kind_blocked',
+  rejected: 'admin_sent_kind_rejected',
+};
+
 type Aviso =
   | { tipo: 'ok'; texto: string }
   | { tipo: 'error'; texto: string }
@@ -60,6 +76,8 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [respuestas, setRespuestas] = useState<RespuestaPorEntregar[]>([]);
   const [fallaRespuestas, setFallaRespuestas] = useState(false);
+  const [enviadas, setEnviadas] = useState<RespuestaEnviadaSinConfirmar[]>([]);
+  const [fallaEnviadas, setFallaEnviadas] = useState(false);
   const [entregando, setEntregando] = useState<RespuestaPorEntregar | null>(null);
   const [nota, setNota] = useState('');
   const [errorNota, setErrorNota] = useState<string | null>(null);
@@ -74,7 +92,11 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     let vigente = true;
     void (async () => {
       const api = getApiLayer().admin;
-      const [res, resp] = await Promise.all([api?.listDeletionRequests(), api?.listDeletionResponses()]);
+      const [res, resp, env] = await Promise.all([
+        api?.listDeletionRequests(),
+        api?.listDeletionResponses(),
+        api?.listSentUnconfirmedDeletionResponses(),
+      ]);
       if (!vigente) return;
       if (!res?.success || !res.data) {
         setFalla(true);
@@ -88,6 +110,12 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       } else {
         setFallaRespuestas(false);
         setRespuestas(resp.data);
+      }
+      if (!env?.success || !env.data) {
+        setFallaEnviadas(true);
+      } else {
+        setFallaEnviadas(false);
+        setEnviadas(env.data);
       }
       setCargando(false);
     })();
@@ -196,7 +224,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       </div>
     );
 
-  const persona = (cuenta: SolicitudDeEliminacion['account'], r?: RespuestaPorEntregar) =>
+  const persona = (cuenta: SolicitudDeEliminacion['account'], r?: { cuentaCerrada: boolean; userId: string }) =>
     cuenta ? (
       <div>
         <p className="font-bold uv-text-primary">{`${cuenta.firstName} ${cuenta.lastName}`.trim()}</p>
@@ -296,6 +324,10 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_resp_load_failed')}</p>
       )}
 
+      {!cargando && fallaEnviadas && (
+        <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_sent_load_failed')}</p>
+      )}
+
       {!cargando && respuestas.length > 0 && (
         <section aria-labelledby="admin-resp-titulo" className="space-y-3 pb-2">
           <div>
@@ -392,6 +424,27 @@ export const SolicitudesDeEliminacion: React.FC = () => {
             </div>
           </article>
         ))}
+
+      {!cargando && enviadas.length > 0 && (
+        <section aria-labelledby="admin-sent-titulo" className="space-y-3 pt-4">
+          <div>
+            <h2 id="admin-sent-titulo" className="font-bold uv-text-primary">{t('admin_sent_title')}</h2>
+            <p className="text-xs uv-text-muted mt-0.5">{t('admin_sent_intro')}</p>
+          </div>
+          {enviadas.map((e) => (
+            <article key={e.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-2">
+              {persona(e.account, e)}
+              <p className="inline-block rounded-full uv-chip-warning px-2 py-0.5 text-[11px] font-bold">
+                {t('admin_resp_unconfirmed')}
+              </p>
+              <p className="text-xs font-semibold uv-text-secondary">
+                {t('admin_sent_at').replace('{date}', fechaLarga(e.entregadaEn, language))}
+              </p>
+              <p className="text-sm uv-text-secondary leading-relaxed">{t(LO_QUE_DECIA[e.tipo])}</p>
+            </article>
+          ))}
+        </section>
+      )}
 
       <BottomSheet
         isOpen={confirmando !== null}

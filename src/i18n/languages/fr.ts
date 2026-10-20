@@ -1979,6 +1979,13 @@ const fr: TranslationKeys = {
   admin_resp_done: 'La remise a été enregistrée.',
   admin_resp_already: 'Cette réponse était déjà remise ou annulée.',
   admin_resp_load_failed: "Les réponses à remettre n'ont pas pu être chargées.",
+  admin_sent_title: 'Envoyées à un e-mail non confirmé',
+  admin_sent_intro: "Celles des 30 derniers jours. Elles sont parties vers une adresse que la personne a donnée uniquement pour la réponse et que personne n'a confirmée : être envoyées ne prouve pas qu'elles sont arrivées.",
+  admin_sent_at: 'Envoyée le {date}',
+  admin_sent_kind_scheduled: 'Elle indiquait que le délai de 30 jours a commencé.',
+  admin_sent_kind_blocked: "Elle indiquait ce qu'il faut régler avant de pouvoir supprimer le compte.",
+  admin_sent_kind_rejected: 'Elle indiquait que la demande ne peut pas être traitée par cette voie.',
+  admin_sent_load_failed: "Les réponses envoyées à un e-mail non confirmé n'ont pas pu être chargées.",
 };
 
 export default fr;

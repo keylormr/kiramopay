@@ -1970,6 +1970,13 @@ const ja: TranslationKeys = {
   admin_resp_done: 'お届けの記録を残しました。',
   admin_resp_already: 'この回答はすでにお届け済みか、取り消されています。',
   admin_resp_load_failed: '未送付の回答を読み込めませんでした。',
+  admin_sent_title: '未確認のメールアドレスに送信済み',
+  admin_sent_intro: '過去30日間の分です。本人が回答のためだけに入力し、誰も確認していないメールアドレスに送られました。送信されたことは、届いたことの証明にはなりません。',
+  admin_sent_at: '{date}に送信',
+  admin_sent_kind_scheduled: '30日間の期間が始まったことを伝えました。',
+  admin_sent_kind_blocked: 'アカウントを削除する前に解決すべきことを伝えました。',
+  admin_sent_kind_rejected: 'この方法では申請に対応できないことを伝えました。',
+  admin_sent_load_failed: '未確認のメールアドレスに送信した回答を読み込めませんでした。',
 };
 
 export default ja;

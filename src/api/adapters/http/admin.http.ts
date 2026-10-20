@@ -7,6 +7,7 @@ import type {
   ResultadoDeSolicitud,
   RespuestaPorEntregar,
   ContactoDeRespuesta,
+  RespuestaEnviadaSinConfirmar,
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
@@ -155,6 +156,24 @@ export class HttpAdminRepository implements IAdminRepository {
           userId: String(r.user_id ?? ''),
           cuentaCerrada: r.account_closed === true,
           correoSinConfirmar: r.unconfirmed_email === true,
+          account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
+        })),
+    );
+  }
+
+  async listSentUnconfirmedDeletionResponses(): Promise<ApiResponse<RespuestaEnviadaSinConfirmar[]>> {
+    const res = await this.client.get<unknown>('/api/v1/admin/account-deletion-responses/sent-unconfirmed?limit=50');
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+        .map((r) => ({
+          id: String(r.id ?? ''),
+          tipo: r.kind === 'blocked' ? ('blocked' as const) : r.kind === 'rejected' ? ('rejected' as const) : ('scheduled' as const),
+          entregadaEn: String(r.delivered_at ?? ''),
+          userId: String(r.user_id ?? ''),
+          cuentaCerrada: r.account_closed === true,
           account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
         })),
     );

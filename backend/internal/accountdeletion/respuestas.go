@@ -68,6 +68,10 @@ const (
 	esperaMaxima = 6 * time.Hour
 	// maxNota acota la nota con que operaciones dice como la entrego.
 	maxNota = 500
+	// diasDeLasEnviadasSinConfirmar: cuanto queda a la vista de operaciones una
+	// respuesta que salio al correo dado solo para la respuesta (decision del
+	// dueno del 2026-10-20).
+	diasDeLasEnviadasSinConfirmar = 30
 	// presupuestoDelBarrido acota cuanto manda un barrido: corre bajo el lock
 	// del lider, y un proveedor lento no debe demorar el siguiente cierre del
 	// dia 30. Lo que no alcanzo a salir queda para el proximo tick.
@@ -529,9 +533,48 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 	return out, nil
 }
 
-// EnviadasSinConfirmar todavia sin hacer.
-func (s *Service) EnviadasSinConfirmar(_ context.Context, _ int) ([]RespuestaEnviadaSinConfirmar, error) {
-	return []RespuestaEnviadaSinConfirmar{}, nil
+// EnviadasSinConfirmar lista las respuestas que salieron por correo en los
+// ultimos 30 dias al que la persona dio solo para la respuesta: que el proveedor
+// lo aceptara no prueba que le llego. Solo cuenta ese correo, no el de la cuenta
+// aunque no este verificado, y no las que operaciones entrego por otro medio. La
+// mas reciente primero, sin la direccion: se borro al entregarla.
+func (s *Service) EnviadasSinConfirmar(ctx context.Context, limite int) ([]RespuestaEnviadaSinConfirmar, error) {
+	if limite <= 0 || limite > 100 {
+		limite = 50
+	}
+	filas, err := s.pool.Query(ctx, `
+		SELECT r.id::text, r.kind, r.delivered_at, r.user_id::text, u.deleted_at IS NOT NULL
+		  FROM account_deletion_responses r
+		  JOIN users u ON u.id = r.user_id
+		 WHERE r.email_unconfirmed AND r.delivered_via = 'email'
+		   AND r.delivered_at >= NOW() - make_interval(days => $2::int)
+		 ORDER BY r.delivered_at DESC, r.id
+		 LIMIT $1`, limite, diasDeLasEnviadasSinConfirmar)
+	if err != nil {
+		return nil, fmt.Errorf("listar las enviadas a un correo sin confirmar: %w", err)
+	}
+	out := make([]RespuestaEnviadaSinConfirmar, 0, 8)
+	for filas.Next() {
+		var r RespuestaEnviadaSinConfirmar
+		if err := filas.Scan(&r.ID, &r.Tipo, &r.EntregadaEn, &r.UserID, &r.CuentaCerrada); err != nil {
+			filas.Close()
+			return nil, fmt.Errorf("leer la enviada: %w", err)
+		}
+		out = append(out, r)
+	}
+	filas.Close()
+	if err := filas.Err(); err != nil {
+		return nil, fmt.Errorf("recorrer las enviadas: %w", err)
+	}
+	for i := range out {
+		if out[i].CuentaCerrada {
+			continue // ya no tiene tarjeta: el panel muestra el id
+		}
+		if v, err := s.users.GetAdminView(ctx, out[i].UserID); err == nil {
+			out[i].Cuenta = v
+		}
+	}
+	return out, nil
 }
 
 // MarcarRespuestaEntregada deja constancia de una respuesta que operaciones

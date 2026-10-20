@@ -1979,6 +1979,13 @@ const pt: TranslationKeys = {
   admin_resp_done: 'A entrega ficou registrada.',
   admin_resp_already: 'Esta resposta já estava entregue ou cancelada.',
   admin_resp_load_failed: 'Não foi possível carregar as respostas a entregar.',
+  admin_sent_title: 'Enviadas a um e-mail não confirmado',
+  admin_sent_intro: 'As dos últimos 30 dias. Foram para um e-mail que a pessoa informou só para a resposta e que ninguém confirmou: ter sido enviada não prova que chegou.',
+  admin_sent_at: 'Enviada em {date}',
+  admin_sent_kind_scheduled: 'Dizia que o prazo de 30 dias começou.',
+  admin_sent_kind_blocked: 'Dizia o que resolver para poder excluir a conta.',
+  admin_sent_kind_rejected: 'Dizia que a solicitação não pode ser atendida por esta via.',
+  admin_sent_load_failed: 'Não foi possível carregar as respostas enviadas a um e-mail não confirmado.',
 };
 
 export default pt;

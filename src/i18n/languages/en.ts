@@ -1978,6 +1978,13 @@ const en: TranslationKeys = {
   admin_resp_done: 'The delivery was recorded.',
   admin_resp_already: 'This response was already delivered or cancelled.',
   admin_resp_load_failed: "The responses to deliver couldn't be loaded.",
+  admin_sent_title: 'Sent to an unconfirmed email',
+  admin_sent_intro: 'From the last 30 days. They went to an email the person gave only for the response, which nobody confirmed: being sent does not prove they arrived.',
+  admin_sent_at: 'Sent on {date}',
+  admin_sent_kind_scheduled: 'It said the 30-day term started.',
+  admin_sent_kind_blocked: 'It said what to resolve before the account can be deleted.',
+  admin_sent_kind_rejected: 'It said the request cannot be handled this way.',
+  admin_sent_load_failed: "The responses sent to an unconfirmed email couldn't be loaded.",
 };
 
 export default en;

@@ -1982,6 +1982,13 @@ const es: TranslationKeys = {
   admin_resp_done: 'Quedó la constancia de la entrega.',
   admin_resp_already: 'Esta respuesta ya estaba entregada o cancelada.',
   admin_resp_load_failed: 'No se pudieron cargar las respuestas por entregar.',
+  admin_sent_title: 'Enviadas a un correo sin confirmar',
+  admin_sent_intro: 'Las de los últimos 30 días. Salieron a un correo que la persona dio solo para la respuesta y que nadie confirmó: que salieran no prueba que le llegaron.',
+  admin_sent_at: 'Enviada el {date}',
+  admin_sent_kind_scheduled: 'Decía que empezó el plazo de 30 días.',
+  admin_sent_kind_blocked: 'Decía qué resolver para poder eliminar la cuenta.',
+  admin_sent_kind_rejected: 'Decía que no se puede atender por esta vía.',
+  admin_sent_load_failed: 'No se pudo cargar la lista de las enviadas a un correo sin confirmar.',
 };
 
 export default es;

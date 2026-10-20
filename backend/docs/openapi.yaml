@@ -789,6 +789,36 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /api/v1/admin/account-deletion-responses/sent-unconfirmed:
+    get:
+      tags: [Admin]
+      summary: Written deletion answers sent to an email nobody confirmed
+      description: >-
+        Read only. The answers of the last 30 days that went out by email to
+        the address the person gave only for the answer: the provider
+        accepting it does not prove it reached them. Only that address counts;
+        the account email does not, even when it is not verified, and neither
+        does an answer operations delivered another way. Most recent first.
+        The address is not returned (it is erased on delivery). The account is
+        masked, and null when it is already closed. Not cacheable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Answers sent to an unconfirmed email
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountDeletionResponseSentUnconfirmed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/admin/account-deletion-responses/{id}/delivered:
     post:
       tags: [Admin]
@@ -6393,6 +6423,20 @@ components:
           description: >-
             The answer goes to the email the person gave only for it, which
             nobody confirmed
+        account:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminUser'
+    AccountDeletionResponseSentUnconfirmed:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [scheduled, blocked, rejected] }
+        delivered_at: { type: string, format: date-time }
+        user_id: { type: string, format: uuid }
+        account_closed:
+          type: boolean
+          description: The account was already closed (day 30) and `account` is null
         account:
           nullable: true
           allOf:

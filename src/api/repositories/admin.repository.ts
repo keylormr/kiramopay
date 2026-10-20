@@ -84,6 +84,21 @@ export interface RespuestaPorEntregar {
   account: AdminUser | null;
 }
 
+/**
+ * Una respuesta que ya salio por correo, en los ultimos 30 dias, al que la
+ * persona dio solo para la respuesta y nadie confirmo: que saliera no prueba
+ * que le llego. Solo para leer; no trae la direccion (se borra al entregarla).
+ */
+export interface RespuestaEnviadaSinConfirmar {
+  id: string;
+  /** Lo que decia: scheduled (empezo el plazo), blocked (que resolver) o rejected. */
+  tipo: 'scheduled' | 'blocked' | 'rejected';
+  entregadaEn: string;
+  userId: string;
+  cuentaCerrada: boolean;
+  account: AdminUser | null;
+}
+
 /** El contacto completo de una respuesta del panel. Vacio lo que no hay. */
 export interface ContactoDeRespuesta {
   telefono: string;
@@ -151,6 +166,8 @@ export interface IAdminRepository {
    * otro medio. Cada vista queda en la auditoria con el administrador.
    */
   viewDeletionResponseContact(id: string): Promise<ApiResponse<ContactoDeRespuesta>>;
+  /** Las de los ultimos 30 dias que salieron a un correo sin confirmar, la mas reciente primero. */
+  listSentUnconfirmedDeletionResponses(): Promise<ApiResponse<RespuestaEnviadaSinConfirmar[]>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

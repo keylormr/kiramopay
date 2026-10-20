@@ -2057,6 +2057,13 @@ export type TranslationKeys = {
   admin_resp_done: string;
   admin_resp_already: string;
   admin_resp_load_failed: string;
+  admin_sent_title: string;
+  admin_sent_intro: string;
+  admin_sent_at: string;
+  admin_sent_kind_scheduled: string;
+  admin_sent_kind_blocked: string;
+  admin_sent_kind_rejected: string;
+  admin_sent_load_failed: string;
 };
 
 import es from './languages/es';

@@ -1970,6 +1970,13 @@ const zhCn: TranslationKeys = {
   admin_resp_done: '已记录送达。',
   admin_resp_already: '这份答复已经送达或已取消。',
   admin_resp_load_failed: '无法加载待送达的答复。',
+  admin_sent_title: '已发送至未确认的电子邮箱',
+  admin_sent_intro: '最近30天内的答复。它们发送到了此人仅为答复而提供、且无人确认过的电子邮箱：已发送并不能证明对方已收到。',
+  admin_sent_at: '发送于{date}',
+  admin_sent_kind_scheduled: '内容为：30天期限已开始。',
+  admin_sent_kind_blocked: '内容为：删除账户前需要解决的事项。',
+  admin_sent_kind_rejected: '内容为：此申请无法通过这种方式处理。',
+  admin_sent_load_failed: '无法加载发送至未确认电子邮箱的答复。',
 };
 
 export default zhCn;

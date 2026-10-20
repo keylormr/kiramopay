@@ -1168,6 +1168,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/account-deletion-responses/sent-unconfirmed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Written deletion answers sent to an email nobody confirmed
+         * @description Read only. The answers of the last 30 days that went out by email to the address the person gave only for the answer: the provider accepting it does not prove it reached them. Only that address counts; the account email does not, even when it is not verified, and neither does an answer operations delivered another way. Most recent first. The address is not returned (it is erased on delivery). The account is masked, and null when it is already closed. Not cacheable.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Answers sent to an unconfirmed email */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountDeletionResponseSentUnconfirmed"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/account-deletion-responses/{id}/delivered": {
         parameters: {
             query?: never;
@@ -10606,6 +10649,19 @@ export interface components {
             account_closed?: boolean;
             /** @description The answer goes to the email the person gave only for it, which nobody confirmed */
             unconfirmed_email?: boolean;
+            account?: components["schemas"]["AdminUser"] | null;
+        };
+        AccountDeletionResponseSentUnconfirmed: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            kind?: "scheduled" | "blocked" | "rejected";
+            /** Format: date-time */
+            delivered_at?: string;
+            /** Format: uuid */
+            user_id?: string;
+            /** @description The account was already closed (day 30) and `account` is null */
+            account_closed?: boolean;
             account?: components["schemas"]["AdminUser"] | null;
         };
         AccountDeletionRequestAdmin: {
