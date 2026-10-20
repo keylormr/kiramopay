@@ -150,6 +150,8 @@ export class HttpAdminRepository implements IAdminRepository {
           seEliminaEl: texto(r.deletion_due_at),
           conservaHasta: texto(r.retained_until),
           bloqueos: Array.isArray(r.blockers) ? r.blockers.filter((b): b is string => typeof b === 'string') : [],
+          userId: String(r.user_id ?? ''),
+          cuentaCerrada: r.account_closed === true,
           account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
         })),
     );

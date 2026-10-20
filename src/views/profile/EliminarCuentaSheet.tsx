@@ -57,8 +57,9 @@ const CLAVE_DEL_RECHAZO: Record<string, keyof TranslationKeys> = {
   RESPONSE_EMAIL_INVALID: 'del_err_response_email_invalid',
 };
 
-// La misma forma que pide el registro: el servidor valida de verdad.
-const CORREO_VALIDO = /^\S+@\S+\.\S+$/;
+// La misma forma que valida el servidor (pkg/validator): uno que pase aqui y
+// no alla habilitaria el envio para recibir RESPONSE_EMAIL_INVALID.
+const CORREO_VALIDO = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 const CAMPO =
   'w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-danger)] focus:ring-[3px] focus:ring-[var(--color-danger)]/20 transition-all';

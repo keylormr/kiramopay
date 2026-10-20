@@ -71,6 +71,9 @@ export interface RespuestaPorEntregar {
   seEliminaEl: string | null;
   conservaHasta: string | null;
   bloqueos: string[];
+  /** Siempre viene: con la cuenta ya cerrada no hay tarjeta y el panel muestra el id. */
+  userId: string;
+  cuentaCerrada: boolean;
   account: AdminUser | null;
 }
 

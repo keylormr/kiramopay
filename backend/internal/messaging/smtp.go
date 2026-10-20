@@ -43,6 +43,9 @@ func newSMTPEmail(cfg EmailConfig) *smtpEmail {
 	}
 }
 
+// smtpTimeout acota un envio cuyo contexto no trae plazo.
+const smtpTimeout = 60 * time.Second
+
 func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBody string) error {
 	msg, err := buildMessage(s.from, to, subject, textBody, htmlBody)
 	if err != nil {
@@ -50,11 +53,24 @@ func (s *smtpEmail) SendEmail(ctx context.Context, to, subject, textBody, htmlBo
 	}
 
 	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
-	var d net.Dialer
+	d := net.Dialer{Timeout: smtpTimeout}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("dial smtp: %w", err)
 	}
+	// net/smtp no mira el contexto despues de conectar: sin plazo en la
+	// conexion, un relevo que no manda el saludo o se atasca en DATA deja a
+	// quien envia esperando para siempre. El plazo del contexto (o smtpTimeout)
+	// acota toda la conversacion, y cancelar el contexto la corta.
+	plazo, ok := ctx.Deadline()
+	if !ok {
+		plazo = time.Now().Add(smtpTimeout)
+	}
+	if err := conn.SetDeadline(plazo); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("smtp deadline: %w", err)
+	}
+	defer context.AfterFunc(ctx, func() { _ = conn.Close() })()
 
 	c, err := smtp.NewClient(conn, s.host)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -55,7 +56,15 @@ const (
 	esperaMaxima = 6 * time.Hour
 	// maxNota acota la nota con que operaciones dice como la entrego.
 	maxNota = 500
+	// presupuestoDelBarrido acota cuanto manda un barrido: corre bajo el lock
+	// del lider, y un proveedor lento no debe demorar el siguiente cierre del
+	// dia 30. Lo que no alcanzo a salir queda para el proximo tick.
+	presupuestoDelBarrido = 2 * time.Minute
 )
+
+// sinMasIntentos es el turno de una respuesta que el barrido ya no reintenta: la
+// de una cuenta cerrada sin a donde mandarla, que queda solo para operaciones.
+var sinMasIntentos = time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)
 
 // esperas entre un intento fallido y el siguiente, por numero de intento.
 var esperas = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, 3 * time.Hour}
@@ -178,6 +187,7 @@ func (s *Service) EntregarRespuestas(ctx context.Context, now time.Time, limite 
 	}
 	entregadas := 0
 	var primero error
+	hasta := time.Now().Add(presupuestoDelBarrido)
 	for pagina := 0; pagina < maxPaginasPorBarrido; pagina++ {
 		// Cada fila que se intenta corre su turno hacia adelante, asi que la
 		// pagina siguiente ya no la trae.
@@ -194,6 +204,9 @@ func (s *Service) EntregarRespuestas(ctx context.Context, now time.Time, limite 
 			return entregadas, fmt.Errorf("leer la bandeja: %w", err)
 		}
 		for _, id := range ids {
+			if time.Now().After(hasta) {
+				return entregadas, primero
+			}
 			ok, err := s.entregarUna(ctx, id, now)
 			if err != nil {
 				if primero == nil {
@@ -223,6 +236,7 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		creada     time.Time
 		intentos   int
 		yaEscalada bool
+		cerrada    bool
 		destino    string
 	)
 	// La reserva corre el turno hacia adelante antes de mandar: otra instancia,
@@ -237,9 +251,10 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		   AND r.delivered_at IS NULL AND r.cancelled_at IS NULL
 		   AND (r.next_attempt_at <= $2 OR r.attempts = 0)
 		RETURNING r.kind, r.deletion_due_at, r.blockers, r.created_at, r.attempts, r.escalated_at IS NOT NULL,
+		          u.deleted_at IS NOT NULL,
 		          COALESCE(NULLIF(fn_pii_decrypt(r.email_enc), ''), NULLIF(fn_pii_decrypt(u.email_enc), ''), '')`,
 		id, now, fmt.Sprintf("%d seconds", int(reservaDeEnvio.Seconds())),
-	).Scan(&tipo, &dia30, &bloqueos, &creada, &intentos, &yaEscalada, &destino)
+	).Scan(&tipo, &dia30, &bloqueos, &creada, &intentos, &yaEscalada, &cerrada, &destino)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -248,7 +263,13 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 	}
 
 	if destino == "" || s.email == nil {
-		return false, s.registrarFallo(ctx, id, now, MotivoSinCanal, true, yaEscalada, now.Add(esperaSinCanal))
+		proximo := now.Add(esperaSinCanal)
+		if cerrada && destino == "" {
+			// Cerrada la cuenta, su correo ya no existe ni va a volver: no hay
+			// nada que reintentar. Queda en el panel de operaciones.
+			proximo = sinMasIntentos
+		}
+		return false, s.registrarFallo(ctx, id, now, MotivoSinCanal, true, yaEscalada, proximo)
 	}
 	subject, text, html := contenidoDeLaRespuesta(tipo, dia30, bloqueos)
 	envio, cancel := context.WithTimeout(ctx, avisoTimeout)
@@ -257,7 +278,7 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 	if errEnvio != nil {
 		// El error del proveedor puede traer la direccion; al log va sin ella.
 		s.logger.Warn("respuesta escrita no enviada; se reintenta", "response", id, "attempt", intentos,
-			"err", strings.ReplaceAll(errEnvio.Error(), destino, "[correo]"))
+			"err", sinDireccion(errEnvio.Error(), destino))
 		escalar := now.Sub(creada) >= plazoParaOperaciones
 		return false, s.registrarFallo(ctx, id, now, MotivoEnvioFallido, escalar, yaEscalada, now.Add(esperaTras(intentos)))
 	}
@@ -270,6 +291,15 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		return true, fmt.Errorf("constancia de la respuesta %s: %w", id, err)
 	}
 	return true, nil
+}
+
+// sinDireccion quita la direccion de un error del proveedor, con cualquier
+// capitalizacion: un rebote la devuelve normalizada.
+func sinDireccion(texto, direccion string) string {
+	if direccion == "" {
+		return texto
+	}
+	return regexp.MustCompile(`(?i)`+regexp.QuoteMeta(direccion)).ReplaceAllLiteralString(texto, "[correo]")
 }
 
 // registrarFallo deja el motivo y el proximo turno. escalar la pasa a
@@ -337,24 +367,21 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 		limite = 50
 	}
 	filas, err := s.pool.Query(ctx, `
-		SELECT id::text, kind, created_at, respond_by, attempts, COALESCE(last_error, ''),
-		       deletion_due_at, blockers, user_id::text
-		  FROM account_deletion_responses
-		 WHERE escalated_at IS NOT NULL AND delivered_at IS NULL AND cancelled_at IS NULL
-		 ORDER BY respond_by, id
+		SELECT r.id::text, r.kind, r.created_at, r.respond_by, r.attempts, COALESCE(r.last_error, ''),
+		       r.deletion_due_at, r.blockers, r.user_id::text, u.deleted_at IS NOT NULL
+		  FROM account_deletion_responses r
+		  JOIN users u ON u.id = r.user_id
+		 WHERE r.escalated_at IS NOT NULL AND r.delivered_at IS NULL AND r.cancelled_at IS NULL
+		 ORDER BY r.respond_by, r.id
 		 LIMIT $1`, limite)
 	if err != nil {
 		return nil, fmt.Errorf("listar las respuestas sin entregar: %w", err)
 	}
 	out := make([]RespuestaPendiente, 0, 8)
-	cuentas := make([]string, 0, 8)
 	for filas.Next() {
-		var (
-			r      RespuestaPendiente
-			userID string
-		)
+		var r RespuestaPendiente
 		if err := filas.Scan(&r.ID, &r.Tipo, &r.CreadaEn, &r.ResponderAntesDe, &r.Intentos, &r.Motivo,
-			&r.SeEliminaEl, &r.Bloqueos, &userID); err != nil {
+			&r.SeEliminaEl, &r.Bloqueos, &r.UserID, &r.CuentaCerrada); err != nil {
 			filas.Close()
 			return nil, fmt.Errorf("leer la respuesta: %w", err)
 		}
@@ -366,14 +393,16 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 			r.ConservaHasta = &hasta
 		}
 		out = append(out, r)
-		cuentas = append(cuentas, userID)
 	}
 	filas.Close()
 	if err := filas.Err(); err != nil {
 		return nil, fmt.Errorf("recorrer las respuestas: %w", err)
 	}
-	for i, userID := range cuentas {
-		if v, err := s.users.GetAdminView(ctx, userID); err == nil {
+	for i := range out {
+		if out[i].CuentaCerrada {
+			continue // ya no tiene tarjeta: el panel muestra el id
+		}
+		if v, err := s.users.GetAdminView(ctx, out[i].UserID); err == nil {
 			out[i].Cuenta = v
 		}
 	}
@@ -387,8 +416,8 @@ func (s *Service) MarcarRespuestaEntregada(ctx context.Context, id, adminID, not
 	if nota == "" {
 		return ErrNotaRequerida
 	}
-	if r := []rune(nota); len(r) > maxNota {
-		nota = string(r[:maxNota])
+	if len([]rune(nota)) > maxNota {
+		return ErrNotaLarga
 	}
 	return s.conReintentos(ctx, func(tx pgx.Tx) error {
 		var (
@@ -415,6 +444,6 @@ func (s *Service) MarcarRespuestaEntregada(ctx context.Context, id, adminID, not
 			 WHERE id = $1::uuid`, id, adminID, nota); err != nil {
 			return fmt.Errorf("marcar la respuesta entregada: %w", err)
 		}
-		return auditar(ctx, tx, userID, "account_deletion_response_delivered", opciones{actor: adminID})
+		return auditar(ctx, tx, userID, "account_deletion_response_delivered", opciones{actor: adminID, respuesta: id})
 	})
 }

@@ -1952,6 +1952,8 @@ const fr: TranslationKeys = {
   admin_resp_scheduled: "À lui dire : le {date}, ses données sont supprimées, et ce que la loi 7786 oblige à conserver est gardé jusqu'au {until}. La personne peut réactiver le compte avant cette date et saisir la PRODHAB.",
   admin_resp_blocked: "À lui dire : rien n'a été supprimé et il faut d'abord régler ceci :",
   admin_resp_no_account: "Le compte n'a pas pu être lu.",
+  admin_resp_closed_account: 'Compte clôturé',
+  admin_resp_account_id: 'Identifiant du compte : {id}',
   admin_resp_mark: 'Marquer comme remise',
   admin_resp_mark_title: 'Marquer la réponse comme remise',
   admin_resp_note_label: "Comment vous l'avez remise",

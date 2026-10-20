@@ -1171,7 +1171,7 @@ export interface paths {
         put?: never;
         /**
          * Record that a written answer was delivered another way
-         * @description `note` (required, up to 500 characters) says how and when it was delivered. The email given only for the answer is erased. Audited with the administrator as actor.
+         * @description `note` (required, up to 500 characters; longer is rejected, not cut) says how and when it was delivered. The email given only for the answer is erased. Audited with the administrator as actor and the answer id.
          */
         post: {
             parameters: {
@@ -1197,7 +1197,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY | NOTE_REQUIRED */
+                /** @description INVALID_BODY | NOTE_REQUIRED | NOTE_TOO_LONG (more than 500 characters) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -10529,6 +10529,10 @@ export interface components {
              */
             retained_until?: string;
             blockers?: string[];
+            /** Format: uuid */
+            user_id?: string;
+            /** @description The account was already closed (day 30): `account` is null and the answer is no longer retried; operations finds it by `user_id` */
+            account_closed?: boolean;
             account?: components["schemas"]["AdminUser"] | null;
         };
         AccountDeletionRequestAdmin: {

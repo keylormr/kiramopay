@@ -1952,6 +1952,8 @@ const pt: TranslationKeys = {
   admin_resp_scheduled: 'Dizer à pessoa: em {date} os dados dela são apagados, e o que a Lei 7786 obriga a guardar fica guardado até {until}. Ela pode reativar a conta antes dessa data e recorrer à PRODHAB.',
   admin_resp_blocked: 'Dizer à pessoa que nada foi apagado e que antes ela precisa resolver isto:',
   admin_resp_no_account: 'Não foi possível ler a conta.',
+  admin_resp_closed_account: 'Conta encerrada',
+  admin_resp_account_id: 'Id da conta: {id}',
   admin_resp_mark: 'Marcar como entregue',
   admin_resp_mark_title: 'Marcar a resposta como entregue',
   admin_resp_note_label: 'Como você entregou',

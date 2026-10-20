@@ -1943,6 +1943,8 @@ const hi: TranslationKeys = {
   admin_resp_scheduled: 'व्यक्ति को बताएँ: {date} को उनका डेटा मिटा दिया जाता है, और कानून 7786 जो रखना अनिवार्य करता है वह {until} तक रखा जाता है। वे उस तारीख से पहले खाता फिर से चालू कर सकते हैं और PRODHAB से संपर्क कर सकते हैं।',
   admin_resp_blocked: 'व्यक्ति को बताएँ कि कुछ भी नहीं मिटाया गया और पहले उन्हें यह हल करना होगा:',
   admin_resp_no_account: 'खाता पढ़ा नहीं जा सका।',
+  admin_resp_closed_account: 'बंद खाता',
+  admin_resp_account_id: 'खाता आईडी: {id}',
   admin_resp_mark: 'पहुँचाया गया चिह्नित करें',
   admin_resp_mark_title: 'जवाब को पहुँचाया गया चिह्नित करें',
   admin_resp_note_label: 'आपने इसे कैसे पहुँचाया',

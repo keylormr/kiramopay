@@ -169,7 +169,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       </div>
     );
 
-  const persona = (cuenta: SolicitudDeEliminacion['account']) =>
+  const persona = (cuenta: SolicitudDeEliminacion['account'], r?: RespuestaPorEntregar) =>
     cuenta ? (
       <div>
         <p className="font-bold uv-text-primary">{`${cuenta.firstName} ${cuenta.lastName}`.trim()}</p>
@@ -178,7 +178,12 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         </p>
       </div>
     ) : (
-      <p className="text-sm uv-text-muted">{t('admin_resp_no_account')}</p>
+      <div>
+        <p className="text-sm uv-text-muted">{t(r?.cuentaCerrada ? 'admin_resp_closed_account' : 'admin_resp_no_account')}</p>
+        {r?.userId && (
+          <p className="text-xs uv-text-muted tabular-nums mt-0.5">{t('admin_resp_account_id').replace('{id}', r.userId)}</p>
+        )}
+      </div>
     );
 
   return (
@@ -229,7 +234,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
           </div>
           {respuestas.map((r) => (
             <article key={r.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
-              {persona(r.account)}
+              {persona(r.account, r)}
               <p className="text-xs font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
                 {r.motivo === 'send_failed'
                   ? t('admin_resp_send_failed').replace('{n}', String(r.intentos))
@@ -352,7 +357,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               if (nota.trim() && actuando === null) void marcarEntregada(entregando);
             }}
           >
-            {persona(entregando.account)}
+            {persona(entregando.account, entregando)}
             {loQueHayQueDecir(entregando)}
             <div>
               <label htmlFor="admin-resp-nota" className="text-sm font-medium uv-text-secondary mb-1.5 block">

@@ -1943,6 +1943,8 @@ const zhCn: TranslationKeys = {
   admin_resp_scheduled: '需告知：{date}将删除其数据（在此之前可重新启用账户）；第7786号法律要求保留的资料将保存至{until}。其也可以向 PRODHAB 提出申诉。',
   admin_resp_blocked: '需告知：没有删除任何内容，需要先解决以下问题：',
   admin_resp_no_account: '无法读取该账户。',
+  admin_resp_closed_account: '已关闭的账户',
+  admin_resp_account_id: '账户 ID：{id}',
   admin_resp_mark: '标记为已送达',
   admin_resp_mark_title: '将答复标记为已送达',
   admin_resp_note_label: '您的送达方式',

@@ -2030,6 +2030,8 @@ export type TranslationKeys = {
   admin_resp_scheduled: string;
   admin_resp_blocked: string;
   admin_resp_no_account: string;
+  admin_resp_closed_account: string;
+  admin_resp_account_id: string;
   admin_resp_mark: string;
   admin_resp_mark_title: string;
   admin_resp_note_label: string;

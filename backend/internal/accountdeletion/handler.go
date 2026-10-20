@@ -254,6 +254,8 @@ func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Reques
 		switch {
 		case errors.Is(err, ErrNotaRequerida):
 			response.Error(w, http.StatusBadRequest, "NOTE_REQUIRED", err.Error())
+		case errors.Is(err, ErrNotaLarga):
+			response.Error(w, http.StatusBadRequest, "NOTE_TOO_LONG", err.Error())
 		case errors.Is(err, ErrRespuestaNoEncontrada):
 			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		case errors.Is(err, ErrRespuestaCerrada):

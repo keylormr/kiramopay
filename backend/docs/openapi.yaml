@@ -774,9 +774,10 @@ paths:
       tags: [Admin]
       summary: Record that a written answer was delivered another way
       description: >-
-        `note` (required, up to 500 characters) says how and when it was
-        delivered. The email given only for the answer is erased. Audited
-        with the administrator as actor.
+        `note` (required, up to 500 characters; longer is rejected, not cut)
+        says how and when it was delivered. The email given only for the
+        answer is erased. Audited with the administrator as actor and the
+        answer id.
       security:
         - bearerAuth: []
       parameters:
@@ -794,7 +795,7 @@ paths:
         '204':
           description: Recorded
         '400':
-          description: INVALID_BODY | NOTE_REQUIRED
+          description: INVALID_BODY | NOTE_REQUIRED | NOTE_TOO_LONG (more than 500 characters)
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -6315,6 +6316,12 @@ components:
         blockers:
           type: array
           items: { type: string, example: BALANCE_POSITIVE }
+        user_id: { type: string, format: uuid }
+        account_closed:
+          type: boolean
+          description: >-
+            The account was already closed (day 30): `account` is null and the
+            answer is no longer retried; operations finds it by `user_id`
         account:
           nullable: true
           allOf:

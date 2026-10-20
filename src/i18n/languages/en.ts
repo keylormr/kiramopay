@@ -1951,6 +1951,8 @@ const en: TranslationKeys = {
   admin_resp_scheduled: 'Tell them: on {date} their data is erased, and what Law 7786 requires keeping is kept until {until}. They can reactivate the account before that date and go to PRODHAB.',
   admin_resp_blocked: 'Tell them nothing was erased and that first they must resolve this:',
   admin_resp_no_account: "The account couldn't be read.",
+  admin_resp_closed_account: 'Closed account',
+  admin_resp_account_id: 'Account id: {id}',
   admin_resp_mark: 'Mark delivered',
   admin_resp_mark_title: 'Mark the response delivered',
   admin_resp_note_label: 'How you delivered it',

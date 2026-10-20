@@ -1955,6 +1955,8 @@ const es: TranslationKeys = {
   admin_resp_scheduled: 'Decirle: el {date} se suprimen sus datos y lo que la Ley 7786 obliga a conservar se guarda hasta el {until}. Puede reactivar la cuenta antes de esa fecha y acudir a la PRODHAB.',
   admin_resp_blocked: 'Decirle que no se borró nada y que antes tiene que resolver esto:',
   admin_resp_no_account: 'No se pudo leer la cuenta.',
+  admin_resp_closed_account: 'Cuenta cerrada',
+  admin_resp_account_id: 'Id de la cuenta: {id}',
   admin_resp_mark: 'Marcar entregada',
   admin_resp_mark_title: 'Marcar la respuesta entregada',
   admin_resp_note_label: 'Cómo la entregaste',

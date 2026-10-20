@@ -48,6 +48,9 @@ type opciones struct {
 	// correoParaRespuesta es el correo que dio, solo para la respuesta escrita,
 	// una persona cuya cuenta no tiene correo. Se ignora si la cuenta tiene uno.
 	correoParaRespuesta string
+	// respuesta es la respuesta escrita sobre la que actua operaciones. Solo va
+	// a la auditoria.
+	respuesta string
 }
 
 // resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
@@ -176,6 +179,14 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado,
 	}); err != nil {
 		return resultado{}, err
+	}
+	// Una solicitud anterior que habia quedado bloqueada ya no tiene nada que
+	// resolver: su respuesta (que no se borro nada) no debe salir despues de esta.
+	if _, err := tx.Exec(ctx, `
+		UPDATE account_deletion_responses SET cancelled_at = NOW(), email_enc = NULL
+		 WHERE user_id = $1::uuid AND kind = $2 AND delivered_at IS NULL AND cancelled_at IS NULL`,
+		userID, RespuestaBloqueada); err != nil {
+		return resultado{}, fmt.Errorf("cancelar la respuesta de la solicitud bloqueada: %w", err)
 	}
 	return res, nil
 }
@@ -480,12 +491,12 @@ var pasosDelDiaTreinta = []paso{
 	{"depurar partes propias", `UPDATE split_shares
 		SET user_name = 'Usuario eliminado', user_phone = NULL
 		WHERE user_id = $1::uuid`},
-	// Participantes sin cuenta que la persona escribio a mano: sus datos eran de
-	// ella para organizar el reparto.
 	// El correo que la persona dio solo para la respuesta escrita. La fila queda:
 	// es la constancia de que se respondio.
 	{"depurar el correo de la respuesta", `UPDATE account_deletion_responses SET email_enc = NULL
 		WHERE user_id = $1::uuid AND email_enc IS NOT NULL`},
+	// Participantes sin cuenta que la persona escribio a mano: sus datos eran de
+	// ella para organizar el reparto.
 	{"depurar participantes escritos", `UPDATE split_shares
 		SET user_name = 'Participante', user_phone = NULL
 		WHERE user_id IS NULL
@@ -709,9 +720,10 @@ func auditar(ctx context.Context, tx pgx.Tx, userID, accion string, op opciones)
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, risk_level)
 		 VALUES ($1::uuid, $2, 'user', $1::text,
-		         jsonb_strip_nulls(jsonb_build_object('channel', NULLIF($3::text, ''), 'actor', NULLIF($4::text, ''))),
+		         jsonb_strip_nulls(jsonb_build_object('channel', NULLIF($3::text, ''), 'actor', NULLIF($4::text, ''),
+		                                              'response', NULLIF($5::text, ''))),
 		         'high')`,
-		userID, accion, string(op.canal), op.actor,
+		userID, accion, string(op.canal), op.actor, op.respuesta,
 	); err != nil {
 		return fmt.Errorf("auditoria: %w", err)
 	}

@@ -64,8 +64,10 @@ func (p *Poller) tick(ctx context.Context) {
 		if desasociadas > 0 && p.logger != nil {
 			p.logger.Info("cuentas desasociadas al vencer la conservacion", "count", desasociadas)
 		}
-		// Las respuestas escritas que no salieron en el primer intento.
-		entregadas, errEntrega := p.svc.EntregarRespuestas(c, now, p.batch)
+		// Las respuestas escritas que no salieron en el primer intento, con la
+		// hora de ahora: el cierre pudo tardar, y la reserva y la constancia se
+		// miden desde el envio.
+		entregadas, errEntrega := p.svc.EntregarRespuestas(c, time.Now(), p.batch)
 		if entregadas > 0 && p.logger != nil {
 			p.logger.Info("respuestas escritas entregadas por el barrido", "count", entregadas)
 		}

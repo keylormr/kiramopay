@@ -1943,6 +1943,8 @@ const ja: TranslationKeys = {
   admin_resp_scheduled: '伝える内容：{date}にデータが削除されます（それまではアカウントを再開できます）。法律第7786号で保存が義務づけられたものは{until}まで保管されます。PRODHABに申し立てることもできます。',
   admin_resp_blocked: '伝える内容：何も削除されておらず、先に次の点を解決する必要があります：',
   admin_resp_no_account: 'アカウントを読み取れませんでした。',
+  admin_resp_closed_account: '閉鎖済みのアカウント',
+  admin_resp_account_id: 'アカウントID：{id}',
   admin_resp_mark: 'お届け済みにする',
   admin_resp_mark_title: '回答をお届け済みにする',
   admin_resp_note_label: 'お届けした方法',
