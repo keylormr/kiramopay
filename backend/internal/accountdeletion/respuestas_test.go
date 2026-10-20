@@ -42,3 +42,28 @@ func TestFrasesDeBloqueo_EnVoseo(t *testing.T) {
 		t.Errorf("la frase del saldo: %q", frasesDeBloqueo[BloqueoSaldo])
 	}
 }
+
+// La regla para pasar una respuesta a operaciones: a las 48 horas, o antes si el
+// plazo legal ya no le deja tres dias. Una respuesta normal (nacida con su plazo
+// de cinco dias habiles) nunca escala antes de las 48 horas, nazca el dia que
+// nazca; una que nacio con el plazo encima escala al primer fallo.
+func TestPasaAOperaciones_NuncaAntesDeLas48HorasSiNacioConSuPlazo(t *testing.T) {
+	cr := time.FixedZone("CR", -6*3600)
+	for dia := 19; dia <= 25; dia++ { // del lunes 19 al domingo 25 de octubre de 2026
+		for _, hora := range []int{0, 10, 23} {
+			creada := time.Date(2026, 10, dia, hora, 30, 0, 0, cr)
+			vence := responderAntesDe(creada)
+			if pasaAOperaciones(creada.Add(48*time.Hour-time.Minute), creada, vence) {
+				t.Errorf("%s: escalo antes de las 48 horas", creada.Format("Mon 02 15:04"))
+			}
+			if !pasaAOperaciones(creada.Add(48*time.Hour), creada, vence) {
+				t.Errorf("%s: a las 48 horas debia escalar", creada.Format("Mon 02 15:04"))
+			}
+		}
+	}
+	creada := time.Date(2026, 10, 22, 10, 0, 0, 0, cr)
+	tarde := responderAntesDe(creada.AddDate(0, 0, -5))
+	if !pasaAOperaciones(creada.Add(time.Minute), creada, tarde) {
+		t.Error("la que nacio con el plazo encima debe escalar al primer fallo")
+	}
+}

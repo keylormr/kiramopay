@@ -306,10 +306,7 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		// El error del proveedor puede traer la direccion; al log va sin ella.
 		s.logger.Warn("respuesta escrita no enviada; se reintenta", "response", id, "attempt", intentos,
 			"err", sinDireccion(errEnvio.Error(), destino))
-		// A las 48 horas, o antes si el plazo legal ya no deja a operaciones sus
-		// tres dias: la que se atendio tarde nace con el plazo encima.
-		escalar := now.Sub(creada) >= plazoParaOperaciones || !now.Before(vence.Add(-margenParaOperaciones))
-		return false, s.registrarFallo(ctx, id, now, MotivoEnvioFallido, escalar, yaEscalada, now.Add(esperaTras(intentos)))
+		return false, s.registrarFallo(ctx, id, now, MotivoEnvioFallido, pasaAOperaciones(now, creada, vence), yaEscalada, now.Add(esperaTras(intentos)))
 	}
 	// Si esto falla, la respuesta vuelve a salir en su proximo turno: mejor dos
 	// veces que ninguna.
@@ -320,6 +317,13 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 		return true, fmt.Errorf("constancia de la respuesta %s: %w", id, err)
 	}
 	return true, nil
+}
+
+// pasaAOperaciones dice si una respuesta que no pudo salir pasa al panel: a las
+// 48 horas, o antes si el plazo legal (vence) ya no deja a operaciones sus tres
+// dias. La que se atendio tarde nace con el plazo encima y pasa al primer fallo.
+func pasaAOperaciones(now, creada, vence time.Time) bool {
+	return now.Sub(creada) >= plazoParaOperaciones || !now.Before(vence.Add(-margenParaOperaciones))
 }
 
 // sinDireccion quita la direccion de un error del proveedor, con cualquier

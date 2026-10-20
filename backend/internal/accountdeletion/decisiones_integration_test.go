@@ -212,8 +212,9 @@ func respondeAntesDe(t *testing.T, pool *pgxpool.Pool, respuesta string) time.Ti
 // o ser de un tipo que no se elimina por esta via. Tampoco nombra a la UIF.
 func sinElMotivo(t *testing.T, texto string) {
 	t.Helper()
-	for _, motivo := range []string{"bloque", "revisión", "fraude", "demostración", "administrador", "UIF", "ROS "} {
-		if strings.Contains(texto, motivo) {
+	bajo := strings.ToLower(texto)
+	for _, motivo := range []string{"bloque", "revisión", "revision", "suspend", "fraude", "demo", "administrador", "uif", "ros "} {
+		if strings.Contains(bajo, motivo) {
 			t.Errorf("la respuesta deja ver el motivo (%q):\n%s", motivo, texto)
 		}
 	}
@@ -472,5 +473,59 @@ func TestRespuesta_ElPanelMarcaElCorreoSinConfirmar(t *testing.T) {
 	}
 	if !pa.CorreoSinConfirmar || pb.CorreoSinConfirmar {
 		t.Errorf("la marca: dado %v, de la cuenta %v", pa.CorreoSinConfirmar, pb.CorreoSinConfirmar)
+	}
+}
+
+// Cerrada la cuenta (dia 30), users ya no guarda su contacto: el telefono queda
+// con un marcador. Ver contacto no lo muestra como si fuera un telefono, y una
+// vista que no revela nada no deja fila en la auditoria.
+func TestRespuesta_VerContactoDeUnaCuentaCerradaNoMuestraElMarcador(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a := sembrar(t, pool)
+	sinCorreo(t, pool, a.ID)
+	admin := administrador(t, pool)
+	svc := nuevoServicio(pool, nil)
+	ctx := context.Background()
+	pedir(t, svc, a.ID)
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatal(err)
+	}
+	cerrar(t, pool, svc, a.ID)
+	r := unaRespuesta(t, pool, a.ID)
+	if !r.Escalada || r.Entregada {
+		t.Fatalf("debia seguir en el panel: %+v", r)
+	}
+
+	c, err := svc.ContactoDeRespuesta(ctx, r.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("ver el contacto: %v", err)
+	}
+	if c.Telefono != "" || c.Correo != "" || c.CorreoParaRespuesta != "" {
+		t.Errorf("de una cuenta cerrada no hay contacto que mostrar: %+v", c)
+	}
+	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 0 {
+		t.Errorf("una vista que no revela nada no va a la auditoria: %d", n)
+	}
+}
+
+// La respuesta pendiente de un rechazo tampoco debe salir despues de que la
+// persona empezo el plazo por otra via.
+func TestRespuesta_EmpezarElPlazoCancelaLaDeRechazo(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a := sembrar(t, pool)
+	rechazo := cuenta1[string](t, pool, `
+		INSERT INTO account_deletion_responses (user_id, kind, respond_by, attempts, last_error, escalated_at)
+		VALUES ($1::uuid, 'rejected', NOW() + interval '5 days', 1, 'no_channel', NOW())
+		RETURNING id::text`, a.ID)
+	svc := nuevoServicio(pool, nil)
+
+	pedir(t, svc, a.ID)
+	for _, r := range respuestasDe(t, pool, a.ID) {
+		if r.ID == rechazo && !r.Cancelada {
+			t.Errorf("empezado el plazo, la respuesta del rechazo sigue pendiente: %+v", r)
+		}
+	}
+	if p := enElPanel(t, svc, a.ID); p != nil && p.ID == rechazo {
+		t.Errorf("el panel sigue pidiendo la respuesta del rechazo: %+v", p)
 	}
 }

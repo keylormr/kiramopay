@@ -114,7 +114,22 @@ describe('SolicitudesDeEliminacion', () => {
     pintar();
 
     await user.click(await screen.findByRole('button', { name: 'Rechazar' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, rechazar y responder' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta solicitud ya fue atendida.');
+  });
+
+  it('rechazar pide confirmacion: no se puede retirar el correo que sale', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [solicitud] });
+    api.admin.rejectDeletionRequest.mockResolvedValue({ success: true, data: { rejected: true } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Rechazar' }));
+    expect(api.admin.rejectDeletionRequest).not.toHaveBeenCalled();
+    expect(screen.getByText(/se le escribe que no se puede atender por esta vía/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Sí, rechazar y responder' }));
+    await waitFor(() => expect(api.admin.rejectDeletionRequest).toHaveBeenCalledWith('r1'));
+    expect(await screen.findByText('La solicitud se cerró sin iniciar el plazo.')).toBeInTheDocument();
   });
 });
 
@@ -263,6 +278,39 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar la entrega' }));
     expect(await screen.findByText('La nota pasa de 500 caracteres.')).toBeInTheDocument();
     expect(screen.getByLabelText('Cómo la entregaste')).toHaveValue('Se la leímos por teléfono');
+  });
+
+  it('de una cuenta cerrada no ofrece ver el contacto: ya no hay', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...respuesta, id: 'd3', account: null, userId: 'u-cerrada-9', cuentaCerrada: true }],
+    });
+    pintar();
+
+    expect(await screen.findByText('No hay contacto guardado.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ver contacto' })).toBeNull();
+  });
+
+  it('un contacto que llega despues de releer no se pinta', async () => {
+    let entregar: (v: unknown) => void = () => {};
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta, { ...respuesta, id: 'd2' }] });
+    api.admin.viewDeletionResponseContact.mockReturnValue(new Promise((r) => { entregar = r; }));
+    api.admin.markDeletionResponseDelivered.mockResolvedValue({ success: true, data: { delivered: true } });
+    const user = userEvent.setup();
+    pintar();
+
+    const [verPrimera] = await screen.findAllByRole('button', { name: 'Ver contacto' });
+    await user.click(verPrimera);
+    // Mientras espera, otra persona del equipo cierra otra y la lista se relee.
+    await user.click(screen.getAllByRole('button', { name: 'Marcar entregada' })[1]);
+    await user.type(screen.getByLabelText('Cómo la entregaste'), 'por telefono');
+    await user.click(screen.getByRole('button', { name: 'Confirmar la entrega' }));
+    await waitFor(() => expect(api.admin.listDeletionResponses).toHaveBeenCalledTimes(2));
+    entregar({ success: true, data: { telefono: '+50688881234', correo: '', correoParaRespuesta: '' } });
+    await screen.findByText('Quedó la constancia de la entrega.');
+    expect(screen.queryByText(/\+50688881234/)).toBeNull();
   });
 
   it('sin respuestas pendientes la seccion no aparece', async () => {

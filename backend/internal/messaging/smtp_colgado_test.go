@@ -181,3 +181,23 @@ func TestSendEmail_UnQUITSinRespuestaNoDeshaceUnEnvioAceptado(t *testing.T) {
 		t.Fatal("SendEmail sigue colgado 10 s despues de vencer su contexto")
 	}
 }
+
+// Y no se queda esperando el QUIT hasta que venza el plazo de toda la
+// conversacion: con el mensaje aceptado, el barrido sigue con la siguiente.
+func TestSendEmail_UnQUITSinRespuestaNoRetieneElEnvio(t *testing.T) {
+	host, port, _ := servidorQueNoDespide(t)
+	e := newSMTPEmail(EmailConfig{SMTPHost: host, SMTPPort: port, SMTPUser: "u", SMTPPassword: "p", From: "no-reply@kiramopay.com"})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	hecho := make(chan error, 1)
+	go func() { hecho <- e.SendEmail(ctx, "persona@ejemplo.test", "Asunto", "Texto", "") }()
+	select {
+	case err := <-hecho:
+		if err != nil {
+			t.Errorf("el mensaje ya estaba aceptado: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("SendEmail espera el QUIT hasta el plazo de 30 s")
+	}
+}
