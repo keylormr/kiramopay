@@ -7,6 +7,9 @@
  */
 export const CLAVES_DEL_RECHAZO_SINPE: Readonly<Record<string, string>> = {
   RECIPIENT_NOT_USER: 'sinpe_recipient_not_user',
+  // Quien recibe pidio eliminar su cuenta entre la busqueda y el envio: nada
+  // se movio. Para quien envia es lo mismo que un numero sin cuenta.
+  RECIPIENT_UNAVAILABLE: 'sinpe_recipient_not_user',
   SELF_SEND: 'sinpe_self_send_error',
   // El numero mal formado tras la validacion del servidor. Sin este codigo se
   // filtraba el "invalid SINPE Móvil phone number" del servidor tal cual.

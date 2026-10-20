@@ -3,6 +3,8 @@ import type {
   AdminUser,
   AdminUserStatus,
   PlanAsignado,
+  SolicitudDeEliminacion,
+  ResultadoDeSolicitud,
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
@@ -31,7 +33,7 @@ interface AdminUserDTO {
   plan?: string;
 }
 
-const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed'];
+const STATUSES: readonly AdminUserStatus[] = ['active', 'blocked', 'suspended', 'closed', 'pending_deletion'];
 
 function mapStatus(raw: unknown): AdminUserStatus {
   return STATUSES.includes(raw as AdminUserStatus) ? (raw as AdminUserStatus) : 'active';
@@ -88,6 +90,45 @@ export class HttpAdminRepository implements IAdminRepository {
     const res = await this.client.get<unknown>('/api/v1/admin/users/blocked?limit=50');
     if (!res.success) return fail(res);
     return apiSuccess(mapList(res.data));
+  }
+
+  async listDeletionRequests(): Promise<ApiResponse<SolicitudDeEliminacion[]>> {
+    const res = await this.client.get<unknown>('/api/v1/admin/account-deletion-requests?limit=50');
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+        .map((r) => ({
+          id: String(r.id ?? ''),
+          contactKind: r.contact_kind === 'phone' ? ('phone' as const) : ('email' as const),
+          createdAt: String(r.created_at ?? ''),
+          verifiedAt: typeof r.verified_at === 'string' ? r.verified_at : null,
+          account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
+        })),
+    );
+  }
+
+  async processDeletionRequest(id: string): Promise<ApiResponse<ResultadoDeSolicitud>> {
+    const res = await this.client.post<{ status?: string; result_code?: string; blockers?: { code: string }[] | null }>(
+      `/api/v1/admin/account-deletion-requests/${encodeURIComponent(id)}/process`,
+      {},
+    );
+    if (!res.success || !res.data) return fail(res);
+    return apiSuccess({
+      status: String(res.data.status ?? ''),
+      resultCode: String(res.data.result_code ?? ''),
+      blockers: (res.data.blockers ?? []).map((b) => b.code),
+    });
+  }
+
+  async rejectDeletionRequest(id: string): Promise<ApiResponse<{ rejected: boolean }>> {
+    const res = await this.client.post<unknown>(
+      `/api/v1/admin/account-deletion-requests/${encodeURIComponent(id)}/reject`,
+      {},
+    );
+    if (!res.success) return fail(res);
+    return apiSuccess({ rejected: true });
   }
 
   async saldoPromociones(): Promise<ApiResponse<{ saldoMinor: number }>> {

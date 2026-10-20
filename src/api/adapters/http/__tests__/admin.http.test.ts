@@ -27,6 +27,15 @@ describe('HttpAdminRepository y el plan de una persona', () => {
     expect(res.data).toEqual({ userId: 'u1', plan: 'plus', planAnterior: 'free', updatedAt: '2026-09-13T10:00:00Z' });
   });
 
+  it('una cuenta con la eliminacion en curso no se pinta como activa', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: [{ id: 'u1', first_name: 'K', status: 'pending_deletion' }, { id: 'u2', first_name: 'V', status: 'raro' }],
+    });
+    const res = await new HttpAdminRepository(fakeClient({ post })).searchUsers('kei');
+    expect(res.data?.map((u) => u.status)).toEqual(['pending_deletion', 'active']);
+  });
+
   it('conserva el codigo del servidor (RATE_LIMITED, USER_NOT_FOUND)', async () => {
     const patch = vi.fn().mockResolvedValue({ success: false, error: { code: 'RATE_LIMITED', message: 'espera' } });
     const res = await new HttpAdminRepository(fakeClient({ patch })).setUserPlan('u1', 'pro');

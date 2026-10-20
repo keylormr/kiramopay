@@ -83,6 +83,10 @@ func responderConocido(w http.ResponseWriter, err error) bool {
 			transaction.ErrSaldoInsuficiente.Error()},
 		{ledger.ErrInsufficientFunds, "INSUFFICIENT_BALANCE", http.StatusUnprocessableEntity,
 			transaction.ErrSaldoInsuficiente.Error()},
+		// Quien cobra pidio eliminar su cuenta: el asiento se rechazo limpio y
+		// nada se movio.
+		{ledger.ErrCuentaCerrada, "RECIPIENT_UNAVAILABLE", http.StatusUnprocessableEntity,
+			"the recipient account cannot receive money"},
 		{transaction.ErrDailyLimitExceeded, "DAILY_LIMIT_EXCEEDED", http.StatusUnprocessableEntity,
 			transaction.ErrDailyLimitExceeded.Error()},
 		{transaction.ErrMonthlyLimitExceeded, "MONTHLY_LIMIT_EXCEEDED", http.StatusUnprocessableEntity,

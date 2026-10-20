@@ -139,6 +139,9 @@ type Service struct {
 	smsSender    messaging.SMSSender
 	emailSender  messaging.EmailSender
 	publicAppURL string
+	// porEliminar responde por las cuentas con la eliminacion en curso (ver
+	// por_eliminar.go). Nil: esas cuentas se rechazan como bloqueadas.
+	porEliminar CuentasPorEliminar
 	// demoLoginEnabled habilita la entrada SIN CONTRASENA para las cuentas
 	// marcadas con users.demo_login. Nace APAGADA y se enciende solo mientras
 	// dure una demostracion: con ella encendida, cualquiera que sepa el nombre
@@ -176,6 +179,10 @@ type Options struct {
 	SMSSender    messaging.SMSSender
 	EmailSender  messaging.EmailSender
 	PublicAppURL string
+	// CuentasPorEliminar responde por las cuentas con la eliminacion en curso
+	// (lo cumple accountdeletion.Service). Tambien se puede cablear despues con
+	// SetCuentasPorEliminar.
+	CuentasPorEliminar CuentasPorEliminar
 }
 
 func NewService(
@@ -214,6 +221,7 @@ func NewService(
 		emailSender:              opts.EmailSender,
 		publicAppURL:             opts.PublicAppURL,
 		demoLoginEnabled:         opts.DemoLoginEnabled,
+		porEliminar:              opts.CuentasPorEliminar,
 	}
 }
 
@@ -238,6 +246,10 @@ type LoginRequest struct {
 	Identifier string `json:"identifier,omitempty"`
 	Cedula     string `json:"cedula,omitempty"`
 	Password   string `json:"password"`
+	// Reactivate: la persona tiene la eliminacion de su cuenta en curso y,
+	// avisada por el login anterior (ACCOUNT_PENDING_DELETION), eligio
+	// reactivarla. Sin esto el login de esa cuenta nunca emite sesion.
+	Reactivate bool `json:"reactivate,omitempty"`
 }
 
 // EffectiveIdentifier es el valor con el que se intenta entrar: identifier si
@@ -459,6 +471,12 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 	// desbloquear la cuenta, seguiria frenada hasta que venciera la ventana.
 	s.resetLockout(kind, canonical)
 	s.resetUserLockout(u.ID)
+
+	// Cuenta con la eliminacion en curso: tambien solo con la contrasena ya
+	// verificada. Es la puerta de vuelta durante los 30 dias del plazo.
+	if u.Status == "pending_deletion" {
+		return s.loginPorEliminar(ctx, u, req, kind, canonical, lc)
+	}
 
 	// Cuenta no activa: se rechaza con codigo propio SOLO con la contrasena ya
 	// verificada (antes del hash revelaria que la cuenta existe). Cualquier
@@ -784,6 +802,14 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 	// `serr == nil` es a proposito: si la BD falla se sigue el camino normal,
 	// que igual rechaza (el bloqueo revoca la familia en la misma tx).
 	if st, serr := s.userRepo.GetStatus(ctx, claims.UserID); serr == nil && st != "active" {
+		// Con la eliminacion en curso se dice por que, para que la app muestre
+		// el aviso de reactivar en lugar del de cuenta bloqueada. Las sesiones
+		// ya estan revocadas desde el dia 0: esto no abre nada.
+		if st == "pending_deletion" && s.porEliminar != nil {
+			if fecha, reactivable, err := s.porEliminar.SeEliminaEl(ctx, claims.UserID); err == nil && reactivable {
+				return nil, &CuentaPorEliminarError{SeEliminaEl: fecha}
+			}
+		}
 		return nil, ErrAccountBlocked
 	}
 

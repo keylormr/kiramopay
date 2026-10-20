@@ -279,7 +279,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). */
+                /** @description CSRF validation failed / origin not allowed, or the account is blocked by an administrator (code ACCOUNT_BLOCKED, only after the password was verified so it cannot be used to enumerate accounts). ACCOUNT_PENDING_DELETION, also only after the password was verified, when the person asked to delete the account and the account is not closed yet: `error.details.deletion_due_at` is the day it closes, or the day it was due when the sweep could not close it because something was still pending. Repeating the login with `reactivate: true` cancels the deletion and signs in. Once the account is closed, or while it is blocked, the answer is ACCOUNT_BLOCKED. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -332,7 +332,15 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
-                403: components["responses"]["AccountBlocked"];
+                /** @description ACCOUNT_BLOCKED, or ACCOUNT_PENDING_DELETION (with `error.details.deletion_due_at`) when the person asked to delete the account: the session is not renewed and the way back is the login. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -693,6 +701,389 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/delete-account/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Can this account be deleted right now?
+         * @description Answers without touching anything. `eligible` is true when nothing stands in the way. `blockers` lists what the person can resolve first (a positive balance in any wallet, pending money in flight, an open escrow, and so on); it is always an array, never null. `reason` is set instead when the account cannot use this path at all: `DEMO_ACCOUNT`, `ADMIN_ACCOUNT` or `ACCOUNT_NOT_ELIGIBLE` (blocked or suspended accounts are handled by the web request, with a person in the loop). `requires_totp` says whether the confirmation will also ask for the authenticator code. Not cacheable.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Eligibility */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: components["schemas"]["AccountDeletionPreflight"];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["AccountBlocked"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/delete-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for the signed-in person's account to be deleted
+         * @description Re-authenticates with the current password (and the authenticator code when TOTP is on) and requires `accept_terms`, the express acceptance of the 30-day term. Day 0 (this call): the account moves to `pending_deletion` and is blocked at once; sessions, API keys and push subscriptions are revoked and the ledger accounts are closed, so no money moves in or out. A written answer goes to the email on file. Days 0 to 30: signing in with the password offers to reactivate the account, which cancels the process (see the login); during the term the account is not a valid recipient (SINPE, QR, escrow) and gets no webhooks. Day 30: a scheduled sweep closes the account. One that cannot be closed (something is pending) stays reactivable until it is. What the person may delete is suppressed and credentials are revoked by overwriting them; what Costa Rica's Law 7786 requires (identity data and documents, the record of operations) is kept, isolated, for 5 years after the closure. When that period ends a second sweep dissociates it irreversibly. The user row is NEVER removed: the ledger is append-only and other tables reference it. Merchants end closed and inactive, not deleted. Day 0 runs in one SERIALIZABLE transaction with the user and wallet rows locked, so a concurrent transfer cannot slip in between the checks and the block. Failed attempts count against a per-account cap (423 once exceeded). On success the refresh cookie is cleared and the browser is asked to drop site data. Repeating the call is harmless: the term does not restart.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Term started. `already_requested` is true on a repeat, and then the dates are the ones of the first request. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success?: boolean;
+                            data?: {
+                                already_requested?: boolean;
+                                /** Format: date-time */
+                                requested_at?: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Day 30, when the account is closed
+                                 */
+                                deletion_due_at?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID | TOTP_REQUIRED | TOTP_INVALID */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description DEMO_ACCOUNT | ADMIN_ACCOUNT | ACCOUNT_NOT_ELIGIBLE */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DELETION_BLOCKED. `error.details.blockers` lists the codes to resolve first (BALANCE_POSITIVE, SAVINGS_BALANCE, CRYPTO_BALANCE, STAKING_ACTIVE, REGIONAL_BALANCE, MERCHANT_BALANCE, MERCHANT_PENDING_CHARGES, TX_PENDING, ESCROW_OPEN, PAYOUT_PENDING, CROSS_BORDER_PENDING, MARKETPLACE_IN_PROGRESS). Nothing was changed and the term did not start. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description DELETION_LOCKED (too many failed confirmations) */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for an account to be deleted, from the public web page
+         * @description For people who no longer have the app. `contact` is the email or phone the account was registered with; anything else (a cedula, a username) is rejected with 400 INVALID_CONTACT. The answer is IDENTICAL whether or not an account exists, so the form cannot be used to find out who is registered. When an account matches, a 6-digit code goes to that contact (SMS when a provider is configured, otherwise the email on file), valid 15 minutes, at most one per minute per contact. A request that is already verified is never reopened. Only HMACs of the contact and the code are stored. `accept_terms` is the express acceptance of the 30-day term, and its time is stored with the request.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Registered email or phone */
+                        contact: string;
+                        /** @description Anything but true answers 400 TERMS_NOT_ACCEPTED */
+                        accept_terms: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Received (always, when the contact is well formed) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | TERMS_NOT_ACCEPTED | INVALID_CONTACT */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/account-deletion-requests/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove control of the contact with the code that was sent
+         * @description With the right code the 30-day term starts at once, exactly as from the app (day 0: the account is blocked and the written answer goes out by email), and the request ends `scheduled`, or `blocked` when something is pending (the person is told by email what to resolve). An account that is blocked or suspended does not start by itself: the request stays `verified`, in the operations queue. Every failure (wrong, expired, reused, no request) answers the same 400 INVALID_CODE; five wrong codes exhaust the request.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        contact: string;
+                        /** @example 123456 */
+                        code: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Verified */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description INVALID_BODY | INVALID_CONTACT | INVALID_CODE */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Web deletion requests waiting for a person (verified contact)
+         * @description Oldest first. Only requests of accounts under review (blocked or suspended) wait here; the rest start the term when the code is verified. The account is shown masked from SQL, like the rest of the admin panel.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Queue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountDeletionRequestAdmin"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the deletion term for a verified web request
+         * @description Starts the same 30-day term as the in-app path, with channel `web`, and, unlike the in-app path, accepts an account that is blocked or suspended because a person has reviewed it; the account stays blocked (asking for deletion does not unblock it). The outcome is written on the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED when the term was already running), `blocked` (with the first blocker as `result_code`; the full list is in the response) or `rejected` (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the administrator as actor.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/account-deletion-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a verified request without starting the term */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Closed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description NOT_PENDING (already handled) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1068,7 +1459,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits). Nothing moved. */
+                /** @description INSUFFICIENT_BALANCE, SINGLE_PAYMENT_LIMIT_EXCEEDED (over the maximum per transfer), SINPE_DAILY_LIMIT_EXCEEDED (today's SINPE quota), DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED (the wallet's limits), or RECIPIENT_UNAVAILABLE (the recipient asked to delete the account while the transfer was being made). Nothing moved. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4397,7 +4788,7 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, or UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle). No money moves. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED, the same codes as POST /api/v1/sinpe/send, UNSUPPORTED_CURRENCY (the code is in a currency the wallet does not handle), or RECIPIENT_UNAVAILABLE (whoever charges asked to delete the account). No money moves. */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4900,6 +5291,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description PAY_FAILED — the share could not be paid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -9942,6 +10351,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountDeletionPreflight: {
+            eligible: boolean;
+            /** @enum {string} */
+            reason?: "DEMO_ACCOUNT" | "ADMIN_ACCOUNT" | "ACCOUNT_NOT_ELIGIBLE";
+            blockers: {
+                /** @example BALANCE_POSITIVE */
+                code: string;
+            }[];
+            requires_totp: boolean;
+        };
+        DeleteAccountRequest: {
+            /** Format: password */
+            password: string;
+            /** @description Express acceptance of the 30-day term; anything but true answers 400 TERMS_NOT_ACCEPTED */
+            accept_terms: boolean;
+            /** @description Required only when the authenticator is turned on */
+            totp_code?: string;
+        };
+        AccountDeletionRequestAdmin: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            contact_kind?: "email" | "phone";
+            /** @example verified */
+            status?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            verified_at?: string | null;
+            account?: components["schemas"]["AdminUser"] | null;
+        };
         /** @description Administrative card of an account. PII is masked in SQL: cedula keeps its last 3 digits, phone its last 4, email its first letter and domain. */
         AdminUser: {
             /** Format: uuid */
@@ -10779,6 +11219,8 @@ export interface components {
             cedula?: string;
             /** @example MiClave2024! */
             password: string;
+            /** @description Only for an account with the deletion term running: with the right password it cancels the deletion and signs in. Ignored otherwise. */
+            reactivate?: boolean;
         };
         AuthResponse: {
             success?: boolean;

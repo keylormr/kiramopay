@@ -105,6 +105,8 @@ func TestResponderError_LosRechazosDeLaTransferenciaTienenCodigoPropio(t *testin
 		{transaction.ErrSaldoInsuficiente, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
 		// El del asiento, que es el que frena bajo concurrencia.
 		{ledger.ErrInsufficientFunds, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE"},
+		// Quien cobra pidio eliminar su cuenta: el asiento se rechazo limpio.
+		{ledger.ErrCuentaCerrada, http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE"},
 		{transaction.ErrDailyLimitExceeded, http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED"},
 		{transaction.ErrMonthlyLimitExceeded, http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED"},
 		{transaction.ErrBloqueadoPorRiesgo, http.StatusBadRequest, "TRANSFER_BLOCKED"},

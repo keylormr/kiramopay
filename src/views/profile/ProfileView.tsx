@@ -13,6 +13,8 @@ import { TwoFactorSheet } from './TwoFactorSheet';
 import { ApiKeysSheet } from './ApiKeysSheet';
 import { WebhooksSheet } from './WebhooksSheet';
 import { AvisosDelDispositivo } from './AvisosDelDispositivo';
+import { EliminarCuentaSheet } from './EliminarCuentaSheet';
+import { abrirPublico, RUTA_PRIVACIDAD } from '../../utils/enlacesLegales';
 import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
@@ -103,6 +105,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const [showTwoFactorSheet, setShowTwoFactorSheet] = useState(false);
   const [showApiKeysSheet, setShowApiKeysSheet] = useState(false);
   const [showWebhooksSheet, setShowWebhooksSheet] = useState(false);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -718,6 +721,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
+
+          {/* Eliminar la cuenta: accion destructiva, por eso el titulo va en el
+              color de peligro y la hoja pide confirmacion fuerte. Google Play
+              exige que esta via este a la vista, en los ajustes de la cuenta. */}
+          <button
+            onClick={() => setShowDeleteSheet(true)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
+              <Icons.Trash size={18} className="text-red-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
+              <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
         </div>
       </div>
 
@@ -973,6 +993,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
+
+          {/* La politica de privacidad es una pagina publica (se abre en el
+              navegador): Google Play exige que este enlazada dentro de la app. */}
+          <button
+            onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
+            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+          >
+            <div className="w-10 h-10 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl flex items-center justify-center mr-3">
+              <Icons.FileText size={18} className="text-gray-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('privacy_policy')}</p>
+            </div>
+            <Icons.ChevronRight size={18} className="uv-text-muted" />
+          </button>
         </div>
       </div>
 
@@ -1198,6 +1233,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       {/* Merchant API keys + webhooks */}
       <ApiKeysSheet isOpen={showApiKeysSheet} onClose={() => setShowApiKeysSheet(false)} />
       <WebhooksSheet isOpen={showWebhooksSheet} onClose={() => setShowWebhooksSheet(false)} />
+      <EliminarCuentaSheet isOpen={showDeleteSheet} onClose={() => setShowDeleteSheet(false)} />
 
       {/* About Sheet */}
       <BottomSheet
@@ -1248,6 +1284,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {/* Footer */}
           <div className="text-center pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
             <p className="text-sm text-gray-500">{t('made_in_cr')}</p>
+            <button
+              type="button"
+              onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
+              className="mt-2 text-sm font-semibold text-[var(--color-primary)] hover:underline"
+            >
+              {t('privacy_policy')}
+            </button>
             <p className="text-xs text-gray-400 mt-1">© 2024 KiramoPay. {t('all_rights')}.</p>
           </div>
         </div>

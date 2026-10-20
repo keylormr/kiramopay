@@ -161,10 +161,15 @@ func (r *Repository) blockAndRevoke(ctx context.Context, userID, reason, updateS
 // a mano una demo vencida duraria hasta el siguiente tick del barrido, que la
 // volveria a bloquear con el mismo motivo. Un vencimiento FUTURO se conserva:
 // ahi el desbloqueo resuelve otra cosa y la demo sigue teniendo su fecha.
+//
+// Una cuenta con la eliminacion en curso (la persona la pidio antes o durante el
+// bloqueo) no vuelve a 'active' sino a 'pending_deletion': la decision de la
+// persona sigue en pie y el barrido la cierra el dia 30, salvo que la reactive.
 func (r *Repository) UnblockUser(ctx context.Context, userID string) (found bool, err error) {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE users
-		    SET status = 'active', blocked_at = NULL, blocked_reason = NULL,
+		    SET status = CASE WHEN deletion_requested_at IS NOT NULL THEN 'pending_deletion' ELSE 'active' END,
+		        blocked_at = NULL, blocked_reason = NULL,
 		        blocked_by = NULL, updated_at = NOW(),
 		        expires_at = CASE WHEN expires_at <= NOW() THEN NULL ELSE expires_at END
 		  WHERE id = $1::uuid AND deleted_at IS NULL`,
@@ -197,6 +202,10 @@ func (r *Repository) ClearUserBlocked(ctx context.Context, userID string) error 
 // ante error devuelve (true, err) y el middleware responde 503, igual que
 // IsAccessJTIRevoked. Sin Redis configurado consulta la BD directamente (una
 // lectura por peticion, solo en ese despliegue).
+//
+// Una cuenta con la eliminacion en curso lleva la misma marca: durante el plazo
+// no hace nada, y un token de acceso que quedo vivo no sigue sirviendo hasta que
+// vence. La puerta de vuelta es el login, que no pasa por aqui.
 func (r *Repository) IsUserBlocked(ctx context.Context, userID string) (bool, error) {
 	if r.redis == nil {
 		var status string
@@ -210,7 +219,7 @@ func (r *Repository) IsUserBlocked(ctx context.Context, userID string) (bool, er
 		if err != nil {
 			return true, fmt.Errorf("blocked lookup: %w", err)
 		}
-		return status == "blocked", nil
+		return status == "blocked" || status == "pending_deletion", nil
 	}
 	n, err := r.redis.Exists(ctx, blockedKey(userID)).Result()
 	if err != nil {
@@ -281,7 +290,7 @@ func (r *Repository) ReconcileBlockedMarks(ctx context.Context) (added, removed 
 
 	enBD := make(map[string]bool)
 	rows, err := r.db.Query(ctx,
-		`SELECT id::text FROM users WHERE status = 'blocked' AND deleted_at IS NULL`)
+		`SELECT id::text FROM users WHERE status IN ('blocked', 'pending_deletion') AND deleted_at IS NULL`)
 	if err != nil {
 		return 0, 0, fmt.Errorf("list blocked users: %w", err)
 	}

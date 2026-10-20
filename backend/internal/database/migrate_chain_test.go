@@ -499,6 +499,7 @@ func mismasColumnas(a, b []string) bool {
 // lea esas columnas desde una vista o las cambie lleva su bajada aca, antes de
 // la de la 075.
 var bajadasHastaLa075 = []string{
+	"077_eliminacion_de_cuenta.down.sql",
 	"076_fn_fx_rate_at_con_zona.down.sql",
 	"075_fechas_con_zona.down.sql",
 }
