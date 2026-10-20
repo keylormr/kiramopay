@@ -376,54 +376,58 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         </div>
       )}
 
-      {!cargando &&
-        cola.map((s) => (
-          <article key={s.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
-            {s.account ? (
-              <div>
-                <p className="font-bold uv-text-primary">{`${s.account.firstName} ${s.account.lastName}`.trim()}</p>
-                <p className="text-xs uv-text-muted tabular-nums mt-0.5">
-                  {[s.account.cedulaMasked, s.account.phoneMasked, s.account.emailMasked].filter(Boolean).join(' · ')}
-                </p>
-                {s.account.status === 'blocked' && (
-                  <p className="mt-1.5 inline-block rounded-full bg-[var(--color-danger-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
-                    {t('admin_users_status_blocked')}
+      {!cargando && cola.length > 0 && (
+        <section aria-labelledby="admin-del-titulo" className="space-y-3">
+          <h2 id="admin-del-titulo" className="font-bold uv-text-primary">{t('admin_del_queue_title')}</h2>
+          {cola.map((s) => (
+            <article key={s.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
+              {s.account ? (
+                <div>
+                  <p className="font-bold uv-text-primary">{`${s.account.firstName} ${s.account.lastName}`.trim()}</p>
+                  <p className="text-xs uv-text-muted tabular-nums mt-0.5">
+                    {[s.account.cedulaMasked, s.account.phoneMasked, s.account.emailMasked].filter(Boolean).join(' · ')}
                   </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm uv-text-muted">{t('admin_del_no_account')}</p>
-            )}
-            <p className="text-xs uv-text-muted">
-              {t(s.contactKind === 'phone' ? 'admin_del_via_phone' : 'admin_del_via_email')}
-              {' · '}
-              {t('admin_del_verified_at').replace('{when}', fechaYHora(s.verifiedAt ?? s.createdAt, language))}
-            </p>
-            {s.responderAntesDe && (
-              <p className="text-xs font-semibold uv-text-secondary">
-                {t('admin_resp_due').replace('{date}', fechaLarga(s.responderAntesDe, language))}
+                  {s.account.status === 'blocked' && (
+                    <p className="mt-1.5 inline-block rounded-full bg-[var(--color-danger-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
+                      {t('admin_users_status_blocked')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm uv-text-muted">{t('admin_del_no_account')}</p>
+              )}
+              <p className="text-xs uv-text-muted">
+                {t(s.contactKind === 'phone' ? 'admin_del_via_phone' : 'admin_del_via_email')}
+                {' · '}
+                {t('admin_del_verified_at').replace('{when}', fechaYHora(s.verifiedAt ?? s.createdAt, language))}
               </p>
-            )}
-            <div className="flex gap-2.5">
-              <button
-                type="button"
-                onClick={() => setConfirmando(s)}
-                disabled={actuando !== null}
-                className="flex-1 bg-[var(--color-danger)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
-              >
-                {t('admin_del_process')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setRechazando(s)}
-                disabled={actuando !== null}
-                className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors"
-              >
-                {t('admin_del_reject')}
-              </button>
-            </div>
-          </article>
-        ))}
+              {s.responderAntesDe && (
+                <p className="text-xs font-semibold uv-text-secondary">
+                  {t('admin_resp_due').replace('{date}', fechaLarga(s.responderAntesDe, language))}
+                </p>
+              )}
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmando(s)}
+                  disabled={actuando !== null}
+                  className="flex-1 bg-[var(--color-danger)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+                >
+                  {t('admin_del_process')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRechazando(s)}
+                  disabled={actuando !== null}
+                  className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors"
+                >
+                  {t('admin_del_reject')}
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {!cargando && enviadas.length > 0 && (
         <section aria-labelledby="admin-sent-titulo" className="space-y-3 pt-4">

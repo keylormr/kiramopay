@@ -1930,6 +1930,7 @@ const en: TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: 'Deletions',
   admin_del_empty: 'There are no requests waiting.',
+  admin_del_queue_title: 'Requests to handle',
   admin_del_load_failed: 'The queue could not be loaded.',
   admin_del_via_email: 'Asked with their email',
   admin_del_via_phone: 'Asked with their phone',

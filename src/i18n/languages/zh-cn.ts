@@ -1922,6 +1922,7 @@ const zhCn: TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: '删除申请',
   admin_del_empty: '没有待处理的申请。',
+  admin_del_queue_title: '待处理的申请',
   admin_del_load_failed: '无法加载队列。',
   admin_del_via_email: '通过邮箱申请',
   admin_del_via_phone: '通过电话申请',

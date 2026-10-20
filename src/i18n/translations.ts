@@ -2009,6 +2009,7 @@ export type TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: string;
   admin_del_empty: string;
+  admin_del_queue_title: string;
   admin_del_load_failed: string;
   admin_del_via_email: string;
   admin_del_via_phone: string;

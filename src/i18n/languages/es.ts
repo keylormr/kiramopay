@@ -1934,6 +1934,7 @@ const es: TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: 'Eliminaciones',
   admin_del_empty: 'No hay solicitudes por atender.',
+  admin_del_queue_title: 'Solicitudes por atender',
   admin_del_load_failed: 'No se pudo cargar la cola.',
   admin_del_via_email: 'Pidió con su correo',
   admin_del_via_phone: 'Pidió con su teléfono',

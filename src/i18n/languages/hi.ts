@@ -1922,6 +1922,7 @@ const hi: TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: 'हटाने के अनुरोध',
   admin_del_empty: 'कोई अनुरोध लंबित नहीं है।',
+  admin_del_queue_title: 'कार्रवाई के लिए बाकी अनुरोध',
   admin_del_load_failed: 'कतार लोड नहीं हो सकी।',
   admin_del_via_email: 'ईमेल से अनुरोध किया',
   admin_del_via_phone: 'फ़ोन से अनुरोध किया',

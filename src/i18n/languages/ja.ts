@@ -1922,6 +1922,7 @@ const ja: TranslationKeys = {
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: '削除申請',
   admin_del_empty: '対応待ちの申請はありません。',
+  admin_del_queue_title: '対応待ちの申請',
   admin_del_load_failed: 'キューを読み込めませんでした。',
   admin_del_via_email: 'メールアドレスで申請',
   admin_del_via_phone: '電話番号で申請',
