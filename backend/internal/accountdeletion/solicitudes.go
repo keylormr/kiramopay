@@ -61,6 +61,7 @@ var (
 	// ErrSolicitudNoEncontrada y ErrSolicitudNoPendiente: del lado del panel.
 	ErrSolicitudNoEncontrada = errors.New("solicitud no encontrada")
 	ErrSolicitudNoPendiente  = errors.New("la solicitud no esta esperando atencion")
+	ErrCuentaYaEnPlazo       = errors.New("la cuenta ya esta en el plazo de eliminacion")
 )
 
 // codigoNumerico devuelve n digitos aleatorios.

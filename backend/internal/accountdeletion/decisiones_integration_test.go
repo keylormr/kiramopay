@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -214,11 +215,24 @@ func respondeAntesDe(t *testing.T, pool *pgxpool.Pool, respuesta string) time.Ti
 func sinElMotivo(t *testing.T, texto string) {
 	t.Helper()
 	bajo := strings.ToLower(texto)
-	for _, motivo := range []string{"bloque", "revisión", "revision", "suspend", "fraude", "demo", "administrador", "uif", "ros "} {
-		if strings.Contains(bajo, motivo) {
-			t.Errorf("la respuesta deja ver el motivo (%q):\n%s", motivo, texto)
+	for _, motivo := range motivosQueNoSeDicen {
+		if motivo.MatchString(bajo) {
+			t.Errorf("la respuesta deja ver el motivo (%s):\n%s", motivo, texto)
 		}
 	}
+}
+
+// motivosQueNoSeDicen, en minusculas y por palabra: "demo" no debe coincidir con
+// "podemos", ni "ros" con "otros".
+var motivosQueNoSeDicen = []*regexp.Regexp{
+	regexp.MustCompile(`bloque`),
+	regexp.MustCompile(`revisi(ó|o)n`),
+	regexp.MustCompile(`suspend`),
+	regexp.MustCompile(`fraude`),
+	regexp.MustCompile(`\bdemo\b|demostraci`),
+	regexp.MustCompile(`administrador`),
+	regexp.MustCompile(`\buif\b`),
+	regexp.MustCompile(`\bros\b`),
 }
 
 // Rechazar una solicitud de la cola tambien se responde por escrito, y el plazo
@@ -518,12 +532,30 @@ func TestRespuesta_EmpezarElPlazoCancelaLaDeRechazo(t *testing.T) {
 		INSERT INTO account_deletion_responses (user_id, kind, respond_by, attempts, last_error, escalated_at)
 		VALUES ($1::uuid, 'rejected', NOW() + interval '5 days', 1, 'no_channel', NOW())
 		RETURNING id::text`, a.ID)
+	// Ni la ya entregada ni la de otra cuenta se tocan.
+	entregada := cuenta1[string](t, pool, `
+		INSERT INTO account_deletion_responses (user_id, kind, respond_by, delivered_at, delivered_via)
+		VALUES ($1::uuid, 'rejected', NOW() + interval '5 days', NOW(), 'email')
+		RETURNING id::text`, a.ID)
+	otra := sembrar(t, pool)
+	deOtra := cuenta1[string](t, pool, `
+		INSERT INTO account_deletion_responses (user_id, kind, respond_by)
+		VALUES ($1::uuid, 'rejected', NOW() + interval '5 days')
+		RETURNING id::text`, otra.ID)
 	svc := nuevoServicio(pool, nil)
 
 	pedir(t, svc, a.ID)
 	for _, r := range respuestasDe(t, pool, a.ID) {
 		if r.ID == rechazo && !r.Cancelada {
 			t.Errorf("empezado el plazo, la respuesta del rechazo sigue pendiente: %+v", r)
+		}
+		if r.ID == entregada && (r.Cancelada || !r.Entregada) {
+			t.Errorf("la ya entregada no se toca: %+v", r)
+		}
+	}
+	for _, r := range respuestasDe(t, pool, otra.ID) {
+		if r.ID == deOtra && r.Cancelada {
+			t.Errorf("la de otra cuenta no se toca: %+v", r)
 		}
 	}
 	if p := enElPanel(t, svc, a.ID); p != nil && p.ID == rechazo {
@@ -576,7 +608,14 @@ func TestRespuesta_LasEnviadasAUnCorreoSinConfirmar(t *testing.T) {
 
 	sinProveedor := nuevoServicio(pool, nil)
 	conCorreoDado(t, sinProveedor, aMano.ID)
-	r := esperarRespuesta(t, pool, aMano.ID, "en el panel", func(r filaRespuesta) bool { return r.Escalada })
+	// Sin proveedor el primer intento no corre: la pasa al panel el barrido.
+	if _, err := sinProveedor.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatal(err)
+	}
+	r := unaRespuesta(t, pool, aMano.ID)
+	if !r.Escalada {
+		t.Fatalf("sin a donde mandarla debia pasar al panel: %+v", r)
+	}
 	if err := sinProveedor.MarcarRespuestaEntregada(ctx, r.ID, admin.ID, "se la leimos por telefono"); err != nil {
 		t.Fatal(err)
 	}
@@ -627,5 +666,35 @@ func TestHandler_ListarLasEnviadasSinConfirmar(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(rec.Body.String()), strings.ToLower(correoDado)) {
 		t.Errorf("la lista no muestra el correo al que salio: %s", rec.Body.String())
+	}
+}
+
+// Mientras la solicitud esperaba en la cola, la cuenta se desbloqueo y la persona
+// empezo el plazo por la app. Rechazar le escribiria "no se borro nada" con el
+// plazo corriendo: no se rechaza, y la solicitud se cierra con Iniciar el plazo.
+func TestRespuesta_RechazarConElPlazoYaCorriendoNoLeEscribeQueNoSeBorroNada(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+	exec(t, pool, `UPDATE users SET status = 'active', blocked_at = NULL, blocked_reason = NULL WHERE id = $1::uuid`, a.ID)
+	pedir(t, svc, a.ID)
+
+	if err := svc.Rechazar(ctx, solicitud, admin.ID); !errors.Is(err, ErrCuentaYaEnPlazo) {
+		t.Fatalf("rechazar con el plazo corriendo: %v", err)
+	}
+	for _, r := range respuestasDe(t, pool, a.ID) {
+		if r.Tipo == RespuestaRechazada {
+			t.Errorf("con el plazo corriendo no se le escribe que no se borro nada: %+v", r)
+		}
+	}
+	if estado, _, _ := estadoDe(t, pool, a.Correo); estado != "verified" {
+		t.Errorf("la solicitud sigue en la cola, para cerrarla con Iniciar el plazo: %s", estado)
+	}
+	srv := router(NewHandler(svc, nil), admin.ID)
+	if rec, env := llamar(t, srv, "POST", "/admin/account-deletion-requests/"+solicitud+"/reject", ""); rec.Code != 409 || env.Error == nil || env.Error.Code != "ALREADY_SCHEDULED" {
+		t.Errorf("el handler: %d %s", rec.Code, rec.Body.String())
 	}
 }

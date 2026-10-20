@@ -120,6 +120,19 @@ describe('SolicitudesDeEliminacion', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta solicitud ya fue atendida.');
   });
 
+  it('rechazar una cuenta que ya esta en el plazo lo explica', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [solicitud] });
+    api.admin.rejectDeletionRequest.mockResolvedValue({ success: false, error: { code: 'ALREADY_SCHEDULED', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Rechazar' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, rechazar y responder' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'La cuenta ya está en el plazo de eliminación, así que no se puede rechazar. Usa "Iniciar el plazo" para cerrar la solicitud.',
+    );
+  });
+
   it('rechazar pide confirmacion: no se puede retirar el correo que sale', async () => {
     api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [solicitud] });
     api.admin.rejectDeletionRequest.mockResolvedValue({ success: true, data: { rejected: true } });
@@ -282,6 +295,38 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     expect(screen.getByLabelText('Cómo la entregaste')).toHaveValue('Se la leímos por teléfono');
   });
 
+  it('el contacto que llega se anuncia y recibe el foco', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.viewDeletionResponseContact.mockResolvedValue({
+      success: true,
+      data: { telefono: '+50688881234', correo: '', correoParaRespuesta: '' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Ver contacto' }));
+    const caja = await screen.findByRole('status');
+    expect(caja).toHaveTextContent('+50688881234');
+    expect(caja).toHaveFocus();
+  });
+
+  it('si la recarga falla, lo que se veia no queda en pantalla', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses
+      .mockResolvedValueOnce({ success: true, data: [respuesta, { ...respuesta, id: 'd2' }] })
+      .mockResolvedValueOnce({ success: false, error: { code: 'LIST_FAILED', message: 'x' } });
+    api.admin.markDeletionResponseDelivered.mockResolvedValue({ success: true, data: { delivered: true } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click((await screen.findAllByRole('button', { name: 'Marcar entregada' }))[0]);
+    await user.type(screen.getByLabelText('Cómo la entregaste'), 'por telefono');
+    await user.click(screen.getByRole('button', { name: 'Confirmar la entrega' }));
+    expect(await screen.findByText('No se pudieron cargar las respuestas por entregar.')).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: 'Ver contacto' })).toHaveLength(0);
+  });
+
   it('de una cuenta cerrada no ofrece ver el contacto: ya no hay', async () => {
     api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
     api.admin.listDeletionResponses.mockResolvedValue({
@@ -337,7 +382,7 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
   const enviada = {
     id: 'e1',
     tipo: 'rejected' as const,
-    entregadaEn: '2026-10-19T15:00:00Z',
+    entregadaEn: '2026-10-19T12:00:00Z',
     userId: 'u1',
     cuentaCerrada: false,
     account: solicitud.account,
