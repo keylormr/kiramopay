@@ -67,3 +67,7 @@ coverage/
 # Local assistant config/state (not part of the repo)
 .claude/
 CLAUDE.md
+
+# Adjuntos que arma scripts/paquete-web.mjs (los publica el CI, no se versionan)
+/kiramopay-web-*.zip
+/actualizacion-*.json
