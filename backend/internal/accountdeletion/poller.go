@@ -10,13 +10,15 @@ import (
 	"github.com/kiramopay/backend/internal/cluster"
 )
 
-// Poller corre los dos barridos de la linea de tiempo: el cierre de las cuentas
-// cuyo dia 30 ya llego y la desasociacion de lo conservado cuyo plazo vencio.
+// Poller corre los barridos de la linea de tiempo: el cierre de las cuentas cuyo
+// dia 30 ya llego, la desasociacion de lo conservado cuyo plazo vencio, y la
+// bandeja de las respuestas escritas que no salieron en el primer intento.
 //
 // Misma forma que el barrido de vencimientos (adminusers.Poller): un ticker que
 // muere con su contexto, sin error fatal, y cada tick bajo el lock de cluster
-// para que con la API escalada solo una instancia trate un mismo lote. Las dos
-// operaciones son idempotentes: una pasada que se repite no hace nada.
+// para que con la API escalada solo una instancia trate un mismo lote. Las tres
+// operaciones son idempotentes: una pasada que se repite no hace nada (la
+// bandeja, ademas, reserva cada respuesta antes de mandarla).
 type Poller struct {
 	svc      *Service
 	pool     *pgxpool.Pool
@@ -62,10 +64,18 @@ func (p *Poller) tick(ctx context.Context) {
 		if desasociadas > 0 && p.logger != nil {
 			p.logger.Info("cuentas desasociadas al vencer la conservacion", "count", desasociadas)
 		}
+		// Las respuestas escritas que no salieron en el primer intento.
+		entregadas, errEntrega := p.svc.EntregarRespuestas(c, now, p.batch)
+		if entregadas > 0 && p.logger != nil {
+			p.logger.Info("respuestas escritas entregadas por el barrido", "count", entregadas)
+		}
 		if errCierre != nil {
 			return errCierre
 		}
-		return errDesasociar
+		if errDesasociar != nil {
+			return errDesasociar
+		}
+		return errEntrega
 	})
 	if err != nil {
 		if p.logger != nil {

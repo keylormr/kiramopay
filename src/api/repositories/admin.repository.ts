@@ -54,6 +54,26 @@ export interface SolicitudDeEliminacion {
   account: AdminUser | null;
 }
 
+/**
+ * Una respuesta escrita a una solicitud de eliminacion (Ley 8968) que no pudo
+ * salir sola por correo: la cuenta no tiene a donde mandarla (no_channel) o el
+ * correo fallo durante 48 horas (send_failed). Operaciones la entrega por otro
+ * medio antes de responderAntesDe y deja constancia.
+ */
+export interface RespuestaPorEntregar {
+  id: string;
+  /** scheduled: empezo el plazo (lleva las fechas); blocked: que resolver. */
+  tipo: 'scheduled' | 'blocked';
+  motivo: 'no_channel' | 'send_failed';
+  intentos: number;
+  creadaEn: string;
+  responderAntesDe: string;
+  seEliminaEl: string | null;
+  conservaHasta: string | null;
+  bloqueos: string[];
+  account: AdminUser | null;
+}
+
 /** Lo que paso al atender una solicitud. */
 export interface ResultadoDeSolicitud {
   /** scheduled (empezo el plazo de 30 dias) | blocked | rejected */
@@ -101,6 +121,13 @@ export interface IAdminRepository {
   processDeletionRequest(id: string): Promise<ApiResponse<ResultadoDeSolicitud>>;
   /** Cierra la solicitud sin eliminar nada. */
   rejectDeletionRequest(id: string): Promise<ApiResponse<{ rejected: boolean }>>;
+  /** Las respuestas escritas que pasaron a operaciones, la de plazo mas cercano primero. */
+  listDeletionResponses(): Promise<ApiResponse<RespuestaPorEntregar[]>>;
+  /**
+   * Deja constancia de que la respuesta se entrego por otro medio. La nota (como
+   * se entrego) es obligatoria; queda en la auditoria con el administrador.
+   */
+  markDeletionResponseDelivered(id: string, nota: string): Promise<ApiResponse<{ delivered: boolean }>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

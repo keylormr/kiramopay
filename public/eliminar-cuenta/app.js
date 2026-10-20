@@ -2,9 +2,12 @@
 //
 // Tres pasos: el contacto con que se registro (mas la casilla que acepta el plazo
 // de 30 dias), el codigo que le llega, y la confirmacion. El codigo correcto es el
-// dia 0: la cuenta se bloquea y empieza el plazo. La API responde IGUAL exista o
-// no la cuenta, asi que esta pagina no puede (ni debe) decir si el contacto esta
-// registrado, ni en que estado esta.
+// dia 0: la cuenta se bloquea y empieza el plazo. Antes del codigo la API responde
+// IGUAL exista o no la cuenta, asi que esta pagina no puede (ni debe) decir si el
+// contacto esta registrado, ni en que estado esta. Con el codigo correcto la
+// persona ya probo que el contacto es suyo, y la confirmacion le muestra la misma
+// respuesta escrita que le llega por correo (Ley 8968): cuando se suprimen sus
+// datos, que se conserva por ley y hasta cuando, y la PRODHAB.
 //
 // Es un archivo aparte, y no un script dentro del HTML, porque la politica de
 // seguridad del sitio solo admite scripts del mismo origen.
@@ -20,6 +23,7 @@
   var pasoContacto = $('paso-contacto');
   var pasoCodigo = $('paso-codigo');
   var pasoListo = $('paso-listo');
+  var respuesta = $('respuesta');
   var contacto = $('contacto');
   var codigo = $('codigo');
   var acepto = $('acepto-plazo');
@@ -29,6 +33,10 @@
   var errorPlazo = $('error-plazo');
   var errorCodigo = $('error-codigo');
   var avisoCodigo = $('aviso-codigo');
+
+  // El texto generico del HTML (el de "Solicitud recibida") se guarda tal cual
+  // esta, para volver a el si el servidor no dice cual fue el resultado.
+  var respuestaGenerica = respuesta ? respuesta.cloneNode(true) : null;
 
   if (!pasoContacto || !pasoCodigo || !pasoListo || !acepto || !errorPlazo) return;
 
@@ -49,8 +57,9 @@
     elemento.hidden = !texto;
   }
 
-  // POST JSON. Devuelve { estado, codigo } y nunca lanza: una caida de red es
-  // estado 0.
+  // POST JSON. Devuelve { estado, codigo, datos } y nunca lanza: una caida de red
+  // es estado 0. "datos" es el contenido de la respuesta (el campo data del sobre
+  // del servidor) o null.
   function pedir(ruta, cuerpo) {
     return fetch(API + ruta, {
       method: 'POST',
@@ -60,16 +69,160 @@
       .then(function (res) {
         return res.json().catch(function () { return null; }).then(function (json) {
           var cod = json && json.error ? json.error.code : '';
-          return { estado: res.status, codigo: cod };
+          return { estado: res.status, codigo: cod, datos: json && json.data ? json.data : json };
         });
       })
-      .catch(function () { return { estado: 0, codigo: '' }; });
+      .catch(function () { return { estado: 0, codigo: '', datos: null }; });
   }
 
   function mensajeDeFallo(r, porDefecto) {
     if (r.estado === 0) return 'No pudimos conectar. Revisa tu conexión e inténtalo de nuevo.';
     if (r.estado === 429) return 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.';
     return porDefecto;
+  }
+
+  // ---- La respuesta escrita del paso final ----
+  //
+  // Todo se construye con createElement y textContent: lo que llega del servidor
+  // (fechas y codigos) nunca se interpreta como HTML.
+
+  // Que resolver, una frase por cada motivo que puede impedir que empiece el plazo.
+  var PENDIENTES = {
+    BALANCE_POSITIVE: 'Tienes saldo en tu billetera: envíalo, retíralo o gástalo hasta dejarla en cero',
+    SAVINGS_BALANCE: 'Tienes dinero en tus metas de ahorro: pásalo a tu billetera',
+    CRYPTO_BALANCE: 'Tienes criptomonedas: véndelas o envíalas',
+    STAKING_ACTIVE: 'Tienes cripto en staking: retírala',
+    REGIONAL_BALANCE: 'Tienes saldo en una billetera regional',
+    MERCHANT_BALANCE: 'Tu comercio tiene saldo: pásalo a tu billetera',
+    MERCHANT_PENDING_CHARGES: 'Tu comercio tiene cobros por QR sin pagar: cancélalos',
+    TX_PENDING: 'Tienes un movimiento en proceso: espera a que termine',
+    ESCROW_OPEN: 'Tienes un acuerdo de garantía abierto: ciérralo o espera a que se liquide',
+    PAYOUT_PENDING: 'Tienes un retiro en proceso: espera a que termine',
+    CROSS_BORDER_PENDING: 'Tienes una transferencia internacional en proceso: espera a que termine',
+    MARKETPLACE_IN_PROGRESS: 'Tienes un viaje o un pedido en curso: espera a que termine',
+  };
+  // Un motivo que esta pagina todavia no conoce no se esconde ni se inventa.
+  var PENDIENTE_GENERICO = 'Tienes algo pendiente en tu cuenta: revísalo en la app';
+
+  function elemento(etiqueta, texto) {
+    var el = document.createElement(etiqueta);
+    if (texto) el.textContent = texto;
+    return el;
+  }
+
+  function vaciar(nodo) {
+    while (nodo.firstChild) nodo.removeChild(nodo.firstChild);
+  }
+
+  // "17 de noviembre de 2026", en la hora de Costa Rica: la fecha que ve la
+  // persona es la de su calendario, no la del servidor. Vacio si no es una fecha.
+  function fecha(iso) {
+    var d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return '';
+    try {
+      return new Intl.DateTimeFormat('es-CR', {
+        day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Costa_Rica',
+      }).format(d);
+    } catch (err) {
+      return '';
+    }
+  }
+
+  // El plazo empezo: cuando se suprime, que se conserva por ley y hasta cuando,
+  // como reactivarla y la PRODHAB.
+  function respuestaProgramada(datos) {
+    var vence = fecha(datos.deletion_due_at);
+    var conserva = fecha(datos.retained_until);
+    // Sin las dos fechas no se afirma nada: queda el texto generico.
+    if (!vence || !conserva) return null;
+    return [
+      elemento('h3', 'Tu cuenta se cierra el ' + vence),
+      elemento('p',
+        'Tu cuenta quedó bloqueada y todavía no se borró nada. El ' + vence + ' se suprimen de forma definitiva ' +
+        'los datos personales que tienes derecho a borrar y la cuenta se cierra.'),
+      elemento('p',
+        'Hasta ese día puedes reactivarla entrando a la aplicación con tu contraseña: reactivar cancela el ' +
+        'proceso y la cuenta vuelve a funcionar.'),
+      elemento('p',
+        'Lo que la Ley 7786 nos obliga a conservar (tu identificación y el registro de tus operaciones) se ' +
+        'guarda hasta el ' + conserva + ' (más tiempo únicamente si la ley o una autoridad competente lo exige) y ' +
+        'después se desasocia de ti de forma irreversible.'),
+      elemento('p',
+        'Si no estás conforme, puedes acudir a la Agencia de Protección de Datos de los Habitantes (PRODHAB), ' +
+        'conforme a la Ley 8968.'),
+      elemento('p',
+        'Esta respuesta también te llega por escrito al correo de tu cuenta; si la cuenta no tiene correo, una ' +
+        'persona del equipo te la hace llegar por otro medio. Si no la ves, revisa la carpeta de correo no deseado.'),
+    ];
+  }
+
+  // Algo lo impide: no se borro nada, y una frase por cada cosa que resolver.
+  function respuestaPendiente(datos) {
+    var codigos = Array.isArray(datos.blockers) ? datos.blockers : [];
+    var frases = [];
+    codigos.forEach(function (c) {
+      var frase = typeof c === 'string' && Object.prototype.hasOwnProperty.call(PENDIENTES, c) ? PENDIENTES[c] : PENDIENTE_GENERICO;
+      if (frases.indexOf(frase) === -1) frases.push(frase);
+    });
+    if (!frases.length) frases.push(PENDIENTE_GENERICO);
+    var lista = elemento('ul');
+    frases.forEach(function (frase) { lista.appendChild(elemento('li', frase + '.')); });
+    return [
+      elemento('h3', 'Falta resolver algo antes de eliminar tu cuenta'),
+      elemento('p', 'No se borró nada y el plazo de 30 días todavía no empezó. Para poder empezar, resuelve esto:'),
+      lista,
+      elemento('p', 'Cuando lo hayas resuelto, puedes volver a pedir la eliminación desde esta página.'),
+    ];
+  }
+
+  // La atiende una persona: nada sobre la cuenta, ni siquiera que algo la frena.
+  function respuestaEnRevision() {
+    return [
+      elemento('h3', 'Solicitud recibida'),
+      elemento('p',
+        'Listo. Tu solicitud la revisa una persona del equipo, que te responde por escrito. ' +
+        'Revisa también la carpeta de correo no deseado.'),
+    ];
+  }
+
+  // Esa cuenta no se elimina por esta via: se la lleva al contacto de privacidad.
+  function respuestaNoDisponible() {
+    var contactoPrivacidad = elemento('a', 'contacto de privacidad');
+    contactoPrivacidad.href = '/privacidad/#contacto';
+    var aviso = elemento('p', 'Para tratar tu caso, escribe al ');
+    aviso.appendChild(contactoPrivacidad);
+    aviso.appendChild(document.createTextNode('.'));
+    return [
+      elemento('h3', 'Esta solicitud no se puede completar aquí'),
+      elemento('p', 'Esta cuenta no se puede eliminar desde esta página.'),
+      aviso,
+    ];
+  }
+
+  var RESPUESTAS = {
+    scheduled: respuestaProgramada,
+    blocked: respuestaPendiente,
+    received: respuestaEnRevision,
+    rejected: respuestaNoDisponible,
+  };
+
+  // Escribe en el paso final la respuesta que corresponde a lo que dijo el
+  // servidor. Si no trae un resultado conocido (un servidor anterior a este
+  // cambio), queda el texto generico del HTML.
+  function pintarRespuesta(datos) {
+    if (!respuesta) return;
+    var resultado = datos && typeof datos.outcome === 'string' ? datos.outcome : '';
+    var nodos = Object.prototype.hasOwnProperty.call(RESPUESTAS, resultado) ? RESPUESTAS[resultado](datos) : null;
+    vaciar(respuesta);
+    if (nodos) {
+      nodos.forEach(function (nodo) { respuesta.appendChild(nodo); });
+      return;
+    }
+    if (respuestaGenerica) {
+      Array.prototype.forEach.call(respuestaGenerica.childNodes, function (nodo) {
+        respuesta.appendChild(nodo.cloneNode(true));
+      });
+    }
   }
 
   pasoContacto.addEventListener('submit', function (e) {
@@ -133,9 +286,10 @@
       .then(function (r) {
         botonConfirmar.disabled = false;
         if (r.estado === 200) {
-          // Misma respuesta en todos los casos (empezo el plazo, hay algo
-          // pendiente, o la atiende una persona): el texto esta en el HTML y no
-          // revela el estado de la cuenta.
+          // Con el codigo correcto la persona ya probo que el contacto es suyo:
+          // se le dice lo que paso (empezo el plazo, hay algo pendiente, la
+          // atiende una persona, o no se elimina por esta via).
+          pintarRespuesta(r.datos);
           mostrar(pasoListo);
           return;
         }

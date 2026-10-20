@@ -12,6 +12,7 @@ import {
   olvidarUltimoAcceso,
 } from '@/stores/olvidarUltimoAcceso';
 import { BotonIdioma } from './BotonIdioma';
+import { RespuestaEscrita } from './RespuestaEscrita';
 import { biometricService } from '../../services/biometric';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { User } from '../../types';
@@ -373,30 +374,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
         </div>
       )}
 
-      {/* Aviso de cuenta eliminada: la persona la elimino y volvio al login */}
+      {/* Aviso de cuenta eliminada: la persona la elimino y volvio al login. Debajo,
+          la respuesta escrita (la misma del correo), que se cierra con el aviso. */}
       {logoutReason === 'deleted' && (
-        <div
-          role="status"
-          className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-4 animate-slide-up"
-        >
-          <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="font-bold text-white">{t('account_deleted_title')}</p>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
-              {fechaLarga(seEliminaEl, language)
-                ? t('account_deleted_body').replace('{date}', fechaLarga(seEliminaEl, language))
-                : t('account_deleted_body_nodate')}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={clearLogoutReason}
-            aria-label={t('close')}
-            className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+        <>
+          <div
+            role="status"
+            className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-4 animate-slide-up"
           >
-            <Icons.X size={18} />
-          </button>
-        </div>
+            <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-white">{t('account_deleted_title')}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+                {fechaLarga(seEliminaEl, language)
+                  ? t('account_deleted_body').replace('{date}', fechaLarga(seEliminaEl, language))
+                  : t('account_deleted_body_nodate')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearLogoutReason}
+              aria-label={t('close')}
+              className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-[var(--color-text-muted-dark)] hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Icons.X size={18} />
+            </button>
+          </div>
+          <RespuestaEscrita seEliminaEl={seEliminaEl} className="mx-6 mb-6 animate-slide-up" />
+        </>
       )}
 
       {/* Aviso de sesion sin confirmar: fallo la red, no la sesion */}
@@ -665,42 +670,48 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             </p>
 
             {/* Eliminacion en curso: en lugar del formulario, cuando se elimina
-                y la puerta de vuelta. */}
+                y la puerta de vuelta. Debajo de la decision, la respuesta escrita
+                de nuevo, salvo que el plazo ya haya vencido. */}
             {porEliminar ? (
-              <div
-                role="alert"
-                className="rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-5 animate-slide-up"
-              >
-                <div className="flex items-start gap-3">
-                  <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <p className="font-bold text-white">{t('login_pending_title')}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
-                      {plazoVencido(porEliminar.fecha)
-                        ? t('login_pending_body_overdue')
-                        : fechaLarga(porEliminar.fecha, language)
-                          ? t('login_pending_body').replace('{date}', fechaLarga(porEliminar.fecha, language))
-                          : t('login_pending_body_nodate')}
-                    </p>
+              <>
+                <div
+                  role="alert"
+                  className="rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-5 animate-slide-up"
+                >
+                  <div className="flex items-start gap-3">
+                    <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-white">{t('login_pending_title')}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
+                        {plazoVencido(porEliminar.fecha)
+                          ? t('login_pending_body_overdue')
+                          : fechaLarga(porEliminar.fecha, language)
+                            ? t('login_pending_body').replace('{date}', fechaLarga(porEliminar.fecha, language))
+                            : t('login_pending_body_nodate')}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-5 space-y-2.5">
+                    <Button type="button" size="lg" fullWidth loading={isLoading} disabled={isLoading} onClick={() => void reactivar()}>
+                      {t('login_pending_reactivate')}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => {
+                        setPorEliminar(null);
+                        setPassword('');
+                      }}
+                      className="w-full py-3 text-center text-sm font-semibold text-[var(--color-text-secondary-dark)] hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {t('login_pending_keep')}
+                    </button>
                   </div>
                 </div>
-                <div className="mt-5 space-y-2.5">
-                  <Button type="button" size="lg" fullWidth loading={isLoading} disabled={isLoading} onClick={() => void reactivar()}>
-                    {t('login_pending_reactivate')}
-                  </Button>
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => {
-                      setPorEliminar(null);
-                      setPassword('');
-                    }}
-                    className="w-full py-3 text-center text-sm font-semibold text-[var(--color-text-secondary-dark)] hover:text-white transition-colors disabled:opacity-50"
-                  >
-                    {t('login_pending_keep')}
-                  </button>
-                </div>
-              </div>
+                {!plazoVencido(porEliminar.fecha) && (
+                  <RespuestaEscrita seEliminaEl={porEliminar.fecha} className="mt-4" />
+                )}
+              </>
             ) : (
             /* Password form — a real <form> so browsers/password managers can
                 offer autofill and save (and to drop the "field not in a form"

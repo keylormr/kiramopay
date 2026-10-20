@@ -68,6 +68,10 @@ func (h *Handler) Eliminar(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrPlazoNoAceptado):
 			response.Error(w, http.StatusBadRequest, "TERMS_NOT_ACCEPTED", err.Error())
+		case errors.Is(err, ErrCorreoParaRespuesta):
+			response.Error(w, http.StatusBadRequest, "RESPONSE_EMAIL_REQUIRED", err.Error())
+		case errors.Is(err, ErrCorreoParaRespuestaInvalido):
+			response.Error(w, http.StatusBadRequest, "RESPONSE_EMAIL_INVALID", err.Error())
 		case errors.As(err, &bloqueada):
 			response.ErrorConDetalle(w, http.StatusConflict, "DELETION_BLOCKED",
 				"la cuenta tiene algo pendiente que resolver antes de eliminarla",
@@ -131,6 +135,9 @@ func (h *Handler) Solicitar(w http.ResponseWriter, r *http.Request) {
 }
 
 // Verificar — POST /public/account-deletion-requests/verify {"contact":"...","code":"123456"}
+//
+// Con el codigo correcto responde lo mismo que la respuesta escrita: quien lo
+// presenta ya probo que el contacto es suyo.
 func (h *Handler) Verificar(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Contacto string `json:"contact"`
@@ -140,7 +147,8 @@ func (h *Handler) Verificar(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := h.service.Verificar(r.Context(), req.Contacto, req.Codigo); err != nil {
+	web, err := h.service.Confirmar(r.Context(), req.Contacto, req.Codigo)
+	if err != nil {
 		switch {
 		case errors.Is(err, ErrContactoInvalido):
 			response.Error(w, http.StatusBadRequest, "INVALID_CONTACT", err.Error())
@@ -152,7 +160,10 @@ func (h *Handler) Verificar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	response.JSON(w, http.StatusOK, map[string]string{"status": "verified"})
+	response.JSON(w, http.StatusOK, struct {
+		Estado string `json:"status"`
+		*RespuestaWeb
+	}{"verified", web})
 }
 
 // ListarSolicitudes — GET /admin/account-deletion-requests?limit=50 (admin)
@@ -212,10 +223,45 @@ func (h *Handler) Rechazar(w http.ResponseWriter, r *http.Request) {
 // Las respuestas escritas que pasaron a operaciones: sin a donde mandarlas, o
 // sin salir despues de 48 horas.
 func (h *Handler) ListarRespuestas(w http.ResponseWriter, r *http.Request) {
-	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "not implemented")
+	limite, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	out, err := h.service.RespuestasSinEntregar(r.Context(), limite)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "LIST_FAILED", err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response.JSON(w, http.StatusOK, out)
 }
 
 // MarcarRespuestaEntregada — POST /admin/account-deletion-responses/{id}/delivered {"note":"..."} (admin)
+//
+// Deja constancia de que operaciones entrego la respuesta por otra via; la nota
+// dice cual.
 func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Request) {
-	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "not implemented")
+	id := chi.URLParam(r, "id")
+	if _, err := uuid.Parse(id); err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "response not found")
+		return
+	}
+	var req struct {
+		Nota string `json:"note"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := h.service.MarcarRespuestaEntregada(r.Context(), id, middleware.GetUserID(r.Context()), req.Nota); err != nil {
+		switch {
+		case errors.Is(err, ErrNotaRequerida):
+			response.Error(w, http.StatusBadRequest, "NOTE_REQUIRED", err.Error())
+		case errors.Is(err, ErrRespuestaNoEncontrada):
+			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		case errors.Is(err, ErrRespuestaCerrada):
+			response.Error(w, http.StatusConflict, "NOT_PENDING", err.Error())
+		default:
+			response.Error(w, http.StatusInternalServerError, "DELIVERY_FAILED", err.Error())
+		}
+		return
+	}
+	response.NoContent(w)
 }

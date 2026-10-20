@@ -180,6 +180,7 @@ export class HttpAuthRepository implements IAuthRepository {
       reason?: MotivoDeEliminacion;
       blockers: { code: string }[] | null;
       requires_totp: boolean;
+      requires_response_email?: boolean;
     }>('/api/v1/users/me/delete-account/preflight');
     if (!res.success || !res.data) {
       return falla(res, 'PREFLIGHT_FAILED');
@@ -190,6 +191,7 @@ export class HttpAuthRepository implements IAuthRepository {
       motivo: d.reason,
       bloqueos: (d.blockers ?? []).map((b) => b.code),
       pideSegundoFactor: !!d.requires_totp,
+      pideCorreoParaRespuesta: !!d.requires_response_email,
     });
   }
 
@@ -203,6 +205,8 @@ export class HttpAuthRepository implements IAuthRepository {
       // undefined se omite del JSON: sin autenticador no viaja la clave.
       totp_code: request.totpCode,
       accept_terms: request.acceptTerms,
+      // Igual: solo viaja si la cuenta no tiene correo y la persona dio uno.
+      ...(request.responseEmail ? { response_email: request.responseEmail } : {}),
     });
     if (!res.success) {
       // El codigo y el detalle pasan: la pantalla elige el texto por codigo y,

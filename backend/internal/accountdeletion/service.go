@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/user"
 	"github.com/kiramopay/backend/pkg/hash"
+	"github.com/kiramopay/backend/pkg/validator"
 )
 
 // TOTPChecker es lo que se necesita del segundo factor. Lo cumple mfa.Service; la
@@ -119,7 +121,7 @@ func (s *Service) Preflight(ctx context.Context, userID string) (*Preflight, err
 	if err != nil {
 		return nil, ErrCuentaNoEncontrada
 	}
-	out := &Preflight{Bloqueos: []Bloqueo{}}
+	out := &Preflight{Bloqueos: []Bloqueo{}, RequiereCorreoParaRespuesta: noTieneCorreo(u)}
 	if s.totp != nil {
 		if on, err := s.totp.TOTPEnabled(ctx, userID); err == nil {
 			out.ConSegundoFactor = on
@@ -202,6 +204,19 @@ func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirm
 	if u.DemoLogin {
 		return nil, user.ErrCuentaDeDemostracion
 	}
+	// Sin correo en la cuenta, la respuesta escrita necesita a donde ir: la
+	// persona da uno solo para eso. Va antes de la contrasena y no gasta
+	// intentos.
+	correoDado := ""
+	if noTieneCorreo(u) {
+		correoDado = strings.TrimSpace(c.CorreoParaRespuesta)
+		if correoDado == "" {
+			return nil, ErrCorreoParaRespuesta
+		}
+		if validator.ValidateEmail(correoDado) != nil {
+			return nil, ErrCorreoParaRespuestaInvalido
+		}
+	}
 	if s.lockout != nil && s.lockout.IncrLockout(lockoutKey(userID)) > int64(s.maxIntentos) {
 		return nil, ErrEnPausa
 	}
@@ -228,12 +243,20 @@ func (s *Service) EliminarMiCuenta(ctx context.Context, userID string, c Confirm
 		s.lockout.ResetLockout(lockoutKey(userID))
 	}
 
-	res, err := s.iniciar(ctx, userID, opciones{canal: CanalApp})
+	res, err := s.iniciar(ctx, userID, opciones{canal: CanalApp, correoParaRespuesta: correoDado})
 	if err != nil {
 		return nil, err
 	}
 	s.despues(userID, res)
-	return &Solicitud{Ya: res.Ya, SolicitadaEn: res.SolicitadaEn, SeEliminaEl: res.SeEliminaEl}, nil
+	return &Solicitud{
+		Ya: res.Ya, SolicitadaEn: res.SolicitadaEn, SeEliminaEl: res.SeEliminaEl,
+		ConservaHasta: conservaHasta(res.SeEliminaEl),
+	}, nil
+}
+
+// noTieneCorreo dice si la cuenta no tiene a donde recibir la respuesta escrita.
+func noTieneCorreo(u *user.UserRecord) bool {
+	return strings.TrimSpace(u.Email) == ""
 }
 
 // iniciar abre la transaccion SERIALIZABLE, pide la eliminacion (el dia 0) y
@@ -289,14 +312,15 @@ func esReintentable(err error) bool {
 	return errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01")
 }
 
-// avisoTimeout acota el envio del correo de aviso, que va por un contexto propio
-// para que un proveedor lento no retenga la peticion.
+// avisoTimeout acota el envio de un correo, que va por un contexto propio para
+// que un proveedor lento no retenga la peticion.
 const avisoTimeout = 30 * time.Second
 
 // despues hace lo que no puede estar dentro de la transaccion del dia 0: marcar
-// la cuenta para que ningun token siga vivo, cortar los WebSocket y mandar la
-// respuesta escrita. Nada de esto es critico: la base ya es autoritativa (sin
-// la marca, el repaso de las marcas la pone) y una falla aqui solo se registra.
+// la cuenta para que ningun token siga vivo, cortar los WebSocket y el primer
+// intento de la respuesta escrita. Nada de esto es critico: la base ya es
+// autoritativa (sin la marca, el repaso de las marcas la pone; la respuesta
+// esta en la bandeja y la manda el barrido) y una falla aqui solo se registra.
 func (s *Service) despues(userID string, res resultado) {
 	if res.Ya {
 		return
@@ -305,16 +329,7 @@ func (s *Service) despues(userID string, res resultado) {
 	if s.disconnector != nil {
 		s.disconnector.DisconnectUser(userID)
 	}
-	s.responderPorEscrito(userID, res)
-}
-
-// responderPorEscrito manda la respuesta escrita del dia 0 con las fechas de la
-// solicitud. La via web la vuelve a mandar cuando se pide de nuevo una cuenta
-// que ya esta en plazo: la pagina promete el correo.
-func (s *Service) responderPorEscrito(userID string, res resultado) {
-	subject, text, html := messaging.AccountDeletionRequestedEmail(res.SeEliminaEl,
-		res.SeEliminaEl.AddDate(anosDeConservacion, 0, 0))
-	s.enviarAviso(userID, res.Correo, subject, text, html, "respuesta a la solicitud de eliminacion no enviada")
+	s.entregarAhora(res.Respuesta)
 }
 
 // marcar pone la marca que el middleware mira en cada peticion autenticada.
@@ -329,8 +344,10 @@ func (s *Service) marcar(userID string) {
 	}
 }
 
-// enviarAviso manda un correo por fuera de la peticion, acotado por avisoTimeout.
-// El correo no se escribe en el log: es un dato que se va a suprimir.
+// enviarAviso manda un correo de mejor esfuerzo por fuera de la peticion,
+// acotado por avisoTimeout: los avisos de reactivacion y del dia 30. La
+// respuesta escrita no va por aqui, sino por la bandeja (respuestas.go). El
+// correo no se escribe en el log: es un dato que se va a suprimir.
 func (s *Service) enviarAviso(userID, correo, subject, text, html, siFalla string) {
 	if s.email == nil || correo == "" {
 		return

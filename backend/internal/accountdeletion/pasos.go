@@ -45,16 +45,21 @@ type opciones struct {
 	// pide la eliminacion sola. Aun asi la cuenta SIGUE bloqueada: pedir la
 	// eliminacion no la desbloquea.
 	permitirCuentaBloqueada bool
+	// correoParaRespuesta es el correo que dio, solo para la respuesta escrita,
+	// una persona cuya cuenta no tiene correo. Se ignora si la cuenta tiene uno.
+	correoParaRespuesta string
 }
 
-// resultado de pedir la eliminacion. Correo y Nombre son para la respuesta
-// escrita que sale despues del commit.
+// resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
+// que quedo en la bandeja, para el primer intento despues del commit; vacio si
+// no se encolo ninguna (la segunda orden de la app, por ejemplo).
 type resultado struct {
 	Ya           bool
 	SolicitadaEn time.Time
 	SeEliminaEl  time.Time
 	Correo       string
 	Nombre       string
+	Respuesta    string
 }
 
 // ── Dia 0 ─────────────────────────────────────────────────────────────────
@@ -158,6 +163,18 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	// evento si el proceso cae justo despues del commit). Sin IP ni agente: no se
 	// guardan datos nuevos de una persona que acaba de pedir que se borren.
 	if err := auditar(ctx, tx, userID, "account_deletion_requested", op); err != nil {
+		return resultado{}, err
+	}
+	// La respuesta escrita queda en la bandeja en esta MISMA transaccion: si la
+	// solicitud quedo, la respuesta tambien, aunque el proceso caiga despues.
+	correoDado := ""
+	if res.Correo == "" {
+		correoDado = op.correoParaRespuesta
+	}
+	dia30 := res.SeEliminaEl
+	if res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
+		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado,
+	}); err != nil {
 		return resultado{}, err
 	}
 	return res, nil
@@ -288,6 +305,12 @@ func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) 
 		{"cancelar la solicitud web", `UPDATE account_deletion_requests
 			SET status = 'cancelled', result_code = 'REACTIVATED', processed_at = NOW()
 			WHERE user_id = $1::uuid AND status = 'scheduled'`},
+		// La respuesta del dia 0 que todavia no salio ya no corresponde: la
+		// persona cancelo la solicitud. El correo que dio para ella se borra.
+		{"cancelar la respuesta pendiente", `UPDATE account_deletion_responses
+			SET cancelled_at = NOW(), email_enc = NULL
+			WHERE user_id = $1::uuid AND kind = 'scheduled'
+			  AND delivered_at IS NULL AND cancelled_at IS NULL`},
 	} {
 		if _, err := tx.Exec(ctx, p.sql, userID); err != nil {
 			return false, fmt.Errorf("%s: %w", p.nombre, err)
@@ -459,6 +482,10 @@ var pasosDelDiaTreinta = []paso{
 		WHERE user_id = $1::uuid`},
 	// Participantes sin cuenta que la persona escribio a mano: sus datos eran de
 	// ella para organizar el reparto.
+	// El correo que la persona dio solo para la respuesta escrita. La fila queda:
+	// es la constancia de que se respondio.
+	{"depurar el correo de la respuesta", `UPDATE account_deletion_responses SET email_enc = NULL
+		WHERE user_id = $1::uuid AND email_enc IS NOT NULL`},
 	{"depurar participantes escritos", `UPDATE split_shares
 		SET user_name = 'Participante', user_phone = NULL
 		WHERE user_id IS NULL
@@ -652,6 +679,10 @@ var pasosDeLaDesasociacion = []paso{
 		WHERE user_id = $1::uuid`},
 	{"desasociar sedes", `UPDATE merchant_locations SET name = 'Sede', address = ''
 		WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
+	// La constancia de la respuesta escrita queda (fechas y via); la nota de
+	// operaciones es texto libre y puede nombrar a la persona.
+	{"desasociar respuestas", `UPDATE account_deletion_responses SET delivery_note = NULL, email_enc = NULL
+		WHERE user_id = $1::uuid`},
 }
 
 // ── Piezas comunes ────────────────────────────────────────────────────────

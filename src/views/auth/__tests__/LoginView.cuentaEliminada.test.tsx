@@ -82,10 +82,10 @@ describe('LoginView — cuenta eliminada y politica de privacidad', () => {
   });
 
   it('la respuesta se puede copiar para guardarla', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     useAuthStore.setState({ logoutReason: 'deleted', seEliminaEl: '2026-11-17T18:00:00Z' });
+    // userEvent instala su propio portapapeles: se espia despues de crearlo.
     const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
     pintar();
 
     await user.click(screen.getByRole('button', { name: 'Copiar la respuesta' }));

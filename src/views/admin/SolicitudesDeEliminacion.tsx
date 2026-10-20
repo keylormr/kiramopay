@@ -3,9 +3,10 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '@/components/Icons';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { getApiLayer } from '@/api';
-import type { SolicitudDeEliminacion } from '@/api/repositories/admin.repository';
+import type { RespuestaPorEntregar, SolicitudDeEliminacion } from '@/api/repositories/admin.repository';
 import type { TranslationKeys } from '@/i18n/translations';
 import { fechaYHora } from '@/utils/fechaPlazo';
+import { fechaLarga } from '@/utils/planes';
 
 // La cola de las solicitudes de eliminacion que llegan de la pagina web
 // (/eliminar-cuenta) y esperan a una persona: solo las de cuentas bajo revision
@@ -16,6 +17,13 @@ import { fechaYHora } from '@/utils/fechaPlazo';
 //
 // Vive como pestana de la pantalla de cuentas porque es la misma tarea
 // (gestionar una cuenta) y asi no se agrega otra entrada al menu.
+//
+// Arriba, las respuestas escritas (Ley 8968) que no pudieron salir solas por
+// correo: la persona del equipo la entrega por otro medio antes del plazo legal
+// y deja constancia de como. Sin ninguna pendiente, la seccion no aparece.
+
+// La nota de la entrega; el servidor guarda hasta 500 caracteres.
+const NOTA_MAX = 500;
 
 const CLAVE_DEL_BLOQUEO: Record<string, keyof TranslationKeys> = {
   BALANCE_POSITIVE: 'del_block_BALANCE_POSITIVE',
@@ -46,17 +54,30 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   const [confirmando, setConfirmando] = useState<SolicitudDeEliminacion | null>(null);
   const [actuando, setActuando] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
+  const [respuestas, setRespuestas] = useState<RespuestaPorEntregar[]>([]);
+  const [fallaRespuestas, setFallaRespuestas] = useState(false);
+  const [entregando, setEntregando] = useState<RespuestaPorEntregar | null>(null);
+  const [nota, setNota] = useState('');
+  const [errorNota, setErrorNota] = useState<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
     void (async () => {
-      const res = await getApiLayer().admin?.listDeletionRequests();
+      const api = getApiLayer().admin;
+      const [res, resp] = await Promise.all([api?.listDeletionRequests(), api?.listDeletionResponses()]);
       if (!vigente) return;
       if (!res?.success || !res.data) {
         setFalla(true);
       } else {
         setFalla(false);
         setCola(res.data);
+      }
+      // Una lista que no se pudo leer no es una lista vacia: se dice.
+      if (!resp?.success || !resp.data) {
+        setFallaRespuestas(true);
+      } else {
+        setFallaRespuestas(false);
+        setRespuestas(resp.data);
       }
       setCargando(false);
     })();
@@ -102,6 +123,64 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     releer();
   };
 
+  const abrirEntrega = (r: RespuestaPorEntregar) => {
+    setNota('');
+    setErrorNota(null);
+    setEntregando(r);
+  };
+
+  const marcarEntregada = async (r: RespuestaPorEntregar) => {
+    setActuando(r.id);
+    setErrorNota(null);
+    const res = await getApiLayer().admin?.markDeletionResponseDelivered(r.id, nota.trim());
+    setActuando(null);
+    if (res?.success) {
+      setEntregando(null);
+      setAviso({ tipo: 'ok', texto: t('admin_resp_done') });
+      releer();
+      return;
+    }
+    const codigo = res?.error?.code;
+    if (codigo === 'NOTE_REQUIRED') {
+      setErrorNota(t('admin_resp_note_required'));
+      return;
+    }
+    setEntregando(null);
+    setAviso({ tipo: 'error', texto: t(codigo === 'NOT_PENDING' ? 'admin_resp_already' : 'admin_del_action_failed') });
+    releer();
+  };
+
+  // Lo que hay que decirle a la persona: las fechas, o que resolver.
+  const loQueHayQueDecir = (r: RespuestaPorEntregar) =>
+    r.tipo === 'scheduled' ? (
+      <p className="text-sm uv-text-secondary leading-relaxed">
+        {t('admin_resp_scheduled')
+          .replace('{date}', fechaLarga(r.seEliminaEl, language))
+          .replace('{until}', fechaLarga(r.conservaHasta, language))}
+      </p>
+    ) : (
+      <div className="space-y-1">
+        <p className="text-sm uv-text-secondary">{t('admin_resp_blocked')}</p>
+        <ul className="list-disc pl-5 space-y-0.5">
+          {(r.bloqueos.length > 0 ? r.bloqueos : ['']).map((c) => (
+            <li key={c} className="text-sm uv-text-secondary">{t(CLAVE_DEL_BLOQUEO[c] ?? 'del_block_unknown')}</li>
+          ))}
+        </ul>
+      </div>
+    );
+
+  const persona = (cuenta: SolicitudDeEliminacion['account']) =>
+    cuenta ? (
+      <div>
+        <p className="font-bold uv-text-primary">{`${cuenta.firstName} ${cuenta.lastName}`.trim()}</p>
+        <p className="text-xs uv-text-muted tabular-nums mt-0.5">
+          {[cuenta.cedulaMasked, cuenta.phoneMasked, cuenta.emailMasked].filter(Boolean).join(' · ')}
+        </p>
+      </div>
+    ) : (
+      <p className="text-sm uv-text-muted">{t('admin_resp_no_account')}</p>
+    );
+
   return (
     <div className="px-4 py-4 space-y-3">
       {aviso?.tipo === 'ok' && (
@@ -136,6 +215,40 @@ export const SolicitudesDeEliminacion: React.FC = () => {
 
       {!cargando && falla && (
         <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_del_load_failed')}</p>
+      )}
+
+      {!cargando && fallaRespuestas && (
+        <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_resp_load_failed')}</p>
+      )}
+
+      {!cargando && respuestas.length > 0 && (
+        <section aria-labelledby="admin-resp-titulo" className="space-y-3 pb-2">
+          <div>
+            <h2 id="admin-resp-titulo" className="font-bold uv-text-primary">{t('admin_resp_title')}</h2>
+            <p className="text-xs uv-text-muted mt-0.5">{t('admin_resp_intro')}</p>
+          </div>
+          {respuestas.map((r) => (
+            <article key={r.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
+              {persona(r.account)}
+              <p className="text-xs font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
+                {r.motivo === 'send_failed'
+                  ? t('admin_resp_send_failed').replace('{n}', String(r.intentos))
+                  : t('admin_resp_no_channel')}
+                {' · '}
+                {t('admin_resp_due').replace('{date}', fechaLarga(r.responderAntesDe, language))}
+              </p>
+              {loQueHayQueDecir(r)}
+              <button
+                type="button"
+                onClick={() => abrirEntrega(r)}
+                disabled={actuando !== null}
+                className="w-full bg-[var(--color-primary)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+              >
+                {t('admin_resp_mark')}
+              </button>
+            </article>
+          ))}
+        </section>
       )}
 
       {!cargando && !falla && cola.length === 0 && (
@@ -222,6 +335,59 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               )}
             </button>
           </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={entregando !== null}
+        onClose={() => { if (actuando === null) setEntregando(null); }}
+        title={t('admin_resp_mark_title')}
+        dismissable={actuando === null}
+      >
+        {entregando && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (nota.trim() && actuando === null) void marcarEntregada(entregando);
+            }}
+          >
+            {persona(entregando.account)}
+            {loQueHayQueDecir(entregando)}
+            <div>
+              <label htmlFor="admin-resp-nota" className="text-sm font-medium uv-text-secondary mb-1.5 block">
+                {t('admin_resp_note_label')}
+              </label>
+              <textarea
+                id="admin-resp-nota"
+                value={nota}
+                onChange={(e) => { setNota(e.target.value); setErrorNota(null); }}
+                rows={3}
+                maxLength={NOTA_MAX}
+                autoFocus
+                disabled={actuando !== null}
+                aria-invalid={errorNota ? true : undefined}
+                aria-describedby="admin-resp-nota-ayuda"
+                className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)] resize-none"
+              />
+              <div className="flex justify-between gap-3 mt-1 text-xs uv-text-muted">
+                <span id="admin-resp-nota-ayuda">{t('admin_resp_note_hint')}</span>
+                <span className="tabular-nums shrink-0">{nota.length}/{NOTA_MAX}</span>
+              </div>
+            </div>
+            {errorNota && <p className="text-sm text-[var(--color-danger)]" role="alert">{errorNota}</p>}
+            <button
+              type="submit"
+              disabled={actuando !== null || nota.trim() === ''}
+              className="w-full bg-[var(--color-primary)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              {actuando ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                t('admin_resp_confirm')
+              )}
+            </button>
+          </form>
         )}
       </BottomSheet>
     </div>

@@ -112,6 +112,11 @@ export interface PreflightDeEliminacion {
   bloqueos: string[];
   /** La confirmacion pedira ademas el codigo del autenticador. */
   pideSegundoFactor: boolean;
+  /**
+   * La cuenta no tiene correo: la confirmacion pide uno, solo para enviarle la
+   * respuesta escrita (no queda en el perfil).
+   */
+  pideCorreoParaRespuesta: boolean;
 }
 
 export interface EliminarCuentaRequest {
@@ -120,6 +125,12 @@ export interface EliminarCuentaRequest {
   totpCode?: string;
   /** La aceptacion expresa del plazo de 30 dias. Sin ella el servidor responde TERMS_NOT_ACCEPTED. */
   acceptTerms: boolean;
+  /**
+   * Solo si la cuenta no tiene correo: a donde enviar la respuesta escrita. Sin
+   * el, el servidor responde RESPONSE_EMAIL_REQUIRED; mal escrito,
+   * RESPONSE_EMAIL_INVALID.
+   */
+  responseEmail?: string;
 }
 
 /** La solicitud de eliminacion ya registrada: el dia 0 y el dia 30, en ISO. */

@@ -1936,6 +1936,9 @@ export type TranslationKeys = {
   del_kept_title: string;
   del_kept_1: string;
   del_kept_2: string;
+  del_kept_2_no_email: string;
+  del_response_email_label: string;
+  del_response_email_hint: string;
   del_policy_link: string;
   del_blocked_title: string;
   del_blocked_intro: string;
@@ -1968,6 +1971,8 @@ export type TranslationKeys = {
   del_err_locked: string;
   del_err_terms: string;
   del_err_generic: string;
+  del_err_response_email_required: string;
+  del_err_response_email_invalid: string;
   privacy_policy: string;
   register_privacy_hint: string;
   account_deleted_title: string;
@@ -1980,6 +1985,14 @@ export type TranslationKeys = {
   login_pending_reactivate: string;
   login_pending_keep: string;
   login_pending_failed: string;
+  resp_title: string;
+  resp_erased: string;
+  resp_kept: string;
+  resp_reactivate: string;
+  resp_rights: string;
+  resp_by_email: string;
+  resp_copy: string;
+  resp_copied: string;
   // Solicitudes de eliminacion de cuenta (panel de administracion)
   admin_del_tab: string;
   admin_del_empty: string;
@@ -1998,6 +2011,23 @@ export type TranslationKeys = {
   admin_del_rejected: string;
   admin_del_already: string;
   admin_del_action_failed: string;
+  admin_resp_title: string;
+  admin_resp_intro: string;
+  admin_resp_no_channel: string;
+  admin_resp_send_failed: string;
+  admin_resp_due: string;
+  admin_resp_scheduled: string;
+  admin_resp_blocked: string;
+  admin_resp_no_account: string;
+  admin_resp_mark: string;
+  admin_resp_mark_title: string;
+  admin_resp_note_label: string;
+  admin_resp_note_hint: string;
+  admin_resp_note_required: string;
+  admin_resp_confirm: string;
+  admin_resp_done: string;
+  admin_resp_already: string;
+  admin_resp_load_failed: string;
 };
 
 import es from './languages/es';

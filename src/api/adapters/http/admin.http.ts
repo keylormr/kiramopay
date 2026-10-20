@@ -5,6 +5,7 @@ import type {
   PlanAsignado,
   SolicitudDeEliminacion,
   ResultadoDeSolicitud,
+  RespuestaPorEntregar,
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
@@ -129,6 +130,38 @@ export class HttpAdminRepository implements IAdminRepository {
     );
     if (!res.success) return fail(res);
     return apiSuccess({ rejected: true });
+  }
+
+  async listDeletionResponses(): Promise<ApiResponse<RespuestaPorEntregar[]>> {
+    const res = await this.client.get<unknown>('/api/v1/admin/account-deletion-responses?limit=50');
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    const texto = (v: unknown) => (typeof v === 'string' ? v : null);
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+        .map((r) => ({
+          id: String(r.id ?? ''),
+          tipo: r.kind === 'blocked' ? ('blocked' as const) : ('scheduled' as const),
+          motivo: r.reason === 'send_failed' ? ('send_failed' as const) : ('no_channel' as const),
+          intentos: typeof r.attempts === 'number' ? r.attempts : 0,
+          creadaEn: String(r.created_at ?? ''),
+          responderAntesDe: String(r.respond_by ?? ''),
+          seEliminaEl: texto(r.deletion_due_at),
+          conservaHasta: texto(r.retained_until),
+          bloqueos: Array.isArray(r.blockers) ? r.blockers.filter((b): b is string => typeof b === 'string') : [],
+          account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
+        })),
+    );
+  }
+
+  async markDeletionResponseDelivered(id: string, nota: string): Promise<ApiResponse<{ delivered: boolean }>> {
+    const res = await this.client.post<unknown>(
+      `/api/v1/admin/account-deletion-responses/${encodeURIComponent(id)}/delivered`,
+      { note: nota },
+    );
+    if (!res.success) return fail(res);
+    return apiSuccess({ delivered: true });
   }
 
   async saldoPromociones(): Promise<ApiResponse<{ saldoMinor: number }>> {
