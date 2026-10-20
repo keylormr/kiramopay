@@ -275,7 +275,7 @@ func Load() *Config {
 			APIKey: getEnv("ANTHROPIC_API_KEY", ""),
 			// Default to Haiku: the assistant is a fast, low-cost Q&A helper, so
 			// the cheapest current model fits and keeps the API budget lasting.
-			Model:            getEnv("ANTHROPIC_MODEL", "claude-haiku-4-5"),
+			Model:            getEnv("ANTHROPIC_MODEL", "claude-haiku-5-5"),
 			UserDailyLimit:   getEnvInt("ASSISTANT_USER_DAILY_LIMIT", 2),
 			PlusDailyLimit:   getEnvInt("ASSISTANT_PLUS_DAILY_LIMIT", 15),
 			ProDailyLimit:    getEnvInt("ASSISTANT_PRO_DAILY_LIMIT", 50),

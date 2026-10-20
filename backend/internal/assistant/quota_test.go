@@ -145,3 +145,42 @@ func TestCuota_LaDevolucionQueCruzaLaMedianocheNoDejaLlaveEterna(t *testing.T) {
 		t.Fatalf("el dia nuevo dio %d turnos y el plan son 2: el contador arranco en negativo por la devolucion", permitidos)
 	}
 }
+
+// Una pregunta que el filtro de alcance rechaza no gasta la cuota, pero no sin
+// tope: sin tope, quien mande preguntas ajenas sin parar nunca agota su cupo y
+// cada una sigue costando una llamada al filtro. Se devuelven tantas
+// rechazadas por dia como turnos da el plan; de ahi en adelante cuentan.
+func TestCuota_LaRechazadaSeDevuelveHastaElLimiteDelPlan(t *testing.T) {
+	espia := testutil.NuevoEspiaDeRedis()
+	q := NewRedisQuota(espia.Cliente(), map[string]int{"free": 2}, 100, nil)
+	ctx := context.Background()
+
+	for i := 1; i <= 2; i++ {
+		if res, err := q.Allow(ctx, "curioso"); err != nil || !res.Allowed {
+			t.Fatalf("turno %d: %+v, %v", i, res, err)
+		}
+		if !q.RefundDeclined(ctx, "curioso") {
+			t.Fatalf("la rechazada %d no se devolvio", i)
+		}
+	}
+	if n := espia.Cuenta(q.userKey("curioso")); n != 0 {
+		t.Errorf("tras dos rechazadas el cupo del usuario quedo en %d; se esperaba 0", n)
+	}
+	if n := espia.Cuenta(q.globalKey()); n != 0 {
+		t.Errorf("tras dos rechazadas el cupo global quedo en %d; se esperaba 0", n)
+	}
+	if !espia.TieneVencimiento(q.declinedKey("curioso")) {
+		t.Error("el contador de rechazadas quedo sin vencimiento")
+	}
+
+	// La tercera del dia ya cuenta como cualquier pregunta.
+	if res, err := q.Allow(ctx, "curioso"); err != nil || !res.Allowed {
+		t.Fatalf("tercer turno: %+v, %v", res, err)
+	}
+	if q.RefundDeclined(ctx, "curioso") {
+		t.Error("se devolvio una rechazada por encima del limite del plan")
+	}
+	if n := espia.Cuenta(q.userKey("curioso")); n != 1 {
+		t.Errorf("la rechazada sobre el tope dejo el cupo en %d; se esperaba 1", n)
+	}
+}

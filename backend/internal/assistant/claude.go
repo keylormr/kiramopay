@@ -26,12 +26,28 @@ type ClaudeClient struct {
 }
 
 const (
-	defaultClaudeModel   = "claude-haiku-4-5"
-	anthropicVersion     = "2023-06-01"
-	claudeMaxOutputToken = 1024
+	defaultClaudeModel = "claude-haiku-5-5"
+	anthropicVersion   = "2023-06-01"
+	// claudeMaxOutputToken era 1024 con Haiku 4.5. Haiku 5.5 gasta cerca de un
+	// 30% mas de tokens por el mismo texto, asi que se sube en esa proporcion
+	// para que una respuesta alcance el mismo largo que con Haiku 4.5.
+	claudeMaxOutputToken = 1400
 )
 
-// NewClaudeClient wires the client. model defaults to Haiku (fast and cheap —
+// sinRazonamiento devuelve el campo thinking para los modelos que razonan por
+// defecto y aceptan apagarlo. Haiku 5.5 razona por defecto: ese razonamiento
+// cuenta contra max_tokens y, en el ciclo de herramientas, la API pide devolver
+// esos bloques tal cual, cosa que la historia neutral (Message) no guarda. El
+// asistente contesta preguntas cortas con datos de las herramientas; no le
+// hace falta. Otros modelos no reciben el campo: Opus 5.5 rechaza "disabled".
+func sinRazonamiento(model string) *anthropicThinking {
+	if model == "claude-haiku-5-5" {
+		return &anthropicThinking{Type: "disabled"}
+	}
+	return nil
+}
+
+// NewClaudeClient wires the client. model defaults to Haiku 5.5 (fast and cheap —
 // the assistant is a short-turn Q&A helper, not a reasoning workload) and is
 // allowlist-validated (reusing safeModel from gemini.go). The caller must
 // ensure apiKey is non-empty.
@@ -79,11 +95,29 @@ type anthropicTool struct {
 }
 
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
-	Tools     []anthropicTool    `json:"tools,omitempty"`
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	System       string                 `json:"system,omitempty"`
+	Messages     []anthropicMessage     `json:"messages"`
+	Tools        []anthropicTool        `json:"tools,omitempty"`
+	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+}
+
+// anthropicThinking apaga el razonamiento (asistente en Haiku 5.5 y filtro de
+// alcance). anthropicOutputConfig lo usa solo el filtro: effort y salida
+// estructurada (output_config.format, sin encabezado beta).
+type anthropicThinking struct {
+	Type string `json:"type"`
+}
+type anthropicOutputConfig struct {
+	Effort string           `json:"effort,omitempty"`
+	Format *anthropicFormat `json:"format,omitempty"`
+}
+
+type anthropicFormat struct {
+	Type   string         `json:"type"`
+	Schema map[string]any `json:"schema"`
 }
 
 type anthropicResponse struct {
@@ -102,6 +136,7 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		MaxTokens: claudeMaxOutputToken,
 		System:    system,
 		Messages:  toAnthropicMessages(history),
+		Thinking:  sinRazonamiento(c.model),
 	}
 	// Sampling params (temperature/top_p) are intentionally omitted: Opus 4.7+
 	// reject them, and they are unnecessary for grounded tool-calling.
@@ -117,6 +152,39 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		reqBody.Tools = decls
 	}
 
+	ar, err := c.send(ctx, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	// A safety refusal is a 200 with stop_reason "refusal" and (usually) empty
+	// content. Surface a neutral message rather than an error so the assistant
+	// can relay it to the user.
+	if ar.StopReason == "refusal" {
+		return &LLMResult{Text: "I can't help with that request."}, nil
+	}
+
+	var (
+		text  string
+		calls []ToolCall
+	)
+	for _, block := range ar.Content {
+		switch block.Type {
+		case "text":
+			text += block.Text
+		case "tool_use":
+			var args map[string]any
+			if block.Input != nil {
+				args = *block.Input
+			}
+			calls = append(calls, ToolCall{Name: block.Name, Args: args})
+		}
+	}
+	return &LLMResult{Text: text, ToolCalls: calls}, nil
+}
+
+// send hace el POST a /v1/messages y devuelve la respuesta decodificada; un
+// estado HTTP de error vuelve como error con el mensaje de la API.
+func (c *ClaudeClient) send(ctx context.Context, reqBody anthropicRequest) (*anthropicResponse, error) {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -154,30 +222,7 @@ func (c *ClaudeClient) Generate(ctx context.Context, system string, history []Me
 		}
 		return nil, fmt.Errorf("anthropic http %d", resp.StatusCode)
 	}
-	// A safety refusal is a 200 with stop_reason "refusal" and (usually) empty
-	// content. Surface a neutral message rather than an error so the assistant
-	// can relay it to the user.
-	if ar.StopReason == "refusal" {
-		return &LLMResult{Text: "I can't help with that request."}, nil
-	}
-
-	var (
-		text  string
-		calls []ToolCall
-	)
-	for _, block := range ar.Content {
-		switch block.Type {
-		case "text":
-			text += block.Text
-		case "tool_use":
-			var args map[string]any
-			if block.Input != nil {
-				args = *block.Input
-			}
-			calls = append(calls, ToolCall{Name: block.Name, Args: args})
-		}
-	}
-	return &LLMResult{Text: text, ToolCalls: calls}, nil
+	return &ar, nil
 }
 
 // toAnthropicMessages maps provider-neutral messages to Anthropic messages.

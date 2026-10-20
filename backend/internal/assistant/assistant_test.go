@@ -20,13 +20,15 @@ type fakeLLM struct {
 	results     []*LLMResult
 	err         error // when set, Generate fails with it
 	calls       int
+	lastSystem  string
 	lastTools   []FunctionDecl
 	lastHistory []Message
 }
 
-func (f *fakeLLM) Generate(_ context.Context, _ string, history []Message, tools []FunctionDecl) (*LLMResult, error) {
+func (f *fakeLLM) Generate(_ context.Context, system string, history []Message, tools []FunctionDecl) (*LLMResult, error) {
 	i := f.calls
 	f.calls++
+	f.lastSystem = system
 	f.lastTools = tools
 	f.lastHistory = history
 	if f.err != nil {

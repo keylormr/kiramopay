@@ -24,6 +24,9 @@ type Limiter interface {
 	// Refund returns one consumed unit, called when a turn that passed Allow
 	// ultimately fails so our own error doesn't burn the user's quota.
 	Refund(ctx context.Context, userID string)
+	// RefundDeclined devuelve el turno de una pregunta que el filtro de alcance
+	// rechazo, con tope diario. Responde si devolvio.
+	RefundDeclined(ctx context.Context, userID string) bool
 }
 
 // PlanResolver returns the user's billing plan ("free"/"plus"/"pro"). On error
@@ -70,6 +73,30 @@ func (q *RedisQuota) userKey(userID string) string {
 
 func (q *RedisQuota) globalKey() string {
 	return fmt.Sprintf("assistant:q:global:%s", q.day())
+}
+
+func (q *RedisQuota) declinedKey(userID string) string {
+	return fmt.Sprintf("assistant:q:declined:%s:%s", userID, q.day())
+}
+
+// RefundDeclined devuelve el turno de una pregunta que el filtro de alcance
+// rechazo: una pregunta ajena a KiramoPay no gasta el cupo del dia.
+//
+// Con tope: se devuelven por dia tantas rechazadas como turnos da el plan, y de
+// ahi en adelante cuentan como cualquier pregunta. Sin tope, quien mande
+// preguntas ajenas sin parar no agotaria nunca ni su cupo ni el global, y cada
+// una sigue costando una llamada al filtro. Devolver solo el cupo del usuario
+// tampoco sirve: una sola persona podria agotar el global de toda la app.
+//
+// Si Redis falla al contar, no se devuelve: el cupo queda un turno mas
+// estricto, nunca mas flojo.
+func (q *RedisQuota) RefundDeclined(ctx context.Context, userID string) bool {
+	n, err := q.incr(ctx, q.declinedKey(userID))
+	if err != nil || n > int64(q.limitFor(ctx, userID)) {
+		return false
+	}
+	q.Refund(ctx, userID)
+	return true
 }
 
 // limitFor resolves the caller's daily limit from their plan, defaulting to the
