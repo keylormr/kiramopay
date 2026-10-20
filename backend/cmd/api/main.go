@@ -1370,6 +1370,7 @@ func main() {
 					// entrega por otra via y deja constancia.
 					r.Get("/admin/account-deletion-responses", accountDeletionHandler.ListarRespuestas)
 					r.Post("/admin/account-deletion-responses/{id}/delivered", accountDeletionHandler.MarcarRespuestaEntregada)
+					r.Post("/admin/account-deletion-responses/{id}/contact", accountDeletionHandler.VerContactoDeRespuesta)
 				})
 
 				// Lista de espera de los planes de pago, con la PII enmascarada.
