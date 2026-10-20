@@ -234,4 +234,14 @@ func TestRespuestaContraElEsquemaReal(t *testing.T) {
 	esperarRespuesta(t, pool, c.ID, "la del rechazo, entregada", func(r filaRespuesta) bool {
 		return r.Tipo == RespuestaRechazada && r.Entregada
 	})
+
+	// La que salio al correo dado queda en la lista de las enviadas a un correo
+	// sin confirmar.
+	d := sembrar(t, pool)
+	sinCorreo(t, pool, d.ID)
+	conCorreoDado(t, conCodigo, d.ID)
+	esperarRespuesta(t, pool, d.ID, "entregada al correo dado", func(r filaRespuesta) bool { return r.Entregada })
+	if enviadaSinConfirmar(t, conCodigo, d.ID) == nil {
+		t.Fatal("la lista de las enviadas a un correo sin confirmar no la tiene")
+	}
 }

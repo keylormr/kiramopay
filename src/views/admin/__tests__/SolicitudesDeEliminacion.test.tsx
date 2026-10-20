@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { SolicitudesDeEliminacion } from '../SolicitudesDeEliminacion';
@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
     listDeletionResponses: vi.fn(),
     markDeletionResponseDelivered: vi.fn(),
     viewDeletionResponseContact: vi.fn(),
+    listSentUnconfirmedDeletionResponses: vi.fn(),
   },
 }));
 
@@ -45,6 +46,7 @@ beforeEach(() => {
   for (const fn of Object.values(api.admin)) fn.mockReset();
   // Sin respuestas pendientes la seccion no aparece.
   api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [] });
+  api.admin.listSentUnconfirmedDeletionResponses.mockResolvedValue({ success: true, data: [] });
 });
 afterEach(cleanup);
 
@@ -318,5 +320,51 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     pintar();
     expect(await screen.findByText('No hay solicitudes por atender.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Respuestas por entregar' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Enviadas a un correo sin confirmar' })).toBeNull();
+  });
+
+  const enviada = {
+    id: 'e1',
+    tipo: 'rejected' as const,
+    entregadaEn: '2026-10-19T15:00:00Z',
+    userId: 'u1',
+    cuentaCerrada: false,
+    account: solicitud.account,
+  };
+
+  it('las que ya salieron a un correo sin confirmar se listan aparte, solo para leer', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listSentUnconfirmedDeletionResponses.mockResolvedValue({ success: true, data: [enviada] });
+    pintar();
+
+    const seccion = await screen.findByRole('region', { name: 'Enviadas a un correo sin confirmar' });
+    expect(within(seccion).getByText('Maria Rojas')).toBeInTheDocument();
+    expect(within(seccion).getByText('Correo sin confirmar')).toBeInTheDocument();
+    expect(within(seccion).getByText(/Enviada el 19 de octubre de 2026/)).toBeInTheDocument();
+    expect(within(seccion).getByText('Decía que no se puede atender por esta vía.')).toBeInTheDocument();
+    expect(within(seccion).queryAllByRole('button')).toHaveLength(0);
+    // Sin pendientes, la de las por entregar no aparece.
+    expect(screen.queryByRole('heading', { name: 'Respuestas por entregar' })).toBeNull();
+  });
+
+  it('la enviada de una cuenta ya cerrada da el id de la cuenta', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listSentUnconfirmedDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...enviada, tipo: 'scheduled' as const, account: null, userId: 'u-cerrada-9', cuentaCerrada: true }],
+    });
+    pintar();
+
+    const seccion = await screen.findByRole('region', { name: 'Enviadas a un correo sin confirmar' });
+    expect(within(seccion).getByText(/u-cerrada-9/)).toBeInTheDocument();
+    expect(within(seccion).getByText('Decía que empezó el plazo de 30 días.')).toBeInTheDocument();
+  });
+
+  it('si la lista de las enviadas no carga lo dice', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listSentUnconfirmedDeletionResponses.mockResolvedValue({ success: false, error: { code: 'LIST_FAILED', message: 'x' } });
+    pintar();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cargar la lista de las enviadas a un correo sin confirmar.');
   });
 });

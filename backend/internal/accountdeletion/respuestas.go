@@ -401,6 +401,17 @@ type RespuestaPendiente struct {
 	Cuenta             *user.AdminUserView `json:"account"`
 }
 
+// RespuestaEnviadaSinConfirmar es una respuesta que ya salio por correo al que
+// la persona dio solo para la respuesta, que nadie confirmo.
+type RespuestaEnviadaSinConfirmar struct {
+	ID            string              `json:"id"`
+	Tipo          string              `json:"kind"`
+	EntregadaEn   time.Time           `json:"delivered_at"`
+	UserID        string              `json:"user_id"`
+	CuentaCerrada bool                `json:"account_closed"`
+	Cuenta        *user.AdminUserView `json:"account"`
+}
+
 // ContactoCompleto es el contacto sin enmascarar de una respuesta del panel:
 // con lo enmascarado no se puede entregar por otro medio. Vacio lo que no hay.
 type ContactoCompleto struct {
@@ -516,6 +527,11 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 		}
 	}
 	return out, nil
+}
+
+// EnviadasSinConfirmar todavia sin hacer.
+func (s *Service) EnviadasSinConfirmar(_ context.Context, _ int) ([]RespuestaEnviadaSinConfirmar, error) {
+	return []RespuestaEnviadaSinConfirmar{}, nil
 }
 
 // MarcarRespuestaEntregada deja constancia de una respuesta que operaciones

@@ -23,7 +23,8 @@ import (
 //   - Toda solicitud web verificada recibe respuesta escrita por la bandeja,
 //     tambien las rechazadas, con el plazo legal contado desde la verificacion.
 //   - El correo dado solo para la respuesta se pide dos veces, y el panel marca
-//     la respuesta que va a un correo que nadie confirmo.
+//     la respuesta que va a un correo que nadie confirmo. Las que ya salieron a
+//     ese correo quedan 30 dias en una lista propia, solo para leer.
 
 const correoDado = "Dado.Respuesta@ejemplo.test"
 
@@ -527,5 +528,104 @@ func TestRespuesta_EmpezarElPlazoCancelaLaDeRechazo(t *testing.T) {
 	}
 	if p := enElPanel(t, svc, a.ID); p != nil && p.ID == rechazo {
 		t.Errorf("el panel sigue pidiendo la respuesta del rechazo: %+v", p)
+	}
+}
+
+// ── Las que ya salieron a un correo sin confirmar ─────────────────────────
+
+// enviadaSinConfirmar devuelve la de la cuenta en la lista de las que salieron
+// a un correo que nadie confirmo, o nil.
+func enviadaSinConfirmar(t *testing.T, svc *Service, userID string) *RespuestaEnviadaSinConfirmar {
+	t.Helper()
+	lista, err := svc.EnviadasSinConfirmar(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range lista {
+		if lista[i].UserID == userID {
+			return &lista[i]
+		}
+	}
+	return nil
+}
+
+// Una respuesta que salio sola deja el panel. Si salio al correo dado solo para
+// la respuesta, nadie sabe si le llego a la persona: operaciones la ve 30 dias
+// en su propia lista. Solo cuenta ese correo: el de la cuenta, aunque no este
+// verificado, no; tampoco una que operaciones entrego por otro medio.
+func TestRespuesta_LasEnviadasAUnCorreoSinConfirmar(t *testing.T) {
+	pool := testutil.TestDB(t)
+	dado, deLaCuenta, vieja, aMano := sembrar(t, pool), sembrar(t, pool), sembrar(t, pool), sembrar(t, pool)
+	for _, c := range []cuenta{dado, vieja, aMano} {
+		sinCorreo(t, pool, c.ID)
+	}
+	exec(t, pool, `UPDATE users SET email_verified = false WHERE id = $1::uuid`, deLaCuenta.ID)
+	admin := administrador(t, pool)
+	ctx := context.Background()
+	conCorreo := nuevoServicio(pool, &Options{Email: nuevoCorreo()})
+
+	conCorreoDado(t, conCorreo, dado.ID)
+	conCorreoDado(t, conCorreo, vieja.ID)
+	if _, err := conCorreo.EliminarMiCuenta(ctx, deLaCuenta.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []cuenta{dado, vieja, deLaCuenta} {
+		esperarRespuesta(t, pool, c.ID, "entregada por correo", func(r filaRespuesta) bool { return r.Entregada })
+	}
+	exec(t, pool, `UPDATE account_deletion_responses SET delivered_at = NOW() - interval '31 days' WHERE user_id = $1::uuid`, vieja.ID)
+
+	sinProveedor := nuevoServicio(pool, nil)
+	conCorreoDado(t, sinProveedor, aMano.ID)
+	r := esperarRespuesta(t, pool, aMano.ID, "en el panel", func(r filaRespuesta) bool { return r.Escalada })
+	if err := sinProveedor.MarcarRespuestaEntregada(ctx, r.ID, admin.ID, "se la leimos por telefono"); err != nil {
+		t.Fatal(err)
+	}
+
+	e := enviadaSinConfirmar(t, conCorreo, dado.ID)
+	if e == nil {
+		t.Fatal("la que salio al correo dado debe estar en la lista")
+	}
+	if e.Tipo != RespuestaPlazoIniciado || e.EntregadaEn.IsZero() || e.Cuenta == nil || e.CuentaCerrada {
+		t.Errorf("la enviada: %+v", e)
+	}
+	for que, c := range map[string]cuenta{
+		"la del correo de la cuenta sin verificar":  deLaCuenta,
+		"la de hace 31 dias":                        vieja,
+		"la que operaciones entrego por otro medio": aMano,
+	} {
+		if enviadaSinConfirmar(t, conCorreo, c.ID) != nil {
+			t.Errorf("%s no va en la lista", que)
+		}
+	}
+}
+
+func TestHandler_ListarLasEnviadasSinConfirmar(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	sinCorreo(t, pool, a.ID)
+	svc := nuevoServicio(pool, &Options{Email: nuevoCorreo()})
+	srv := router(NewHandler(svc, nil), admin.ID)
+	conCorreoDado(t, svc, a.ID)
+	esperarRespuesta(t, pool, a.ID, "entregada por correo", func(r filaRespuesta) bool { return r.Entregada })
+
+	rec, env := llamar(t, srv, "GET", "/admin/account-deletion-responses/sent-unconfirmed", "")
+	var lista []struct {
+		ID          string          `json:"id"`
+		Kind        string          `json:"kind"`
+		DeliveredAt *time.Time      `json:"delivered_at"`
+		UserID      string          `json:"user_id"`
+		Closed      *bool           `json:"account_closed"`
+		Account     json.RawMessage `json:"account"`
+	}
+	_ = json.Unmarshal(env.Data, &lista)
+	if rec.Code != 200 || len(lista) != 1 || lista[0].Kind != "scheduled" || lista[0].DeliveredAt == nil ||
+		lista[0].UserID != a.ID || lista[0].Closed == nil || len(lista[0].Account) < 3 {
+		t.Fatalf("la lista: %d %s", rec.Code, rec.Body.String())
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("la lista no se guarda en ninguna cache: %q", cc)
+	}
+	if strings.Contains(strings.ToLower(rec.Body.String()), strings.ToLower(correoDado)) {
+		t.Errorf("la lista no muestra el correo al que salio: %s", rec.Body.String())
 	}
 }

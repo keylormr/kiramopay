@@ -42,6 +42,7 @@ func TestLasRutasDelPanelDeEliminacionesPidenAdministrador(t *testing.T) {
 		"Post /admin/account-deletion-requests/{id}/process",
 		"Post /admin/account-deletion-requests/{id}/reject",
 		"Get /admin/account-deletion-responses",
+		"Get /admin/account-deletion-responses/sent-unconfirmed",
 		"Post /admin/account-deletion-responses/{id}/delivered",
 		"Post /admin/account-deletion-responses/{id}/contact",
 	} {

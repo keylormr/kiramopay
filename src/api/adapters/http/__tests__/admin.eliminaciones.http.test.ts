@@ -124,6 +124,36 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     expect(res.data?.[0]).toMatchObject({ id: 'd3', userId: 'u-cerrada-9', cuentaCerrada: true, account: null });
   });
 
+  it('lista las que salieron a un correo sin confirmar, sin la direccion', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: 'e1', kind: 'rejected', delivered_at: '2026-10-19T15:00:00Z', user_id: 'u1', account_closed: false,
+            account: { id: 'u1', first_name: 'Maria', last_name: 'Rojas', cedula_masked: '••••930', status: 'blocked' },
+          },
+          { id: 'e2', kind: 'scheduled', delivered_at: '2026-10-18T15:00:00Z', user_id: 'u-cerrada-9', account_closed: true, account: null },
+        ],
+      }),
+    });
+    const res = await new HttpAdminRepository(client).listSentUnconfirmedDeletionResponses();
+    expect(client.get).toHaveBeenCalledWith('/api/v1/admin/account-deletion-responses/sent-unconfirmed?limit=50');
+    expect(res.data).toHaveLength(2);
+    expect(res.data?.[0]).toMatchObject({
+      id: 'e1', tipo: 'rejected', entregadaEn: '2026-10-19T15:00:00Z', userId: 'u1', cuentaCerrada: false,
+      account: { firstName: 'Maria', cedulaMasked: '••••930' },
+    });
+    expect(res.data?.[1]).toEqual({
+      id: 'e2', tipo: 'scheduled', entregadaEn: '2026-10-18T15:00:00Z', userId: 'u-cerrada-9', cuentaCerrada: true, account: null,
+    });
+  });
+
+  it('lo que no es una lista son cero enviadas', async () => {
+    const client = fakeClient({ get: vi.fn().mockResolvedValue({ success: true, data: { no: 'lista' } }) });
+    expect((await new HttpAdminRepository(client).listSentUnconfirmedDeletionResponses()).data).toEqual([]);
+  });
+
   it('marcar una respuesta entregada manda la nota', async () => {
     const client = fakeClient({ post: vi.fn().mockResolvedValue({ success: true, data: null }) });
     const res = await new HttpAdminRepository(client).markDeletionResponseDelivered('d 1', 'Se la leimos por telefono');

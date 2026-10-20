@@ -235,6 +235,21 @@ func (h *Handler) ListarRespuestas(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, out)
 }
 
+// ListarEnviadasSinConfirmar — GET /admin/account-deletion-responses/sent-unconfirmed?limit=50 (admin)
+//
+// Las respuestas de los ultimos 30 dias que salieron por correo al que la
+// persona dio solo para la respuesta: que salieran no prueba que le llegaron.
+func (h *Handler) ListarEnviadasSinConfirmar(w http.ResponseWriter, r *http.Request) {
+	limite, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	out, err := h.service.EnviadasSinConfirmar(r.Context(), limite)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "LIST_FAILED", err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response.JSON(w, http.StatusOK, out)
+}
+
 // MarcarRespuestaEntregada — POST /admin/account-deletion-responses/{id}/delivered {"note":"..."} (admin)
 //
 // Deja constancia de que operaciones entrego la respuesta por otra via; la nota
