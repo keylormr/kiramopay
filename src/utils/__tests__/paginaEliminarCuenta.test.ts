@@ -88,8 +88,12 @@ describe('Pagina /eliminar-cuenta — la respuesta escrita al confirmar', () => 
   });
 
   it('si la atiende una persona, no dice nada sobre la cuenta', async () => {
-    const texto = await confirmar(responder(200, { success: true, data: { status: 'verified', outcome: 'received' } }));
+    const texto = await confirmar(
+      responder(200, { success: true, data: { status: 'verified', outcome: 'received', respond_by: '2026-10-27T18:00:00Z' } }),
+    );
     expect(texto).toMatch(/una persona del equipo/);
+    // El plazo legal, contado desde que se verifico el codigo.
+    expect(texto).toContain('27 de octubre de 2026');
     expect(texto).not.toMatch(/saldo|2031|se suprimen/);
   });
 
@@ -97,6 +101,12 @@ describe('Pagina /eliminar-cuenta — la respuesta escrita al confirmar', () => 
     const texto = await confirmar(responder(200, { success: true, data: { status: 'verified', outcome: 'rejected' } }));
     expect(texto).toMatch(/no se puede eliminar desde esta página/);
     expect(porId('paso-listo').querySelector('a[href="/privacidad/#contacto"]')).not.toBeNull();
+    // Tambien es una respuesta escrita: no se borro nada, y el derecho de acudir
+    // a la PRODHAB. Sin el motivo.
+    expect(texto).toMatch(/No se borró nada/);
+    expect(texto).toMatch(/PRODHAB/);
+    expect(texto).toMatch(/por escrito/);
+    expect(texto).not.toMatch(/bloque|revisión|demostración|administrador/i);
     expect(texto).not.toMatch(/2031|se suprimen/);
   });
 });

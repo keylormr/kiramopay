@@ -398,6 +398,7 @@ func TestRespuesta_UnaCuentaSinCorreoDaUnoParaLaRespuesta(t *testing.T) {
 	}
 
 	pedido.CorreoParaRespuesta = "  respuesta@ejemplo.test "
+	pedido.ConfirmacionCorreo = "respuesta@ejemplo.test"
 	res, err := svc.EliminarMiCuenta(ctx, a.ID, pedido)
 	if err != nil {
 		t.Fatalf("con el correo para la respuesta: %v", err)
@@ -425,7 +426,7 @@ func TestRespuesta_ReactivarCancelaLaQueNoSalio(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{
-		Password: claveDePrueba, AceptaPlazo: true, CorreoParaRespuesta: "respuesta@ejemplo.test",
+		Password: claveDePrueba, AceptaPlazo: true, CorreoParaRespuesta: "respuesta@ejemplo.test", ConfirmacionCorreo: "respuesta@ejemplo.test",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +455,7 @@ func TestRespuesta_DiaTreintaYDesasociacion(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{
-		Password: claveDePrueba, AceptaPlazo: true, CorreoParaRespuesta: "respuesta@ejemplo.test",
+		Password: claveDePrueba, AceptaPlazo: true, CorreoParaRespuesta: "respuesta@ejemplo.test", ConfirmacionCorreo: "respuesta@ejemplo.test",
 	}); err != nil {
 		t.Fatal(err)
 	}

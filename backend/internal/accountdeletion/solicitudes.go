@@ -208,6 +208,8 @@ type RespuestaWeb struct {
 	SeEliminaEl   *time.Time `json:"deletion_due_at,omitempty"`
 	ConservaHasta *time.Time `json:"retained_until,omitempty"`
 	Bloqueos      []string   `json:"blockers,omitempty"`
+	// ResponderAntesDe: hasta cuando hay que responder la que espera a una persona.
+	ResponderAntesDe *time.Time `json:"respond_by,omitempty"`
 }
 
 // Verificar es Confirmar sin la respuesta para la pagina.
@@ -400,12 +402,14 @@ func (s *Service) despuesDeAtender(_ context.Context, userID string, out *Atendi
 // SolicitudAdmin es una fila de la cola, tal como la ve operaciones. La cuenta
 // va enmascarada desde SQL, como en el resto del panel.
 type SolicitudAdmin struct {
-	ID           string              `json:"id"`
-	ContactKind  string              `json:"contact_kind"`
-	Estado       string              `json:"status"`
-	CreadaEn     time.Time           `json:"created_at"`
-	VerificadaEn *time.Time          `json:"verified_at"`
-	Cuenta       *user.AdminUserView `json:"account"`
+	ID           string     `json:"id"`
+	ContactKind  string     `json:"contact_kind"`
+	Estado       string     `json:"status"`
+	CreadaEn     time.Time  `json:"created_at"`
+	VerificadaEn *time.Time `json:"verified_at"`
+	// ResponderAntesDe es el plazo legal de la respuesta, desde la verificacion.
+	ResponderAntesDe time.Time           `json:"respond_by"`
+	Cuenta           *user.AdminUserView `json:"account"`
 }
 
 // ListarVerificadas devuelve la cola: las solicitudes con el contacto ya

@@ -41,12 +41,16 @@ describe('HttpAuthRepository — eliminar la cuenta', () => {
       data: { already_requested: false, requested_at: '2026-10-18T15:00:00Z', deletion_due_at: '2026-11-17T15:00:00Z' },
     });
     const repo = new HttpAuthRepository(fakeClient({ post }));
-    await repo.deleteAccount({ password: 'Clave-123', acceptTerms: true, responseEmail: 'respuesta@ejemplo.test' });
+    await repo.deleteAccount({
+      password: 'Clave-123', acceptTerms: true,
+      responseEmail: 'respuesta@ejemplo.test', responseEmailConfirmation: 'Respuesta@ejemplo.test',
+    });
     expect(post).toHaveBeenLastCalledWith('/api/v1/users/me/delete-account', {
       password: 'Clave-123',
       totp_code: undefined,
       accept_terms: true,
       response_email: 'respuesta@ejemplo.test',
+      response_email_confirmation: 'Respuesta@ejemplo.test',
     });
   });
 

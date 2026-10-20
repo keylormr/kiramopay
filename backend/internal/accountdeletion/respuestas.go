@@ -34,6 +34,8 @@ const (
 	RespuestaPlazoIniciado = "scheduled"
 	// RespuestaBloqueada: la solicitud web no pudo empezar; se dice que resolver.
 	RespuestaBloqueada = "blocked"
+	// RespuestaRechazada: la solicitud web no se atiende por esta via.
+	RespuestaRechazada = "rejected"
 )
 
 // Por que una respuesta no salio. Es un codigo y nunca el texto del proveedor:
@@ -110,6 +112,8 @@ var (
 	ErrNotaRequerida = errors.New("escribe como se entrego la respuesta")
 	// ErrNotaLarga: la nota pasa de maxNota caracteres.
 	ErrNotaLarga = errors.New("la nota es demasiado larga")
+	// ErrRespuestaFueraDelPanel: la respuesta no esta pendiente en el panel.
+	ErrRespuestaFueraDelPanel = errors.New("la respuesta no esta pendiente en el panel")
 )
 
 // nuevaRespuesta es lo que se encola.
@@ -355,9 +359,23 @@ type RespuestaPendiente struct {
 	Bloqueos         []string   `json:"blockers"`
 	// UserID y CuentaCerrada dejan atender la de una cuenta ya cerrada, que no
 	// tiene tarjeta enmascarada.
-	UserID        string              `json:"user_id"`
-	CuentaCerrada bool                `json:"account_closed"`
-	Cuenta        *user.AdminUserView `json:"account"`
+	UserID        string `json:"user_id"`
+	CuentaCerrada bool   `json:"account_closed"`
+	// CorreoSinConfirmar: va al correo que la persona dio solo para la respuesta.
+	CorreoSinConfirmar bool                `json:"unconfirmed_email"`
+	Cuenta             *user.AdminUserView `json:"account"`
+}
+
+// ContactoCompleto es el contacto sin enmascarar de una respuesta del panel.
+type ContactoCompleto struct {
+	Telefono            string `json:"phone"`
+	Correo              string `json:"email"`
+	CorreoParaRespuesta string `json:"response_email"`
+}
+
+// ContactoDeRespuesta devuelve el contacto completo de una respuesta del panel.
+func (s *Service) ContactoDeRespuesta(_ context.Context, _, _ string) (*ContactoCompleto, error) {
+	return nil, errors.New("sin hacer")
 }
 
 // RespuestasSinEntregar lista las que pasaron a operaciones, la de plazo mas

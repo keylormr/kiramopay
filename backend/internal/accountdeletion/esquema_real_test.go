@@ -205,4 +205,33 @@ func TestRespuestaContraElEsquemaReal(t *testing.T) {
 	if err := svc.MarcarRespuestaEntregada(ctx, id, admin.ID, "entregada a mano en la prueba"); err != nil {
 		t.Fatalf("marcarla entregada: %v", err)
 	}
+
+	// Una cuenta sin correo que dio uno para la respuesta: la marca del correo
+	// sin confirmar y ver su contacto, con la vista en la auditoria.
+	b := sembrar(t, pool)
+	sinCorreo(t, pool, b.ID)
+	conCorreoDado(t, svc, b.ID)
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatalf("barrido de la bandeja: %v", err)
+	}
+	p := enElPanel(t, svc, b.ID)
+	if p == nil || !p.CorreoSinConfirmar {
+		t.Fatalf("el panel debe marcar el correo sin confirmar: %+v", p)
+	}
+	if c, err := svc.ContactoDeRespuesta(ctx, p.ID, admin.ID); err != nil || c.CorreoParaRespuesta != correoDado {
+		t.Fatalf("ver el contacto: %+v %v", c, err)
+	}
+
+	// El rechazo de una solicitud web tambien va por la bandeja: su tipo entra en
+	// el CHECK de la 083.
+	c := sembrar(t, pool)
+	correo := nuevoCorreo()
+	conCodigo := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, conCodigo, correo, c)
+	if err := conCodigo.Rechazar(ctx, solicitud, admin.ID); err != nil {
+		t.Fatalf("rechazar: %v", err)
+	}
+	esperarRespuesta(t, pool, c.ID, "la del rechazo, entregada", func(r filaRespuesta) bool {
+		return r.Tipo == RespuestaRechazada && r.Entregada
+	})
 }

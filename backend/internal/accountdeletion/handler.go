@@ -267,3 +267,8 @@ func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Reques
 	}
 	response.NoContent(w)
 }
+
+// VerContactoDeRespuesta — POST /admin/account-deletion-responses/{id}/contact (admin)
+func (h *Handler) VerContactoDeRespuesta(w http.ResponseWriter, _ *http.Request) {
+	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "sin hacer")
+}

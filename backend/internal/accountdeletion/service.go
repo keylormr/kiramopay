@@ -167,6 +167,8 @@ type Confirmacion struct {
 	// CorreoParaRespuesta solo cuenta si la cuenta no tiene correo: es adonde va
 	// la respuesta escrita. No se guarda en el perfil.
 	CorreoParaRespuesta string `json:"response_email,omitempty"`
+	// ConfirmacionCorreo es el mismo correo, escrito otra vez.
+	ConfirmacionCorreo string `json:"response_email_confirmation,omitempty"`
 }
 
 // ErrPlazoNoAceptado: la solicitud no trae la aceptacion expresa del plazo.

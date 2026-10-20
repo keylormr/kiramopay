@@ -43,7 +43,7 @@ func TestHandler_EliminarConElCorreoParaLaRespuesta(t *testing.T) {
 	if rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{`+base+`,"response_email":"no-es-correo"}`); rec.Code != 400 || env.Error == nil || env.Error.Code != "RESPONSE_EMAIL_INVALID" {
 		t.Errorf("con un correo invalido: %d %s", rec.Code, rec.Body.String())
 	}
-	rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{`+base+`,"response_email":"respuesta@ejemplo.test"}`)
+	rec, env := llamar(t, srv, "POST", "/users/me/delete-account", `{`+base+`,"response_email":"respuesta@ejemplo.test","response_email_confirmation":"respuesta@ejemplo.test"}`)
 	if rec.Code != 200 {
 		t.Fatalf("con el correo: %d %s", rec.Code, rec.Body.String())
 	}

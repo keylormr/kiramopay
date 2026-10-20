@@ -208,6 +208,8 @@ func TestCorreosDeLaEliminacionNoMencionanElReporte(t *testing.T) {
 	correos["pendiente"] = [2]string{a, b}
 	_, a, b = AccountReactivatedEmail()
 	correos["reactivacion"] = [2]string{a, b}
+	_, a, b = DeletionRejectedEmail()
+	correos["rechazo"] = [2]string{a, b}
 	for nombre, c := range correos {
 		for _, cuerpo := range c {
 			if m := mencionProhibida.FindString(cuerpo); m != "" {
@@ -227,6 +229,29 @@ func TestAccountReactivatedEmail(t *testing.T) {
 		for _, debe := range []string{"reactiv", "contraseña"} {
 			if !strings.Contains(cuerpo, debe) {
 				t.Errorf("el %s no dice %q", nombre, debe)
+			}
+		}
+	}
+}
+
+// La solicitud web que no se puede atender tambien se responde por escrito
+// (decision del dueno del 2026-10-20): que no se borro nada, a donde escribir y
+// el derecho a acudir a la PRODHAB. Nunca dice por que: la cuenta puede estar
+// bajo revision, ser de demostracion o de un administrador.
+func TestDeletionRejectedEmailEsLaRespuestaEscrita(t *testing.T) {
+	subject, text, html := DeletionRejectedEmail()
+	if subject == "" {
+		t.Fatal("sin asunto")
+	}
+	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
+		for _, debe := range []string{"No se borró nada", "privacidad", "PRODHAB", "escribinos"} {
+			if !strings.Contains(cuerpo, debe) {
+				t.Errorf("el %s no dice %q:\n%s", nombre, debe, cuerpo)
+			}
+		}
+		for _, motivo := range []string{"bloque", "revisión", "demostración", "administrador", "suspend"} {
+			if strings.Contains(strings.ToLower(cuerpo), motivo) {
+				t.Errorf("el %s deja ver el motivo (%q):\n%s", nombre, motivo, cuerpo)
 			}
 		}
 	}

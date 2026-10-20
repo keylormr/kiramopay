@@ -373,3 +373,8 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 	htmlBody = emailShell("Todavía no pudimos eliminar tu cuenta", "No se borró nada.", body.String())
 	return subject, text.String(), htmlBody
 }
+
+// DeletionRejectedEmail es la respuesta a una solicitud web que no se atiende.
+func DeletionRejectedEmail() (subject, textBody, htmlBody string) {
+	return "", "", ""
+}

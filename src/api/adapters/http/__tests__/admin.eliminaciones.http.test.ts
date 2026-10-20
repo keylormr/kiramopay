@@ -14,6 +14,7 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
         data: [
           {
             id: 'r1', contact_kind: 'phone', status: 'verified', created_at: '2026-10-14T15:00:00Z', verified_at: '2026-10-14T15:05:00Z',
+            respond_by: '2026-10-21T15:05:00Z',
             account: { id: 'u1', first_name: 'Maria', last_name: 'Rojas', cedula_masked: '••••930', status: 'blocked' },
           },
           { id: 'r2', contact_kind: 'email', created_at: '2026-10-14T16:00:00Z', verified_at: null, account: null },
@@ -23,8 +24,11 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     const res = await new HttpAdminRepository(client).listDeletionRequests();
     expect(client.get).toHaveBeenCalledWith('/api/v1/admin/account-deletion-requests?limit=50');
     expect(res.data).toHaveLength(2);
-    expect(res.data?.[0]).toMatchObject({ id: 'r1', contactKind: 'phone', account: { firstName: 'Maria', cedulaMasked: '••••930', status: 'blocked' } });
-    expect(res.data?.[1]).toMatchObject({ id: 'r2', contactKind: 'email', verifiedAt: null, account: null });
+    expect(res.data?.[0]).toMatchObject({
+      id: 'r1', contactKind: 'phone', responderAntesDe: '2026-10-21T15:05:00Z',
+      account: { firstName: 'Maria', cedulaMasked: '••••930', status: 'blocked' },
+    });
+    expect(res.data?.[1]).toMatchObject({ id: 'r2', contactKind: 'email', verifiedAt: null, responderAntesDe: null, account: null });
   });
 
   it('lo que no es una lista (el stub de E2E) es una cola vacia', async () => {
@@ -54,6 +58,7 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
             id: 'd1', kind: 'scheduled', reason: 'no_channel', attempts: 1,
             created_at: '2026-10-19T15:00:00Z', respond_by: '2026-10-26T15:00:00Z',
             deletion_due_at: '2026-11-18T15:00:00Z', retained_until: '2031-11-18T15:00:00Z', blockers: [],
+            unconfirmed_email: true,
             account: { id: 'u1', first_name: 'Maria', last_name: 'Rojas', cedula_masked: '••••930', status: 'pending_deletion' },
           },
           {
@@ -69,12 +74,36 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     expect(res.data?.[0]).toMatchObject({
       id: 'd1', tipo: 'scheduled', motivo: 'no_channel', intentos: 1, responderAntesDe: '2026-10-26T15:00:00Z',
       seEliminaEl: '2026-11-18T15:00:00Z', conservaHasta: '2031-11-18T15:00:00Z', bloqueos: [],
+      correoSinConfirmar: true,
       account: { firstName: 'Maria', cedulaMasked: '••••930' },
     });
     expect(res.data?.[1]).toMatchObject({
       id: 'd2', tipo: 'blocked', motivo: 'send_failed', seEliminaEl: null, conservaHasta: null,
-      bloqueos: ['BALANCE_POSITIVE'], account: null,
+      bloqueos: ['BALANCE_POSITIVE'], correoSinConfirmar: false, account: null,
     });
+  });
+
+  it('la respuesta de una solicitud rechazada llega con su tipo', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: [{ id: 'd4', kind: 'rejected', reason: 'no_channel', attempts: 1, created_at: '2026-10-19T15:00:00Z', respond_by: '2026-10-26T15:00:00Z', blockers: [], account: null }],
+      }),
+    });
+    const res = await new HttpAdminRepository(client).listDeletionResponses();
+    expect(res.data?.[0]).toMatchObject({ id: 'd4', tipo: 'rejected' });
+  });
+
+  it('ver el contacto lo pide por POST y lo devuelve completo', async () => {
+    const client = fakeClient({
+      post: vi.fn().mockResolvedValue({
+        success: true,
+        data: { phone: '+50688881234', email: '', response_email: 'dado@ejemplo.test' },
+      }),
+    });
+    const res = await new HttpAdminRepository(client).viewDeletionResponseContact('d 1');
+    expect(client.post).toHaveBeenCalledWith('/api/v1/admin/account-deletion-responses/d%201/contact', {});
+    expect(res.data).toEqual({ telefono: '+50688881234', correo: '', correoParaRespuesta: 'dado@ejemplo.test' });
   });
 
   it('la de una cuenta ya cerrada trae el id de la cuenta, para atenderla sin la tarjeta', async () => {

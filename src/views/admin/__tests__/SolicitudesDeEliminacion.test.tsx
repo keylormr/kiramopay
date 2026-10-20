@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
     rejectDeletionRequest: vi.fn(),
     listDeletionResponses: vi.fn(),
     markDeletionResponseDelivered: vi.fn(),
+    viewDeletionResponseContact: vi.fn(),
   },
 }));
 
@@ -27,6 +28,7 @@ const solicitud = {
   contactKind: 'email' as const,
   createdAt: '2026-10-14T15:00:00Z',
   verifiedAt: '2026-10-14T15:05:00Z',
+  responderAntesDe: '2026-10-21T18:05:00Z',
   account: {
     id: 'u1', firstName: 'Maria', lastName: 'Rojas', username: '', cedulaMasked: '••••••930',
     phoneMasked: '••••••1234', emailMasked: 'm•••@ejemplo.test', status: 'active' as const, role: 'user',
@@ -53,6 +55,8 @@ describe('SolicitudesDeEliminacion', () => {
     expect(await screen.findByText('Maria Rojas')).toBeInTheDocument();
     expect(screen.getByText(/••••••930/)).toBeInTheDocument();
     expect(screen.getByText(/Pidió con su correo/)).toBeInTheDocument();
+    // El plazo legal de la respuesta corre desde la verificacion.
+    expect(screen.getByText(/Responder antes del 21 de octubre de 2026/)).toBeInTheDocument();
   });
 
   it('una cola vacia lo dice', async () => {
@@ -180,6 +184,85 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     expect(await screen.findByText(/Cuenta cerrada/)).toBeInTheDocument();
     expect(screen.getByText(/u-cerrada-9/)).toBeInTheDocument();
     expect(screen.queryByText('No se pudo leer la cuenta.')).toBeNull();
+  });
+
+  it('ver el contacto lo pide al servidor y lo muestra completo, avisando que queda registrado', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.viewDeletionResponseContact.mockResolvedValue({
+      success: true,
+      data: { telefono: '+50688881234', correo: 'maria@ejemplo.test', correoParaRespuesta: 'dado@ejemplo.test' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    expect(await screen.findByText('Queda registrado quién lo ve y cuándo.')).toBeInTheDocument();
+    expect(screen.queryByText(/\+50688881234/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ver contacto' }));
+    await waitFor(() => expect(api.admin.viewDeletionResponseContact).toHaveBeenCalledWith('d1'));
+    expect(await screen.findByText(/\+50688881234/)).toBeInTheDocument();
+    expect(screen.getByText(/maria@ejemplo\.test/)).toBeInTheDocument();
+    expect(screen.getByText(/Correo que dio para la respuesta: dado@ejemplo\.test/)).toBeInTheDocument();
+  });
+
+  it('si el contacto no se puede leer lo dice', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.viewDeletionResponseContact.mockResolvedValue({ success: false, error: { code: 'NOT_PENDING', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Ver contacto' }));
+    expect(await screen.findByText('No se pudo leer el contacto.')).toBeInTheDocument();
+  });
+
+  it('sin contacto guardado lo dice en vez de mostrar campos vacios', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.viewDeletionResponseContact.mockResolvedValue({ success: true, data: { telefono: '', correo: '', correoParaRespuesta: '' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Ver contacto' }));
+    expect(await screen.findByText('No hay contacto guardado.')).toBeInTheDocument();
+  });
+
+  it('la que va a un correo que nadie confirmo lleva la marca', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...respuesta, correoSinConfirmar: true }, { ...respuesta, id: 'd2', correoSinConfirmar: false }],
+    });
+    pintar();
+
+    expect(await screen.findAllByText('Correo sin confirmar')).toHaveLength(1);
+  });
+
+  it('la de una solicitud rechazada dice que decirle, sin el motivo', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...respuesta, tipo: 'rejected', seEliminaEl: null, conservaHasta: null }],
+    });
+    pintar();
+
+    expect(await screen.findByText(/no se puede atender por esta vía/)).toBeInTheDocument();
+    expect(screen.getByText(/PRODHAB/)).toBeInTheDocument();
+    expect(screen.queryByText(/se suprimen sus datos/)).toBeNull();
+  });
+
+  it('una nota de mas de 500 caracteres lo dice y no cierra la hoja', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.markDeletionResponseDelivered.mockResolvedValue({ success: false, error: { code: 'NOTE_TOO_LONG', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Marcar entregada' }));
+    await user.type(screen.getByLabelText('Cómo la entregaste'), 'Se la leímos por teléfono');
+    await user.click(screen.getByRole('button', { name: 'Confirmar la entrega' }));
+    expect(await screen.findByText('La nota pasa de 500 caracteres.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cómo la entregaste')).toHaveValue('Se la leímos por teléfono');
   });
 
   it('sin respuestas pendientes la seccion no aparece', async () => {
