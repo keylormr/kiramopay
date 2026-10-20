@@ -1,6 +1,8 @@
 package appversion
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +24,10 @@ func handlerDePrueba(api, web string) *Handler {
 	// Sin servidor de novedades: las pruebas que no las miran no salen a la
 	// red. Las que si, apuntan notasFmt a servidorNotas.
 	h.notasFmt = ""
+	// Lo mismo con los paquetes de la actualizacion interna: las que los miran
+	// usan conPaquetes.
+	h.manifiestoFmt = ""
+	h.paqueteFmt = ""
 	h.token = ""
 	return h
 }
@@ -544,5 +550,349 @@ func TestGetLatest_PeticionesSimultaneasConsultanUnaSolaVez(t *testing.T) {
 	wg.Wait()
 	if aLaAPI.Load() != 1 || aLasNotas.Load() != 1 {
 		t.Fatalf("API %d veces y notas %d veces, esperaba una de cada una", aLaAPI.Load(), aLasNotas.Load())
+	}
+}
+
+// ── Actualizacion interna ────────────────────────────────────────────────────
+// Cuando la version nueva solo cambia la capa web, la app la baja por dentro en
+// vez de pedir otro APK. El CI adjunta al release, por plataforma, el paquete
+// web (kiramopay-web-<plataforma>.zip) y su manifiesto firmado
+// (actualizacion-<plataforma>.json). El servidor no verifica la firma: la
+// verifica el telefono con la llave que trae el binario. Aca solo se pasa lo
+// publicado, sin ofrecer un paquete que no existe o que es de otra version.
+
+type adjunto struct {
+	status int
+	cuerpo string
+}
+
+// Release con adjuntos, servido como GitHub: la descarga redirige al
+// almacenamiento de objetos, que responde el archivo. Cuenta cuantas veces se
+// pidio cada uno.
+func servidorAdjuntos(t *testing.T, tag string, adjuntos map[string]adjunto) (*httptest.Server, *sync.Map) {
+	t.Helper()
+	pedidos := &sync.Map{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if nombre, ok := strings.CutPrefix(r.URL.Path, "/download/"+tag+"/"); ok {
+			http.Redirect(w, r, "/objetos/"+nombre, http.StatusFound)
+			return
+		}
+		nombre, ok := strings.CutPrefix(r.URL.Path, "/objetos/")
+		a, existe := adjuntos[nombre]
+		if !ok || !existe {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		n, _ := pedidos.LoadOrStore(nombre, new(atomic.Int32))
+		n.(*atomic.Int32).Add(1)
+		if a.status != http.StatusOK {
+			w.WriteHeader(a.status)
+			return
+		}
+		if r.Header.Get("Range") != "" {
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte(a.cuerpo[:1]))
+			return
+		}
+		_, _ = w.Write([]byte(a.cuerpo))
+	}))
+	return srv, pedidos
+}
+
+func vecesPedido(pedidos *sync.Map, nombre string) int32 {
+	if n, ok := pedidos.Load(nombre); ok {
+		return n.(*atomic.Int32).Load()
+	}
+	return 0
+}
+
+// El manifiesto como lo publica scripts/paquete-web.mjs: el JSON firmado va en
+// base64, junto con su firma.
+func manifiestoPublicado(version, plataforma string) (cuerpo, manifiesto string) {
+	m := fmt.Sprintf(`{"formato":1,"plataforma":%q,"version":%q,"versionCode":19,"nativaMinima":19,`+
+		`"huellaNativa":"h","paquete":"kiramopay-web-%s.zip","firmaPaquete":"Zg==","bytes":10}`, plataforma, version, plataforma)
+	manifiesto = base64.StdEncoding.EncodeToString([]byte(m))
+	return fmt.Sprintf(`{"manifiesto":%q,"firma":"ZmlybWE="}`, manifiesto), manifiesto
+}
+
+func conPaquetes(api, web, adjuntos string) *Handler {
+	h := handlerDePrueba(api, web)
+	h.manifiestoFmt = adjuntos + "/download/%s/actualizacion-%s.json"
+	h.paqueteFmt = adjuntos + "/download/%s/kiramopay-web-%s.zip"
+	return h
+}
+
+func releaseCompleto(plataformas ...string) (map[string]adjunto, map[string]string) {
+	adjuntos := map[string]adjunto{}
+	manifiestos := map[string]string{}
+	for _, p := range plataformas {
+		cuerpo, m := manifiestoPublicado("2.3.6", p)
+		adjuntos["actualizacion-"+p+".json"] = adjunto{http.StatusOK, cuerpo}
+		adjuntos["kiramopay-web-"+p+".zip"] = adjunto{http.StatusOK, "PK"}
+		manifiestos[p] = m
+	}
+	return adjuntos, manifiestos
+}
+
+// En Render la API suele estar sin cuota y la version sale por la redireccion:
+// ese camino tambien tiene que traer el paquete.
+func TestPaqueteWeb_PorLaRedireccionAndroidRecibeElManifiestoFirmado(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	contenido, manifiestos := releaseCompleto("android")
+	adj, _ := servidorAdjuntos(t, "v2.3.6", contenido)
+	defer adj.Close()
+
+	code, info := pedir(t, conPaquetes(api.URL, web.URL, adj.URL))
+	if code != http.StatusOK || info.Web == nil {
+		t.Fatalf("code=%d info=%+v, esperaba 200 con el paquete web", code, info)
+	}
+	if info.Web.Manifest != manifiestos["android"] || info.Web.Signature != "ZmlybWE=" {
+		t.Fatalf("web=%+v, esperaba el manifiesto y la firma tal cual se publicaron", info.Web)
+	}
+	if want := adj.URL + "/download/v2.3.6/kiramopay-web-android.zip"; info.Web.URL != want {
+		t.Fatalf("url del paquete=%q, esperaba %q", info.Web.URL, want)
+	}
+	// El APK sigue ahi: es el camino cuando cambia lo nativo.
+	if info.URL == "" {
+		t.Fatalf("sin URL del APK")
+	}
+}
+
+// Por la API los adjuntos vienen en la lista del release: no hace falta
+// confirmar el .zip pidiendolo.
+func TestPaqueteWeb_PorLaAPIUsaLosAdjuntosDelRelease(t *testing.T) {
+	contenido, manifiestos := releaseCompleto("android")
+	adj, pedidos := servidorAdjuntos(t, "v2.3.6", contenido)
+	defer adj.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"tag_name":"v2.3.6","assets":[
+			{"name":"kiramopay.apk","browser_download_url":"https://ejemplo/apk"},
+			{"name":"actualizacion-android.json","browser_download_url":"%[1]s/download/v2.3.6/actualizacion-android.json"},
+			{"name":"kiramopay-web-android.zip","browser_download_url":"%[1]s/download/v2.3.6/kiramopay-web-android.zip"}]}`, adj.URL)
+	}))
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+
+	code, info := pedir(t, conPaquetes(api.URL, web.URL, adj.URL))
+	if code != http.StatusOK || info.Web == nil || info.Web.Manifest != manifiestos["android"] {
+		t.Fatalf("code=%d info=%+v, esperaba el paquete de la lista del release", code, info)
+	}
+	if want := adj.URL + "/download/v2.3.6/kiramopay-web-android.zip"; info.Web.URL != want {
+		t.Fatalf("url=%q, esperaba la del adjunto %q", info.Web.URL, want)
+	}
+	if n := vecesPedido(pedidos, "kiramopay-web-android.zip"); n != 0 {
+		t.Fatalf("pidio el .zip %d veces: la lista del release ya dice que existe", n)
+	}
+}
+
+// Un release sin paquete (todos los anteriores a este cambio), o con uno que no
+// sirve, no deja a nadie sin actualizar: se ofrece el APK, como siempre.
+func TestPaqueteWeb_SinPaqueteUtilSeOfreceSoloElAPK(t *testing.T) {
+	deOtraVersion, _ := manifiestoPublicado("2.3.5", "android")
+	deOtraPlataforma, _ := manifiestoPublicado("2.3.6", "ios")
+	completo, _ := releaseCompleto("android")
+	sinZip := map[string]adjunto{"actualizacion-android.json": completo["actualizacion-android.json"]}
+	for _, caso := range []struct {
+		nombre   string
+		adjuntos map[string]adjunto
+	}{
+		{"sin manifiesto", map[string]adjunto{"kiramopay-web-android.zip": {http.StatusOK, "PK"}}},
+		{"manifiesto roto", map[string]adjunto{
+			"actualizacion-android.json": {http.StatusOK, "no es json"},
+			"kiramopay-web-android.zip":  {http.StatusOK, "PK"},
+		}},
+		{"manifiesto sin firma", map[string]adjunto{
+			"actualizacion-android.json": {http.StatusOK, `{"manifiesto":"e30=","firma":""}`},
+			"kiramopay-web-android.zip":  {http.StatusOK, "PK"},
+		}},
+		{"manifiesto de otra version", map[string]adjunto{
+			"actualizacion-android.json": {http.StatusOK, deOtraVersion},
+			"kiramopay-web-android.zip":  {http.StatusOK, "PK"},
+		}},
+		{"manifiesto de la otra plataforma", map[string]adjunto{
+			"actualizacion-android.json": {http.StatusOK, deOtraPlataforma},
+			"kiramopay-web-android.zip":  {http.StatusOK, "PK"},
+		}},
+		{"sin el zip", sinZip},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			api := servidorAPI(t, http.StatusForbidden, true)
+			defer api.Close()
+			web := servidorWeb(t, true)
+			defer web.Close()
+			adj, _ := servidorAdjuntos(t, "v2.3.6", caso.adjuntos)
+			defer adj.Close()
+
+			rec := httptest.NewRecorder()
+			conPaquetes(api.URL, web.URL, adj.URL).GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("code=%d, esperaba 200 con el APK", rec.Code)
+			}
+			// Sin "web" en la respuesta: los APK viejos no lo conocen y los
+			// nuevos van por el APK.
+			if strings.Contains(rec.Body.String(), `"web"`) || !strings.Contains(rec.Body.String(), `kiramopay.apk`) {
+				t.Fatalf("body=%s, esperaba solo el APK", rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestPaqueteWeb_CadaPlataformaRecibeElSuyo(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	contenido, manifiestos := releaseCompleto("android", "ios")
+	adj, _ := servidorAdjuntos(t, "v2.3.6", contenido)
+	defer adj.Close()
+	h := conPaquetes(api.URL, web.URL, adj.URL)
+	h.iosUpdateURL = "https://testflight.apple.com/join/abc123"
+
+	_, android := pedirPlataforma(t, h, "?platform=android")
+	_, ios := pedirPlataforma(t, h, "?platform=ios")
+	if android.Web == nil || android.Web.Manifest != manifiestos["android"] || !strings.HasSuffix(android.Web.URL, "/kiramopay-web-android.zip") {
+		t.Fatalf("android web=%+v, esperaba el paquete de android", android.Web)
+	}
+	if ios.Web == nil || ios.Web.Manifest != manifiestos["ios"] || !strings.HasSuffix(ios.Web.URL, "/kiramopay-web-ios.zip") {
+		t.Fatalf("ios web=%+v, esperaba el paquete de ios", ios.Web)
+	}
+	if ios.URL != h.iosUpdateURL {
+		t.Fatalf("ios url=%q, esperaba el canal", ios.URL)
+	}
+}
+
+// Sin canal de iOS (no hay TestFlight ni App Store todavia) la capa web igual
+// se puede actualizar por dentro. Antes esto respondia 503 sin mirar nada.
+func TestPaqueteWeb_IOSSinCanalPeroConPaqueteSeOfrece(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	contenido, manifiestos := releaseCompleto("android", "ios")
+	adj, _ := servidorAdjuntos(t, "v2.3.6", contenido)
+	defer adj.Close()
+
+	code, info := pedirPlataforma(t, conPaquetes(api.URL, web.URL, adj.URL), "?platform=ios")
+	if code != http.StatusOK || info.Web == nil || info.Web.Manifest != manifiestos["ios"] {
+		t.Fatalf("code=%d info=%+v, esperaba 200 con el paquete de ios", code, info)
+	}
+	if info.URL != "" || info.Version != "2.3.6" {
+		t.Fatalf("info=%+v, esperaba la 2.3.6 sin canal (url vacia)", info)
+	}
+}
+
+func TestPaqueteWeb_IOSSinCanalNiPaqueteSigueSinOfrecer(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	contenido, _ := releaseCompleto("android")
+	adj, _ := servidorAdjuntos(t, "v2.3.6", contenido)
+	defer adj.Close()
+
+	if code, info := pedirPlataforma(t, conPaquetes(api.URL, web.URL, adj.URL), "?platform=ios"); code != http.StatusServiceUnavailable {
+		t.Fatalf("code=%d info=%+v, esperaba 503: ni canal ni paquete", code, info)
+	}
+}
+
+// Una falla pasajera al bajar el manifiesto no deja a todos por el APK los
+// diez minutos de la cache.
+func TestPaqueteWeb_FallaPasajeraSeReintentaPronto(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	cuerpo, manifiesto := manifiestoPublicado("2.3.6", "android")
+	var pedidas atomic.Int32
+	adj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/actualizacion-android.json"):
+			if pedidas.Add(1) == 1 {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			_, _ = w.Write([]byte(cuerpo))
+		case strings.HasSuffix(r.URL.Path, "/kiramopay-web-android.zip"):
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("P"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer adj.Close()
+	h := conPaquetes(api.URL, web.URL, adj.URL)
+
+	if _, info := pedir(t, h); info.Web != nil {
+		t.Fatalf("primera: web=%+v, esperaba sin paquete por la falla", info.Web)
+	}
+	h.mu.Lock()
+	h.cachedAt = time.Now().Add(-2 * time.Minute)
+	h.mu.Unlock()
+	if _, info := pedir(t, h); info.Web == nil || info.Web.Manifest != manifiesto {
+		t.Fatalf("segunda: web=%+v, la falla pasajera no debia quedar diez minutos en cache", info.Web)
+	}
+}
+
+// El refresco de la cache sirve a todos: si el telefono que lo disparo corta la
+// conexion a mitad, los demas no pueden quedarse un minuto sin el paquete (en
+// Android eso es la barrera del APK).
+func TestPaqueteWeb_UnTelefonoQueCortaNoDejaATodosSinPaquete(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	cuerpo, manifiesto := manifiestoPublicado("2.3.6", "android")
+	llego := make(chan struct{}, 1)
+	cortado := make(chan struct{})
+	adj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/actualizacion-android.json"):
+			select {
+			case llego <- struct{}{}:
+			default:
+			}
+			// GitHub contesta recien despues de que el telefono corto.
+			<-cortado
+			_, _ = w.Write([]byte(cuerpo))
+		case strings.HasSuffix(r.URL.Path, "/kiramopay-web-android.zip"):
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("P"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer adj.Close()
+	h := conPaquetes(api.URL, web.URL, adj.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-llego
+		cancel()
+		close(cortado)
+	}()
+	rec := httptest.NewRecorder()
+	h.GetLatest(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/version?platform=android", nil).WithContext(ctx))
+
+	if _, info := pedir(t, h); info.Web == nil || info.Web.Manifest != manifiesto {
+		t.Fatalf("otro telefono: web=%+v, el corte de uno no puede dejar a todos sin el paquete", info.Web)
+	}
+}
+
+// En produccion los paquetes se buscan en los adjuntos del release que publican
+// los workflows del tag.
+func TestNewHandler_BuscaLosPaquetesEnElRelease(t *testing.T) {
+	h := NewHandler()
+	if got, want := fmt.Sprintf(h.manifiestoFmt, "v2.9.0", "android"),
+		"https://github.com/keylormr/kiramopay/releases/download/v2.9.0/actualizacion-android.json"; got != want {
+		t.Fatalf("manifiestoFmt da %q, esperaba %q", got, want)
+	}
+	if got, want := fmt.Sprintf(h.paqueteFmt, "v2.9.0", "ios"),
+		"https://github.com/keylormr/kiramopay/releases/download/v2.9.0/kiramopay-web-ios.zip"; got != want {
+		t.Fatalf("paqueteFmt da %q, esperaba %q", got, want)
 	}
 }

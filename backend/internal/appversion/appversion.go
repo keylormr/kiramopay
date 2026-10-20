@@ -32,6 +32,16 @@
 // de Android falla, el release queda sin .apk. La API lo rechaza sola; la
 // redireccion no ve los adjuntos, asi que confirma el APK antes de ofrecerlo.
 //
+// Actualizacion interna: cuando la version nueva solo cambia la capa web, la
+// app la baja por dentro en vez de pedir otro binario. Los workflows del tag
+// adjuntan al release, por plataforma, el paquete (kiramopay-web-<p>.zip) y su
+// manifiesto firmado (actualizacion-<p>.json), y la respuesta los pasa en
+// "web". El servidor no verifica la firma ni decide si el paquete le sirve al
+// telefono: eso lo hace la app, con la llave que trae el binario
+// (src/utils/paqueteFirmado.ts y src/hooks/useActualizacion.ts). Aca solo se
+// cuida no ofrecer un paquete que no existe o que es de otra version o de otra
+// plataforma; ante cualquier duda se omite y la app va por el binario.
+//
 // Las dos plataformas comparten la VERSION pero no la URL, porque no se
 // actualizan igual:
 //
@@ -40,11 +50,14 @@
 //   - iOS no puede instalar un binario bajado de un link. Actualizar es siempre
 //     mandar al usuario a su canal: TestFlight, App Store, o un manifiesto OTA
 //     itms-services:// si la distribucion es Ad Hoc. Cual de los tres se
-//     configura con IOS_UPDATE_URL; sin esa variable no hay canal y la app iOS
-//     no ofrece nada, que es preferible a un boton que no lleva a ningun lado.
+//     configura con IOS_UPDATE_URL. Sin esa variable no hay canal: la app iOS
+//     solo se actualiza por dentro, y si tampoco hay paquete no se ofrece nada,
+//     que es preferible a un boton que no lleva a ningun lado.
 package appversion
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -63,19 +76,45 @@ const (
 	webURL      = "https://github.com/keylormr/kiramopay/releases/latest"
 	descargaFmt = "https://github.com/keylormr/kiramopay/releases/download/%s/kiramopay.apk"
 	notasFmt    = "https://github.com/keylormr/kiramopay/releases/download/%s/notas.json"
-	cacheTTL    = 10 * time.Minute
+	// Por tag y plataforma; los nombres los fija scripts/paquete-web.mjs.
+	manifiestoFmt = "https://github.com/keylormr/kiramopay/releases/download/%s/actualizacion-%s.json"
+	paqueteFmt    = "https://github.com/keylormr/kiramopay/releases/download/%s/kiramopay-web-%s.zip"
+	cacheTTL      = 10 * time.Minute
 	// Cuando las novedades fallaron por algo pasajero (un 5xx, un corte):
 	// se vuelven a buscar pronto.
 	cacheTTLProvisional = time.Minute
 	// Un changelog son unas decenas de lineas; esto sobra y corta un adjunto
 	// equivocado antes de leerlo entero.
 	maxNotas = 64 << 10
+	// Un manifiesto firmado ocupa menos de 2 KiB.
+	maxManifiesto = 16 << 10
+	// Tope del refresco entero. Cada pedido ya tiene el suyo (los clientes
+	// HTTP); esto acota la suma.
+	tiempoRefresco = 30 * time.Second
 )
+
+var plataformas = []string{"android", "ios"}
 
 type infoVersion struct {
 	Version string   `json:"version"`
 	URL     string   `json:"url"`
 	Notas   []string `json:"notes"`
+	// La capa web de la plataforma que pregunta, si el release la trae. Se
+	// omite si no: los binarios viejos no conocen el campo.
+	Web *infoWeb `json:"web,omitempty"`
+
+	// Lo que se guarda en cache y no sale tal cual: el paquete de cada
+	// plataforma, y los adjuntos del release cuando se leyo por la API.
+	paquetes map[string]*infoWeb
+	adjuntos map[string]string
+}
+
+// infoWeb es lo que la app necesita para actualizar por dentro: el manifiesto
+// firmado (base64) y su firma, tal cual los publico el CI, y la URL del .zip.
+type infoWeb struct {
+	Manifest  string `json:"manifest"`
+	Signature string `json:"signature"`
+	URL       string `json:"url"`
 }
 
 type Handler struct {
@@ -96,11 +135,13 @@ type Handler struct {
 	// distribucion iOS; ver el comentario del paquete.
 	iosUpdateURL string
 	// Inyectables para las pruebas; en produccion son las constantes de arriba.
-	apiURL      string
-	webURL      string
-	descargaFmt string
-	notasFmt    string
-	token       string
+	apiURL        string
+	webURL        string
+	descargaFmt   string
+	notasFmt      string
+	manifiestoFmt string
+	paqueteFmt    string
+	token         string
 }
 
 func NewHandler() *Handler {
@@ -117,6 +158,8 @@ func NewHandler() *Handler {
 		webURL:           webURL,
 		descargaFmt:      descargaFmt,
 		notasFmt:         notasFmt,
+		manifiestoFmt:    manifiestoFmt,
+		paqueteFmt:       paqueteFmt,
 		// Opcional: sube el limite de la API de 60 a 5000 por hora. Sin el, el
 		// camino web hace el trabajo igual.
 		token:        os.Getenv("GITHUB_TOKEN"),
@@ -124,9 +167,11 @@ func NewHandler() *Handler {
 	}
 }
 
-// GetLatest responde {version, url} del ultimo APK publicado. Publico: la app
-// lo consulta ANTES de saber si hay sesion. Si los dos caminos fallan y no hay
-// cache, devuelve 503 y la app simplemente no ofrece actualizar esta vez.
+// GetLatest responde {version, url, notes, web} de la ultima version publicada:
+// url es el binario (o el canal de iOS) y web, si existe, la capa web para
+// actualizar por dentro. Publico: la app lo consulta ANTES de saber si hay
+// sesion. Si los dos caminos fallan y no hay cache, devuelve 503 y la app
+// simplemente no ofrece actualizar esta vez.
 func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	// Sin parametro se asume android: los APK ya instalados llaman a este
 	// endpoint sin plataforma y tienen que seguir recibiendo la URL del .apk.
@@ -138,48 +183,90 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "platform must be android or ios")
 		return
 	}
-	// iOS sin canal configurado: no es un fallo del servicio, es que todavia no
-	// hay por donde actualizar. Se responde 503, que es lo que la app ya sabe
-	// tolerar en silencio.
-	if plataforma == "ios" && h.iosUpdateURL == "" {
-		response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "no ios update channel configured")
-		return
-	}
 
 	if info, ok := h.cacheVigente(); ok {
-		response.JSON(w, http.StatusOK, h.paraPlataforma(info, plataforma))
+		h.responder(w, info, plataforma)
 		return
 	}
 	h.refresco.Lock()
 	defer h.refresco.Unlock()
 	// Mientras se esperaba, otra peticion pudo haberla llenado.
 	if info, ok := h.cacheVigente(); ok {
-		response.JSON(w, http.StatusOK, h.paraPlataforma(info, plataforma))
+		h.responder(w, info, plataforma)
 		return
 	}
 
-	info, err := h.desdeAPI(r)
+	// El refresco llena la cache de todos: no se corta porque el telefono que lo
+	// disparo se desconecte. Sin esto, su corte dejaba a los demas un minuto sin
+	// paquete, y en Android eso es la barrera del APK.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), tiempoRefresco)
+	defer cancel()
+
+	info, err := h.desdeAPI(ctx)
 	if err != nil {
 		slog.Warn("app version: la API de GitHub no sirvio, se prueba la redireccion web", "err", err)
-		info, err = h.desdeRedireccion(r)
+		info, err = h.desdeRedireccion(ctx)
 	}
 	if err != nil {
 		slog.Warn("app version: ningun camino a GitHub funciono", "err", err)
 		h.responderCacheViejaOFallo(w, plataforma)
 		return
 	}
-	notas, definitivas := h.notasDe(r, info.Version)
+
+	// Las novedades y el paquete de cada plataforma son descargas
+	// independientes: se piden a la vez. Las goroutines reciben solo la
+	// version y los adjuntos, no info: info se completa aca, al terminar.
+	var (
+		wg                  sync.WaitGroup
+		notas               []string
+		notasDefinitivas    bool
+		paquetesDefinitivos = make([]bool, len(plataformas))
+		paquetesPlataforma  = make([]*infoWeb, len(plataformas))
+		version, adjuntos   = info.Version, info.adjuntos
+	)
+	wg.Add(1 + len(plataformas))
+	go func() {
+		defer wg.Done()
+		notas, notasDefinitivas = h.notasDe(ctx, version)
+	}()
+	for i, p := range plataformas {
+		go func() {
+			defer wg.Done()
+			paquetesPlataforma[i], paquetesDefinitivos[i] = h.paqueteDe(ctx, version, adjuntos, p)
+		}()
+	}
+	wg.Wait()
 	info.Notas = notas
+	definitivo := notasDefinitivas
+	info.paquetes = map[string]*infoWeb{}
+	for i, p := range plataformas {
+		if paquetesPlataforma[i] != nil {
+			info.paquetes[p] = paquetesPlataforma[i]
+		}
+		definitivo = definitivo && paquetesDefinitivos[i]
+	}
 
 	h.mu.Lock()
 	h.cache = info
 	h.cachedAt = time.Now()
 	h.cacheVigencia = cacheTTL
-	if !definitivas {
+	if !definitivo {
 		h.cacheVigencia = cacheTTLProvisional
 	}
 	h.mu.Unlock()
-	response.JSON(w, http.StatusOK, h.paraPlataforma(*info, plataforma))
+	h.responder(w, *info, plataforma)
+}
+
+// responder arma la respuesta de la plataforma. iOS sin canal y sin paquete no
+// tiene por donde actualizar: no es un fallo del servicio, y se responde 503,
+// que es lo que la app ya sabe tolerar en silencio.
+func (h *Handler) responder(w http.ResponseWriter, info infoVersion, plataforma string) {
+	resp := h.paraPlataforma(info, plataforma)
+	if plataforma == "ios" && resp.URL == "" && resp.Web == nil {
+		response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "no ios update channel configured")
+		return
+	}
+	response.JSON(w, http.StatusOK, resp)
 }
 
 // cacheVigente devuelve la respuesta cacheada si todavia vale.
@@ -208,7 +295,81 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 	if info.Notas == nil {
 		info.Notas = []string{}
 	}
+	info.Web = info.paquetes[plataforma]
 	return info
+}
+
+// paqueteDe lee el manifiesto firmado de la plataforma en el release y confirma
+// que el .zip existe. Devuelve nil si no hay paquete util, y si el resultado es
+// definitivo (no lo hay, o no sirve) o una falla pasajera que conviene
+// reintentar pronto (red, corte, 5xx).
+func (h *Handler) paqueteDe(ctx context.Context, version string, adjuntos map[string]string, plataforma string) (*infoWeb, bool) {
+	if h.manifiestoFmt == "" || h.paqueteFmt == "" {
+		return nil, true
+	}
+	tag := "v" + version
+	nombreManifiesto := "actualizacion-" + plataforma + ".json"
+	nombrePaquete := "kiramopay-web-" + plataforma + ".zip"
+	urlManifiesto := fmt.Sprintf(h.manifiestoFmt, tag, plataforma)
+	urlPaquete := fmt.Sprintf(h.paqueteFmt, tag, plataforma)
+	// Por la API se sabe que adjuntos tiene el release: sin los dos, no hay
+	// paquete y no hace falta pedir nada.
+	if adjuntos != nil {
+		m, okM := adjuntos[nombreManifiesto]
+		z, okZ := adjuntos[nombrePaquete]
+		if !okM || !okZ {
+			return nil, true
+		}
+		urlManifiesto, urlPaquete = m, z
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlManifiesto, nil)
+	if err != nil {
+		return nil, true
+	}
+	resp, err := h.clienteDescargas.Do(req)
+	if err != nil {
+		slog.Warn("app version: no se pudo bajar el manifiesto del paquete", "version", version, "plataforma", plataforma, "err", err)
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// 404: un release sin actualizacion interna (los anteriores a la 2.9.0).
+		return nil, resp.StatusCode < 500
+	}
+	var publicado struct {
+		Manifiesto string `json:"manifiesto"`
+		Firma      string `json:"firma"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxManifiesto)).Decode(&publicado); err != nil ||
+		publicado.Manifiesto == "" || publicado.Firma == "" {
+		slog.Warn("app version: el manifiesto del paquete no es valido", "version", version, "plataforma", plataforma, "err", err)
+		return nil, true
+	}
+	crudo, err := base64.StdEncoding.DecodeString(publicado.Manifiesto)
+	var campos struct {
+		Version    string `json:"version"`
+		Plataforma string `json:"plataforma"`
+		Paquete    string `json:"paquete"`
+	}
+	if err != nil || json.Unmarshal(crudo, &campos) != nil {
+		slog.Warn("app version: el manifiesto del paquete no se puede leer", "version", version, "plataforma", plataforma)
+		return nil, true
+	}
+	// Un adjunto subido al release o a la plataforma equivocados no se ofrece:
+	// la app lo rechazaria igual, pero iria por el binario sin necesidad.
+	if campos.Version != version || campos.Plataforma != plataforma || campos.Paquete != nombrePaquete {
+		slog.Warn("app version: el manifiesto del paquete no corresponde", "release", version, "plataforma", plataforma,
+			"manifiesto_version", campos.Version, "manifiesto_plataforma", campos.Plataforma)
+		return nil, true
+	}
+	if adjuntos == nil {
+		if err := h.existeDescarga(ctx, urlPaquete); err != nil {
+			slog.Warn("app version: el release no tiene el paquete web", "version", version, "plataforma", plataforma, "err", err)
+			return nil, false
+		}
+	}
+	return &infoWeb{Manifest: publicado.Manifiesto, Signature: publicado.Firma, URL: urlPaquete}, true
 }
 
 // notasDe baja el notas.json del release de esa version. Cualquier problema
@@ -219,12 +380,12 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 // valor dice si el resultado es definitivo (hay notas, o el release no las
 // tiene, o son invalidas) o si fue una falla pasajera que conviene reintentar
 // pronto (red, corte, 5xx).
-func (h *Handler) notasDe(r *http.Request, version string) ([]string, bool) {
+func (h *Handler) notasDe(ctx context.Context, version string) ([]string, bool) {
 	if h.notasFmt == "" {
 		return []string{}, true
 	}
 	url := fmt.Sprintf(h.notasFmt, "v"+version)
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return []string{}, true
 	}
@@ -264,8 +425,8 @@ func (h *Handler) notasDe(r *http.Request, version string) ([]string, bool) {
 // existeDescarga confirma que el adjunto esta publicado. Pide un solo byte:
 // el almacenamiento de objetos de GitHub firma la URL para GET, y un HEAD
 // podria rechazarse aunque el archivo exista.
-func (h *Handler) existeDescarga(r *http.Request, url string) error {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+func (h *Handler) existeDescarga(ctx context.Context, url string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -284,8 +445,8 @@ func (h *Handler) existeDescarga(r *http.Request, url string) error {
 // desdeAPI lee el release por la API: es la fuente autoritativa del nombre del
 // archivo adjunto (la release lleva tambien el .ipa de iOS, asi que hay que
 // elegir el .apk, no el primero).
-func (h *Handler) desdeAPI(r *http.Request) (*infoVersion, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.apiURL, nil)
+func (h *Handler) desdeAPI(ctx context.Context) (*infoVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -318,11 +479,11 @@ func (h *Handler) desdeAPI(r *http.Request) (*infoVersion, error) {
 		return nil, err
 	}
 
-	info := infoVersion{Version: strings.TrimPrefix(release.TagName, "v")}
+	info := infoVersion{Version: strings.TrimPrefix(release.TagName, "v"), adjuntos: map[string]string{}}
 	for _, a := range release.Assets {
-		if strings.HasSuffix(a.Name, ".apk") {
+		info.adjuntos[a.Name] = a.BrowserDownloadURL
+		if info.URL == "" && strings.HasSuffix(a.Name, ".apk") {
 			info.URL = a.BrowserDownloadURL
-			break
 		}
 	}
 	if info.Version == "" || info.URL == "" {
@@ -333,8 +494,8 @@ func (h *Handler) desdeAPI(r *http.Request) (*infoVersion, error) {
 
 // desdeRedireccion saca el tag de la cabecera Location de la pagina de releases
 // y arma la URL del APK. No pasa por la API, asi que no tiene su limite por IP.
-func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.webURL, nil)
+func (h *Handler) desdeRedireccion(ctx context.Context) (*infoVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.webURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +517,7 @@ func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
 		return nil, fmt.Errorf("la redireccion no trae tag: %q", destino)
 	}
 	descarga := fmt.Sprintf(h.descargaFmt, tag)
-	if err := h.existeDescarga(r, descarga); err != nil {
+	if err := h.existeDescarga(ctx, descarga); err != nil {
 		return nil, fmt.Errorf("el release %s no tiene el APK todavia: %w", tag, err)
 	}
 	return &infoVersion{
@@ -375,9 +536,10 @@ func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
 // respuesta por plataforma vino a evitar.
 func (h *Handler) responderCacheViejaOFallo(w http.ResponseWriter, plataforma string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.cache != nil {
-		response.JSON(w, http.StatusOK, h.paraPlataforma(*h.cache, plataforma))
+	cache := h.cache
+	h.mu.Unlock()
+	if cache != nil {
+		h.responder(w, *cache, plataforma)
 		return
 	}
 	response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "version check failed")

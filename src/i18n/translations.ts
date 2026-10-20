@@ -1016,6 +1016,17 @@ export type TranslationKeys = {
   update_whats_new: string;
   // La version que corre en el telefono, al pie de la barrera.
   update_installed: string;
+  // Actualizacion por dentro: la barrera baja la capa web nueva y la app se
+  // reinicia sola, sin APK. {done} y {total} van en MB ya formateados.
+  update_internal_title: string;
+  update_internal_body: string;
+  update_internal_preparing: string;
+  update_internal_downloading: string;
+  update_internal_applying: string;
+  update_internal_size: string;
+  update_internal_offline: string;
+  update_internal_error: string;
+  update_internal_retry: string;
   promo_invite_title: string;
   promo_invite_body: string;
   promo_invite_cta: string;
