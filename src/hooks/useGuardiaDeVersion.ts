@@ -84,7 +84,13 @@ export function useGuardiaDeVersion(): EstadoVersion {
 
       // El commit manda: dos despliegues pueden compartir numero de version.
       const distinta = sha ? sha !== __BUILD_SHA__ : version !== __APP_VERSION__;
-      if (!distinta) return;
+      if (!distinta) {
+        // Esta pestana corre la version vigente: el contador de recargas
+        // automaticas (si quedo alguno de un despliegue anterior) ya no
+        // aplica. El proximo despliegue vuelve a tener su cupo completo.
+        limpiarIntentosDeRecargaAutomatica();
+        return;
+      }
 
       yaVencida.current = true;
       setEstado({ desactualizada: true, versionDesplegada: version || sha });
@@ -122,6 +128,76 @@ export function useGuardiaDeVersion(): EstadoVersion {
   }, [comprobar]);
 
   return estado;
+}
+
+// Cuantas veces se recarga la pestana sola, sin que nadie la vea, antes de
+// rendirse. Protege de un bucle invisible cuando lo desactualizado no es la
+// pestana sino una copia en cache delante del servidor (CDN, Cloudflare):
+// ahi ninguna recarga trae la version nueva y, sin este tope, la pestana se
+// recargaria para siempre sin que la persona se entere de que algo no anda.
+export const MAX_RECARGAS_AUTOMATICAS = 3;
+
+const CLAVE_INTENTOS_RECARGA = 'kiramopay-guardia-version-intentos';
+
+function intentosDeRecargaAutomatica(): number {
+  try {
+    const guardado = Number(sessionStorage.getItem(CLAVE_INTENTOS_RECARGA));
+    return Number.isFinite(guardado) && guardado > 0 ? guardado : 0;
+  } catch {
+    // Sin sessionStorage no hay como contar: mejor no insistir en un bucle
+    // que nadie podria frenar.
+    return MAX_RECARGAS_AUTOMATICAS;
+  }
+}
+
+function registrarIntentoDeRecargaAutomatica(): number {
+  const siguiente = intentosDeRecargaAutomatica() + 1;
+  try {
+    sessionStorage.setItem(CLAVE_INTENTOS_RECARGA, String(siguiente));
+  } catch {
+    // Se pudo leer pero no guardar (cupo de storage agotado, por ejemplo):
+    // el intento de ahora no va a quedar contado, y seguir asi es exactamente
+    // el bucle silencioso que este contador existe para evitar. Sin forma
+    // confiable de contar, mejor rendirse ya que insistir a ciegas.
+    return MAX_RECARGAS_AUTOMATICAS + 1;
+  }
+  return siguiente;
+}
+
+function limpiarIntentosDeRecargaAutomatica(): void {
+  try {
+    sessionStorage.removeItem(CLAVE_INTENTOS_RECARGA);
+  } catch {
+    // Nada que limpiar si no hay storage.
+  }
+}
+
+/**
+ * En la web, una version vieja se recarga sola: nadie tiene que ver una
+ * pantalla ni tocar un boton. `agotada` avisa cuando esta pestana ya intento
+ * demasiadas veces sin lograrlo (lo mas probable: una cache intermedia
+ * sirviendo siempre el mismo despliegue viejo) — ahi toca dejar de insistir
+ * en silencio y mostrar algo con lo que la persona pueda hacer algo.
+ */
+export function useRecargaAutomaticaDeVersion(desactualizada: boolean): boolean {
+  const [agotada, setAgotada] = useState(false);
+  // Esta pestana ya decidio que hacer: ni una segunda recarga por el mismo
+  // aviso, ni (si toco rendirse) volver a intentarlo despues.
+  const decidida = useRef(false);
+
+  useEffect(() => {
+    if (!desactualizada || decidida.current) return;
+    decidida.current = true;
+    if (registrarIntentoDeRecargaAutomatica() > MAX_RECARGAS_AUTOMATICAS) {
+      // Diferida al proximo tick, mismo patron que el resto de la aplicacion:
+      // asi el setState nunca ocurre de forma sincrona dentro del efecto.
+      window.setTimeout(() => setAgotada(true), 0);
+      return;
+    }
+    void recargarSaltandoCaches();
+  }, [desactualizada]);
+
+  return agotada;
 }
 
 /**
