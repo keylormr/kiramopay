@@ -206,3 +206,16 @@ func (h *Handler) Rechazar(w http.ResponseWriter, r *http.Request) {
 	}
 	response.NoContent(w)
 }
+
+// ListarRespuestas — GET /admin/account-deletion-responses?limit=50 (admin)
+//
+// Las respuestas escritas que pasaron a operaciones: sin a donde mandarlas, o
+// sin salir despues de 48 horas.
+func (h *Handler) ListarRespuestas(w http.ResponseWriter, r *http.Request) {
+	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "not implemented")
+}
+
+// MarcarRespuestaEntregada — POST /admin/account-deletion-responses/{id}/delivered {"note":"..."} (admin)
+func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Request) {
+	response.Error(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "not implemented")
+}

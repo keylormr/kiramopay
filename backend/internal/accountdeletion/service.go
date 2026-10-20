@@ -108,6 +108,9 @@ type Preflight struct {
 	// ConSegundoFactor dice si la confirmacion pedira ademas el codigo del
 	// autenticador, para que la pantalla muestre el campo desde el principio.
 	ConSegundoFactor bool `json:"requires_totp"`
+	// RequiereCorreoParaRespuesta: la cuenta no tiene correo, y la confirmacion
+	// pide uno solo para mandar la respuesta escrita.
+	RequiereCorreoParaRespuesta bool `json:"requires_response_email"`
 }
 
 // Preflight responde "se puede eliminar?" sin tocar nada.
@@ -159,6 +162,9 @@ type Confirmacion struct {
 	TOTPCode string `json:"totp_code,omitempty"`
 	// AceptaPlazo es la aceptacion expresa del plazo de 30 dias.
 	AceptaPlazo bool `json:"accept_terms"`
+	// CorreoParaRespuesta solo cuenta si la cuenta no tiene correo: es adonde va
+	// la respuesta escrita. No se guarda en el perfil.
+	CorreoParaRespuesta string `json:"response_email,omitempty"`
 }
 
 // ErrPlazoNoAceptado: la solicitud no trae la aceptacion expresa del plazo.
@@ -169,6 +175,9 @@ type Solicitud struct {
 	Ya           bool      `json:"already_requested"`
 	SolicitadaEn time.Time `json:"requested_at"`
 	SeEliminaEl  time.Time `json:"deletion_due_at"`
+	// ConservaHasta es hasta cuando se guarda lo que la Ley 7786 obliga: cinco
+	// anos desde el dia 30. Es lo que dice la respuesta escrita.
+	ConservaHasta time.Time `json:"retained_until"`
 }
 
 func lockoutKey(userID string) string { return "lockout:delacct:uid:" + userID }

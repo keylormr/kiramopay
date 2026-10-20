@@ -196,6 +196,25 @@ func (s *Service) enviarCodigo(kind identifier.Kind, canonico string, cuenta *us
 	}
 }
 
+// RespuestaWeb es lo que la pagina le muestra a quien presento el codigo
+// correcto: la misma respuesta escrita que le llega por correo.
+type RespuestaWeb struct {
+	// Resultado: scheduled (empezo el plazo), blocked (hay que resolver algo) o
+	// received (la atiende una persona; no se dice por que).
+	Resultado     string     `json:"outcome"`
+	SeEliminaEl   *time.Time `json:"deletion_due_at,omitempty"`
+	ConservaHasta *time.Time `json:"retained_until,omitempty"`
+	Bloqueos      []string   `json:"blockers,omitempty"`
+}
+
+// Confirmar es Verificar con la respuesta para la pagina.
+func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*RespuestaWeb, error) {
+	if err := s.Verificar(ctx, raw, codigo); err != nil {
+		return nil, err
+	}
+	return &RespuestaWeb{Resultado: "received"}, nil
+}
+
 // Verificar comprueba el codigo. Con el codigo correcto empieza el plazo (el dia
 // 0), salvo que la cuenta este bajo revision: esa queda en la cola de
 // operaciones. Un bloqueo (saldo, algo en curso) no es un error de la

@@ -225,13 +225,14 @@ jobs:
 
       # La eliminacion de cuenta se prueba tambien contra el esquema que dejan las
       # migraciones REALES (las pruebas de integracion usan el que declara
-      # testutil a mano): valida su SQL contra produccion y exige que toda tabla
-      # con datos de una persona este clasificada.
+      # testutil a mano): valida su SQL contra produccion, el de la bandeja de la
+      # respuesta escrita incluido, y exige que toda tabla con datos de una
+      # persona este clasificada.
       - name: Validate account deletion against the migrated schema
         working-directory: backend
         env:
           MIGTEST_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_migtest?sslmode=disable
-        run: go test ./internal/accountdeletion/ -run 'TestClasificacionCubreElEsquema|TestEliminarFuncionaContraElEsquemaReal' -count=1 -v
+        run: go test ./internal/accountdeletion/ -run 'TestClasificacionCubreElEsquema|TestEliminarFuncionaContraElEsquemaReal|TestRespuestaContraElEsquemaReal' -count=1 -v
 
   backend-build:
     name: Backend Build

@@ -112,6 +112,20 @@ describe('LoginView — cuenta con la eliminacion en curso', () => {
     expect(cuerpos().some((c) => c.reactivate)).toBe(false);
   });
 
+  it('repite la respuesta escrita debajo de las opciones, con hasta cuando se conserva', async () => {
+    servidor();
+    await entrar();
+
+    await screen.findByText('Tu cuenta se va a eliminar');
+    const respuesta = screen.getByRole('region', { name: 'Lo que pasa con tus datos' });
+    expect(respuesta).toHaveTextContent(/Ley 7786/);
+    expect(respuesta).toHaveTextContent('17 de noviembre de 2031');
+    expect(respuesta).toHaveTextContent(/PRODHAB/);
+    // Primero la decision, despues la referencia.
+    const reactivar = screen.getByRole('button', { name: 'Reactivar mi cuenta' });
+    expect(reactivar.compareDocumentPosition(respuesta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('reactivar repite el login con reactivate y entra', async () => {
     servidor();
     const onLogin = vi.fn();

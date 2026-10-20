@@ -171,3 +171,38 @@ func TestEliminarFuncionaContraElEsquemaReal(t *testing.T) {
 		t.Error("la otra persona resulto afectada")
 	}
 }
+
+// La bandeja de la respuesta escrita contra el esquema real: el dia 0 la deja,
+// el barrido la intenta, el panel la lista con la cuenta enmascarada (la vista
+// users_masked) y operaciones la marca entregada. Si una sentencia nombra una
+// columna que la 083 no tiene, o un CHECK la rechaza, falla aqui.
+func TestRespuestaContraElEsquemaReal(t *testing.T) {
+	pool := poolDeLaCadena(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), sembrar(t, pool)
+	svc := nuevoServicio(pool, nil)
+
+	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); err != nil {
+		t.Fatalf("pedir la eliminacion: %v", err)
+	}
+	// Sin proveedor no hay a donde mandarla: pasa a operaciones.
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatalf("barrido de la bandeja: %v", err)
+	}
+	lista, err := svc.RespuestasSinEntregar(ctx, 100)
+	if err != nil {
+		t.Fatalf("listar las respuestas sin entregar: %v", err)
+	}
+	var id string
+	for _, r := range lista {
+		if r.Cuenta != nil && r.Cuenta.ID == a.ID {
+			id = r.ID
+		}
+	}
+	if id == "" {
+		t.Fatalf("el panel no lista la respuesta de la cuenta: %+v", lista)
+	}
+	if err := svc.MarcarRespuestaEntregada(ctx, id, admin.ID, "entregada a mano en la prueba"); err != nil {
+		t.Fatalf("marcarla entregada: %v", err)
+	}
+}

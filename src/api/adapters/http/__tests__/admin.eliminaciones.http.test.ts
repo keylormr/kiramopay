@@ -45,6 +45,47 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     expect(res.data).toEqual({ status: 'blocked', resultCode: 'BALANCE_POSITIVE', blockers: ['BALANCE_POSITIVE'] });
   });
 
+  it('lista las respuestas escritas que pasaron a operaciones, con lo que hay que decirle a la persona', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: 'd1', kind: 'scheduled', reason: 'no_channel', attempts: 1,
+            created_at: '2026-10-19T15:00:00Z', respond_by: '2026-10-26T15:00:00Z',
+            deletion_due_at: '2026-11-18T15:00:00Z', retained_until: '2031-11-18T15:00:00Z', blockers: [],
+            account: { id: 'u1', first_name: 'Maria', last_name: 'Rojas', cedula_masked: '••••930', status: 'pending_deletion' },
+          },
+          {
+            id: 'd2', kind: 'blocked', reason: 'send_failed', attempts: 9,
+            created_at: '2026-10-17T15:00:00Z', respond_by: '2026-10-24T15:00:00Z', blockers: ['BALANCE_POSITIVE'], account: null,
+          },
+        ],
+      }),
+    });
+    const res = await new HttpAdminRepository(client).listDeletionResponses();
+    expect(client.get).toHaveBeenCalledWith('/api/v1/admin/account-deletion-responses?limit=50');
+    expect(res.data).toHaveLength(2);
+    expect(res.data?.[0]).toMatchObject({
+      id: 'd1', tipo: 'scheduled', motivo: 'no_channel', intentos: 1, responderAntesDe: '2026-10-26T15:00:00Z',
+      seEliminaEl: '2026-11-18T15:00:00Z', conservaHasta: '2031-11-18T15:00:00Z', bloqueos: [],
+      account: { firstName: 'Maria', cedulaMasked: '••••930' },
+    });
+    expect(res.data?.[1]).toMatchObject({
+      id: 'd2', tipo: 'blocked', motivo: 'send_failed', seEliminaEl: null, conservaHasta: null,
+      bloqueos: ['BALANCE_POSITIVE'], account: null,
+    });
+  });
+
+  it('marcar una respuesta entregada manda la nota', async () => {
+    const client = fakeClient({ post: vi.fn().mockResolvedValue({ success: true, data: null }) });
+    const res = await new HttpAdminRepository(client).markDeletionResponseDelivered('d 1', 'Se la leimos por telefono');
+    expect(client.post).toHaveBeenCalledWith('/api/v1/admin/account-deletion-responses/d%201/delivered', {
+      note: 'Se la leimos por telefono',
+    });
+    expect(res.success).toBe(true);
+  });
+
   it('un rechazo del servidor conserva el codigo (NOT_PENDING)', async () => {
     const client = fakeClient({ post: vi.fn().mockResolvedValue({ success: false, error: { code: 'NOT_PENDING', message: 'x' } }) });
     const res = await new HttpAdminRepository(client).rejectDeletionRequest('r1');

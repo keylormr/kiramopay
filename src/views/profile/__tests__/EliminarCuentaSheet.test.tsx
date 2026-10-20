@@ -266,3 +266,67 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     expect(cuentaEliminada).not.toHaveBeenCalled();
   });
 });
+
+// La respuesta escrita a la solicitud sale por correo (Ley 8968). Una cuenta sin
+// correo da uno solo para eso: no queda en el perfil.
+describe('EliminarCuentaSheet — a donde va la respuesta escrita', () => {
+  const sinCorreo = { ...limpia, pideCorreoParaRespuesta: true };
+  const CAMPO_CORREO = 'Correo para enviarte la respuesta';
+
+  it('con correo registrado, el resumen dice que la respuesta va a su correo y no pide otro', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
+    const user = userEvent.setup();
+    pintar();
+
+    expect(await screen.findByText(/Te enviamos todo esto por escrito a tu correo/)).toBeInTheDocument();
+    await llegarALaConfirmacion(user);
+    expect(screen.queryByLabelText(CAMPO_CORREO)).toBeNull();
+  });
+
+  it('una cuenta sin correo pide uno solo para la respuesta y lo manda', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    api.auth.deleteAccount.mockResolvedValue({ success: true, data: pedida });
+    const user = userEvent.setup();
+    pintar();
+
+    expect(await screen.findByText(/te pedimos uno, solo para enviarte todo esto por escrito/)).toBeInTheDocument();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+    const boton = screen.getByRole('button', { name: BOTON });
+    // Sin un correo valido no se puede enviar.
+    expect(boton).toBeDisabled();
+    const campo = screen.getByLabelText(CAMPO_CORREO);
+    expect(campo).toHaveAccessibleDescription(/no queda en tu perfil/);
+    await user.type(campo, 'no-es-un-correo');
+    expect(boton).toBeDisabled();
+    await user.clear(campo);
+    await user.type(campo, 'respuesta@ejemplo.test');
+    await user.click(boton);
+
+    await waitFor(() => expect(cuentaEliminada).toHaveBeenCalledTimes(1));
+    expect(api.auth.deleteAccount).toHaveBeenCalledWith({
+      password: 'Clave-123',
+      totpCode: undefined,
+      acceptTerms: true,
+      responseEmail: 'respuesta@ejemplo.test',
+    });
+  });
+
+  it('si el servidor rechaza el correo para la respuesta, lo dice en el formulario', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    api.auth.deleteAccount
+      .mockResolvedValueOnce({ success: false, error: { code: 'RESPONSE_EMAIL_INVALID', message: 'x' } })
+      .mockResolvedValueOnce({ success: false, error: { code: 'RESPONSE_EMAIL_REQUIRED', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'respuesta@ejemplo.test');
+
+    await user.click(screen.getByRole('button', { name: BOTON }));
+    expect(await screen.findByText('Ese correo no es válido. Revísalo.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: BOTON }));
+    expect(await screen.findByText('Escribe un correo para enviarte la respuesta.')).toBeInTheDocument();
+    expect(cuentaEliminada).not.toHaveBeenCalled();
+  });
+});

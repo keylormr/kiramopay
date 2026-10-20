@@ -32,6 +32,8 @@ func router(h *Handler, userID string) http.Handler {
 		r.Post("/users/me/delete-account", h.Eliminar)
 		r.Post("/admin/account-deletion-requests/{id}/process", h.Procesar)
 		r.Post("/admin/account-deletion-requests/{id}/reject", h.Rechazar)
+		r.Get("/admin/account-deletion-responses", h.ListarRespuestas)
+		r.Post("/admin/account-deletion-responses/{id}/delivered", h.MarcarRespuestaEntregada)
 	})
 	r.Post("/public/account-deletion-requests", h.Solicitar)
 	r.Post("/public/account-deletion-requests/verify", h.Verificar)

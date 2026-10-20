@@ -155,4 +155,10 @@ var (
 
 	// ErrEnPausa: demasiados intentos de reautenticacion fallidos.
 	ErrEnPausa = errors.New("demasiados intentos; vuelve a intentar mas tarde")
+
+	// ErrCorreoParaRespuesta: la cuenta no tiene correo y la solicitud no trae
+	// uno para mandar la respuesta escrita. ErrCorreoParaRespuestaInvalido: el
+	// que trae no es un correo.
+	ErrCorreoParaRespuesta         = errors.New("tu cuenta no tiene correo: escribe uno para enviarte la respuesta")
+	ErrCorreoParaRespuestaInvalido = errors.New("el correo para la respuesta no es valido")
 )

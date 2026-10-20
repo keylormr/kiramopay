@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
     listDeletionRequests: vi.fn(),
     processDeletionRequest: vi.fn(),
     rejectDeletionRequest: vi.fn(),
+    listDeletionResponses: vi.fn(),
+    markDeletionResponseDelivered: vi.fn(),
   },
 }));
 
@@ -39,6 +41,8 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   for (const fn of Object.values(api.admin)) fn.mockReset();
+  // Sin respuestas pendientes la seccion no aparece.
+  api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [] });
 });
 afterEach(cleanup);
 
@@ -107,5 +111,68 @@ describe('SolicitudesDeEliminacion', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Rechazar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta solicitud ya fue atendida.');
+  });
+});
+
+// La respuesta escrita que no pudo salir por correo pasa a operaciones: la
+// persona del equipo la entrega por otro medio antes del plazo legal y deja
+// constancia de como.
+describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
+  const respuesta = {
+    id: 'd1',
+    tipo: 'scheduled' as const,
+    motivo: 'no_channel' as const,
+    intentos: 1,
+    creadaEn: '2026-10-19T15:00:00Z',
+    responderAntesDe: '2026-10-26T18:00:00Z',
+    seEliminaEl: '2026-11-18T18:00:00Z',
+    conservaHasta: '2031-11-18T18:00:00Z',
+    bloqueos: [] as string[],
+    account: solicitud.account,
+  };
+
+  it('lista lo que hay que decirle a la persona y el plazo, con la cuenta enmascarada', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [respuesta, { ...respuesta, id: 'd2', tipo: 'blocked', motivo: 'send_failed', intentos: 7, seEliminaEl: null, conservaHasta: null, bloqueos: ['BALANCE_POSITIVE'] }],
+    });
+    pintar();
+
+    expect(await screen.findByRole('heading', { name: 'Respuestas por entregar' })).toBeInTheDocument();
+    expect(screen.getAllByText('Maria Rojas')).toHaveLength(2);
+    expect(screen.getAllByText(/••••••930/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/No tiene correo/)).toBeInTheDocument();
+    expect(screen.getByText(/El correo falló 7 veces/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Responder antes del 26 de octubre de 2026/)).toHaveLength(2);
+    // Lo que hay que decirle: las fechas, o que resolver.
+    expect(screen.getByText(/18 de noviembre de 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/18 de noviembre de 2031/)).toBeInTheDocument();
+    expect(screen.getByText(/saldo en tu billetera/)).toBeInTheDocument();
+  });
+
+  it('marcarla entregada exige decir como, la manda y relee', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({ success: true, data: [respuesta] });
+    api.admin.markDeletionResponseDelivered.mockResolvedValue({ success: true, data: { delivered: true } });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(await screen.findByRole('button', { name: 'Marcar entregada' }));
+    const confirmar = screen.getByRole('button', { name: 'Confirmar la entrega' });
+    expect(confirmar).toBeDisabled();
+    await user.type(screen.getByLabelText('Cómo la entregaste'), 'Se la leímos por teléfono');
+    await user.click(confirmar);
+
+    await waitFor(() => expect(api.admin.markDeletionResponseDelivered).toHaveBeenCalledWith('d1', 'Se la leímos por teléfono'));
+    await waitFor(() => expect(api.admin.listDeletionResponses).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Quedó la constancia de la entrega.')).toBeInTheDocument();
+  });
+
+  it('sin respuestas pendientes la seccion no aparece', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    pintar();
+    expect(await screen.findByText('No hay solicitudes por atender.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Respuestas por entregar' })).toBeNull();
   });
 });
