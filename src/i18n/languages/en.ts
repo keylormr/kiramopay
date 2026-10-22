@@ -1951,7 +1951,7 @@ const en: TranslationKeys = {
   admin_del_already: 'This request was already handled.',
   admin_del_action_failed: 'The action could not be completed. Try again.',
   admin_resp_title: 'Responses to deliver',
-  admin_resp_intro: "They couldn't go out by email. Deliver each one another way before the deadline and record how.",
+  admin_resp_intro: "They couldn't go out by email, or their request is still unhandled and the deadline is near. Each one says what to do before its date.",
   admin_resp_no_channel: 'No email',
   admin_resp_send_failed: 'Email failed {n} times',
   admin_resp_due: 'Respond by {date}',

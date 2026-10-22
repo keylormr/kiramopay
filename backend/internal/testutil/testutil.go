@@ -1714,7 +1714,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided'));
 	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_sin_decidir;
 	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL));
-	CREATE INDEX IF NOT EXISTS idx_adresp_solicitud ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;
+	DROP INDEX IF EXISTS idx_adresp_solicitud;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_adresp_solicitud ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;
 
 	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
 	CREATE TABLE IF NOT EXISTS closed_account_records (

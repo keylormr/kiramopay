@@ -59,8 +59,11 @@ const (
 	// deja tres de los cinco dias habiles para entregarla por otro medio.
 	plazoParaOperaciones = 48 * time.Hour
 	// margenParaOperaciones son esos tres dias, corridos y no habiles, contados
-	// hacia atras desde el plazo: una respuesta que nace con menos (la atendieron
-	// dias despues de la verificacion) pasa a operaciones al primer fallo.
+	// hacia atras desde el plazo. Una sin decidir pasa sola al panel cuando le
+	// quedan menos. Y una respuesta que nace con menos pasa a operaciones al
+	// primer fallo: la de una solicitud verificada antes de que existiera la
+	// bandeja, que no tiene su fila sin decidir y la recibe al atenderla, dias
+	// despues. Las demas nacen con la verificacion y llegan antes a las 48 horas.
 	// Corridos a proposito: con un fin de semana en medio escala antes, no despues.
 	margenParaOperaciones = 72 * time.Hour
 	// reservaDeEnvio aparta la fila mientras se manda. Es mas que avisoTimeout:
@@ -417,7 +420,8 @@ func (s *Service) entregarUna(ctx context.Context, id string, now time.Time) (bo
 
 // pasaAOperaciones dice si una respuesta que no pudo salir pasa al panel: a las
 // 48 horas, o antes si el plazo legal (vence) ya no deja a operaciones sus tres
-// dias. La que se atendio tarde nace con el plazo encima y pasa al primer fallo.
+// dias. La que nace tarde (una solicitud verificada antes de la bandeja,
+// atendida dias despues) tiene el plazo encima y pasa al primer fallo.
 func pasaAOperaciones(now, creada, vence time.Time) bool {
 	return now.Sub(creada) >= plazoParaOperaciones || !now.Before(vence.Add(-margenParaOperaciones))
 }
@@ -532,18 +536,22 @@ type ContactoCompleto struct {
 // del cierre y la desasociacion; desasociado lo conservado, ya no hay contacto.
 //
 // Una respuesta sin decidir no tiene nada que entregar: ErrRespuestaSinDecidir.
+//
+// La vista de lo conservado lleva source = closed_account_record en la
+// auditoria, para poder listar esos accesos aparte.
 func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (*ContactoCompleto, error) {
 	var out *ContactoCompleto
 	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
 		out = nil
 		var (
 			userID, tipo           string
-			enElPanel              bool
+			enElPanel, cerrada     bool
 			telefono, correo, dado *string
 		)
 		err := tx.QueryRow(ctx, `
 			SELECT r.user_id::text, r.kind,
 			       r.escalated_at IS NOT NULL AND r.delivered_at IS NULL AND r.cancelled_at IS NULL,
+			       u.deleted_at IS NOT NULL,
 			       fn_pii_decrypt(CASE WHEN u.deleted_at IS NULL THEN u.phone_enc ELSE c.phone_enc END),
 			       fn_pii_decrypt(CASE WHEN u.deleted_at IS NULL THEN u.email_enc ELSE c.email_enc END),
 			       fn_pii_decrypt(r.email_enc)
@@ -552,7 +560,7 @@ func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (
 			  LEFT JOIN closed_account_records c ON c.user_id = r.user_id
 			 WHERE r.id = $1::uuid
 			   FOR SHARE OF r`, id,
-		).Scan(&userID, &tipo, &enElPanel, &telefono, &correo, &dado)
+		).Scan(&userID, &tipo, &enElPanel, &cerrada, &telefono, &correo, &dado)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRespuestaNoEncontrada
 		}
@@ -570,7 +578,11 @@ func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (
 			out = c
 			return nil
 		}
-		if err := auditar(ctx, tx, userID, "account_deletion_response_contact_viewed", opciones{actor: adminID, respuesta: id}); err != nil {
+		op := opciones{actor: adminID, respuesta: id}
+		if cerrada {
+			op.fuente = fuenteLoConservado
+		}
+		if err := auditar(ctx, tx, userID, "account_deletion_response_contact_viewed", op); err != nil {
 			return err
 		}
 		out = c
@@ -581,6 +593,10 @@ func (s *Service) ContactoDeRespuesta(ctx context.Context, id, adminID string) (
 	}
 	return out, nil
 }
+
+// fuenteLoConservado marca en la auditoria una vista que salio de
+// closed_account_records.
+const fuenteLoConservado = "closed_account_record"
 
 // valorDe es el texto de una columna que puede venir NULL.
 func valorDe(s *string) string {

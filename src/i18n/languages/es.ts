@@ -1955,7 +1955,7 @@ const es: TranslationKeys = {
   admin_del_already: 'Esta solicitud ya fue atendida.',
   admin_del_action_failed: 'No se pudo completar la acción. Inténtalo de nuevo.',
   admin_resp_title: 'Respuestas por entregar',
-  admin_resp_intro: 'No pudieron salir por correo. Entrega cada una por otro medio antes del plazo y deja constancia de cómo.',
+  admin_resp_intro: 'No pudieron salir por correo, o su solicitud sigue sin atender y el plazo se acerca. Cada una dice qué hacer antes de su fecha.',
   admin_resp_no_channel: 'No tiene correo',
   admin_resp_send_failed: 'El correo falló {n} veces',
   admin_resp_due: 'Responder antes del {date}',

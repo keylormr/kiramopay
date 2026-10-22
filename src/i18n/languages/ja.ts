@@ -1943,7 +1943,7 @@ const ja: TranslationKeys = {
   admin_del_already: 'この申請はすでに対応済みです。',
   admin_del_action_failed: '操作を完了できませんでした。もう一度お試しください。',
   admin_resp_title: '未送付の回答',
-  admin_resp_intro: 'メールで送信できなかった回答です。期限までに別の方法でお届けし、その方法を記録してください。',
+  admin_resp_intro: 'メールで送信できなかった回答と、申請が未対応のまま期限が近い回答です。それぞれに、期日までに何をすべきかが書かれています。',
   admin_resp_no_channel: 'メールアドレスなし',
   admin_resp_send_failed: 'メール送信に{n}回失敗',
   admin_resp_due: '{date}までに回答',

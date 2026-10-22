@@ -1943,7 +1943,7 @@ const zhCn: TranslationKeys = {
   admin_del_already: '该申请已处理。',
   admin_del_action_failed: '无法完成操作。请重试。',
   admin_resp_title: '待送达的答复',
-  admin_resp_intro: '这些答复无法通过电子邮件发出。请在期限前通过其他方式逐一送达，并记录送达方式。',
+  admin_resp_intro: '这些答复无法通过电子邮件发出，或其申请仍未处理且期限将至。每一条都写明了在其日期前需要做什么。',
   admin_resp_no_channel: '没有电子邮箱',
   admin_resp_send_failed: '邮件发送失败 {n} 次',
   admin_resp_due: '请在{date}前答复',

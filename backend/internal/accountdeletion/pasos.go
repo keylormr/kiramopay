@@ -58,6 +58,10 @@ type opciones struct {
 	// solicitud es la solicitud web que se atiende: su respuesta sin decidir es
 	// la que se completa. Vacio en la via de la app.
 	solicitud string
+	// fuente dice de donde salio lo que se revela cuando no es la cuenta:
+	// closed_account_record si Ver contacto leyo lo conservado por ley. Solo va
+	// a la auditoria.
+	fuente string
 }
 
 // resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
@@ -730,9 +734,9 @@ func auditar(ctx context.Context, tx pgx.Tx, userID, accion string, op opciones)
 		`INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, risk_level)
 		 VALUES ($1::uuid, $2, 'user', $1::text,
 		         jsonb_strip_nulls(jsonb_build_object('channel', NULLIF($3::text, ''), 'actor', NULLIF($4::text, ''),
-		                                              'response', NULLIF($5::text, ''))),
+		                                              'response', NULLIF($5::text, ''), 'source', NULLIF($6::text, ''))),
 		         'high')`,
-		userID, accion, string(op.canal), op.actor, op.respuesta,
+		userID, accion, string(op.canal), op.actor, op.respuesta, op.fuente,
 	); err != nil {
 		return fmt.Errorf("auditoria: %w", err)
 	}

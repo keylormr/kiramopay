@@ -1952,7 +1952,7 @@ const pt: TranslationKeys = {
   admin_del_already: 'Esta solicitação já foi atendida.',
   admin_del_action_failed: 'Não foi possível concluir a ação. Tente de novo.',
   admin_resp_title: 'Respostas a entregar',
-  admin_resp_intro: 'Não puderam sair por e-mail. Entregue cada uma por outro meio antes do prazo e registre como.',
+  admin_resp_intro: 'Não puderam sair por e-mail, ou a solicitação ainda não foi atendida e o prazo se aproxima. Cada uma diz o que fazer antes da data.',
   admin_resp_no_channel: 'Sem e-mail',
   admin_resp_send_failed: 'O e-mail falhou {n} vezes',
   admin_resp_due: 'Responder antes de {date}',

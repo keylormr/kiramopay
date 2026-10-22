@@ -34,7 +34,16 @@
 --     (decision del dueno del 2026-10-22).
 --
 -- request_id no apunta a account_deletion_requests con una FK: la bajada de la
--- 077 borra esa tabla.
+-- 077 borra esa tabla. Es unico: la respuesta de una solicitud se completa al
+-- atenderla y nunca se agrega otra al lado.
+--
+-- Excepcion a la 077, que dice que ninguna consulta lee closed_account_records:
+-- "Ver contacto" del panel lee de ahi el telefono y el correo de una cuenta ya
+-- cerrada cuya respuesta sigue sin entregar. USO LIMITADO, decision del dueno del
+-- 2026-10-22 que confirma con su asesor legal: solo para entregar esa respuesta
+-- escrita a la misma persona, solo administradores, y cada vista queda en
+-- audit_logs con source = closed_account_record. Desasociado lo conservado, no
+-- hay nada que leer.
 CREATE TABLE IF NOT EXISTS account_deletion_responses (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id),
@@ -82,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_adresp_en_operaciones
 
 CREATE INDEX IF NOT EXISTS idx_adresp_cuenta ON account_deletion_responses (user_id);
 
--- La respuesta de una solicitud web, para completarla al atenderla.
-CREATE INDEX IF NOT EXISTS idx_adresp_solicitud
+-- La respuesta de una solicitud web, para completarla al atenderla. Una sola
+-- por solicitud.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_adresp_solicitud
     ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;
