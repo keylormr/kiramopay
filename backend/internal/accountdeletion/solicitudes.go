@@ -300,7 +300,9 @@ func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*Respuesta
 			return fmt.Errorf("leer cuenta: %w", err)
 		}
 		if status == "blocked" || status == "suspended" {
-			return nil
+			// Su respuesta entra ya a la bandeja, sin decidir, con el plazo desde
+			// esta verificacion (decision del dueno del 2026-10-22).
+			return encolarSinDecidir(ctx, tx, cuenta, id, verificada)
 		}
 		out, res, err = atenderEnTx(ctx, tx, id, cuenta, "", opciones{canal: CanalWeb})
 		return err
@@ -364,7 +366,7 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 	// esta via. No dice por que.
 	var respuestaDelRechazo string
 	rechazar := func(codigo string) error {
-		id, err := encolarRespuesta(ctx, tx, userID, nuevaRespuesta{tipo: RespuestaRechazada, desde: op.solicitadaEn})
+		id, err := responder(ctx, tx, userID, solicitudID, nuevaRespuesta{tipo: RespuestaRechazada, desde: op.solicitadaEn})
 		if err != nil {
 			return err
 		}
@@ -373,6 +375,7 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 	}
 
 	op.actor = adminID
+	op.solicitud = solicitudID
 	res, err := iniciarEnTx(ctx, tx, userID, op)
 	var bloqueada *ErrBloqueada
 	switch {
@@ -381,7 +384,7 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		// anterior todavia no salio, es esa misma.
 		if res.Respuesta, err = respuestaPendiente(ctx, tx, userID, RespuestaPlazoIniciado); err == nil && res.Respuesta == "" {
 			dia30 := res.SeEliminaEl
-			res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
+			res.Respuesta, err = responder(ctx, tx, userID, solicitudID, nuevaRespuesta{
 				tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, desde: op.solicitadaEn,
 			})
 		}
@@ -394,7 +397,7 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		// La solicitud no pudo empezar, y eso tambien se responde por escrito:
 		// que resolver. Va por la bandeja como la del dia 0.
 		res = resultado{}
-		if res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
+		if res.Respuesta, err = responder(ctx, tx, userID, solicitudID, nuevaRespuesta{
 			tipo: RespuestaBloqueada, bloqueos: codigosDeBloqueo(bloqueada.Bloqueos), desde: op.solicitadaEn,
 		}); err == nil {
 			if err = cerrar("blocked", bloqueada.Bloqueos[0].Codigo); err == nil {
@@ -410,6 +413,11 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 	case errors.Is(err, ErrCuentaNoEncontrada):
 		// Sin la cuenta no hay a quien responder.
 		err = cerrar("rejected", "NOT_FOUND")
+	}
+	// Lo que haya quedado sin decidir de esta solicitud ya no tiene que decir: la
+	// cubre otra respuesta que todavia no salio, o no hay a quien responder.
+	if err == nil {
+		err = cancelarSinDecidir(ctx, tx, solicitudID)
 	}
 	if err != nil {
 		return nil, resultado{}, err
@@ -621,7 +629,7 @@ func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) err
 		if verificada != nil {
 			r.desde = *verificada
 		}
-		respuesta, err = encolarRespuesta(ctx, tx, *userID, r)
+		respuesta, err = responder(ctx, tx, *userID, solicitudID, r)
 		return err
 	})
 	if err != nil {

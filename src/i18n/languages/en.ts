@@ -1965,6 +1965,8 @@ const en: TranslationKeys = {
   admin_resp_unconfirmed_hint: 'It goes to an email the person gave only for the response, which nobody confirmed.',
   admin_resp_view_contact: 'View contact',
   admin_resp_contact_hint: 'Who views it, and when, is recorded.',
+  admin_resp_contact_closed_hint: 'It comes from what is kept by law: use it only to deliver this response.',
+  admin_resp_undecided: 'Still unhandled in "Requests to handle". Start the term or reject it before that date: the response goes out with what you decide.',
   admin_resp_contact_phone: 'Phone: {v}',
   admin_resp_contact_email: 'Account email: {v}',
   admin_resp_contact_response_email: 'Email given for the response: {v}',

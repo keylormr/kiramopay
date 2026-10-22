@@ -1966,6 +1966,8 @@ const pt: TranslationKeys = {
   admin_resp_unconfirmed_hint: 'Vai para um e-mail que a pessoa informou só para a resposta e que ninguém confirmou.',
   admin_resp_view_contact: 'Ver contato',
   admin_resp_contact_hint: 'Fica registrado quem vê e quando.',
+  admin_resp_contact_closed_hint: 'Vem do que se conserva por lei: use-o só para entregar esta resposta.',
+  admin_resp_undecided: 'Ainda sem atender em "Solicitações a atender". Inicie o prazo ou rejeite-a antes dessa data: a resposta sai com o que você decidir.',
   admin_resp_contact_phone: 'Telefone: {v}',
   admin_resp_contact_email: 'E-mail da conta: {v}',
   admin_resp_contact_response_email: 'E-mail informado para a resposta: {v}',

@@ -1680,6 +1680,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	CREATE TABLE IF NOT EXISTS account_deletion_responses (
 		id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id         UUID NOT NULL REFERENCES users(id),
+		request_id      UUID,
 		kind            VARCHAR(12) NOT NULL,
 		deletion_due_at TIMESTAMPTZ,
 		blockers        TEXT[] NOT NULL DEFAULT '{}',
@@ -1696,7 +1697,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		delivery_note   TEXT,
 		cancelled_at    TIMESTAMPTZ,
 		created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected')),
+		CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided')),
+		CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL)),
 		CONSTRAINT chk_adresp_fecha CHECK (kind <> 'scheduled' OR deletion_due_at IS NOT NULL),
 		CONSTRAINT chk_adresp_intentos CHECK (attempts >= 0),
 		CONSTRAINT chk_adresp_error CHECK (last_error IS NULL OR last_error IN ('no_channel', 'send_failed')),
@@ -1707,8 +1709,12 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	);
 	-- Una base de pruebas que sobrevivio a la primera version de la 083.
 	ALTER TABLE account_deletion_responses ADD COLUMN IF NOT EXISTS email_unconfirmed BOOLEAN NOT NULL DEFAULT false;
+	ALTER TABLE account_deletion_responses ADD COLUMN IF NOT EXISTS request_id UUID;
 	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_kind;
-	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected'));
+	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided'));
+	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_sin_decidir;
+	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL));
+	CREATE INDEX IF NOT EXISTS idx_adresp_solicitud ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;
 
 	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
 	CREATE TABLE IF NOT EXISTS closed_account_records (

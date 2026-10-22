@@ -66,9 +66,11 @@ export interface RespuestaPorEntregar {
   id: string;
   /**
    * scheduled: empezo el plazo (lleva las fechas); blocked: que resolver;
-   * rejected: la solicitud no se atiende por esta via (sin decir por que).
+   * rejected: la solicitud no se atiende por esta via (sin decir por que);
+   * undecided: la solicitud web de una cuenta en revision sigue sin atender. No
+   * hay nada que entregar: se procesa o se rechaza en la cola.
    */
-  tipo: 'scheduled' | 'blocked' | 'rejected';
+  tipo: 'scheduled' | 'blocked' | 'rejected' | 'undecided';
   motivo: 'no_channel' | 'send_failed';
   intentos: number;
   creadaEn: string;

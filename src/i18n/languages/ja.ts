@@ -1957,6 +1957,8 @@ const ja: TranslationKeys = {
   admin_resp_unconfirmed_hint: '本人が回答のためだけに入力し、誰も確認していないメールアドレスに送られます。',
   admin_resp_view_contact: '連絡先を表示',
   admin_resp_contact_hint: '誰がいつ表示したかが記録されます。',
+  admin_resp_contact_closed_hint: '法律に基づき保存されている記録からの情報です。この回答を届けるためだけに使ってください。',
+  admin_resp_undecided: '「対応待ちの申請」でまだ未対応です。その日までに期間を開始するか却下してください。回答はあなたの決定どおりに送られます。',
   admin_resp_contact_phone: '電話：{v}',
   admin_resp_contact_email: 'アカウントのメールアドレス：{v}',
   admin_resp_contact_response_email: '回答用に入力されたメールアドレス：{v}',

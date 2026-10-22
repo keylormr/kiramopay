@@ -1969,6 +1969,8 @@ const es: TranslationKeys = {
   admin_resp_unconfirmed_hint: 'Va a un correo que la persona dio solo para la respuesta y que nadie confirmó.',
   admin_resp_view_contact: 'Ver contacto',
   admin_resp_contact_hint: 'Queda registrado quién lo ve y cuándo.',
+  admin_resp_contact_closed_hint: 'Sale de lo que se conserva por ley: úsalo solo para entregar esta respuesta.',
+  admin_resp_undecided: 'Sigue sin atender en "Solicitudes por atender". Inicia el plazo o recházala antes de esa fecha: la respuesta sale con lo que decidas.',
   admin_resp_contact_phone: 'Teléfono: {v}',
   admin_resp_contact_email: 'Correo de la cuenta: {v}',
   admin_resp_contact_response_email: 'Correo que dio para la respuesta: {v}',

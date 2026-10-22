@@ -772,7 +772,11 @@ paths:
         request, or from the verification of a web request) first. Each one
         carries what to tell the person: the dates (`scheduled`), what to
         resolve (`blocked`) or that the request is not handled this way
-        (`rejected`). The account is masked from SQL, and null when it can no
+        (`rejected`). `undecided` is the answer of a web request from an
+        account under review that nobody processed or rejected yet: it entered
+        the outbox at verification and moved here 3 days before `respond_by`;
+        there is nothing to deliver, the request is processed or rejected in
+        the queue, which completes this same answer. The account is masked from SQL, and null when it can no
         longer be read; the full contact is only given by
         /admin/account-deletion-responses/{id}/contact. Not cacheable.
       security:
@@ -853,7 +857,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: NOT_PENDING (already delivered or cancelled)
+          description: >-
+            NOT_PENDING (already delivered or cancelled), or NOT_DECIDED (the
+            request is still undecided: process or reject it)
 
   /api/v1/admin/account-deletion-responses/{id}/contact:
     post:
@@ -864,10 +870,13 @@ paths:
         (while it exists), so the answer can be delivered another way. Only for
         answers in the panel (escalated and not delivered). It is a POST
         because every view is audited (who and when, with the answer id) in
-        the same transaction; without the audit row nothing is returned. An
-        account already closed (day 30) has no contact left: the answer is
-        empty and no view is audited, since it reveals nothing. Not
-        cacheable.
+        the same transaction; without the audit row nothing is returned. For
+        an account already closed (day 30) the phone and email come from the
+        identity kept by law (closed_account_records). LIMITED USE: only to
+        deliver this written answer to the same person, only administrators,
+        and every view is audited like the rest. Once that identity is
+        dissociated there is no contact left: the answer is empty and no view
+        is audited, since it reveals nothing. Not cacheable.
       security:
         - bearerAuth: []
       parameters:
@@ -894,7 +903,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: NOT_PENDING (not in the panel)
+          description: >-
+            NOT_PENDING (not in the panel), or NOT_DECIDED (the request is
+            still undecided: there is nothing to deliver yet)
 
   # ── Wallets ────────────────────────────────────────────────────────────
   /api/v1/wallets/me:
@@ -6408,8 +6419,11 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [scheduled, blocked, rejected] }
-        reason: { type: string, enum: [no_channel, send_failed] }
+        kind: { type: string, enum: [scheduled, blocked, rejected, undecided] }
+        reason:
+          type: string
+          enum: [no_channel, send_failed, '']
+          description: Empty for `undecided`, which never tried to send
         attempts: { type: integer }
         created_at: { type: string, format: date-time }
         respond_by: { type: string, format: date-time }

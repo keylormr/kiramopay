@@ -2044,6 +2044,8 @@ export type TranslationKeys = {
   admin_resp_unconfirmed_hint: string;
   admin_resp_view_contact: string;
   admin_resp_contact_hint: string;
+  admin_resp_contact_closed_hint: string;
+  admin_resp_undecided: string;
   admin_resp_contact_phone: string;
   admin_resp_contact_email: string;
   admin_resp_contact_response_email: string;

@@ -1966,6 +1966,8 @@ const fr: TranslationKeys = {
   admin_resp_unconfirmed_hint: "Elle part vers une adresse que la personne a donnée uniquement pour la réponse et que personne n'a confirmée.",
   admin_resp_view_contact: 'Voir le contact',
   admin_resp_contact_hint: 'Qui le consulte, et quand, est enregistré.',
+  admin_resp_contact_closed_hint: 'Il provient de ce qui est conservé par la loi : utilisez-le uniquement pour remettre cette réponse.',
+  admin_resp_undecided: 'Toujours non traitée dans « Demandes à traiter ». Lancez le délai ou rejetez-la avant cette date : la réponse part avec ce que vous décidez.',
   admin_resp_contact_phone: 'Téléphone : {v}',
   admin_resp_contact_email: 'E-mail du compte : {v}',
   admin_resp_contact_response_email: 'E-mail donné pour la réponse : {v}',

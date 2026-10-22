@@ -55,6 +55,9 @@ type opciones struct {
 	// legal de la respuesta, aunque operaciones la atienda despues. Vacio en la
 	// via de la app, que pide y responde en el mismo acto.
 	solicitadaEn time.Time
+	// solicitud es la solicitud web que se atiende: su respuesta sin decidir es
+	// la que se completa. Vacio en la via de la app.
+	solicitud string
 }
 
 // resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
@@ -179,7 +182,7 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 		correoDado = op.correoParaRespuesta
 	}
 	dia30 := res.SeEliminaEl
-	if res.Respuesta, err = encolarRespuesta(ctx, tx, userID, nuevaRespuesta{
+	if res.Respuesta, err = responder(ctx, tx, userID, op.solicitud, nuevaRespuesta{
 		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado, desde: op.solicitadaEn,
 	}); err != nil {
 		return resultado{}, err
@@ -351,7 +354,8 @@ func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) 
 //     secreto se destruye.
 //   - DEPURA el texto que la persona escribio en filas que se quedan.
 //   - CONSERVA lo que la ley obliga, y saca la identidad de users a
-//     closed_account_records, donde ninguna consulta de la aplicacion la lee.
+//     closed_account_records. Ahi solo la lee Ver contacto de una respuesta
+//     escrita sin entregar, con uso limitado (ContactoDeRespuesta).
 func cerrarEnTx(ctx context.Context, tx pgx.Tx, userID string, now time.Time) (bool, []Bloqueo, error) {
 	var canal string
 	err := tx.QueryRow(ctx, `

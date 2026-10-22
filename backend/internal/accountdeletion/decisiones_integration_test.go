@@ -188,7 +188,8 @@ func TestHandler_VerContactoDeUnaRespuesta(t *testing.T) {
 // ── Toda solicitud verificada tiene su respuesta ──────────────────────────
 
 // verificadaHace corre al pasado la verificacion de una solicitud de la cola y
-// devuelve la fecha que quedo: operaciones la atiende dias despues.
+// devuelve la fecha que quedo: operaciones la atiende dias despues. La respuesta
+// sin decidir nacio con esa verificacion, asi que corre con ella.
 func verificadaHace(t *testing.T, pool *pgxpool.Pool, solicitud string, dias int) time.Time {
 	t.Helper()
 	var v time.Time
@@ -197,6 +198,10 @@ func verificadaHace(t *testing.T, pool *pgxpool.Pool, solicitud string, dias int
 		 WHERE id = $1::uuid RETURNING verified_at`, solicitud, dias).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
+	exec(t, pool, `
+		UPDATE account_deletion_responses
+		   SET respond_by = $2, created_at = created_at - make_interval(days => $3)
+		 WHERE request_id = $1::uuid AND kind = 'undecided'`, solicitud, responderAntesDe(v), dias)
 	return v
 }
 

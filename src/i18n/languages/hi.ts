@@ -1957,6 +1957,8 @@ const hi: TranslationKeys = {
   admin_resp_unconfirmed_hint: 'यह उस ईमेल पर जाता है जो व्यक्ति ने केवल जवाब के लिए दिया था और जिसकी किसी ने पुष्टि नहीं की।',
   admin_resp_view_contact: 'संपर्क देखें',
   admin_resp_contact_hint: 'कौन इसे देखता है और कब, यह दर्ज होता है।',
+  admin_resp_contact_closed_hint: 'यह कानून के तहत रखे गए रिकॉर्ड से आता है: इसका उपयोग केवल यह जवाब पहुँचाने के लिए करें।',
+  admin_resp_undecided: '"कार्रवाई के लिए बाकी अनुरोध" में यह अभी भी लंबित है। उस तारीख से पहले अवधि शुरू करें या इसे अस्वीकार करें: जवाब आपके निर्णय के अनुसार भेजा जाता है।',
   admin_resp_contact_phone: 'फ़ोन: {v}',
   admin_resp_contact_email: 'खाते का ईमेल: {v}',
   admin_resp_contact_response_email: 'जवाब के लिए दिया गया ईमेल: {v}',

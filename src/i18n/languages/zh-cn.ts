@@ -1957,6 +1957,8 @@ const zhCn: TranslationKeys = {
   admin_resp_unconfirmed_hint: '发送到此人仅为答复而提供、且无人确认过的电子邮箱。',
   admin_resp_view_contact: '查看联系方式',
   admin_resp_contact_hint: '谁在何时查看都会被记录。',
+  admin_resp_contact_closed_hint: '来自依法保存的记录：仅可用于送达此答复。',
+  admin_resp_undecided: '仍在“待处理的申请”中未处理。请在该日期前启动期限或拒绝：答复将按你的决定发出。',
   admin_resp_contact_phone: '电话：{v}',
   admin_resp_contact_email: '账户电子邮箱：{v}',
   admin_resp_contact_response_email: '为答复提供的电子邮箱：{v}',

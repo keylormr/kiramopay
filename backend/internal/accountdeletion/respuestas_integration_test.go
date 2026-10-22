@@ -527,8 +527,11 @@ func TestConfirmar_UnaCuentaBajoRevisionNoDiceNada(t *testing.T) {
 	if out.Resultado != "received" || out.SeEliminaEl != nil || out.ConservaHasta != nil || len(out.Bloqueos) != 0 {
 		t.Errorf("bajo revision la pagina no debe decir nada de la cuenta: %+v", out)
 	}
-	if rs := respuestasDe(t, pool, a.ID); len(rs) != 0 {
-		t.Errorf("bajo revision no hay respuesta hasta que la atienda una persona: %+v", rs)
+	// Su respuesta queda en la bandeja desde la verificacion, sin decidir: no
+	// sale nada hasta que la atienda una persona (decision del dueno del
+	// 2026-10-22).
+	if rs := respuestasDe(t, pool, a.ID); len(rs) != 1 || rs[0].Tipo != RespuestaSinDecidir || rs[0].Intentos != 0 {
+		t.Errorf("bajo revision queda una sola respuesta, sin decidir y sin intentos: %+v", rs)
 	}
 }
 

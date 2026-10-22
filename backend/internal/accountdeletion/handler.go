@@ -281,6 +281,8 @@ func (h *Handler) MarcarRespuestaEntregada(w http.ResponseWriter, r *http.Reques
 			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		case errors.Is(err, ErrRespuestaCerrada):
 			response.Error(w, http.StatusConflict, "NOT_PENDING", err.Error())
+		case errors.Is(err, ErrRespuestaSinDecidir):
+			response.Error(w, http.StatusConflict, "NOT_DECIDED", err.Error())
 		default:
 			response.Error(w, http.StatusInternalServerError, "DELIVERY_FAILED", err.Error())
 		}
@@ -306,6 +308,8 @@ func (h *Handler) VerContactoDeRespuesta(w http.ResponseWriter, r *http.Request)
 			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		case errors.Is(err, ErrRespuestaFueraDelPanel):
 			response.Error(w, http.StatusConflict, "NOT_PENDING", err.Error())
+		case errors.Is(err, ErrRespuestaSinDecidir):
+			response.Error(w, http.StatusConflict, "NOT_DECIDED", err.Error())
 		default:
 			response.Error(w, http.StatusInternalServerError, "CONTACT_FAILED", err.Error())
 		}

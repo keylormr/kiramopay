@@ -27,11 +27,18 @@
 --   * Toda solicitud web verificada tiene la suya, tambien la rechazada
 --     (rejected), y respond_by se cuenta desde la verificacion aunque
 --     operaciones la atienda dias despues.
+--   * La de una cuenta en revision entra apenas se verifica la solicitud, sin
+--     decidir (undecided), con su request_id y su plazo. No sale nada hasta que
+--     operaciones procesa o rechaza la solicitud, que completan esa misma fila.
+--     Si nadie la atiende, pasa sola al panel tres dias antes del plazo
+--     (decision del dueno del 2026-10-22).
 --
--- No apunta a account_deletion_requests: la bajada de la 077 borra esa tabla.
+-- request_id no apunta a account_deletion_requests con una FK: la bajada de la
+-- 077 borra esa tabla.
 CREATE TABLE IF NOT EXISTS account_deletion_responses (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id),
+    request_id      UUID,
     kind            VARCHAR(12) NOT NULL,
     deletion_due_at TIMESTAMPTZ,
     blockers        TEXT[] NOT NULL DEFAULT '{}',
@@ -50,8 +57,10 @@ CREATE TABLE IF NOT EXISTS account_deletion_responses (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- scheduled: empezo el plazo de 30 dias. blocked: la solicitud web no pudo
     -- empezar y se le dice a la persona que resolver. rejected: la solicitud web
-    -- no se atiende por esta via, sin decir por que.
-    CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected')),
+    -- no se atiende por esta via, sin decir por que. undecided: la solicitud web
+    -- de una cuenta en revision espera a operaciones; todavia no hay que decir.
+    CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided')),
+    CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL)),
     CONSTRAINT chk_adresp_fecha CHECK (kind <> 'scheduled' OR deletion_due_at IS NOT NULL),
     CONSTRAINT chk_adresp_intentos CHECK (attempts >= 0),
     CONSTRAINT chk_adresp_error CHECK (last_error IS NULL OR last_error IN ('no_channel', 'send_failed')),
@@ -72,3 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_adresp_en_operaciones
     WHERE escalated_at IS NOT NULL AND delivered_at IS NULL AND cancelled_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_adresp_cuenta ON account_deletion_responses (user_id);
+
+-- La respuesta de una solicitud web, para completarla al atenderla.
+CREATE INDEX IF NOT EXISTS idx_adresp_solicitud
+    ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;

@@ -218,7 +218,9 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   // Lo que hay que decirle a la persona: las fechas, que resolver, o que no se
   // atiende por esta via.
   const loQueHayQueDecir = (r: RespuestaPorEntregar) =>
-    r.tipo === 'rejected' ? (
+    r.tipo === 'undecided' ? (
+      <p className="text-sm uv-text-secondary leading-relaxed">{t('admin_resp_undecided')}</p>
+    ) : r.tipo === 'rejected' ? (
       <p className="text-sm uv-text-secondary leading-relaxed">{t('admin_resp_rejected')}</p>
     ) : r.tipo === 'scheduled' ? (
       <p className="text-sm uv-text-secondary leading-relaxed">
@@ -257,10 +259,8 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   // El contacto completo, solo despues de pedirlo: el boton avisa que la vista
   // queda registrada.
   const contacto = (r: RespuestaPorEntregar) => {
-    // De una cuenta cerrada ya no hay contacto guardado que ver.
-    if (r.cuentaCerrada) {
-      return <p className="text-sm uv-text-muted">{t('admin_resp_contact_none')}</p>;
-    }
+    // Sin decidir no hay nada que entregar todavia: se atiende la solicitud.
+    if (r.tipo === 'undecided') return null;
     const c = contactos[r.id];
     if (c && c !== 'falla') {
       const lineas = [
@@ -298,6 +298,8 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         >
           {t('admin_resp_view_contact')}
         </button>
+        {/* De una cuenta cerrada sale de lo que se conserva por ley: uso limitado. */}
+        {r.cuentaCerrada && <p className="text-xs uv-text-muted">{t('admin_resp_contact_closed_hint')}</p>}
         {c === 'falla' ? (
           <p role="alert" className="text-xs text-[var(--color-danger)]">{t('admin_resp_contact_failed')}</p>
         ) : (
@@ -369,22 +371,28 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 </div>
               )}
               <p className="text-xs font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
-                {r.motivo === 'send_failed'
-                  ? t('admin_resp_send_failed').replace('{n}', String(r.intentos))
-                  : t('admin_resp_no_channel')}
-                {' · '}
+                {r.tipo !== 'undecided' && (
+                  <>
+                    {r.motivo === 'send_failed'
+                      ? t('admin_resp_send_failed').replace('{n}', String(r.intentos))
+                      : t('admin_resp_no_channel')}
+                    {' · '}
+                  </>
+                )}
                 {t('admin_resp_due').replace('{date}', fechaLarga(r.responderAntesDe, language))}
               </p>
               {loQueHayQueDecir(r)}
               {contacto(r)}
-              <button
-                type="button"
-                onClick={() => abrirEntrega(r)}
-                disabled={actuando !== null}
-                className="w-full bg-[var(--color-primary)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
-              >
-                {t('admin_resp_mark')}
-              </button>
+              {r.tipo !== 'undecided' && (
+                <button
+                  type="button"
+                  onClick={() => abrirEntrega(r)}
+                  disabled={actuando !== null}
+                  className="w-full bg-[var(--color-primary)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+                >
+                  {t('admin_resp_mark')}
+                </button>
+              )}
             </article>
           ))}
         </section>

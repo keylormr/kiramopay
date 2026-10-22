@@ -1134,7 +1134,7 @@ export interface paths {
         };
         /**
          * Written deletion answers that could not go out by themselves
-         * @description The answers Law 8968 requires that moved to operations: the account has nowhere to send them (`no_channel`) or the email kept failing for 48 hours (`send_failed`), or sooner when fewer than 3 days are left before `respond_by`. The nearest `respond_by` (5 business days from the request, or from the verification of a web request) first. Each one carries what to tell the person: the dates (`scheduled`), what to resolve (`blocked`) or that the request is not handled this way (`rejected`). The account is masked from SQL, and null when it can no longer be read; the full contact is only given by /admin/account-deletion-responses/{id}/contact. Not cacheable.
+         * @description The answers Law 8968 requires that moved to operations: the account has nowhere to send them (`no_channel`) or the email kept failing for 48 hours (`send_failed`), or sooner when fewer than 3 days are left before `respond_by`. The nearest `respond_by` (5 business days from the request, or from the verification of a web request) first. Each one carries what to tell the person: the dates (`scheduled`), what to resolve (`blocked`) or that the request is not handled this way (`rejected`). `undecided` is the answer of a web request from an account under review that nobody processed or rejected yet: it entered the outbox at verification and moved here 3 days before `respond_by`; there is nothing to deliver, the request is processed or rejected in the queue, which completes this same answer. The account is masked from SQL, and null when it can no longer be read; the full contact is only given by /admin/account-deletion-responses/{id}/contact. Not cacheable.
          */
         get: {
             parameters: {
@@ -1256,7 +1256,7 @@ export interface paths {
                     content?: never;
                 };
                 404: components["responses"]["NotFound"];
-                /** @description NOT_PENDING (already delivered or cancelled) */
+                /** @description NOT_PENDING (already delivered or cancelled), or NOT_DECIDED (the request is still undecided: process or reject it) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1282,7 +1282,7 @@ export interface paths {
         put?: never;
         /**
          * Full contact of a written answer in the operations panel
-         * @description Unmasked phone, account email and the email given only for the answer (while it exists), so the answer can be delivered another way. Only for answers in the panel (escalated and not delivered). It is a POST because every view is audited (who and when, with the answer id) in the same transaction; without the audit row nothing is returned. An account already closed (day 30) has no contact left: the answer is empty and no view is audited, since it reveals nothing. Not cacheable.
+         * @description Unmasked phone, account email and the email given only for the answer (while it exists), so the answer can be delivered another way. Only for answers in the panel (escalated and not delivered). It is a POST because every view is audited (who and when, with the answer id) in the same transaction; without the audit row nothing is returned. For an account already closed (day 30) the phone and email come from the identity kept by law (closed_account_records). LIMITED USE: only to deliver this written answer to the same person, only administrators, and every view is audited like the rest. Once that identity is dissociated there is no contact left: the answer is empty and no view is audited, since it reveals nothing. Not cacheable.
          */
         post: {
             parameters: {
@@ -1314,7 +1314,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
-                /** @description NOT_PENDING (not in the panel) */
+                /** @description NOT_PENDING (not in the panel), or NOT_DECIDED (the request is still undecided: there is nothing to deliver yet) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -10624,9 +10624,12 @@ export interface components {
             /** Format: uuid */
             id?: string;
             /** @enum {string} */
-            kind?: "scheduled" | "blocked" | "rejected";
-            /** @enum {string} */
-            reason?: "no_channel" | "send_failed";
+            kind?: "scheduled" | "blocked" | "rejected" | "undecided";
+            /**
+             * @description Empty for `undecided`, which never tried to send
+             * @enum {string}
+             */
+            reason?: "no_channel" | "send_failed" | "";
             attempts?: number;
             /** Format: date-time */
             created_at?: string;

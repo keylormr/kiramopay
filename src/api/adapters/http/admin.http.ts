@@ -145,7 +145,14 @@ export class HttpAdminRepository implements IAdminRepository {
         .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
         .map((r) => ({
           id: String(r.id ?? ''),
-          tipo: r.kind === 'blocked' ? ('blocked' as const) : r.kind === 'rejected' ? ('rejected' as const) : ('scheduled' as const),
+          tipo:
+            r.kind === 'blocked'
+              ? ('blocked' as const)
+              : r.kind === 'rejected'
+                ? ('rejected' as const)
+                : r.kind === 'undecided'
+                  ? ('undecided' as const)
+                  : ('scheduled' as const),
           motivo: r.reason === 'send_failed' ? ('send_failed' as const) : ('no_channel' as const),
           intentos: typeof r.attempts === 'number' ? r.attempts : 0,
           creadaEn: String(r.created_at ?? ''),
