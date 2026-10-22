@@ -84,15 +84,27 @@ jobs:
           path: dist/
       - name: Check bundle sizes
         run: |
-          echo "Checking bundle sizes (max 200KB per chunk)..."
+          echo "Checking bundle sizes (max 200KB per chunk, 300KB per language dictionary)..."
           MAX_SIZE=204800
+          # Los diccionarios que translations.ts carga con import() (todos menos
+          # es, que va en el chunk i18n) tienen su propio tope: cada persona baja
+          # solo el de su idioma y son texto, no codigo. El devanagari ocupa 3
+          # bytes por caracter en UTF-8, asi que hi pesa casi el doble que en con
+          # los mismos textos. 300KB le deja a hi margen para crecer la mitad; al pasarlo
+          # toca partir los diccionarios (por ejemplo, los textos del panel de
+          # administracion aparte), no subir el tope.
+          MAX_IDIOMA=307200
           FAILED=0
           for file in dist/assets/*.js; do
             SIZE=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
             SIZE_KB=$((SIZE / 1024))
             FILENAME=$(basename "$file")
-            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-              echo "FAIL: $FILENAME is ${SIZE_KB}KB (max 200KB)"
+            LIMIT=$MAX_SIZE
+            if echo "$FILENAME" | grep -Eq '^(en|fr|pt|zh-cn|ja|hi)-[A-Za-z0-9_-]{8}\.js$'; then
+              LIMIT=$MAX_IDIOMA
+            fi
+            if [ "$SIZE" -gt "$LIMIT" ]; then
+              echo "FAIL: $FILENAME is ${SIZE_KB}KB (max $((LIMIT / 1024))KB)"
               FAILED=1
             else
               echo "OK: $FILENAME is ${SIZE_KB}KB"
