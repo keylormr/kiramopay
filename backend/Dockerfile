@@ -1,9 +1,10 @@
-# go.mod pins toolchain go1.26.9; the official image sets GOTOOLCHAIN=local
-# (no auto-download), so the base image's Go must already satisfy it. 1.26.9
-# is the first 1.26 release with the net/http, crypto/tls and html/template
-# fixes of October 2026 (GO-2026-6599 to GO-2026-6617); the 1.25 line no
-# longer gets security releases.
-FROM golang:1.26.9-alpine AS builder
+# go.mod pins toolchain go1.26.10; the official image sets GOTOOLCHAIN=local
+# (no auto-download), so the base image's Go must already satisfy it. 1.26.10
+# fixes GO-2026-6809 (crypto/x509, compromised intermediate certificates);
+# 1.26.9 already carried the net/http, crypto/tls and html/template fixes of
+# October 2026 (GO-2026-6599 to GO-2026-6617). The 1.25 line no longer gets
+# security releases.
+FROM golang:1.26.10-alpine AS builder
 
 WORKDIR /app
 
