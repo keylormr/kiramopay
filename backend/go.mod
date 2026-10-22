@@ -2,7 +2,7 @@ module github.com/kiramopay/backend
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
