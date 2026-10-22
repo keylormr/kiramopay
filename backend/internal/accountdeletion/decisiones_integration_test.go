@@ -992,7 +992,12 @@ func TestRespuesta_YaPedidaSinRespuestaPendienteCompletaLaSinDecidir(t *testing.
 	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
 	sinDecidir := unaRespuesta(t, pool, a.ID)
 	desbloquear(t, pool, a.ID)
-	pedir(t, svc, a.ID)
+	// pedir no manda el primer intento: en la app lo manda el handler, aqui se
+	// manda a mano.
+	app := pedir(t, svc, a.ID)
+	if ok, err := svc.entregarUna(context.Background(), app.Respuesta, time.Now()); !ok || err != nil {
+		t.Fatalf("la respuesta de la app no salio: %v %v", ok, err)
+	}
 	esperarLaFila(t, pool, a.ID, "la de la app, entregada", func(r filaRespuesta) bool { return r.ID != sinDecidir.ID && r.Entregada })
 	dia30 := cuenta1[time.Time](t, pool, `SELECT deletion_due_at FROM users WHERE id = $1::uuid`, a.ID)
 
