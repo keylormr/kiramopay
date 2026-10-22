@@ -242,6 +242,10 @@ func TestRespuestaContraElEsquemaReal(t *testing.T) {
 	}); r.ID != sinDecidir.ID {
 		t.Errorf("rechazar debia completar la fila sin decidir: %+v", r)
 	}
+	// Una solicitud tiene una sola respuesta: la 083 no deja poner otra al lado.
+	if err := segundaRespuestaDe(ctx, pool, c.ID, solicitud); !esRepetida(err) {
+		t.Errorf("una segunda respuesta para la misma solicitud: %v", err)
+	}
 
 	// La que salio al correo dado queda en la lista de las enviadas a un correo
 	// sin confirmar.

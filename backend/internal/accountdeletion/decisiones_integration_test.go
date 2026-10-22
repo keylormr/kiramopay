@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kiramopay/backend/internal/testutil"
@@ -71,6 +72,21 @@ func vistasDelContacto(t *testing.T, pool *pgxpool.Pool, userID, adminID, respue
 	return n
 }
 
+// fuenteDeLaVista dice de donde salio el contacto en la ultima vista auditada de
+// la respuesta: vacio cuando salio de la cuenta.
+func fuenteDeLaVista(t *testing.T, pool *pgxpool.Pool, userID, respuesta string) string {
+	t.Helper()
+	var f string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT COALESCE(details->>'source', '') FROM audit_logs
+		 WHERE user_id = $1::uuid AND action = 'account_deletion_response_contact_viewed'
+		   AND details->>'response' = $2
+		 ORDER BY created_at DESC LIMIT 1`, userID, respuesta).Scan(&f); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
 // ── Ver el contacto ───────────────────────────────────────────────────────
 
 // Para entregar por otro medio hace falta el contacto completo: el telefono, el
@@ -102,6 +118,9 @@ func TestRespuesta_VerContactoDaElCompletoYQuedaEnLaAuditoria(t *testing.T) {
 	}
 	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 1 {
 		t.Errorf("la vista debe quedar en la auditoria: %d filas", n)
+	}
+	if f := fuenteDeLaVista(t, pool, a.ID, r.ID); f != "" {
+		t.Errorf("de una cuenta abierta el contacto sale de la cuenta: %q", f)
 	}
 	if _, err := svc.ContactoDeRespuesta(ctx, r.ID, admin.ID); err != nil {
 		t.Fatal(err)
@@ -362,14 +381,17 @@ func TestRespuesta_ElRechazoWebVaEnLaMismaTransaccion(t *testing.T) {
 	}
 }
 
-// Una respuesta que nace cerca de su plazo (la atendieron dias despues de la
-// verificacion) no espera las 48 horas: al primer fallo pasa a operaciones.
+// Una solicitud verificada antes de que existiera la bandeja no tiene su
+// respuesta sin decidir: nace al atenderla, dias despues, con el plazo encima.
+// Por las 48 horas no llegaria a tiempo al panel; pasa por el margen, al primer
+// fallo.
 func TestRespuesta_LaQueNaceCercaDelPlazoPasaAOperacionesAlPrimerFallo(t *testing.T) {
 	pool := testutil.TestDB(t)
 	a, admin := sembrar(t, pool), administrador(t, pool)
 	correo := nuevoCorreo()
 	id := solicitudEnLaCola(t, pool, nuevoServicio(pool, &Options{Email: correo}), correo, a)
 	verificadaHace(t, pool, id, 5)
+	exec(t, pool, `DELETE FROM account_deletion_responses WHERE request_id = $1::uuid`, id)
 
 	caido := nuevoServicio(pool, &Options{Email: nuevoCorreoQueFalla(100)})
 	if _, err := caido.Procesar(context.Background(), id, admin.ID); err != nil {
@@ -527,6 +549,11 @@ func TestRespuesta_VerContactoDeUnaCuentaCerradaLeeLoConservado(t *testing.T) {
 	}
 	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 1 {
 		t.Errorf("la vista de lo conservado queda en la auditoria: %d", n)
+	}
+	// La auditoria dice que salio de lo conservado por ley: esas vistas se
+	// pueden listar aparte.
+	if f := fuenteDeLaVista(t, pool, a.ID, r.ID); f != "closed_account_record" {
+		t.Errorf("la vista debe decir que el contacto salio de lo conservado: %q", f)
 	}
 
 	exec(t, pool, `UPDATE closed_account_records
@@ -848,5 +875,190 @@ func TestRespuesta_SinDecidirNoSeMarcaNiSeVeElContacto(t *testing.T) {
 		if rec.Code != 409 || env.Error == nil || env.Error.Code != "NOT_DECIDED" {
 			t.Errorf("%s: %d %s", ruta, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// esperarLaFila espera a que alguna respuesta de la cuenta cumpla cond, cuando la
+// cuenta tiene mas de una.
+func esperarLaFila(t *testing.T, pool *pgxpool.Pool, userID, que string, cond func(filaRespuesta) bool) filaRespuesta {
+	t.Helper()
+	limite := time.Now().Add(5 * time.Second)
+	for {
+		for _, r := range respuestasDe(t, pool, userID) {
+			if cond(r) {
+				return r
+			}
+		}
+		if time.Now().After(limite) {
+			t.Fatalf("la bandeja nunca llego a %s: %+v", que, respuestasDe(t, pool, userID))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func desbloquear(t *testing.T, pool *pgxpool.Pool, userID string) {
+	t.Helper()
+	exec(t, pool, `UPDATE users SET status = 'active', blocked_at = NULL, blocked_reason = NULL WHERE id = $1::uuid`, userID)
+}
+
+// Procesar completa la fila sin decidir con lo que resulte: bloqueada por algo
+// que resolver, o rechazada. Nunca una fila nueva al lado de la cancelada.
+func TestRespuesta_ProcesarCompletaLaMismaFilaConCadaResultado(t *testing.T) {
+	casos := map[string]struct {
+		tipo   string
+		antes  func(t *testing.T, pool *pgxpool.Pool, userID string)
+		luego  string
+		codigo string
+	}{
+		"con saldo": {tipo: RespuestaBloqueada, codigo: BloqueoSaldo,
+			antes: func(t *testing.T, pool *pgxpool.Pool, userID string) { fondear(t, pool, userID, 500) }},
+		"ROLE_NOT_ALLOWED": {tipo: RespuestaRechazada, codigo: "ROLE_NOT_ALLOWED",
+			luego: `UPDATE users SET role = 'admin' WHERE id = $1::uuid`},
+		"DEMO_ACCOUNT": {tipo: RespuestaRechazada, codigo: "DEMO_ACCOUNT",
+			luego: `UPDATE users SET demo_login = true WHERE id = $1::uuid`},
+		"NOT_ELIGIBLE": {tipo: RespuestaRechazada, codigo: "NOT_ELIGIBLE",
+			luego: `UPDATE users SET status = 'closed' WHERE id = $1::uuid`},
+	}
+	for nombre, c := range casos {
+		t.Run(nombre, func(t *testing.T) {
+			pool := testutil.TestDB(t)
+			a, admin := sembrar(t, pool), administrador(t, pool)
+			if c.antes != nil {
+				c.antes(t, pool, a.ID)
+			}
+			correo := nuevoCorreo()
+			svc := nuevoServicio(pool, &Options{Email: correo})
+			solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+			if c.luego != "" {
+				exec(t, pool, c.luego, a.ID)
+			}
+			antes := unaRespuesta(t, pool, a.ID)
+
+			out, err := svc.Procesar(context.Background(), solicitud, admin.ID)
+			if err != nil || out.Codigo != c.codigo {
+				t.Fatalf("procesar: %+v %v", out, err)
+			}
+			r := esperarRespuesta(t, pool, a.ID, "la misma fila, completada y entregada", func(r filaRespuesta) bool { return r.Entregada })
+			if r.ID != antes.ID || r.Tipo != c.tipo || r.Cancelada {
+				t.Errorf("procesar completa la misma fila: antes %+v, despues %+v", antes, r)
+			}
+		})
+	}
+}
+
+// La persona empezo el plazo por la app mientras la solicitud esperaba, y esa
+// respuesta todavia no salio: es la que la cubre. La sin decidir se cancela y no
+// queda una segunda pendiente.
+func TestRespuesta_YaPedidaConSuRespuestaPendienteCancelaLaSinDecidir(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	solicitud := solicitudEnLaCola(t, pool, nuevoServicio(pool, &Options{Email: correo}), correo, a)
+	sinDecidir := unaRespuesta(t, pool, a.ID)
+	desbloquear(t, pool, a.ID)
+	// Sin proveedor, la respuesta de la app queda pendiente.
+	sinProveedor := nuevoServicio(pool, nil)
+	pedir(t, sinProveedor, a.ID)
+
+	out, err := sinProveedor.Procesar(context.Background(), solicitud, admin.ID)
+	if err != nil || out.Codigo != "ALREADY_REQUESTED" {
+		t.Fatalf("procesar: %+v %v", out, err)
+	}
+	pendientes := 0
+	for _, r := range respuestasDe(t, pool, a.ID) {
+		switch {
+		case r.ID == sinDecidir.ID:
+			if !r.Cancelada {
+				t.Errorf("la sin decidir debia cancelarse: %+v", r)
+			}
+		case r.Tipo == RespuestaPlazoIniciado && !r.Cancelada && !r.Entregada:
+			pendientes++
+		default:
+			t.Errorf("una respuesta de mas: %+v", r)
+		}
+	}
+	if pendientes != 1 {
+		t.Errorf("queda una sola respuesta pendiente, la del plazo: %d", pendientes)
+	}
+}
+
+// Si la respuesta de la app ya salio, la solicitud web lleva la suya: la sin
+// decidir se completa con el plazo que ya corre.
+func TestRespuesta_YaPedidaSinRespuestaPendienteCompletaLaSinDecidir(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+	sinDecidir := unaRespuesta(t, pool, a.ID)
+	desbloquear(t, pool, a.ID)
+	pedir(t, svc, a.ID)
+	esperarLaFila(t, pool, a.ID, "la de la app, entregada", func(r filaRespuesta) bool { return r.ID != sinDecidir.ID && r.Entregada })
+	dia30 := cuenta1[time.Time](t, pool, `SELECT deletion_due_at FROM users WHERE id = $1::uuid`, a.ID)
+
+	out, err := svc.Procesar(context.Background(), solicitud, admin.ID)
+	if err != nil || out.Codigo != "ALREADY_REQUESTED" {
+		t.Fatalf("procesar: %+v %v", out, err)
+	}
+	r := esperarLaFila(t, pool, a.ID, "la sin decidir, completada y entregada", func(r filaRespuesta) bool { return r.ID == sinDecidir.ID && r.Entregada })
+	if r.Tipo != RespuestaPlazoIniciado || r.Cancelada || r.SeEliminaEl == nil || !r.SeEliminaEl.Equal(dia30) {
+		t.Errorf("la sin decidir se completa con el plazo que corre (%v): %+v", dia30, r)
+	}
+	if n := len(respuestasDe(t, pool, a.ID)); n != 2 {
+		t.Errorf("la de la app y la de la solicitud, nada mas: %d", n)
+	}
+}
+
+// Una sin decidir no se manda: ni el primer intento ni el barrido la toman,
+// aunque le haya llegado el turno.
+func TestRespuesta_SinDecidirNoSeManda(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitudEnLaCola(t, pool, svc, correo, a)
+	r := unaRespuesta(t, pool, a.ID)
+
+	if ok, err := svc.entregarUna(ctx, r.ID, time.Now()); ok || err != nil {
+		t.Errorf("el primer intento tomo una sin decidir: %v %v", ok, err)
+	}
+	exec(t, pool, `UPDATE account_deletion_responses SET next_attempt_at = NOW() - interval '1 minute' WHERE id = $1::uuid`, r.ID)
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatal(err)
+	}
+	if r := unaRespuesta(t, pool, a.ID); r.Tipo != RespuestaSinDecidir || r.Intentos != 0 || r.Entregada || r.Escalada {
+		t.Errorf("el barrido tomo una sin decidir: %+v", r)
+	}
+	select {
+	case m := <-correo.ch:
+		t.Errorf("salio un correo sin decidir nada: %+v", m)
+	default:
+	}
+}
+
+// segundaRespuestaDe intenta dejar otra respuesta para una solicitud que ya
+// tiene la suya.
+func segundaRespuestaDe(ctx context.Context, pool *pgxpool.Pool, userID, solicitud string) error {
+	_, err := pool.Exec(ctx, `
+		INSERT INTO account_deletion_responses (user_id, kind, respond_by, request_id)
+		VALUES ($1::uuid, 'undecided', NOW() + interval '5 days', $2::uuid)`, userID, solicitud)
+	return err
+}
+
+// esRepetida dice si la base rechazo la fila por repetida.
+func esRepetida(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "23505"
+}
+
+// Una solicitud tiene una sola respuesta: la base no deja poner otra al lado.
+func TestRespuesta_UnaSolicitudTieneUnaSolaRespuesta(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a := sembrar(t, pool)
+	correo := nuevoCorreo()
+	solicitud := solicitudEnLaCola(t, pool, nuevoServicio(pool, &Options{Email: correo}), correo, a)
+	if err := segundaRespuestaDe(context.Background(), pool, a.ID, solicitud); !esRepetida(err) {
+		t.Errorf("una segunda respuesta para la misma solicitud: %v", err)
 	}
 }
