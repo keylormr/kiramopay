@@ -171,3 +171,89 @@ func TestEliminarFuncionaContraElEsquemaReal(t *testing.T) {
 		t.Error("la otra persona resulto afectada")
 	}
 }
+
+// La bandeja de la respuesta escrita contra el esquema real: el dia 0 la deja,
+// el barrido la intenta, el panel la lista con la cuenta enmascarada (la vista
+// users_masked) y operaciones la marca entregada. Si una sentencia nombra una
+// columna que la 083 no tiene, o un CHECK la rechaza, falla aqui.
+func TestRespuestaContraElEsquemaReal(t *testing.T) {
+	pool := poolDeLaCadena(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), sembrar(t, pool)
+	svc := nuevoServicio(pool, nil)
+
+	if _, err := svc.EliminarMiCuenta(ctx, a.ID, Confirmacion{Password: claveDePrueba, AceptaPlazo: true}); err != nil {
+		t.Fatalf("pedir la eliminacion: %v", err)
+	}
+	// Sin proveedor no hay a donde mandarla: pasa a operaciones.
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatalf("barrido de la bandeja: %v", err)
+	}
+	lista, err := svc.RespuestasSinEntregar(ctx, 100)
+	if err != nil {
+		t.Fatalf("listar las respuestas sin entregar: %v", err)
+	}
+	var id string
+	for _, r := range lista {
+		if r.Cuenta != nil && r.Cuenta.ID == a.ID {
+			id = r.ID
+		}
+	}
+	if id == "" {
+		t.Fatalf("el panel no lista la respuesta de la cuenta: %+v", lista)
+	}
+	if err := svc.MarcarRespuestaEntregada(ctx, id, admin.ID, "entregada a mano en la prueba"); err != nil {
+		t.Fatalf("marcarla entregada: %v", err)
+	}
+
+	// Una cuenta sin correo que dio uno para la respuesta: la marca del correo
+	// sin confirmar y ver su contacto, con la vista en la auditoria.
+	b := sembrar(t, pool)
+	sinCorreo(t, pool, b.ID)
+	conCorreoDado(t, svc, b.ID)
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatalf("barrido de la bandeja: %v", err)
+	}
+	p := enElPanel(t, svc, b.ID)
+	if p == nil || !p.CorreoSinConfirmar {
+		t.Fatalf("el panel debe marcar el correo sin confirmar: %+v", p)
+	}
+	if c, err := svc.ContactoDeRespuesta(ctx, p.ID, admin.ID); err != nil || c.CorreoParaRespuesta != correoDado {
+		t.Fatalf("ver el contacto: %+v %v", c, err)
+	}
+
+	// El rechazo de una solicitud web tambien va por la bandeja: su tipo entra en
+	// el CHECK de la 083.
+	c := sembrar(t, pool)
+	correo := nuevoCorreo()
+	conCodigo := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, conCodigo, correo, c)
+	// La cuenta en revision tiene su respuesta sin decidir desde la verificacion,
+	// y rechazar completa esa misma fila.
+	sinDecidir := unaRespuesta(t, pool, c.ID)
+	if sinDecidir.Tipo != RespuestaSinDecidir {
+		t.Fatalf("al verificar debia quedar una respuesta sin decidir: %+v", sinDecidir)
+	}
+	if err := conCodigo.Rechazar(ctx, solicitud, admin.ID); err != nil {
+		t.Fatalf("rechazar: %v", err)
+	}
+	if r := esperarRespuesta(t, pool, c.ID, "la del rechazo, entregada", func(r filaRespuesta) bool {
+		return r.Tipo == RespuestaRechazada && r.Entregada
+	}); r.ID != sinDecidir.ID {
+		t.Errorf("rechazar debia completar la fila sin decidir: %+v", r)
+	}
+	// Una solicitud tiene una sola respuesta: la 083 no deja poner otra al lado.
+	if err := segundaRespuestaDe(ctx, pool, c.ID, solicitud); !esRepetida(err) {
+		t.Errorf("una segunda respuesta para la misma solicitud: %v", err)
+	}
+
+	// La que salio al correo dado queda en la lista de las enviadas a un correo
+	// sin confirmar.
+	d := sembrar(t, pool)
+	sinCorreo(t, pool, d.ID)
+	conCorreoDado(t, conCodigo, d.ID)
+	esperarRespuesta(t, pool, d.ID, "entregada al correo dado", func(r filaRespuesta) bool { return r.Entregada })
+	if enviadaSinConfirmar(t, conCodigo, d.ID) == nil {
+		t.Fatal("la lista de las enviadas a un correo sin confirmar no la tiene")
+	}
+}

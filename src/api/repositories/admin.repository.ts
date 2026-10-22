@@ -51,7 +51,62 @@ export interface SolicitudDeEliminacion {
   contactKind: 'email' | 'phone';
   createdAt: string;
   verifiedAt: string | null;
+  /** Hasta cuando hay que responderle: cinco dias habiles desde la verificacion. */
+  responderAntesDe: string | null;
   account: AdminUser | null;
+}
+
+/**
+ * Una respuesta escrita a una solicitud de eliminacion (Ley 8968) que no pudo
+ * salir sola por correo: la cuenta no tiene a donde mandarla (no_channel) o el
+ * correo fallo durante 48 horas (send_failed). Operaciones la entrega por otro
+ * medio antes de responderAntesDe y deja constancia.
+ */
+export interface RespuestaPorEntregar {
+  id: string;
+  /**
+   * scheduled: empezo el plazo (lleva las fechas); blocked: que resolver;
+   * rejected: la solicitud no se atiende por esta via (sin decir por que);
+   * undecided: la solicitud web de una cuenta en revision sigue sin atender. No
+   * hay nada que entregar: se procesa o se rechaza en la cola.
+   */
+  tipo: 'scheduled' | 'blocked' | 'rejected' | 'undecided';
+  motivo: 'no_channel' | 'send_failed';
+  intentos: number;
+  creadaEn: string;
+  responderAntesDe: string;
+  seEliminaEl: string | null;
+  conservaHasta: string | null;
+  bloqueos: string[];
+  /** Siempre viene: con la cuenta ya cerrada no hay tarjeta y el panel muestra el id. */
+  userId: string;
+  cuentaCerrada: boolean;
+  /** Va al correo que la persona dio solo para la respuesta, que nadie confirmo. */
+  correoSinConfirmar: boolean;
+  account: AdminUser | null;
+}
+
+/**
+ * Una respuesta que ya salio por correo, en los ultimos 30 dias, al que la
+ * persona dio solo para la respuesta y nadie confirmo: que saliera no prueba
+ * que le llego. Solo para leer; no trae la direccion (se borra al entregarla).
+ */
+export interface RespuestaEnviadaSinConfirmar {
+  id: string;
+  /** Lo que decia: scheduled (empezo el plazo), blocked (que resolver) o rejected. */
+  tipo: 'scheduled' | 'blocked' | 'rejected';
+  entregadaEn: string;
+  userId: string;
+  cuentaCerrada: boolean;
+  account: AdminUser | null;
+}
+
+/** El contacto completo de una respuesta del panel. Vacio lo que no hay. */
+export interface ContactoDeRespuesta {
+  telefono: string;
+  correo: string;
+  /** El que la persona dio solo para la respuesta, mientras exista. */
+  correoParaRespuesta: string;
 }
 
 /** Lo que paso al atender una solicitud. */
@@ -101,6 +156,20 @@ export interface IAdminRepository {
   processDeletionRequest(id: string): Promise<ApiResponse<ResultadoDeSolicitud>>;
   /** Cierra la solicitud sin eliminar nada. */
   rejectDeletionRequest(id: string): Promise<ApiResponse<{ rejected: boolean }>>;
+  /** Las respuestas escritas que pasaron a operaciones, la de plazo mas cercano primero. */
+  listDeletionResponses(): Promise<ApiResponse<RespuestaPorEntregar[]>>;
+  /**
+   * Deja constancia de que la respuesta se entrego por otro medio. La nota (como
+   * se entrego) es obligatoria; queda en la auditoria con el administrador.
+   */
+  markDeletionResponseDelivered(id: string, nota: string): Promise<ApiResponse<{ delivered: boolean }>>;
+  /**
+   * El contacto sin enmascarar de una respuesta del panel, para entregarla por
+   * otro medio. Cada vista queda en la auditoria con el administrador.
+   */
+  viewDeletionResponseContact(id: string): Promise<ApiResponse<ContactoDeRespuesta>>;
+  /** Las de los ultimos 30 dias que salieron a un correo sin confirmar, la mas reciente primero. */
+  listSentUnconfirmedDeletionResponses(): Promise<ApiResponse<RespuestaEnviadaSinConfirmar[]>>;
 
   // ── Fondo de promociones (cashback de puntos) ──
   /** Lo que queda en el fondo del que salen los canjes de cashback. */

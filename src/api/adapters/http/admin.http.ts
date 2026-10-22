@@ -5,6 +5,9 @@ import type {
   PlanAsignado,
   SolicitudDeEliminacion,
   ResultadoDeSolicitud,
+  RespuestaPorEntregar,
+  ContactoDeRespuesta,
+  RespuestaEnviadaSinConfirmar,
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
 import type { ApiResponse } from '../../types';
@@ -104,6 +107,7 @@ export class HttpAdminRepository implements IAdminRepository {
           contactKind: r.contact_kind === 'phone' ? ('phone' as const) : ('email' as const),
           createdAt: String(r.created_at ?? ''),
           verifiedAt: typeof r.verified_at === 'string' ? r.verified_at : null,
+          responderAntesDe: typeof r.respond_by === 'string' ? r.respond_by : null,
           account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
         })),
     );
@@ -129,6 +133,79 @@ export class HttpAdminRepository implements IAdminRepository {
     );
     if (!res.success) return fail(res);
     return apiSuccess({ rejected: true });
+  }
+
+  async listDeletionResponses(): Promise<ApiResponse<RespuestaPorEntregar[]>> {
+    const res = await this.client.get<unknown>('/api/v1/admin/account-deletion-responses?limit=50');
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    const texto = (v: unknown) => (typeof v === 'string' ? v : null);
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+        .map((r) => ({
+          id: String(r.id ?? ''),
+          tipo:
+            r.kind === 'blocked'
+              ? ('blocked' as const)
+              : r.kind === 'rejected'
+                ? ('rejected' as const)
+                : r.kind === 'undecided'
+                  ? ('undecided' as const)
+                  : ('scheduled' as const),
+          motivo: r.reason === 'send_failed' ? ('send_failed' as const) : ('no_channel' as const),
+          intentos: typeof r.attempts === 'number' ? r.attempts : 0,
+          creadaEn: String(r.created_at ?? ''),
+          responderAntesDe: String(r.respond_by ?? ''),
+          seEliminaEl: texto(r.deletion_due_at),
+          conservaHasta: texto(r.retained_until),
+          bloqueos: Array.isArray(r.blockers) ? r.blockers.filter((b): b is string => typeof b === 'string') : [],
+          userId: String(r.user_id ?? ''),
+          cuentaCerrada: r.account_closed === true,
+          correoSinConfirmar: r.unconfirmed_email === true,
+          account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
+        })),
+    );
+  }
+
+  async listSentUnconfirmedDeletionResponses(): Promise<ApiResponse<RespuestaEnviadaSinConfirmar[]>> {
+    const res = await this.client.get<unknown>('/api/v1/admin/account-deletion-responses/sent-unconfirmed?limit=50');
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+        .map((r) => ({
+          id: String(r.id ?? ''),
+          tipo: r.kind === 'blocked' ? ('blocked' as const) : r.kind === 'rejected' ? ('rejected' as const) : ('scheduled' as const),
+          entregadaEn: String(r.delivered_at ?? ''),
+          userId: String(r.user_id ?? ''),
+          cuentaCerrada: r.account_closed === true,
+          account: isUserDTO(r.account) ? mapAdminUser(r.account) : null,
+        })),
+    );
+  }
+
+  async markDeletionResponseDelivered(id: string, nota: string): Promise<ApiResponse<{ delivered: boolean }>> {
+    const res = await this.client.post<unknown>(
+      `/api/v1/admin/account-deletion-responses/${encodeURIComponent(id)}/delivered`,
+      { note: nota },
+    );
+    if (!res.success) return fail(res);
+    return apiSuccess({ delivered: true });
+  }
+
+  async viewDeletionResponseContact(id: string): Promise<ApiResponse<ContactoDeRespuesta>> {
+    const res = await this.client.post<{ phone?: string; email?: string; response_email?: string }>(
+      `/api/v1/admin/account-deletion-responses/${encodeURIComponent(id)}/contact`,
+      {},
+    );
+    if (!res.success || !res.data) return fail(res);
+    return apiSuccess({
+      telefono: String(res.data.phone ?? ''),
+      correo: String(res.data.email ?? ''),
+      correoParaRespuesta: String(res.data.response_email ?? ''),
+    });
   }
 
   async saldoPromociones(): Promise<ApiResponse<{ saldoMinor: number }>> {

@@ -266,3 +266,110 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     expect(cuentaEliminada).not.toHaveBeenCalled();
   });
 });
+
+// La respuesta escrita a la solicitud sale por correo (Ley 8968). Una cuenta sin
+// correo da uno solo para eso: no queda en el perfil.
+describe('EliminarCuentaSheet — a donde va la respuesta escrita', () => {
+  const sinCorreo = { ...limpia, pideCorreoParaRespuesta: true };
+  const CAMPO_CORREO = 'Correo para enviarte la respuesta';
+  const CAMPO_REPETIDO = 'Repite el correo';
+
+  it('con correo registrado, el resumen dice que la respuesta va a su correo y no pide otro', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: limpia });
+    const user = userEvent.setup();
+    pintar();
+
+    expect(await screen.findByText(/Te enviamos todo esto por escrito a tu correo/)).toBeInTheDocument();
+    await llegarALaConfirmacion(user);
+    expect(screen.queryByLabelText(CAMPO_CORREO)).toBeNull();
+  });
+
+  it('una cuenta sin correo pide uno solo para la respuesta y lo manda', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    api.auth.deleteAccount.mockResolvedValue({ success: true, data: pedida });
+    const user = userEvent.setup();
+    pintar();
+
+    expect(await screen.findByText(/te pedimos uno, solo para enviarte todo esto por escrito/)).toBeInTheDocument();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+    const boton = screen.getByRole('button', { name: BOTON });
+    // Sin un correo valido no se puede enviar.
+    expect(boton).toBeDisabled();
+    const campo = screen.getByLabelText(CAMPO_CORREO);
+    expect(campo).toHaveAccessibleDescription(/no queda en tu perfil/);
+    await user.type(campo, 'no-es-un-correo');
+    expect(boton).toBeDisabled();
+    await user.clear(campo);
+    await user.type(campo, 'respuesta@ejemplo.test');
+    // Se pide dos veces: con uno solo todavia no se puede enviar.
+    expect(boton).toBeDisabled();
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 'Respuesta@Ejemplo.test');
+    await user.click(boton);
+
+    await waitFor(() => expect(cuentaEliminada).toHaveBeenCalledTimes(1));
+    expect(api.auth.deleteAccount).toHaveBeenCalledWith({
+      password: 'Clave-123',
+      totpCode: undefined,
+      acceptTerms: true,
+      responseEmail: 'respuesta@ejemplo.test',
+      responseEmailConfirmation: 'Respuesta@Ejemplo.test',
+    });
+  });
+
+  it('si los dos correos no coinciden no deja enviar y lo dice', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'respuesta@ejemplo.test');
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 'respuesta@ejemplo.tes');
+    await user.tab();
+    expect(screen.getByText('Los dos correos no coinciden.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: BOTON })).toBeDisabled();
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 't');
+    expect(screen.queryByText('Los dos correos no coinciden.')).toBeNull();
+    expect(screen.getByRole('button', { name: BOTON })).toBeEnabled();
+  });
+
+  it('el correo para la respuesta se valida como en el servidor: uno con tilde no habilita el envio', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'josé@ejemplo.com');
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 'josé@ejemplo.com');
+    expect(screen.getByRole('button', { name: BOTON })).toBeDisabled();
+    await user.clear(screen.getByLabelText(CAMPO_CORREO));
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'jose@ejemplo.com');
+    await user.clear(screen.getByLabelText(CAMPO_REPETIDO));
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 'jose@ejemplo.com');
+    expect(screen.getByRole('button', { name: BOTON })).toBeEnabled();
+  });
+
+  it('si el servidor rechaza el correo para la respuesta, lo dice en el formulario', async () => {
+    api.auth.deletionPreflight.mockResolvedValue({ success: true, data: sinCorreo });
+    api.auth.deleteAccount
+      .mockResolvedValueOnce({ success: false, error: { code: 'RESPONSE_EMAIL_INVALID', message: 'x' } })
+      .mockResolvedValueOnce({ success: false, error: { code: 'RESPONSE_EMAIL_REQUIRED', message: 'x' } })
+      .mockResolvedValueOnce({ success: false, error: { code: 'RESPONSE_EMAIL_MISMATCH', message: 'x' } });
+    const user = userEvent.setup();
+    pintar();
+    await llegarALaConfirmacion(user);
+    await completar(user);
+    await user.type(screen.getByLabelText(CAMPO_CORREO), 'respuesta@ejemplo.test');
+    await user.type(screen.getByLabelText(CAMPO_REPETIDO), 'respuesta@ejemplo.test');
+
+    await user.click(screen.getByRole('button', { name: BOTON }));
+    expect(await screen.findByText('Ese correo no es válido. Revísalo.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: BOTON }));
+    expect(await screen.findByText('Escribe un correo para enviarte la respuesta.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: BOTON }));
+    expect(await screen.findByText('Los dos correos no coinciden.')).toBeInTheDocument();
+    expect(cuentaEliminada).not.toHaveBeenCalled();
+  });
+});

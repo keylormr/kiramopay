@@ -30,7 +30,12 @@ import (
 //     un formulario abierto seria una puerta para cerrar cuentas ajenas.
 //  3. Solo una cuenta bajo revision (bloqueada o suspendida) espera a una
 //     persona: operaciones la atiende con Procesar, que inicia el plazo sin
-//     desbloquearla.
+//     desbloquearla, o con Rechazar.
+//
+// Toda solicitud verificada recibe su respuesta escrita por la bandeja: plazo
+// iniciado, que resolver o que no se atiende por esta via. El plazo legal corre
+// desde la verificacion, no desde que operaciones la atiende (decision del dueno
+// del 2026-10-20).
 
 const (
 	vigenciaCodigo    = 15 * time.Minute
@@ -56,6 +61,7 @@ var (
 	// ErrSolicitudNoEncontrada y ErrSolicitudNoPendiente: del lado del panel.
 	ErrSolicitudNoEncontrada = errors.New("solicitud no encontrada")
 	ErrSolicitudNoPendiente  = errors.New("la solicitud no esta esperando atencion")
+	ErrCuentaYaEnPlazo       = errors.New("la cuenta ya esta en el plazo de eliminacion")
 )
 
 // codigoNumerico devuelve n digitos aleatorios.
@@ -196,18 +202,41 @@ func (s *Service) enviarCodigo(kind identifier.Kind, canonico string, cuenta *us
 	}
 }
 
-// Verificar comprueba el codigo. Con el codigo correcto empieza el plazo (el dia
+// RespuestaWeb es lo que la pagina le muestra a quien presento el codigo
+// correcto, que ya probo que el contacto es suyo: la misma respuesta escrita que
+// le llega por correo.
+type RespuestaWeb struct {
+	// Resultado: scheduled (empezo el plazo), blocked (hay que resolver algo),
+	// rejected (esta cuenta no se elimina por esta via) o received (la atiende
+	// una persona). En received no se dice por que: una cuenta bajo revision no
+	// se anuncia.
+	Resultado     string     `json:"outcome"`
+	SeEliminaEl   *time.Time `json:"deletion_due_at,omitempty"`
+	ConservaHasta *time.Time `json:"retained_until,omitempty"`
+	Bloqueos      []string   `json:"blockers,omitempty"`
+	// ResponderAntesDe: hasta cuando hay que responder la que espera a una persona.
+	ResponderAntesDe *time.Time `json:"respond_by,omitempty"`
+}
+
+// Verificar es Confirmar sin la respuesta para la pagina.
+func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
+	_, err := s.Confirmar(ctx, raw, codigo)
+	return err
+}
+
+// Confirmar comprueba el codigo. Con el codigo correcto empieza el plazo (el dia
 // 0), salvo que la cuenta este bajo revision: esa queda en la cola de
 // operaciones. Un bloqueo (saldo, algo en curso) no es un error de la
 // verificacion: la solicitud queda bloqueada y se le escribe a la persona.
-func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
+// Devuelve lo que la pagina le muestra.
+func (s *Service) Confirmar(ctx context.Context, raw, codigo string) (*RespuestaWeb, error) {
 	_, canonico, err := s.contacto(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var contactHash string
 	if err := s.pool.QueryRow(ctx, `SELECT fn_pii_hmac($1)`, canonico).Scan(&contactHash); err != nil {
-		return fmt.Errorf("hash de contacto: %w", err)
+		return nil, fmt.Errorf("hash de contacto: %w", err)
 	}
 
 	// fallido distingue "codigo equivocado" de un error de verdad: el primero debe
@@ -215,13 +244,14 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 	// despues responder ErrCodigoInvalido; devolver el error desde dentro la
 	// desharia y el tope de intentos nunca se alcanzaria.
 	var (
-		fallido bool
-		cuenta  string
-		out     *Atendida
-		res     resultado
+		fallido    bool
+		cuenta     string
+		out        *Atendida
+		res        resultado
+		verificada time.Time
 	)
 	err = s.conReintentos(ctx, func(tx pgx.Tx) error {
-		fallido, cuenta, out, res = false, "", nil, resultado{}
+		fallido, cuenta, out, res, verificada = false, "", nil, resultado{}, time.Time{}
 		var (
 			id       string
 			guardado *string
@@ -255,10 +285,11 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 			return nil
 		}
 		cuenta = *cuentaDe
-		_, err = tx.Exec(ctx, `
+		err = tx.QueryRow(ctx, `
 			UPDATE account_deletion_requests
 			   SET status = 'verified', verified_at = NOW(), verification_hash = NULL
-			 WHERE id = $1::uuid`, id)
+			 WHERE id = $1::uuid
+			RETURNING verified_at`, id).Scan(&verificada)
 		if err != nil {
 			return fmt.Errorf("marcar verificada: %w", err)
 		}
@@ -269,19 +300,39 @@ func (s *Service) Verificar(ctx context.Context, raw, codigo string) error {
 			return fmt.Errorf("leer cuenta: %w", err)
 		}
 		if status == "blocked" || status == "suspended" {
-			return nil
+			// Su respuesta entra ya a la bandeja, sin decidir, con el plazo desde
+			// esta verificacion (decision del dueno del 2026-10-22).
+			return encolarSinDecidir(ctx, tx, cuenta, id, verificada)
 		}
 		out, res, err = atenderEnTx(ctx, tx, id, cuenta, "", opciones{canal: CanalWeb})
 		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if fallido {
-		return ErrCodigoInvalido
+		return nil, ErrCodigoInvalido
 	}
 	s.despuesDeAtender(ctx, cuenta, out, res)
-	return nil
+
+	web := &RespuestaWeb{Resultado: "received"}
+	if out == nil {
+		// La atiende una persona: la pagina dice hasta cuando, no por que.
+		antesDe := responderAntesDe(verificada)
+		web.ResponderAntesDe = &antesDe
+	}
+	if out != nil {
+		switch out.Estado {
+		case "scheduled":
+			dia30, hasta := res.SeEliminaEl, conservaHasta(res.SeEliminaEl)
+			web.Resultado, web.SeEliminaEl, web.ConservaHasta = RespuestaPlazoIniciado, &dia30, &hasta
+		case "blocked":
+			web.Resultado, web.Bloqueos = RespuestaBloqueada, codigosDeBloqueo(out.Bloqueos)
+		case "rejected":
+			web.Resultado = "rejected"
+		}
+	}
+	return web, nil
 }
 
 // atenderEnTx pide la eliminacion de la cuenta de una solicitud web ya
@@ -302,61 +353,111 @@ func atenderEnTx(ctx context.Context, tx pgx.Tx, solicitudID, userID, adminID st
 		return nil
 	}
 
+	// El plazo legal de la respuesta corre desde la verificacion.
+	var verificada *time.Time
+	if err := tx.QueryRow(ctx, `SELECT verified_at FROM account_deletion_requests WHERE id = $1::uuid`,
+		solicitudID).Scan(&verificada); err != nil {
+		return nil, resultado{}, fmt.Errorf("leer la solicitud: %w", err)
+	}
+	if verificada != nil {
+		op.solicitadaEn = *verificada
+	}
+	// rechazar cierra la solicitud y le deja su respuesta: no se atiende por
+	// esta via. No dice por que.
+	var respuestaDelRechazo string
+	rechazar := func(codigo string) error {
+		id, err := responder(ctx, tx, userID, solicitudID, nuevaRespuesta{tipo: RespuestaRechazada, desde: op.solicitadaEn})
+		if err != nil {
+			return err
+		}
+		respuestaDelRechazo = id
+		return cerrar("rejected", codigo)
+	}
+
 	op.actor = adminID
+	op.solicitud = solicitudID
 	res, err := iniciarEnTx(ctx, tx, userID, op)
 	var bloqueada *ErrBloqueada
 	switch {
 	case err == nil && res.Ya:
-		err = cerrar("scheduled", "ALREADY_REQUESTED")
+		// Pedirla otra vez es otra solicitud y lleva su respuesta. Si la
+		// anterior todavia no salio, es esa misma.
+		if res.Respuesta, err = respuestaPendiente(ctx, tx, userID, RespuestaPlazoIniciado); err == nil && res.Respuesta == "" {
+			dia30 := res.SeEliminaEl
+			res.Respuesta, err = responder(ctx, tx, userID, solicitudID, nuevaRespuesta{
+				tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, desde: op.solicitadaEn,
+			})
+		}
+		if err == nil {
+			err = cerrar("scheduled", "ALREADY_REQUESTED")
+		}
 	case err == nil:
 		err = cerrar("scheduled", "SCHEDULED")
 	case errors.As(err, &bloqueada):
-		if err = cerrar("blocked", bloqueada.Bloqueos[0].Codigo); err == nil {
-			out.Bloqueos = bloqueada.Bloqueos
+		// La solicitud no pudo empezar, y eso tambien se responde por escrito:
+		// que resolver. Va por la bandeja como la del dia 0.
+		res = resultado{}
+		if res.Respuesta, err = responder(ctx, tx, userID, solicitudID, nuevaRespuesta{
+			tipo: RespuestaBloqueada, bloqueos: codigosDeBloqueo(bloqueada.Bloqueos), desde: op.solicitadaEn,
+		}); err == nil {
+			if err = cerrar("blocked", bloqueada.Bloqueos[0].Codigo); err == nil {
+				out.Bloqueos = bloqueada.Bloqueos
+			}
 		}
 	case errors.Is(err, ErrRolNoPermitido):
-		err = cerrar("rejected", "ROLE_NOT_ALLOWED")
+		res, err = resultado{}, rechazar("ROLE_NOT_ALLOWED")
 	case errors.Is(err, user.ErrCuentaDeDemostracion):
-		err = cerrar("rejected", "DEMO_ACCOUNT")
+		res, err = resultado{}, rechazar("DEMO_ACCOUNT")
 	case errors.Is(err, ErrCuentaNoElegible):
-		err = cerrar("rejected", "NOT_ELIGIBLE")
+		res, err = resultado{}, rechazar("NOT_ELIGIBLE")
 	case errors.Is(err, ErrCuentaNoEncontrada):
+		// Sin la cuenta no hay a quien responder.
 		err = cerrar("rejected", "NOT_FOUND")
+	}
+	// Lo que haya quedado sin decidir de esta solicitud ya no tiene que decir: la
+	// cubre otra respuesta que todavia no salio, o no hay a quien responder.
+	if err == nil {
+		err = cancelarSinDecidir(ctx, tx, solicitudID)
 	}
 	if err != nil {
 		return nil, resultado{}, err
 	}
+	if respuestaDelRechazo != "" {
+		res.Respuesta = respuestaDelRechazo
+	}
 	return out, res, nil
 }
 
-// despuesDeAtender manda lo que corresponde tras el commit: la respuesta
-// escrita si empezo el plazo (otra vez, si ya estaba en plazo), o lo que hay
-// que resolver si quedo bloqueada.
-func (s *Service) despuesDeAtender(ctx context.Context, userID string, out *Atendida, res resultado) {
+// despuesDeAtender hace lo que va tras el commit: si empezo el plazo, lo mismo
+// que la via de la app; si ya estaba en plazo, quedo bloqueada o se rechazo, el
+// primer intento de la respuesta que quedo en la bandeja.
+func (s *Service) despuesDeAtender(_ context.Context, userID string, out *Atendida, res resultado) {
 	if userID == "" || out == nil {
 		return
 	}
 	switch out.Estado {
 	case "scheduled":
 		if res.Ya {
-			s.responderPorEscrito(userID, res)
+			s.entregarAhora(res.Respuesta)
 			return
 		}
 		s.despues(userID, res)
-	case "blocked":
-		s.avisarBloqueo(ctx, userID, out.Bloqueos)
+	case "blocked", "rejected":
+		s.entregarAhora(res.Respuesta)
 	}
 }
 
 // SolicitudAdmin es una fila de la cola, tal como la ve operaciones. La cuenta
 // va enmascarada desde SQL, como en el resto del panel.
 type SolicitudAdmin struct {
-	ID           string              `json:"id"`
-	ContactKind  string              `json:"contact_kind"`
-	Estado       string              `json:"status"`
-	CreadaEn     time.Time           `json:"created_at"`
-	VerificadaEn *time.Time          `json:"verified_at"`
-	Cuenta       *user.AdminUserView `json:"account"`
+	ID           string     `json:"id"`
+	ContactKind  string     `json:"contact_kind"`
+	Estado       string     `json:"status"`
+	CreadaEn     time.Time  `json:"created_at"`
+	VerificadaEn *time.Time `json:"verified_at"`
+	// ResponderAntesDe es el plazo legal de la respuesta, desde la verificacion.
+	ResponderAntesDe time.Time           `json:"respond_by"`
+	Cuenta           *user.AdminUserView `json:"account"`
 }
 
 // ListarVerificadas devuelve la cola: las solicitudes con el contacto ya
@@ -385,6 +486,11 @@ func (s *Service) ListarVerificadas(ctx context.Context, limite int) ([]Solicitu
 		if err := filas.Scan(&r.ID, &r.ContactKind, &r.Estado, &r.CreadaEn, &r.VerificadaEn, &userID); err != nil {
 			return nil, fmt.Errorf("leer solicitud: %w", err)
 		}
+		desde := r.CreadaEn
+		if r.VerificadaEn != nil {
+			desde = *r.VerificadaEn
+		}
+		r.ResponderAntesDe = responderAntesDe(desde)
 		if userID != "" {
 			// Si la cuenta ya no se puede leer (eliminada por otra via), la fila
 			// sale sin ficha y el panel la ve como "sin cuenta".
@@ -463,69 +569,72 @@ func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*A
 
 // frasesDeBloqueo es lo que se le escribe a la persona por cada cosa pendiente.
 // Van aqui, y no en el front, porque salen por correo y no hay pantalla que las
-// traduzca. Un codigo que no este aqui cae en la frase generica.
+// traduzca; en voseo, como el resto del correo. Un codigo que no este aqui cae
+// en la frase generica (motivosDe).
 var frasesDeBloqueo = map[string]string{
-	BloqueoSaldo:             "tienes saldo en tu billetera: envíalo, retíralo o gástalo hasta dejarla en cero",
-	BloqueoAhorros:           "tienes dinero en tus metas de ahorro: pásalo a tu billetera",
-	BloqueoCripto:            "tienes criptomonedas: véndelas o envíalas",
-	BloqueoStaking:           "tienes cripto en staking: retírala",
-	BloqueoSaldoRegional:     "tienes saldo en una billetera regional",
-	BloqueoSaldoComercio:     "tu comercio tiene saldo: pásalo a tu billetera",
-	BloqueoCobrosAbiertos:    "tu comercio tiene cobros por QR sin pagar: cancélalos",
-	BloqueoMovimientoEnCurso: "tienes un movimiento en proceso: espera a que termine",
-	BloqueoEscrowAbierto:     "tienes un acuerdo de garantía abierto: ciérralo o espera a que se liquide",
-	BloqueoPayoutEnCurso:     "tienes un retiro en proceso: espera a que termine",
-	BloqueoTransfronterizo:   "tienes una transferencia internacional en proceso: espera a que termine",
-	BloqueoMarketplace:       "tienes un viaje o un pedido en curso: espera a que termine",
-}
-
-// avisarBloqueo le escribe a la persona, al correo de su cuenta, que su
-// solicitud todavia no se pudo atender y que tiene que resolver. Sin esto una
-// solicitud hecha desde la web que no se puede completar moriria en silencio: la
-// pagina promete que se avisa. Sin correo en la cuenta no hay a donde avisar y la
-// solicitud queda marcada como bloqueada para operaciones. Es de mejor esfuerzo:
-// la base ya quedo escrita.
-func (s *Service) avisarBloqueo(ctx context.Context, userID string, bloqueos []Bloqueo) {
-	if s.email == nil || len(bloqueos) == 0 {
-		return
-	}
-	u, err := s.users.FindByID(ctx, userID)
-	if err != nil || u.Email == "" {
-		return
-	}
-	motivos := make([]string, 0, len(bloqueos))
-	for _, b := range bloqueos {
-		if f, ok := frasesDeBloqueo[b.Codigo]; ok {
-			motivos = append(motivos, f)
-		} else {
-			motivos = append(motivos, "hay algo pendiente en tu cuenta")
-		}
-	}
-	// #nosec G118 -- intentionally detached: the request context dies with the
-	// response and the notice must outlive it; it bounds itself with avisoTimeout.
-	go func(correo string) {
-		cctx, cancel := context.WithTimeout(context.Background(), avisoTimeout)
-		defer cancel()
-		subject, text, html := messaging.DeletionBlockedEmail(motivos)
-		if err := s.email.SendEmail(cctx, correo, subject, text, html); err != nil {
-			s.logger.Warn("aviso de eliminacion bloqueada no enviado", "user", userID, "err", err.Error())
-		}
-	}(u.Email)
+	BloqueoSaldo:             "tenés saldo en tu billetera: envialo, retiralo o gastalo hasta dejarla en cero",
+	BloqueoAhorros:           "tenés dinero en tus metas de ahorro: pasalo a tu billetera",
+	BloqueoCripto:            "tenés criptomonedas: vendelas o envialas",
+	BloqueoStaking:           "tenés cripto en staking: retirala",
+	BloqueoSaldoRegional:     "tenés saldo en una billetera regional",
+	BloqueoSaldoComercio:     "tu comercio tiene saldo: pasalo a tu billetera",
+	BloqueoCobrosAbiertos:    "tu comercio tiene cobros por QR sin pagar: cancelalos",
+	BloqueoMovimientoEnCurso: "tenés un movimiento en proceso: esperá a que termine",
+	BloqueoEscrowAbierto:     "tenés un acuerdo de garantía abierto: cerralo o esperá a que se liquide",
+	BloqueoPayoutEnCurso:     "tenés un retiro en proceso: esperá a que termine",
+	BloqueoTransfronterizo:   "tenés una transferencia internacional en proceso: esperá a que termine",
+	BloqueoMarketplace:       "tenés un viaje o un pedido en curso: esperá a que termine",
 }
 
 // Rechazar cierra una solicitud de la cola sin iniciar nada (por ejemplo, cuando
-// la persona se arrepintio).
+// la persona se arrepintio). Tambien se responde por escrito, en la misma
+// transaccion, con el plazo contado desde la verificacion. Si la cuenta ya esta
+// en el plazo (lo empezo por la app mientras la solicitud esperaba), esa
+// respuesta diria que no se borro nada con el plazo corriendo: no se rechaza
+// (ErrCuentaYaEnPlazo), y la solicitud se cierra con Iniciar el plazo.
 func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE account_deletion_requests
-		   SET status = 'rejected', result_code = 'REJECTED_BY_ADMIN',
-		       processed_at = NOW(), processed_by = $2::uuid
-		 WHERE id = $1::uuid AND status = 'verified'`, solicitudID, adminID)
+	var respuesta string
+	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
+		respuesta = ""
+		var (
+			userID     *string
+			verificada *time.Time
+		)
+		err := tx.QueryRow(ctx, `
+			UPDATE account_deletion_requests q
+			   SET status = 'rejected', result_code = 'REJECTED_BY_ADMIN',
+			       processed_at = NOW(), processed_by = $2::uuid
+			 WHERE q.id = $1::uuid AND q.status = 'verified'
+			   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = q.user_id AND u.deletion_requested_at IS NOT NULL)
+			RETURNING q.user_id::text, q.verified_at`, solicitudID, adminID).Scan(&userID, &verificada)
+		if errors.Is(err, pgx.ErrNoRows) {
+			var pendiente bool
+			if err := tx.QueryRow(ctx, `
+				SELECT EXISTS (SELECT 1 FROM account_deletion_requests WHERE id = $1::uuid AND status = 'verified')`,
+				solicitudID).Scan(&pendiente); err != nil {
+				return fmt.Errorf("leer solicitud: %w", err)
+			}
+			if pendiente {
+				return ErrCuentaYaEnPlazo
+			}
+			return ErrSolicitudNoPendiente
+		}
+		if err != nil {
+			return fmt.Errorf("rechazar solicitud: %w", err)
+		}
+		if userID == nil {
+			return nil
+		}
+		r := nuevaRespuesta{tipo: RespuestaRechazada}
+		if verificada != nil {
+			r.desde = *verificada
+		}
+		respuesta, err = responder(ctx, tx, *userID, solicitudID, r)
+		return err
+	})
 	if err != nil {
-		return fmt.Errorf("rechazar solicitud: %w", err)
+		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrSolicitudNoPendiente
-	}
+	s.entregarAhora(respuesta)
 	return nil
 }

@@ -461,7 +461,9 @@ paths:
         `ADMIN_ACCOUNT` or `ACCOUNT_NOT_ELIGIBLE` (blocked or suspended
         accounts are handled by the web request, with a person in the loop).
         `requires_totp` says whether the confirmation will also ask for the
-        authenticator code. Not cacheable.
+        authenticator code. `requires_response_email` is true when the account
+        has no email on file: the confirmation must then carry
+        `response_email`, used only to send the written answer. Not cacheable.
       security:
         - bearerAuth: []
       responses:
@@ -489,7 +491,13 @@ paths:
         the 30-day term. Day 0 (this call): the account moves to
         `pending_deletion` and is blocked at once; sessions, API keys and push
         subscriptions are revoked and the ledger accounts are closed, so no
-        money moves in or out. A written answer goes to the email on file. Days
+        money moves in or out. The written answer (Law 8968: what is erased on
+        day 30, what Law 7786 keeps and until when, and the right to go to
+        PRODHAB) is queued in the same transaction and sent by email, with
+        retries; an account without email gives `response_email` for it, which
+        is stored encrypted and erased once delivered. An answer that cannot go
+        out (no channel, or 48 hours of failures) moves to the operations
+        panel (/admin/account-deletion-responses). Days
         0 to 30: signing in with the password offers to reactivate the
         account, which cancels the process (see the login); during the term
         the account is not a valid recipient (SINPE, QR, escrow) and gets no
@@ -535,10 +543,18 @@ paths:
                         type: string
                         format: date-time
                         description: Day 30, when the account is closed
+                      retained_until:
+                        type: string
+                        format: date-time
+                        description: >-
+                          Day 30 plus the 5 years Law 7786 requires; what is
+                          kept is dissociated after this date
         '400':
           description: >-
             INVALID_BODY | TERMS_NOT_ACCEPTED | CURRENT_PASSWORD_INVALID |
-            TOTP_REQUIRED | TOTP_INVALID
+            TOTP_REQUIRED | TOTP_INVALID | RESPONSE_EMAIL_REQUIRED (the account
+            has no email and none was given) | RESPONSE_EMAIL_INVALID |
+            RESPONSE_EMAIL_MISMATCH (the repeated email is not the same)
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -600,13 +616,21 @@ paths:
       summary: Prove control of the contact with the code that was sent
       description: >-
         With the right code the 30-day term starts at once, exactly as from the
-        app (day 0: the account is blocked and the written answer goes out by
-        email), and the request ends `scheduled`, or `blocked` when something
-        is pending (the person is told by email what to resolve). An account
-        that is blocked or suspended does not start by itself: the request
-        stays `verified`, in the operations queue. Every failure (wrong,
-        expired, reused, no request) answers the same 400 INVALID_CODE; five
-        wrong codes exhaust the request.
+        app (day 0: the account is blocked and the written answer is queued),
+        and the request ends `scheduled`, or `blocked` when something is
+        pending (the written answer says what to resolve, and goes through the
+        same queue). An account that is blocked or suspended does not start by
+        itself: the request stays `verified`, in the operations queue. Whoever
+        presents the right code has proven the contact is theirs, so the 200
+        carries the same answer for the page: `outcome` is `scheduled` (with
+        the dates), `blocked` (with the codes), `rejected` (this account is not
+        deleted through this path; the written answer goes through the queue
+        too, without the reason) or `received` (a person handles it; the
+        reason is never given, so an account under review is not disclosed,
+        and `respond_by` says until when the written answer is due, 5
+        business days from this verification).
+        Every failure (wrong, expired, reused, no request) answers the same 400
+        INVALID_CODE; five wrong codes exhaust the request. Not cacheable.
       security: []
       requestBody:
         required: true
@@ -620,7 +644,35 @@ paths:
                 code: { type: string, example: '123456' }
       responses:
         '200':
-          description: Verified
+          description: Verified, with the written answer for the page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [status, outcome]
+                    properties:
+                      status: { type: string, enum: [verified] }
+                      outcome: { type: string, enum: [scheduled, blocked, rejected, received] }
+                      deletion_due_at:
+                        type: string
+                        format: date-time
+                        description: Only when `scheduled`
+                      retained_until:
+                        type: string
+                        format: date-time
+                        description: Only when `scheduled`
+                      blockers:
+                        type: array
+                        items: { type: string, example: BALANCE_POSITIVE }
+                        description: Only when `blocked`
+                      respond_by:
+                        type: string
+                        format: date-time
+                        description: Only when `received`
         '400':
           description: INVALID_BODY | INVALID_CONTACT | INVALID_CODE
         '429':
@@ -634,7 +686,8 @@ paths:
         Oldest first. Only requests of accounts under review (blocked or
         suspended) wait here; the rest start the term when the code is
         verified. The account is shown masked from SQL, like the rest of the
-        admin panel.
+        admin panel. `respond_by` is the legal deadline of the written answer,
+        counted from the verification however late the request is handled.
       security:
         - bearerAuth: []
       parameters:
@@ -665,8 +718,11 @@ paths:
         the request: `scheduled` (`result_code` SCHEDULED, or ALREADY_REQUESTED
         when the term was already running), `blocked` (with the first blocker
         as `result_code`; the full list is in the response) or `rejected`
-        (NO_ACCOUNT, ROLE_NOT_ALLOWED, NOT_ELIGIBLE). Audited with the
-        administrator as actor.
+        (ROLE_NOT_ALLOWED, DEMO_ACCOUNT, NOT_ELIGIBLE, or NO_ACCOUNT and
+        NOT_FOUND when no account is left). Every outcome with an account
+        queues its written answer, due 5 business days after the
+        verification; NO_ACCOUNT and NOT_FOUND have no one to answer.
+        Audited with the administrator as actor.
       security:
         - bearerAuth: []
       parameters:
@@ -683,6 +739,13 @@ paths:
     post:
       tags: [Admin]
       summary: Close a verified request without starting the term
+      description: >-
+        Nothing is deleted. The written answer (the request is not handled
+        this way, nothing was deleted, the privacy contact and the right to go
+        to PRODHAB; never the reason) is queued in the same transaction, due 5
+        business days after the verification. If the account already started
+        the term (from the app, while the request waited), it is not rejected:
+        409 ALREADY_SCHEDULED, and the request is closed by starting the term.
       security:
         - bearerAuth: []
       parameters:
@@ -693,7 +756,156 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: NOT_PENDING (already handled)
+          description: >-
+            NOT_PENDING (already handled), or ALREADY_SCHEDULED (the account
+            is already in the deletion term)
+
+  /api/v1/admin/account-deletion-responses:
+    get:
+      tags: [Admin]
+      summary: Written deletion answers that could not go out by themselves
+      description: >-
+        The answers Law 8968 requires that moved to operations: the account
+        has nowhere to send them (`no_channel`) or the email kept failing for
+        48 hours (`send_failed`), or sooner when fewer than 3 days are left
+        before `respond_by`. The nearest `respond_by` (5 business days from the
+        request, or from the verification of a web request) first. Each one
+        carries what to tell the person: the dates (`scheduled`), what to
+        resolve (`blocked`) or that the request is not handled this way
+        (`rejected`). `undecided` is the answer of a web request from an
+        account under review that nobody processed or rejected yet: it entered
+        the outbox at verification and moved here 3 days before `respond_by`;
+        there is nothing to deliver, the request is processed or rejected in
+        the queue, which completes this same answer. The account is masked from SQL, and null when it can no
+        longer be read; the full contact is only given by
+        /admin/account-deletion-responses/{id}/contact. Not cacheable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending answers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountDeletionResponseAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/account-deletion-responses/sent-unconfirmed:
+    get:
+      tags: [Admin]
+      summary: Written deletion answers sent to an email nobody confirmed
+      description: >-
+        Read only. The answers of the last 30 days that went out by email to
+        the address the person gave only for the answer: the provider
+        accepting it does not prove it reached them. Only that address counts;
+        the account email does not, even when it is not verified, and neither
+        does an answer operations delivered another way. Most recent first.
+        The address is not returned (it is erased on delivery). The account is
+        masked, and null when it is already closed. Not cacheable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Answers sent to an unconfirmed email
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountDeletionResponseSentUnconfirmed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/account-deletion-responses/{id}/delivered:
+    post:
+      tags: [Admin]
+      summary: Record that a written answer was delivered another way
+      description: >-
+        `note` (required, up to 500 characters; longer is rejected, not cut)
+        says how and when it was delivered. The email given only for the
+        answer is erased. Audited with the administrator as actor and the
+        answer id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string, maxLength: 500 }
+      responses:
+        '204':
+          description: Recorded
+        '400':
+          description: INVALID_BODY | NOTE_REQUIRED | NOTE_TOO_LONG (more than 500 characters)
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            NOT_PENDING (already delivered or cancelled), or NOT_DECIDED (the
+            request is still undecided: process or reject it)
+
+  /api/v1/admin/account-deletion-responses/{id}/contact:
+    post:
+      tags: [Admin]
+      summary: Full contact of a written answer in the operations panel
+      description: >-
+        Unmasked phone, account email and the email given only for the answer
+        (while it exists), so the answer can be delivered another way. Only for
+        answers in the panel (escalated and not delivered). It is a POST
+        because every view is audited (who and when, with the answer id) in
+        the same transaction; without the audit row nothing is returned. For
+        an account already closed (day 30) the phone and email come from the
+        identity kept by law (closed_account_records). LIMITED USE: only to
+        deliver this written answer to the same person, only administrators,
+        and every view is audited like the rest. Once that identity is
+        dissociated there is no contact left: the answer is empty and no view
+        is audited, since it reveals nothing. Not cacheable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Full contact; empty strings for what is missing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      phone: { type: string }
+                      email: { type: string }
+                      response_email: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            NOT_PENDING (not in the panel), or NOT_DECIDED (the request is
+            still undecided: there is nothing to deliver yet)
 
   # ── Wallets ────────────────────────────────────────────────────────────
   /api/v1/wallets/me:
@@ -6171,6 +6383,11 @@ components:
             properties:
               code: { type: string, example: BALANCE_POSITIVE }
         requires_totp: { type: boolean }
+        requires_response_email:
+          type: boolean
+          description: >-
+            The account has no email on file; the confirmation must carry
+            response_email
     DeleteAccountRequest:
       type: object
       required: [password, accept_terms]
@@ -6184,6 +6401,66 @@ components:
         totp_code:
           type: string
           description: Required only when the authenticator is turned on
+        response_email:
+          type: string
+          format: email
+          description: >-
+            Required only when the account has no email: where to send the
+            written answer. It is not added to the profile, and it is erased
+            once the answer is delivered
+        response_email_confirmation:
+          type: string
+          format: email
+          description: >-
+            The same email, typed again. Required with `response_email`; it
+            must match, ignoring case, or the answer is 400
+            RESPONSE_EMAIL_MISMATCH
+    AccountDeletionResponseAdmin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [scheduled, blocked, rejected, undecided] }
+        reason:
+          type: string
+          enum: [no_channel, send_failed, '']
+          description: Empty for `undecided`, which never tried to send
+        attempts: { type: integer }
+        created_at: { type: string, format: date-time }
+        respond_by: { type: string, format: date-time }
+        deletion_due_at: { type: string, format: date-time, description: Only when scheduled }
+        retained_until: { type: string, format: date-time, description: Only when scheduled }
+        blockers:
+          type: array
+          items: { type: string, example: BALANCE_POSITIVE }
+        user_id: { type: string, format: uuid }
+        account_closed:
+          type: boolean
+          description: >-
+            The account was already closed (day 30): `account` is null and the
+            answer is no longer retried; operations finds it by `user_id`
+        unconfirmed_email:
+          type: boolean
+          description: >-
+            The answer goes to the email the person gave only for it, which
+            nobody confirmed
+        account:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminUser'
+    AccountDeletionResponseSentUnconfirmed:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [scheduled, blocked, rejected] }
+        delivered_at: { type: string, format: date-time }
+        user_id: { type: string, format: uuid }
+        account_closed:
+          type: boolean
+          description: The account was already closed (day 30) and `account` is null
+        account:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminUser'
     AccountDeletionRequestAdmin:
       type: object
       properties:
@@ -6192,6 +6469,10 @@ components:
         status: { type: string, example: verified }
         created_at: { type: string, format: date-time }
         verified_at: { type: string, format: date-time, nullable: true }
+        respond_by:
+          type: string
+          format: date-time
+          description: Deadline of the written answer, 5 business days from the verification
         account:
           nullable: true
           allOf:

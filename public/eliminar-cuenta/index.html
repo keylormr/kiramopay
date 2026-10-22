@@ -81,18 +81,24 @@
       <p><button class="enlace" type="button" id="otro-contacto">Usar otro correo o teléfono</button></p>
     </form>
 
-    <!-- Paso 3: hecho. La respuesta es la misma exista o no la cuenta. -->
+    <!-- Paso 3: hecho. Con el código correcto la persona ya probó que el contacto es suyo, y
+         app.js escribe aquí la misma respuesta que le llega por escrito, según lo que respondió
+         el servidor (se programó la eliminación, hay algo pendiente, la atiende una persona o
+         no se elimina por esta vía). Lo que está dentro de #respuesta es el texto genérico, que
+         queda si el servidor no dice cuál fue el resultado. -->
     <div id="paso-listo" hidden role="status">
-      <h3>Solicitud recibida</h3>
-      <p>
-        Listo. Si el código correspondía a una cuenta, te escribimos al correo registrado en ella con lo que
-        sigue: cuándo se elimina, qué se conserva y cómo reactivarla si cambias de opinión.
-      </p>
-      <p>
-        Si hay algo pendiente que lo impida (por ejemplo, saldo en la cuenta), el correo te dice qué resolver
-        antes de que empiece el plazo. Si la cuenta está en revisión por el equipo, una persona atiende la
-        solicitud antes de que empiece. Revisa también la carpeta de correo no deseado.
-      </p>
+      <div id="respuesta">
+        <h3>Solicitud recibida</h3>
+        <p>
+          Listo. Si el código correspondía a una cuenta, te escribimos al correo registrado en ella con lo que
+          sigue: cuándo se elimina, qué se conserva y cómo reactivarla si cambias de opinión.
+        </p>
+        <p>
+          Si hay algo pendiente que lo impida (por ejemplo, saldo en la cuenta), el correo te dice qué resolver
+          antes de que empiece el plazo. Si la cuenta está en revisión por el equipo, una persona atiende la
+          solicitud antes de que empiece. Revisa también la carpeta de correo no deseado.
+        </p>
+      </div>
     </div>
   </section>
 
@@ -101,9 +107,10 @@
   <ol>
     <li>
       <strong>Hoy, cuando confirmas el código:</strong> tu cuenta queda bloqueada. No puedes entrar, mover ni recibir
-      dinero, y dejas de recibir avisos. Todavía no se borra nada. Si tu cuenta tiene un correo registrado, te
-      escribimos ahí una respuesta con lo que sigue: que tus datos se suprimen el día 30, qué se conserva por la
-      Ley 7786 y hasta cuándo, y tu derecho a acudir a la PRODHAB. Lo mismo se explica en esta página.
+      dinero, y dejas de recibir avisos. Todavía no se borra nada. Te enviamos por escrito una respuesta con lo
+      que sigue: que tus datos se suprimen el día 30, qué se conserva por la Ley 7786 y hasta cuándo, y tu derecho
+      a acudir a la PRODHAB. Va al correo de tu cuenta; si no tiene, una persona del equipo te la hace llegar por
+      otro medio. La misma respuesta aparece en esta página al confirmar el código.
     </li>
     <li>
       <strong>Del día 0 al día 30:</strong> puedes reactivar la cuenta entrando a la aplicación con tu contraseña; la

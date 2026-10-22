@@ -66,6 +66,34 @@ describe('LoginView — cuenta eliminada y politica de privacidad', () => {
     expect(screen.queryByText('Tu cuenta se eliminará')).toBeNull();
   });
 
+  it('trae la respuesta escrita: que se suprime el dia 30, que se conserva por ley y hasta cuando, y la PRODHAB', () => {
+    useAuthStore.setState({ logoutReason: 'deleted', seEliminaEl: '2026-11-17T18:00:00Z' });
+    pintar();
+
+    const respuesta = screen.getByRole('region', { name: 'Lo que pasa con tus datos' });
+    expect(respuesta).toHaveTextContent('17 de noviembre de 2026');
+    expect(respuesta).toHaveTextContent(/contactos/);
+    expect(respuesta).toHaveTextContent(/Ley 7786/);
+    // Cinco anos desde el dia 30, nunca otro plazo.
+    expect(respuesta).toHaveTextContent('17 de noviembre de 2031');
+    expect(respuesta).toHaveTextContent(/PRODHAB/);
+    expect(respuesta).toHaveTextContent(/por correo/);
+    expect(respuesta.textContent ?? '').not.toMatch(/\bUIF\b|\bROS\b|sospechos|10 años|diez años/i);
+  });
+
+  it('la respuesta se puede copiar para guardarla', async () => {
+    useAuthStore.setState({ logoutReason: 'deleted', seEliminaEl: '2026-11-17T18:00:00Z' });
+    // userEvent instala su propio portapapeles: se espia despues de crearlo.
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Copiar la respuesta' }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('17 de noviembre de 2031'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('PRODHAB'));
+    expect(await screen.findByText('Respuesta copiada')).toBeInTheDocument();
+  });
+
   it('sin la fecha (un servidor que no la mando) el aviso dice el plazo', () => {
     useAuthStore.setState({ logoutReason: 'deleted', seEliminaEl: null });
     pintar();

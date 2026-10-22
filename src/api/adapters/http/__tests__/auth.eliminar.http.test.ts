@@ -21,6 +21,36 @@ describe('HttpAuthRepository — eliminar la cuenta', () => {
       motivo: undefined,
       bloqueos: ['BALANCE_POSITIVE', 'TX_PENDING'],
       pideSegundoFactor: true,
+      pideCorreoParaRespuesta: false,
+    });
+  });
+
+  it('el preflight dice si la cuenta no tiene correo y hay que pedir uno para la respuesta', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: { eligible: true, blockers: [], requires_totp: false, requires_response_email: true },
+      }),
+    });
+    expect((await new HttpAuthRepository(client).deletionPreflight()).data?.pideCorreoParaRespuesta).toBe(true);
+  });
+
+  it('deleteAccount manda el correo para la respuesta solo si lo hay', async () => {
+    const post = vi.fn().mockResolvedValue({
+      success: true,
+      data: { already_requested: false, requested_at: '2026-10-18T15:00:00Z', deletion_due_at: '2026-11-17T15:00:00Z' },
+    });
+    const repo = new HttpAuthRepository(fakeClient({ post }));
+    await repo.deleteAccount({
+      password: 'Clave-123', acceptTerms: true,
+      responseEmail: 'respuesta@ejemplo.test', responseEmailConfirmation: 'Respuesta@ejemplo.test',
+    });
+    expect(post).toHaveBeenLastCalledWith('/api/v1/users/me/delete-account', {
+      password: 'Clave-123',
+      totp_code: undefined,
+      accept_terms: true,
+      response_email: 'respuesta@ejemplo.test',
+      response_email_confirmation: 'Respuesta@ejemplo.test',
     });
   });
 

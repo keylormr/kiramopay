@@ -45,16 +45,35 @@ type opciones struct {
 	// pide la eliminacion sola. Aun asi la cuenta SIGUE bloqueada: pedir la
 	// eliminacion no la desbloquea.
 	permitirCuentaBloqueada bool
+	// correoParaRespuesta es el correo que dio, solo para la respuesta escrita,
+	// una persona cuya cuenta no tiene correo. Se ignora si la cuenta tiene uno.
+	correoParaRespuesta string
+	// respuesta es la respuesta escrita sobre la que actua operaciones. Solo va
+	// a la auditoria.
+	respuesta string
+	// solicitadaEn es cuando se verifico la solicitud web: de ahi corre el plazo
+	// legal de la respuesta, aunque operaciones la atienda despues. Vacio en la
+	// via de la app, que pide y responde en el mismo acto.
+	solicitadaEn time.Time
+	// solicitud es la solicitud web que se atiende: su respuesta sin decidir es
+	// la que se completa. Vacio en la via de la app.
+	solicitud string
+	// fuente dice de donde salio lo que se revela cuando no es la cuenta:
+	// closed_account_record si Ver contacto leyo lo conservado por ley. Solo va
+	// a la auditoria.
+	fuente string
 }
 
-// resultado de pedir la eliminacion. Correo y Nombre son para la respuesta
-// escrita que sale despues del commit.
+// resultado de pedir la eliminacion. Respuesta es el id de la respuesta escrita
+// que quedo en la bandeja, para el primer intento despues del commit; vacio si
+// no se encolo ninguna (la segunda orden de la app, por ejemplo).
 type resultado struct {
 	Ya           bool
 	SolicitadaEn time.Time
 	SeEliminaEl  time.Time
 	Correo       string
 	Nombre       string
+	Respuesta    string
 }
 
 // ── Dia 0 ─────────────────────────────────────────────────────────────────
@@ -159,6 +178,27 @@ func iniciarEnTx(ctx context.Context, tx pgx.Tx, userID string, op opciones) (re
 	// guardan datos nuevos de una persona que acaba de pedir que se borren.
 	if err := auditar(ctx, tx, userID, "account_deletion_requested", op); err != nil {
 		return resultado{}, err
+	}
+	// La respuesta escrita queda en la bandeja en esta MISMA transaccion: si la
+	// solicitud quedo, la respuesta tambien, aunque el proceso caiga despues.
+	correoDado := ""
+	if res.Correo == "" {
+		correoDado = op.correoParaRespuesta
+	}
+	dia30 := res.SeEliminaEl
+	if res.Respuesta, err = responder(ctx, tx, userID, op.solicitud, nuevaRespuesta{
+		tipo: RespuestaPlazoIniciado, seEliminaEl: &dia30, correoDado: correoDado, desde: op.solicitadaEn,
+	}); err != nil {
+		return resultado{}, err
+	}
+	// Una solicitud anterior que habia quedado bloqueada o rechazada ya no tiene
+	// nada que resolver: su respuesta (que no se borro nada) no debe salir
+	// despues de esta.
+	if _, err := tx.Exec(ctx, `
+		UPDATE account_deletion_responses SET cancelled_at = NOW(), email_enc = NULL
+		 WHERE user_id = $1::uuid AND kind IN ($2, $3) AND delivered_at IS NULL AND cancelled_at IS NULL`,
+		userID, RespuestaBloqueada, RespuestaRechazada); err != nil {
+		return resultado{}, fmt.Errorf("cancelar la respuesta de la solicitud bloqueada: %w", err)
 	}
 	return res, nil
 }
@@ -288,6 +328,12 @@ func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) 
 		{"cancelar la solicitud web", `UPDATE account_deletion_requests
 			SET status = 'cancelled', result_code = 'REACTIVATED', processed_at = NOW()
 			WHERE user_id = $1::uuid AND status = 'scheduled'`},
+		// La respuesta del dia 0 que todavia no salio ya no corresponde: la
+		// persona cancelo la solicitud. El correo que dio para ella se borra.
+		{"cancelar la respuesta pendiente", `UPDATE account_deletion_responses
+			SET cancelled_at = NOW(), email_enc = NULL
+			WHERE user_id = $1::uuid AND kind = 'scheduled'
+			  AND delivered_at IS NULL AND cancelled_at IS NULL`},
 	} {
 		if _, err := tx.Exec(ctx, p.sql, userID); err != nil {
 			return false, fmt.Errorf("%s: %w", p.nombre, err)
@@ -312,7 +358,8 @@ func reactivarEnTx(ctx context.Context, tx pgx.Tx, userID string) (bool, error) 
 //     secreto se destruye.
 //   - DEPURA el texto que la persona escribio en filas que se quedan.
 //   - CONSERVA lo que la ley obliga, y saca la identidad de users a
-//     closed_account_records, donde ninguna consulta de la aplicacion la lee.
+//     closed_account_records. Ahi solo la lee Ver contacto de una respuesta
+//     escrita sin entregar, con uso limitado (ContactoDeRespuesta).
 func cerrarEnTx(ctx context.Context, tx pgx.Tx, userID string, now time.Time) (bool, []Bloqueo, error) {
 	var canal string
 	err := tx.QueryRow(ctx, `
@@ -457,6 +504,10 @@ var pasosDelDiaTreinta = []paso{
 	{"depurar partes propias", `UPDATE split_shares
 		SET user_name = 'Usuario eliminado', user_phone = NULL
 		WHERE user_id = $1::uuid`},
+	// El correo que la persona dio solo para la respuesta escrita. La fila queda:
+	// es la constancia de que se respondio.
+	{"depurar el correo de la respuesta", `UPDATE account_deletion_responses SET email_enc = NULL
+		WHERE user_id = $1::uuid AND email_enc IS NOT NULL`},
 	// Participantes sin cuenta que la persona escribio a mano: sus datos eran de
 	// ella para organizar el reparto.
 	{"depurar participantes escritos", `UPDATE split_shares
@@ -652,6 +703,10 @@ var pasosDeLaDesasociacion = []paso{
 		WHERE user_id = $1::uuid`},
 	{"desasociar sedes", `UPDATE merchant_locations SET name = 'Sede', address = ''
 		WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
+	// La constancia de la respuesta escrita queda (fechas y via); la nota de
+	// operaciones es texto libre y puede nombrar a la persona.
+	{"desasociar respuestas", `UPDATE account_deletion_responses SET delivery_note = NULL, email_enc = NULL
+		WHERE user_id = $1::uuid`},
 }
 
 // ── Piezas comunes ────────────────────────────────────────────────────────
@@ -678,9 +733,10 @@ func auditar(ctx context.Context, tx pgx.Tx, userID, accion string, op opciones)
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, risk_level)
 		 VALUES ($1::uuid, $2, 'user', $1::text,
-		         jsonb_strip_nulls(jsonb_build_object('channel', NULLIF($3::text, ''), 'actor', NULLIF($4::text, ''))),
+		         jsonb_strip_nulls(jsonb_build_object('channel', NULLIF($3::text, ''), 'actor', NULLIF($4::text, ''),
+		                                              'response', NULLIF($5::text, ''), 'source', NULLIF($6::text, ''))),
 		         'high')`,
-		userID, accion, string(op.canal), op.actor,
+		userID, accion, string(op.canal), op.actor, op.respuesta, op.fuente,
 	); err != nil {
 		return fmt.Errorf("auditoria: %w", err)
 	}

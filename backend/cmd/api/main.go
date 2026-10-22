@@ -1365,6 +1365,15 @@ func main() {
 					r.Get("/admin/account-deletion-requests", accountDeletionHandler.ListarSolicitudes)
 					r.Post("/admin/account-deletion-requests/{id}/process", accountDeletionHandler.Procesar)
 					r.Post("/admin/account-deletion-requests/{id}/reject", accountDeletionHandler.Rechazar)
+					// Respuestas escritas (Ley 8968) que no salieron solas: sin
+					// a donde mandarlas o sin salir en 48 horas. Operaciones las
+					// entrega por otra via y deja constancia.
+					r.Get("/admin/account-deletion-responses", accountDeletionHandler.ListarRespuestas)
+					// Las que ya salieron a un correo que nadie confirmo, de
+					// los ultimos 30 dias: solo para leer.
+					r.Get("/admin/account-deletion-responses/sent-unconfirmed", accountDeletionHandler.ListarEnviadasSinConfirmar)
+					r.Post("/admin/account-deletion-responses/{id}/delivered", accountDeletionHandler.MarcarRespuestaEntregada)
+					r.Post("/admin/account-deletion-responses/{id}/contact", accountDeletionHandler.VerContactoDeRespuesta)
 				})
 
 				// Lista de espera de los planes de pago, con la PII enmascarada.

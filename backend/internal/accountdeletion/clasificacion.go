@@ -146,6 +146,10 @@ var Clasificacion = map[string]Tratamiento{
 	// La cola de solicitudes web guarda el HMAC del contacto y el resultado: es
 	// la prueba de que la solicitud se atendio, y el HMAC se vacia al desasociar.
 	"account_deletion_requests": Conservar,
+	// La constancia de la respuesta escrita (Ley 8968): cuando y por que via se
+	// respondio. El correo que la persona dio solo para ella se borra al
+	// entregarla y el dia 30; la nota de operaciones, al desasociar.
+	"account_deletion_responses": Conservar,
 }
 
 // tablasDeApoyo son tablas que cuelgan de una de arriba SIN columna de usuario

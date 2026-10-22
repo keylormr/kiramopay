@@ -20,8 +20,8 @@ type Fase =
   | { tipo: 'falla' }
   | { tipo: 'noElegible'; motivo: MotivoDeEliminacion }
   | { tipo: 'bloqueada'; bloqueos: string[] }
-  | { tipo: 'resumen'; pideTotp: boolean }
-  | { tipo: 'confirmar'; pideTotp: boolean };
+  | { tipo: 'resumen'; pideTotp: boolean; pideCorreo: boolean }
+  | { tipo: 'confirmar'; pideTotp: boolean; pideCorreo: boolean };
 
 // Codigo del servidor -> clave de texto. Un codigo que esta version de la app no
 // conoce cae en del_block_unknown: nunca se muestra el texto del servidor.
@@ -53,7 +53,14 @@ const CLAVE_DEL_RECHAZO: Record<string, keyof TranslationKeys> = {
   TOTP_INVALID: 'del_err_totp',
   DELETION_LOCKED: 'del_err_locked',
   TERMS_NOT_ACCEPTED: 'del_err_terms',
+  RESPONSE_EMAIL_REQUIRED: 'del_err_response_email_required',
+  RESPONSE_EMAIL_INVALID: 'del_err_response_email_invalid',
+  RESPONSE_EMAIL_MISMATCH: 'del_err_response_email_mismatch',
 };
+
+// La misma forma que valida el servidor (pkg/validator): uno que pase aqui y
+// no alla habilitaria el envio para recibir RESPONSE_EMAIL_INVALID.
+const CORREO_VALIDO = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 const CAMPO =
   'w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-danger)] focus:ring-[3px] focus:ring-[var(--color-danger)]/20 transition-all';
@@ -95,6 +102,8 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const idTotp = useId();
   const idError = useId();
   const idPlazo = useId();
+  const idCorreo = useId();
+  const idRepetido = useId();
 
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
   const [intento, setIntento] = useState(0);
@@ -103,6 +112,11 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const [verClave, setVerClave] = useState(false);
   const [totp, setTotp] = useState('');
   const [aceptaPlazo, setAceptaPlazo] = useState(false);
+  const [correo, setCorreo] = useState('');
+  // Se escribe dos veces: nadie lo confirma, y un error de tipeo mandaria la
+  // respuesta a otra persona. El aviso sale al dejar el campo, no a cada letra.
+  const [correoRepetido, setCorreoRepetido] = useState('');
+  const [repetidoTocado, setRepetidoTocado] = useState(false);
   const [enviando, setEnviandoLocal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,7 +142,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
       const d = res.data;
       if (d.motivo) setFase({ tipo: 'noElegible', motivo: d.motivo });
       else if (d.bloqueos.length > 0) setFase({ tipo: 'bloqueada', bloqueos: d.bloqueos });
-      else setFase({ tipo: 'resumen', pideTotp: d.pideSegundoFactor });
+      else setFase({ tipo: 'resumen', pideTotp: d.pideSegundoFactor, pideCorreo: d.pideCorreoParaRespuesta });
     })();
     return () => {
       vigente = false;
@@ -138,8 +152,16 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const palabraEsperada = t('del_word');
   const palabraCorrecta = palabra.trim().toLocaleUpperCase() === palabraEsperada.toLocaleUpperCase();
   const pideTotp = fase.tipo === 'confirmar' && fase.pideTotp;
+  const pideCorreo = fase.tipo === 'confirmar' && fase.pideCorreo;
+  const coinciden = correo.trim().toLowerCase() === correoRepetido.trim().toLowerCase();
+  const noCoinciden = pideCorreo && repetidoTocado && correoRepetido.trim() !== '' && !coinciden;
   const puedeEnviar =
-    palabraCorrecta && clave.length > 0 && aceptaPlazo && (!pideTotp || totp.length === 6) && !enviando;
+    palabraCorrecta &&
+    clave.length > 0 &&
+    aceptaPlazo &&
+    (!pideTotp || totp.length === 6) &&
+    (!pideCorreo || (CORREO_VALIDO.test(correo.trim()) && coinciden)) &&
+    !enviando;
 
   const eliminar = async () => {
     if (!puedeEnviar || fase.tipo !== 'confirmar') return;
@@ -149,6 +171,8 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
       password: clave,
       totpCode: fase.pideTotp ? totp : undefined,
       acceptTerms: aceptaPlazo,
+      // Solo una cuenta sin correo da uno, y solo para la respuesta escrita.
+      ...(fase.pideCorreo ? { responseEmail: correo.trim(), responseEmailConfirmation: correoRepetido.trim() } : {}),
     });
     if (res.success) {
       // La sesion ya esta revocada en el servidor: se suelta todo lo local sin
@@ -275,11 +299,11 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
               <h3 id={`${idError}-conserva`} className="text-xs font-bold uv-text-muted uppercase tracking-wider">
                 {t('del_kept_title')}
               </h3>
-              {lista([t('del_kept_1'), t('del_kept_2')])}
+              {lista([t('del_kept_1'), t(fase.pideCorreo ? 'del_kept_2_no_email' : 'del_kept_2')])}
             </section>
             {enlaceDePolitica}
             <div className="space-y-2.5">
-              <button type="button" onClick={() => setFase({ tipo: 'confirmar', pideTotp: fase.pideTotp })} className={BOTON_PELIGRO}>
+              <button type="button" onClick={() => setFase({ tipo: 'confirmar', pideTotp: fase.pideTotp, pideCorreo: fase.pideCorreo })} className={BOTON_PELIGRO}>
                 {t('continue')}
               </button>
               <button type="button" onClick={onClose} className={BOTON_SECUNDARIO}>{t('cancel')}</button>
@@ -366,6 +390,51 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
                   maxLength={6}
                   className={`${CAMPO} tracking-[0.4em] text-center font-mono`}
                 />
+              </div>
+            )}
+
+            {pideCorreo && (
+              <div>
+                <label htmlFor={idCorreo} className="text-sm text-gray-500 font-medium mb-2 block">
+                  {t('del_response_email_label')}
+                </label>
+                <input
+                  id={idCorreo}
+                  type="email"
+                  value={correo}
+                  onChange={(e) => { setCorreo(e.target.value); setError(null); }}
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-describedby={`${idCorreo}-ayuda`}
+                  className={CAMPO}
+                />
+                <p id={`${idCorreo}-ayuda`} className="mt-1.5 text-xs uv-text-muted leading-relaxed">
+                  {t('del_response_email_hint')}
+                </p>
+                <label htmlFor={idRepetido} className="text-sm text-gray-500 font-medium mb-2 mt-4 block">
+                  {t('del_response_email_confirm_label')}
+                </label>
+                <input
+                  id={idRepetido}
+                  type="email"
+                  value={correoRepetido}
+                  onChange={(e) => { setCorreoRepetido(e.target.value); setError(null); }}
+                  onBlur={() => setRepetidoTocado(true)}
+                  inputMode="email"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-invalid={noCoinciden ? true : undefined}
+                  aria-describedby={noCoinciden ? `${idRepetido}-error` : undefined}
+                  className={CAMPO}
+                />
+                {noCoinciden && (
+                  <p id={`${idRepetido}-error`} role="alert" className="mt-1.5 text-xs text-[var(--color-danger)]">
+                    {t('del_err_response_email_mismatch')}
+                  </p>
+                )}
               </div>
             )}
 

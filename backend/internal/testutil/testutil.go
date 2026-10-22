@@ -1676,6 +1676,47 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		ON account_deletion_requests (contact_hash)
 		WHERE status IN ('pending_verification', 'verified');
 
+	-- La bandeja de la respuesta escrita (migracion 083).
+	CREATE TABLE IF NOT EXISTS account_deletion_responses (
+		id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id         UUID NOT NULL REFERENCES users(id),
+		request_id      UUID,
+		kind            VARCHAR(12) NOT NULL,
+		deletion_due_at TIMESTAMPTZ,
+		blockers        TEXT[] NOT NULL DEFAULT '{}',
+		email_enc       BYTEA,
+		email_unconfirmed BOOLEAN NOT NULL DEFAULT false,
+		respond_by      TIMESTAMPTZ NOT NULL,
+		attempts        INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		last_error      VARCHAR(16),
+		escalated_at    TIMESTAMPTZ,
+		delivered_at    TIMESTAMPTZ,
+		delivered_via   VARCHAR(8),
+		delivered_by    UUID REFERENCES users(id),
+		delivery_note   TEXT,
+		cancelled_at    TIMESTAMPTZ,
+		created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided')),
+		CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL)),
+		CONSTRAINT chk_adresp_fecha CHECK (kind <> 'scheduled' OR deletion_due_at IS NOT NULL),
+		CONSTRAINT chk_adresp_intentos CHECK (attempts >= 0),
+		CONSTRAINT chk_adresp_error CHECK (last_error IS NULL OR last_error IN ('no_channel', 'send_failed')),
+		CONSTRAINT chk_adresp_via CHECK (delivered_via IS NULL OR delivered_via IN ('email', 'manual')),
+		CONSTRAINT chk_adresp_entregada CHECK ((delivered_at IS NULL) = (delivered_via IS NULL)),
+		CONSTRAINT chk_adresp_manual CHECK (delivered_via IS DISTINCT FROM 'manual' OR delivered_by IS NOT NULL),
+		CONSTRAINT chk_adresp_una_salida CHECK (delivered_at IS NULL OR cancelled_at IS NULL)
+	);
+	-- Una base de pruebas que sobrevivio a la primera version de la 083.
+	ALTER TABLE account_deletion_responses ADD COLUMN IF NOT EXISTS email_unconfirmed BOOLEAN NOT NULL DEFAULT false;
+	ALTER TABLE account_deletion_responses ADD COLUMN IF NOT EXISTS request_id UUID;
+	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_kind;
+	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_kind CHECK (kind IN ('scheduled', 'blocked', 'rejected', 'undecided'));
+	ALTER TABLE account_deletion_responses DROP CONSTRAINT IF EXISTS chk_adresp_sin_decidir;
+	ALTER TABLE account_deletion_responses ADD CONSTRAINT chk_adresp_sin_decidir CHECK (kind <> 'undecided' OR (request_id IS NOT NULL AND delivered_at IS NULL));
+	DROP INDEX IF EXISTS idx_adresp_solicitud;
+	CREATE UNIQUE INDEX IF NOT EXISTS uq_adresp_solicitud ON account_deletion_responses (request_id) WHERE request_id IS NOT NULL;
+
 	-- La identidad que se conserva al cerrar una cuenta (migracion 077).
 	CREATE TABLE IF NOT EXISTS closed_account_records (
 		user_id        UUID PRIMARY KEY REFERENCES users(id),
@@ -1747,7 +1788,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	tables := []string{
-		"account_deletion_requests", "closed_account_records", "sinpe_history_archive",
+		"account_deletion_responses", "account_deletion_requests", "closed_account_records", "sinpe_history_archive",
 		"identity_verifications", "payment_history",
 		"assistant_conversations", "card_transactions", "cross_border_transfers",
 		"regional_wallets", "user_devices", "linked_bank_accounts",
