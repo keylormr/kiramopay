@@ -1944,6 +1944,7 @@ const en: TranslationKeys = {
   admin_del_reject_title: 'Reject the request',
   admin_del_reject_body: 'The account is left as it is and no term starts. The person is told in writing that the request cannot be handled this way, without the reason. That message cannot be taken back.',
   admin_del_reject_button: 'Yes, reject and reply',
+  admin_del_reject_in_term: 'The account is already in the deletion term, so the request cannot be rejected. Use "Start the term" to close it.',
   admin_del_done: 'Term started. The account is deleted in 30 days.',
   admin_del_blocked: 'It could not start yet. The person has to resolve this:',
   admin_del_rejected: 'The request was closed without starting the term.',

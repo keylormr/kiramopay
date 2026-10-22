@@ -1089,7 +1089,7 @@ export interface paths {
         put?: never;
         /**
          * Close a verified request without starting the term
-         * @description Nothing is deleted. The written answer (the request is not handled this way, nothing was deleted, the privacy contact and the right to go to PRODHAB; never the reason) is queued in the same transaction, due 5 business days after the verification.
+         * @description Nothing is deleted. The written answer (the request is not handled this way, nothing was deleted, the privacy contact and the right to go to PRODHAB; never the reason) is queued in the same transaction, due 5 business days after the verification. If the account already started the term (from the app, while the request waited), it is not rejected: 409 ALREADY_SCHEDULED, and the request is closed by starting the term.
          */
         post: {
             parameters: {
@@ -1110,7 +1110,7 @@ export interface paths {
                     content?: never;
                 };
                 404: components["responses"]["NotFound"];
-                /** @description NOT_PENDING (already handled) */
+                /** @description NOT_PENDING (already handled), or ALREADY_SCHEDULED (the account is already in the deletion term) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1282,7 +1282,7 @@ export interface paths {
         put?: never;
         /**
          * Full contact of a written answer in the operations panel
-         * @description Unmasked phone, account email and the email given only for the answer (while it exists), so the answer can be delivered another way. Only for answers in the panel (escalated and not delivered). It is a POST because every view is audited (who and when, with the answer id) in the same transaction; without the audit row nothing is returned. Not cacheable.
+         * @description Unmasked phone, account email and the email given only for the answer (while it exists), so the answer can be delivered another way. Only for answers in the panel (escalated and not delivered). It is a POST because every view is audited (who and when, with the answer id) in the same transaction; without the audit row nothing is returned. An account already closed (day 30) has no contact left: the answer is empty and no view is audited, since it reveals nothing. Not cacheable.
          */
         post: {
             parameters: {

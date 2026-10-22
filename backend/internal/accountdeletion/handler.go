@@ -214,6 +214,10 @@ func (h *Handler) Rechazar(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "NOT_PENDING", err.Error())
 			return
 		}
+		if errors.Is(err, ErrCuentaYaEnPlazo) {
+			response.Error(w, http.StatusConflict, "ALREADY_SCHEDULED", err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "REJECT_FAILED", err.Error())
 		return
 	}

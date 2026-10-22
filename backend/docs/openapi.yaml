@@ -743,7 +743,9 @@ paths:
         Nothing is deleted. The written answer (the request is not handled
         this way, nothing was deleted, the privacy contact and the right to go
         to PRODHAB; never the reason) is queued in the same transaction, due 5
-        business days after the verification.
+        business days after the verification. If the account already started
+        the term (from the app, while the request waited), it is not rejected:
+        409 ALREADY_SCHEDULED, and the request is closed by starting the term.
       security:
         - bearerAuth: []
       parameters:
@@ -754,7 +756,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: NOT_PENDING (already handled)
+          description: >-
+            NOT_PENDING (already handled), or ALREADY_SCHEDULED (the account
+            is already in the deletion term)
 
   /api/v1/admin/account-deletion-responses:
     get:
@@ -860,7 +864,9 @@ paths:
         (while it exists), so the answer can be delivered another way. Only for
         answers in the panel (escalated and not delivered). It is a POST
         because every view is audited (who and when, with the answer id) in
-        the same transaction; without the audit row nothing is returned. Not
+        the same transaction; without the audit row nothing is returned. An
+        account already closed (day 30) has no contact left: the answer is
+        empty and no view is audited, since it reveals nothing. Not
         cacheable.
       security:
         - bearerAuth: []

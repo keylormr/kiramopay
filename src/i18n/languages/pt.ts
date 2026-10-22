@@ -1945,6 +1945,7 @@ const pt: TranslationKeys = {
   admin_del_reject_title: 'Rejeitar a solicitação',
   admin_del_reject_body: 'A conta não é alterada e nenhum prazo começa. A pessoa recebe por escrito que a solicitação não pode ser atendida por esta via, sem o motivo. Essa mensagem não pode ser retirada.',
   admin_del_reject_button: 'Sim, rejeitar e responder',
+  admin_del_reject_in_term: 'A conta já está no prazo de exclusão, então a solicitação não pode ser rejeitada. Use "Iniciar o prazo" para encerrá-la.',
   admin_del_done: 'Prazo iniciado. A conta será excluída em 30 dias.',
   admin_del_blocked: 'Ainda não foi possível iniciar. A pessoa precisa resolver isto:',
   admin_del_rejected: 'A solicitação foi encerrada sem iniciar o prazo.',

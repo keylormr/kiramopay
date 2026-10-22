@@ -59,6 +59,12 @@ const LO_QUE_DECIA: Record<RespuestaEnviadaSinConfirmar['tipo'], keyof Translati
   rejected: 'admin_sent_kind_rejected',
 };
 
+// Por que no se pudo rechazar.
+const CLAVE_DEL_RECHAZO: Record<string, keyof TranslationKeys> = {
+  NOT_PENDING: 'admin_del_already',
+  ALREADY_SCHEDULED: 'admin_del_reject_in_term',
+};
+
 type Aviso =
   | { tipo: 'ok'; texto: string }
   | { tipo: 'error'; texto: string }
@@ -87,6 +93,8 @@ export const SolicitudesDeEliminacion: React.FC = () => {
   // Cuenta las relecturas: un contacto que llega despues de releer es de una
   // lista que ya no esta en pantalla, y no se pinta.
   const lectura = useRef(0);
+  // El contacto recien llegado recibe el foco: el boton que se pulso desaparece.
+  const porEnfocar = useRef<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
@@ -98,8 +106,10 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         api?.listSentUnconfirmedDeletionResponses(),
       ]);
       if (!vigente) return;
+      // Lo que se veia antes no queda en pantalla junto al aviso de la falla.
       if (!res?.success || !res.data) {
         setFalla(true);
+        setCola([]);
       } else {
         setFalla(false);
         setCola(res.data);
@@ -107,12 +117,14 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       // Una lista que no se pudo leer no es una lista vacia: se dice.
       if (!resp?.success || !resp.data) {
         setFallaRespuestas(true);
+        setRespuestas([]);
       } else {
         setFallaRespuestas(false);
         setRespuestas(resp.data);
       }
       if (!env?.success || !env.data) {
         setFallaEnviadas(true);
+        setEnviadas([]);
       } else {
         setFallaEnviadas(false);
         setEnviadas(env.data);
@@ -138,6 +150,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     const res = await getApiLayer().admin?.viewDeletionResponseContact(r.id);
     setViendo(null);
     if (deLaLectura !== lectura.current) return;
+    if (res?.success && res.data) porEnfocar.current = r.id;
     setContactos((antes) => ({ ...antes, [r.id]: res?.success && res.data ? res.data : 'falla' }));
   };
 
@@ -169,7 +182,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
     setAviso(
       res?.success
         ? { tipo: 'ok', texto: t('admin_del_rejected') }
-        : { tipo: 'error', texto: t(res?.error?.code === 'NOT_PENDING' ? 'admin_del_already' : 'admin_del_action_failed') },
+        : { tipo: 'error', texto: t(CLAVE_DEL_RECHAZO[res?.error?.code ?? ''] ?? 'admin_del_action_failed') },
     );
     releer();
   };
@@ -256,7 +269,17 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         c.correoParaRespuesta && t('admin_resp_contact_response_email').replace('{v}', c.correoParaRespuesta),
       ].filter((l): l is string => !!l);
       return (
-        <div className="rounded-xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 py-2 space-y-0.5">
+        <div
+          role="status"
+          tabIndex={-1}
+          ref={(el) => {
+            if (el && porEnfocar.current === r.id) {
+              porEnfocar.current = null;
+              el.focus();
+            }
+          }}
+          className="rounded-xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 py-2 space-y-0.5 outline-none"
+        >
           {lineas.length > 0 ? (
             lineas.map((l) => <p key={l} className="text-sm uv-text-primary break-all">{l}</p>)
           ) : (
@@ -353,7 +376,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 {t('admin_resp_due').replace('{date}', fechaLarga(r.responderAntesDe, language))}
               </p>
               {loQueHayQueDecir(r)}
-              <div aria-live="polite">{contacto(r)}</div>
+              {contacto(r)}
               <button
                 type="button"
                 onClick={() => abrirEntrega(r)}

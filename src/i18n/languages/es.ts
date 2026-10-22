@@ -1948,6 +1948,7 @@ const es: TranslationKeys = {
   admin_del_reject_title: 'Rechazar la solicitud',
   admin_del_reject_body: 'La cuenta no se toca y no empieza ningún plazo. A la persona se le escribe que no se puede atender por esta vía, sin decirle el motivo. Ese mensaje no se puede retirar.',
   admin_del_reject_button: 'Sí, rechazar y responder',
+  admin_del_reject_in_term: 'La cuenta ya está en el plazo de eliminación, así que no se puede rechazar. Usa "Iniciar el plazo" para cerrar la solicitud.',
   admin_del_done: 'Plazo iniciado. La cuenta se elimina en 30 días.',
   admin_del_blocked: 'No se pudo iniciar todavía. La persona tiene que resolver esto:',
   admin_del_rejected: 'La solicitud se cerró sin iniciar el plazo.',

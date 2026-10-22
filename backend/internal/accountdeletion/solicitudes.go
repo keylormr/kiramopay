@@ -580,7 +580,10 @@ var frasesDeBloqueo = map[string]string{
 
 // Rechazar cierra una solicitud de la cola sin iniciar nada (por ejemplo, cuando
 // la persona se arrepintio). Tambien se responde por escrito, en la misma
-// transaccion, con el plazo contado desde la verificacion.
+// transaccion, con el plazo contado desde la verificacion. Si la cuenta ya esta
+// en el plazo (lo empezo por la app mientras la solicitud esperaba), esa
+// respuesta diria que no se borro nada con el plazo corriendo: no se rechaza
+// (ErrCuentaYaEnPlazo), y la solicitud se cierra con Iniciar el plazo.
 func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) error {
 	var respuesta string
 	err := s.conReintentos(ctx, func(tx pgx.Tx) error {
@@ -590,12 +593,22 @@ func (s *Service) Rechazar(ctx context.Context, solicitudID, adminID string) err
 			verificada *time.Time
 		)
 		err := tx.QueryRow(ctx, `
-			UPDATE account_deletion_requests
+			UPDATE account_deletion_requests q
 			   SET status = 'rejected', result_code = 'REJECTED_BY_ADMIN',
 			       processed_at = NOW(), processed_by = $2::uuid
-			 WHERE id = $1::uuid AND status = 'verified'
-			RETURNING user_id::text, verified_at`, solicitudID, adminID).Scan(&userID, &verificada)
+			 WHERE q.id = $1::uuid AND q.status = 'verified'
+			   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = q.user_id AND u.deletion_requested_at IS NOT NULL)
+			RETURNING q.user_id::text, q.verified_at`, solicitudID, adminID).Scan(&userID, &verificada)
 		if errors.Is(err, pgx.ErrNoRows) {
+			var pendiente bool
+			if err := tx.QueryRow(ctx, `
+				SELECT EXISTS (SELECT 1 FROM account_deletion_requests WHERE id = $1::uuid AND status = 'verified')`,
+				solicitudID).Scan(&pendiente); err != nil {
+				return fmt.Errorf("leer solicitud: %w", err)
+			}
+			if pendiente {
+				return ErrCuentaYaEnPlazo
+			}
 			return ErrSolicitudNoPendiente
 		}
 		if err != nil {

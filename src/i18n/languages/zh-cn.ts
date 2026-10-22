@@ -1936,6 +1936,7 @@ const zhCn: TranslationKeys = {
   admin_del_reject_title: '拒绝申请',
   admin_del_reject_body: '账户保持不变，不会启动任何期限。将以书面形式告知对方无法通过此途径处理其申请，但不说明原因。该消息无法撤回。',
   admin_del_reject_button: '是，拒绝并回复',
+  admin_del_reject_in_term: '该账户已处于删除期限内，因此无法拒绝此申请。请使用“启动期限”来关闭申请。',
   admin_del_done: '期限已启动。账户将在30天后删除。',
   admin_del_blocked: '暂时无法启动。此人需要先解决以下问题：',
   admin_del_rejected: '申请已关闭，未启动期限。',

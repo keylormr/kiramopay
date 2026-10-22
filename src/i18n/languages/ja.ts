@@ -1936,6 +1936,7 @@ const ja: TranslationKeys = {
   admin_del_reject_title: '申請を却下',
   admin_del_reject_body: 'アカウントはそのままで、期間は始まりません。この方法では申請に対応できないことを、理由を伝えずに書面でお知らせします。このメッセージは取り消せません。',
   admin_del_reject_button: 'はい、却下して返信する',
+  admin_del_reject_in_term: 'このアカウントはすでに削除期間中のため、申請を却下できません。申請を閉じるには「期間を開始」を使ってください。',
   admin_del_done: '期間を開始しました。アカウントは30日後に削除されます。',
   admin_del_blocked: 'まだ開始できません。本人が次の点を解決する必要があります：',
   admin_del_rejected: '期間を開始せずに申請を閉じました。',

@@ -1945,6 +1945,7 @@ const fr: TranslationKeys = {
   admin_del_reject_title: 'Rejeter la demande',
   admin_del_reject_body: 'Le compte reste tel quel et aucun délai ne démarre. La personne reçoit un message écrit indiquant que la demande ne peut pas être traitée par cette voie, sans le motif. Ce message ne peut pas être retiré.',
   admin_del_reject_button: 'Oui, rejeter et répondre',
+  admin_del_reject_in_term: 'Le compte est déjà dans le délai de suppression : la demande ne peut pas être rejetée. Utilisez « Lancer le délai » pour la clore.',
   admin_del_done: 'Délai lancé. Le compte sera supprimé dans 30 jours.',
   admin_del_blocked: "Le délai n'a pas encore pu démarrer. La personne doit régler ceci :",
   admin_del_rejected: 'La demande a été close sans lancer le délai.',
