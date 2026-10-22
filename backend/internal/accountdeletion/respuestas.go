@@ -41,6 +41,8 @@ const (
 	// RespuestaRechazada: la solicitud web no se atiende por esta via. No dice
 	// por que: la cuenta puede estar bajo revision.
 	RespuestaRechazada = "rejected"
+	// RespuestaSinDecidir: todavia sin uso.
+	RespuestaSinDecidir = "undecided"
 )
 
 // Por que una respuesta no salio. Es un codigo y nunca el texto del proveedor:
@@ -129,6 +131,8 @@ var (
 	// ErrRespuestaFueraDelPanel: la respuesta no esta pendiente en el panel (ya
 	// salio, se cancelo, o el barrido todavia la esta reintentando).
 	ErrRespuestaFueraDelPanel = errors.New("la respuesta no esta pendiente en el panel")
+	// ErrRespuestaSinDecidir: todavia sin uso.
+	ErrRespuestaSinDecidir = errors.New("la respuesta espera que se atienda la solicitud")
 )
 
 // nuevaRespuesta es lo que se encola.

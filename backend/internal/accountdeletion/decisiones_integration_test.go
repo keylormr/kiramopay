@@ -491,10 +491,12 @@ func TestRespuesta_ElPanelMarcaElCorreoSinConfirmar(t *testing.T) {
 	}
 }
 
-// Cerrada la cuenta (dia 30), users ya no guarda su contacto: el telefono queda
-// con un marcador. Ver contacto no lo muestra como si fuera un telefono, y una
-// vista que no revela nada no deja fila en la auditoria.
-func TestRespuesta_VerContactoDeUnaCuentaCerradaNoMuestraElMarcador(t *testing.T) {
+// Cerrada la cuenta (dia 30), users ya no guarda su contacto: queda en
+// closed_account_records. Decision del dueno del 2026-10-22: Ver contacto lo lee
+// de ahi, solo para entregar esta respuesta a la misma persona, y la vista queda
+// en la auditoria como cualquier otra. Desasociado lo conservado, ya no hay
+// contacto: sale vacio y una vista que no revela nada no se audita.
+func TestRespuesta_VerContactoDeUnaCuentaCerradaLeeLoConservado(t *testing.T) {
 	pool := testutil.TestDB(t)
 	a := sembrar(t, pool)
 	sinCorreo(t, pool, a.ID)
@@ -515,10 +517,23 @@ func TestRespuesta_VerContactoDeUnaCuentaCerradaNoMuestraElMarcador(t *testing.T
 	if err != nil {
 		t.Fatalf("ver el contacto: %v", err)
 	}
-	if c.Telefono != "" || c.Correo != "" || c.CorreoParaRespuesta != "" {
-		t.Errorf("de una cuenta cerrada no hay contacto que mostrar: %+v", c)
+	if c.Telefono != a.Telefono || c.Correo != "" || c.CorreoParaRespuesta != "" {
+		t.Errorf("de una cuenta cerrada sale el contacto conservado: %+v", c)
 	}
-	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 0 {
+	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 1 {
+		t.Errorf("la vista de lo conservado queda en la auditoria: %d", n)
+	}
+
+	exec(t, pool, `UPDATE closed_account_records
+		SET first_name = NULL, last_name = NULL, birth_date = NULL, birth_date_enc = NULL,
+		    cedula_hash = NULL, cedula_enc = NULL, phone_hash = NULL, phone_enc = NULL,
+		    email_hash = NULL, email_enc = NULL, dissociated_at = NOW()
+		WHERE user_id = $1::uuid`, a.ID)
+	c, err = svc.ContactoDeRespuesta(ctx, r.ID, admin.ID)
+	if err != nil || c.Telefono != "" || c.Correo != "" || c.CorreoParaRespuesta != "" {
+		t.Errorf("desasociado lo conservado no queda contacto: %+v %v", c, err)
+	}
+	if n := vistasDelContacto(t, pool, a.ID, admin.ID, r.ID); n != 1 {
 		t.Errorf("una vista que no revela nada no va a la auditoria: %d", n)
 	}
 }
@@ -696,5 +711,137 @@ func TestRespuesta_RechazarConElPlazoYaCorriendoNoLeEscribeQueNoSeBorroNada(t *t
 	srv := router(NewHandler(svc, nil), admin.ID)
 	if rec, env := llamar(t, srv, "POST", "/admin/account-deletion-requests/"+solicitud+"/reject", ""); rec.Code != 409 || env.Error == nil || env.Error.Code != "ALREADY_SCHEDULED" {
 		t.Errorf("el handler: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ── La cuenta en revision tiene su respuesta desde la verificacion ─────────
+//
+// Decision del dueno del 2026-10-22: la respuesta entra a la bandeja apenas se
+// verifica la solicitud, con el plazo desde ahi. Si nadie la procesa ni la
+// rechaza, pasa sola a "Respuestas por entregar" antes del plazo. Al procesar o
+// rechazar se completa esa misma fila, no una nueva.
+
+// sinDecidirConPlazoEncima deja la respuesta sin decidir de la cuenta con dos
+// dias de plazo, menos de los tres que operaciones necesita, y corre el barrido.
+func sinDecidirConPlazoEncima(t *testing.T, pool *pgxpool.Pool, svc *Service, userID string) filaRespuesta {
+	t.Helper()
+	r := unaRespuesta(t, pool, userID)
+	exec(t, pool, `UPDATE account_deletion_responses SET respond_by = NOW() + interval '2 days' WHERE id = $1::uuid`, r.ID)
+	if _, err := svc.EntregarRespuestas(context.Background(), time.Now(), 100); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestRespuesta_LaCuentaEnRevisionTieneSuFilaDesdeLaVerificacion(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a := sembrar(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+
+	r := unaRespuesta(t, pool, a.ID)
+	if r.Tipo != RespuestaSinDecidir || r.Escalada || r.Entregada || r.Cancelada {
+		t.Fatalf("al verificar debia quedar una respuesta sin decidir: %+v", r)
+	}
+	verificada := cuenta1[time.Time](t, pool, `SELECT verified_at FROM account_deletion_requests WHERE id = $1::uuid`, solicitud)
+	if got, want := respondeAntesDe(t, pool, r.ID), responderAntesDe(verificada); got.Sub(want).Abs() > time.Second {
+		t.Errorf("el plazo corre desde la verificacion: %v, se esperaba %v", got, want)
+	}
+	// Sin decidir no hay nada que mandar, y con plazo de sobra el barrido no la toca.
+	if _, err := svc.EntregarRespuestas(ctx, time.Now(), 100); err != nil {
+		t.Fatal(err)
+	}
+	if r := unaRespuesta(t, pool, a.ID); r.Intentos != 0 || r.Entregada || r.Escalada {
+		t.Errorf("el barrido no manda ni escala una sin decidir con plazo de sobra: %+v", r)
+	}
+	select {
+	case m := <-correo.ch:
+		t.Errorf("salio un correo sin decidir nada: %+v", m)
+	default:
+	}
+}
+
+func TestRespuesta_SinDecidirPasaSolaAlPanelAntesDelPlazo(t *testing.T) {
+	pool := testutil.TestDB(t)
+	a := sembrar(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitudEnLaCola(t, pool, svc, correo, a)
+
+	r := sinDecidirConPlazoEncima(t, pool, svc, a.ID)
+	p := enElPanel(t, svc, a.ID)
+	if p == nil || p.ID != r.ID || p.Tipo != RespuestaSinDecidir {
+		t.Fatalf("sin atender y con el plazo encima, debia pasar sola al panel: %+v", p)
+	}
+	if r := unaRespuesta(t, pool, a.ID); r.Intentos != 0 || r.Entregada {
+		t.Errorf("pasa al panel sin intentar mandar nada: %+v", r)
+	}
+}
+
+func TestRespuesta_ProcesarCompletaLaMismaFila(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+	antes := sinDecidirConPlazoEncima(t, pool, svc, a.ID)
+	plazo := respondeAntesDe(t, pool, antes.ID)
+
+	if _, err := svc.Procesar(ctx, solicitud, admin.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := esperarRespuesta(t, pool, a.ID, "la misma fila, completada y entregada", func(r filaRespuesta) bool { return r.Entregada })
+	if r.ID != antes.ID || r.Tipo != RespuestaPlazoIniciado || r.SeEliminaEl == nil {
+		t.Errorf("procesar completa la misma fila: antes %+v, despues %+v", antes, r)
+	}
+	if got := respondeAntesDe(t, pool, r.ID); !got.Equal(plazo) {
+		t.Errorf("el plazo no cambia al completarla: %v, era %v", got, plazo)
+	}
+}
+
+func TestRespuesta_RechazarCompletaLaMismaFila(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitud := solicitudEnLaCola(t, pool, svc, correo, a)
+	antes := unaRespuesta(t, pool, a.ID)
+
+	if err := svc.Rechazar(ctx, solicitud, admin.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := esperarRespuesta(t, pool, a.ID, "la misma fila, completada y entregada", func(r filaRespuesta) bool { return r.Entregada })
+	if r.ID != antes.ID || r.Tipo != RespuestaRechazada {
+		t.Errorf("rechazar completa la misma fila: antes %+v, despues %+v", antes, r)
+	}
+}
+
+// Sin decidir no hay nada que entregar por otro medio: operaciones atiende la
+// solicitud, y la respuesta sale con lo que decida.
+func TestRespuesta_SinDecidirNoSeMarcaNiSeVeElContacto(t *testing.T) {
+	pool := testutil.TestDB(t)
+	ctx := context.Background()
+	a, admin := sembrar(t, pool), administrador(t, pool)
+	correo := nuevoCorreo()
+	svc := nuevoServicio(pool, &Options{Email: correo})
+	solicitudEnLaCola(t, pool, svc, correo, a)
+	r := sinDecidirConPlazoEncima(t, pool, svc, a.ID)
+
+	if err := svc.MarcarRespuestaEntregada(ctx, r.ID, admin.ID, "por telefono"); !errors.Is(err, ErrRespuestaSinDecidir) {
+		t.Errorf("marcar entregada una sin decidir: %v", err)
+	}
+	if _, err := svc.ContactoDeRespuesta(ctx, r.ID, admin.ID); !errors.Is(err, ErrRespuestaSinDecidir) {
+		t.Errorf("ver el contacto de una sin decidir: %v", err)
+	}
+	srv := router(NewHandler(svc, nil), admin.ID)
+	for _, ruta := range []string{"/delivered", "/contact"} {
+		rec, env := llamar(t, srv, "POST", "/admin/account-deletion-responses/"+r.ID+ruta, `{"note":"por telefono"}`)
+		if rec.Code != 409 || env.Error == nil || env.Error.Code != "NOT_DECIDED" {
+			t.Errorf("%s: %d %s", ruta, rec.Code, rec.Body.String())
+		}
 	}
 }

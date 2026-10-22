@@ -94,6 +94,17 @@ describe('HttpAdminRepository — cola de eliminaciones', () => {
     expect(res.data?.[0]).toMatchObject({ id: 'd4', tipo: 'rejected' });
   });
 
+  it('la respuesta que sigue sin decidir llega con su tipo', async () => {
+    const client = fakeClient({
+      get: vi.fn().mockResolvedValue({
+        success: true,
+        data: [{ id: 'd9', kind: 'undecided', reason: '', attempts: 0, created_at: '2026-10-19T15:00:00Z', respond_by: '2026-10-26T15:00:00Z', blockers: [], account: null }],
+      }),
+    });
+    const res = await new HttpAdminRepository(client).listDeletionResponses();
+    expect(res.data?.[0]).toMatchObject({ id: 'd9', tipo: 'undecided' });
+  });
+
   it('ver el contacto lo pide por POST y lo devuelve completo', async () => {
     const client = fakeClient({
       post: vi.fn().mockResolvedValue({

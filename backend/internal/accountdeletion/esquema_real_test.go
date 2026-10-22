@@ -228,12 +228,20 @@ func TestRespuestaContraElEsquemaReal(t *testing.T) {
 	correo := nuevoCorreo()
 	conCodigo := nuevoServicio(pool, &Options{Email: correo})
 	solicitud := solicitudEnLaCola(t, pool, conCodigo, correo, c)
+	// La cuenta en revision tiene su respuesta sin decidir desde la verificacion,
+	// y rechazar completa esa misma fila.
+	sinDecidir := unaRespuesta(t, pool, c.ID)
+	if sinDecidir.Tipo != RespuestaSinDecidir {
+		t.Fatalf("al verificar debia quedar una respuesta sin decidir: %+v", sinDecidir)
+	}
 	if err := conCodigo.Rechazar(ctx, solicitud, admin.ID); err != nil {
 		t.Fatalf("rechazar: %v", err)
 	}
-	esperarRespuesta(t, pool, c.ID, "la del rechazo, entregada", func(r filaRespuesta) bool {
+	if r := esperarRespuesta(t, pool, c.ID, "la del rechazo, entregada", func(r filaRespuesta) bool {
 		return r.Tipo == RespuestaRechazada && r.Entregada
-	})
+	}); r.ID != sinDecidir.ID {
+		t.Errorf("rechazar debia completar la fila sin decidir: %+v", r)
+	}
 
 	// La que salio al correo dado queda en la lista de las enviadas a un correo
 	// sin confirmar.

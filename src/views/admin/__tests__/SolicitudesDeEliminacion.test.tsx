@@ -327,16 +327,43 @@ describe('SolicitudesDeEliminacion — respuestas por entregar', () => {
     expect(screen.queryAllByRole('button', { name: 'Ver contacto' })).toHaveLength(0);
   });
 
-  it('de una cuenta cerrada no ofrece ver el contacto: ya no hay', async () => {
+  it('de una cuenta cerrada ofrece el contacto conservado, solo para esta respuesta', async () => {
     api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
     api.admin.listDeletionResponses.mockResolvedValue({
       success: true,
       data: [{ ...respuesta, id: 'd3', account: null, userId: 'u-cerrada-9', cuentaCerrada: true }],
     });
+    api.admin.viewDeletionResponseContact.mockResolvedValue({
+      success: true,
+      data: { telefono: '+50688881234', correo: '', correoParaRespuesta: '' },
+    });
+    const user = userEvent.setup();
     pintar();
 
-    expect(await screen.findByText('No hay contacto guardado.')).toBeInTheDocument();
+    expect(await screen.findByText('Sale de lo que se conserva por ley: úsalo solo para entregar esta respuesta.')).toBeInTheDocument();
+    expect(screen.getByText('Queda registrado quién lo ve y cuándo.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ver contacto' }));
+    expect(api.admin.viewDeletionResponseContact).toHaveBeenCalledWith('d3');
+    expect(await screen.findByText(/\+50688881234/)).toBeInTheDocument();
+  });
+
+  it('la que sigue sin decidir manda a atender la solicitud, sin entregar nada', async () => {
+    api.admin.listDeletionRequests.mockResolvedValue({ success: true, data: [] });
+    api.admin.listDeletionResponses.mockResolvedValue({
+      success: true,
+      data: [{ ...respuesta, tipo: 'undecided' as const, motivo: 'no_channel' as const, intentos: 0, seEliminaEl: null, conservaHasta: null }],
+    });
+    pintar();
+
+    expect(
+      await screen.findByText(
+        'Sigue sin atender en "Solicitudes por atender". Inicia el plazo o recházala antes de esa fecha: la respuesta sale con lo que decidas.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Responder antes del 26 de octubre de 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/No tiene correo/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ver contacto' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Marcar entregada' })).toBeNull();
   });
 
   it('un contacto que llega despues de releer no se pinta', async () => {
