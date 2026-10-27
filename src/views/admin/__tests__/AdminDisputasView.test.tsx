@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { useAuthStore } from '@/stores/auth.store';
+import type { User } from '@/types';
 import { AdminDisputasView } from '../AdminDisputasView';
 
 // Hasta el #183 el arbitro no podia ni listar las disputas: habia un boton
@@ -50,6 +52,8 @@ beforeEach(() => {
   mocks.adminList.mockReset();
   mocks.adminResolve.mockReset();
   mocks.getUser.mockReset();
+  // Un administrador que no es parte de ningun acuerdo, salvo que la prueba diga otra cosa.
+  useAuthStore.setState({ user: { id: 'u-administrador' } as User });
   mocks.getUser.mockImplementation(async (id: string) => ({ success: true, data: { id, ...personas[id] } }));
 });
 
@@ -61,7 +65,7 @@ describe('AdminDisputasView', () => {
     expect(await screen.findByText('Bicicleta')).toBeInTheDocument();
     expect(screen.getByText('₡12,500.00')).toBeInTheDocument();
     expect(screen.getByText('Nunca llego')).toBeInTheDocument();
-    expect(screen.getByText('1 casos abiertos')).toBeInTheDocument();
+    expect(screen.getByText('1 caso abierto')).toBeInTheDocument();
     // Nombres, no UUID.
     expect(await screen.findByText(/Ana Mora/)).toBeInTheDocument();
     expect(screen.getByText(/Luis Rojas/)).toBeInTheDocument();
@@ -104,6 +108,50 @@ describe('AdminDisputasView', () => {
 
     expect(await screen.findByText('Eres parte de este acuerdo: lo tiene que resolver otro administrador.')).toBeInTheDocument();
     expect(screen.queryByText(/cannot resolve/)).not.toBeInTheDocument();
+  });
+
+  // "1 casos abiertos": el contador no distinguia el singular.
+  it('el contador dice caso en singular y casos en plural', async () => {
+    mocks.adminList.mockResolvedValue({
+      success: true,
+      data: { agreements: [caso, { ...caso, id: 'e2', description: 'Moto' }], total: 2, status: 'disputed' },
+    });
+    pintar();
+
+    expect(await screen.findByText('2 casos abiertos')).toBeInTheDocument();
+    expect(screen.queryByText(/1 caso/)).not.toBeInTheDocument();
+  });
+
+  // El administrador es el comprador (o el vendedor) del acuerdo: el servidor
+  // lo rechaza recien despues de confirmar. Se dice de entrada, sin ofrecer los
+  // botones de un veredicto que no puede dar.
+  it.each([
+    ['comprador', 'u-comprador'],
+    ['vendedor', 'u-vendedor'],
+  ])('si el administrador es el %s no ofrece resolver y lo dice de entrada', async (_rol, miId) => {
+    useAuthStore.setState({ user: { id: miId } as User });
+    mocks.adminList.mockResolvedValue({ success: true, data: { agreements: [caso], total: 1, status: 'disputed' } });
+    pintar();
+
+    expect(await screen.findByText('Eres parte de este acuerdo: lo tiene que resolver otro administrador.')).toBeInTheDocument();
+    expect(screen.queryByText('A favor del comprador')).not.toBeInTheDocument();
+    expect(screen.queryByText('A favor del vendedor')).not.toBeInTheDocument();
+    // El caso sigue a la vista: se ve el monto y el motivo.
+    expect(screen.getByText('Bicicleta')).toBeInTheDocument();
+    expect(screen.getByText('Nunca llego')).toBeInTheDocument();
+    expect(mocks.adminResolve).not.toHaveBeenCalled();
+  });
+
+  it('en una cola mezclada solo quita los botones de los casos donde es parte', async () => {
+    useAuthStore.setState({ user: { id: 'u-comprador' } as User });
+    const ajeno = { ...caso, id: 'e2', description: 'Moto', buyerId: 'u-otro', sellerId: 'u-vendedor' };
+    mocks.adminList.mockResolvedValue({ success: true, data: { agreements: [caso, ajeno], total: 2, status: 'disputed' } });
+    pintar();
+
+    await screen.findByText('Moto');
+    expect(screen.getAllByText('Eres parte de este acuerdo: lo tiene que resolver otro administrador.')).toHaveLength(1);
+    expect(screen.getAllByText('A favor del comprador')).toHaveLength(1);
+    expect(screen.getAllByText('A favor del vendedor')).toHaveLength(1);
   });
 
   it('una cola que no cargo no se muestra como cola vacia', async () => {

@@ -82,6 +82,29 @@ describe('AdminMerchantsView', () => {
   });
 });
 
+// El servidor guardaba cualquier categoria y la pantalla armaba la clave de
+// traduccion con ella: un comercio con "other" mostraba `merchant_cat_other`
+// tal cual al administrador que lo verifica.
+describe('AdminMerchantsView - categoria sin traduccion', () => {
+  it('un comercio con una categoria desconocida muestra Otro y no la clave cruda', async () => {
+    mockApi.qrPayments.listPendingMerchants.mockResolvedValue({
+      success: true,
+      data: [{ ...pending, category: 'other' }],
+    });
+    setup();
+
+    expect(await screen.findByText(/Otro · Soda Tica SA/)).toBeInTheDocument();
+    expect(screen.queryByText(/merchant_cat_/)).toBeNull();
+  });
+
+  it('una categoria conocida sigue mostrando su traduccion', async () => {
+    mockApi.qrPayments.listPendingMerchants.mockResolvedValue({ success: true, data: [pending] });
+    setup();
+
+    expect(await screen.findByText(/Restaurante · Soda Tica SA/)).toBeInTheDocument();
+  });
+});
+
 describe('AdminMerchantsView - plan de un comercio', () => {
   beforeEach(() => {
     mockApi.qrPayments.listPendingMerchants.mockResolvedValue({ success: true, data: [] });
