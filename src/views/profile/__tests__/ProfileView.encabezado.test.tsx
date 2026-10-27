@@ -38,7 +38,7 @@ vi.mock('@/api', async (importOriginal) => ({
 
 const appState = vi.hoisted(() => ({
   accounts: [] as Array<Record<string, unknown>>,
-  transactions: [] as Array<Record<string, unknown>>,
+  transactions: [] as Transaction[],
 }));
 
 vi.mock('@/hooks/useApp', () => ({
