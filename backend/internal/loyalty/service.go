@@ -159,9 +159,32 @@ func (s *Service) EarnPoints(ctx context.Context, userID string, req *EarnPoints
 	return ptx, nil
 }
 
-// GetRewards returns available rewards catalog.
+// GetRewards returns available rewards catalog. Cada premio trae RedeemableNow:
+// si se puede canjear ahora, que depende de que el fondo de promociones lo
+// cubra (ver canjeableAhora). El saldo del fondo no sale de aqui.
 func (s *Service) GetRewards(ctx context.Context) ([]Reward, error) {
-	return s.repo.GetAvailableRewards(ctx)
+	rewards, err := s.repo.GetAvailableRewards(ctx)
+	if err != nil || len(rewards) == 0 {
+		return rewards, err
+	}
+	// Un fondo que no se puede leer no se toma por vacio: el catalogo falla,
+	// como falla el canje que dependeria del mismo dato.
+	fondo, err := s.repo.SaldoPromociones(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("saldo de promociones: %w", err)
+	}
+	for i := range rewards {
+		rewards[i].RedeemableNow = s.canjeableAhora(&rewards[i], fondo)
+	}
+	return rewards, nil
+}
+
+// canjeableAhora refleja, sin tocar nada, las condiciones de RedeemReward que
+// no dependen de la persona: el premio sigue activo, tiene como entregarse
+// (cashback_minor), queda existencia y el fondo alcanza. Los puntos de quien
+// mira los comprueba la pantalla con su cuenta, y el canje de verdad.
+func (s *Service) canjeableAhora(r *Reward, fondo int64) bool {
+	return s.ledger != nil && r.Active && r.CashbackMinor > 0 && r.Stock != 0 && fondo >= r.CashbackMinor
 }
 
 // RedeemReward exchanges points for a reward.

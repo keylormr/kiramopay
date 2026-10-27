@@ -33,6 +33,13 @@ export interface Reward {
    * premio no tiene como entregarse y el servidor no lo canjea.
    */
   cashbackMinor?: number;
+  /**
+   * Si el premio se puede canjear AHORA (tiene como entregarse y el fondo de
+   * promociones lo cubre). Ausente quiere decir que el servidor no lo informa,
+   * y entonces se deja intentar: decide el servidor al tocar. El saldo del
+   * fondo nunca llega al cliente.
+   */
+  redeemableNow?: boolean;
 }
 
 export interface Redemption {

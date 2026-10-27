@@ -47,6 +47,33 @@ describe('HttpLoyaltyRepository.getReferrals', () => {
   });
 });
 
+// El catalogo trae por premio si se puede canjear ahora (el fondo de promociones
+// lo cubre). Un servidor que no lo manda no se interpreta como "no se puede".
+describe('HttpLoyaltyRepository.getRewards', () => {
+  const premio = {
+    id: 'r1', name: 'Cashback', description: '', category: 'discount', points_cost: 500,
+    image_url: '', partner_code: '', stock: -1, cashback_minor: 50000,
+  };
+
+  it('trae si el premio se puede canjear ahora, en los dos sentidos', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: [
+        { ...premio, id: 'si', redeemable_now: true },
+        { ...premio, id: 'no', redeemable_now: false },
+      ],
+    });
+    const res = await new HttpLoyaltyRepository(fakeClient({ get })).getRewards();
+    expect(res.data?.map((r) => [r.id, r.redeemableNow])).toEqual([['si', true], ['no', false]]);
+  });
+
+  it('sin el dato del servidor no lo inventa', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: [premio] });
+    const res = await new HttpLoyaltyRepository(fakeClient({ get })).getRewards();
+    expect(res.data?.[0].redeemableNow).toBeUndefined();
+  });
+});
+
 // Canjear devolvia siempre REDEEM_FAILED, pisando el codigo del servidor: la
 // pantalla no podia distinguir "no hay fondo de promociones" de un fallo
 // cualquiera.

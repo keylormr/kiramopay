@@ -853,68 +853,74 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
-
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => onOpenAdminMerchants?.()}
-                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-              >
-                <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center mr-3">
-                  <Icons.Shield size={18} className="text-rose-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold uv-text-primary text-sm">{t('merchant_admin_menu')}</p>
-                  <p className="text-xs uv-text-muted mt-0.5">{t('merchant_admin_menu_desc')}</p>
-                </div>
-                <Icons.ChevronRight size={18} className="uv-text-muted" />
-              </button>
-
-              <button
-                onClick={() => onOpenAdminUsers?.()}
-                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-              >
-                <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mr-3">
-                  <Icons.Lock size={18} className="text-amber-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold uv-text-primary text-sm">{t('admin_users_menu')}</p>
-                  <p className="text-xs uv-text-muted mt-0.5">{t('admin_users_menu_desc')}</p>
-                </div>
-                <Icons.ChevronRight size={18} className="uv-text-muted" />
-              </button>
-
-              <button
-                onClick={() => onOpenAdminDisputas?.()}
-                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-              >
-                <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center mr-3">
-                  <Icons.Shield size={18} className="text-violet-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold uv-text-primary text-sm">{t('admin_disputes_menu')}</p>
-                  <p className="text-xs uv-text-muted mt-0.5">{t('admin_disputes_menu_desc')}</p>
-                </div>
-                <Icons.ChevronRight size={18} className="uv-text-muted" />
-              </button>
-
-              <button
-                onClick={() => onOpenAdminPromociones?.()}
-                className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-              >
-                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mr-3">
-                  <Icons.Gift size={18} className="text-emerald-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold uv-text-primary text-sm">{t('admin_promo_menu')}</p>
-                  <p className="text-xs uv-text-muted mt-0.5">{t('admin_promo_menu_desc')}</p>
-                </div>
-                <Icons.ChevronRight size={18} className="uv-text-muted" />
-              </button>
-            </>
-          )}
         </div>
       </div>
+
+      {/* Administration Section: solo para administradores, aparte de las herramientas del dueno de un negocio */}
+      {isAdmin && (
+        <div>
+          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+            {t('admin_section_title')}
+          </h3>
+          <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
+            <button
+              onClick={() => onOpenAdminMerchants?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Shield size={18} className="text-rose-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('merchant_admin_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('merchant_admin_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+
+            <button
+              onClick={() => onOpenAdminUsers?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Lock size={18} className="text-amber-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('admin_users_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('admin_users_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+
+            <button
+              onClick={() => onOpenAdminDisputas?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Shield size={18} className="text-violet-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('admin_disputes_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('admin_disputes_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+
+            <button
+              onClick={() => onOpenAdminPromociones?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Gift size={18} className="text-emerald-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('admin_promo_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('admin_promo_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Preferences Section */}
       <div>

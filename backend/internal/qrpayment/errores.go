@@ -110,6 +110,11 @@ var (
 
 	// ErrComercioNoEncontrado: no existe un comercio con ese id.
 	ErrComercioNoEncontrado = errors.New("merchant not found")
+
+	// ErrCategoriaInvalida: la categoria del comercio no es una de las que
+	// ofrece la app (CategoriasDeComercio). El handler responde 400
+	// INVALID_CATEGORY.
+	ErrCategoriaInvalida = errors.New("invalid merchant category")
 )
 
 // Errores del administrador que es dueno del comercio (PR 295 en adelante: una

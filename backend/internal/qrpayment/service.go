@@ -138,6 +138,9 @@ func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *Regi
 	if cedulaType != "fisica" && cedulaType != "juridica" {
 		return nil, fmt.Errorf("invalid cedula type")
 	}
+	if !categoriaDeComercioValida(req.Category) {
+		return nil, ErrCategoriaInvalida
+	}
 
 	// A user may run several businesses, so there is no "already registered"
 	// guard. The merchant starts pending until an admin verifies it.
@@ -729,6 +732,12 @@ func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string,
 	}
 	if req.LegalName == "" {
 		return nil, fmt.Errorf("legal name is required")
+	}
+	// Las filas anteriores a esta validacion pueden traer una categoria que la
+	// app no ofrece: su dueno las edita sin cambiarla. Lo que no se acepta es
+	// pasar a una categoria desconocida.
+	if req.Category != current.Category && !categoriaDeComercioValida(req.Category) {
+		return nil, ErrCategoriaInvalida
 	}
 	cedulaType := req.CedulaType
 	if cedulaType == "" {

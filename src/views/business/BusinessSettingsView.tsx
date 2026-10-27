@@ -11,14 +11,13 @@ import { BusinessCatalogSheet } from './BusinessCatalogSheet';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
+import { CATEGORIAS_DE_COMERCIO, categoriaDeComercio } from '@/utils/categoriaDeComercio';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
-
-const CATEGORIES = ['restaurant', 'retail', 'services', 'food_truck', 'market'] as const;
 
 const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="flex justify-between gap-3 px-4 py-3">
@@ -38,7 +37,13 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
   const { t, language } = useLanguage();
   const { state } = useApp();
   const ccy = (state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0])?.ccy ?? 'CRC';
-  const cat = t(`merchant_cat_${merchant.category}` as Parameters<typeof t>[0]);
+  const cat = categoriaDeComercio(t, merchant.category);
+  // Un comercio anterior a la validacion puede tener una categoria que la app ya
+  // no ofrece. Se conserva como opcion del selector: sin ella el selector
+  // mostraba otra categoria mientras el formulario seguia mandando la vieja.
+  const categoriasDelSelector: readonly string[] = (CATEGORIAS_DE_COMERCIO as readonly string[]).includes(merchant.category)
+    ? CATEGORIAS_DE_COMERCIO
+    : [merchant.category, ...CATEGORIAS_DE_COMERCIO];
   // What this screen offers depends on the caller's role: the owner manages
   // everything; a manager runs locations/catalog; a cashier only reads.
   const isOwner = merchant.role === 'owner';
@@ -367,8 +372,8 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           <div>
             <label className={label}>{t('merchant_category')}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>{t(`merchant_cat_${c}` as Parameters<typeof t>[0])}</option>
+              {categoriasDelSelector.map((c) => (
+                <option key={c} value={c}>{categoriaDeComercio(t, c)}</option>
               ))}
             </select>
           </div>
