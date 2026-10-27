@@ -781,3 +781,71 @@ func TestSimbolosSoportados_OrdenadosYCompletos(t *testing.T) {
 		}
 	}
 }
+
+// MATIC migro 1:1 a POL en 2024 y CoinGecko dejo de cotizar el id viejo
+// ("matic-network", hoy "MATIC (migrated to POL)"): su precio quedo congelado
+// el 2026-02-03 en 0.126 mientras POL valia 0.091, y la app lo ofrecia para
+// comprar y vender a ese precio. El simbolo de la app sigue siendo MATIC (los
+// saldos guardados lo usan), pero se cotiza con el id de POL.
+func TestPriceService_MATICSeCotizaComoPOL(t *testing.T) {
+	var pedidos string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pedidos = r.URL.Query().Get("ids")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"polygon-ecosystem-token","current_price":0.0911}]`))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+
+	prices, err := ps.GetPrices(context.Background(), []string{"MATIC"})
+	if err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	if pedidos != "polygon-ecosystem-token" {
+		t.Errorf("para MATIC se pidio ids=%q; se esperaba polygon-ecosystem-token", pedidos)
+	}
+	if p, ok := prices["MATIC"]; !ok || p.Price != 0.0911 {
+		t.Errorf("MATIC = %+v; se esperaba el precio de POL, 0.0911", prices["MATIC"])
+	}
+}
+
+// Un precio que la fuente dejo de actualizar no se usa: no se muestra ni se
+// opera con el. El sello del cache es la hora de la consulta, y por eso no
+// alcanzaba para verlo: CoinGecko seguia devolviendo el precio congelado de
+// MATIC en cada respuesta, y la app lo daba por fresco. Un id que la fuente
+// actualizo hace minutos pasa igual que siempre, y uno sin last_updated
+// tambien (no hay con que juzgarlo).
+func TestPriceService_PrecioQueLaFuenteDejoDeActualizarNoSeUsa(t *testing.T) {
+	ahora := time.Now().UTC()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `[
+			{"id":"bitcoin","current_price":80000,"last_updated":%q},
+			{"id":"ethereum","current_price":2300,"last_updated":"2026-02-03T01:57:00.000Z"},
+			{"id":"solana","current_price":100}
+		]`, ahora.Add(-3*time.Minute).Format(time.RFC3339))
+	}))
+	defer srv.Close()
+
+	ps := NewPriceService()
+	ps.SetBaseURL(srv.URL)
+
+	prices, err := ps.GetPrices(context.Background(), []string{"BTC", "ETH", "SOL"})
+	if err != nil {
+		t.Fatalf("GetPrices: %v", err)
+	}
+	if _, ok := prices["ETH"]; ok {
+		t.Errorf("ETH con last_updated de febrero llego como precio: %+v", prices["ETH"])
+	}
+	if _, err := ps.GetPrice(context.Background(), "ETH"); err == nil {
+		t.Error("GetPrice(ETH) dio un precio que la fuente no actualiza desde febrero; se esperaba error")
+	}
+	if p, ok := prices["BTC"]; !ok || p.Price != 80000 {
+		t.Errorf("BTC actualizado hace 3 minutos = %+v; se esperaba 80000", prices["BTC"])
+	}
+	if p, ok := prices["SOL"]; !ok || p.Price != 100 {
+		t.Errorf("SOL sin last_updated = %+v; se esperaba 100", prices["SOL"])
+	}
+}

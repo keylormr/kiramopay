@@ -32,6 +32,14 @@ const (
 	edadMaximaMinima = 30 * time.Second
 )
 
+// antiguedadMaximaEnLaFuente: un precio que la FUENTE no actualiza hace mas de
+// esto se descarta. Es otra cosa que la edad maxima de arriba, que mide cuanto
+// lleva en el cache: CoinGecko sigue devolviendo en cada respuesta el ultimo
+// precio de un id que dejo de cotizar (paso con MATIC, congelado desde febrero
+// de 2026), y para el cache ese precio era fresco. Holgada a proposito: un id
+// poco movido puede tardar en actualizarse, y aqui solo se busca el muerto.
+const antiguedadMaximaEnLaFuente = 6 * time.Hour
+
 // ErrPrecioViejo: hay un precio en cache pero lleva demasiado sin refrescarse.
 //
 // GetPrices degrada al cache y NO devuelve error cuando el proveedor falla
@@ -137,7 +145,9 @@ var coinGeckoIDs = map[string]string{
 	"DOT":   "polkadot",
 	"AVAX":  "avalanche-2",
 	"LINK":  "chainlink",
-	"MATIC": "matic-network",
+	// MATIC migro 1:1 a POL y CoinGecko congelo "matic-network" en febrero de
+	// 2026. El simbolo de la app sigue siendo MATIC: los saldos lo usan.
+	"MATIC": "polygon-ecosystem-token",
 	"UNI":   "uniswap",
 	"ATOM":  "cosmos",
 }
@@ -283,6 +293,7 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 		High24h                  float64 `json:"high_24h"`
 		Low24h                   float64 `json:"low_24h"`
 		PriceChangePercentage24h float64 `json:"price_change_percentage_24h"`
+		LastUpdated              string  `json:"last_updated"`
 		SparklineIn7d            struct {
 			Price []float64 `json:"price"`
 		} `json:"sparkline_in_7d"`
@@ -305,6 +316,17 @@ func (ps *PriceService) fetchFromAPI(ctx context.Context, symbols []string) (map
 			// Un id que el catalogo no pidio (o que CoinGecko devolviera mal
 			// formado): no hay a que simbolo asignarlo, se descarta en vez de
 			// adivinar.
+			continue
+		}
+		// Un precio que la fuente dejo de actualizar no se muestra ni se opera:
+		// se saca tambien del cache, que si no lo seguiria sirviendo. Sin
+		// last_updated no hay con que juzgarlo y pasa como siempre.
+		if enLaFuente, err := time.Parse(time.RFC3339, item.LastUpdated); err == nil &&
+			ahora.Sub(enLaFuente) > antiguedadMaximaEnLaFuente {
+			slog.Warn("price fetch: la fuente dejo de actualizar el precio, se descarta",
+				"symbol", symbol, "id", item.ID, "last_updated", item.LastUpdated)
+			delete(ps.cache, symbol)
+			delete(ps.cachedAt, symbol)
 			continue
 		}
 		pd := &PriceData{
