@@ -595,6 +595,8 @@ export type TranslationKeys = {
   crypto_already_done_updating: string;
   crypto_already_done_stale: string;
   crypto_sparkline_sin_datos: string;
+  crypto_since_purchase: string;
+  crypto_change_24h: string;
   crypto_price_stale: string;
   crypto_err_insufficient_asset: string;
   crypto_err_insufficient_funds: string;
@@ -1231,6 +1233,7 @@ export type TranslationKeys = {
   home_spent_month: string;
   home_spent_failed: string;
   home_vs_last_month: string;
+  balance_usd_estimate: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;
   qr_mi_codigo: string;

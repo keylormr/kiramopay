@@ -20,6 +20,9 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
 import { mensajeDeRechazo } from '../../i18n/mensajesDeError';
 import { Capacitor } from '@capacitor/core';
+import { useGastoDelMes } from '@/views/home/useGastoDelMes';
+import { saldoTotal, formatearSaldoTotal, SALDO_SIN_DATO } from '@/utils/saldoTotal';
+import { formatearTelefonoCR } from '@/utils/telefono';
 
 // Cada rechazo de cambiar la contrasena con su texto. Todo decia "Contraseña
 // incorrecta", tambien cuando la actual era correcta y el problema era otro.
@@ -64,6 +67,9 @@ interface ProfileViewProps {
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
   const { state, dispatch } = useApp();
+  // El gasto del mes del encabezado es el MISMO de la tarjeta de Inicio y de la
+  // pantalla de analisis: resumen del servidor, dias civiles de Costa Rica.
+  const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
   // Admin entry is gated by a server-side probe: the role lives only on the
   // backend (no role is exposed to the client), so we surface the menu item only
@@ -334,10 +340,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   const dailyLimit = limits ? formatCurrency(limits.daily) : SIN_DATO;
   const monthlyLimit = limits ? formatCurrency(limits.monthly) : SIN_DATO;
 
-  const totalBalance = state.accounts.reduce((acc, curr) => {
-    const rate = curr.rateToUsd || 1;
-    return acc + (curr.balance * rate);
-  }, 0);
+  // El mismo saldo total de la tarjeta de Inicio: todas las cuentas en la
+  // moneda base. Sin tasa para alguna cuenta no hay total (antes se contaba
+  // como 1 y los colones valian dolares).
+  const monedaBase = state.baseCurrency || 'CRC';
+  const totalBalance = saldoTotal(state.accounts, monedaBase).enBase;
 
   const kycLevelText: Record<number, string> = {
     0: t('kyc_basic'),
@@ -361,7 +368,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <h2 className="text-xl font-black truncate tracking-tight">
               {state.user?.firstName} {state.user?.lastName}
             </h2>
-            <p className="text-white/70 text-sm">{state.user?.phone}</p>
+            <p className="text-white/70 text-sm">{state.user?.phone ? formatearTelefonoCR(state.user.phone) : null}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/15 backdrop-blur-sm border border-white/20">
                 KYC {kycLevelText[state.user?.kycLevel || 0]}
@@ -381,14 +388,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('total_balance')}</p>
             <p className="text-lg font-black tabular-nums">
-              ~${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatearSaldoTotal(totalBalance, monedaBase)}
             </p>
           </div>
-          <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('this_month')}</p>
-            <p className="text-lg font-black">
-              {state.transactions.filter(tx => tx.type === 'debit').length} {t('expenses')}
-            </p>
+          <div
+            className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3"
+            aria-busy={gastoMes.estado === 'cargando'}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('home_spent_month')}</p>
+            {/* Mientras llega el resumen no hay cifra, y sin servidor ni nada
+                guardado tampoco: un cero ahi se leeria como "no gastaste nada". */}
+            {gastoMes.estado === 'cargando' ? (
+              <div className="h-7 w-24 rounded-lg bg-white/15 animate-pulse" aria-hidden="true" />
+            ) : gastoMes.estado === 'sin_datos' ? (
+              <p className="text-lg font-black">{SALDO_SIN_DATO}</p>
+            ) : (
+              <p className="text-lg font-black tabular-nums">
+                {formatearSaldoTotal(gastoMes.gastado, gastoMes.moneda)}
+              </p>
+            )}
+            {gastoMes.estado === 'respaldo' && (
+              <p className="mt-1 text-[10px] leading-snug text-white/70">{t('analytics_offline')}</p>
+            )}
           </div>
         </div>
       </div>
@@ -1311,7 +1332,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             { label: t('first_name'), value: state.user?.firstName },
             { label: t('last_name'), value: state.user?.lastName },
             { label: t('cedula'), value: state.user?.cedula },
-            { label: t('phone'), value: state.user?.phone },
+            { label: t('phone'), value: state.user?.phone ? formatearTelefonoCR(state.user.phone) : undefined },
           ].map((row) => (
             <div key={row.label} className="flex justify-between items-center uv-surface-2 rounded-xl px-4 py-3">
               <span className="uv-text-muted text-sm">{row.label}</span>

@@ -31,6 +31,7 @@ import {
   minutosParaVencer,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
+import { saldoTotal, formatearSaldoTotal } from '@/utils/saldoTotal';
 import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
@@ -170,10 +171,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       rateToUsd: state.baseCurrency === 'USD' ? 1 : undefined,
     };
   
-  const totalUsdEstimate = state.accounts.reduce((acc, curr) => {
-    const rate = curr.rateToUsd || 1;
-    return acc + (curr.balance * rate);
-  }, 0);
+  // El saldo total de la tarjeta principal: todas las cuentas en moneda,
+  // llevadas a la moneda base con la tasa de cada una (utils/saldoTotal, el
+  // mismo calculo del Perfil). Una tasa faltante deja el total sin dato; antes
+  // se contaba como 1 y los colones valian dolares.
+  const monedaDelSaldo = state.baseCurrency || 'CRC';
+  const totales = saldoTotal(state.accounts, monedaDelSaldo);
 
 
   // Contacto ya guardado bajo ese numero, si lo hay. Mismo criterio que
@@ -538,10 +541,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           </div>
         </div>
         <div className="relative text-[2.5rem] leading-tight font-black tracking-tight mb-1 tabular-nums">
-          {formatCurrency(baseAccount.balance, baseAccount.ccy)}
+          {formatearSaldoTotal(totales.enBase, monedaDelSaldo)}
         </div>
+        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea se
+            va en vez de mostrar una cifra inventada. */}
         <div className="relative text-sm text-white/70 mb-6 tabular-nums">
-          ≈ ${totalUsdEstimate.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} USD Total
+          {totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
         </div>
 
         <div className="relative flex gap-2.5">

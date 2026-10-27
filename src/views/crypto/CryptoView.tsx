@@ -84,9 +84,15 @@ const formatLargeNumber = (value: number | string | undefined | null): string =>
 // ninguna de las dos cosas es cierta. Se usa el mismo "—" que el resto de
 // esta pantalla ya usa para un dato que no llego (ver SIN_DATO), del mismo
 // tamano que el grafico real para que la fila no salte de layout.
-const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolean; sinDatosLabel: string }> = ({ data, positive, sinDatosLabel }) => {
+//
+// El color es la tendencia de LO QUE DIBUJA (ultimo punto contra el primero de
+// la serie), no el cambio de 24 h ni la ganancia desde la compra: la curva
+// cubre siete dias, y pintarla segun otra cifra dejaba lineas verdes que caian
+// y rojas que subian junto a un porcentaje de otro periodo.
+const SparklineChart: React.FC<{ data: number[]; color: string; sinDatosLabel: string }> = ({ data, sinDatosLabel }) => {
   // Need at least 2 valid numbers to draw a line
   const validData = Array.isArray(data) ? data.filter(d => typeof d === 'number' && !isNaN(d)) : [];
+  const positive = validData.length >= 2 && validData[validData.length - 1] >= validData[0];
   const tono = positive ? '#10B981' : '#EF4444';
 
   if (validData.length < 2) {
@@ -122,7 +128,7 @@ const SparklineChart: React.FC<{ data: number[]; color: string; positive: boolea
   const gradId = `spark-${positive ? 'up' : 'down'}`;
 
   return (
-    // Decorativo: el cambio de 24h ya se lee en texto junto a la fila: la
+    // Decorativo: los porcentajes ya se leen en texto junto a la fila: la
     // curva no le agrega informacion a quien usa lector de pantalla.
     <svg width={width} height={height} className="overflow-visible shrink-0" aria-hidden="true">
       <defs>
@@ -1026,6 +1032,11 @@ export const CryptoView: React.FC = () => {
             <div className={`px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-white/15 border-white/25 text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
               {sinPrecios ? SIN_DATO : `${totalProfitLoss >= 0 ? '+' : ''}${formatUsd(totalProfitLoss)} (${totalProfitLossPercent.toFixed(2)}%)`}
             </div>
+            {/* La ganancia o perdida de la pastilla es contra lo que se pago al
+                comprar; sin precios no hay cifra y tampoco rotulo. */}
+            {!sinPrecios && (
+              <p className="text-[10px] text-white/70 mt-1">{t('crypto_since_purchase')}</p>
+            )}
             {lastUpdated && (
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
@@ -1132,14 +1143,20 @@ export const CryptoView: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                        {/* Ganancia o perdida desde la compra, no el cambio de
+                            24 h ni la tendencia de la curva: se rotula para
+                            que no se lean como la misma cifra. */}
                         {asset.currentPrice > 0 && asset.avgBuyPrice > 0 && (
-                          <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
+                          <span className="flex flex-col items-end leading-tight">
+                            <span className={`text-sm font-medium ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                              {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
+                            </span>
+                            <span className="text-[10px] uv-text-muted">{t('crypto_since_purchase')}</span>
                           </span>
                         )}
                       </div>
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </button>
                 );
               })}
@@ -1264,8 +1281,13 @@ export const CryptoView: React.FC = () => {
                           {asset.currentPrice > 0 && <> · ≈ {crcDesdeUsd(asset.currentPrice)}</>}
                         </span>
                         {asset.currentPrice > 0 && (
-                          <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
+                          <span className="flex flex-col items-end leading-tight">
+                            <span className={`text-sm font-medium ${asset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                              {asset.priceChange24h >= 0 ? '+' : ''}{asset.priceChange24h.toFixed(2)}%
+                            </span>
+                            {/* La curva de al lado dibuja siete dias y tiene su
+                                propio color: este es solo el cambio del dia. */}
+                            <span className="text-[10px] uv-text-muted">{t('crypto_change_24h')}</span>
                           </span>
                         )}
                       </div>
@@ -1276,7 +1298,7 @@ export const CryptoView: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <SparklineChart data={asset.priceHistory} color={asset.color} positive={asset.priceChange24h >= 0} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
+                    <SparklineChart data={asset.priceHistory} color={asset.color} sinDatosLabel={t('crypto_sparkline_sin_datos')} />
                   </div>
                 </button>
               );

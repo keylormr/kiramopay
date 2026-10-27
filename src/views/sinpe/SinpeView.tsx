@@ -700,7 +700,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                           <Icons.Star size={13} className="text-[var(--color-accent)] fill-[var(--color-accent)] shrink-0" />
                         )}
                       </div>
-                      <div className="text-xs uv-text-muted">{contact.phone}</div>
+                      <div className="text-xs uv-text-muted">{formatearTelefonoCR(contact.phone)}</div>
                     </div>
                     <span className="text-[11px] font-semibold bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] px-2 py-1 rounded-md uv-text-secondary ml-2 shrink-0">
                       {contact.bank || t('unknown_bank')}
@@ -881,7 +881,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               </div>
               <div className="min-w-0">
                 <p className="font-bold uv-text-primary truncate">{duplicateContact.name}</p>
-                <p className="text-sm uv-text-muted tabular-nums">{duplicateContact.phone}</p>
+                <p className="text-sm uv-text-muted tabular-nums">{formatearTelefonoCR(duplicateContact.phone)}</p>
               </div>
             </div>
             <div className="flex gap-2.5">
@@ -1102,7 +1102,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 </div>
                 <div className="flex-1">
                   <div className="font-bold uv-text-primary">{selectedContact.name}</div>
-                  <div className="text-sm text-gray-500">{selectedContact.phone}</div>
+                  <div className="text-sm text-gray-500">{formatearTelefonoCR(selectedContact.phone)}</div>
                 </div>
                 <button
                   onClick={() => { setSelectedContact(null); setPhone(''); }}
