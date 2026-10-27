@@ -194,7 +194,8 @@ describe('HomeView', () => {
   it('should show the USD total estimate', () => {
     renderHomeView();
     // totalUsdEstimate = 850000 * 0.0019 + 1250.50 * 1 = 1615 + 1250.50 = 2865.50
-    expect(screen.getByText(/USD Total/)).toBeInTheDocument();
+    // Traducido y con el formato de montos de la app (antes: "USD Total" fijo).
+    expect(screen.getByText('≈ $2,865.50 USD en total')).toBeInTheDocument();
   });
 
   it('should render the Add New button in accounts list', () => {
