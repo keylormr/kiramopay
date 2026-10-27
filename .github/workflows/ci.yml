@@ -211,7 +211,10 @@ jobs:
           TEST_REDIS_ADDR: localhost:6379
         # -p 1: integration tests share one Postgres with fixed seed IDs, so
         # packages must run serially (parallel packages race on the same rows).
-        run: go test ./internal/... -p 1 -count=1 -timeout=300s
+        # -timeout is per package: qrpayment hit 300s on a slow runner (2026-10-27,
+        # 187s on a normal one) and accountdeletion reached 278s, so 300s failed
+        # good changes. A hung test still fails, at 600s.
+        run: go test ./internal/... -p 1 -count=1 -timeout=600s
 
       # Gate the real deploy migration path: apply the full chain (RunMigrations)
       # against a fresh DB, exactly as the API does on boot with RUN_MIGRATIONS=true.
