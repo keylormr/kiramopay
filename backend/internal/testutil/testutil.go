@@ -217,7 +217,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		CONSTRAINT chk_users_not_self_referred CHECK (referred_by IS NULL OR referred_by <> id),
 		CONSTRAINT chk_users_plan CHECK (plan IN ('free', 'plus', 'pro')),
 		CONSTRAINT chk_users_username_formato CHECK (username IS NULL OR username ~ '^[a-z][a-z0-9._-]{2,19}$'),
-		CONSTRAINT chk_users_demo_login_no_admin CHECK (NOT (demo_login AND role = 'admin'))
+		CONSTRAINT chk_users_demo_login_no_admin CHECK (NOT (demo_login AND role = 'admin') OR COALESCE(username, '') = 'keilor')
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username ON users (username) WHERE username IS NOT NULL;
 	-- A persisted local test DB predates the columns above (CREATE TABLE IF NOT
@@ -226,6 +226,12 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(10) NOT NULL DEFAULT 'free';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS demo_login BOOLEAN NOT NULL DEFAULT false;
+	-- El CHECK de la 084: ningun administrador entra sin contrasena, salvo
+	-- keilor. Se rehace en cada arranque porque la prueba de la bajada de la 084
+	-- lo deja como el de la 058, y una base persistida trae el viejo.
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_demo_login_no_admin;
+	ALTER TABLE users ADD CONSTRAINT chk_users_demo_login_no_admin
+		CHECK (NOT (demo_login AND role = 'admin') OR COALESCE(username, '') = 'keilor');
 	-- Igual que la 074: el idioma de la cuenta, con el que se escriben sus avisos.
 	-- NULL es "no eligio" (los avisos salen en espanol). Los dos ALTER COLUMN
 	-- dejan igual una base de pruebas creada con la version anterior.
