@@ -34,9 +34,9 @@ type TestUser struct {
 	DemoLogin bool
 	// Role es el rol con el que nace la cuenta ("" = user). Por la misma razon
 	// que Username: la 026 (admin.kp) y la 082 (keilor) dan el rol a cuentas que
-	// YA EXISTEN, y en una base nueva el sembrador corre despues. Un
-	// administrador nunca es cuenta de demostracion: lo prohibe el CHECK
-	// chk_users_demo_login_no_admin.
+	// YA EXISTEN, y en una base nueva el sembrador corre despues. Ningun
+	// administrador es cuenta de demostracion salvo keilor (084, decision del
+	// dueno): lo prohibe el CHECK chk_users_demo_login_no_admin.
 	Role string
 }
 
@@ -45,7 +45,7 @@ var DefaultTestUsers = []TestUser{
 		ID:         "a0000000-0000-0000-0000-000000000001",
 		Cedula:     "702650930",
 		Username:   "keilor",
-		DemoLogin:  false, // administra desde la 082: entra con contrasena
+		DemoLogin:  true, // administra (082) y entra sin contrasena (084)
 		Role:       "admin",
 		Phone:      "+50688880001",
 		FirstName:  "Keilor",
@@ -126,7 +126,8 @@ var DefaultTestUsers = []TestUser{
 // skipped. This guarantees the repository never ships usable production
 // credentials (the cedula 700000000 and 702650930 accounts are administrators,
 // by migrations 026 and 082 and by Role here, so a known password there is a
-// full admin takeover).
+// full admin takeover). Note that 702650930 (keilor) also opens WITHOUT a
+// password while DEMO_LOGIN_ENABLED is on (migration 084, owner's decision).
 func SeedDevelopment(ctx context.Context, pool *pgxpool.Pool, devMode bool) error {
 	for _, u := range DefaultTestUsers {
 		// Check if user already exists
