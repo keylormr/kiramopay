@@ -35,6 +35,9 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 
 	merchant, err := h.service.RegisterMerchant(r.Context(), userID, &req)
 	if err != nil {
+		if responderSiCategoriaInvalida(w, err) {
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "REGISTER_FAILED", err.Error())
 		return
 	}
@@ -53,7 +56,7 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		if responderSiCerro(w, err) {
+		if responderSiCerro(w, err) || responderSiCategoriaInvalida(w, err) {
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
@@ -144,6 +147,18 @@ func responderSiCerro(w http.ResponseWriter, err error) bool {
 		return false
 	}
 	response.Error(w, http.StatusConflict, "MERCHANT_CLOSED", ErrComercioCerrado.Error())
+	return true
+}
+
+// responderSiCategoriaInvalida responde 400 INVALID_CATEGORY cuando la categoria
+// del comercio no es una de CategoriasDeComercio, y dice si lo hizo. Lo usan el
+// registro y la edicion: el texto de la pantalla lo escribe el cliente a partir
+// del codigo.
+func responderSiCategoriaInvalida(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrCategoriaInvalida) {
+		return false
+	}
+	response.Error(w, http.StatusBadRequest, "INVALID_CATEGORY", ErrCategoriaInvalida.Error())
 	return true
 }
 

@@ -5,8 +5,7 @@ import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
-
-const CATEGORIES = ['restaurant', 'retail', 'services', 'food_truck', 'market'] as const;
+import { CATEGORIAS_DE_COMERCIO as CATEGORIES, categoriaDeComercio } from '@/utils/categoriaDeComercio';
 
 interface Props {
   isOpen: boolean;
@@ -36,7 +35,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
   const [looking, setLooking] = useState(false);
   const [lookupState, setLookupState] = useState<'idle' | 'found' | 'not_found'>('idle');
 
-  const cat = (c: string) => t(`merchant_cat_${c}` as Parameters<typeof t>[0]);
+  const cat = (c: string) => categoriaDeComercio(t, c);
 
   const reset = () => {
     setStep(0); setCedulaType('fisica'); setName(''); setCategory(CATEGORIES[0]);

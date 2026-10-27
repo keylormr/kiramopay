@@ -56,7 +56,7 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
     const res = await this.client.get<Array<{
       id: string; name: string; description: string; category: string;
       points_cost: number; image_url: string; partner_code: string;
-      stock: number; cashback_minor?: number;
+      stock: number; cashback_minor?: number; redeemable_now?: boolean;
     }>>('/api/v1/loyalty/rewards');
 
     if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
@@ -71,6 +71,8 @@ export class HttpLoyaltyRepository implements ILoyaltyRepository {
       partnerCode: r.partner_code || undefined,
       stock: r.stock,
       cashbackMinor: r.cashback_minor || undefined,
+      // Solo un booleano de verdad cuenta: otra cosa es "el servidor no lo dijo".
+      redeemableNow: typeof r.redeemable_now === 'boolean' ? r.redeemable_now : undefined,
     })));
   }
 

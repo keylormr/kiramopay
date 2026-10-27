@@ -8,6 +8,7 @@ import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
 import type { PlanComercio } from '@/api/repositories/plans.repository';
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
+import { categoriaDeComercio } from '@/utils/categoriaDeComercio';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 
 type Pestana = 'pending' | 'all' | 'plan';
@@ -76,7 +77,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
   const [rechazoCierre, setRechazoCierre] = useState<RechazoDelCierre | null>(null);
   const [cerradoAhora, setCerradoAhora] = useState<string | null>(null);
 
-  const cat = (c: string) => t(`merchant_cat_${c}` as Parameters<typeof t>[0]);
+  const cat = (c: string) => categoriaDeComercio(t, c);
 
   useEffect(() => {
     let cancelled = false;

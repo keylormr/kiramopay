@@ -3,6 +3,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
+import { useAuthStore } from '@/stores/auth.store';
 import type { EscrowAgreement, AdminUser } from '@/api';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { fechaYHora } from '@/utils/fechaPlazo';
@@ -19,6 +20,7 @@ type Veredicto = 'released' | 'refunded';
 
 export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t, language } = useLanguage();
+  const miId = useAuthStore((s) => s.user?.id);
   const [casos, setCasos] = useState<EscrowAgreement[]>([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -72,6 +74,12 @@ export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }
     const completo = `${p.firstName} ${p.lastName}`.trim();
     return p.phoneMasked ? `${completo} · ${p.phoneMasked}` : completo;
   };
+
+  // El administrador que es comprador o vendedor del acuerdo no lo arbitra: lo
+  // resuelve otro. El servidor lo rechaza (ADMIN_IS_AFFECTED_PARTY) pero recien
+  // despues de confirmar, asi que se dice de entrada y no se ofrecen los botones
+  // de un veredicto que no puede dar.
+  const esParte = (a: EscrowAgreement) => !!miId && (a.buyerId === miId || a.sellerId === miId);
 
   const monto = (a: EscrowAgreement) => formatMoney(a.amountMinor / 100, a.currency as CurrencyCode, { decimals: 2 });
 
@@ -127,7 +135,7 @@ export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }
         ) : (
           <div className="px-4 py-4 space-y-3">
             <p className="text-xs font-semibold uv-text-muted uppercase tracking-wider">
-              {t('admin_disputes_total').replace('{n}', String(total))}
+              {t(total === 1 ? 'admin_disputes_total_one' : 'admin_disputes_total').replace('{n}', String(total))}
             </p>
             {casos.map((a) => (
               <div key={a.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
@@ -161,20 +169,24 @@ export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }
                     {t('admin_disputes_delivered').replace('{fecha}', fechaYHora(a.deliveredAt, language))}
                   </p>
                 )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setErrorResolver(''); setConfirmando({ caso: a, veredicto: 'refunded' }); }}
-                    className="flex-1 border border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-primary py-2.5 rounded-xl font-bold text-sm"
-                  >
-                    {t('admin_disputes_to_buyer')}
-                  </button>
-                  <button
-                    onClick={() => { setErrorResolver(''); setConfirmando({ caso: a, veredicto: 'released' }); }}
-                    className="flex-1 border border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-primary py-2.5 rounded-xl font-bold text-sm"
-                  >
-                    {t('admin_disputes_to_seller')}
-                  </button>
-                </div>
+                {esParte(a) ? (
+                  <p className="uv-surface-2 rounded-xl p-3 text-sm uv-text-primary">{t('admin_disputes_err_party')}</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setErrorResolver(''); setConfirmando({ caso: a, veredicto: 'refunded' }); }}
+                      className="flex-1 border border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-primary py-2.5 rounded-xl font-bold text-sm"
+                    >
+                      {t('admin_disputes_to_buyer')}
+                    </button>
+                    <button
+                      onClick={() => { setErrorResolver(''); setConfirmando({ caso: a, veredicto: 'released' }); }}
+                      className="flex-1 border border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-primary py-2.5 rounded-xl font-bold text-sm"
+                    >
+                      {t('admin_disputes_to_seller')}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

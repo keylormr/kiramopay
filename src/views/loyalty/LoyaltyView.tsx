@@ -328,6 +328,9 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                     // deshabilitar por un 0 inventado seria decidir por el
                     // servidor. Se deja intentar y el servidor responde.
                     const canAfford = accountFailed || (account?.availablePoints || 0) >= reward.pointsCost;
+                    // El servidor dice si el fondo de promociones cubre el
+                    // premio. Sin ese dato (undefined) se deja intentar.
+                    const sinFondo = reward.redeemableNow === false;
                     return (
                       <div key={reward.id}
                         className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 shadow-sm animate-stagger"
@@ -346,15 +349,18 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                               <span className="text-sm font-extrabold text-[var(--color-primary)]">{formatPoints(reward.pointsCost)} pts</span>
                               <button
                                 onClick={() => handleRedeem(reward.id)}
-                                disabled={!canAfford || redeeming === reward.id}
+                                disabled={!canAfford || sinFondo || redeeming === reward.id}
                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
-                                  canAfford
+                                  canAfford && !sinFondo
                                     ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
                                     : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
                                 }`}>
                                 {redeeming === reward.id ? '...' : t('loyalty_redeem')}
                               </button>
                             </div>
+                            {sinFondo && (
+                              <p className="text-xs uv-text-muted mt-2">{t('loyalty_reward_unavailable')}</p>
+                            )}
                           </div>
                         </div>
                       </div>

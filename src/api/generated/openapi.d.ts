@@ -3324,7 +3324,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get available rewards catalog */
+        /**
+         * Get available rewards catalog
+         * @description Each reward carries `redeemable_now`: whether it can be redeemed right now, which needs a way to be delivered (`cashback_minor`), stock, and a promotions fund that covers it. It is a hint for the screen (so it does not offer a "Redeem" that always fails); the redeem call checks again and decides. The fund balance itself is never returned.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3540,7 +3543,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Register as QR merchant */
+        /**
+         * Register as QR merchant
+         * @description category must be one of restaurant, retail, services, food_truck or market, written exactly so; any other value (including an empty one) is rejected with INVALID_CATEGORY.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3556,6 +3562,15 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); REGISTER_FAILED (a required field is missing or invalid). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -3639,7 +3654,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a merchant (owner only)
-         * @description Replaces the business data. name, cedula and legal_name are required; a missing cedula_type keeps the current one. Changing the cedula or the legal name, or editing a rejected merchant, sends it back to pending review.
+         * @description Replaces the business data. name, cedula and legal_name are required; a missing cedula_type keeps the current one. Changing the cedula or the legal name, or editing a rejected merchant, sends it back to pending review. category must be one of restaurant, retail, services, food_truck or market; a merchant registered before that validation may keep the category it already has, but cannot move to another unknown one.
          */
         patch: {
             parameters: {
@@ -3665,7 +3680,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -10847,6 +10862,7 @@ export interface components {
         MerchantProfileRequest: {
             name: string;
             description?: string;
+            /** @description restaurant, retail, services, food_truck or market. Anything else is rejected with INVALID_CATEGORY, except an edit that keeps the category an older merchant already has. */
             category?: string;
             cedula: string;
             /** @enum {string} */

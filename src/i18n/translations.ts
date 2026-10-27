@@ -958,6 +958,7 @@ export type TranslationKeys = {
   // Cashback de puntos y fondo de promociones (migracion 066).
   loyalty_cashback_done: string;
   loyalty_sin_fondos: string;
+  loyalty_reward_unavailable: string;
   tx_title_loyalty_cashback: string;
   tx_title_crypto_buy: string;
   tx_title_crypto_sell: string;
@@ -1455,6 +1456,7 @@ export type TranslationKeys = {
   assistant_conv_limit: string;
   // Phase F — escrow + API keys + webhooks
   merchant_tools: string;
+  admin_section_title: string;
   escrow_menu: string;
   escrow_menu_desc: string;
   apikeys_menu: string;
@@ -1479,6 +1481,7 @@ export type TranslationKeys = {
   merchant_cat_services: string;
   merchant_cat_food_truck: string;
   merchant_cat_market: string;
+  merchant_cat_other: string;
   merchant_status_pending: string;
   merchant_status_verified: string;
   merchant_status_rejected: string;
@@ -1623,6 +1626,7 @@ export type TranslationKeys = {
   admin_disputes_title: string;
   admin_disputes_empty: string;
   admin_disputes_total: string;
+  admin_disputes_total_one: string;
   admin_disputes_opened: string;
   admin_disputes_delivered: string;
   admin_disputes_reason: string;

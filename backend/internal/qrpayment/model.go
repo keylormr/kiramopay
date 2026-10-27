@@ -4,6 +4,23 @@ import "time"
 
 // ── Merchant QR ──────────────────────────────────────────────────────────────
 
+// CategoriasDeComercio son las categorias que ofrece la app al registrar o
+// editar un comercio. Antes el servidor guardaba cualquier texto, y la pantalla
+// armaba la clave de traduccion con el ("merchant_cat_" + categoria): una
+// categoria que nadie tradujo se mostraba como la clave cruda.
+var CategoriasDeComercio = []string{"restaurant", "retail", "services", "food_truck", "market"}
+
+// categoriaDeComercioValida dice si c es una de CategoriasDeComercio, escrita
+// exactamente asi.
+func categoriaDeComercioValida(c string) bool {
+	for _, v := range CategoriasDeComercio {
+		if c == v {
+			return true
+		}
+	}
+	return false
+}
+
 type Merchant struct {
 	ID          string `json:"id"`
 	UserID      string `json:"user_id"`

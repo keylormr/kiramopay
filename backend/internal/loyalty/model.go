@@ -76,6 +76,13 @@ type Reward struct {
 	// CashbackMinor es lo que el premio acredita en la billetera. Cero quiere
 	// decir que no tiene como entregarse, y no se canjea.
 	CashbackMinor int64 `json:"cashback_minor,omitempty"`
+	// RedeemableNow dice si el premio se puede canjear AHORA: tiene como
+	// entregarse y el fondo de promociones alcanza para pagarlo. Se calcula al
+	// leer el catalogo y no se guarda. Es una pista para la pantalla (evita
+	// ofrecer un "Canjear" que siempre falla): el canje vuelve a comprobarlo,
+	// bajo bloqueo, y es el que decide. Del fondo solo sale este si o no, nunca
+	// su saldo.
+	RedeemableNow bool `json:"redeemable_now"`
 }
 
 // ── Redemption ───────────────────────────────────────────────────────────────
