@@ -232,12 +232,19 @@ export default {
     await f.paso('Casos límite por API: cantidad ínfima, par repetido y activo en minúsculas', async (c) => {
       // Defectos conocidos del servidor: una cantidad que vale menos de medio centavo termina en 500,
       // convertir un activo en si mismo se acepta, y un activo en minusculas se rechaza con un 503 de precio.
+      const eth0 = num((await activo(api.victor, 'ETH')).balance);
+      const saldo0 = await api.victor.saldo();
       const polvo = await api.victor.post('/crypto/send', { asset: 'ETH', amount: 0.00000001, qr_data: qrKeilor, idempotency_key: llave('polvo') });
       c.ok(polvo.status < 500, `enviar una cantidad que vale menos de medio centavo respondió ${polvo.resumen()} (se esperaba un rechazo 4xx claro, no un error del servidor)`);
+      // Aunque la respuesta sea mala, el rechazo no puede dejar plata movida.
+      c.cercano(num((await activo(api.victor, 'ETH')).balance), polvo.ok ? eth0 - 0.00000001 : eth0, 1e-12, 'ETH de victor tras el envío de la cantidad ínfima');
       const igual = await api.victor.post('/crypto/convert', { from_asset: 'ETH', to_asset: 'ETH', from_amount: 0.0001, idempotency_key: llave('convert') });
-      c.ok(!igual.ok, `convertir ETH a ETH debería rechazarse y respondió ${igual.resumen()}`);
+      c.ok(!igual.ok, `convertir ETH a ETH debería rechazarse y respondió ${igual.resumen()} (ETH de victor: ${num((await activo(api.victor, 'ETH')).balance)}, antes ${eth0})`);
       const minusculas = await api.victor.post('/crypto/buy', { asset: 'eth', from_currency: 'USD', from_amount: 1, idempotency_key: llave('buy') });
       c.ok(minusculas.ok || minusculas.status === 400, `comprar con el activo en minúsculas respondió ${minusculas.resumen()} (se esperaba aceptarlo o un 400 claro)`);
+      if (!minusculas.ok) c.igual((await api.victor.saldo()).usd, saldo0.usd, 'dólares de victor tras la compra rechazada');
+      const problemas = problemasDelLibro();
+      c.ok(problemas.length === 0, problemas.join(' | '));
     }, { seguir: true });
   },
 };
