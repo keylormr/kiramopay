@@ -5,6 +5,8 @@ import { CUENTAS, CORRIDA } from '../lib/entorno.mjs';
 import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, volver, reposar } from '../lib/ui.mjs';
 import { clientes, centimos } from '../lib/comun.mjs';
 import { peticion, esperarHasta } from '../lib/api.mjs';
+import { pausa } from '../lib/regulador.mjs';
+import * as bd from '../lib/bd.mjs';
 import { txt, escapar } from '../lib/textos.mjs';
 
 async function abrirPanel(sesion, fila) {
@@ -94,6 +96,16 @@ export default {
       c.igual(m?.verification_status, 'rejected', 'estado tras rechazar');
       c.igual(m?.rejection_reason, 'No cumple los requisitos de la prueba', 'motivo del rechazo');
     });
+
+    await f.paso('Aprobar y rechazar un comercio deja registro de auditoría', async (c) => {
+      // Defecto conocido: aprobar, rechazar y fijar la comision de un comercio no escriben en audit_logs
+      // (si lo hacen cerrar y cambiar el plan). La auditoria llega con hasta 2 s de atraso.
+      await pausa(3000);
+      for (const [accion, id] of [['aprobar', comercios.aprobado.id], ['rechazar', comercios.rechazado.id]]) {
+        const filas = bd.consultar(`SELECT action FROM audit_logs WHERE resource_id = '${id}' OR details::text LIKE '%${id}%'`);
+        c.ok(filas.length > 0, `${accion} un comercio no dejó ninguna fila en audit_logs (comercio ${id})`);
+      }
+    }, { seguir: true });
 
     await f.paso('Pestaña "Todos": busca el comercio aprobado y lo cierra con un motivo', async (c) => {
       await keilor.page.getByRole('tab', { name: txt('Todos'), exact: true }).click();

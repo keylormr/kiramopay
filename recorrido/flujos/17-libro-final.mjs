@@ -45,6 +45,15 @@ export default {
       }
     });
 
+    await f.paso('El historial acepta pedir más movimientos que el tope sin volver a 20', async (c) => {
+      // Defecto conocido: un "limit" mayor que el tope (100) vuelve al valor por defecto (20).
+      const victor = await clientes('victor');
+      const cien = (await victor.victor.exigir('GET', '/transactions?limit=100')).data.transactions ?? [];
+      const quinientos = (await victor.victor.exigir('GET', '/transactions?limit=500')).data.transactions ?? [];
+      c.ok(cien.length > 20, `victor debería tener más de 20 movimientos al final del recorrido: ${cien.length}`);
+      c.ok(quinientos.length >= cien.length, `pedir limit=500 devolvió ${quinientos.length} movimientos y limit=100 devolvió ${cien.length}: el tope debería recortar a 100, no volver a 20`);
+    }, { seguir: true });
+
     await f.paso('Ningún flujo provocó un error 5xx del servidor', async (c) => {
       const errores = [];
       for (const fl of ctx.informe.flujos) {

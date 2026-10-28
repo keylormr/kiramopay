@@ -1,7 +1,7 @@
 // Retiro por el riel simulado ("Pagos salientes"). El riel de prueba decide el
 // resultado por el prefijo de la cuenta de destino: cualquier cuenta normal se
 // completa; "fail..." es rechazada por el riel y el servidor devuelve el dinero.
-import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, reposar } from '../lib/ui.mjs';
+import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, reposar, volver } from '../lib/ui.mjs';
 import { clientes, centimos, problemasDelLibro } from '../lib/comun.mjs';
 import { reColones, txt, escapar } from '../lib/textos.mjs';
 import { llave, CUENTAS } from '../lib/entorno.mjs';
@@ -135,6 +135,16 @@ export default {
       c.respuesta(mfa, 428, 'pago de ₡100.000 sin segundo factor', 'MFA_REQUIRED');
       c.igual((await api.victor.saldo()).crc, antesSaldo - 100, 'el rechazo por segundo factor no debe mover plata');
     });
+
+    await f.paso('Al volver al inicio, los pagos salientes ya están en los movimientos (sin recargar)', async (c) => {
+      // Defecto conocido: Inicio no vuelve a pedir los movimientos tras un pago saliente.
+      await volver(victor.page);
+      const filas = victor.page.locator('[data-movimiento]');
+      await filas.first().waitFor({ state: 'visible', timeout: 15000 });
+      await filas.first().scrollIntoViewIfNeeded();
+      const textos = await filas.allInnerTexts();
+      c.ok(textos.some((t) => t.includes(`Repetido ${tag}`)), `el inicio no muestra el último pago saliente ("Repetido ${tag}") entre sus movimientos: ${JSON.stringify(textos)}`);
+    }, { seguir: true });
 
     await f.paso('El reembolso aparece como entrada (+) en los movimientos del inicio', async (c) => {
       // Defecto conocido: la pantalla clasifica payout_refund como salida y lo pinta sin "+".

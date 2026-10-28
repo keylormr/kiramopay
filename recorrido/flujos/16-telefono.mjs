@@ -25,6 +25,19 @@ async function aInicio(p) {
   await ir(p, txt('Inicio'));
 }
 
+/** Opacidad (0 a 1) de un color CSS tal como lo devuelve el navegador. */
+function alfaDe(color) {
+  if (!color || color === 'transparent') return 0;
+  const m = /^(?:rgba?|color)\(([^)]*)\)$/.exec(color.trim());
+  if (!m) return 1;
+  const partes = m[1].split(/[\s,/]+/).filter(Boolean);
+  if (color.trim().startsWith('color(')) {
+    const i = m[1].indexOf('/');
+    return i === -1 ? 1 : Number.parseFloat(m[1].slice(i + 1));
+  }
+  return partes.length >= 4 ? Number.parseFloat(partes[3]) : 1;
+}
+
 /** Falla si la pantalla actual se desborda en el telefono. */
 async function sinDesborde(p, donde = '') {
   await reposar(p, 600);
@@ -65,6 +78,19 @@ export default {
     await paso('Inicio', async () => {
       await aInicio(p);
       await sinDesborde(p);
+    });
+
+    await paso('La barra inferior tiene fondo propio y no deja ver lo que pasa por detrás', async () => {
+      await aInicio(p);
+      const fondo = await p.evaluate(() => {
+        const n = document.querySelector('nav[aria-label]');
+        return n ? getComputedStyle(n).backgroundColor : null;
+      });
+      if (fondo === null) throw new Error('no se encontró la barra inferior');
+      const alfa = alfaDe(fondo);
+      if (alfa < 0.9) {
+        throw new Error(`la barra inferior casi no tiene fondo (color ${fondo}, opacidad ${alfa}): el texto de la lista se transparenta detrás de sus etiquetas`);
+      }
     });
 
     await paso('Hoja de Enviar (acción rápida del inicio)', async () => {
