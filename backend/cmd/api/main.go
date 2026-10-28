@@ -1016,6 +1016,9 @@ func main() {
 
 			// Auth
 			r.Post("/auth/logout", authHandler.Logout)
+			// La persona acaba de actuar: lo unico que mantiene viva la sesion
+			// ante el cierre por inactividad (JWT_IDLE_MINUTES).
+			r.Post("/auth/activity", authHandler.RegistrarActividad)
 			// Los dispositivos con sesion abierta, y el poder de cerrarlos:
 			// uno solo, o todos los demas.
 			r.Get("/auth/sessions", authHandler.Sessions)

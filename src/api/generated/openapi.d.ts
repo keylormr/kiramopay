@@ -383,6 +383,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tell the server the person just did something
+         * @description The client calls this when the PERSON acts (a tap, a key press, the wheel), at most once a minute, and once when a session opens or is restored. It is the only thing that keeps a session alive against the idle timeout (`JWT_IDLE_MINUTES`, 30 by default), counted from the last action and not from the last token renewal. Background requests (price polling, order tracking, the notifications socket) and token refreshes are NOT actions, which is why activity is not inferred from the other routes: the same route is fetched by the person and by a timer. Past the window nothing is revived: the answer is 401 `SESSION_IDLE` and the client's refresh, which applies the same rule, ends the session. A session opened by a client that never calls this (an older app) is measured as before, from the token's issue time.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recorded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED (closed, or idle past the window) | SESSION_IDLE (idle past the window) */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description ACTIVITY_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-pin": {
         parameters: {
             query?: never;

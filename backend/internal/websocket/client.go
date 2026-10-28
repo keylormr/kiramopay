@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -131,9 +132,7 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				c.logger.Error("WebSocket read error", "error", err)
-			}
+			c.logReadEnd(err)
 			break
 		}
 
@@ -156,6 +155,49 @@ func (c *Client) readPump() {
 			authenticated = true
 		}
 	}
+}
+
+// readEndLevel decide con que nivel se registra el error que corto la lectura
+// de un socket. Un cierre del cliente no es una falla del servidor:
+//
+//   - 1000, 1001 y 1005: el cliente se despide (cierra la pestana, cambia de
+//     pantalla, o llama close() sin codigo, que el navegador manda como 1005).
+//     Es la vida normal de un socket: INFO.
+//   - 1006: la conexion murio sin despedida, lo de todos los dias con un
+//     telefono que pierde senal. Conviene que se vea, pero no es un error: WARN.
+//   - cualquier otro codigo (protocolo, datos invalidos, error interno del
+//     par) si lo es: ERROR.
+//   - lo que no es un cierre de WebSocket (vencio el pong, el socket ya estaba
+//     cerrado porque el servidor lo cerro): DEBUG. Antes no se registraba, y
+//     tampoco merece ruido en INFO.
+func readEndLevel(err error) slog.Level {
+	var closeErr *websocket.CloseError
+	if !errors.As(err, &closeErr) {
+		return slog.LevelDebug
+	}
+	switch closeErr.Code {
+	case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived:
+		return slog.LevelInfo
+	case websocket.CloseAbnormalClosure:
+		return slog.LevelWarn
+	default:
+		return slog.LevelError
+	}
+}
+
+// logReadEnd registra por que dejo de leerse el socket, al nivel de readEndLevel.
+func (c *Client) logReadEnd(err error) {
+	level := readEndLevel(err)
+	msg := "WebSocket closed"
+	if level == slog.LevelError {
+		msg = "WebSocket read error"
+	}
+	attrs := []any{"error", err}
+	var closeErr *websocket.CloseError
+	if errors.As(err, &closeErr) {
+		attrs = append(attrs, "code", closeErr.Code)
+	}
+	c.logger.Log(context.Background(), level, msg, attrs...)
 }
 
 // authenticate validates an access token from an auth message. On success it
