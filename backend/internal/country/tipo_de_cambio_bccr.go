@@ -31,7 +31,7 @@ const URLBCCR = "https://apim.bccr.fi.cr/sddE/api/Bccr.Ge.SDDE.Publico.Indicador
 // VariableTokenBCCR es la variable de entorno con el Bearer que el BCCR entrega
 // al registrarse. Solo se nombra aqui: su valor no se escribe en el codigo, ni
 // en los registros, ni en las respuestas.
-const VariableTokenBCCR = "BCCR_TOKEN"
+const VariableTokenBCCR = "BCCR_TOKEN" // #nosec G101 -- es el NOMBRE de la variable de entorno, no una credencial
 
 // Los dos nombres con que la fila guardada y /health dicen de donde salio el
 // tipo de cambio de una pasada.
