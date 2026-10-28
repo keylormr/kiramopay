@@ -62,7 +62,7 @@ func TestUpdateMerchant_VolverAPendienteLimpiaLaRevisionAnterior(t *testing.T) {
 	}
 
 	// La nueva aprobacion vuelve a dejar quien y cuando.
-	m, err = svc.ApproveMerchant(ctx, qr.MerchantID, revisorDePrueba)
+	m, err = svc.ApproveMerchant(ctx, qr.MerchantID, revisorDePrueba, qrpayment.ActorContext{})
 	if err != nil {
 		t.Fatalf("re-aprobar: %v", err)
 	}

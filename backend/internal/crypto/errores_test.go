@@ -76,6 +76,9 @@ func TestResponderError_CodigosPropios(t *testing.T) {
 		{"monto invalido",
 			fmt.Errorf("%w: at most 18 decimal places", ErrMontoInvalido),
 			http.StatusBadRequest, "CRYPTO_INVALID_AMOUNT", "invalid amount: at most 18 decimal places"},
+		{"par de conversion invalido",
+			fmt.Errorf("%w: ETH", ErrParInvalido),
+			http.StatusBadRequest, "CRYPTO_INVALID_PAIR", "cannot convert an asset into itself"},
 		{"saldo de la billetera",
 			fmt.Errorf("buy BTC: %w", transaction.ErrSaldoInsuficiente),
 			http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE", "insufficient balance"},
@@ -155,6 +158,20 @@ func TestStake_SoloLosActivosDelPrograma(t *testing.T) {
 	for _, activo := range []string{"ETH", "SOL"} {
 		if _, ok := stakingAPY[activo]; !ok {
 			t.Fatalf("%s deberia seguir en el programa", activo)
+		}
+	}
+}
+
+// Convertir un activo en si mismo se rechaza antes de tocar la base, con las
+// minusculas incluidas: "eth" y "ETH" son el mismo activo.
+func TestConvert_UnActivoEnSiMismoSeRechazaSinTocarLaBase(t *testing.T) {
+	svc := &Service{}
+	for _, par := range [][2]string{{"ETH", "ETH"}, {"eth", "ETH"}, {"ETH", " eth "}} {
+		_, err := svc.Convert(context.Background(), "u", &ConvertRequest{
+			FromAsset: par[0], ToAsset: par[1], FromAmount: decimal.NewFromInt(1),
+		})
+		if !errors.Is(err, ErrParInvalido) {
+			t.Fatalf("convertir %q en %q = %v, se esperaba ErrParInvalido", par[0], par[1], err)
 		}
 	}
 }

@@ -22,6 +22,9 @@ var (
 	// ErrMontoInvalido: la cantidad pedida no se puede operar. El detalle lo
 	// arma el servicio antes de tocar la base, asi que puede salir tal cual.
 	ErrMontoInvalido = errors.New("invalid amount")
+	// ErrParInvalido: el par de una conversion no existe (el mismo activo de un
+	// lado y del otro). No mueve nada: el rechazo sale antes de tocar un saldo.
+	ErrParInvalido = errors.New("cannot convert an asset into itself")
 	// ErrPosicionNoEncontrada: la posicion de staking no existe o no es de
 	// quien la pide.
 	ErrPosicionNoEncontrada = errors.New("staking position not found")
@@ -70,6 +73,8 @@ func rechazoConocido(err error) (rechazo, bool) {
 			ErrSaldoDeActivoInsuficiente.Error()}, true
 	case errors.Is(err, ErrMontoInvalido):
 		return rechazo{http.StatusBadRequest, "CRYPTO_INVALID_AMOUNT", err.Error()}, true
+	case errors.Is(err, ErrParInvalido):
+		return rechazo{http.StatusBadRequest, "CRYPTO_INVALID_PAIR", ErrParInvalido.Error()}, true
 	case errors.Is(err, transaction.ErrSaldoInsuficiente):
 		return rechazo{http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
 			transaction.ErrSaldoInsuficiente.Error()}, true

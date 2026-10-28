@@ -57,18 +57,18 @@ func TestDecisionesDelAdministrador_AprobarRechazarYComisionQuedanEnAuditoria(t 
 	aprobado := registrarComercio(t, svc, owner, "Soda Aprobada")
 	rechazado := registrarComercio(t, svc, owner, "Soda Rechazada")
 
-	if _, err := svc.ApproveMerchant(ctx, aprobado.ID, revisorDePrueba); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, aprobado.ID, revisorDePrueba, qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("aprobar: %v", err)
 	}
-	if _, err := svc.RejectMerchant(ctx, rechazado.ID, revisorDePrueba, "documento ilegible"); err != nil {
+	if _, err := svc.RejectMerchant(ctx, rechazado.ID, revisorDePrueba, "documento ilegible", qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("rechazar: %v", err)
 	}
-	if _, err := svc.SetCommission(ctx, aprobado.ID, revisorDePrueba, 150); err != nil {
+	if _, err := svc.SetCommission(ctx, aprobado.ID, revisorDePrueba, 150, qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("fijar la comision: %v", err)
 	}
 	// Una decision que se rechaza no cambio nada: no deja fila. El dueno no
 	// aprueba su propio comercio.
-	if _, err := svc.ApproveMerchant(ctx, rechazado.ID, owner); err == nil {
+	if _, err := svc.ApproveMerchant(ctx, rechazado.ID, owner, qrpayment.ActorContext{}); err == nil {
 		t.Fatal("el dueno aprobo su propio comercio")
 	}
 	logger.Stop()

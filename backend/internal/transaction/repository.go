@@ -227,9 +227,13 @@ func patronDeBusqueda(s string) string {
 const maxLargoBusqueda = 100
 
 func (r *Repository) ListByUser(ctx context.Context, userID string, req *ListTransactionsRequest) (*TransactionListResponse, error) {
+	// Sin pedido son 20; pedir mas que el tope devuelve el tope. Antes volvia al
+	// valor por defecto, y `limit=500` traia menos movimientos que `limit=100`.
 	limit := req.Limit
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 {
 		limit = 20
+	} else if limit > 100 {
+		limit = 100
 	}
 	offset := req.Offset
 	if offset < 0 {

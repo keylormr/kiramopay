@@ -821,8 +821,11 @@ func (s *Service) VentasDelComercio(ctx context.Context, merchantID, userID stri
 	if err != nil || role == "" {
 		return nil, fmt.Errorf("merchant not found")
 	}
-	if limit <= 0 || limit > 200 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope.
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	return s.repo.GetMerchantPayments(ctx, merchantID, limit, antesDe)
 }
@@ -1208,8 +1211,39 @@ func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) 
 //
 // Un comercio cerrado no se aprueba ni se rechaza: la sentencia no lo toca, y se
 // dice ErrComercioCerrado.
-func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string) (*Merchant, error) {
-	return s.decidirVerificacion(ctx, merchantID, "verified", adminID, "")
+//
+// La decision queda en el rastro de auditoria (ver auditarDecisionDeAdmin): un
+// comercio aprobado puede cobrar, asi que quien lo aprobo tiene que poder
+// saberse.
+func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string, ac ActorContext) (*Merchant, error) {
+	m, err := s.decidirVerificacion(ctx, merchantID, "verified", adminID, "")
+	if err != nil {
+		return nil, err
+	}
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_approved", ac, map[string]interface{}{
+		"estado_nuevo": m.VerificationStatus,
+	})
+	return m, nil
+}
+
+// auditarDecisionDeAdmin deja el rastro de una decision del administrador sobre
+// un comercio, con riesgo alto como el cambio de plan. Solo se llama cuando la
+// decision se aplico: lo rechazado no cambio nada y no deja fila. Sin logger
+// (pruebas que no lo necesitan) no hace nada.
+func (s *Service) auditarDecisionDeAdmin(adminID, merchantID, accion string, ac ActorContext, detalle map[string]interface{}) {
+	if s.auditLogger == nil {
+		return
+	}
+	s.auditLogger.Log(audit.Event{
+		UserID:       adminID,
+		Action:       accion,
+		ResourceType: "merchant",
+		ResourceID:   merchantID,
+		IPAddress:    ac.IPAddress,
+		UserAgent:    ac.UserAgent,
+		Details:      detalle,
+		RiskLevel:    "high",
+	})
 }
 
 func (s *Service) decidirVerificacion(ctx context.Context, merchantID, status, adminID, reason string) (*Merchant, error) {
@@ -1259,13 +1293,25 @@ func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, 
 	return m, nil
 }
 
-func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string) (*Merchant, error) {
-	return s.decidirVerificacion(ctx, merchantID, "rejected", adminID, reason)
+// RejectMerchant rechaza la verificacion del comercio con un motivo. Queda en
+// el rastro de auditoria igual que la aprobacion.
+func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string, ac ActorContext) (*Merchant, error) {
+	m, err := s.decidirVerificacion(ctx, merchantID, "rejected", adminID, reason)
+	if err != nil {
+		return nil, err
+	}
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_rejected", ac, map[string]interface{}{
+		"estado_nuevo": m.VerificationStatus,
+		"motivo":       reason,
+	})
+	return m, nil
 }
 
 // SetCommission updates a merchant's commission rate (basis points). The platform
 // sets the rate, so this is an admin action, and never by the merchant's owner.
-func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string, bps int) (*Merchant, error) {
+// La comision se descuenta de cada cobro: el cambio queda en el rastro de
+// auditoria con la comision nueva.
+func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string, bps int, ac ActorContext) (*Merchant, error) {
 	if bps < 0 || bps > 10000 {
 		return nil, ErrComisionFueraDeRango
 	}
@@ -1273,10 +1319,16 @@ func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string,
 		return nil, err
 	}
 	m, err := s.repo.UpdateCommission(ctx, merchantID, bps)
-	if err != nil && s.estaCerrado(ctx, merchantID) {
-		return nil, ErrComercioCerrado
+	if err != nil {
+		if s.estaCerrado(ctx, merchantID) {
+			return nil, ErrComercioCerrado
+		}
+		return nil, err
 	}
-	return m, err
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_commission_set", ac, map[string]interface{}{
+		"comision_bps_nueva": m.CommissionBps,
+	})
+	return m, nil
 }
 
 // administradorNoEsElDueno rechaza al administrador que actua sobre un comercio

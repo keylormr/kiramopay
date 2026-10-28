@@ -271,12 +271,15 @@ func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset 
 	return lista, nil
 }
 
-// limiteDeHistorial acota una pagina del historial: sin pedido o fuera de
-// rango son 20, y nunca mas de 50. Aparte de ListHistory para que la prueba
-// llame a esta regla y no a una copia de ella.
+// limiteDeHistorial acota una pagina del historial: sin pedido son 20, y pedir
+// mas que el tope devuelve el tope, 50. Aparte de ListHistory para que la
+// prueba llame a esta regla y no a una copia de ella.
 func limiteDeHistorial(limit int) int {
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 {
 		return 20
+	}
+	if limit > 50 {
+		return 50
 	}
 	return limit
 }

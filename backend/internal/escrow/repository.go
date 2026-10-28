@@ -70,8 +70,11 @@ func (r *Repository) Get(ctx context.Context, id string) (*Agreement, error) {
 
 // ListByUser returns agreements where the user is buyer or seller, newest first.
 func (r *Repository) ListByUser(ctx context.Context, userID string, limit int) ([]Agreement, error) {
-	if limit <= 0 || limit > 200 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope.
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	rows, err := r.db.Query(ctx,
 		`SELECT `+agreementCols+` FROM escrow_agreements

@@ -105,6 +105,10 @@ func (s *Service) GetTransactions(ctx context.Context, userID string) ([]Transac
 // repetir la compra con la misma llave de idempotencia abonaba el activo otra
 // vez sin cobrar nada.
 func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*TransactionRecord, error) {
+	// El simbolo se normaliza a la entrada: "btc" es BTC. Sin esto el precio no
+	// se encontraba y un dato mal escrito salia como 503 PRICE_UNAVAILABLE,
+	// igual que un proveedor de precios caido.
+	req.Asset = normalizarActivo(req.Asset)
 	// req.Amount ya no se valida ni se usa: la cantidad de cripto la calcula el
 	// servidor. Se sigue aceptando en el cuerpo para no romper a los clientes
 	// desplegados, que todavia la mandan.
@@ -206,6 +210,8 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 // delta negativo, que el CHECK de saldo de la base rechaza SIEMPRE. Vender
 // nunca funciono en produccion.
 func (s *Service) Sell(ctx context.Context, userID string, req *SellRequest) (*TransactionRecord, error) {
+	// Ver Buy: el simbolo se normaliza a la entrada.
+	req.Asset = normalizarActivo(req.Asset)
 	if err := validarCantidad(req.Amount); err != nil {
 		return nil, err
 	}
@@ -387,6 +393,15 @@ func (s *Service) compraOVentaYaHecha(ctx context.Context, userID, llave string,
 }
 
 func (s *Service) Convert(ctx context.Context, userID string, req *ConvertRequest) (*TransactionRecord, error) {
+	// Ver Buy: los simbolos se normalizan a la entrada. Va antes de comparar el
+	// par: "eth" y "ETH" son el mismo activo.
+	req.FromAsset = normalizarActivo(req.FromAsset)
+	req.ToAsset = normalizarActivo(req.ToAsset)
+	// Convertir un activo en si mismo no cambia ningun saldo y, sin este
+	// rechazo, quedaba en el historial como una conversion hecha.
+	if req.FromAsset == req.ToAsset {
+		return nil, fmt.Errorf("%w: %s", ErrParInvalido, req.FromAsset)
+	}
 	if err := validarCantidad(req.FromAmount); err != nil {
 		return nil, err
 	}
@@ -515,6 +530,8 @@ var stakingAPY = map[string]float64{
 }
 
 func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (*StakingRecord, error) {
+	// Ver Buy: el simbolo se normaliza a la entrada.
+	req.Asset = normalizarActivo(req.Asset)
 	apy, disponible := stakingAPY[req.Asset]
 	if !disponible {
 		return nil, fmt.Errorf("%w: %s", ErrStakingNoDisponible, req.Asset)
@@ -663,8 +680,17 @@ func (s *Service) RemovePriceAlert(ctx context.Context, userID, alertID string) 
 	return s.repo.DeactivatePriceAlert(ctx, id.String(), userID)
 }
 
+// GetPrices devuelve los precios de los simbolos pedidos. Los simbolos vienen
+// escritos por la persona (?symbols=btc,eth): se normalizan, y los precios
+// salen con el simbolo en mayusculas, que es con el que se buscan.
 func (s *Service) GetPrices(ctx context.Context, symbols []string) (map[string]*PriceData, error) {
-	return s.prices.GetPrices(ctx, symbols)
+	normalizados := make([]string, 0, len(symbols))
+	for _, simbolo := range symbols {
+		if n := normalizarActivo(simbolo); n != "" {
+			normalizados = append(normalizados, n)
+		}
+	}
+	return s.prices.GetPrices(ctx, normalizados)
 }
 
 func getAssetName(symbol string) string {
