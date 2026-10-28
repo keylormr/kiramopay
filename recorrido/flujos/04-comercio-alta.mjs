@@ -2,7 +2,7 @@
 // administrador (admin.kp, por API con su contraseña de semilla): el servidor no
 // deja que un administrador apruebe un comercio propio (ADMIN_IS_AFFECTED_PARTY).
 // Este comercio lo usan despues el cobro con QR y el modo negocio.
-import { abrirSesion, boton, ultimoDialogo, dialogo, sinDialogos, verTexto, reposar } from '../lib/ui.mjs';
+import { abrirSesion, boton, ultimoDialogo, dialogo, sinDialogos, verTexto, reposar, cambiarAPerfil } from '../lib/ui.mjs';
 import { clientes, nombreUnico, adminKp } from '../lib/comun.mjs';
 import { txt, escapar } from '../lib/textos.mjs';
 
@@ -55,6 +55,17 @@ export default {
       await registrarPorLaPantalla(keilor, nombre);
     });
 
+    await f.paso('Al terminar el registro, la pantalla deja a keilor dentro del negocio nuevo', async () => {
+      // Defecto conocido: App.tsx fija el negocio activo apenas se crea, pero la lista de
+      // comercios todavia no lo trae y la "autocuracion" lo toma por un negocio que ya no
+      // existe: lo saca de vuelta al perfil personal sin decir nada.
+      const dentro = await keilor.page.getByText(txt('Pendiente de verificación')).first()
+        .waitFor({ state: 'visible', timeout: 6000 }).then(() => true, () => false);
+      if (!dentro) {
+        throw new Error('tras registrar el comercio la pantalla volvió al perfil personal en lugar de mostrar el negocio nuevo como "Pendiente de verificación"');
+      }
+    }, { seguir: true });
+
     await f.paso('El comercio queda "pendiente de verificación" y no deja cobrar todavía', async (c) => {
       const lista = (await api.keilor.exigir('GET', '/qr/merchants')).data ?? [];
       comercio = lista.find((x) => x.name === nombre);
@@ -64,6 +75,10 @@ export default {
       c.igual(comercio.commission_bps, 50, 'comisión base en puntos básicos');
       c.igual(comercio.plan, 'base', 'plan del comercio');
       ctx.estado.comercio = { id: comercio.id, nombre };
+      // Se entra al negocio a mano desde el selector de perfil (por el defecto de arriba
+      // la pantalla pudo haber quedado en el perfil personal).
+      const enNegocio = await keilor.page.getByText(txt('Pendiente de verificación')).first().isVisible().catch(() => false);
+      if (!enNegocio) await cambiarAPerfil(keilor.page, nombre);
       await verTexto(keilor.page, txt('Pendiente de verificación'));
       const generar = boton(keilor.page, txt('Generar QR de cobro'), { exacto: true }).first();
       c.ok(await generar.isDisabled(), 'el botón "Generar QR de cobro" debería estar deshabilitado mientras está pendiente');

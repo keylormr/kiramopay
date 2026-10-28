@@ -97,7 +97,7 @@ export default {
 
     await f.paso('La pantalla muestra el ETH comprado en el portafolio', async () => {
       await boton(victor.page, /Ethereum/).first().waitFor({ state: 'visible', timeout: 15000 });
-      await victor.page.getByText(/Compra ETH/).first().waitFor({ state: 'visible', timeout: 15000 });
+      await victor.page.getByText(/Compra\s+USD\s*→\s*ETH/).first().waitFor({ state: 'visible', timeout: 15000 });
     });
 
     await f.paso(`Vender ${VENTA_ETH} ETH y recibir colones`, async (c) => {

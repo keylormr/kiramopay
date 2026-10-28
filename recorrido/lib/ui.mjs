@@ -127,6 +127,16 @@ export function boton(ambito, nombre, { exacto = false } = {}) {
 }
 
 /**
+ * Sale de una pantalla completa (Pagos protegidos, Disputas, Metas...) con su
+ * flecha "Volver". Esas pantallas cubren la barra inferior, asi que no se puede
+ * salir pulsando una pestana.
+ */
+export async function volver(page) {
+  await page.getByRole('button', { name: txt('Volver'), exact: true }).first().click();
+  await reposar(page, 400);
+}
+
+/**
  * Cambia el perfil activo desde el boton "Cambiar de perfil" de la barra
  * superior: "Personal" o el nombre de un negocio.
  */
