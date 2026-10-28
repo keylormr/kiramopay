@@ -49,8 +49,35 @@ func llaveDelLibro(tipo, llave string) string {
 	return tipo + ":" + llave
 }
 
+// catalogoDeProveedores es lo que el catalogo necesita del repositorio. Una
+// interfaz, para probar el endpoint sin base de datos.
+type catalogoDeProveedores interface {
+	ListActiveProviders(ctx context.Context) ([]ProviderInfo, error)
+}
+
+// Operadores son los operadores a los que Recharge acepta recargar, en el orden
+// en que se ofrecen. Una sola lista para el catalogo y para Recharge: un
+// operador que la pantalla ofrece y el servidor rechaza (INVALID_OPERATOR) es el
+// mismo defecto que tenian las empresas.
+var Operadores = []OperatorInfo{
+	{Code: "kolbi", Name: "Kölbi (ICE)"},
+	{Code: "claro", Name: "Claro"},
+	{Code: "movistar", Name: "Movistar"},
+}
+
+// nombreDelOperador busca un operador por su codigo.
+func nombreDelOperador(codigo string) (string, bool) {
+	for _, op := range Operadores {
+		if op.Code == codigo {
+			return op.Name, true
+		}
+	}
+	return "", false
+}
+
 type Service struct {
 	repo      *Repository
+	catalogo  catalogoDeProveedores
 	txService *transaction.Service
 	// convenios habilita el cobro. Falso mientras no exista integracion real;
 	// se enciende por entorno igual que el registro de rieles de payouts, para
@@ -66,6 +93,9 @@ type Options struct {
 
 func NewService(repo *Repository, txService *transaction.Service, opts *Options) *Service {
 	s := &Service{repo: repo, txService: txService}
+	if repo != nil {
+		s.catalogo = repo
+	}
 	if opts != nil {
 		s.convenios = opts.ConveniosActivos
 	}
@@ -80,6 +110,23 @@ func NewService(repo *Repository, txService *transaction.Service, opts *Options)
 // bandera en el asistente, para que las dos no puedan quedar diciendo cosas
 // distintas.
 func (s *Service) ConveniosActivos() bool { return s.convenios }
+
+// Catalog arma lo que la pantalla de Servicios ofrece: las empresas activas, los
+// operadores de recarga y si el cobro se puede entregar.
+func (s *Service) Catalog(ctx context.Context) (*Catalog, error) {
+	providers, err := s.catalogo.ListActiveProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if providers == nil {
+		providers = []ProviderInfo{}
+	}
+	return &Catalog{
+		AgreementsActive: s.convenios,
+		Providers:        providers,
+		Operators:        Operadores,
+	}, nil
+}
 
 func (s *Service) PayBill(ctx context.Context, userID string, req *PayBillRequest) (*PayBillResponse, error) {
 	if !s.convenios {
@@ -151,13 +198,7 @@ func (s *Service) Recharge(ctx context.Context, userID string, req *RechargeRequ
 		return nil, ErrLlaveInvalida
 	}
 
-	// Map operator to display name
-	operatorNames := map[string]string{
-		"kolbi":    "Kölbi (ICE)",
-		"claro":    "Claro",
-		"movistar": "Movistar",
-	}
-	operatorName, ok := operatorNames[req.Operator]
+	operatorName, ok := nombreDelOperador(req.Operator)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrOperadorInvalido, req.Operator)
 	}

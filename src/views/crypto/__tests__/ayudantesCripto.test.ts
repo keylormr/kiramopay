@@ -12,7 +12,7 @@ describe('mensajeDeErrorCripto', () => {
   // ninguno es la clave cruda (seria una clave que falta en el diccionario).
   it.each([
     'PRICE_STALE', 'PRICE_UNAVAILABLE', 'PRICE_MOVED', 'UNSUPPORTED_CURRENCY',
-    'CRYPTO_INSUFFICIENT_BALANCE', 'CRYPTO_INVALID_AMOUNT', 'INSUFFICIENT_BALANCE',
+    'CRYPTO_INSUFFICIENT_BALANCE', 'CRYPTO_INVALID_AMOUNT', 'CRYPTO_INVALID_PAIR', 'INSUFFICIENT_BALANCE',
     'DAILY_LIMIT_EXCEEDED', 'MONTHLY_LIMIT_EXCEEDED', 'LLAVE_REUTILIZADA',
     'STAKING_NOT_AVAILABLE', 'STAKING_POSITION_NOT_FOUND', 'STAKING_POSITION_INACTIVE',
     'STAKING_POSITION_LOCKED', 'STAKING_ALREADY_WITHDRAWN', 'CLAIM_NOT_AVAILABLE',
@@ -35,6 +35,7 @@ describe('mensajeDeErrorCripto', () => {
     expect(mensajeDeErrorCripto({ code: 'LLAVE_REUTILIZADA' }, conIngles)).not.toMatch(/^FALTA/);
     expect(mensajeDeErrorCripto({ code: 'STAKING_NOT_AVAILABLE' }, conIngles)).not.toMatch(/^FALTA/);
     expect(mensajeDeErrorCripto({ code: 'STAKING_ALREADY_WITHDRAWN' }, conIngles)).not.toMatch(/^FALTA/);
+    expect(mensajeDeErrorCripto({ code: 'CRYPTO_INVALID_PAIR' }, conIngles)).not.toMatch(/^FALTA/);
   });
 
   it('llaveYaGastada reconoce los dos rechazos tras los que el siguiente toque es otra operacion', () => {

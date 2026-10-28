@@ -5,7 +5,7 @@ import { ServicesView } from '../ServicesView';
 
 const mocks = vi.hoisted(() => ({
   api: {
-    services: { payBill: vi.fn(), recharge: vi.fn() },
+    services: { getCatalog: vi.fn(), payBill: vi.fn(), recharge: vi.fn() },
     mfa: { totpVerify: vi.fn() },
   },
   dispatch: vi.fn(),
@@ -34,6 +34,20 @@ vi.mock('@/services/dataSync', () => ({
   refreshTransactions: vi.fn(() => Promise.resolve()),
 }));
 
+// La lista de empresas y operadores sale del servidor (GET /services/providers).
+const CATALOGO = {
+  agreementsActive: true,
+  providers: [
+    { code: 'ice', name: 'ICE Electricidad', category: 'electricity' },
+    { code: 'aya', name: 'AyA', category: 'water' },
+  ],
+  operators: [
+    { code: 'kolbi', name: 'Kolbi' },
+    { code: 'claro', name: 'Claro' },
+    { code: 'movistar', name: 'Movistar' },
+  ],
+};
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -44,7 +58,7 @@ function setup() {
 
 /** Abre el formulario de pago de un proveedor y lo completa. */
 async function completarPago(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByText('ICE Electricidad'));
+  await user.click(await screen.findByText('ICE Electricidad'));
   await user.type(await screen.findByPlaceholderText('Ej: 1234567'), '123456');
   await user.type(screen.getByPlaceholderText('0'), '250000');
   await user.click(screen.getByRole('button', { name: /^Pagar/ }));
@@ -53,6 +67,8 @@ async function completarPago(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
+  mocks.api.services.getCatalog.mockReset();
+  mocks.api.services.getCatalog.mockResolvedValue({ success: true, data: CATALOGO });
   mocks.api.services.payBill.mockReset();
   mocks.api.services.recharge.mockReset();
   mocks.api.mfa.totpVerify.mockReset();
@@ -156,7 +172,7 @@ describe('ServicesView — pago de servicios: monto invalido (hallazgo n=69)', (
     const user = userEvent.setup();
     setup();
 
-    await user.click(screen.getByText('ICE Electricidad'));
+    await user.click(await screen.findByText('ICE Electricidad'));
     await user.type(await screen.findByPlaceholderText('Ej: 1234567'), '123456');
     await user.type(screen.getByPlaceholderText('0'), '0');
 
@@ -172,7 +188,7 @@ describe('ServicesView — recarga', () => {
   /** Abre la recarga de Kolbi con numero y monto elegidos. */
   async function completarRecarga(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('tab', { name: 'Recarga' }));
-    await user.click(screen.getByText('Kolbi'));
+    await user.click(await screen.findByText('Kolbi'));
     await user.type(await screen.findByPlaceholderText('8888-0000'), '88880000');
     const montos = screen.getByText('Selecciona monto').parentElement as HTMLElement;
     await user.click(within(montos).getAllByRole('button')[0]);
@@ -187,7 +203,7 @@ describe('ServicesView — recarga', () => {
     setup();
 
     await user.click(screen.getByRole('tab', { name: 'Recarga' }));
-    await user.click(screen.getByText('Kolbi'));
+    await user.click(await screen.findByText('Kolbi'));
     const montos = (await screen.findByText('Selecciona monto')).parentElement as HTMLElement;
     const botones = within(montos).getAllByRole('button');
 
@@ -433,7 +449,7 @@ describe('ServicesView — el formulario de pago en otro idioma', () => {
     const user = userEvent.setup();
     setup();
 
-    await user.click(screen.getByText('ICE Electricidad'));
+    await user.click(await screen.findByText('ICE Electricidad'));
 
     expect(await screen.findByPlaceholderText('e.g. 1234567')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Ej: 1234567')).not.toBeInTheDocument();

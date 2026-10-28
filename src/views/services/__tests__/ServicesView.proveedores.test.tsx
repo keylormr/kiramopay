@@ -234,6 +234,59 @@ describe('ServicesView — cada rechazo con su propio texto', () => {
     await waitFor(() => expect(mocks.api.services.getCatalog).toHaveBeenCalledTimes(2));
   });
 
+  it('si tras el rechazo la empresa ya no esta en la lista nueva, cierra el formulario y deja el aviso sobre la lista', async () => {
+    const AVISO_EMPRESA =
+      'Esa empresa ya no está disponible. Actualizamos la lista; elige otra. No se cobró nada.';
+    mocks.api.services.payBill.mockResolvedValue({
+      success: false,
+      error: { code: 'INVALID_PROVIDER', message: 'invalid provider: ice' },
+    });
+    mocks.api.services.getCatalog
+      .mockResolvedValueOnce({ success: true, data: CATALOGO })
+      .mockResolvedValue({
+        success: true,
+        data: { ...CATALOGO, providers: CATALOGO.providers.filter((p) => p.code !== 'ice') },
+      });
+    const user = userEvent.setup();
+    setup();
+
+    await pagarIce(user);
+
+    await waitFor(() => expect(screen.queryByPlaceholderText('Ej: 1234567')).not.toBeInTheDocument());
+    expect(await screen.findByText(AVISO_EMPRESA)).toBeInTheDocument();
+    expect(screen.queryByText('ICE — Electricidad')).not.toBeInTheDocument();
+    expect(screen.getByText('AyA — Agua')).toBeInTheDocument();
+  });
+
+  it('un operador que el servidor ya no ofrece: cierra la recarga y avisa sobre la lista', async () => {
+    mocks.api.services.recharge.mockResolvedValue({
+      success: false,
+      error: { code: 'INVALID_OPERATOR', message: 'invalid operator: claro' },
+    });
+    mocks.api.services.getCatalog
+      .mockResolvedValueOnce({ success: true, data: CATALOGO })
+      .mockResolvedValue({
+        success: true,
+        data: { ...CATALOGO, operators: CATALOGO.operators.filter((o) => o.code !== 'claro') },
+      });
+    const user = userEvent.setup();
+    setup();
+    await screen.findByText('ICE — Electricidad');
+
+    await user.click(screen.getByRole('tab', { name: /Recarga/ }));
+    await user.click(await screen.findByText('Claro'));
+    await user.type(await screen.findByPlaceholderText('8888-0000'), '88887777');
+    await user.click(screen.getByRole('button', { name: '₡2,000' }));
+    await user.click(screen.getByRole('button', { name: /^Recarga ₡2,000(\.00)?$/ }));
+
+    await waitFor(() => expect(screen.queryByPlaceholderText('8888-0000')).not.toBeInTheDocument());
+    expect(
+      await screen.findByText('Ese operador no está disponible para recargas. No se cobró nada.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Claro')).not.toBeInTheDocument();
+    expect(screen.getByText('Movistar')).toBeInTheDocument();
+  });
+
   it('INVALID_OPERATOR dice que el operador no recibe recargas', async () => {
     mocks.api.services.recharge.mockResolvedValue({
       success: false,
@@ -247,7 +300,7 @@ describe('ServicesView — cada rechazo con su propio texto', () => {
     await user.click(await screen.findByText('Claro'));
     await user.type(await screen.findByPlaceholderText('8888-0000'), '88887777');
     await user.click(screen.getByRole('button', { name: '₡2,000' }));
-    await user.click(screen.getByRole('button', { name: /^Recarga ₡2,000$/ }));
+    await user.click(screen.getByRole('button', { name: /^Recarga ₡2,000(\.00)?$/ }));
 
     expect(await screen.findByText('Ese operador no está disponible para recargas. No se cobró nada.')).toBeInTheDocument();
     expect(screen.queryByText('No se pudo completar la acción')).not.toBeInTheDocument();

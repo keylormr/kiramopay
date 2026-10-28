@@ -1004,10 +1004,10 @@ export const CryptoView: React.FC = () => {
           className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
           style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
         />
-        <div className="relative flex justify-between items-start mb-4">
+        <div className="relative flex flex-col gap-3 min-[420px]:flex-row min-[420px]:justify-between min-[420px]:items-start mb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t('total_portfolio')}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
               <div aria-live="polite">
                 {isLoading ? (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
@@ -1035,7 +1035,7 @@ export const CryptoView: React.FC = () => {
               </p>
             )}
           </div>
-          <div className="text-right shrink-0">
+          <div className="min-[420px]:text-right shrink-0">
             {/* Sin precios, la ganancia se calcula contra cero y sale una
                 perdida enorme que nadie tuvo: es la mentira mas cara de esta
                 pantalla, peor que el total. Se muestra neutra. */}
@@ -1051,7 +1051,7 @@ export const CryptoView: React.FC = () => {
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
                 aria-label={t('crypto_refresh_prices')}
-                className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors ml-auto"
+                className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors min-[420px]:ml-auto"
               >
                 <Icons.RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
                 {formatTimeAgo(lastUpdated)}
@@ -1077,19 +1077,19 @@ export const CryptoView: React.FC = () => {
         <div className="relative flex gap-2 mt-4">
           <button
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.Plus size={16} /> {t('buy')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
             onClick={openConvertSheet}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
           </button>
@@ -1146,13 +1146,13 @@ export const CryptoView: React.FC = () => {
                     >
                       {asset.icon}
                     </div>
-                    <div className="flex-1 text-left">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold uv-text-primary">{asset.name}</span>
-                        <span className="font-bold uv-text-primary">{montoUsd(value, asset.currentPrice)}</span>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="font-bold uv-text-primary truncate">{asset.name}</span>
+                        <span className="font-bold uv-text-primary shrink-0 whitespace-nowrap">{montoUsd(value, asset.currentPrice)}</span>
                       </div>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                      <div className="flex justify-between items-center gap-2 mt-1">
+                        <span className="text-sm text-gray-500 truncate">{formatCrypto(asset.balance)} {asset.symbol}</span>
                         {/* Ganancia o perdida desde la compra, no el cambio de
                             24 h ni la tendencia de la curva: se rotula para
                             que no se lean como la misma cifra. */}

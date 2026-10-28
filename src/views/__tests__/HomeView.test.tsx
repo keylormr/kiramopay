@@ -141,7 +141,7 @@ describe('HomeView', () => {
 
   it('should render the total balance section', () => {
     renderHomeView();
-    expect(screen.getByText('Balance Total')).toBeInTheDocument();
+    expect(screen.getByText('Saldo total')).toBeInTheDocument();
     // The base currency badge — rendered as "CRC · Base" (separator added in
     // the Unified Vision design refactor); match flexibly on the separator.
     expect(screen.getByText(/CRC.*Base/)).toBeInTheDocument();

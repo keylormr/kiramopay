@@ -25,6 +25,9 @@ export function mensajeDeErrorCripto(
       return t('crypto_err_insufficient_asset');
     case 'CRYPTO_INVALID_AMOUNT':
       return t('crypto_err_invalid_amount');
+    // Convertir un activo en si mismo.
+    case 'CRYPTO_INVALID_PAIR':
+      return t('crypto_err_invalid_pair');
     case 'INSUFFICIENT_BALANCE':
       return t('crypto_err_insufficient_funds');
     case 'DAILY_LIMIT_EXCEEDED':

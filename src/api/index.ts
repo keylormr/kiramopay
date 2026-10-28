@@ -136,7 +136,12 @@ export type {
   BuyCryptoRequest,
   SellCryptoRequest,
 } from './repositories/crypto.repository';
-export type { IServicesRepository } from './repositories/services.repository';
+export type {
+  IServicesRepository,
+  ServiceCatalog,
+  ServiceProviderInfo,
+  ServiceOperatorInfo,
+} from './repositories/services.repository';
 export type { INotificationRepository } from './repositories/notification.repository';
 export type { ISettingsRepository, AppSettings } from './repositories/settings.repository';
 export type { IMarketplaceRepository } from './repositories/marketplace.repository';

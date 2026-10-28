@@ -43,6 +43,34 @@ type RechargeResponse struct {
 	Replayed bool `json:"replayed,omitempty"`
 }
 
+// ProviderInfo es una empresa a la que se le puede pagar un recibo: lo que
+// PayBill acepta como provider_code.
+type ProviderInfo struct {
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+}
+
+// OperatorInfo es un operador al que se le puede recargar: lo que Recharge
+// acepta como operator.
+type OperatorInfo struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Catalog es lo que la pantalla de Servicios ofrece, sacado del servidor en vez
+// de escrito a mano en la pantalla (11 de las 15 empresas que llevaba no
+// existian aqui y respondian INVALID_PROVIDER).
+type Catalog struct {
+	// AgreementsActive dice si el cobro se puede entregar. Falso en produccion
+	// mientras no haya convenio con las empresas ni con los operadores: PayBill
+	// y Recharge responden SIN_CONVENIO, y la pantalla lo avisa ANTES de que la
+	// persona llene el formulario.
+	AgreementsActive bool           `json:"agreements_active"`
+	Providers        []ProviderInfo `json:"providers"`
+	Operators        []OperatorInfo `json:"operators"`
+}
+
 type SavedServiceRecord struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"user_id"`

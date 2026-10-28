@@ -388,7 +388,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
 
         {/* Quick Stats */}
-        <div className="relative grid grid-cols-2 gap-3 mt-6">
+        <div className="relative grid grid-cols-1 min-[480px]:grid-cols-2 gap-3 mt-6">
           <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('total_balance')}</p>
             <p className="text-lg font-black tabular-nums">

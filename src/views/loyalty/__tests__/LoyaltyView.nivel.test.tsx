@@ -71,7 +71,7 @@ describe('LoyaltyView — el nivel en el orden del idioma', () => {
     localStorage.setItem('kiramopay_language', 'en');
     conNivel('silver');
 
-    expect(await screen.findByText('Level Silver')).toBeInTheDocument();
+    expect(await screen.findByText('Silver tier')).toBeInTheDocument();
     expect(screen.getByText('Gold: 25,000 pts')).toBeInTheDocument();
   });
 

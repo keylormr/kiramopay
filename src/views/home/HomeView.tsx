@@ -923,14 +923,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <div className="flex gap-3 w-full">
                 <button
                   onClick={() => { navigator.clipboard?.writeText((cobrarCharge ?? cobrarCode).qrData); }}
-                  className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  className="shrink-0 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 px-5 rounded-xl font-bold flex items-center justify-center gap-2"
                 >
                   <Icons.Copy size={18} /> {t('copy')}
                 </button>
                 <button
                   onClick={handleCobrarMonto}
                   disabled={cobrarLoading || !(parseFloat(cobrarAmount) > 0)}
-                  className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 px-3 rounded-xl font-bold leading-tight disabled:opacity-50"
                 >
                   {cobrarLoading ? t('loading') : cobrarCharge ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
                 </button>
@@ -1067,10 +1067,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <div className="w-16 h-16 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
                 <Icons.Check size={32} className="text-[var(--color-success)]" />
               </div>
+              {/* El monto con el formato de la app, como el resto de las
+                  pantallas. El titulo de la hoja ya dice "Pago realizado": bajo
+                  el monto va a quien se le pago, no la misma frase otra vez. */}
               <p className="text-3xl font-black uv-text-primary tabular-nums">
-                {payResult.currency} {payResult.amount}
+                {formatCurrency(payResult.amount, payResult.currency)}
               </p>
-              <p className="uv-text-muted text-sm">{t('payment_done')}</p>
+              {(resuelto?.merchantName || resuelto?.payeeName) && (
+                <p className="uv-text-muted text-sm">{resuelto?.merchantName || resuelto?.payeeName}</p>
+              )}
               <button
                 onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"

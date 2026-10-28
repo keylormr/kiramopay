@@ -18,6 +18,7 @@ import type {
   MerchantLocation,
 } from '@/api/repositories/qrpayment.repository';
 import { mensajeDelRechazoDelCobro, minutosParaVencer, textoDeDuracion } from '@/utils/erroresQr';
+import { conteoConPlural } from '@/utils/conteo';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { fechaCorta } from '@/utils/fechaPlazo';
 
@@ -345,7 +346,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
               {balance === null ? '—' : money(balance)}
             </div>
             <div className="relative text-white/70 text-sm">
-              {t('business_sales_today')}: {paymentsFailed ? SIN_DATO : `${money(todayGross)} · ${todays.length}`}
+              {t('business_sales_today')}: {paymentsFailed ? SIN_DATO : `${money(todayGross)} · ${conteoConPlural(t, 'business_charges_count', todays.length)}`}
             </div>
             {isOwner && (
               <button
@@ -365,7 +366,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             </span>
             <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">{paymentsFailed ? SIN_DATO : money(todayGross)}</div>
             <div className="relative text-white/70 text-sm">
-              {todays.length} · {t('business_cashier_hint')}
+              {conteoConPlural(t, 'business_charges_count', todays.length)} · {t('business_cashier_hint')}
             </div>
           </>
         )}
@@ -406,7 +407,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
           servidor. */}
       <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="uv-text-muted">{t('business_sales_window').replace('{n}', String(ventana))}</span>
+          <span className="uv-text-muted">{conteoConPlural(t, 'business_sales_window', ventana)}</span>
           <span className="font-semibold uv-text-primary tabular-nums">
             {paymentsFailed ? SIN_DATO : money(enMoneda.reduce((s, p) => s + p.amount, 0))}
           </span>

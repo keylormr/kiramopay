@@ -122,16 +122,16 @@ describe('ProfileView encabezado: balance total', () => {
   it('muestra el mismo total que Inicio: todas las cuentas en la moneda base', () => {
     pintar();
 
-    expect(estadistica('Balance Total').getByText('₡722,500.00')).toBeInTheDocument();
+    expect(estadistica('Saldo total').getByText('₡722,500.00')).toBeInTheDocument();
     // Ya no es el total en dolares con otro formato.
-    expect(estadistica('Balance Total').queryByText(/~\$/)).not.toBeInTheDocument();
+    expect(estadistica('Saldo total').queryByText(/~\$/)).not.toBeInTheDocument();
   });
 
   it('una cuenta con saldo y sin tasa no se cuenta 1 a 1: muestra el guion', () => {
     appState.accounts = [colones(500_000, undefined), dolares(445)];
     pintar();
 
-    const total = estadistica('Balance Total');
+    const total = estadistica('Saldo total');
     expect(total.getByText('—')).toBeInTheDocument();
     expect(total.queryByText(/500,000|445|~\$/)).not.toBeInTheDocument();
   });
@@ -233,7 +233,7 @@ describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
     appState.accounts = [colones(500_000, undefined), dolares(445)];
     pintar();
 
-    const total = estadistica('Balance Total');
+    const total = estadistica('Saldo total');
     expect(total.getByText('—')).toBeInTheDocument();
     expect(total.getByText('Sin tipo de cambio')).toBeInTheDocument();
   });
@@ -241,6 +241,6 @@ describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
   it('con tipo de cambio no aparece el aviso', () => {
     pintar();
 
-    expect(estadistica('Balance Total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
+    expect(estadistica('Saldo total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
   });
 });

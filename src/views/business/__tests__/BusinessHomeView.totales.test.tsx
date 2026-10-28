@@ -95,6 +95,11 @@ describe('BusinessHomeView', () => {
 // Con un solo cobro la pantalla decia "Ultimos 1 cobros", y junto a las ventas
 // de hoy quedaba un "1" suelto sin decir de que era.
 describe('BusinessHomeView — singular y plural', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('kiramopay_language', 'es');
+  });
+
   it('un solo cobro: "Último cobro", no "Últimos 1 cobros"', async () => {
     pintar([cobro('1', 1000)]);
 
