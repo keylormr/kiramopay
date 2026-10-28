@@ -22,6 +22,7 @@ export default {
     let keilor;
     let victor;
     let cobro; // { id, qr_data }
+    let comprobante = ''; // texto de la hoja "Pago realizado" que ve victor
     const antes = {};
 
     await f.paso('El comercio de keilor está aprobado (si el flujo de alta no corrió, se prepara por API)', async () => {
@@ -69,7 +70,13 @@ export default {
     await f.paso('Victor paga y la pantalla confirma "Pago realizado"', async () => {
       await boton(ultimoDialogo(victor.page), txt('Pagar'), { exacto: true }).click();
       await victor.page.getByRole('heading', { name: txt('Pago realizado') }).waitFor({ state: 'visible', timeout: 15000 });
+      comprobante = await ultimoDialogo(victor.page).innerText();
     });
+
+    await f.paso('El comprobante del pago muestra el monto con el formato de la app', async (c) => {
+      // Defecto conocido: el comprobante escribe "CRC 1000" en lugar de "₡1,000.00".
+      c.ok(reColones(MONTO).test(comprobante), `el comprobante dice ${JSON.stringify(comprobante.replace(/\s+/g, ' ').trim())}: el monto debería verse como ₡${MONTO}.00`);
+    }, { seguir: true });
 
     await f.paso('Saldos: victor paga el monto exacto; el comercio recibe el neto; la billetera de keilor no cambia', async (c) => {
       const v = await api.victor.saldo();

@@ -45,6 +45,13 @@ export default {
       await keilor.page.getByText(reColones(antes.negocio / 100)).first().waitFor({ state: 'visible', timeout: 10000 });
     });
 
+    await f.paso('El resumen del inicio del negocio concuerda en singular y plural', async (c) => {
+      // Defecto conocido: con un solo cobro dice "Últimos 1 cobros" (el texto no distingue el singular).
+      const resumen = await keilor.page.getByText(/Últimos\s+\d+\s+cobros/).first().innerText().catch(() => null);
+      c.exigir(resumen, 'el inicio del negocio no muestra el resumen de cobros');
+      c.ok(!/Últimos\s+1\s+cobros/.test(resumen), `el resumen dice "${resumen}": con un solo cobro debería decir "Último cobro"`);
+    }, { seguir: true });
+
     await f.paso(`Ajustes > Catálogo: agrega el producto "${producto}" de ₡2.500`, async (c) => {
       await ir(keilor.page, txt('Ajustes'));
       await boton(keilor.page, txt('Catálogo'), { exacto: true }).first().click();
