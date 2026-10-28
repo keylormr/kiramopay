@@ -610,3 +610,51 @@ describe('Pagar un QR — no se pudo verificar el codigo', () => {
     expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
   });
 });
+
+// El comprobante del pago escribia "CRC 1000": codigo de moneda y numero sin
+// miles ni decimales, distinto de todo el resto de la app, y repetia "Pago
+// realizado" en el titulo y bajo el monto.
+describe('Pagar un QR — el comprobante', () => {
+  async function pagar1000() {
+    const user = userEvent.setup();
+    pintar();
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '1000');
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+  }
+
+  it('escribe el monto con el formato de la app', async () => {
+    await pagar1000();
+
+    expect(await screen.findByText('₡1,000.00')).toBeInTheDocument();
+    expect(screen.queryByText('CRC 1000')).toBeNull();
+  });
+
+  it('dice "Pago realizado" una sola vez', async () => {
+    await pagar1000();
+
+    await screen.findByText('₡1,000.00');
+    expect(screen.getAllByText('Pago realizado')).toHaveLength(1);
+  });
+});
+
+// Dos botones iguales (flex-1) repartian el ancho a partes iguales: a 390 px
+// "Cobrar este monto" se partia en dos lineas. Copiar mide lo que su texto; el
+// de cobrar se queda con el resto.
+describe('Cobrar con QR — los botones de la hoja a 390 px', () => {
+  it('Copiar no se reparte el ancho a partes iguales con Cobrar este monto', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+
+    const copiar = screen.getByRole('button', { name: 'Copiar' });
+    const cobrar = screen.getByRole('button', { name: 'Cobrar este monto' });
+    expect(copiar.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+    expect(cobrar.className).toMatch(/(^|\s)flex-1(\s|$)/);
+    expect(cobrar.className).toContain('min-w-0');
+  });
+});

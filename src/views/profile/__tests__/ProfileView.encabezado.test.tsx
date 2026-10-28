@@ -212,3 +212,18 @@ describe('ProfileView encabezado: telefono', () => {
     expect(hoja.queryByText('+50688880001')).not.toBeInTheDocument();
   });
 });
+
+// A 390 px cada estadistica del encabezado mide ~123 px: "₡1,437,677.00" (146 px)
+// se salia de su caja y pisaba al cuadro vecino. Las dos cajas se apilan hasta
+// que haya ancho para ponerlas lado a lado.
+describe('ProfileView encabezado: las estadisticas a 390 px', () => {
+  it('se apilan en una columna y pasan a dos solo con ancho de sobra', () => {
+    pintar();
+
+    const caja = screen.getByText(/^(Balance|Saldo) total$/i).parentElement as HTMLElement;
+    const grilla = caja.parentElement as HTMLElement;
+    expect(grilla.className).toMatch(/(^|\s)grid-cols-1(\s|$)/);
+    expect(grilla.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grilla.className).toMatch(/min-\[\d+px\]:grid-cols-2|sm:grid-cols-2/);
+  });
+});

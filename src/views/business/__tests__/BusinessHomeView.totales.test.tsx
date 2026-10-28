@@ -91,3 +91,32 @@ describe('BusinessHomeView', () => {
     expect(screen.queryByText('₡125000.00')).toBeNull();
   });
 });
+
+// Con un solo cobro la pantalla decia "Ultimos 1 cobros", y junto a las ventas
+// de hoy quedaba un "1" suelto sin decir de que era.
+describe('BusinessHomeView — singular y plural', () => {
+  it('un solo cobro: "Último cobro", no "Últimos 1 cobros"', async () => {
+    pintar([cobro('1', 1000)]);
+
+    expect(await screen.findByText('Último cobro')).toBeTruthy();
+    expect(screen.queryByText(/Últimos 1 cobros/)).toBeNull();
+  });
+
+  it('varios cobros: "Últimos N cobros"', async () => {
+    pintar([cobro('1', 1000), cobro('2', 2000), cobro('3', 500)]);
+
+    expect(await screen.findByText('Últimos 3 cobros')).toBeTruthy();
+  });
+
+  it('las ventas de hoy dicen de que es la cuenta: "1 cobro", no un "1" suelto', async () => {
+    pintar([cobro('1', 1000)]);
+
+    expect(await screen.findByText('Ventas de hoy: ₡1,000.00 · 1 cobro')).toBeTruthy();
+  });
+
+  it('las ventas de hoy con varios cobros: "3 cobros"', async () => {
+    pintar([cobro('1', 1000), cobro('2', 2000), cobro('3', 500)]);
+
+    expect(await screen.findByText('Ventas de hoy: ₡3,500.00 · 3 cobros')).toBeTruthy();
+  });
+});
