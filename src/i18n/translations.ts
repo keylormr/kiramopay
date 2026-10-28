@@ -296,6 +296,9 @@ export type TranslationKeys = {
 
   // Additional UI
   add_money: string;
+  add_money_today_title: string;
+  add_money_today_desc: string;
+  add_money_bank_soon: string;
   add_account: string;
   open_new_account: string;
   accounts_other_ccy_title: string;
@@ -304,7 +307,6 @@ export type TranslationKeys = {
   accounts_go_crypto: string;
   insufficient_funds: string;
   card: string;
-  deposit_crypto: string;
   amount_to_send: string;
   amount_to_request: string;
   from: string;
@@ -313,6 +315,9 @@ export type TranslationKeys = {
   date: string;
   category: string;
   transaction_id: string;
+  transaction_type: string;
+  transaction_to: string;
+  transaction_note: string;
   tx_status_completed: string;
   tx_status_pending: string;
   tx_status_processing: string;
@@ -336,7 +341,6 @@ export type TranslationKeys = {
   this_month: string;
   expenses: string;
   available_247: string;
-  request_increase: string;
   daily_limit: string;
   monthly_limit: string;
   per_transaction: string;
@@ -423,12 +427,13 @@ export type TranslationKeys = {
   card_limits_desc: string;
   card_cancel: string;
   card_cancel_confirm: string;
-  card_atm_limit: string;
   card_created_title: string;
   card_created_desc: string;
   // La tarjeta no pertenece a ninguna red de pago: se rotula y se avisa.
   card_only_in_app: string;
   card_decorative_note: string;
+  card_err_create: string;
+  card_err_no_name: string;
   card_number_label: string;
   card_expiry_label: string;
   card_cvv_label: string;
@@ -965,6 +970,8 @@ export type TranslationKeys = {
   tx_title_crypto_buy: string;
   tx_title_crypto_sell: string;
   tx_title_crypto_send: string;
+  tx_title_merchant_withdrawal: string;
+  tx_title_refund: string;
   demo_tx_sinpe_diego: string;
   demo_tx_pago_ice: string;
   demo_rec_sinpe_diego: string;
@@ -1316,6 +1323,12 @@ export type TranslationKeys = {
   splitpay_status_settled: string;
   splitpay_status_cancelled: string;
   splitpay_detail: string;
+  splitpay_detail_state_active: string;
+  splitpay_detail_state_settled: string;
+  splitpay_detail_state_cancelled: string;
+  splitpay_detail_cancelled_note: string;
+  splitpay_share_not_charged: string;
+  splitpay_cancel_paid_warning: string;
   splitpay_decline_share: string;
   splitpay_cancel_split: string;
   splitpay_confirm_decline: string;
@@ -1590,6 +1603,7 @@ export type TranslationKeys = {
   // le puede liberar a nadie.
   escrow_seller_not_found: string;
   escrow_amount: string;
+  escrow_amount_hint: string;
   escrow_desc_label: string;
   escrow_desc_hint: string;
   escrow_create_btn: string;
@@ -1597,6 +1611,7 @@ export type TranslationKeys = {
   escrow_role_seller: string;
   escrow_you_buyer: string;
   escrow_you_seller: string;
+  escrow_date_created: string;
   escrow_status_pending: string;
   escrow_status_funded: string;
   escrow_status_released: string;

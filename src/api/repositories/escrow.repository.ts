@@ -30,6 +30,19 @@ export interface EscrowAgreement {
   closedByExpiry?: 'entrega' | 'revision';
   /** Cuando se abrio la disputa. */
   disputedAt?: string;
+  /** Cuando el comprador lo fondeo. */
+  fundedAt?: string;
+  /** Cuando el dinero paso al vendedor. */
+  releasedAt?: string;
+  /** Cuando el dinero volvio al comprador. */
+  refundedAt?: string;
+  /** Cuando se cancelo, antes de fondearse. */
+  cancelledAt?: string;
+  /**
+   * El nombre de la OTRA parte: el vendedor para el comprador y al reves. Solo
+   * viaja en la respuesta a quien es parte; falta si la cuenta no se pudo leer.
+   */
+  counterpartyName?: string;
 }
 
 /** Una pagina de la cola del arbitro, con el tamano de la cola entera. */

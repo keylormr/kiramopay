@@ -5725,7 +5725,7 @@ export interface paths {
         put?: never;
         /**
          * Create a virtual card
-         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit.
+         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit. The cardholder name is the person's own name, read from the profile.
          */
         post: {
             parameters: {
@@ -5743,14 +5743,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY | CREATE_FAILED */
+                /** @description INVALID_BODY | INVALID_CURRENCY (only CRC or USD) | INVALID_CARD_TYPE (only virtual or physical) */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) */
+                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) | CARDHOLDER_NAME_MISSING (the profile has no name to print) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5758,6 +5758,13 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["PlanLimitError"];
                     };
+                };
+                /** @description CREATE_FAILED. The body never carries the database error; the cause stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -11491,6 +11498,33 @@ export interface components {
              * @enum {string}
              */
             closed_by_expiry?: "entrega" | "revision";
+            /**
+             * Format: date-time
+             * @description When the buyer funded it.
+             */
+            funded_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went to the seller.
+             */
+            released_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went back to the buyer.
+             */
+            refunded_at?: string;
+            /**
+             * Format: date-time
+             * @description When a dispute was opened.
+             */
+            disputed_at?: string;
+            /**
+             * Format: date-time
+             * @description When it was cancelled before funding.
+             */
+            cancelled_at?: string;
+            /** @description Name of the OTHER party, the one who is not asking: the seller for the buyer and the buyer for the seller. Only in the response to a party of the agreement (create, list, get and each action); it is not stored and does not travel in webhook events. Absent when the account cannot be read. */
+            counterparty_name?: string;
         };
         /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
         PayoutDestination: {
