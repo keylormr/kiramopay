@@ -38,6 +38,7 @@ func RangoDelMes(ahora time.Time, mesesAtras int) (RangoResumen, error) {
 var TiposDeIngresoEnPantalla = []string{
 	"sinpe_receive", "qr_receive", "deposit", "p2p_receive", "refund", "crypto_sell",
 	"savings_withdraw", "escrow_receive", "escrow_refund", "loyalty_cashback",
+	"payout_refund",
 }
 
 // EsIngresoEnPantalla dice si la aplicacion cuenta un tipo de movimiento como

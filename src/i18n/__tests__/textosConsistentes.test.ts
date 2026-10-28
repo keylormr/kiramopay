@@ -47,3 +47,34 @@ describe('los avisos de cripto nombran la lista como la pantalla', () => {
     expect(d.crypto_err_repeated_request.toLowerCase()).toContain(lista);
   });
 });
+
+// Anglicismos con equivalente corriente. "BALANCE TOTAL" y "Mi Portfolio" se
+// leian como texto traducido a medias; el resto de la app ya decia "saldo" y
+// "cripto". Los rotulos que son de contabilidad ("Balance del período", "Balance
+// Neto") son espanol correcto y quedan.
+describe('el espanol de la app no deja anglicismos con equivalente corriente', () => {
+  const textos = es as unknown as Record<string, string>;
+
+  it('el saldo de una cuenta es "saldo", no "balance"', () => {
+    expect(textos.total_balance).toBe('Saldo total');
+    expect(textos.available_balance).toBe('Saldo disponible');
+    expect(textos.crypto_your_balance).toBe('Tu saldo');
+  });
+
+  it('"portfolio" se escribe "portafolio"', () => {
+    expect(textos.crypto_my_portfolio).toBe('Mi portafolio');
+    expect(textos.total_portfolio).toBe('Portafolio total');
+    expect(textos.crypto_portfolio).toBe('Portafolio cripto');
+    const conPortfolio = Object.entries(textos)
+      .filter(([, texto]) => /\bportfolio\b/i.test(texto))
+      .map(([clave]) => clave);
+    expect(conPortfolio).toEqual([]);
+  });
+
+  it('"crypto" se escribe "cripto"', () => {
+    const conCrypto = Object.entries(textos)
+      .filter(([, texto]) => /\bcrypto\b/i.test(texto))
+      .map(([clave]) => clave);
+    expect(conCrypto).toEqual([]);
+  });
+});

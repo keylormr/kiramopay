@@ -9,11 +9,22 @@ import { fechaYHora } from '@/utils/fechaPlazo';
 import { nombreDelPremio, descripcionDelPremio, descripcionDelMovimiento } from '@/utils/textosDeRecompensas';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
-const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
-  bronze: { color: '#CD7F32', bg: 'from-amber-700/20 to-orange-600/10', icon: Icons.Award },
-  silver: { color: '#C0C0C0', bg: 'from-gray-300/20 to-slate-400/10', icon: Icons.Award },
-  gold: { color: '#FFD700', bg: 'from-yellow-400/20 to-amber-500/10', icon: Icons.Trophy },
-  platinum: { color: '#E5E4E2', bg: 'from-slate-200/30 to-purple-300/10', icon: Icons.Trophy },
+// `color` es el del metal: sirve de relleno (la barra de progreso, el fondo del
+// icono), pero como color de TEXTO el plata (#C0C0C0) y el platino (#E5E4E2)
+// casi no se distinguen del fondo claro de la tarjeta. El texto y el icono
+// llevan `texto`, una clase con contraste propio en claro y en oscuro.
+const TIER_CONFIG: Record<string, { color: string; texto: string; bg: string; icon: LucideIcon }> = {
+  bronze: { color: '#CD7F32', texto: 'text-amber-800 dark:text-amber-400', bg: 'from-amber-700/20 to-orange-600/10', icon: Icons.Award },
+  silver: { color: '#C0C0C0', texto: 'text-slate-600 dark:text-slate-300', bg: 'from-gray-300/20 to-slate-400/10', icon: Icons.Award },
+  gold: { color: '#FFD700', texto: 'text-yellow-700 dark:text-yellow-400', bg: 'from-yellow-400/20 to-amber-500/10', icon: Icons.Trophy },
+  platinum: { color: '#E5E4E2', texto: 'text-violet-700 dark:text-violet-300', bg: 'from-slate-200/30 to-purple-300/10', icon: Icons.Trophy },
+};
+
+// Hasta donde llega cada nivel: el siguiente y los puntos que pide.
+const SIGUIENTE_NIVEL: Record<string, { nivel: string; puntos: number }> = {
+  bronze: { nivel: 'silver', puntos: 5000 },
+  silver: { nivel: 'gold', puntos: 25000 },
+  gold: { nivel: 'platinum', puntos: 100000 },
 };
 
 const RELLENO = 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)]';
@@ -183,10 +194,18 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
   const tierConfig = TIER_CONFIG[account?.tier || 'bronze'];
   const TierIcon = tierConfig?.icon || Icons.Award;
+  // El nombre del nivel en el idioma de la app. El del servidor ("silver") es un
+  // identificador, no un texto; uno que la app no conoce se muestra como llega.
+  const nombreDelNivel = (nivel: string) => {
+    const clave = `loyalty_tier_${nivel}`;
+    const texto = t(clave);
+    return texto === clave ? nivel : texto;
+  };
 
   // Miles con coma, como los montos: sin locale, el del telefono (en es-CR,
   // "12 500").
   const formatPoints = (pts: number) => pts.toLocaleString(MONEY_LOCALE);
+  const siguiente = account ? SIGUIENTE_NIVEL[account.tier] : undefined;
   // Un guion dice "no lo se". Un cero dice "no tienes". No son lo mismo.
   const SIN_DATO = '—';
 
@@ -214,11 +233,11 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${tierConfig?.color}30` }}>
-                      <TierIcon size={24} style={{ color: tierConfig?.color }} />
+                      <TierIcon size={24} className={tierConfig?.texto} />
                     </div>
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: tierConfig?.color }}>
-                        {accountFailed ? t('loyalty_unavailable') : t('loyalty_tier').replace('{nivel}', account?.tier || 'Bronze')}
+                      <p className={`text-xs font-bold uppercase tracking-wider ${tierConfig?.texto ?? 'uv-text-secondary'}`}>
+                        {accountFailed ? t('loyalty_unavailable') : t('loyalty_tier').replace('{nivel}', nombreDelNivel(account?.tier || 'bronze'))}
                       </p>
                       <p className="text-3xl font-black uv-text-primary">
                         {accountFailed ? SIN_DATO : formatPoints(account?.availablePoints || 0)}
@@ -252,10 +271,10 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
               <div className="uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-bold text-gray-500">{t('loyalty_next_tier')}</span>
-                  <span className="text-xs font-bold" style={{ color: tierConfig?.color }}>
-                    {account?.tier === 'bronze' ? 'Silver: 5,000 pts' :
-                     account?.tier === 'silver' ? 'Gold: 25,000 pts' :
-                     account?.tier === 'gold' ? 'Platinum: 100,000 pts' : t('loyalty_tier_max')}
+                  <span className={`text-xs font-bold ${tierConfig?.texto ?? 'uv-text-secondary'}`}>
+                    {siguiente
+                      ? `${nombreDelNivel(siguiente.nivel)}: ${formatPoints(siguiente.puntos)} pts`
+                      : t('loyalty_tier_max')}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] overflow-hidden">

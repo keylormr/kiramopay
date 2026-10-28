@@ -122,16 +122,16 @@ describe('ProfileView encabezado: balance total', () => {
   it('muestra el mismo total que Inicio: todas las cuentas en la moneda base', () => {
     pintar();
 
-    expect(estadistica('Balance Total').getByText('₡722,500.00')).toBeInTheDocument();
+    expect(estadistica('Saldo total').getByText('₡722,500.00')).toBeInTheDocument();
     // Ya no es el total en dolares con otro formato.
-    expect(estadistica('Balance Total').queryByText(/~\$/)).not.toBeInTheDocument();
+    expect(estadistica('Saldo total').queryByText(/~\$/)).not.toBeInTheDocument();
   });
 
   it('una cuenta con saldo y sin tasa no se cuenta 1 a 1: muestra el guion', () => {
     appState.accounts = [colones(500_000, undefined), dolares(445)];
     pintar();
 
-    const total = estadistica('Balance Total');
+    const total = estadistica('Saldo total');
     expect(total.getByText('—')).toBeInTheDocument();
     expect(total.queryByText(/500,000|445|~\$/)).not.toBeInTheDocument();
   });
@@ -213,12 +213,27 @@ describe('ProfileView encabezado: telefono', () => {
   });
 });
 
+// A 390 px cada estadistica del encabezado mide ~123 px: "₡1,437,677.00" (146 px)
+// se salia de su caja y pisaba al cuadro vecino. Las dos cajas se apilan hasta
+// que haya ancho para ponerlas lado a lado.
+describe('ProfileView encabezado: las estadisticas a 390 px', () => {
+  it('se apilan en una columna y pasan a dos solo con ancho de sobra', () => {
+    pintar();
+
+    const caja = screen.getByText(/^(Balance|Saldo) total$/i).parentElement as HTMLElement;
+    const grilla = caja.parentElement as HTMLElement;
+    expect(grilla.className).toMatch(/(^|\s)grid-cols-1(\s|$)/);
+    expect(grilla.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grilla.className).toMatch(/min-\[\d+px\]:grid-cols-2|sm:grid-cols-2/);
+  });
+});
+
 describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
   it('el guion del total dice por que no hay cifra', () => {
     appState.accounts = [colones(500_000, undefined), dolares(445)];
     pintar();
 
-    const total = estadistica('Balance Total');
+    const total = estadistica('Saldo total');
     expect(total.getByText('—')).toBeInTheDocument();
     expect(total.getByText('Sin tipo de cambio')).toBeInTheDocument();
   });
@@ -226,6 +241,6 @@ describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
   it('con tipo de cambio no aparece el aviso', () => {
     pintar();
 
-    expect(estadistica('Balance Total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
+    expect(estadistica('Saldo total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
   });
 });

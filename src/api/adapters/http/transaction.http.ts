@@ -149,6 +149,7 @@ const INCOMING_TYPES = new Set([
   'escrow_receive',
   'escrow_refund',
   'loyalty_cashback', // SYSTEM:PROMOTIONS -> wallet (canje de puntos)
+  'payout_refund', // retiro rechazado por el banco: la plata vuelve a la billetera
 ]);
 
 function isIncoming(backendType: string): boolean {
@@ -177,6 +178,10 @@ function mapCategory(backendType: string): string {
     withdrawal: 'cash',
     savings_deposit: 'savings',
     savings_withdraw: 'savings',
+    // Comprar, vender y enviar cripto: sin categoria propia caian en "Otros".
+    crypto_buy: 'crypto',
+    crypto_sell: 'crypto',
+    crypto_send: 'crypto',
   };
   return map[backendType] || 'other';
 }

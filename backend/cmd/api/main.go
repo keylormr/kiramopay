@@ -1135,6 +1135,7 @@ func main() {
 			// Services & Payments
 			r.Post("/services/pay-bill", paymentHandler.PayBill)
 			r.Post("/services/recharge", paymentHandler.Recharge)
+			r.Get("/services/providers", paymentHandler.GetProviders)
 			r.Get("/services/saved", paymentHandler.GetSavedServices)
 			r.Post("/services/saved", paymentHandler.AddSavedService)
 			r.Get("/services/history", paymentHandler.GetPaymentHistory)

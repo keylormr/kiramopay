@@ -9,9 +9,10 @@ import { formatMoney } from '@/utils/money';
 // El fondo de promociones del que sale el cashback de puntos.
 //
 // Cada canje de cashback sale de aca y se rechaza si no alcanza: nunca se
-// regala plata que no existe. Registrar un fondeo SUBE LA RESERVA PUBLICADA en
-// la prueba de reservas, asi que solo se hace con un deposito real, y la
-// pantalla lo dice antes de confirmar.
+// regala plata que no existe. Registrar un fondeo NO sube la reserva publicada:
+// la plata es capital propio de la empresa y pasa a la reserva, de a poco, con
+// cada canje. Aun asi solo se hace con un deposito real, y la pantalla lo dice
+// antes de confirmar.
 
 function nuevaLlave(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto

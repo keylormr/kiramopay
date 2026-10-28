@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -82,6 +82,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
   // Form states
   const [phone, setPhone] = useState('');
+  // El aviso de "numero incompleto" espera a que la persona salga del campo o
+  // toque Enviar: gritarle mientras todavia teclea el cuarto digito no ayuda.
+  const [telefonoTocado, setTelefonoTocado] = useState(false);
+  const campoTelefono = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -160,6 +164,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         ? crypto.randomUUID()
         : `sinpe-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
+
+  useEffect(() => {
+    if (!phone) setTelefonoTocado(false);
+  }, [phone]);
+
+  // Un numero escrito a mano que no llega a un celular de 8 digitos. Con un
+  // contacto elegido el numero ya viene completo.
+  const telefonoIncompleto = !selectedContact && phone.length > 0 && normalizarTelefonoCR(phone) === null;
 
   const handleSelectContact = (contact: SinpeContact) => {
     setSelectedContact(contact);
@@ -634,17 +646,19 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
           {/* Todos los contactos */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+            {/* A 390 px el titulo y los tres enlaces no caben en un renglon: la
+                fila se parte y los enlaces bajan juntos, cada uno entero. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
+              <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider whitespace-nowrap">
                 {t('sinpe_contacts')}
               </h3>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-auto">
                 {/* El QR propio junto al escáner: donde uno ofrece escanear al
                     otro, el otro busca cómo mostrarse. Tenerlo solo en la
                     pestaña Solicitar lo volvía invisible justo aquí. */}
                 <button
                   onClick={() => setShowMyQrSheet(true)}
-                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.QrCode size={16} />
                   {t('my_qr_short')}
@@ -654,14 +668,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     para recién ahí descubrir que se podía escanear. */}
                 <button
                   onClick={openContactScanner}
-                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.Scan size={16} />
                   {t('scan_qr')}
                 </button>
                 <button
                   onClick={() => setShowAddContactSheet(true)}
-                  className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.Plus size={16} />
                   {t('new_contact')}
@@ -1122,13 +1136,22 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <div className="flex gap-2">
                 <span className="text-lg text-gray-400">+506</span>
                 <input
+                  ref={campoTelefono}
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(digitosLocalesCR(e.target.value))}
+                  onBlur={() => setTelefonoTocado(true)}
+                  aria-invalid={telefonoTocado && telefonoIncompleto ? true : undefined}
+                  aria-describedby={telefonoTocado && telefonoIncompleto ? 'sinpe-telefono-aviso' : undefined}
                   placeholder="8888-0000"
                   className="flex-1 bg-transparent outline-none text-lg font-semibold uv-text-primary"
                 />
               </div>
+            )}
+            {telefonoTocado && telefonoIncompleto && (
+              <p id="sinpe-telefono-aviso" role="alert" className="mt-2 text-sm text-[var(--color-danger)]">
+                {t('sinpe_phone_incomplete')}
+              </p>
             )}
           </div>
 
@@ -1182,7 +1205,17 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
           {/* Boton enviar */}
           <button
-            onClick={() => setShowConfirm(true)}
+            onClick={() => {
+              // Sin los 8 digitos no hay nada que revisar: el aviso sale junto
+              // al campo y el foco vuelve a el, en vez de abrir la hoja de
+              // revision y avisar ahi, ya sin el campo a la vista.
+              if (telefonoIncompleto) {
+                setTelefonoTocado(true);
+                campoTelefono.current?.focus();
+                return;
+              }
+              setShowConfirm(true);
+            }}
             disabled={!phone || !amount || !(parseFloat(amount) > 0) || parseFloat(amount) > balance || isProcessing}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >

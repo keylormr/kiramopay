@@ -71,6 +71,9 @@ func TestEsIngresoEnPantalla(t *testing.T) {
 	ingresos := []string{
 		"sinpe_receive", "qr_receive", "deposit", "p2p_receive", "refund", "crypto_sell",
 		"savings_withdraw", "escrow_receive", "escrow_refund", "loyalty_cashback",
+		// El reembolso de un retiro rechazado: la plata vuelve a la billetera.
+		// Salia como gasto en el Inicio ("todo lo demas es salida").
+		"payout_refund",
 	}
 	for _, tipo := range ingresos {
 		if !EsIngresoEnPantalla(tipo) {

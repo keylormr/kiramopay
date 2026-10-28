@@ -1,8 +1,13 @@
-import type { IServicesRepository, PayBillRequest, RechargeRequest } from '../../repositories/services.repository';
+import type {
+  IServicesRepository,
+  PayBillRequest,
+  RechargeRequest,
+  ServiceCatalog,
+} from '../../repositories/services.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess } from '../../types';
 import type { SavedService, Bill, Recharge } from '@/types';
-import { initialSavedServices, initialRechargeHistory } from './mock-data';
+import { initialSavedServices, initialRechargeHistory, mockServiceCatalog } from './mock-data';
 
 const STORAGE_KEY = 'kiramopay_app_state';
 
@@ -22,6 +27,10 @@ function saveField(field: string, value: unknown) {
 }
 
 export class MockServicesRepository implements IServicesRepository {
+  async getCatalog(): Promise<ApiResponse<ServiceCatalog>> {
+    return apiSuccess(mockServiceCatalog);
+  }
+
   async getSavedServices(): Promise<ApiResponse<SavedService[]>> {
     const state = getState();
     return apiSuccess(state?.savedServices ?? initialSavedServices);

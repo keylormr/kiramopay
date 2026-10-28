@@ -30,9 +30,11 @@ export interface BusinessData {
   reload: () => void;
 }
 
-// Reintentos automaticos tras un fallo de la lista de comercios, con espera
-// creciente (3s, 6s, 12s, 24s). Pasado el ultimo, queda el boton de reintentar:
-// insistir sin tope contra un servidor que responde 429 solo alarga el bloqueo.
+// Reintentos automaticos tras un fallo de la lista de comercios o de la de
+// cobros, con espera creciente (3s, 6s, 12s, 24s). Pasado el ultimo, queda el
+// boton de reintentar: insistir sin tope contra un servidor que responde 429
+// solo alarga el bloqueo. Cada lista lleva su propia cuenta: que los comercios
+// salgan bien no le devuelve los intentos a unos cobros que siguen fallando.
 const REINTENTOS_MAX = 4;
 const ESPERA_BASE_MS = 3000;
 
@@ -44,16 +46,26 @@ export function useBusinessData(): BusinessData {
   const activeMerchantId = useBusinessStore((s) => s.activeMerchantId);
   const [merchants, setMerchants] = useState<QRMerchant[]>([]);
   const [payments, setPayments] = useState<QRPayment[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Cuantas cargas se pidieron y a cual corresponde lo que hay en pantalla.
+  // `loading` sale de comparar las dos, en el mismo render que el pedido: un
+  // booleano que el efecto apagara despues deja una ventana en la que App lee
+  // la lista vieja como si fuera la nueva. Al terminar "Crear negocio", App fija
+  // el negocio nuevo como activo y pide recargar; la lista que todavia no lo
+  // trae hacia que App lo tomara por un negocio que ya no existe y devolviera a
+  // la persona al perfil personal.
+  const [nonce, setNonce] = useState(0);
+  const [cargado, setCargado] = useState(-1);
   const [error, setError] = useState('');
   const [paymentsFailed, setPaymentsFailed] = useState(false);
   const [merchantsFailed, setMerchantsFailed] = useState(false);
   const [reintentos, setReintentos] = useState(0);
-  const [nonce, setNonce] = useState(0);
+  const [reintentosCobros, setReintentosCobros] = useState(0);
+  const loading = cargado < nonce;
 
   // Un reintento pedido por la persona vuelve a habilitar los automaticos.
   const reload = useCallback(() => {
     setReintentos(0);
+    setReintentosCobros(0);
     setNonce((n) => n + 1);
   }, []);
 
@@ -62,7 +74,7 @@ export function useBusinessData(): BusinessData {
     void (async () => {
       const api = getApiLayer().qrPayments;
       if (!api) {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setCargado(nonce);
         return;
       }
       // Un reintento que sale bien tiene que borrar el error anterior; si no,
@@ -90,6 +102,7 @@ export function useBusinessData(): BusinessData {
         if (pRes.success && pRes.data) {
           setPayments([...pRes.data].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
           setPaymentsFailed(false);
+          setReintentosCobros(0);
         } else {
           // Antes esto se tragaba entero: la lista quedaba vacia (o con lo de
           // la carga anterior) y la pantalla de negocio pintaba las ventas en
@@ -101,7 +114,7 @@ export function useBusinessData(): BusinessData {
         setPayments([]);
         setPaymentsFailed(false);
       }
-      setLoading(false);
+      setCargado(nonce);
     })();
     return () => { cancelled = true; };
   }, [activeMerchantId, nonce]);
@@ -117,6 +130,19 @@ export function useBusinessData(): BusinessData {
     }, ESPERA_BASE_MS * 2 ** reintentos);
     return () => clearTimeout(temporizador);
   }, [retrying, reintentos]);
+
+  // Lo mismo para la lista de cobros: "No se pudieron cargar los cobros" duraba
+  // hasta que la persona tocaba Reintentar.
+  const retryingPayments =
+    paymentsFailed && !merchantsFailed && activeMerchantId !== null && reintentosCobros < REINTENTOS_MAX;
+  useEffect(() => {
+    if (!retryingPayments) return;
+    const temporizador = setTimeout(() => {
+      setReintentosCobros((r) => r + 1);
+      setNonce((n) => n + 1);
+    }, ESPERA_BASE_MS * 2 ** reintentosCobros);
+    return () => clearTimeout(temporizador);
+  }, [retryingPayments, reintentosCobros]);
 
   const active = activeMerchantId
     ? merchants.find((m) => m.id === activeMerchantId) ?? null
