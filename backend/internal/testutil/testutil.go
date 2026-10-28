@@ -1871,10 +1871,11 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	// Una prueba toca una docena de estas ~80 tablas, no todas. Antes se hacia un
 	// TRUNCATE por tabla, cada uno su propia transaccion con su propio commit y
 	// su fsync, y TRUNCATE no es barato ni sobre una tabla vacia (crea archivos
-	// nuevos para la tabla, sus indices y su TOAST): ~160 commits por prueba, dos
-	// veces (al arrancar y al cerrar). Ahora una sola consulta dice cuales tienen
-	// filas y un solo TRUNCATE las limpia junto con el sembrado, en una
-	// transaccion. El resultado es el mismo: todas quedan vacias.
+	// nuevos para la tabla, sus indices y su TOAST): ~80 commits por limpieza y
+	// dos limpiezas por prueba (al arrancar y al cerrar), unos 340 ms cada una
+	// medidos en CI. Ahora una sola consulta dice cuales tienen filas y un solo
+	// TRUNCATE las limpia junto con el sembrado, en una transaccion. El resultado
+	// es el mismo: todas quedan vacias.
 	vistas := make(map[string]bool, len(tables))
 	sondas := make([]string, 0, len(tables))
 	for _, tbl := range tables {

@@ -201,6 +201,22 @@ jobs:
         env:
           TEST_DB_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable
         run: go test ./internal/testutil/ -run TestMedirCostoDeTestDB -v -count=1
+      - name: Relajar la durabilidad de la base de pruebas
+        env:
+          PGPASSWORD: kiramopay_dev
+        run: |
+          psql -h localhost -U kiramopay -d postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "SELECT pg_reload_conf()"
+          sleep 2
+          psql -h localhost -U kiramopay -d postgres -At -c "SHOW fsync" -c "SHOW synchronous_commit" -c "SHOW full_page_writes"
+      - name: Medir con la durabilidad relajada
+        working-directory: backend
+        env:
+          TEST_DB_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable
+        run: go test ./internal/testutil/ -run TestMedirCostoDeTestDB -v -count=1
 
   backend-test-integration:
     name: Backend Integration Tests
