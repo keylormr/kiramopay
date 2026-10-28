@@ -75,7 +75,7 @@ export default {
 
     await f.paso('El comprobante del pago muestra el monto con el formato de la app', async (c) => {
       // Defecto conocido: el comprobante escribe "CRC 1000" en lugar de "₡1,000.00".
-      c.ok(reColones(MONTO).test(comprobante), `el comprobante dice ${JSON.stringify(comprobante.replace(/\s+/g, ' ').trim())}: el monto debería verse como ₡${MONTO}.00`);
+      c.ok(reColones(MONTO).test(comprobante), `el comprobante dice ${JSON.stringify(comprobante.replace(/\s+/g, ' ').trim())}: el monto debería verse como ₡${MONTO.toLocaleString('en-US')}.00`);
     }, { seguir: true });
 
     await f.paso('Saldos: victor paga el monto exacto; el comercio recibe el neto; la billetera de keilor no cambia', async (c) => {

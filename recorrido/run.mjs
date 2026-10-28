@@ -28,6 +28,7 @@ async function anotarReservas(flujo) {
       const antes = diferenciaDeReservas[m.currency];
       if (flujo && antes !== undefined && dif !== antes) {
         flujo.alertar(`Prueba de reservas ${m.currency}: la diferencia (reserva menos pasivo) pasó de ${antes} a ${dif} en este flujo`);
+        (ctx.estado.cambiosReservas ??= []).push({ flujo: flujo.nombre, moneda: m.currency, antes, despues: dif });
       }
       diferenciaDeReservas[m.currency] = dif;
     }
