@@ -2,17 +2,18 @@ package cards
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/middleware"
-	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
 type Handler struct {
 	service *Service
+	// nombreDe da el nombre de la persona para el titular de la tarjeta. Ver
+	// ConNombreDe.
+	nombreDe BuscadorDeNombre
 }
 
 func NewHandler(service *Service) *Handler {
@@ -27,16 +28,14 @@ func (h *Handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Get cardholder name from user profile service
-	card, err := h.service.CreateCard(r.Context(), userID, "Titular KiramoPay", &req)
+	titular, err := h.titular(r.Context(), userID)
 	if err != nil {
-		var tope *plans.TopeAlcanzadoError
-		if errors.As(err, &tope) {
-			response.ErrorConDetalle(w, http.StatusConflict, "CARD_LIMIT",
-				"your plan does not allow more active or frozen cards", tope.Detalle())
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "CREATE_FAILED", err.Error())
+		responderErrorDeCreacion(w, err)
+		return
+	}
+	card, err := h.service.CreateCard(r.Context(), userID, titular, &req)
+	if err != nil {
+		responderErrorDeCreacion(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, card)

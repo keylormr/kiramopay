@@ -1198,6 +1198,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </button>
           )}
 
+          {/* Antes seguia un boton "Solicitar aumento" sin accion. Aumentar los
+              limites llega con la verificacion avanzada, que todavia no esta
+              disponible: se dice, y no se ofrece un boton que no hace nada. */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Icons.Info size={18} className="text-blue-500 mt-0.5" />
@@ -1208,10 +1211,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               </div>
             </div>
           </div>
-
-          <button className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all">
-            {t('request_increase')}
-          </button>
         </div>
       </BottomSheet>
 

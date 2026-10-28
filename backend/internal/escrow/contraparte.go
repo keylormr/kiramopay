@@ -89,3 +89,61 @@ func (s *Service) resolverVendedor(ctx context.Context, req *CreateRequest) erro
 // lo cancela, asi que cualquiera que conozca el telefono podria impedir el
 // cierre del dia 30.
 func porEliminar(status string) bool { return status == "pending_deletion" }
+
+// otraParte es el id de la parte que NO es quien consulta; vacio si quien
+// consulta no es parte del acuerdo.
+func otraParte(a *Agreement, viewerID string) string {
+	switch viewerID {
+	case a.BuyerID:
+		return a.SellerID
+	case a.SellerID:
+		return a.BuyerID
+	default:
+		return ""
+	}
+}
+
+// nombreDeLaCuenta es el nombre y el apellido, sin espacios de mas. Vacio si la
+// cuenta no se puede leer: el detalle se pinta igual, sin el nombre.
+func (s *Service) nombreDeLaCuenta(ctx context.Context, id string) string {
+	u, err := s.cuentas.FindByID(ctx, id)
+	if err != nil || u == nil {
+		return ""
+	}
+	return strings.Join(strings.Fields(u.FirstName+" "+u.LastName), " ")
+}
+
+// ConContraparte devuelve una COPIA del acuerdo con el nombre de la otra parte,
+// para la respuesta de quien consulta. El acuerdo original no se toca: es el que
+// se guarda y el que viaja en los avisos a los webhooks de las dos partes.
+func (s *Service) ConContraparte(ctx context.Context, viewerID string, a *Agreement) *Agreement {
+	if a == nil {
+		return nil
+	}
+	copia := *a
+	if otra := otraParte(&copia, viewerID); otra != "" && s.cuentas != nil {
+		copia.CounterpartyName = s.nombreDeLaCuenta(ctx, otra)
+	}
+	return &copia
+}
+
+// ConContrapartes es ConContraparte para una lista: pregunta una sola vez por
+// cada persona, aunque aparezca en varios acuerdos.
+func (s *Service) ConContrapartes(ctx context.Context, viewerID string, items []Agreement) []Agreement {
+	salida := make([]Agreement, len(items))
+	nombres := map[string]string{}
+	for i := range items {
+		salida[i] = items[i]
+		otra := otraParte(&items[i], viewerID)
+		if otra == "" || s.cuentas == nil {
+			continue
+		}
+		nombre, visto := nombres[otra]
+		if !visto {
+			nombre = s.nombreDeLaCuenta(ctx, otra)
+			nombres[otra] = nombre
+		}
+		salida[i].CounterpartyName = nombre
+	}
+	return salida
+}

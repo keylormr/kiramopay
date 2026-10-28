@@ -945,14 +945,51 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Add Money (Crypto) Sheet */}
-      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('deposit_crypto')}>
-        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
-            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
+      {/* Agregar dinero. Sobre el saldo en colones abria "Depositar Crypto /
+          proximamente": otra cosa que lo que se pidio. Dice como entra dinero
+          hoy —recibir de otra cuenta KiramoPay, por numero o por QR—, lleva a
+          las dos pantallas donde se hace, y avisa que cargar desde el banco
+          llega con la conexion a SINPE. */}
+      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('add_money')}>
+        <div className="space-y-5 px-1 pb-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-success-soft)] text-[var(--color-success)]">
+              <Icons.Receive size={22} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold uv-text-primary">{t('add_money_today_title')}</h3>
+              <p className="mt-1 text-sm uv-text-secondary leading-relaxed">{t('add_money_today_desc')}</p>
+            </div>
           </div>
-          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
-          <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.Receive size={18} aria-hidden="true" />}
+              onClick={() => { setActiveSheet('none'); onNavigateToSinpe?.('receive'); }}
+            >
+              {t('receive')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.QrCode size={18} aria-hidden="true" />}
+              onClick={() => setActiveSheet('cobrar')}
+            >
+              {t('my_qr_short')}
+            </Button>
+          </div>
+
+          <p
+            role="note"
+            className="flex items-start gap-2 rounded-xl uv-surface-2 p-3 text-sm uv-text-secondary leading-relaxed"
+          >
+            <Icons.Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {t('add_money_bank_soon')}
+          </p>
         </div>
       </BottomSheet>
 

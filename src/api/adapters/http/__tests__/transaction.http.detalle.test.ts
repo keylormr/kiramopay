@@ -45,4 +45,11 @@ describe('HttpTransactionRepository: contraparte y nota por separado', () => {
     expect(tx?.note).toBe('Pago de luz');
     expect(tx?.title).toBe('Pago de luz');
   });
+
+  it('sin ninguna de las dos, los campos quedan sin definir', async () => {
+    const tx = await mapear({});
+
+    expect(tx?.counterparty).toBeUndefined();
+    expect(tx?.note).toBeUndefined();
+  });
 });

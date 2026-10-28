@@ -73,4 +73,11 @@ describe('ProfileView: hoja de limites', () => {
       within(hoja).getByText('Los límites más altos llegan con la verificación avanzada, que todavía no está disponible.'),
     ).toBeInTheDocument();
   });
+
+  it('sigue mostrando los limites de la cuenta', async () => {
+    const hoja = await abrirLimites();
+
+    expect(within(hoja).getByText('Límite diario')).toBeInTheDocument();
+    expect(within(hoja).getByText('Límite mensual')).toBeInTheDocument();
+  });
 });

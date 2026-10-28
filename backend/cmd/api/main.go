@@ -672,7 +672,14 @@ func main() {
 	loyaltyHandler := loyalty.NewHandler(loyaltyService)
 	qrHandler := qrpayment.NewHandler(qrService)
 	splitHandler := splitpay.NewHandler(splitService)
-	cardsHandler := cards.NewHandler(cardsService)
+	// El titular de la tarjeta es el nombre de la persona, el de su perfil.
+	cardsHandler := cards.NewHandler(cardsService).ConNombreDe(func(ctx context.Context, userID string) (string, error) {
+		u, err := userRepo.FindByID(ctx, userID)
+		if err != nil {
+			return "", err
+		}
+		return u.FirstName + " " + u.LastName, nil
+	})
 	fraudHandler := fraud.NewHandler(fraudService)
 	countryHandler := country.NewHandler(countryService)
 	budgetHandler := budget.NewHandler(budgetService)

@@ -99,6 +99,12 @@ describe('EscrowView: la contraparte en el detalle', () => {
     const fila = within(detalle).getByText('Ana Mora').closest('div');
     expect(fila).toHaveTextContent('Comprador');
   });
+
+  it('si el servidor no manda el nombre, el detalle se pinta igual', async () => {
+    const { detalle } = await abrirElDetalle({ ...liberado, counterpartyName: undefined });
+
+    expect(within(detalle).getByText('Eres el comprador')).toBeInTheDocument();
+  });
 });
 
 describe('EscrowView: las fechas en el detalle', () => {

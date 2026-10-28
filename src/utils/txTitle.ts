@@ -98,6 +98,42 @@ function tituloDeCripto(tx: Transaction, t: (key: string) => string): string | n
   return resto ? `${etiqueta}: ${resto}` : etiqueta;
 }
 
+/**
+ * Que tipo de movimiento fue, dicho con el nombre que la app le da en cada
+ * idioma ("Pago con QR", "Transferencia SINPE enviada", "Compra de cripto"). Un
+ * tipo que la app no conoce cae a si entro o salio dinero, que siempre es cierto.
+ */
+export function tipoDeMovimiento(tx: Transaction, t: (key: string) => string): string {
+  const kind = (tx.kind || '').trim();
+  if (kind) {
+    const traducido = t(`tx_title_${kind}`);
+    if (traducido && traducido !== `tx_title_${kind}`) return traducido;
+  }
+  return t(tx.type === 'credit' ? 'tx_title_generic_in' : 'tx_title_generic_out');
+}
+
+/** Con quien fue el movimiento; vacio si no hay un nombre legible. */
+export function contraparteDelMovimiento(tx: Transaction): string {
+  return legible(tx.counterparty);
+}
+
+/**
+ * La nota que escribio la persona. Vacia si repite a la contraparte, o si es la
+ * descripcion que el servidor escribe en ingles para los ahorros, las cuotas
+ * divididas y la cripto: esas ya salen traducidas en el titulo.
+ */
+export function notaDelMovimiento(tx: Transaction): string {
+  const nota = legible(tx.note);
+  if (!nota || nota === contraparteDelMovimiento(tx)) return '';
+  const kind = (tx.kind || '').trim();
+  const prefijoDeAhorro = PREFIJOS_DESCRIPCION_AHORRO[kind];
+  if (prefijoDeAhorro && nota.startsWith(prefijoDeAhorro)) return '';
+  if (TIPOS_CUOTA_DIVIDIDA.has(kind) && nota.startsWith(PREFIJO_CUOTA_DIVIDIDA)) return '';
+  const prefijoDeCripto = PREFIJOS_CRIPTO[kind];
+  if (prefijoDeCripto && nota.startsWith(prefijoDeCripto)) return '';
+  return nota;
+}
+
 export function txTitle(tx: Transaction, t: (key: string) => string): string {
   const deAhorro = tituloDeAhorro(tx, t);
   if (deAhorro) return deAhorro;

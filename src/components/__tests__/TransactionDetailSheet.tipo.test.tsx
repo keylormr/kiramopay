@@ -104,4 +104,32 @@ describe('TransactionDetailSheet: con quien fue y la nota', () => {
 
     expect(valorDe('Nota')).toBe('Almuerzo del viernes');
   });
+
+  it('sin contraparte ni nota no hay filas vacias', () => {
+    pintar(movimiento({ counterparty: undefined, note: undefined }));
+
+    expect(screen.queryByText('Para', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText('De', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText('Nota', { selector: 'dt' })).toBeNull();
+  });
+
+  it('un identificador tecnico no se muestra como nombre', () => {
+    pintar(movimiento({ counterparty: 'b5f43f1a-1f10-48a3-9a0e-0d2a3c4b5d6e' }));
+
+    expect(screen.queryByText('Para', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText(/b5f43f1a/)).toBeNull();
+  });
+
+  it('la descripcion cruda en ingles de un ahorro no sale como nota', () => {
+    pintar(movimiento({ kind: 'savings_deposit', note: 'savings deposit: Vacaciones' }));
+
+    expect(screen.queryByText('Nota', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText(/savings deposit:/)).toBeNull();
+  });
+
+  it('una nota igual a la contraparte no se repite', () => {
+    pintar(movimiento({ counterparty: 'Ana Mora', note: 'Ana Mora' }));
+
+    expect(screen.queryByText('Nota', { selector: 'dt' })).toBeNull();
+  });
 });

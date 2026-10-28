@@ -60,4 +60,12 @@ describe('PayoutView: sin ninguna via de envio', () => {
     expect(aviso.closest('[role="alert"]')).toBeNull();
     expect(aviso.closest('[role="status"]')).not.toBeNull();
   });
+
+  it('con una via disponible no aparece el aviso', async () => {
+    mockApi.payout.rails.mockResolvedValue({ success: true, data: ['mock'] });
+    pintar();
+
+    expect((await screen.findAllByRole('button', { name: 'Nuevo pago' })).length).toBeGreaterThan(0);
+    expect(screen.queryByText(TEXTO)).toBeNull();
+  });
 });

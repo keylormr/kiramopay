@@ -45,4 +45,14 @@ describe('HttpEscrowRepository: fechas y contraparte', () => {
     expect(res.data?.[0].releasedAt).toBe('2026-09-05T15:00:00Z');
     expect(res.data?.[0].counterpartyName).toBe('Luis Rojas');
   });
+
+  it('lo que el servidor no manda queda sin definir', async () => {
+    const minimo: Record<string, unknown> = { ...crudo };
+    for (const clave of ['funded_at', 'released_at', 'refunded_at', 'cancelled_at', 'counterparty_name']) delete minimo[clave];
+    const res = await repoConElAcuerdo(minimo).get('a1');
+
+    expect(res.data?.fundedAt).toBeUndefined();
+    expect(res.data?.releasedAt).toBeUndefined();
+    expect(res.data?.counterpartyName).toBeUndefined();
+  });
 });

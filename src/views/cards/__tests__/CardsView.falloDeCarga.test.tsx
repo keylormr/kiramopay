@@ -29,6 +29,7 @@ const pintar = () =>
 
 describe('CardsView cuando no se pudo consultar', () => {
   beforeEach(() => {
+    localStorage.setItem('kiramopay_language', 'es');
     mocks.getCards.mockReset();
     mocks.createCard.mockReset();
     mocks.freezeCard.mockReset();
@@ -54,7 +55,8 @@ describe('CardsView cuando no se pudo consultar', () => {
   it('un fallo al congelar la tarjeta se muestra', async () => {
     const congelar = vi.fn().mockResolvedValue({
       success: false,
-      error: { code: 'FREEZE_FAILED', message: 'No se pudo congelar la tarjeta' },
+      // Lo que responde el servidor de verdad: texto de diagnostico en ingles.
+      error: { code: 'FREEZE_FAILED', message: 'card not found' },
     });
     mocks.getCards.mockResolvedValue({
       success: true,
@@ -72,9 +74,11 @@ describe('CardsView cuando no se pudo consultar', () => {
     const boton = await screen.findByRole('button', { name: /congelar|freeze/i });
     await user.click(boton);
 
+    // Se muestra el texto de la pantalla, no el del servidor.
     await waitFor(() =>
-      expect(screen.getByText('No se pudo congelar la tarjeta')).toBeInTheDocument(),
+      expect(screen.getByText('No se pudo completar la acción')).toBeInTheDocument(),
     );
+    expect(screen.queryByText('card not found')).toBeNull();
   });
 
   it('sin tarjetas de verdad si ofrece crear una', async () => {

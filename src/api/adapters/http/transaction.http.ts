@@ -45,6 +45,9 @@ function mapRow(tx: BackendTransactionRow): Transaction {
     // Kept so the UI can fall back to a name derived from the movement type
     // when neither counterparty nor description carries one.
     kind: tx.type,
+    // Cada una en su campo, para el detalle del movimiento.
+    counterparty: tx.counterparty_name || undefined,
+    note: parseDescription(tx.metadata) || undefined,
   };
 }
 

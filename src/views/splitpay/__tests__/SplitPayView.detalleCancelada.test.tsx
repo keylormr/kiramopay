@@ -87,6 +87,15 @@ describe('SplitPayView: detalle de una division cancelada', () => {
     // La cuota que si se pago sigue diciendolo.
     expect(within(detalle).getByText('Pagada')).toBeInTheDocument();
   });
+
+  it('no ofrece pagar, rechazar ni cancelar otra vez', async () => {
+    const detalle = await abrirElDetalle(grupo('cancelled', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'pending'),
+    ]);
+
+    expect(within(detalle).queryByRole('button', { name: /pagar mi parte|rechazar mi parte|cancelar división/i })).toBeNull();
+  });
 });
 
 describe('SplitPayView: el detalle dice el estado del grupo', () => {
@@ -127,5 +136,18 @@ describe('SplitPayView: cancelar una division donde alguien ya pago', () => {
     expect(await within(detalle).findByText(AVISO)).toBeInTheDocument();
     // El aviso no cancela por si solo: falta confirmar.
     expect(mocks.cancelSplit).not.toHaveBeenCalled();
+  });
+
+  it('la cuota del propio creador no cuenta como "alguien ya pago"', async () => {
+    // El creador puso la cuenta: su cuota nace pagada y no mueve dinero.
+    const detalle = await abrirElDetalle(grupo('active', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'pending'),
+    ]);
+
+    fireEvent.click(within(detalle).getByRole('button', { name: /cancelar división/i }));
+
+    expect(await within(detalle).findByText(/Se cancela para todos los participantes/)).toBeInTheDocument();
+    expect(within(detalle).queryByText(AVISO)).toBeNull();
   });
 });

@@ -81,8 +81,8 @@ describe('Retiros a otros bancos: lenguaje simple', () => {
     pt: 'ainda não está disponível', 'zh-cn': '尚不可用', ja: 'まだ利用できません', hi: 'अभी उपलब्ध नहीं',
   });
 
-  it.each(idiomas.filter(([idioma]) => idioma === 'es' || idioma === 'en'))('%s: no habla de rieles', (_idioma, d) => {
-    expect(d.payout_no_rails).not.toMatch(/rail|riel/i);
+  it.each(idiomas)('%s: no habla de rieles', (_idioma, d) => {
+    expect(d.payout_no_rails).not.toMatch(/rail|riel|rieles|轨道/i);
   });
 });
 

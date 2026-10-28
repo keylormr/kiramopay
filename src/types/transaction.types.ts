@@ -23,4 +23,9 @@ export interface Transaction {
   // credit/debit `type` above so the UI can name a movement whose counterparty
   // and description are both empty, instead of leaving the row blank.
   kind?: string;
+  // Con quien fue, y la nota que escribio la persona, cada una por separado:
+  // `title` y `description` las juntan ("la contraparte o, si no hay, la nota")
+  // y el detalle del movimiento necesita mostrarlas aparte.
+  counterparty?: string;
+  note?: string;
 }

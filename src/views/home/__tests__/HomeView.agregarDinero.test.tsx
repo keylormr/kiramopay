@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { HomeView } from '../HomeView';
@@ -102,7 +102,8 @@ describe('HomeView: Agregar dinero', () => {
     await user.click(within(hoja).getByRole('button', { name: 'Recibir' }));
 
     expect(onNavigateToSinpe).toHaveBeenCalledWith('receive');
-    expect(screen.queryByRole('dialog', { name: 'Agregar dinero' })).toBeNull();
+    // La hoja tarda 300 ms en irse (animacion de salida).
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agregar dinero' })).toBeNull());
   });
 
   it('Mi QR abre el QR con el que te pagan', async () => {
@@ -112,6 +113,6 @@ describe('HomeView: Agregar dinero', () => {
     await user.click(within(hoja).getByRole('button', { name: 'Mi QR' }));
 
     expect(await screen.findByRole('dialog', { name: 'Cobrar con QR' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Agregar dinero' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agregar dinero' })).toBeNull());
   });
 });
