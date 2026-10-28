@@ -40,15 +40,18 @@ type SessionRecord struct {
 	ExpiresAt         time.Time
 }
 
+// CreateSession declara expires_at como ::timestamptz y lo manda en UTC: igual
+// que en InsertRefreshToken, el instante tiene que llegar entero a la base sin
+// depender de la zona de la sesion ni de lo que Postgres infiera del parametro.
 func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO user_sessions
 		   (id, user_id, access_jti, refresh_jti, device_fingerprint,
 		    ip_address, user_agent, expires_at, token_hash, refresh_token_hash)
 		 VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
-		         NULLIF($6,'')::inet, $7::text, $8, $9::text, $10::text)`,
+		         NULLIF($6,'')::inet, $7::text, $8::timestamptz, $9::text, $10::text)`,
 		s.ID, s.UserID, s.AccessJTI, s.RefreshJTI, nullable(s.DeviceFingerprint),
-		s.IPAddress, nullable(s.UserAgent), s.ExpiresAt,
+		s.IPAddress, nullable(s.UserAgent), s.ExpiresAt.UTC(),
 		s.AccessJTI, s.RefreshJTI, // legacy token_hash / refresh_token_hash mirror
 	)
 	return err
@@ -80,12 +83,12 @@ func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error 
 func (r *Repository) MoverSesionAlRotar(ctx context.Context, userID, parentRefreshJTI string, s *SessionRecord) (bool, error) {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE user_sessions
-		    SET access_jti = $3::uuid, refresh_jti = $4::uuid, expires_at = $5,
+		    SET access_jti = $3::uuid, refresh_jti = $4::uuid, expires_at = $5::timestamptz,
 		        token_hash = $3::text, refresh_token_hash = $4::text,
 		        ip_address = COALESCE(NULLIF($6,'')::inet, ip_address),
 		        user_agent = COALESCE(NULLIF($7,''), user_agent)
 		  WHERE user_id = $1::uuid AND refresh_jti = $2::uuid AND revoked_at IS NULL`,
-		userID, parentRefreshJTI, s.AccessJTI, s.RefreshJTI, s.ExpiresAt,
+		userID, parentRefreshJTI, s.AccessJTI, s.RefreshJTI, s.ExpiresAt.UTC(),
 		s.IPAddress, s.UserAgent,
 	)
 	if err != nil {
@@ -167,13 +170,25 @@ type RefreshTokenRecord struct {
 	UserAgent string
 }
 
+// InsertRefreshToken guarda el token con sus fechas como INSTANTES, no como
+// hora de pared.
+//
+// Antes los dos parametros iban con ::timestamp. Ese cast descarta la zona del
+// time.Time y deja solo el reloj de pared; al entrar a la columna TIMESTAMPTZ,
+// Postgres lo toma como hora de la zona de la SESION. Con la base en GMT, como
+// en produccion, el desfase es cero y no se notaba; en cualquier otra zona el
+// vencimiento se corria tantas horas como el desfase (seis de mas en
+// America/Costa_Rica, nueve de menos en Asia/Tokyo: ahi el refresh nacia
+// vencido). Con ::timestamptz el instante viaja entero y la zona de la sesion
+// ya no interviene; .UTC() deja el valor en la zona que usa el resto del
+// backend.
 func (r *Repository) InsertRefreshToken(ctx context.Context, t *RefreshTokenRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO refresh_tokens
 		   (jti, user_id, parent_jti, family_id, token_hash, issued_at, expires_at, ip_address, user_agent)
 		 VALUES ($1::uuid, $2::uuid, NULLIF($3::text,'')::uuid, $4::uuid, $5::text,
-		         $6::timestamp, $7::timestamp, NULLIF($8::text,'')::inet, $9::text)`,
-		t.JTI, t.UserID, t.ParentJTI, t.FamilyID, t.TokenHash, t.IssuedAt, t.ExpiresAt,
+		         $6::timestamptz, $7::timestamptz, NULLIF($8::text,'')::inet, $9::text)`,
+		t.JTI, t.UserID, t.ParentJTI, t.FamilyID, t.TokenHash, t.IssuedAt.UTC(), t.ExpiresAt.UTC(),
 		t.IPAddress, nullable(t.UserAgent),
 	)
 	return err

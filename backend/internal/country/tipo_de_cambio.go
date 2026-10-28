@@ -55,6 +55,45 @@ type Cotizacion struct {
 	Fecha  time.Time
 }
 
+// pasadasFallidasParaAlertar son las pasadas seguidas sin que la fuente
+// confirme a partir de las cuales una falla pasajera deja de registrarse como
+// WARN y pasa a ERROR. Con el intervalo por defecto (una hora) son seis horas:
+// de sobra para que un 503 de Hacienda se arregle solo, y muy lejos de las 96
+// horas de EdadMaximaTipoDeCambio en que cripto en colones deja de operar, asi
+// que la alerta llega con tiempo para actuar.
+const pasadasFallidasParaAlertar = 6
+
+// fallaPasajera marca el error de la fuente que se espera que se arregle solo:
+// un 5xx, un 429 o una red que no responde. Conserva el mensaje del error
+// original, que es el que se publica en /health. Una respuesta que llego pero
+// no sirve (un 404, basura, una cifra fuera de rango) NO lo es: eso no se
+// arregla esperando.
+type fallaPasajera struct{ err error }
+
+func (f fallaPasajera) Error() string { return f.err.Error() }
+func (f fallaPasajera) Unwrap() error { return f.err }
+
+func esFallaPasajera(err error) bool {
+	var f fallaPasajera
+	return errors.As(err, &f)
+}
+
+// estadoPasajero dice si un codigo HTTP de la fuente es de los que se arreglan
+// solos.
+func estadoPasajero(codigo int) bool {
+	return codigo >= http.StatusInternalServerError || codigo == http.StatusTooManyRequests
+}
+
+// nivelDeFalla decide con que nivel se registra una pasada fallida, siendo
+// seguidas el numero de pasadas seguidas sin confirmar contando la actual: WARN
+// si la falla es pasajera y todavia es corta, ERROR en cualquier otro caso.
+func nivelDeFalla(err error, seguidas int) slog.Level {
+	if esFallaPasajera(err) && seguidas < pasadasFallidasParaAlertar {
+		return slog.LevelWarn
+	}
+	return slog.LevelError
+}
+
 // FuenteTipoDeCambio trae la cotizacion vigente del dolar en colones.
 type FuenteTipoDeCambio interface {
 	Obtener(ctx context.Context) (*Cotizacion, error)
@@ -91,11 +130,15 @@ func (f *FuenteHacienda) ObtenerEuro(ctx context.Context) (float64, time.Time, e
 	req.Header.Set("Accept", "application/json")
 	res, err := f.Client.Do(req)
 	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("hacienda euro: %w", err)
+		return 0, time.Time{}, fallaPasajera{fmt.Errorf("hacienda euro: %w", err)}
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return 0, time.Time{}, fmt.Errorf("hacienda euro: HTTP %d", res.StatusCode)
+		err := fmt.Errorf("hacienda euro: HTTP %d", res.StatusCode)
+		if estadoPasajero(res.StatusCode) {
+			err = fallaPasajera{err}
+		}
+		return 0, time.Time{}, err
 	}
 	var cuerpo struct {
 		Fecha   string  `json:"fecha"`
@@ -131,11 +174,15 @@ func (f *FuenteHacienda) Obtener(ctx context.Context) (*Cotizacion, error) {
 	req.Header.Set("Accept", "application/json")
 	res, err := f.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("hacienda: %w", err)
+		return nil, fallaPasajera{fmt.Errorf("hacienda: %w", err)}
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hacienda: HTTP %d", res.StatusCode)
+		err := fmt.Errorf("hacienda: HTTP %d", res.StatusCode)
+		if estadoPasajero(res.StatusCode) {
+			err = fallaPasajera{err}
+		}
+		return nil, err
 	}
 	var cuerpo struct {
 		Venta struct {
@@ -193,6 +240,10 @@ type Actualizador struct {
 
 	mu     sync.Mutex
 	estado DiagnosticoTipoDeCambio
+	// Pasadas seguidas sin que la fuente confirme el dolar y el euro. Deciden
+	// el nivel del registro de una falla pasajera (nivelDeFalla); una pasada
+	// buena las pone en cero.
+	fallasSeguidas, fallasEuroSeguidas int
 }
 
 // DiagnosticoTipoDeCambio es lo que se publica en /health.
@@ -221,8 +272,9 @@ func NewActualizador(repo *Repository, fuente FuenteTipoDeCambio, cada time.Dura
 // esta primera pasada, cripto en colones quedaria fuera de servicio una hora.
 //
 // El error de cada pasada no se propaga: ActualizarUnaVez ya lo deja en el
-// diagnostico de /health y en el log con nivel Error, y la siguiente pasada lo
-// vuelve a intentar.
+// diagnostico de /health y en el log (WARN si es una falla pasajera de la
+// fuente y todavia corta, ERROR si no), y la siguiente pasada lo vuelve a
+// intentar.
 func (a *Actualizador) Run(ctx context.Context) {
 	_ = a.ActualizarUnaVez(ctx)
 	t := time.NewTicker(a.cada)
@@ -246,11 +298,21 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	}
 	if err != nil {
 		a.anotarError(err)
-		// Error y no Warn: si esto se repite durante EdadMaximaTipoDeCambio,
+		a.mu.Lock()
+		a.fallasSeguidas++
+		seguidas := a.fallasSeguidas
+		a.mu.Unlock()
+		// Un 503 que se arregla solo es WARN; si se repite hasta
+		// pasadasFallidasParaAlertar pasadas, o la respuesta llego pero no
+		// sirve, es ERROR: pasadas EdadMaximaTipoDeCambio sin confirmar,
 		// cripto en colones deja de operar, y eso tiene que verse antes.
-		a.logger.Error("tipo de cambio: no se pudo actualizar", "error", err)
+		a.logger.Log(ctx, nivelDeFalla(err, seguidas), "tipo de cambio: no se pudo actualizar",
+			"error", err, "pasadas_seguidas", seguidas)
 		return err
 	}
+	a.mu.Lock()
+	a.fallasSeguidas = 0
+	a.mu.Unlock()
 
 	// Una sola tasa de referencia, la de VENTA, para los dos sentidos. Asi el
 	// precio que la pantalla muestra es exactamente el que se cobra, y una
@@ -318,8 +380,17 @@ func (a *Actualizador) actualizarEuro(ctx context.Context, fe FuenteEuro) {
 	if err == nil {
 		err = a.repo.RegistrarCotizacionDelDia(ctx, "EUR", fecha, 1/dolares, "hacienda")
 	}
+	a.mu.Lock()
+	if err == nil {
+		a.fallasEuroSeguidas = 0
+	} else {
+		a.fallasEuroSeguidas++
+	}
+	seguidas := a.fallasEuroSeguidas
+	a.mu.Unlock()
 	if err != nil {
-		a.logger.Error("tipo de cambio: no se pudo actualizar el euro", "error", err)
+		a.logger.Log(ctx, nivelDeFalla(err, seguidas), "tipo de cambio: no se pudo actualizar el euro",
+			"error", err, "pasadas_seguidas", seguidas)
 	}
 }
 

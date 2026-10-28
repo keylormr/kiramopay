@@ -82,6 +82,103 @@ func TestElEuroCaidoEsWarnNoError(t *testing.T) {
 	}
 }
 
+// Solo lo que se arregla esperando es pasajero. Una respuesta que llego pero no
+// sirve es un error de verdad desde la primera vez: la URL cambio, Hacienda nos
+// bloqueo, o el formato cambio y el actualizador ya no entiende lo que lee.
+func TestSoloLasFallasQueSeArreglanSolasSonPasajeras(t *testing.T) {
+	casos := []struct {
+		nombre   string
+		handler  http.HandlerFunc
+		pasajera bool
+	}{
+		{"500", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }, true},
+		{"502", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(502) }, true},
+		{"503", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }, true},
+		{"504", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(504) }, true},
+		{"429", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(429) }, true},
+		{"404", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) }, false},
+		{"403", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) }, false},
+		{"200 con basura", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("<html>mantenimiento</html>"))
+		}, false},
+		{"200 sin fecha", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"venta":{"valor":450},"compra":{"valor":444}}`))
+		}, false},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			srv := httptest.NewServer(c.handler)
+			defer srv.Close()
+			f := &FuenteHacienda{URL: srv.URL, URLEuro: srv.URL, Client: srv.Client()}
+
+			_, err := f.Obtener(context.Background())
+			if err == nil {
+				t.Fatal("se esperaba error")
+			}
+			if got := esFallaPasajera(err); got != c.pasajera {
+				t.Errorf("dolar: esFallaPasajera = %v, se esperaba %v (%v)", got, c.pasajera, err)
+			}
+			_, _, err = f.ObtenerEuro(context.Background())
+			if err == nil {
+				t.Fatal("se esperaba error en el euro")
+			}
+			if got := esFallaPasajera(err); got != c.pasajera {
+				t.Errorf("euro: esFallaPasajera = %v, se esperaba %v (%v)", got, c.pasajera, err)
+			}
+		})
+	}
+}
+
+func TestUnaRespuestaQueNoSirveEsErrorDeEntrada(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	a, buf := registroDelActualizador(&FuenteHacienda{URL: srv.URL, Client: srv.Client()})
+
+	_ = a.ActualizarUnaVez(context.Background())
+
+	if salida := buf.String(); !strings.Contains(salida, "level=ERROR") {
+		t.Errorf("un 404 tiene que ser ERROR desde la primera pasada: %s", salida)
+	}
+}
+
+// Una cifra fuera de rango llega con 200, bien formada: la rechaza la
+// validacion, no la fuente, y sigue siendo ERROR.
+func TestUnaCotizacionFueraDeRangoEsErrorDeEntrada(t *testing.T) {
+	a, buf := registroDelActualizador(fuenteFija{c: &Cotizacion{Compra: 44422, Venta: 45006, Fecha: time.Now()}})
+
+	_ = a.ActualizarUnaVez(context.Background())
+
+	if salida := buf.String(); !strings.Contains(salida, "level=ERROR") {
+		t.Errorf("una cotizacion fuera de rango tiene que ser ERROR: %s", salida)
+	}
+}
+
+func TestNivelDeFalla(t *testing.T) {
+	pasajera := fallaPasajera{errString("hacienda: HTTP 503")}
+	otra := errString("hacienda: HTTP 404")
+	casos := []struct {
+		nombre   string
+		err      error
+		seguidas int
+		quiere   slog.Level
+	}{
+		{"pasajera y corta", pasajera, 1, slog.LevelWarn},
+		{"pasajera, a una del tope", pasajera, pasadasFallidasParaAlertar - 1, slog.LevelWarn},
+		{"pasajera que ya no se va", pasajera, pasadasFallidasParaAlertar, slog.LevelError},
+		{"pasajera muy larga", pasajera, 100, slog.LevelError},
+		{"no pasajera, la primera vez", otra, 1, slog.LevelError},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := nivelDeFalla(c.err, c.seguidas); got != c.quiere {
+				t.Errorf("nivelDeFalla(%v, %d) = %v, se esperaba %v", c.err, c.seguidas, got, c.quiere)
+			}
+		})
+	}
+}
+
 // Una falla que no se va deja de ser pasajera: dos dias de pasadas cada hora
 // sin una sola confirmacion tienen que terminar en ERROR.
 func TestUn503QueNoSeVaTerminaEnError(t *testing.T) {

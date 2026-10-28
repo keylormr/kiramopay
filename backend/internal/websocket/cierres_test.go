@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -120,6 +122,15 @@ func TestLecturaDelSocket_ElNivelDelRegistroSigueAlTipoDeCierre(t *testing.T) {
 			},
 			nivel: "level=WARN", codigo: "code=1006",
 		},
+		{
+			// Lo que de verdad es un error sigue siendolo.
+			nombre: "el cliente cierra con error interno",
+			cerrar: func(conn *websocket.Conn) {
+				_ = conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseInternalServerErr, ""))
+			},
+			nivel: "level=ERROR", codigo: "code=1011",
+		},
 	}
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
@@ -130,13 +141,44 @@ func TestLecturaDelSocket_ElNivelDelRegistroSigueAlTipoDeCierre(t *testing.T) {
 			_ = conn.Close()
 			buf.esperarDesconexion(t)
 
-			if l, hay := buf.lineaCon("level=ERROR"); hay {
-				t.Errorf("un cierre del cliente no es un ERROR del servidor: %s", l)
+			if c.nivel != "level=ERROR" {
+				if l, hay := buf.lineaCon("level=ERROR"); hay {
+					t.Errorf("un cierre del cliente no es un ERROR del servidor: %s", l)
+				}
 			}
 			if l, hay := buf.lineaCon(c.nivel, c.codigo); !hay {
 				t.Errorf("falta la linea %s con %s; registro:\n%s", c.nivel, c.codigo, strings.Join(buf.lineas(), "\n"))
 			} else {
 				t.Logf("registro: %s", l)
+			}
+		})
+	}
+}
+
+// readEndLevel clasifica por el codigo de cierre, aunque el error venga
+// envuelto, y deja en DEBUG lo que no es un cierre de WebSocket (un pong que no
+// llego, un socket que el servidor ya cerro).
+func TestReadEndLevel(t *testing.T) {
+	cierre := func(codigo int) error { return &websocket.CloseError{Code: codigo} }
+	casos := []struct {
+		nombre string
+		err    error
+		quiere slog.Level
+	}{
+		{"cierre normal", cierre(websocket.CloseNormalClosure), slog.LevelInfo},
+		{"going away", cierre(websocket.CloseGoingAway), slog.LevelInfo},
+		{"close() del navegador sin codigo", cierre(websocket.CloseNoStatusReceived), slog.LevelInfo},
+		{"cierre abrupto", cierre(websocket.CloseAbnormalClosure), slog.LevelWarn},
+		{"error de protocolo", cierre(websocket.CloseProtocolError), slog.LevelError},
+		{"datos invalidos", cierre(websocket.CloseInvalidFramePayloadData), slog.LevelError},
+		{"error interno del par", cierre(websocket.CloseInternalServerErr), slog.LevelError},
+		{"envuelto", fmt.Errorf("leer: %w", cierre(websocket.CloseAbnormalClosure)), slog.LevelWarn},
+		{"sin cierre de websocket", errors.New("use of closed network connection"), slog.LevelDebug},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := readEndLevel(c.err); got != c.quiere {
+				t.Errorf("readEndLevel(%v) = %v, se esperaba %v", c.err, got, c.quiere)
 			}
 		})
 	}
