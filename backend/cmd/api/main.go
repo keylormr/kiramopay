@@ -390,7 +390,9 @@ func main() {
 		EmailSender:              emailSender,
 		PublicAppURL:             msgCfg.PublicAppURL,
 	})
-	userService := user.NewService(userRepo)
+	// El perfil dice que cuentas entran sin contrasena con la misma bandera del
+	// login, para que la app no les ofrezca cambiar una contrasena que no tienen.
+	userService := user.NewService(userRepo).ConEntradaDeDemostracion(cfg.Server.DemoLoginEnabled)
 	walletService := wallet.NewService(walletRepo)
 	// El motor de riesgo se construye ANTES que el servicio de transacciones
 	// porque este ultimo lo consulta en el camino de salida. Hasta ahora solo

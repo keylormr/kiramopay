@@ -25,6 +25,12 @@ type UserRecord struct {
 	// sola: el servidor exige ademas que DEMO_LOGIN_ENABLED este encendida.
 	// Nunca sale al cliente.
 	DemoLogin bool `json:"-"`
+	// PasswordlessLogin dice si la cuenta entra SIN CONTRASENA ahora mismo: esta
+	// marcada (DemoLogin) Y el servidor tiene la bandera encendida. Es lo que la
+	// app necesita saber: a esas cuentas no se les ofrece cambiar la contrasena
+	// ni eliminar la cuenta, porque las dos piden la contrasena actual. No se
+	// lee de la base: lo fija MarcarEntradaSinContrasena antes de responder.
+	PasswordlessLogin bool `json:"passwordless_login"`
 	// Plan es el plan personal (free, plus, pro; migracion 048). Hoy no hay
 	// cobro: solo un administrador lo cambia, para pilotos. Define los topes de
 	// metas de ahorro y tarjetas y la cuota del asistente.
@@ -40,6 +46,14 @@ type UserRecord struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
+}
+
+// MarcarEntradaSinContrasena fija PasswordlessLogin con las mismas condiciones
+// con que el login deja entrar sin contrasena: la cuenta marcada, activa, y la
+// bandera del servidor encendida. Lo llaman quienes arman la respuesta al
+// cliente (el perfil y el login); la bandera vive en cada uno de sus servicios.
+func (u *UserRecord) MarcarEntradaSinContrasena(banderaEncendida bool) {
+	u.PasswordlessLogin = banderaEncendida && u.DemoLogin && u.Status == "active"
 }
 
 type UpdateProfileRequest struct {

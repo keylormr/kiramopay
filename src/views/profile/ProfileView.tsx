@@ -71,6 +71,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   // pantalla de analisis: resumen del servidor, dias civiles de Costa Rica.
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
+  // La cuenta entra sin contrasena (demostracion): ver el aviso de Seguridad.
+  const sinContrasena = state.user?.passwordlessLogin === true;
   // Admin entry is gated by a server-side probe: the role lives only on the
   // backend (no role is exposed to the client), so we surface the menu item only
   // when the admin-only endpoint answers successfully for this user.
@@ -642,19 +644,33 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           <HelpButton topic="mfa" className="-mr-1" />
         </div>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-          <button
-            onClick={() => setShowPasswordSheet(true)}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Lock size={18} className="text-orange-600" />
+          {/* Las cuentas que entran sin contrasena no tienen una contrasena actual que
+              presentar: cambiarla y eliminar la cuenta fallarian (el servidor las
+              rechaza), asi que no se ofrecen y esta linea dice por que. */}
+          {sinContrasena && (
+            <div role="note" className="flex items-start gap-3 px-4 py-3.5">
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center shrink-0">
+                <Icons.Lock size={18} className="text-orange-600" />
+              </div>
+              <p className="flex-1 text-sm leading-relaxed uv-text-secondary">{t('profile_demo_account')}</p>
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold uv-text-primary text-sm">{t('change_password')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('password_requirements')}</p>
-            </div>
-            <Icons.ChevronRight size={18} className="uv-text-muted" />
-          </button>
+          )}
+
+          {!sinContrasena && (
+            <button
+              onClick={() => setShowPasswordSheet(true)}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Lock size={18} className="text-orange-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('change_password')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('password_requirements')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
 
           {ofrecerBiometria && (
             <div>
@@ -746,19 +762,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {/* Eliminar la cuenta: accion destructiva, por eso el titulo va en el
               color de peligro y la hoja pide confirmacion fuerte. Google Play
               exige que esta via este a la vista, en los ajustes de la cuenta. */}
-          <button
-            onClick={() => setShowDeleteSheet(true)}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Trash size={18} className="text-red-600" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
-            </div>
-            <Icons.ChevronRight size={18} className="uv-text-muted" />
-          </button>
+          {!sinContrasena && (
+            <button
+              onClick={() => setShowDeleteSheet(true)}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Trash size={18} className="text-red-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
         </div>
       </div>
 

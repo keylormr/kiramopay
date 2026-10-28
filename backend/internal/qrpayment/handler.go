@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -35,10 +36,7 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 
 	merchant, err := h.service.RegisterMerchant(r.Context(), userID, &req)
 	if err != nil {
-		if responderSiCategoriaInvalida(w, err) {
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "REGISTER_FAILED", err.Error())
+		responderErrorDelComercio(w, "REGISTER_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, merchant)
@@ -49,6 +47,12 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
+	// Un id que ni tiene la forma del de un comercio es un comercio que no
+	// existe, igual que en el retiro.
+	if _, err := uuid.Parse(merchantID); err != nil {
+		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		return
+	}
 	var req RegisterMerchantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -56,10 +60,10 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		if responderSiCerro(w, err) || responderSiCategoriaInvalida(w, err) {
+		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
+		responderErrorDelComercio(w, "UPDATE_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, m)
@@ -150,16 +154,67 @@ func responderSiCerro(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// responderSiCategoriaInvalida responde 400 INVALID_CATEGORY cuando la categoria
-// del comercio no es una de CategoriasDeComercio, y dice si lo hizo. Lo usan el
-// registro y la edicion: el texto de la pantalla lo escribe el cliente a partir
-// del codigo.
-func responderSiCategoriaInvalida(w http.ResponseWriter, err error) bool {
-	if !errors.Is(err, ErrCategoriaInvalida) {
-		return false
+// responderErrorDelComercio da su respuesta a cada rechazo de registrar, editar
+// y revisar un comercio. `generico` es el codigo que ya usaba la ruta
+// (REGISTER_FAILED, UPDATE_FAILED...): queda para lo inesperado, que es un 500.
+//
+// Antes todo salia como 400 con err.Error(): la frase de validacion en ingles y,
+// cuando fallaba la base, la del controlador ("ERROR: value too long for type
+// character varying(200)", "failed to connect to ..."). Ahora cada rechazo
+// conocido lleva su codigo, y en el 500 la causa va al log (response.Error la
+// escribe ahi y al cliente le manda un mensaje generico).
+//
+// Lo que la persona lee lo escribe la PANTALLA, a partir del codigo; el mensaje
+// es para quien integra la API y va en ingles.
+func responderErrorDelComercio(w http.ResponseWriter, generico string, err error) {
+	casos := []struct {
+		err    error
+		http   int
+		codigo string
+	}{
+		{ErrCategoriaInvalida, http.StatusBadRequest, "INVALID_CATEGORY"},
+		{ErrNombreDeComercioRequerido, http.StatusBadRequest, "MERCHANT_NAME_REQUIRED"},
+		{ErrCedulaRequerida, http.StatusBadRequest, "MERCHANT_CEDULA_REQUIRED"},
+		{ErrRazonSocialRequerida, http.StatusBadRequest, "MERCHANT_LEGAL_NAME_REQUIRED"},
+		{ErrTipoDeCedulaInvalido, http.StatusBadRequest, "MERCHANT_CEDULA_TYPE_INVALID"},
+		{ErrDatoDeComercioMuyLargo, http.StatusBadRequest, "MERCHANT_FIELD_TOO_LONG"},
+		{ErrComisionFueraDeRango, http.StatusBadRequest, "COMMISSION_OUT_OF_RANGE"},
+		// Un comercio que no existe y uno que no es de quien lo edita no se
+		// distinguen, para no decirle a nadie que comercios existen.
+		{ErrComercioNoEncontrado, http.StatusNotFound, "MERCHANT_NOT_FOUND"},
 	}
-	response.Error(w, http.StatusBadRequest, "INVALID_CATEGORY", ErrCategoriaInvalida.Error())
-	return true
+	for _, c := range casos {
+		if errors.Is(err, c.err) {
+			response.Error(w, c.http, c.codigo, c.err.Error())
+			return
+		}
+	}
+	// Lo que la ruta no previo y la base rechazo se reconoce por el SQLSTATE y no
+	// por el texto, que cambia con el idioma del servidor de base de datos.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505": // unique_violation
+			response.Error(w, http.StatusConflict, "MERCHANT_DUPLICATE", "merchant already exists")
+			return
+		case "22001": // string_data_right_truncation
+			response.Error(w, http.StatusBadRequest, "MERCHANT_FIELD_TOO_LONG", ErrDatoDeComercioMuyLargo.Error())
+			return
+		}
+	}
+	response.Error(w, http.StatusInternalServerError, generico, err.Error())
+}
+
+// idDeComercioDeAdministracion lee el {id} de una ruta de administracion; uno que
+// no es un UUID es un 400 INVALID_ID, como en el plan y el cierre. Sin esto la
+// base fallaba al compararlo y su texto salia en la respuesta.
+func idDeComercioDeAdministracion(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "id must be a UUID")
+		return "", false
+	}
+	return id.String(), true
 }
 
 // responderSiEsPropio responde 403 ADMIN_IS_AFFECTED_PARTY cuando el
@@ -496,13 +551,16 @@ func (h *Handler) ListPendingMerchants(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
 	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
+		responderErrorDelComercio(w, "APPROVE_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
@@ -510,7 +568,10 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
 	var req VerificationDecisionRequest
 	// Body is optional; an empty/invalid body just means no reason was given.
 	_ = json.NewDecoder(r.Body).Decode(&req)
@@ -519,7 +580,7 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
+		responderErrorDelComercio(w, "REJECT_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
@@ -527,7 +588,10 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
 	var req SetCommissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -538,7 +602,7 @@ func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
+		responderErrorDelComercio(w, "SET_COMMISSION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
