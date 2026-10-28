@@ -241,7 +241,16 @@ export async function revisarTelefono(page) {
     }
     if (fuera.length) problemas.push(`controles fuera de la pantalla: ${[...new Set(fuera)].slice(0, 8).join('; ')}`);
     // Texto que se sale de su caja (un monto largo que pisa el borde del cuadro, por ejemplo).
-    // Se ignoran las cajas que recortan o se desplazan a proposito.
+    // Se ignoran las cajas que recortan o se desplazan a proposito, y lo que otra pantalla
+    // (una hoja o una pantalla completa abierta encima) tiene tapado: se reporta en su propia pantalla.
+    const tapado = (el) => {
+      const r = el.getBoundingClientRect();
+      const x = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1);
+      const y = r.top + r.height / 2;
+      if (y < 0 || y >= window.innerHeight) return false; // fuera de la ventana no se puede saber: cuenta
+      const arriba = document.elementFromPoint(x, y);
+      return !!arriba && !el.contains(arriba) && !arriba.contains(el);
+    };
     const desbordados = [];
     for (const el of document.querySelectorAll('body *')) {
       if (el.closest('svg') || !visible(el)) continue;
@@ -253,6 +262,7 @@ export async function revisarTelefono(page) {
         .join('')
         .trim();
       if (!texto || dentroDeDesplazable(el)) continue;
+      if (el.scrollWidth <= el.clientWidth + 2 || tapado(el)) continue;
       if (el.scrollWidth > el.clientWidth + 2) desbordados.push(`"${texto.slice(0, 30)}" (${el.scrollWidth} px en una caja de ${el.clientWidth} px)`);
     }
     if (desbordados.length) problemas.push(`texto que se sale de su caja: ${[...new Set(desbordados)].slice(0, 6).join('; ')}`);

@@ -142,7 +142,7 @@ export default {
     await f.paso('Rechazos del servidor: comercio inexistente, comisión fuera de rango, plan inválido, usuario normal', async (c) => {
       const inexistente = '00000000-0000-4000-8000-000000000000';
       c.ok(!(await api.keilor.post(`/admin/merchants/${inexistente}/approve`, {})).ok, 'aprobar un comercio inexistente no debería salir bien');
-      c.respuesta(await api.keilor.patch(`/admin/merchants/${comercios.rechazado.id}/commission`, { commission_bps: 10001 }), 400, 'comisión de 100,01 %', 'SET_COMMISSION_FAILED');
+      c.respuesta(await api.keilor.patch(`/admin/merchants/${comercios.rechazado.id}/commission`, { commission_bps: 10001 }), 400, 'comisión de 100,01 %', 'COMMISSION_OUT_OF_RANGE');
       c.respuesta(await api.keilor.patch(`/admin/merchants/${comercios.rechazado.id}/plan`, { plan: 'platino' }), 400, 'plan desconocido', 'PLAN_INVALID');
       c.respuesta(await api.victor.post(`/admin/merchants/${comercios.rechazado.id}/approve`, {}), 403, 'victor aprueba un comercio', 'FORBIDDEN');
     });

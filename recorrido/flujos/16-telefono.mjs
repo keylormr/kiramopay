@@ -115,6 +115,12 @@ export default {
       await sinDesborde(p);
     });
 
+    await paso('Cripto: pestaña', async () => {
+      await aInicio(p);
+      await ir(p, txt('Crypto'));
+      await sinDesborde(p);
+    });
+
     await paso('Cripto: hoja de comprar', async () => {
       await aInicio(p);
       await ir(p, txt('Crypto'));
