@@ -5,6 +5,7 @@ import { apiSuccess } from '../../types';
 import { falla } from './falla';
 import { HttpClient } from './client';
 import type { ApiData } from '../../generated/helpers';
+import { idiomaInicial } from '@/i18n/idiomaDeLaPersona';
 
 // Anchored to the spec — re-run `npm run gen:api` after backend changes.
 type NotificationDTO = NonNullable<
@@ -18,9 +19,12 @@ export class HttpNotificationRepository implements INotificationRepository {
     // Backend (notification_history) returns: title, body, type, read_at, created_at.
     // We also tolerate the historical {message, read} shape.
     // Legacy {message, read} fields kept for back-compat with older backends.
+    // La lista se pide en el idioma de la pantalla: los avisos se guardan ya
+    // escritos, y los de antes de que la cuenta tuviera idioma estan en espanol.
+    // El servidor reescribe los que reconoce y no toca lo guardado.
     const res = await this.client.get<
       Array<NotificationDTO & { message?: string; read?: boolean }> | null
-    >('/api/v1/notifications');
+    >(`/api/v1/notifications?lang=${idiomaInicial()}`);
 
     if (!res.success) {
       return falla(res, 'FETCH_FAILED');

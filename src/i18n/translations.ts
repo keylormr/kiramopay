@@ -1240,9 +1240,12 @@ export type TranslationKeys = {
   qr_mi_codigo: string;
   qr_rotulo_mostrador: string;
   qr_rotulo_ayuda: string;
+  qr_personal_ayuda: string;
   qr_cobrar_monto: string;
   qr_cobrando: string;
-  qr_vence_en_min: string;
+  qr_vence_en: string;
+  duration_hours: string;
+  duration_minutes: string;
   qr_cambiar_monto: string;
   qr_quitar_monto: string;
   qr_cancelar_cobro: string;
@@ -1251,6 +1254,7 @@ export type TranslationKeys = {
   qr_le_pagas_a: string;
   qr_verificando: string;
   qr_solicitudes_activas: string;
+  qr_ver_qr: string;
   qr_sin_solicitudes: string;
   qr_err_revocado: string;
   qr_err_reemplazado: string;
@@ -1308,6 +1312,9 @@ export type TranslationKeys = {
   splitpay_share_paid: string;
   splitpay_share_pending: string;
   splitpay_share_declined: string;
+  splitpay_status_active: string;
+  splitpay_status_settled: string;
+  splitpay_status_cancelled: string;
   splitpay_detail: string;
   splitpay_decline_share: string;
   splitpay_cancel_split: string;
@@ -1353,6 +1360,10 @@ export type TranslationKeys = {
   loyalty_redeem: string;
   loyalty_next_tier: string;
   loyalty_max_per_tx: string;
+  loyalty_reward_cashback_name: string;
+  loyalty_reward_cashback_desc: string;
+  loyalty_tx_redeem: string;
+  loyalty_tx_referral: string;
 
   // Home extra cards
   home_split: string;
@@ -2092,10 +2103,24 @@ const loaders: Record<Exclude<Language, 'es'>, () => Promise<{ default: Translat
   hi: () => import('./languages/hi'),
 };
 
+// Los diccionarios que ya llegaron. Quien pinta (LanguageProvider, la pantalla
+// de error) los lee de aqui en su primer render: sin esto el primer pintado era
+// siempre en espanol y el idioma de la persona entraba despues, cuando el trozo
+// terminaba de bajar; si no terminaba (justo lo que pasa con una red mala o un
+// servidor dormido), la pantalla de arranque se quedaba en espanol.
+const cargados: Partial<Record<Language, TranslationKeys>> = { es };
+
+/** El diccionario del idioma si ya llego, sin esperar nada. */
+export function diccionarioCargado(lang: Language): TranslationKeys | undefined {
+  return cargados[lang];
+}
+
 // loadLanguage resolves a language's messages: Spanish is already bundled;
 // the others are fetched via a dynamic import (their own chunk).
 export async function loadLanguage(lang: Language): Promise<TranslationKeys> {
-  if (lang === 'es') return es;
-  const mod = await loaders[lang]();
+  const ya = cargados[lang];
+  if (ya) return ya;
+  const mod = await loaders[lang as Exclude<Language, 'es'>]();
+  cargados[lang] = mod.default;
   return mod.default;
 }

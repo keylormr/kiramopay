@@ -17,6 +17,9 @@
 // 2.0.0 mientras la aplicación publicada iba en 2.3.3: el perfil mostraba una
 // versión que no existía y el changelog se había quedado en febrero.
 
+import type { Language } from '@/i18n/translations';
+import notasTraducidas from './notasTraducidas.json';
+
 /** Versión del paquete (package.json), fijada en tiempo de build. */
 export const BUILD_VERSION: string = __APP_VERSION__;
 
@@ -301,4 +304,17 @@ export const getBuildDate = (locale = 'es-CR'): string => {
 // Helper para obtener todas las versiones (actual + historial)
 export const getAllVersions = (): VersionInfo[] => {
   return [APP_VERSION.current, ...APP_VERSION.history];
+};
+
+// Los cambios de una version en el idioma de la persona. El changelog de arriba
+// esta en espanol; las demas lenguas viven en notasTraducidas.json, una lista
+// por version, en el mismo orden. Si falta la traduccion, o tiene otro numero de
+// cambios (los textos se correrian), sale el espanol: mejor eso que una lista
+// vacia o mezclada.
+const traducciones = notasTraducidas as Record<string, Partial<Record<Language, string[]>>>;
+
+export const cambiosEn = (version: VersionInfo, idioma: Language): string[] => {
+  if (idioma === 'es') return version.changes;
+  const textos = traducciones[version.version]?.[idioma];
+  return textos && textos.length === version.changes.length ? textos : version.changes;
 };

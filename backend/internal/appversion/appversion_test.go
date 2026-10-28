@@ -432,7 +432,9 @@ func TestPlataforma_IOSRecibeLasMismasTraducciones(t *testing.T) {
 	notas := servidorNotas(t, "v2.3.6", `{"version":"2.3.6","cambios":["Uno"],"traducciones":{"en":["One"]}}`, http.StatusOK)
 	defer notas.Close()
 
-	got, _ := pedirCrudo(t, conNotas(api.URL, web.URL, notas.URL), "/api/v1/app/version?platform=ios")
+	h := conNotas(api.URL, web.URL, notas.URL)
+	h.iosUpdateURL = "https://apps.apple.com/app/kiramopay"
+	got, _ := pedirCrudo(t, h, "/api/v1/app/version?platform=ios")
 	if !reflect.DeepEqual(got.NotesI18n, map[string][]string{"en": {"One"}}) {
 		t.Fatalf("notes_i18n=%q, esperaba las mismas traducciones que Android", got.NotesI18n)
 	}

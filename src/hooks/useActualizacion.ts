@@ -54,6 +54,8 @@ type Comun = {
   instalada: string;
   /** Lo que trae la version; vacia si el release no lo dice. */
   notas: string[];
+  /** Las mismas novedades en los demas idiomas, por codigo; {} si el release no las trae. */
+  notasTraducidas?: Record<string, string[]>;
 };
 
 export type FaseInterna = 'preparando' | 'descargando' | 'aplicando' | 'sin_red' | 'error';
@@ -152,6 +154,18 @@ function notasLimpias(notas: unknown): string[] {
     .filter((n): n is string => typeof n === 'string')
     .map((n) => n.trim())
     .filter((n) => n !== '');
+}
+
+// Por idioma, y solo los que traen al menos un texto: la pantalla cae al espanol
+// cuando falta el de la persona.
+function traduccionesLimpias(traducidas: unknown): Record<string, string[]> {
+  if (!traducidas || typeof traducidas !== 'object' || Array.isArray(traducidas)) return {};
+  const limpias: Record<string, string[]> = {};
+  for (const [idioma, notas] of Object.entries(traducidas as Record<string, unknown>)) {
+    const textos = notasLimpias(notas);
+    if (textos.length > 0) limpias[idioma] = textos;
+  }
+  return limpias;
 }
 
 function esPaqueteWeb(web: unknown): web is PaqueteWeb {
@@ -332,9 +346,14 @@ export function useActualizacion(): {
           Promise.resolve({ success: false as const, data: undefined }),
       ]);
       if (!viva.current || !res.success || !res.data) return;
-      const { version, url, notes, web } = res.data;
+      const { version, url, notes, notes_i18n: notasTraducidas, web } = res.data;
       if (!esVersionMasNueva(version, BUILD_VERSION)) return;
-      const comun: Comun = { version, instalada: BUILD_VERSION, notas: notasLimpias(notes) };
+      const comun: Comun = {
+        version,
+        instalada: BUILD_VERSION,
+        notas: notasLimpias(notes),
+        notasTraducidas: traduccionesLimpias(notasTraducidas),
+      };
       const externa = typeof url === 'string' && url !== '' ? url : null;
 
       if (esPaqueteWeb(web)) {

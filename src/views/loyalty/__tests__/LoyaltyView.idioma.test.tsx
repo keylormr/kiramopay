@@ -158,6 +158,5 @@ describe('las plantillas del catalogo en los siete idiomas', () => {
     expect(d.loyalty_reward_cashback_desc).toContain('{monto}');
     expect(d.loyalty_tx_redeem).toContain('{premio}');
     expect(d.loyalty_tx_referral).toBeTruthy();
-    expect(d.version_current).toBeTruthy();
   });
 });

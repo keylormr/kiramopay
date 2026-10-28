@@ -20,6 +20,7 @@ import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repos
 import { mensajeDelRechazoDelCobro } from '@/utils/erroresQr';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
+import { Bandera } from '@/components/Bandera';
 
 /**
  * Viste un cobro con la forma que la pantalla ya sabe pintar. Un pedido de
@@ -522,6 +523,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const favorites = state.sinpeContacts.filter(c => c.isFavorite);
   const allContacts = state.sinpeContacts;
   const userPhone = state.user?.phone || '+506 8888-0000';
+  // El numero propio se lee igual que todos los demas de la pantalla
+  // ("+506 8888-0004"); el codigo QR y lo que se copia llevan el numero sin
+  // adornos, que es el que se escanea y se pega.
+  const userPhoneLegible = formatearTelefonoCR(userPhone);
+  const userPhoneCrudo = normalizarTelefonoCR(userPhone) ?? userPhone.replace(/\s/g, '');
   const userName = [state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ') || t('app_name');
   const myContactQr = encodeContactQr({ name: userName, phone: userPhone });
 
@@ -542,7 +548,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         />
         <div className="relative flex items-center gap-2 mb-3">
           <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center backdrop-blur-sm">
-            <span className="text-base">🇨🇷</span>
+            <Bandera pais="CR" className="text-base" />
           </div>
           <span className="text-xs font-semibold uppercase tracking-wider text-white/70">{t('sinpe_mobile')}</span>
         </div>
@@ -733,14 +739,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               {t('my_sinpe_number')}
             </h3>
             <p className="text-2xl font-black uv-text-primary mb-2 tabular-nums">
-              {userPhone}
+              {userPhoneLegible}
             </p>
             <p className="uv-text-muted text-sm mb-4">
               {t('share_number_message')}
             </p>
             <div className="flex gap-2.5">
               <button
-                onClick={() => handleCopy(userPhone.replace(/\s/g, ''), 'numero')}
+                onClick={() => handleCopy(userPhoneCrudo, 'numero')}
                 aria-label={t('copy')}
                 className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] py-3 rounded-xl font-semibold uv-text-primary flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
               >
@@ -750,7 +756,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               <button
                 onClick={() => handleShare(
                   t('sinpe_mobile'),
-                  `${t('share_number_message')}: ${userPhone}`
+                  `${t('share_number_message')}: ${userPhoneLegible}`
                 )}
                 aria-label={t('share')}
                 className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] py-3 rounded-xl font-semibold uv-text-primary flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -1056,14 +1062,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           </div>
           <div className="text-center">
             <p className="text-lg font-bold uv-text-primary">{userName}</p>
-            <p className="text-sm uv-text-muted tabular-nums">{userPhone}</p>
+            <p className="text-sm uv-text-muted tabular-nums">{userPhoneLegible}</p>
           </div>
           {/* Antes solo decia "compartí este número". Explicar que el QR AGREGA
               como contacto es lo que hace descubrible la funcion. */}
           <p className="text-sm uv-text-secondary text-center px-4">{t('contact_qr_desc')}</p>
           <p className="text-xs uv-text-muted text-center px-4">{t('share_number_message')}</p>
           <button
-            onClick={() => handleShare(t('app_name'), `${userName} · ${userPhone}`)}
+            onClick={() => handleShare(t('app_name'), `${userName} · ${userPhoneLegible}`)}
             className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] py-3 rounded-xl font-semibold uv-text-primary flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
           >
             <Icons.Share size={16} />
@@ -1328,7 +1334,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                         onClick={() => setRequestQr(cobroComoCodigo(pd))}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]"
                       >
-                        {t('view_all')}
+                        {t('qr_ver_qr')}
                       </button>
                       <button
                         onClick={() => void cancelarPedido(pd.id)}

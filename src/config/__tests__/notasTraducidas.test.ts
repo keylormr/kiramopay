@@ -58,7 +58,7 @@ describe('cambiosEn', () => {
   });
 
   it('una traduccion con otro numero de cambios no se usa: se corrian los textos', () => {
-    const cojea: VersionInfo = { version: '2.8.0', buildNumber: 18, releaseDate: '2026-10-18', changes: ['Uno', 'Dos', 'Tres'] };
-    expect(cambiosEn(cojea, 'en')).toEqual(['Uno', 'Dos', 'Tres']);
+    const cojea: VersionInfo = { version: '2.8.0', buildNumber: 18, releaseDate: '2026-10-18', changes: ['Uno', 'Dos'] };
+    expect(cambiosEn(cojea, 'en')).toEqual(['Uno', 'Dos']);
   });
 });

@@ -8,6 +8,7 @@ import { normalizarCodigoInvitacion, clearReferralCode } from '@/utils/referralC
 import { esNombreDeUsuarioValido } from '@/utils/identificador';
 import { useCapa } from '@/navegacion/pilaDeCapas';
 import { BotonIdioma } from './BotonIdioma';
+import { Bandera } from '@/components/Bandera';
 import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 
 interface RegisterViewProps {
@@ -237,7 +238,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
 
             <div className="flex gap-3 mb-4">
               <div className="flex items-center gap-2 bg-[var(--color-surface-2-dark)] px-4 py-4 rounded-xl border border-[var(--color-border-dark)]">
-                <span className="text-xl">🇨🇷</span>
+                <Bandera pais="CR" className="text-xl" />
                 <span className="text-white font-medium">+506</span>
               </div>
               <input
