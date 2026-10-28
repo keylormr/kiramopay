@@ -138,7 +138,9 @@ export default {
 
     await f.paso('Al volver al inicio, los pagos salientes ya están en los movimientos (sin recargar)', async (c) => {
       // Defecto conocido: Inicio no vuelve a pedir los movimientos tras un pago saliente.
+      // "Pagos salientes" se abre desde Perfil: al volver se cae en Perfil y de ahi se pasa al Inicio.
       await volver(victor.page);
+      await ir(victor.page, txt('Inicio'));
       const filas = victor.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 15000 });
       await filas.first().scrollIntoViewIfNeeded();
