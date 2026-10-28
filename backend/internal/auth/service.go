@@ -525,6 +525,9 @@ func (s *Service) emitirSesion(ctx context.Context, u *user.UserRecord, kind ide
 	if s.auditLogger != nil {
 		s.auditLogger.LogLogin(u.ID, lc.IPAddress, lc.UserAgent, true, string(kind))
 	}
+	// La respuesta dice si la cuenta entra sin contrasena (lo mismo que el
+	// perfil), para que la app no le ofrezca cambiar una contrasena que no tiene.
+	u.MarcarEntradaSinContrasena(s.demoLoginEnabled)
 	return &LoginResponse{User: u, Tokens: tokens}, nil
 }
 

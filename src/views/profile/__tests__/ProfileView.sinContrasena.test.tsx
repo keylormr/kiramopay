@@ -73,6 +73,26 @@ describe('ProfileView: cuenta que entra sin contrasena', () => {
     expect(screen.queryByRole('button', { name: /Eliminar mi cuenta/ })).toBeNull();
     expect(screen.getByText(/cuenta de demostración que entra sin contraseña/i)).toBeInTheDocument();
   });
+
+  // Lo que no se debe romper: una cuenta con contrasena sigue viendo las dos
+  // opciones y no ve el aviso.
+  it('una cuenta con contrasena conserva las dos opciones y no ve el aviso', () => {
+    mocks.usuario = { ...BASE, passwordlessLogin: false };
+    pintar();
+
+    expect(screen.getByRole('button', { name: /Cambiar contraseña/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Eliminar mi cuenta/ })).toBeInTheDocument();
+    expect(screen.queryByText(/cuenta de demostración que entra sin contraseña/i)).toBeNull();
+  });
+
+  // Un servidor viejo no manda el dato: se trata como cuenta normal.
+  it('si el servidor no dice nada, se comporta como una cuenta normal', () => {
+    pintar();
+
+    expect(screen.getByRole('button', { name: /Cambiar contraseña/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Eliminar mi cuenta/ })).toBeInTheDocument();
+    expect(screen.queryByText(/cuenta de demostración que entra sin contraseña/i)).toBeNull();
+  });
 });
 
 describe('profile_demo_account: el aviso existe en los siete idiomas', () => {

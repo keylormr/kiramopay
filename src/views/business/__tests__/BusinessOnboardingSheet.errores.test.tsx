@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { precargarIdioma } from '@/test/idiomas';
@@ -30,12 +30,15 @@ async function llenarYRegistrar(user: ReturnType<typeof userEvent.setup>, siguie
       <BusinessOnboardingSheet isOpen onClose={vi.fn()} onCreated={vi.fn()} />
     </LanguageProvider>,
   );
-  await user.click(screen.getByRole('button', { name: siguiente }));
-  await user.type(screen.getAllByRole('textbox')[0], 'Soda Tica');
+  // El idioma distinto del espanol llega en su propio trozo: se espera al texto.
+  await user.click(await screen.findByRole('button', { name: siguiente }));
+  // Teclear letra por letra con userEvent se acerca al limite de 5 s por prueba
+  // con la suite completa en paralelo; el cambio directo dispara el mismo onChange.
+  fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Soda Tica' } });
   await user.click(screen.getByRole('button', { name: siguiente }));
   const campos = screen.getAllByRole('textbox');
-  await user.type(campos[0], '3-101-123456');
-  await user.type(campos[1], 'Soda Tica SA');
+  fireEvent.change(campos[0], { target: { value: '3-101-123456' } });
+  fireEvent.change(campos[1], { target: { value: 'Soda Tica SA' } });
   await user.click(screen.getByRole('checkbox'));
   await user.click(screen.getByRole('button', { name: registrar }));
 }
@@ -100,7 +103,7 @@ describe('BusinessOnboardingSheet: los campos tienen el largo que acepta el serv
     );
     await user.click(screen.getByRole('button', { name: 'Siguiente' }));
     expect(screen.getAllByRole('textbox')[0]).toHaveAttribute('maxlength', '200');
-    await user.type(screen.getAllByRole('textbox')[0], 'Soda Tica');
+    fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Soda Tica' } });
     await user.click(screen.getByRole('button', { name: 'Siguiente' }));
 
     const campos = screen.getAllByRole('textbox');

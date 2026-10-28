@@ -3563,8 +3563,26 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); REGISTER_FAILED (a required field is missing or invalid). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_DUPLICATE — the database reported a uniqueness conflict. Nothing was saved. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REGISTER_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3680,7 +3698,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3689,8 +3707,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                /** @description MERCHANT_NOT_FOUND — the merchant does not exist or the caller is not its owner (the two are not told apart), or the id is not a UUID. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. MERCHANT_DUPLICATE — the database reported a uniqueness conflict. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description UPDATE_FAILED — anything unexpected, including the database being down. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7317,12 +7353,14 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description APPROVE_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
@@ -7333,8 +7371,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description APPROVE_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7389,7 +7445,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description REJECT_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7407,8 +7463,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REJECT_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7464,7 +7538,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant). */
+                /** @description INVALID_ID (the id is not a UUID); INVALID_BODY; COMMISSION_OUT_OF_RANGE (commission_bps is not between 0 and 10000). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7482,8 +7556,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant keeps the commission it had. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SET_COMMISSION_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -11563,6 +11655,8 @@ export interface components {
                      * @enum {string|null}
                      */
                     language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+                    /** @description Same as UserProfile.passwordless_login */
+                    passwordless_login?: boolean;
                 };
             };
         };
@@ -11600,6 +11694,8 @@ export interface components {
              * @enum {string|null}
              */
             language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+            /** @description true when the account enters without a password: it is marked as a demonstration account and the server has DEMO_LOGIN_ENABLED on. Such an account has no current password to present, so changing the password and deleting the account are rejected with DEMO_ACCOUNT (the app does not offer them). Always present; false for any other account. */
+            passwordless_login?: boolean;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

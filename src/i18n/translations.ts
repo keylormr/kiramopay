@@ -1820,8 +1820,6 @@ export type TranslationKeys = {
   merchant_admin_tab_pending: string;
   merchant_admin_tab_plan: string;
   merchant_admin_plan_desc: string;
-  merchant_admin_plan_id_label: string;
-  merchant_admin_plan_id_invalid: string;
   merchant_admin_plan_base_desc: string;
   merchant_admin_plan_analitica_desc: string;
   merchant_admin_plan_review: string;
@@ -1866,6 +1864,15 @@ export type TranslationKeys = {
   merchant_admin_err_own: string;
   merchant_admin_close_err_own: string;
   merchant_admin_close_done: string;
+  merchant_admin_plan_pick_label: string;
+  merchant_admin_plan_current: string;
+  merchant_admin_err_commission: string;
+  merchant_err_category: string;
+  merchant_err_required: string;
+  merchant_err_cedula_type: string;
+  merchant_err_too_long: string;
+  merchant_err_duplicate: string;
+  profile_demo_account: string;
   business_closed_menu: string;
   business_closed_menu_desc: string;
   business_closed_intro: string;
