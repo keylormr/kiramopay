@@ -171,6 +171,37 @@ jobs:
         # que no necesitan base y hasta ahora no corrian en ningun job.
         run: go test ./pkg/... ./cmd/... -v -count=1
 
+  # TEMPORAL: mide en un par de minutos el costo de TestDB, sin esperar los ~18
+  # del job de integracion. Se quita al cerrar este PR.
+  medir-testdb:
+    name: Medir TestDB
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kiramopay
+          POSTGRES_PASSWORD: kiramopay_dev
+          POSTGRES_DB: kiramopay_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache-dependency-path: backend/go.sum
+      - name: Medir
+        working-directory: backend
+        env:
+          TEST_DB_DSN: postgres://kiramopay:kiramopay_dev@localhost:5432/kiramopay_test?sslmode=disable
+        run: go test ./internal/testutil/ -run TestMedirCostoDeTestDB -v -count=1
+
   backend-test-integration:
     name: Backend Integration Tests
     runs-on: ubuntu-latest
