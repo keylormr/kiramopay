@@ -10,7 +10,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
@@ -83,4 +83,8 @@
     <!-- Android 13 en adelante pide permiso para mostrar avisos; la app lo
          solicita cuando la persona los activa en Perfil. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Huella y rostro (@capgo/capacitor-native-biometric): su guia de
+         instalacion pide declararlo en la app. Es un permiso normal, no se le
+         pregunta a la persona. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 </manifest>
