@@ -1,11 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
-import { cambiosEn, getAllVersions } from '../../config/version';
+import { cambiosEn, cargarNotasTraducidas, getAllVersions, type NotasTraducidas } from '../../config/version';
 
 // Lo que trajo cada version, en el idioma de la persona. La vigente va primero y
 // lleva la etiqueta "Actual", que sale del diccionario como el resto de la app.
+// Las traducciones se piden solo si el idioma no es el espanol, del que sale el
+// changelog; mientras llegan se lee el espanol.
 export const HistorialDeVersiones: React.FC = () => {
   const { t, language } = useLanguage();
+  const [traducidas, setTraducidas] = useState<NotasTraducidas>({});
+
+  useEffect(() => {
+    if (language === 'es') return;
+    let vigente = true;
+    cargarNotasTraducidas()
+      .then((notas) => {
+        if (vigente) setTraducidas(notas);
+      })
+      .catch(() => {
+        /* sin el archivo se lee el espanol, que siempre esta */
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [language]);
 
   return (
     <>
@@ -25,7 +43,7 @@ export const HistorialDeVersiones: React.FC = () => {
             <span className="text-xs text-gray-500">{version.releaseDate}</span>
           </div>
           <ul className="space-y-1.5">
-            {cambiosEn(version, language).map((change, i) => (
+            {cambiosEn(version, language, traducidas).map((change, i) => (
               <li key={i} className="flex items-start gap-2 text-sm uv-text-secondary">
                 <span className="text-[var(--color-primary)] mt-0.5">•</span>
                 {change}

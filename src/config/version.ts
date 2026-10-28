@@ -18,7 +18,6 @@
 // versión que no existía y el changelog se había quedado en febrero.
 
 import type { Language } from '@/i18n/translations';
-import notasTraducidas from './notasTraducidas.json';
 
 /** Versión del paquete (package.json), fijada en tiempo de build. */
 export const BUILD_VERSION: string = __APP_VERSION__;
@@ -306,15 +305,23 @@ export const getAllVersions = (): VersionInfo[] => {
   return [APP_VERSION.current, ...APP_VERSION.history];
 };
 
-// Los cambios de una version en el idioma de la persona. El changelog de arriba
-// esta en espanol; las demas lenguas viven en notasTraducidas.json, una lista
-// por version, en el mismo orden. Si falta la traduccion, o tiene otro numero de
-// cambios (los textos se correrian), sale el espanol: mejor eso que una lista
-// vacia o mezclada.
-const traducciones = notasTraducidas as Record<string, Partial<Record<Language, string[]>>>;
+// Las notas de cada version en los demas idiomas, por version y por idioma, en
+// el mismo orden que el changelog de arriba (notasTraducidas.json).
+export type NotasTraducidas = Record<string, Partial<Record<Language, string[]>>>;
 
-export const cambiosEn = (version: VersionInfo, idioma: Language): string[] => {
+// El archivo pesa unos 90 KB y lo lee quien abre "Acerca de" en un idioma que no
+// es el espanol, no quien arranca la app: se pide con import() para que viaje en
+// su propio chunk y no en el principal (el CI limita cada chunk a 200 KB). Por
+// eso version.ts NO lo importa de forma estatica; hay una prueba que lo vigila.
+export const cargarNotasTraducidas = async (): Promise<NotasTraducidas> =>
+  (await import('./notasTraducidas.json')).default as NotasTraducidas;
+
+// Los cambios de una version en el idioma de la persona. Si falta la traduccion
+// (todavia no se cargo, o la version no la tiene), o tiene otro numero de cambios
+// (los textos se correrian), sale el espanol: mejor eso que una lista vacia o
+// mezclada.
+export const cambiosEn = (version: VersionInfo, idioma: Language, traducidas: NotasTraducidas = {}): string[] => {
   if (idioma === 'es') return version.changes;
-  const textos = traducciones[version.version]?.[idioma];
+  const textos = traducidas[version.version]?.[idioma];
   return textos && textos.length === version.changes.length ? textos : version.changes;
 };
