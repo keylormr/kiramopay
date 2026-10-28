@@ -52,6 +52,9 @@ export default {
     await f.paso('El libro cuadra antes de empezar', async (c) => {
       const problemas = problemasDelLibro();
       c.ok(problemas.length === 0, problemas.join(' | '));
+      // Cifras de partida de la prueba de reservas: el libro final las compara con las del cierre.
+      const reservas = await peticion('GET', '/transparency/proof-of-reserves');
+      ctx.estado.reservasInicio = Object.fromEntries((reservas.data?.currencies ?? []).map((m) => [m.currency, m]));
     });
 
     await f.paso('Entrada sin contraseña por la pantalla (victor)', async (c) => {

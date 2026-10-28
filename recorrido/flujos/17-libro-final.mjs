@@ -2,7 +2,7 @@
 // contable tiene que seguir cuadrado. Va siempre al ultimo.
 import { API_BASE } from '../lib/entorno.mjs';
 import { clientes } from '../lib/comun.mjs';
-import { peticion } from '../lib/api.mjs';
+import { peticion, errores5xx } from '../lib/api.mjs';
 import * as bd from '../lib/bd.mjs';
 
 export default {
@@ -41,7 +41,10 @@ export default {
       const monedas = r.data.currencies ?? [];
       c.ok(monedas.length >= 1, 'la prueba de reservas no trae monedas');
       for (const m of monedas) {
-        f.alertar(`Prueba de reservas ${m.currency}: pasivo ${m.user_liabilities_minor}, reserva ${m.reserve_balance_minor}, cobertura ${Number(m.ratio_pct).toFixed(1)} %`);
+        const diferencia = Number(m.reserve_balance_minor) - Number(m.user_liabilities_minor);
+        const inicio = ctx.estado.reservasInicio?.[m.currency];
+        const alEmpezar = inicio ? `, al empezar ${Number(inicio.reserve_balance_minor) - Number(inicio.user_liabilities_minor)}` : '';
+        f.alertar(`Prueba de reservas ${m.currency}: pasivo ${m.user_liabilities_minor}, reserva ${m.reserve_balance_minor}, diferencia (reserva menos pasivo) al terminar ${diferencia}${alEmpezar}, cobertura ${Number(m.ratio_pct).toFixed(3)} %`);
       }
     });
 
@@ -59,8 +62,9 @@ export default {
       for (const fl of ctx.informe.flujos) {
         for (const a of fl.alertas ?? []) if (/HTTP 5\d\d/.test(a)) errores.push(`${fl.nombre}: ${a}`);
       }
+      for (const e of errores5xx) errores.push(`API: ${e}`);
       c.ok(errores.length === 0, `${errores.length} respuesta(s) 5xx durante el recorrido:\n${errores.slice(0, 10).join('\n')}`);
-    });
+    }, { seguir: true });
 
     await f.paso('El servidor sigue sano al terminar', async (c) => {
       const res = await fetch(`${API_BASE}/health`);

@@ -30,6 +30,9 @@ export class Respuesta {
   }
 }
 
+/** Respuestas 5xx que el servidor dio a las peticiones del script (el libro final las lista). */
+export const errores5xx = [];
+
 export async function peticion(metodo, ruta, { token, cuerpo, cabeceras } = {}) {
   const res = await fetch(`${API}${ruta}`, {
     method: metodo,
@@ -47,7 +50,9 @@ export async function peticion(metodo, ruta, { token, cuerpo, cabeceras } = {}) 
   } catch {
     json = null;
   }
-  return new Respuesta(res.status, json, texto);
+  const respuesta = new Respuesta(res.status, json, texto);
+  if (res.status >= 500) errores5xx.push(`${metodo} ${ruta}: ${respuesta.resumen()}`);
+  return respuesta;
 }
 
 export class Cliente {

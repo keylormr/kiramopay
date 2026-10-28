@@ -241,18 +241,28 @@ export async function revisarTelefono(page) {
     }
     if (fuera.length) problemas.push(`controles fuera de la pantalla: ${[...new Set(fuera)].slice(0, 8).join('; ')}`);
     // Texto que se sale de su caja (un monto largo que pisa el borde del cuadro, por ejemplo).
-    // Se ignoran las cajas que recortan o se desplazan a proposito, y lo que otra pantalla
-    // (una hoja o una pantalla completa abierta encima) tiene tapado: se reporta en su propia pantalla.
-    const tapado = (el) => {
-      const r = el.getBoundingClientRect();
-      const x = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1);
-      const y = r.top + r.height / 2;
-      if (y < 0 || y >= window.innerHeight) return false; // fuera de la ventana no se puede saber: cuenta
-      const arriba = document.elementFromPoint(x, y);
-      return !!arriba && !el.contains(arriba) && !arriba.contains(el);
+    // Se ignoran las cajas que recortan o se desplazan a proposito. Solo se mira la capa de arriba:
+    // la ultima hoja abierta, o la pantalla completa (fija, del tamano de la ventana y con fondo
+    // opaco) que cubre la anterior. Lo que queda debajo se reporta en su propia pantalla.
+    const alfaDelFondo = (el) => {
+      const color = getComputedStyle(el).backgroundColor.trim();
+      const m = /^rgba?\(([^)]*)\)$/.exec(color);
+      if (!m) return color === 'transparent' ? 0 : 1; // otro formato de color (color-mix, color()): se toma por opaco
+      const partes = m[1].split(/[\s,/]+/).filter(Boolean);
+      return partes.length >= 4 ? Number.parseFloat(partes[3]) : 1;
+    };
+    const capaDeArriba = () => {
+      const hojas = [...document.querySelectorAll('[role=dialog]')].filter(visible);
+      if (hojas.length) return hojas[hojas.length - 1];
+      const completas = [...document.querySelectorAll('body *')].filter((c) => {
+        if (getComputedStyle(c).position !== 'fixed' || !visible(c)) return false;
+        const r = c.getBoundingClientRect();
+        return r.width >= window.innerWidth - 1 && r.height >= window.innerHeight - 1 && alfaDelFondo(c) >= 0.9;
+      });
+      return completas.length ? completas[completas.length - 1] : document.body;
     };
     const desbordados = [];
-    for (const el of document.querySelectorAll('body *')) {
+    for (const el of capaDeArriba().querySelectorAll('*')) {
       if (el.closest('svg') || !visible(el)) continue;
       const cs = getComputedStyle(el);
       if (cs.display === 'inline' || cs.overflowX !== 'visible') continue;
@@ -262,7 +272,6 @@ export async function revisarTelefono(page) {
         .join('')
         .trim();
       if (!texto || dentroDeDesplazable(el)) continue;
-      if (el.scrollWidth <= el.clientWidth + 2 || tapado(el)) continue;
       if (el.scrollWidth > el.clientWidth + 2) desbordados.push(`"${texto.slice(0, 30)}" (${el.scrollWidth} px en una caja de ${el.clientWidth} px)`);
     }
     if (desbordados.length) problemas.push(`texto que se sale de su caja: ${[...new Set(desbordados)].slice(0, 6).join('; ')}`);
