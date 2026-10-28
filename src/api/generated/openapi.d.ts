@@ -11651,9 +11651,9 @@ export interface components {
              * @example 0
              */
             auditoria_descartada: number;
-            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            /** @description Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN` loaded it comes from the Banco Central de Costa Rica (SDDE) and, if that fails, from Hacienda, which republishes the same reference rate; without the token it comes from Hacienda and `falta` names the missing variable. `fuente` is where the last confirmed rate really came from (`bccr` or `hacienda`), empty until one is confirmed. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why, including why the BCCR was skipped when Hacienda covered it. */
             tipo_de_cambio: {
-                /** @example hacienda */
+                /** @example bccr */
                 fuente: string;
                 /** @example 450.06 */
                 usd_crc: number;
@@ -11664,6 +11664,13 @@ export interface components {
                 /** Format: date-time */
                 ultima_confirmacion?: string;
                 ultimo_error?: string;
+                /**
+                 * @description Names (never values) of the environment variables that are not loaded and keep the rate from coming from the BCCR.
+                 * @example [
+                 *       "BCCR_TOKEN"
+                 *     ]
+                 */
+                falta?: string[];
             };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {

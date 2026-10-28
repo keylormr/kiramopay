@@ -7428,18 +7428,30 @@ components:
           additionalProperties: false
           required: [fuente, usd_crc, compra]
           description: >-
-            Official USD/CRC reference rate (BCCR, as republished by Hacienda),
-            refreshed hourly. `usd_crc` is the rate the app charges with, in
-            both directions. If the source cannot confirm it for 96 hours,
-            crypto quoted in colones stops trading rather than using a stale
-            number; `ultimo_error` says why.
+            Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN`
+            loaded it comes from the Banco Central de Costa Rica (SDDE) and, if
+            that fails, from Hacienda, which republishes the same reference rate;
+            without the token it comes from Hacienda and `falta` names the
+            missing variable. `fuente` is where the last confirmed rate really
+            came from (`bccr` or `hacienda`), empty until one is confirmed.
+            `usd_crc` is the rate the app charges with, in both directions. If
+            the source cannot confirm it for 96 hours, crypto quoted in colones
+            stops trading rather than using a stale number; `ultimo_error` says
+            why, including why the BCCR was skipped when Hacienda covered it.
           properties:
-            fuente: { type: string, example: hacienda }
+            fuente: { type: string, example: bccr }
             usd_crc: { type: number, example: 450.06 }
             compra: { type: number, example: 444.22 }
             fecha_fuente: { type: string, example: '2026-09-11' }
             ultima_confirmacion: { type: string, format: date-time }
             ultimo_error: { type: string }
+            falta:
+              type: array
+              description: >-
+                Names (never values) of the environment variables that are not
+                loaded and keep the rate from coming from the BCCR.
+              items: { type: string }
+              example: [BCCR_TOKEN]
         crypto_prices:
           type: object
           description: >-

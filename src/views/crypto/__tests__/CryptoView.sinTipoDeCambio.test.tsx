@@ -98,7 +98,7 @@ describe('CryptoView sin tipo de cambio del dolar', () => {
     montar();
 
     // El valor en dolares no depende del tipo de cambio.
-    expect(await screen.findByText('$20,000.00')).toBeInTheDocument();
+    expect((await screen.findAllByText('$20,000.00')).length).toBeGreaterThan(0);
     expect(screen.getByText('Equivalente en colones no disponible')).toBeInTheDocument();
     // Ninguna cifra en colones en toda la pantalla: ni el total (antes ₡10,300,000
     // con 515), ni el "≈" de cada fila.

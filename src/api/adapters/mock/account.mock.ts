@@ -48,7 +48,7 @@ export class MockAccountRepository implements IAccountRepository {
     return apiSuccess(account);
   }
 
-  async getBalanceSummary(): Promise<ApiResponse<{ totalUsd: number; accounts: Account[] }>> {
+  async getBalanceSummary(): Promise<ApiResponse<{ totalUsd: number | null; accounts: Account[] }>> {
     const state = getState();
     const accounts: Account[] = state?.accounts ?? initialAccounts;
     const totalUsd = accounts.reduce((sum, acc) => sum + acc.balance * (acc.rateToUsd ?? 0), 0);
