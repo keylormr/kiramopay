@@ -570,7 +570,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
 		('SYSTEM:SAVINGS:CRC', 'savings', 'CRC', 'credit'),
 		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit'),
-		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
+		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit'),
+		('SYSTEM:CAPITAL:CRC', 'capital', 'CRC', 'debit'),
+		('SYSTEM:CAPITAL:USD', 'capital', 'USD', 'debit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -1930,7 +1932,9 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 			('SYSTEM:SAVINGS:USD',   'savings',    'USD', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
-			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
+			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit'),
+			('SYSTEM:CAPITAL:CRC',   'capital',    'CRC', 'debit'),
+			('SYSTEM:CAPITAL:USD',   'capital',    'USD', 'debit')
 		ON CONFLICT (code) DO NOTHING
 	`); err != nil {
 		return fmt.Errorf("truncate and re-seed system ledger accounts: %w", err)

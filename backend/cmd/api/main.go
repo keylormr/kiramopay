@@ -452,8 +452,8 @@ func main() {
 	})
 	// Payouts — ledger-backed outbound payments over pluggable rails. Only the
 	// deterministic mock rail is registered today; real rails (SINPE
-	// participant, dLocal, Circle/USDC) are added by registering an adapter and
-	// seeding its SYSTEM:EXTERNAL:<RAIL>:<CUR> accounts.
+	// participant, dLocal, Circle/USDC) are added by registering an adapter; the
+	// ledger side needs no extra account (a payout moves reserve and liability).
 	payoutRegistry := payout.NewRegistry()
 	// The mock rail debits the user's real wallet but never actually disburses,
 	// so it must NEVER be reachable in production. Only register it outside
@@ -477,7 +477,7 @@ func main() {
 		Logger:      logger,
 	})
 	// Pago de recibos y recargas: sin convenio con la empresa o el operador,
-	// cobrar solo debita la billetera y deja la plata en SYSTEM:EXTERNAL, sin
+	// cobrar solo debita la billetera y saca la plata de la reserva, sin
 	// entrega y sin reverso. Misma politica que el registro de rieles de
 	// payouts de mas arriba: fuera de produccion se permite para las demos.
 	paymentService := payment.NewService(paymentRepo, txService, &payment.Options{

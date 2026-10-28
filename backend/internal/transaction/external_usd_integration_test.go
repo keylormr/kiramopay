@@ -13,7 +13,7 @@ import (
 	"github.com/kiramopay/backend/pkg/hash"
 )
 
-// La contraparte externa se elige por la moneda del movimiento.
+// Las cuentas de contraparte se eligen por la moneda del movimiento.
 //
 // Lo que fallaba: buildSingleSidedPosting fijaba SYSTEM:EXTERNAL:CRC para toda
 // operacion contra el exterior, aunque la moneda fuera USD. La cuenta de
@@ -23,8 +23,13 @@ import (
 // conciliacion por moneda salia mal. Es alcanzable con una compra o venta de
 // cripto en dolares y con depositos y retiros en dolares.
 //
-// Sin el arreglo esta prueba falla: el asiento aparece en SYSTEM:EXTERNAL:CRC.
-func TestPosting_LaContraparteExternaSigueLaMoneda(t *testing.T) {
+// Desde las reservas al 100 %, un deposito o un retiro tiene la RESERVA de la
+// moneda por contraparte, y la cripto tiene la posicion externa mas el
+// capital propio y la reserva: las tres tienen que seguir la moneda.
+//
+// Sin el arreglo esta prueba falla: el asiento aparece en una cuenta de la
+// otra moneda.
+func TestPosting_LasContrapartesSiguenLaMoneda(t *testing.T) {
 	pool := testutil.TestDB(t)
 	l := ledger.NewEngine(pool, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	svc := transaction.NewService(transaction.NewRepository(pool), wallet.NewRepository(pool), l, nil)
@@ -34,20 +39,27 @@ func TestPosting_LaContraparteExternaSigueLaMoneda(t *testing.T) {
 
 	casos := []struct {
 		nombre   string
+		tipoMov  string
 		moneda   string
+		tipoCta  string
 		esperada string
 	}{
-		{"dolares", "USD", "SYSTEM:EXTERNAL:USD"},
-		{"colones", "CRC", "SYSTEM:EXTERNAL:CRC"},
+		{"deposito en dolares va a la reserva en dolares", "deposit", "USD", "reserve", "SYSTEM:RESERVE:USD"},
+		{"deposito en colones va a la reserva en colones", "deposit", "CRC", "reserve", "SYSTEM:RESERVE:CRC"},
+		{"venta de cripto en dolares: posicion externa en dolares", "crypto_sell", "USD", "external", "SYSTEM:EXTERNAL:USD"},
+		{"venta de cripto en colones: posicion externa en colones", "crypto_sell", "CRC", "external", "SYSTEM:EXTERNAL:CRC"},
+		{"venta de cripto en dolares: capital propio en dolares", "crypto_sell", "USD", "capital", "SYSTEM:CAPITAL:USD"},
+		{"venta de cripto en colones: capital propio en colones", "crypto_sell", "CRC", "capital", "SYSTEM:CAPITAL:CRC"},
 	}
 
-	for _, c := range casos {
+	for i, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
 			tx, err := svc.CreateTransaction(ctx, userID, &transaction.CreateTransactionRequest{
-				Type: "deposit", Amount: 1000, Currency: c.moneda, Internal: true,
+				Type: c.tipoMov, Amount: 1000, Currency: c.moneda, Internal: true,
+				IdempotencyKey: "contraparte:" + c.tipoMov + ":" + c.moneda + ":" + string(rune('a'+i)),
 			})
 			if err != nil {
-				t.Fatalf("deposito en %s: %v", c.moneda, err)
+				t.Fatalf("%s en %s: %v", c.tipoMov, c.moneda, err)
 			}
 
 			var codigo, monedaCuenta string
@@ -56,11 +68,11 @@ func TestPosting_LaContraparteExternaSigueLaMoneda(t *testing.T) {
 				   FROM journal_entries je
 				   JOIN journal_postings jp ON jp.id = je.posting_id
 				   JOIN ledger_accounts  la ON la.id = je.account_id
-				  WHERE jp.tx_id = $1::uuid AND la.type = 'external'`,
-				tx.ID,
+				  WHERE jp.tx_id = $1::uuid AND la.type = $2`,
+				tx.ID, c.tipoCta,
 			).Scan(&codigo, &monedaCuenta)
 			if err != nil {
-				t.Fatalf("buscar el asiento externo: %v", err)
+				t.Fatalf("buscar la cuenta de tipo %s del asiento: %v", c.tipoCta, err)
 			}
 			if codigo != c.esperada {
 				t.Errorf("un movimiento en %s se anoto en %s, esperaba %s", c.moneda, codigo, c.esperada)

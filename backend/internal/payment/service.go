@@ -12,7 +12,7 @@ import (
 // telefono y no hay integracion con la empresa ni con el operador.
 //
 // Sin convenio, cobrar es debitar la billetera de verdad y dejar la plata en
-// SYSTEM:EXTERNAL: nadie la recibe, el recibo que se emite no vale nada y no
+// la reserva: nadie la recibe, el recibo que se emite no vale nada y no
 // hay camino de reverso. Es exactamente el caso que este repositorio ya
 // rechaza en otros dos lugares —sinpe.Send se niega a enviar a quien no es
 // usuario ("tomar la plata y mostrar pendiente para siempre es peor que decir

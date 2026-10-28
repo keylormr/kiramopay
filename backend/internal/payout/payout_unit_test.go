@@ -185,12 +185,20 @@ func TestNormalizeAndValidate(t *testing.T) {
 	}
 }
 
-func TestRailSystemAccountCode(t *testing.T) {
-	acc := railSystemAccount("mock", "crc")
-	if acc.SystemCode != "SYSTEM:EXTERNAL:MOCK:CRC" {
-		t.Errorf("system code = %q", acc.SystemCode)
+func TestReservaDelPayoutSigueLaMoneda(t *testing.T) {
+	casos := map[string]string{
+		"crc": "SYSTEM:RESERVE:CRC",
+		"CRC": "SYSTEM:RESERVE:CRC",
+		"usd": "SYSTEM:RESERVE:USD",
+		"USD": "SYSTEM:RESERVE:USD",
 	}
-	if acc.UserID != "" {
-		t.Errorf("system account should have empty UserID")
+	for moneda, esperada := range casos {
+		acc := reservaDelPayout(moneda)
+		if string(acc.SystemCode) != esperada {
+			t.Errorf("%s: cuenta = %q, se esperaba %q", moneda, acc.SystemCode, esperada)
+		}
+		if acc.UserID != "" {
+			t.Errorf("una cuenta de sistema no lleva UserID")
+		}
 	}
 }

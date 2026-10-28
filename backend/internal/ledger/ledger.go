@@ -50,9 +50,58 @@ const (
 	SystemSavingsCRC  SystemAccountCode = "SYSTEM:SAVINGS:CRC"
 	SystemSavingsUSD  SystemAccountCode = "SYSTEM:SAVINGS:USD"
 	// SystemPromotionsCRC es el fondo de promociones (migracion 066): la
-	// empresa lo fondea desde la reserva y los canjes de cashback salen de ahi.
+	// empresa lo fondea con plata propia (capital) y los canjes de cashback
+	// salen de ahi.
 	SystemPromotionsCRC SystemAccountCode = "SYSTEM:PROMOTIONS:CRC"
+	// SystemCapitalCRC y SystemCapitalUSD son el capital propio de KiramoPay
+	// (migracion 087): el efectivo de la empresa que NO es de los usuarios. La
+	// reserva es exactamente igual a lo que se les debe a ellos; todo lo demas
+	// vive aqui. Ver ReservaACapital y CapitalAReserva.
+	SystemCapitalCRC SystemAccountCode = "SYSTEM:CAPITAL:CRC"
+	SystemCapitalUSD SystemAccountCode = "SYSTEM:CAPITAL:USD"
 )
+
+// ReserveFor devuelve la cuenta de reserva de la moneda.
+func ReserveFor(currency string) SystemAccountCode {
+	if currency == "USD" {
+		return SystemReserveUSD
+	}
+	return SystemReserveCRC
+}
+
+// CapitalFor devuelve la cuenta de capital propio de la moneda.
+func CapitalFor(currency string) SystemAccountCode {
+	if currency == "USD" {
+		return SystemCapitalUSD
+	}
+	return SystemCapitalCRC
+}
+
+// ReservaACapital devuelve las dos patas que pasan `amount` de la reserva al
+// capital propio: debito capital, credito reserva. La reserva baja y el capital
+// sube lo mismo.
+//
+// Se agrega a un asiento cuando el pasivo con los usuarios BAJO por algo que no
+// sale del sistema —una comision cobrada, una compra de cripto—: la plata sigue
+// siendo de KiramoPay, pero ya no respalda a nadie. Las dos patas balancean
+// solas, asi que no alteran el equilibrio del asiento que las lleva.
+func ReservaACapital(currency string, amount int64) []Entry {
+	return []Entry{
+		{Account: Account{SystemCode: CapitalFor(currency)}, Side: Debit, AmountMinor: amount, Currency: currency},
+		{Account: Account{SystemCode: ReserveFor(currency)}, Side: Credit, AmountMinor: amount, Currency: currency},
+	}
+}
+
+// CapitalAReserva devuelve las dos patas que pasan `amount` del capital propio
+// a la reserva: debito reserva, credito capital. Es el reves de ReservaACapital:
+// se agrega cuando el pasivo con los usuarios SUBIO por algo que la empresa
+// pone de su bolsillo —un cashback, una venta de cripto—.
+func CapitalAReserva(currency string, amount int64) []Entry {
+	return []Entry{
+		{Account: Account{SystemCode: ReserveFor(currency)}, Side: Debit, AmountMinor: amount, Currency: currency},
+		{Account: Account{SystemCode: CapitalFor(currency)}, Side: Credit, AmountMinor: amount, Currency: currency},
+	}
+}
 
 // Account is a polymorphic reference to a user wallet, a merchant wallet or a
 // system account. Exactly one of UserID/MerchantID/SystemCode must be set.

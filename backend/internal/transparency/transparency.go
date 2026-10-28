@@ -44,12 +44,21 @@ func (h *Handler) SetPlanes(p PlanesPublicados) { h.planes = p }
 // alongside the matching reserve account balance. Publishing this builds
 // trust and is the cheapest defensible "we hold your money" signal.
 //
+// La cifra que importa es la DIFERENCIA exacta, en centimos, no el cociente:
+// un porcentaje con un decimal redondeaba a "100,0 %" un faltante de 1.720,50
+// colones. Desde las reservas al 100 % (migracion 087) la reserva es
+// exactamente igual al pasivo con los usuarios, asi que lo normal es
+// difference_minor = 0; cualquier otro valor es un descuadre y se publica tal
+// cual, con su signo (negativo si falta reserva).
+//
 // Response shape:
 //   {
 //     "currencies": [{
 //       "currency":"CRC",
 //       "user_liabilities_minor": 1500000000,
 //       "reserve_balance_minor":  1500000000,
+//       "difference_minor": 0,
+//       "fully_backed": true,
 //       "ratio_pct": 100.0
 //     }, ...],
 //     "as_of": "..."
@@ -80,6 +89,9 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 			GROUP BY currency
 		),
 		reserves AS (
+			-- Solo la reserva. El capital propio de KiramoPay (type 'capital',
+			-- migracion 087) no cuenta: es de la empresa, no respalda a nadie, y
+			-- la reserva es exactamente igual a lo que se le debe a la gente.
 			SELECT currency, COALESCE(SUM(balance_minor), 0) AS amt
 			FROM ledger_account_balances
 			WHERE type = 'reserve'
@@ -99,10 +111,15 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type item struct {
-		Currency             string  `json:"currency"`
-		UserLiabilitiesMinor int64   `json:"user_liabilities_minor"`
-		ReserveBalanceMinor  int64   `json:"reserve_balance_minor"`
-		RatioPct             float64 `json:"ratio_pct"`
+		Currency             string `json:"currency"`
+		UserLiabilitiesMinor int64  `json:"user_liabilities_minor"`
+		ReserveBalanceMinor  int64  `json:"reserve_balance_minor"`
+		// DifferenceMinor es reserva menos pasivo, en centimos y con signo:
+		// cero si la reserva cubre exactamente lo que se debe, negativa si falta.
+		DifferenceMinor int64 `json:"difference_minor"`
+		// FullyBacked: la reserva cubre todo lo que se les debe a los usuarios.
+		FullyBacked bool    `json:"fully_backed"`
+		RatioPct    float64 `json:"ratio_pct"`
 	}
 	items := []item{}
 	for rows.Next() {
@@ -111,6 +128,8 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusInternalServerError, "POR_SCAN", "scan failed")
 			return
 		}
+		it.DifferenceMinor = it.ReserveBalanceMinor - it.UserLiabilitiesMinor
+		it.FullyBacked = it.DifferenceMinor >= 0
 		if it.UserLiabilitiesMinor > 0 {
 			it.RatioPct = float64(it.ReserveBalanceMinor) / float64(it.UserLiabilitiesMinor) * 100
 		} else {
