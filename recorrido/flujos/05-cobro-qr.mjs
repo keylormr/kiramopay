@@ -2,7 +2,7 @@
 // comercio absorbe la comision (0,25 % durante la promocion de entrada): el
 // pagador paga exactamente el monto del cobro.
 import { CUENTAS, llave } from '../lib/entorno.mjs';
-import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil } from '../lib/ui.mjs';
+import { abrirSesion, boton, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil } from '../lib/ui.mjs';
 import { clientes, centimos, asegurarComercio, problemasDelLibro } from '../lib/comun.mjs';
 import { reColones, txt } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';

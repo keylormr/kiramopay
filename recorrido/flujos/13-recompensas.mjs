@@ -174,7 +174,7 @@ export default {
     await f.paso('Con el fondo gastado, los premios vuelven a "No disponible" y el historial muestra el canje', async (c) => {
       const p = keilor.page;
       await p.getByText(txt('No disponible por ahora. Tus puntos no se tocan.')).first().waitFor({ state: 'visible', timeout: 10000 });
-      await p.getByRole('tab', { name: txt('Historial'), exact: true }).click();
+      await boton(p, txt('Historial'), { exacto: true }).click();
       await reposar(p, 500);
       await verTexto(p, /Canje:\s*Cashback/);
       const r = await api.keilor.exigir('GET', '/loyalty/rewards');

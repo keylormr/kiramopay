@@ -3,6 +3,7 @@
 // guarda su token de acceso en memoria. Es el token "vivo" que exigen las rutas
 // de administrador: no se refresca nunca, asi que no lo rota nadie.
 import { API } from './entorno.mjs';
+import { anotar, cupo, pausa } from './regulador.mjs';
 
 /** Respuesta de la API ya interpretada. */
 export class Respuesta {
@@ -58,25 +59,41 @@ export class Cliente {
   get id() {
     return this.perfil?.id;
   }
+  /**
+   * Una peticion con el ritmo regulado: espera si la persona ya va muy rapido y,
+   * si el servidor aun asi contesta 429, espera y repite (es el limite por minuto,
+   * no un resultado de lo que se prueba).
+   */
+  async pedir(metodo, ruta, cuerpo, cabeceras) {
+    let r;
+    for (let intento = 0; intento < 4; intento++) {
+      await cupo(this.usuario);
+      anotar(this.usuario);
+      r = await peticion(metodo, ruta, { token: this.token, cuerpo, cabeceras });
+      if (r.status !== 429) return r;
+      await pausa(10_000);
+    }
+    return r;
+  }
   get(ruta, cabeceras) {
-    return peticion('GET', ruta, { token: this.token, cabeceras });
+    return this.pedir('GET', ruta, undefined, cabeceras);
   }
   post(ruta, cuerpo = {}, cabeceras) {
-    return peticion('POST', ruta, { token: this.token, cuerpo, cabeceras });
+    return this.pedir('POST', ruta, cuerpo, cabeceras);
   }
   put(ruta, cuerpo = {}, cabeceras) {
-    return peticion('PUT', ruta, { token: this.token, cuerpo, cabeceras });
+    return this.pedir('PUT', ruta, cuerpo, cabeceras);
   }
   patch(ruta, cuerpo = {}, cabeceras) {
-    return peticion('PATCH', ruta, { token: this.token, cuerpo, cabeceras });
+    return this.pedir('PATCH', ruta, cuerpo, cabeceras);
   }
   delete(ruta, cabeceras) {
-    return peticion('DELETE', ruta, { token: this.token, cabeceras });
+    return this.pedir('DELETE', ruta, undefined, cabeceras);
   }
 
   /** Igual que get/post, pero lanza si la respuesta no es 2xx. */
   async exigir(metodo, ruta, cuerpo, cabeceras) {
-    const r = await peticion(metodo, ruta, { token: this.token, cuerpo, cabeceras });
+    const r = await this.pedir(metodo, ruta, cuerpo, cabeceras);
     if (!r.ok) throw new Error(`${metodo} ${ruta} (${this.usuario}): ${r.resumen()}`);
     return r;
   }
@@ -101,6 +118,8 @@ export class Cliente {
 
 /** Login sin contrasena. Lanza si el servidor no abre la sesion. */
 export async function entrar(usuario) {
+  await cupo(usuario, 3);
+  anotar(usuario);
   const r = await peticion('POST', '/auth/login', { cuerpo: { identifier: usuario, password: '' } });
   if (!r.ok || !r.data?.tokens?.access_token) {
     throw new Error(`No se pudo entrar como ${usuario} sin contraseña: ${r.resumen()}`);
@@ -110,6 +129,8 @@ export async function entrar(usuario) {
 
 /** Login con contrasena (solo para admin.kp, que no es cuenta de demostracion). */
 export async function entrarConContrasena(identificador, password) {
+  await cupo(identificador, 3);
+  anotar(identificador);
   const r = await peticion('POST', '/auth/login', { cuerpo: { identifier: identificador, password } });
   if (!r.ok || !r.data?.tokens?.access_token) {
     throw new Error(`No se pudo entrar como ${identificador}: ${r.resumen()}`);

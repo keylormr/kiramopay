@@ -73,6 +73,7 @@ export default {
     await f.paso('La lista muestra el estado de la división en español', async (c) => {
       // Defecto conocido de la pantalla: pinta el estado crudo del servidor ("active").
       const crudo = await victor.page.getByText('active', { exact: true }).count();
+      if (crudo) await victor.page.getByText('active', { exact: true }).first().scrollIntoViewIfNeeded().catch(() => {});
       c.igual(crudo, 0, 'veces que la lista pinta el estado en inglés ("active")');
     }, { seguir: true });
 

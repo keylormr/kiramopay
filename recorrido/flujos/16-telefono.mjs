@@ -67,7 +67,21 @@ export default {
       await sinDesborde(p);
     });
 
-    await paso('Hoja de Enviar (SINPE > Enviar a nuevo número)', async () => {
+    await paso('Hoja de Enviar (acción rápida del inicio)', async () => {
+      await aInicio(p);
+      await boton(p, txt('Enviar'), { exacto: true }).first().click();
+      await reposar(p, 800);
+      await sinDesborde(p);
+    });
+
+    await paso('Cobrar con QR (acción rápida del inicio)', async () => {
+      await aInicio(p);
+      await boton(p, txt('Cobrar con QR'), { exacto: true }).first().click();
+      await reposar(p, 800);
+      await sinDesborde(p);
+    });
+
+    await paso('Hoja de Enviar a un número nuevo (SINPE)', async () => {
       await aInicio(p);
       await ir(p, txt('SINPE'));
       await boton(p, txt('Enviar a nuevo número')).click();
@@ -124,7 +138,7 @@ export default {
       await sinDesborde(p);
     });
 
-    await paso('Modo negocio: Cobrar con QR (hoja "Generar QR de cobro")', async () => {
+    await paso('Modo negocio: hoja "Generar QR de cobro"', async () => {
       await boton(p, txt('Generar QR de cobro'), { exacto: true }).first().click();
       await ultimoDialogo(p).waitFor({ state: 'visible' });
       await sinDesborde(p);

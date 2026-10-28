@@ -141,6 +141,7 @@ export default {
       const nueva = await abrirSesion(f, 'victor');
       const filas = nueva.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 15000 });
+      await filas.first().scrollIntoViewIfNeeded();
       const textos = await filas.allInnerTexts();
       const deMil = textos.filter((t) => reColones(1000).test(t));
       c.ok(deMil.length > 0, `no hay filas de ₡1.000 entre los movimientos del inicio: ${JSON.stringify(textos)}`);

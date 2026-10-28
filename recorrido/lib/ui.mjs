@@ -5,6 +5,7 @@
 import { chromium } from '@playwright/test';
 import { APP, API_BASE } from './entorno.mjs';
 import { entrar } from './api.mjs';
+import { anotar, cupo } from './regulador.mjs';
 import { txt, escapar } from './textos.mjs';
 
 let navegador = null;
@@ -52,8 +53,14 @@ export async function abrirSesion(flujo, usuario, { movil = false, entrarPorPant
   });
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP }).catch(() => {});
   await ctx.addInitScript(INICIO_SIN_BIENVENIDA);
+  // Un arranque completo de la pantalla pide una veintena de datos: se espera si la persona ya va al limite.
+  await cupo(usuario, 40);
   const page = await ctx.newPage();
   page.setDefaultTimeout(15000);
+  page.usuarioDelRecorrido = usuario;
+  page.on('request', (r) => {
+    if (r.url().startsWith(API_BASE)) anotar(usuario);
+  });
   vigilar(flujo, page, usuario);
   const sesion = { usuario, ctx, page, api: null, movil, flujo };
   flujo.sesiones.push(sesion);
@@ -95,6 +102,7 @@ export const barraInferior = (page) => page.getByRole('navigation', { name: /Nav
 
 /** Pestana de la barra inferior: Inicio, SINPE, Crypto, Servicios o Perfil. */
 export async function ir(page, destino) {
+  await cupo(page.usuarioDelRecorrido, 25);
   await barraInferior(page).getByRole('button', { name: destino, exact: true }).click();
   await reposar(page);
 }
