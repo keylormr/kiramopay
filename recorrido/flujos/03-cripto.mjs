@@ -44,7 +44,10 @@ export default {
       precioEth = r.data?.ETH?.price;
       const fx = await peticion('GET', '/exchange-rates');
       const usdCrc = (fx.data ?? []).find((t) => t.from_currency === 'USD' && t.to_currency === 'CRC');
-      c.ok(usdCrc && usdCrc.rate > 0, 'no hay tipo de cambio USD a CRC');
+      c.ok(usdCrc && usdCrc.rate > 0, 'no hay tipo de cambio USD a CRC (¿se cayó el simulador de Hacienda del workflow?)');
+      // La venta que publica el simulador de Hacienda (recorrido/simulador/terceros.mjs): el servidor ya no trae
+      // un tipo de cambio de reserva, asi que este es el que confirmo la fuente.
+      c.cercano(usdCrc?.rate, 451.25, 1e-6, 'tipo de cambio USD a CRC (la venta del simulador de Hacienda)');
       ctx.estado.tasaUsdCrc = usdCrc?.rate;
       c.exigir(precioEth > 0, 'sin precio de ETH no se puede seguir');
     });

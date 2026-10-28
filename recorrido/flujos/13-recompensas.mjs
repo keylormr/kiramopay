@@ -73,7 +73,7 @@ export default {
       c.igual(crudo, 0, 'veces que la pantalla pinta un nivel en inglés (silver, gold...)');
       const traducido = await keilor.page.getByText(new RegExp(`Nivel\\s+${txt('Plata')}`, 'i')).count();
       c.ok(traducido >= 1, `la pantalla no muestra "Nivel ${txt('Plata')}" para keilor (4.250 puntos totales)`);
-      const siguiente = await keilor.page.getByText(new RegExp(`${txt('Oro')}:\\s*25,000\\s*pts`)).count();
+      const siguiente = await keilor.page.getByText(new RegExp(`${txt('Oro')}:\\s*25,000\\s*pts`, 'i')).count();
       c.ok(siguiente >= 1, `la barra de progreso no nombra el siguiente nivel como "${txt('Oro')}: 25,000 pts"`);
     }, { seguir: true });
 
