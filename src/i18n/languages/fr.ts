@@ -876,7 +876,7 @@ const fr: TranslationKeys = {
   admin_promo_reference_hint: 'Numéro de virement ou de reçu',
   admin_promo_fund_btn: 'Enregistrer le dépôt',
   admin_promo_confirm: '{monto} seront enregistrés dans le fonds de promotions, avec la référence {referencia}.',
-  admin_promo_warning: 'Cela augmente les réserves publiées dans la preuve de réserves. Ne l\'enregistrez que si le dépôt est déjà sur le compte de l\'entreprise.',
+  admin_promo_warning: 'Cela n\'augmente pas les réserves publiées dans la preuve de réserves : c\'est de l\'argent propre à l\'entreprise, qui passe dans la réserve petit à petit, à chaque échange de cashback. Ne l\'enregistrez que si le dépôt est déjà sur le compte de l\'entreprise.',
   admin_promo_done: '{monto} enregistrés dans le fonds.',
   admin_promo_failed: 'Impossible de lire ou d\'enregistrer le fonds de promotions',
   tx_totals_scope: 'Ces totaux couvrent {shown} de vos {total} opérations',

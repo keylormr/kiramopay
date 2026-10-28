@@ -874,7 +874,7 @@ const zhCn: TranslationKeys = {
   admin_promo_reference_hint: '转账或收据编号',
   admin_promo_fund_btn: '登记存款',
   admin_promo_confirm: '将以参考号 {referencia} 在促销资金中登记 {monto}。',
-  admin_promo_warning: '这会提高储备证明中公布的储备金。只有在存款已到公司账户后才登记。',
+  admin_promo_warning: '这不会提高储备证明中公布的储备金：这是公司自有资金，每次返现兑换时会逐步转入储备金。只有在存款已到公司账户后才登记。',
   admin_promo_done: '已在资金中登记 {monto}。',
   admin_promo_failed: '无法读取或登记促销资金',
   tx_totals_scope: '以上合计涵盖你 {total} 笔交易中的 {shown} 笔',

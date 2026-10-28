@@ -875,7 +875,7 @@ const en: TranslationKeys = {
   admin_promo_reference_hint: 'Transfer or receipt number',
   admin_promo_fund_btn: 'Record deposit',
   admin_promo_confirm: '{monto} will be recorded in the promotions fund, with reference {referencia}.',
-  admin_promo_warning: 'This raises the reserves published in the proof of reserves. Only record it once the deposit is in the company account.',
+  admin_promo_warning: 'This does not raise the reserves published in the proof of reserves: it is the company\'s own money, and it moves into the reserve a little at a time, with each cashback redemption. Only record it once the deposit is in the company account.',
   admin_promo_done: '{monto} recorded in the fund.',
   admin_promo_failed: 'Could not read or record the promotions fund',
   tx_totals_scope: 'These totals cover {shown} of your {total} transactions',

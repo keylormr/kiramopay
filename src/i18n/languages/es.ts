@@ -875,7 +875,7 @@ const es: TranslationKeys = {
   admin_promo_reference_hint: 'Transferencia o comprobante',
   admin_promo_fund_btn: 'Registrar depósito',
   admin_promo_confirm: 'Se registrarán {monto} en el fondo de promociones, con la referencia {referencia}.',
-  admin_promo_warning: 'Esto sube la reserva que publica la prueba de reservas. Regístralo solo si el depósito ya está en la cuenta de la empresa.',
+  admin_promo_warning: 'Esto no sube la reserva que publica la prueba de reservas: es dinero propio de la empresa y pasa a la reserva de a poco, con cada canje de cashback. Regístralo solo si el depósito ya está en la cuenta de la empresa.',
   admin_promo_done: 'Se registraron {monto} en el fondo.',
   admin_promo_failed: 'No se pudo leer o registrar el fondo de promociones',
   tx_totals_scope: 'Estos totales cubren {shown} de tus {total} movimientos',

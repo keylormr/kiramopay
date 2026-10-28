@@ -873,7 +873,7 @@ const ja: TranslationKeys = {
   admin_promo_reference_hint: '振込番号または領収書番号',
   admin_promo_fund_btn: '入金を記録',
   admin_promo_confirm: '{monto}を参照番号{referencia}でプロモーション資金に記録します。',
-  admin_promo_warning: 'これにより準備金証明で公表される準備金が増えます。会社の口座に入金済みの場合にのみ記録してください。',
+  admin_promo_warning: 'これにより準備金証明で公表される準備金は増えません。会社自身のお金であり、キャッシュバックの交換のたびに少しずつ準備金へ移ります。会社の口座に入金済みの場合にのみ記録してください。',
   admin_promo_done: '{monto}を資金に記録しました。',
   admin_promo_failed: 'プロモーション資金を読み込めない、または記録できませんでした',
   tx_totals_scope: 'この合計は{total}件のうち{shown}件を対象としています',

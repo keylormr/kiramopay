@@ -876,7 +876,7 @@ const pt: TranslationKeys = {
   admin_promo_reference_hint: 'Número da transferência ou comprovante',
   admin_promo_fund_btn: 'Registrar depósito',
   admin_promo_confirm: '{monto} serão registrados no fundo de promoções, com a referência {referencia}.',
-  admin_promo_warning: 'Isso aumenta a reserva publicada na prova de reservas. Registre apenas se o depósito já estiver na conta da empresa.',
+  admin_promo_warning: 'Isso não aumenta a reserva publicada na prova de reservas: é dinheiro próprio da empresa e passa para a reserva aos poucos, a cada resgate de cashback. Registre apenas se o depósito já estiver na conta da empresa.',
   admin_promo_done: '{monto} registrados no fundo.',
   admin_promo_failed: 'Não foi possível ler ou registrar o fundo de promoções',
   tx_totals_scope: 'Estes totais cobrem {shown} das suas {total} movimentações',
