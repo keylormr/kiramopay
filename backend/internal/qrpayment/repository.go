@@ -155,7 +155,7 @@ func (r *Repository) UpdateVerification(ctx context.Context, merchantID, status,
 		  RETURNING `+merchantCols, merchantID, status, reviewedBy, reason, PromoEntradaMeses))
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("merchant not found")
+			return nil, ErrComercioNoEncontrado
 		}
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (r *Repository) UpdateMerchantProfile(
 		merchantID, name, description, category, cedula, cedulaType, legalName, status))
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("merchant not found")
+			return nil, ErrComercioNoEncontrado
 		}
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (r *Repository) UpdateCommission(ctx context.Context, merchantID string, bp
 		merchantID, bps))
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("merchant not found")
+			return nil, ErrComercioNoEncontrado
 		}
 		return nil, err
 	}

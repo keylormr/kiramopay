@@ -91,7 +91,8 @@ Ver `.env.example` para todas las variables. Las mas importantes:
 | `REFERRAL_BONUS_POINTS` | `500` | Puntos de lealtad que recibe quien invita por cada registro con su codigo (0 apaga el pago, conserva la atribucion) |
 | `JWT_SECRET` | `dev-secret-...` | Secreto para firmar JWT (cambiar en produccion) |
 | `JWT_ACCESS_MINUTES` | `15` | Duracion del access token en minutos |
-| `JWT_REFRESH_DAYS` | `7` | Duracion del refresh token en dias |
+| `JWT_REFRESH_DAYS` | `7` | Duracion del refresh token en dias (tope absoluto de una sesion) |
+| `JWT_IDLE_MINUTES` | `30` | Cierre por inactividad: minutos sin una ACCION de la persona (`POST /auth/activity`) antes de que la sesion deje de servir. Renovar el token o una peticion de fondo no cuentan |
 
 ## Estructura del Proyecto
 

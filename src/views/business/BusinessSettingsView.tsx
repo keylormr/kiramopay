@@ -12,6 +12,7 @@ import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
 import { CATEGORIAS_DE_COMERCIO, categoriaDeComercio } from '@/utils/categoriaDeComercio';
+import { LARGO_MAXIMO_DE_COMERCIO as LARGO, mensajeDelPerfilDeComercio } from '@/utils/erroresDeComercio';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -121,7 +122,8 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       setShowEdit(false);
       onUpdated();
     } else {
-      setError(res.error?.message || t('assistant_action_failed'));
+      // El texto lo pone la pantalla a partir del codigo, no el del servidor.
+      setError(mensajeDelPerfilDeComercio(t, res.error, 'assistant_action_failed'));
     }
   };
 
@@ -367,7 +369,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
         <div className="space-y-4">
           <div>
             <label className={label}>{t('merchant_name')}</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={LARGO.nombre} className={field} />
           </div>
           <div>
             <label className={label}>{t('merchant_category')}</label>
@@ -383,11 +385,11 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           </div>
           <div>
             <label className={label}>{t('merchant_cedula')}</label>
-            <input value={cedula} onChange={(e) => setCedula(e.target.value)} className={field} inputMode="numeric" />
+            <input value={cedula} onChange={(e) => setCedula(e.target.value)} maxLength={LARGO.cedula} className={field} inputMode="numeric" />
           </div>
           <div>
             <label className={label}>{t('merchant_legal_name')}</label>
-            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className={field} />
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} maxLength={LARGO.razonSocial} className={field} />
           </div>
 
           {/* Editing the legal identity is not silent: it returns the shop to review. */}
