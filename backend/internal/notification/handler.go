@@ -89,7 +89,9 @@ func (h *Handler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	notifs, err := h.service.ListHistory(r.Context(), userID, limit, offset)
+	// La pantalla pide la lista en su idioma (?lang=). Un idioma que la app no
+	// tiene, o ninguno, deja los avisos como se guardaron.
+	notifs, err := h.service.ListHistory(r.Context(), userID, limit, offset, r.URL.Query().Get("lang"))
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "LIST_FAILED", err.Error())
 		return

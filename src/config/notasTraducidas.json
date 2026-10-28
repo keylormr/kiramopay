@@ -1,0 +1,962 @@
+{
+  "2.8.0": {
+    "en": [
+      "When a new version comes out, the app asks you to install it before you continue and tells you what it brings",
+      "If an account in “Last access” signs in without a password, you get in with a single tap, without typing your username",
+      "When you sign in with your fingerprint and have no saved password, the app first checks whether your account needs one"
+    ],
+    "fr": [
+      "Quand une nouvelle version sort, l’application vous demande de l’installer avant de continuer et vous indique ce qu’elle apporte",
+      "Si un compte affiché dans « Dernier accès » se connecte sans mot de passe, vous entrez d’un seul toucher, sans saisir votre nom d’utilisateur",
+      "Quand vous vous connectez avec votre empreinte et que vous n’avez pas de mot de passe enregistré, l’application vérifie d’abord si votre compte en a besoin"
+    ],
+    "pt": [
+      "Quando sai uma versão nova, o app pede que você a instale antes de continuar e conta o que ela traz",
+      "Se em \"Último acesso\" aparecer uma conta que entra sem senha, você entra com um toque, sem digitar seu usuário",
+      "Ao entrar com a sua digital, se você não tem uma senha salva, o app primeiro verifica se a sua conta precisa dela"
+    ],
+    "zh-cn": [
+      "发布新版本后，应用会在您继续使用之前提示安装，并介绍新版本的内容。",
+      "如果“上次登录”中显示的账户无需密码即可登录，轻点一下就能进入，无需输入用户名。",
+      "使用指纹登录时，如果没有已保存的密码，应用会先检查您的账户是否需要密码。"
+    ],
+    "ja": [
+      "新しいバージョンが出ると、アプリは先に進む前にインストールをご案内し、新しい内容もお知らせします。",
+      "「前回のアクセス」にパスワードなしで入れるアカウントが表示されているときは、ユーザー名を入力せずにワンタップでログインできます。",
+      "指紋でログインするとき、パスワードが保存されていない場合は、アカウントにパスワードが必要かどうかをアプリが先に確認します。"
+    ],
+    "hi": [
+      "जब कोई नया संस्करण आता है, तो ऐप आगे बढ़ने से पहले आपसे उसे इंस्टॉल करने को कहता है और बताता है कि उसमें क्या नया है",
+      "अगर \"अंतिम पहुंच\" में कोई ऐसा खाता दिखे जो बिना पासवर्ड के लॉग इन करता है, तो आप सिर्फ़ एक टैप में अंदर आ जाते हैं, उपयोगकर्ता नाम लिखे बिना",
+      "फिंगरप्रिंट से लॉग इन करते समय, अगर आपका पासवर्ड सहेजा हुआ नहीं है, तो ऐप पहले जाँचता है कि आपके खाते को उसकी ज़रूरत है या नहीं"
+    ]
+  },
+  "2.7.0": {
+    "en": [
+      "If a SINPE transfer or a withdrawal from your business is repeated because of a dropped connection, you are not charged twice, even if you sign out and back in",
+      "When a SINPE transfer or a withdrawal from your business can't be completed, the app tells you why in your language",
+      "Paying with a QR code tells you why it didn't go through: balance, daily or monthly limit, or a business that isn't available yet. If the payment is left unconfirmed, trying again right away with the same amount won't charge you twice",
+      "Notifications and alerts on your phone arrive in the language you chose",
+      "Exporting or copying your transactions and the business report now come out in the app's language, and the exported file can no longer run formulas when opened in a spreadsheet",
+      "When you pay your share of a split bill, you see the name of the person who created it",
+      "Rides, orders, the demo examples, service payments and two-factor authentication appear in your language",
+      "Errors when charging via QR, paying bills and recharges, and talking to the assistant appear in your language instead of as technical text",
+      "The assistant tells you when you've used all your questions for the day, instead of asking you to wait a moment",
+      "On a phone with a small screen, the sheets for sending, paying, charging and trading crypto fit entirely, and the error shows up without you having to look for it",
+      "Your transactions show their real status: a failed, reversed or processing payment no longer appears as pending, and failed or reversed ones are not added to your totals",
+      "In crypto, a transaction that failed or has a status the app doesn't recognize no longer shows as completed",
+      "If a QR code can't be verified because of a connection problem, the app tells you and lets you try again, instead of saying the code doesn't exist",
+      "Depositing into or withdrawing from a savings goal is not repeated after a dropped connection, and if it can't be done, the app tells you why",
+      "Server security updates"
+    ],
+    "fr": [
+      "Si un envoi SINPE ou un retrait de votre commerce est répété à cause d’une coupure de connexion, le montant n’est pas débité deux fois, même si vous vous déconnectez puis vous reconnectez",
+      "Quand un envoi SINPE ou un retrait de votre commerce ne peut pas être effectué, l’application vous en donne la raison dans votre langue",
+      "Payer par QR vous indique pourquoi le paiement n’a pas abouti : solde, plafond quotidien ou mensuel, ou commerce pas encore disponible. Si le paiement reste non confirmé, le réessayer aussitôt avec le même montant ne vous débite pas deux fois",
+      "Les notifications et les alertes sur votre téléphone vous arrivent dans la langue que vous avez choisie",
+      "L’export ou la copie de vos transactions et du rapport du commerce se font dans la langue de l’application, et le fichier exporté ne peut plus exécuter de formules lorsqu’il est ouvert dans un tableur",
+      "Quand vous payez votre part d’une addition partagée, vous voyez le nom de la personne qui l’a créée",
+      "Les trajets, les commandes, les exemples de la démo, le paiement des services et l’authentification à deux facteurs s’affichent dans votre langue",
+      "Les erreurs lors d’un encaissement par QR, du paiement de factures et de recharges, ou d’un échange avec l’assistant s’affichent dans votre langue, et non plus sous forme de texte technique",
+      "L’assistant vous prévient quand vous avez utilisé toutes vos questions du jour, au lieu de vous demander d’attendre un instant",
+      "Sur un téléphone à petit écran, les fenêtres pour envoyer, payer, encaisser et opérer en crypto tiennent entièrement à l’écran, et l’erreur s’affiche sans qu’il faille la chercher",
+      "Vos transactions affichent leur statut réel : un paiement échoué, annulé ou en cours n’apparaît plus comme en attente, et les transactions échouées ou annulées ne sont pas comptées dans vos totaux",
+      "En crypto, une transaction échouée ou dont l’application ne reconnaît pas le statut n’apparaît plus comme terminée",
+      "Si un code QR ne peut pas être vérifié à cause d’un problème de connexion, l’application vous le dit et vous laisse réessayer, au lieu d’indiquer que le code n’existe pas",
+      "Un dépôt sur un objectif d’épargne ou un retrait ne se répète pas en cas de coupure de connexion, et si l’opération est impossible, l’application vous en donne la raison",
+      "Mises à jour de sécurité du serveur"
+    ],
+    "pt": [
+      "Se um envio SINPE ou um saque do seu negócio se repetir por uma queda de conexão, ele não é cobrado duas vezes, mesmo que você saia da conta e entre de novo",
+      "Quando um envio SINPE ou um saque do seu negócio não puder ser feito, o app informa o motivo no seu idioma",
+      "Pagar com QR informa por que não foi possível: saldo, limite diário ou mensal, ou um comércio que ainda não está disponível. Se o pagamento ficar sem confirmação, tentar de novo logo em seguida com o mesmo valor não cobra duas vezes",
+      "As notificações e os avisos no seu celular chegam no idioma que você escolheu",
+      "Exportar ou copiar suas movimentações e o relatório do negócio saem no idioma do app, e o arquivo exportado não pode mais executar fórmulas ao ser aberto em uma planilha",
+      "Ao pagar a sua parte de uma conta dividida, você vê o nome de quem a criou",
+      "Viagens, pedidos, os exemplos da demo, o pagamento de serviços e a verificação em duas etapas aparecem no seu idioma",
+      "Os erros ao cobrar com QR, ao pagar contas e recargas e ao falar com o assistente aparecem no seu idioma, e não como texto técnico",
+      "O assistente avisa quando você usou todas as suas perguntas do dia, em vez de pedir que você espere um momento",
+      "Em um celular de tela pequena, as janelas para enviar, pagar, cobrar e operar com cripto cabem inteiras e o erro aparece sem você precisar procurá-lo",
+      "Suas movimentações mostram o status real: um pagamento que falhou, foi estornado ou está processando não aparece mais como pendente, e o que falhou ou foi estornado não entra nos seus totais",
+      "Em cripto, uma movimentação que falhou ou com um status que o app não reconhece não é mais exibida como concluída",
+      "Se um código QR não puder ser verificado por um problema de conexão, o app avisa e deixa você tentar de novo, em vez de dizer que o código não existe",
+      "Depositar ou sacar de uma meta de economia não se repete por uma queda de conexão e, se não for possível, o app informa o motivo",
+      "Atualizações de segurança do servidor"
+    ],
+    "zh-cn": [
+      "因网络中断而重复提交 SINPE 转账或商家余额转出时，不会重复扣款；即使您退出登录后再次登录也是如此。",
+      "SINPE 转账或商家余额转出无法完成时，应用会用您选择的语言告诉您原因。",
+      "QR 付款失败时，会告诉您原因：余额不足、已达每日或每月限额，或该商家暂不可用。如果付款未能确认，立即用相同金额重试也不会重复扣款。",
+      "手机上的通知和提醒，会以您选择的语言送达。",
+      "导出或复制交易记录和商家报表时，会使用应用当前的语言；导出的文件在电子表格中打开时，也不再会执行公式。",
+      "支付分账中您的那一份时，可以看到创建者的名字。",
+      "打车行程、订单、演示示例、缴费和两步验证，现在都以您选择的语言显示。",
+      "用 QR 收款、支付账单和储值，以及与助理对话时出现的错误，现在会以您选择的语言显示，而不是技术性文字。",
+      "当您用完当天的提问次数时，助理会明确告知，而不再让您稍等片刻。",
+      "在小屏幕手机上，转账、付款、收款和加密货币操作的页面可以完整显示，错误提示也不用再费力寻找。",
+      "交易记录会显示真实状态：失败、已撤销或处理中的付款不再显示为待处理，失败或已撤销的交易也不会计入合计。",
+      "在加密货币中，失败或状态未知的交易不再显示为已完成。",
+      "如果因网络问题无法验证 QR 码，应用会告知您并允许重试，而不是提示该码不存在。",
+      "向储蓄目标存入或取出资金时，不会因网络中断而重复执行；无法完成时，应用会告诉您原因。",
+      "服务器安全更新。"
+    ],
+    "ja": [
+      "接続が切れてSINPE送金やビジネス残高の引き出しが再送信されても、二重には引き落とされません。ログアウトして入り直した場合も同じです。",
+      "SINPE送金やビジネス残高の引き出しができないときは、アプリが理由をお使いの言語でお知らせします。",
+      "QRで支払えなかったときは、その理由が表示されます。残高不足、1日または月間の限度額、まだ利用できないお店などです。支払いが確認できなかった場合も、同じ金額ですぐにやり直せば二重には引き落とされません。",
+      "通知やスマートフォンに届くお知らせが、選んだ言語で届きます。",
+      "取引履歴とビジネスのレポートをエクスポートまたはコピーすると、アプリの言語で出力されます。また、エクスポートしたファイルを表計算ソフトで開いても、数式が実行されることはなくなりました。",
+      "割り勘で自分の分を支払うときに、作成した人の名前が表示されます。",
+      "配車、注文、デモの例、サービスの支払い、二段階認証が、お使いの言語で表示されます。",
+      "QRでの請求、請求書やチャージの支払い、アシスタントとのやり取りで出るエラーが、技術的な文面ではなく、お使いの言語で表示されます。",
+      "アシスタントは、1日の質問回数を使い切ったときに、そのことをお知らせします。「しばらくお待ちください」とは表示されません。",
+      "画面の小さいスマートフォンでも、送金・支払い・請求・暗号資産の取引の画面が全体表示に収まり、エラーも探さずに見つけられます。",
+      "取引履歴に実際の状態が表示されます。失敗、取り消し、処理中の支払いが「保留中」と表示されることはなくなり、失敗または取り消された取引は合計に含まれません。",
+      "暗号資産で、失敗した取引や、アプリが認識できない状態の取引が「完了」と表示されることはなくなりました。",
+      "接続の問題でQRコードを確認できないときは、「コードが存在しない」と表示するのではなく、その旨をお知らせし、再試行できます。",
+      "貯蓄目標への入金や出金は、接続が切れても二重に実行されません。実行できないときは、アプリが理由をお知らせします。",
+      "サーバーのセキュリティアップデート。"
+    ],
+    "hi": [
+      "अगर कनेक्शन टूटने की वजह से कोई SINPE ट्रांसफ़र या आपके व्यवसाय की निकासी दोहराई जाती है, तो पैसे दो बार नहीं कटते, चाहे आप लॉग आउट करके दोबारा लॉग इन करें",
+      "जब कोई SINPE ट्रांसफ़र या आपके व्यवसाय की निकासी नहीं हो पाती, तो ऐप आपकी भाषा में उसकी वजह बताता है",
+      "QR से भुगतान न हो पाए तो ऐप वजह बताता है: बैलेंस, दैनिक या मासिक सीमा, या ऐसा व्यापारी जो अभी उपलब्ध नहीं है। अगर भुगतान की पुष्टि न हो, तो उसी राशि से तुरंत दोबारा कोशिश करने पर पैसे दो बार नहीं कटते",
+      "आपके फ़ोन पर आने वाली सूचनाएं और अलर्ट अब आपकी चुनी हुई भाषा में आते हैं",
+      "अपने लेन-देन और व्यवसाय की रिपोर्ट को निर्यात या कॉपी करने पर वे ऐप की भाषा में मिलते हैं, और निर्यात की गई फ़ाइल को स्प्रेडशीट में खोलने पर उसमें अब फ़ॉर्मूले नहीं चल सकते",
+      "बंटवारे में अपना हिस्सा चुकाते समय आपको उस व्यक्ति का नाम दिखता है जिसने बंटवारा बनाया",
+      "सवारी, ऑर्डर, डेमो के उदाहरण, सेवाओं का भुगतान और दो-चरणीय सत्यापन आपकी भाषा में दिखते हैं",
+      "QR से शुल्क लेने, बिल और रिचार्ज का भुगतान करने, और सहायक से बात करने में आने वाली गड़बड़ियाँ अब आपकी भाषा में दिखती हैं, तकनीकी टेक्स्ट के रूप में नहीं",
+      "सहायक आपको बताता है कि आपने दिन के सारे सवाल इस्तेमाल कर लिए हैं, यह कहने के बजाय कि थोड़ा रुकिए",
+      "छोटी स्क्रीन वाले फ़ोन में भेजने, भुगतान करने, शुल्क लेने और क्रिप्टो में लेन-देन करने की विंडो पूरी समा जाती हैं और गड़बड़ी बिना खोजे दिख जाती है",
+      "आपके लेन-देन अपनी असली स्थिति बताते हैं: विफल, वापस किया गया या प्रक्रियाधीन भुगतान अब लंबित नहीं दिखता, और विफल या वापस किए गए लेन-देन आपके योग में नहीं जुड़ते",
+      "क्रिप्टो में, विफल लेन-देन या ऐसी स्थिति वाला लेन-देन जिसे ऐप नहीं पहचानता, अब पूरा हुआ नहीं दिखाया जाता",
+      "अगर कनेक्शन की समस्या की वजह से QR कोड की जाँच नहीं हो पाती, तो ऐप आपको बताता है और दोबारा कोशिश करने देता है, यह कहने के बजाय कि कोड मौजूद नहीं है",
+      "बचत लक्ष्य में पैसे जमा करना या उसमें से निकालना कनेक्शन टूटने पर दोहराया नहीं जाता, और अगर न हो सके तो ऐप वजह बताता है",
+      "सर्वर के सुरक्षा अपडेट"
+    ]
+  },
+  "2.6.0": {
+    "en": [
+      "Savings: you can now withdraw from a goal in the app, and depositing works again in the browser",
+      "Split Bill works: you can create a split, decline your share and cancel the one you created",
+      "Crypto price alerts: you ask us to let you know when a coin rises or falls to a price, and it is checked every so often even when the app isn't open",
+      "Selling crypto and receiving colones no longer fails, and you can withdraw what you had in staking",
+      "Paying ₡100,000 or more by QR now goes through: the app asks you for two-factor authentication on the spot",
+      "The back button no longer leaves you on a blank screen, and leaving a send no longer takes you out of the app",
+      "Amounts are typed with a thousands separator and without the little up and down arrows: “1,000” means one thousand, not one",
+      "Spending Analytics shows income and expenses in their own colors, and you can filter by month or by a date range of your choice",
+      "The home screen has a space with what's worth knowing: the upcoming plans, your invite link and QR charging with no commission",
+      "If you scan someone who is already in your contacts, the app tells you instead of adding them again",
+      "The rewards catalog has rewards again, and if the fund falls short we tell you without deducting any points",
+      "Someone else using the app heavily from the same network as you no longer locks you out",
+      "Sending crypto to another KiramoPay user is real: it arrives in their account",
+      "If a crypto purchase, sale or conversion is repeated because of a dropped connection, you aren't charged twice and the app tells you it was already done",
+      "Your crypto purchases, sales and conversions appear in your transactions with the full amount",
+      "Dates, times and numbers appear in the language you chose throughout the app: transactions, SINPE, notifications, points, recharges and crypto",
+      "If you can't sign in or change your password, the app tells you why, and both have an attempt limit that protects your account",
+      "Notifications you remove from your list no longer come back",
+      "Copying and sharing your transactions no longer adds colones to dollars",
+      "In your transactions, the share of a split payment appears with its name"
+    ],
+    "fr": [
+      "Épargne : vous pouvez désormais retirer de l’argent d’un objectif depuis l’application, et le dépôt fonctionne de nouveau dans le navigateur",
+      "Partager l’addition fonctionne : vous pouvez créer un partage, refuser votre part et annuler celui que vous avez créé",
+      "Alertes de prix crypto : vous demandez qu’on vous prévienne quand une crypto monte ou baisse à un prix donné, et le prix est vérifié régulièrement même si l’application n’est pas ouverte",
+      "La vente de cryptos avec réception de colones n’échoue plus, et vous pouvez retirer ce que vous aviez en staking",
+      "Payer 100 000 ₡ ou plus par QR aboutit désormais : l’application vous demande l’authentification à deux facteurs sur le moment",
+      "Le bouton retour ne vous laisse plus sur un écran blanc, et quitter un envoi ne vous fait plus sortir de l’application",
+      "Les montants se saisissent avec un séparateur de milliers et sans les petites flèches haut et bas : « 1,000 » vaut mille, et non un",
+      "Analyse des dépenses affiche les revenus et les dépenses avec leurs couleurs, et vous pouvez filtrer par mois ou par une plage de dates de votre choix",
+      "L’accueil comporte un espace avec ce qu’il vous est utile de savoir : les forfaits à venir, votre lien d’invitation et l’encaissement par QR sans commission",
+      "Si vous scannez une personne qui figure déjà dans vos contacts, l’application vous le signale au lieu de l’ajouter en double",
+      "Le catalogue de récompenses propose de nouveau des récompenses, et si le fonds ne suffit pas, nous vous le disons sans débiter de points",
+      "Le fait qu’une autre personne utilise beaucoup l’application depuis votre réseau ne vous empêche plus de vous connecter",
+      "L’envoi de cryptos à une autre personne sur KiramoPay est bien réel : il arrive sur son compte",
+      "Si un achat, une vente ou une conversion de cryptos est répété à cause d’une coupure de connexion, il n’est pas débité deux fois et l’application vous prévient que l’opération avait déjà été effectuée",
+      "Vos achats, ventes et conversions de cryptos apparaissent dans vos transactions avec le montant complet",
+      "Les dates, les heures et les nombres s’affichent dans la langue que vous avez choisie dans toute l’application : transactions, SINPE, notifications, points, recharges et crypto",
+      "Si vous ne pouvez pas vous connecter ou changer votre mot de passe, l’application vous en donne la raison, et les deux ont une limite de tentatives qui protège votre compte",
+      "Les notifications que vous retirez de votre liste ne réapparaissent plus",
+      "La copie et le partage de vos transactions n’additionnent plus des colones avec des dollars",
+      "Dans vos transactions, la part d’un paiement partagé s’affiche avec son nom"
+    ],
+    "pt": [
+      "Economia: agora você pode sacar de uma meta pelo app, e depositar voltou a funcionar no navegador",
+      "Dividir conta funciona: você pode criar uma divisão, recusar a sua parte e cancelar a que você criou",
+      "Alertas de preço de cripto: você pede para ser avisado quando uma moeda subir ou cair até um preço, e a verificação acontece de tempos em tempos, mesmo com o app fechado",
+      "Vender cripto e receber colones não falha mais, e você pode sacar o que tinha em staking",
+      "Pagar por QR ₡100.000 ou mais agora é concluído: o app pede a verificação em duas etapas na hora",
+      "O botão voltar não deixa mais você numa tela em branco, e sair de um envio não tira mais você do app",
+      "Os valores são digitados com separador de milhar e sem as setinhas de subir e descer: \"1,000\" vale mil, não um",
+      "Análise de gastos mostra entradas e gastos com suas cores, e você pode filtrar por mês ou por um intervalo de datas à sua escolha",
+      "No Início há um espaço com o que vale a pena saber: os planos que estão chegando, o seu link para convidar e a cobrança com QR sem comissão",
+      "Se você escanear alguém que já está nos seus contatos, o app avisa em vez de repetir o contato",
+      "O catálogo de prêmios voltou a ter recompensas e, se o fundo não for suficiente, avisamos sem descontar seus pontos",
+      "Outra pessoa usar muito o app a partir da mesma rede que a sua não deixa mais você sem conseguir entrar",
+      "Enviar cripto para outra pessoa do KiramoPay é real: chega na conta dela",
+      "Se uma compra, venda ou conversão de cripto se repetir por uma queda de conexão, ela não é cobrada duas vezes e o app avisa que já estava feita",
+      "Suas compras, vendas e conversões de cripto aparecem nas suas movimentações com o valor completo",
+      "Datas, horas e números aparecem no idioma que você escolheu em todo o app: movimentações, SINPE, notificações, pontos, recargas e cripto",
+      "Se você não consegue entrar ou trocar a sua senha, o app informa o motivo, e as duas ações têm um limite de tentativas que protege a sua conta",
+      "As notificações que você remove da sua lista não voltam mais a aparecer",
+      "Copiar e compartilhar suas movimentações não soma mais colones com dólares",
+      "Nas suas movimentações, a parte de um pagamento dividido aparece com o nome dela"
+    ],
+    "zh-cn": [
+      "储蓄：现在可以在应用中从目标取出资金，在浏览器中存入也恢复正常了。",
+      "分账可以使用了：可以建立分账、拒绝自己的那一份，以及取消自己创建的分账。",
+      "加密货币价格提醒：可以设置某个币种涨到或跌到指定价格时通知您，即使没有打开应用，系统也会定期检查。",
+      "出售加密货币并收到科朗不再失败，质押中的资产也可以取回。",
+      "用 QR 支付 ₡100,000 或以上现在可以完成了：应用会当场要求进行两步验证。",
+      "返回键不再让您停在空白页面，从转账页面退出也不会再退出整个应用。",
+      "金额现在使用千位分隔符输入，并去掉了上下增减的小箭头：“1,000”表示一千，而不是一。",
+      "消费分析会用不同颜色显示收入和支出，并可以按月份或您自选的日期范围筛选。",
+      "首页新增了一个“实用信息”区域：即将推出的套餐、您的邀请链接，以及零手续费的 QR 收款。",
+      "如果您扫描的是已在联络人中的人，应用会提示您，而不会重复添加。",
+      "奖励目录重新有了奖励；如果资金不足，我们会告知您，并且不会扣除您的积分。",
+      "同一网络下的其他人频繁使用应用，不会再导致您无法登录。",
+      "向另一位 KiramoPay 用户发送加密货币现已真实可用：对方的账户会收到。",
+      "如果加密货币的买入、卖出或转换因网络中断而被重复提交，不会重复扣款，应用会提示您该操作已经完成。",
+      "您的加密货币买入、卖出和转换会以完整金额出现在交易记录中。",
+      "日期、时间和数字在整个应用中都会按您选择的语言显示：交易记录、SINPE、通知、积分、储值和加密货币。",
+      "如果无法登录或更改密码，应用会告诉您原因；两者都设有尝试次数上限，以保护您的账户。",
+      "您从列表中删除的通知不会再次出现。",
+      "复制和分享交易记录时，不再把科朗和美元加在一起。",
+      "在交易记录中，分账的那一份会显示该分账的名称。"
+    ],
+    "ja": [
+      "貯蓄：アプリから貯蓄目標の出金ができるようになり、ブラウザでも入金が再び使えるようになりました。",
+      "割り勘が使えるようになりました。割り勘の作成、自分の分の辞退、作成した割り勘の取り消しができます。",
+      "暗号資産の価格アラート：通貨が指定した価格まで上昇または下落したときに通知するよう設定でき、アプリを開いていなくても一定の間隔で確認されます。",
+      "暗号資産を売却してコロンを受け取る操作が失敗しなくなり、ステーキングしていた分も引き出せるようになりました。",
+      "₡100,000以上のQR支払いを完了できるようになりました。その場でアプリが二段階認証を求めます。",
+      "戻るボタンで白い画面のままになることがなくなり、送金の画面から戻ってもアプリが終了しなくなりました。",
+      "金額は桁区切りで入力でき、増減の小さな矢印は表示されなくなりました。「1,000」は千であり、1ではありません。",
+      "支出分析で収入と支出が色分けして表示され、月または選んだ日付の範囲で絞り込めます。",
+      "ホームに、知っておくと便利な情報のスペースが加わりました。今後のプラン、招待リンク、手数料なしのQR請求です。",
+      "すでに連絡先にいる人をスキャンすると、重複して追加せず、その旨をお知らせします。",
+      "特典カタログに再び特典が並ぶようになりました。資金が足りないときはその旨をお知らせし、ポイントは差し引きません。",
+      "同じネットワークの別の人がアプリを頻繁に使っても、ログインできなくなることはなくなりました。",
+      "KiramoPayの別のユーザーへの暗号資産の送信が実際に行われるようになり、相手のアカウントに届きます。",
+      "暗号資産の購入・売却・変換が接続の切断で再送信されても、二重には引き落とされず、すでに完了していることをアプリがお知らせします。",
+      "暗号資産の購入・売却・変換が、全額で取引履歴に表示されます。",
+      "日付、時刻、数字が、選んだ言語の形式でアプリ全体に表示されます。取引履歴、SINPE、通知、ポイント、チャージ、暗号資産も対象です。",
+      "ログインやパスワードの変更ができないときは、アプリが理由をお知らせします。どちらも試行回数に上限があり、アカウントを守ります。",
+      "一覧から削除した通知が再び表示されることはなくなりました。",
+      "取引履歴をコピー・共有するときに、コロンとドルが合算されなくなりました。",
+      "取引履歴で、割り勘の支払いがその割り勘の名前付きで表示されます。"
+    ],
+    "hi": [
+      "बचत: अब आप ऐप से किसी लक्ष्य में से पैसे निकाल सकते हैं, और ब्राउज़र में जमा करना फिर से काम करने लगा है",
+      "बिल बांटें काम करता है: आप बंटवारा बना सकते हैं, अपना हिस्सा अस्वीकार कर सकते हैं और अपना बनाया बंटवारा रद्द कर सकते हैं",
+      "क्रिप्टो कीमत अलर्ट: आप कहते हैं कि कोई क्रिप्टो किसी कीमत तक ऊपर या नीचे जाए तो आपको बताया जाए, और ऐप बंद होने पर भी समय-समय पर उसकी जाँच होती रहती है",
+      "क्रिप्टो बेचकर कोलोन पाना अब विफल नहीं होता, और आप स्टेकिंग में रखी राशि निकाल सकते हैं",
+      "₡100.000 या उससे ज़्यादा का QR भुगतान अब पूरा हो जाता है: ऐप उसी समय दो-चरणीय सत्यापन माँगता है",
+      "बैक बटन अब आपको खाली स्क्रीन पर नहीं छोड़ता, और भेजने की प्रक्रिया से बाहर निकलने पर आप ऐप से बाहर नहीं हो जाते",
+      "राशियाँ हज़ार के विभाजक के साथ लिखी जाती हैं और ऊपर-नीचे के छोटे तीर नहीं दिखते: \"1,000\" का मतलब एक हज़ार है, एक नहीं",
+      "खर्च विश्लेषण में आय और खर्च अपने रंगों के साथ दिखते हैं, और आप महीने के हिसाब से या अपनी चुनी हुई तारीख़ों की सीमा से फ़िल्टर कर सकते हैं",
+      "होम में आपके काम की बातों की एक जगह है: आने वाले प्लान, आमंत्रण का आपका लिंक और बिना कमीशन के QR से शुल्क लेना",
+      "अगर आप ऐसे व्यक्ति को स्कैन करते हैं जो पहले से आपके संपर्कों में है, तो ऐप उसे दोहराने के बजाय आपको यह बता देता है",
+      "पुरस्कारों के कैटलॉग में फिर से रिवॉर्ड आ गए हैं, और अगर फंड पर्याप्त न हो तो हम आपके पॉइंट काटे बिना आपको बता देते हैं",
+      "आपके ही नेटवर्क से किसी और के ऐप का बहुत ज़्यादा इस्तेमाल करने पर अब आप लॉग इन करने से वंचित नहीं होते",
+      "KiramoPay के किसी दूसरे व्यक्ति को क्रिप्टो भेजना असली है: वह उसके खाते में पहुँचता है",
+      "अगर क्रिप्टो की खरीद, बिक्री या परिवर्तन कनेक्शन टूटने से दोहराया जाता है, तो पैसे दो बार नहीं कटते और ऐप बताता है कि वह पहले ही हो चुका था",
+      "आपकी क्रिप्टो की खरीद, बिक्री और परिवर्तन आपके लेन-देन में पूरी राशि के साथ दिखते हैं",
+      "तारीख़ें, समय और संख्याएँ पूरे ऐप में आपकी चुनी हुई भाषा में दिखती हैं: लेन-देन, SINPE, सूचनाएं, पॉइंट्स, रिचार्ज और क्रिप्टो",
+      "अगर आप लॉग इन नहीं कर पाते या पासवर्ड नहीं बदल पाते, तो ऐप वजह बताता है, और दोनों में कोशिशों की एक सीमा है जो आपके खाते की रक्षा करती है",
+      "आपकी सूची से हटाई गई सूचनाएं दोबारा नहीं दिखतीं",
+      "लेन-देन कॉपी और साझा करने पर अब कोलोन और डॉलर आपस में नहीं जुड़ते",
+      "आपके लेन-देन में बँटे हुए भुगतान का हिस्सा अपने नाम के साथ दिखता है"
+    ]
+  },
+  "2.5.0": {
+    "en": [
+      "Your QR code for getting paid no longer changes every time: it's a single code, you can print it, and each charge with an amount expires on its own",
+      "Protected payments (escrow) have clear deadlines: the seller has 14 days to deliver and the buyer has 7 to review. You see how much time you have left, you can start an agreement with the other person's number, and you can concede in a dispute",
+      "In the browser, alerts can reach you with the app closed: turn them on in Profile, under Notifications",
+      "Searching your transactions searches your entire history, and what you receive shows up without closing the screen",
+      "Crypto prices in colones use Hacienda's official exchange rate for the day",
+      "Cashback rewards are back in the catalog: the money comes out of a promotions fund, and if it falls short we tell you without deducting your points",
+      "The virtual card shows a KiramoPay number of its own, which can't match another person's real card",
+      "Each transaction, its status and your history are saved together: a retry can no longer charge you twice",
+      "The transactions CSV file no longer adds colones to dollars"
+    ],
+    "fr": [
+      "Votre code QR pour encaisser ne change plus à chaque fois : il est unique, vous pouvez l’imprimer, et chaque encaissement avec montant expire de lui-même",
+      "Les paiements protégés (escrow) ont des délais clairs : le vendeur a 14 jours pour livrer et l’acheteur 7 jours pour vérifier. Vous voyez le temps qu’il vous reste, vous pouvez lancer un accord avec le numéro de l’autre personne et céder dans un litige",
+      "Dans le navigateur, les alertes peuvent vous parvenir même quand l’application est fermée : activez-les dans Profil, sous Notifications",
+      "La recherche dans vos transactions porte sur tout votre historique, et ce que vous recevez apparaît sans avoir à fermer l’écran",
+      "Les prix des cryptos en colones utilisent le taux de change officiel du jour de Hacienda",
+      "Les récompenses de cashback reviennent au catalogue : l’argent provient d’un fonds de promotions, et s’il ne suffit pas, nous vous le disons sans débiter vos points",
+      "La carte virtuelle affiche un numéro propre à KiramoPay, qui ne peut pas coïncider avec la carte réelle d’une autre personne",
+      "Chaque transaction, son statut et votre historique sont enregistrés ensemble : une nouvelle tentative ne peut plus vous débiter deux fois",
+      "Le fichier CSV des transactions n’additionne plus des colones avec des dollars"
+    ],
+    "pt": [
+      "O seu código QR para cobrar não muda mais a cada vez: é um só, você pode imprimi-lo, e cada cobrança com valor definido expira sozinha",
+      "Os pagamentos protegidos têm prazos claros: quem vende tem 14 dias para entregar e quem compra tem 7 para revisar. Você vê quanto tempo resta, pode iniciar um acordo com o número da outra pessoa e ceder em uma disputa",
+      "No navegador, os avisos podem chegar com o app fechado: ative-os em Perfil, em Notificações",
+      "Buscar nas suas movimentações pesquisa em todo o seu histórico, e o que chega para você aparece sem precisar fechar a tela",
+      "Os preços de cripto em colones usam o câmbio oficial da Hacienda do dia",
+      "Os prêmios de cashback voltam ao catálogo: o dinheiro sai de um fundo de promoções e, se não for suficiente, avisamos sem descontar seus pontos",
+      "O cartão virtual mostra um número próprio do KiramoPay, que não pode coincidir com um cartão real de outra pessoa",
+      "Cada movimentação, o seu status e o seu histórico são salvos juntos: uma nova tentativa não pode mais cobrar você duas vezes",
+      "O arquivo CSV de movimentações não soma mais colones com dólares"
+    ],
+    "zh-cn": [
+      "您用于收款的 QR 码不会再每次变化：只有一个，可以打印，而带金额的收款会自动过期。",
+      "保障付款有了明确的期限：卖方有 14 天交付，买方有 7 天查验。您可以看到剩余时间，可以用对方的手机号发起协议，并在争议中让步。",
+      "在浏览器中，即使应用已关闭也能收到提醒：请在“个人资料”的“通知”中开启。",
+      "搜索交易记录时会搜索全部历史记录，收到的新交易无需关闭页面就会显示。",
+      "加密货币的科朗价格采用 Hacienda（财政部）当天的官方汇率。",
+      "返现奖励回到了目录：资金来自促销基金，不足时我们会告知您，并且不会扣除您的积分。",
+      "虚拟卡显示 KiramoPay 自己的卡号，不会与其他人的真实银行卡重合。",
+      "每笔交易、其状态和您的记录会一起保存：重试不会再导致重复扣款。",
+      "交易记录的 CSV 文件不再把科朗和美元加在一起。"
+    ],
+    "ja": [
+      "請求用のQRコードは毎回変わらなくなりました。1つだけで、印刷もでき、金額付きの請求は自動的に期限切れになります。",
+      "エスクロー決済の期限が明確になりました。販売者は14日以内に配送し、購入者は7日以内に内容を確認します。残り時間が表示され、相手の電話番号で契約を始められ、異議申立中は譲歩することもできます。",
+      "ブラウザでは、アプリを閉じていても通知を受け取れます。プロフィールの「通知」でオンにしてください。",
+      "取引の検索が全履歴を対象にするようになり、新しく届いた取引は画面を閉じなくても表示されます。",
+      "暗号資産のコロン建て価格には、Hacienda（財務省）の当日の公式為替レートが使われます。",
+      "キャッシュバック特典がカタログに戻りました。資金はプロモーション用の基金から出され、足りない場合はその旨をお知らせし、ポイントは差し引きません。",
+      "仮想カードにはKiramoPay独自の番号が表示され、他の人の実在のカードと一致することはありません。",
+      "各取引、その状態、履歴がまとめて保存されるため、再試行で二重に引き落とされることはなくなりました。",
+      "取引のCSVファイルで、コロンとドルが合算されなくなりました。"
+    ],
+    "hi": [
+      "पैसे लेने के लिए आपका QR कोड अब हर बार नहीं बदलता: वह एक ही है, आप उसे प्रिंट कर सकते हैं, और राशि वाली हर वसूली अपने आप समाप्त हो जाती है",
+      "सुरक्षित भुगतान की अवधियाँ अब साफ़ हैं: बेचने वाले के पास डिलीवरी के लिए 14 दिन और खरीदने वाले के पास जाँचने के लिए 7 दिन हैं। आप देखते हैं कि कितना समय बचा है, दूसरे व्यक्ति के नंबर से समझौता शुरू कर सकते हैं और किसी विवाद में पीछे हट सकते हैं",
+      "ब्राउज़र में ऐप बंद होने पर भी अलर्ट आ सकते हैं: उन्हें प्रोफाइल में, सूचनाएं में चालू करें",
+      "लेन-देन में खोजने पर आपका पूरा इतिहास खोजा जाता है, और जो आपके पास आता है वह स्क्रीन बंद किए बिना दिख जाता है",
+      "कोलोन में क्रिप्टो की कीमतें उस दिन की Hacienda की आधिकारिक विनिमय दर इस्तेमाल करती हैं",
+      "कैशबैक पुरस्कार कैटलॉग में लौट आए हैं: पैसा प्रमोशन फंड से आता है, और अगर वह पर्याप्त न हो तो हम आपके पॉइंट काटे बिना आपको बता देते हैं",
+      "वर्चुअल कार्ड पर KiramoPay का अपना नंबर दिखता है, जो किसी दूसरे व्यक्ति के असली कार्ड से मेल नहीं खा सकता",
+      "हर लेन-देन, उसकी स्थिति और आपका इतिहास एक साथ सहेजे जाते हैं: दोबारा कोशिश करने पर अब आपसे दो बार पैसे नहीं कट सकते",
+      "लेन-देन की CSV फ़ाइल में अब कोलोन और डॉलर आपस में नहीं जुड़ते"
+    ]
+  },
+  "2.4.1": {
+    "en": [
+      "You can now charge a bill split with friends: you pick who takes part by their number, see how much each person owes and pay your share in the app",
+      "When you deposit into or withdraw from a savings goal, the transaction and your goal update together: it can no longer happen that the money moves and the goal doesn't show it",
+      "The rewards catalog is paused until there is a way to deliver them; the points you earn stay saved in your account"
+    ],
+    "fr": [
+      "Vous pouvez maintenant encaisser une addition partagée avec des amis : vous choisissez les participants par leur numéro, vous voyez combien chacun doit et vous payez votre part depuis l’application",
+      "Quand vous déposez sur un objectif d’épargne ou en retirez de l’argent, la transaction et votre objectif se mettent à jour ensemble : il ne peut plus arriver que l’argent bouge sans que l’objectif l’affiche",
+      "Le catalogue de récompenses est en pause tant qu’il n’y a aucun moyen de les remettre ; les points que vous accumulez restent enregistrés dans votre compte"
+    ],
+    "pt": [
+      "Dividir uma conta com amigos já pode ser cobrada: você escolhe quem participa pelo número, vê quanto cabe a cada um e paga a sua parte pelo app",
+      "Ao guardar ou sacar dinheiro de uma meta de economia, a movimentação e a sua meta são atualizadas juntas: não pode mais acontecer de o dinheiro se mover e a meta não mostrar",
+      "O catálogo de prêmios fica em pausa enquanto não houver como entregá-los; os pontos que você acumula continuam salvos na sua conta"
+    ],
+    "zh-cn": [
+      "与朋友分账现在可以真正收款了：按手机号选择参与者，查看每个人应付多少，并在应用中支付自己的那一份。",
+      "向储蓄目标存入或取出资金时，交易和目标会同时更新：不会再出现钱已转走、目标却没有显示的情况。",
+      "在没有办法发放奖励期间，奖励目录暂停；您累积的积分仍保存在账户中。"
+    ],
+    "ja": [
+      "友達との割り勘で、実際に請求できるようになりました。参加者を電話番号で選び、各自の負担額を確認して、アプリから自分の分を支払えます。",
+      "貯蓄目標への入金や出金では、取引と目標が同時に更新されます。お金は動いたのに目標に反映されない、ということはなくなりました。",
+      "特典カタログは、特典を提供できる体制が整うまで一時停止します。貯めたポイントはアカウントに保存されたままです。"
+    ],
+    "hi": [
+      "दोस्तों के साथ बिल बांटने पर अब पैसे लिए जा सकते हैं: आप नंबर से चुनते हैं कि कौन शामिल है, देखते हैं कि हर किसी का कितना हिस्सा बनता है और अपना हिस्सा ऐप से चुकाते हैं",
+      "बचत लक्ष्य में पैसे जमा करने या निकालने पर लेन-देन और आपका लक्ष्य एक साथ अपडेट होते हैं: अब ऐसा नहीं हो सकता कि पैसा हिल जाए और लक्ष्य उसे न दिखाए",
+      "जब तक पुरस्कार देने का कोई तरीका नहीं है, तब तक पुरस्कारों का कैटलॉग रुका रहेगा; आपके जमा किए हुए पॉइंट आपके खाते में सुरक्षित हैं"
+    ]
+  },
+  "2.4.0": {
+    "en": [
+      "You now sign in with a username: you choose it when you create your account, you see it in your profile, and we remind you by email if you forget it",
+      "You can see which devices your account is open on and close the one you don't recognize, without closing the one you're using",
+      "Changing your email now asks for your password, because it is the address the password recovery link is sent to",
+      "When a screen can't load your data, it tells you, instead of showing you a zero as if it were your balance",
+      "Amounts are always shown in the currency they belong to",
+      "Recharges, bills, rides and orders tell you there is no agreement yet instead of charging you for something that can't be delivered",
+      "If you use an iPhone, the app now tells you about new versions through the channel that applies to it"
+    ],
+    "fr": [
+      "Vous vous connectez désormais avec un nom d’utilisateur : vous le choisissez à la création du compte, vous le voyez dans votre profil et nous vous le rappelons par e-mail si vous l’oubliez",
+      "Vous pouvez voir sur quels appareils votre compte est ouvert et fermer celui que vous ne reconnaissez pas, sans fermer celui que vous utilisez",
+      "Changer votre e-mail demande maintenant votre mot de passe, car c’est l’adresse à laquelle est envoyé le lien de récupération du mot de passe",
+      "Quand un écran n’arrive pas à charger vos données, il vous le dit, au lieu de vous afficher un zéro comme s’il s’agissait de votre solde",
+      "Les montants s’affichent toujours dans la devise qui leur correspond",
+      "Les recharges, les factures, les trajets et les commandes vous indiquent qu’il n’y a pas encore d’accord, au lieu de vous facturer quelque chose qui ne peut pas être livré",
+      "Si vous utilisez un iPhone, l’application vous prévient désormais des nouvelles versions par le canal qui lui correspond"
+    ],
+    "pt": [
+      "Agora você entra com um nome de usuário: escolhe ao criar a conta, vê no seu perfil e lembramos você por e-mail se esquecer",
+      "Você pode ver em quais dispositivos a sua conta está aberta e encerrar o que não reconhecer, sem encerrar o que você está usando",
+      "Trocar o seu e-mail agora pede a sua senha, porque é o endereço para o qual chega o link de recuperação dela",
+      "Quando uma tela não consegue carregar os seus dados, ela avisa, em vez de mostrar um zero como se fosse o seu saldo",
+      "Os valores sempre aparecem na moeda que lhes corresponde",
+      "Recargas, contas, viagens e pedidos avisam que ainda não há convênio, em vez de cobrar por algo que não pode ser entregue",
+      "Se você usa iPhone, o app agora avisa sobre as versões novas pelo canal adequado"
+    ],
+    "zh-cn": [
+      "现在使用用户名登录：创建账户时自己选择，在个人资料中可以看到，忘记时我们会通过邮件提醒您。",
+      "可以查看账户在哪些设备上已登录，并关闭不认识的设备，而不会关闭您正在使用的设备。",
+      "更改邮箱现在需要输入密码，因为找回密码的链接会发送到这个地址。",
+      "页面无法加载数据时会如实告知，而不是显示一个“0”冒充您的余额。",
+      "金额始终以其对应的货币显示。",
+      "储值、账单、打车行程和订单在尚未合作时会明确告知，而不是为无法提供的服务扣款。",
+      "如果您使用 iPhone，应用现在会通过相应的渠道通知您有新版本。"
+    ],
+    "ja": [
+      "ユーザー名でログインできるようになりました。アカウント作成時に選び、プロフィールで確認でき、忘れた場合はメールでお知らせします。",
+      "アカウントにログインしている端末を確認し、今使っている端末はそのままに、心当たりのない端末を閉じられます。",
+      "メールアドレスの変更にパスワードが必要になりました。パスワードを再設定するリンクが届く宛先だからです。",
+      "画面がデータを読み込めないときは、残高であるかのように0を表示せず、その旨をお知らせします。",
+      "金額は常に本来の通貨で表示されます。",
+      "チャージ、請求書、配車、注文は、提供できないものに課金する代わりに、まだ提携していないことをお知らせします。",
+      "iPhoneをお使いの場合も、新しいバージョンのお知らせが適切な経路で届くようになりました。"
+    ],
+    "hi": [
+      "अब आप उपयोगकर्ता नाम से लॉग इन करते हैं: उसे आप खाता बनाते समय चुनते हैं, अपनी प्रोफाइल में देखते हैं और भूल जाएं तो हम उसे ईमेल से याद दिला देते हैं",
+      "आप देख सकते हैं कि आपका खाता किन डिवाइस पर खुला है और जिसे आप न पहचानें उसे बंद कर सकते हैं, बिना उस डिवाइस को बंद किए जिसे आप इस्तेमाल कर रहे हैं",
+      "ईमेल बदलने के लिए अब आपका पासवर्ड माँगा जाता है, क्योंकि पासवर्ड पुनः प्राप्त करने का लिंक इसी पते पर आता है",
+      "जब कोई स्क्रीन आपका डेटा लोड नहीं कर पाती, तो वह आपको बताती है, आपके बैलेंस के रूप में शून्य दिखाने के बजाय",
+      "राशियाँ हमेशा उसी मुद्रा में दिखाई जाती हैं जिससे वे जुड़ी हैं",
+      "रिचार्ज, बिल, सवारी और ऑर्डर बताते हैं कि अभी करार नहीं है, ऐसी चीज़ के पैसे काटने के बजाय जो दी नहीं जा सकती",
+      "अगर आप iPhone इस्तेमाल करते हैं, तो ऐप अब नए संस्करणों की जानकारी आपको सही चैनल से देता है"
+    ]
+  },
+  "2.3.6": {
+    "en": [
+      "Crypto prices are no longer made up: if they can't be obtained, the screen says so instead of showing values that aren't real",
+      "If you leave the app open and a new version comes out, it lets you know and updates itself",
+      "Links that open the app from outside work again",
+      "The app no longer goes blank when it finds data saved by an earlier version",
+      "Security fixes in how balances are handled"
+    ],
+    "fr": [
+      "Les prix des cryptos ne sont plus inventés : s’ils ne peuvent pas être obtenus, l’écran l’indique au lieu d’afficher des valeurs qui ne sont pas réelles",
+      "Si vous laissez l’application ouverte et qu’une nouvelle version sort, elle vous prévient et se met à jour toute seule",
+      "Les liens qui ouvrent l’application depuis l’extérieur fonctionnent de nouveau",
+      "L’application ne reste plus sur un écran blanc quand elle trouve des données enregistrées par une version précédente",
+      "Correctifs de sécurité dans la gestion des soldes"
+    ],
+    "pt": [
+      "Os preços de cripto não são mais inventados: se não for possível obtê-los, a tela avisa em vez de mostrar valores que não são reais",
+      "Se você deixa o app aberto e sai uma versão nova, ele avisa e se atualiza sozinho",
+      "Os links que abrem o app a partir de fora voltam a funcionar",
+      "O app não fica mais em branco ao encontrar dados salvos de uma versão anterior",
+      "Correções de segurança no tratamento de saldos"
+    ],
+    "zh-cn": [
+      "加密货币价格不再显示虚假数值：无法获取时，页面会直接说明，而不是显示并非真实的数值。",
+      "如果应用一直开着时发布了新版本，会提示您并自动更新。",
+      "从外部打开应用的链接又可以正常使用了。",
+      "遇到旧版本保存的数据时，应用不再出现空白页面。",
+      "修复余额处理方面的安全问题。"
+    ],
+    "ja": [
+      "暗号資産の価格は、実際にない値が表示されなくなりました。取得できないときは、画面でその旨をお知らせします。",
+      "アプリを開いたままにしているときに新しいバージョンが出ると、お知らせして自動的に更新されます。",
+      "外部からアプリを開くリンクが、再び使えるようになりました。",
+      "以前のバージョンの保存データがあっても、アプリが白い画面のままになることはなくなりました。",
+      "残高の取り扱いに関するセキュリティ修正。"
+    ],
+    "hi": [
+      "क्रिप्टो की कीमतें अब गढ़ी नहीं जातीं: अगर वे न मिल सकें, तो स्क्रीन ऐसे मान दिखाने के बजाय यह बता देती है",
+      "अगर आप ऐप खुला छोड़ देते हैं और नया संस्करण आ जाता है, तो वह आपको बताता है और अपने आप अपडेट हो जाता है",
+      "बाहर से ऐप खोलने वाले लिंक फिर से काम करने लगे हैं",
+      "पिछले संस्करण का सहेजा हुआ डेटा मिलने पर ऐप अब खाली नहीं रह जाता",
+      "बैलेंस संभालने में सुरक्षा सुधार"
+    ]
+  },
+  "2.3.5": {
+    "en": [
+      "The “About” screen shows the version you actually have installed, and the change history is up to date again",
+      "Turning off two-factor authentication is recorded in your account's security history"
+    ],
+    "fr": [
+      "L’écran « À propos » affiche la version réellement installée, et l’historique des modifications est de nouveau à jour",
+      "La désactivation de l’authentification à deux facteurs est enregistrée dans l’historique de sécurité de votre compte"
+    ],
+    "pt": [
+      "A tela \"Sobre\" mostra a versão que você realmente tem instalada, e o histórico de alterações voltou a estar em dia",
+      "Desativar a verificação em duas etapas fica registrado no histórico de segurança da sua conta"
+    ],
+    "zh-cn": [
+      "“关于”页面会显示您实际安装的版本，更新记录也恢复为最新。",
+      "关闭两步验证的操作会记录在账户的安全记录中。"
+    ],
+    "ja": [
+      "「概要」画面に実際にインストールされているバージョンが表示され、更新履歴も最新になりました。",
+      "二段階認証を無効にした操作が、アカウントのセキュリティ履歴に記録されます。"
+    ],
+    "hi": [
+      "\"के बारे में\" स्क्रीन वही संस्करण दिखाती है जो वाकई इंस्टॉल है, और बदलावों का इतिहास फिर से अद्यतन है",
+      "दो-चरणीय सत्यापन बंद करना आपके खाते के सुरक्षा इतिहास में दर्ज हो जाता है"
+    ]
+  },
+  "2.3.4": {
+    "en": [
+      "Demo accounts can be scheduled to stop working on a given date, and they close on their own when it arrives",
+      "When an account is blocked, any session it had open is cut off immediately",
+      "The referral invitation is back, now that the rewards are real"
+    ],
+    "fr": [
+      "Les comptes de démonstration peuvent être programmés pour cesser de fonctionner à une date donnée, et se ferment d’eux-mêmes à son arrivée",
+      "Quand un compte est bloqué, la session qu’il avait ouverte est coupée immédiatement",
+      "L’invitation au programme de parrainage réapparaît, maintenant que les récompenses sont réelles"
+    ],
+    "pt": [
+      "As contas de demonstração podem ser programadas para parar de funcionar em uma data e se encerram sozinhas ao chegar nela",
+      "Ao bloquear uma conta, a sessão que ela tiver aberta é cortada na hora",
+      "O convite para chamar amigos voltou a aparecer, agora que as recompensas são reais"
+    ],
+    "zh-cn": [
+      "演示账户可以设定在某个日期停止使用，到期后会自动关闭。",
+      "封禁账户时，该账户已打开的会话会立即中断。",
+      "随着奖励变为真实发放，邀请好友的入口重新出现。"
+    ],
+    "ja": [
+      "デモアカウントは、指定した日付に使えなくなるよう設定でき、その日が来ると自動的に閉鎖されます。",
+      "アカウントをブロックすると、開いていたセッションがその場で切断されます。",
+      "報酬が実際に付与されるようになったため、友達招待の案内が再び表示されます。"
+    ],
+    "hi": [
+      "डेमो खातों को इस तरह तय किया जा सकता है कि वे किसी तारीख़ पर काम करना बंद कर दें, और उस तारीख़ के आने पर वे अपने आप बंद हो जाते हैं",
+      "किसी खाते को ब्लॉक करते ही उस पर खुला सत्र उसी क्षण कट जाता है",
+      "दोस्तों को आमंत्रित करने का विकल्प फिर से दिखने लगा है, अब जब रिवॉर्ड असली हैं"
+    ]
+  },
+  "2.3.3": {
+    "en": [
+      "New icon and branding, in the app and on your phone's home screen",
+      "Sign-up clearly explains why it fails, instead of showing a generic error",
+      "New FAQ entry about how your information is protected"
+    ],
+    "fr": [
+      "Nouvelle icône et nouvelle identité visuelle, dans l’application et sur l’écran d’accueil du téléphone",
+      "L’inscription explique clairement pourquoi elle échoue, au lieu d’afficher une erreur générique",
+      "Nouvelle question dans la FAQ sur la façon dont vos informations sont protégées"
+    ],
+    "pt": [
+      "Ícone e marca novos, no app e na tela inicial do celular",
+      "O cadastro explica com clareza por que falha, em vez de um erro genérico",
+      "Nova pergunta frequente sobre como as suas informações são protegidas"
+    ],
+    "zh-cn": [
+      "全新的图标和品牌，应用内和手机主屏幕都已更新。",
+      "注册失败时会清楚说明原因，而不是显示笼统的错误。",
+      "新增常见问题：如何保护您的信息。"
+    ],
+    "ja": [
+      "新しいアイコンとブランドを、アプリ内とスマートフォンのホーム画面に導入しました。",
+      "登録に失敗したときは、汎用的なエラーではなく、理由がわかりやすく表示されます。",
+      "情報がどのように保護されるかについて、よくある質問を追加しました。"
+    ],
+    "hi": [
+      "ऐप में और फ़ोन की होम स्क्रीन पर नया आइकन और ब्रांड",
+      "पंजीकरण में साफ़ बताया जाता है कि वह क्यों विफल हुआ, सामान्य त्रुटि दिखाने के बजाय",
+      "आपकी जानकारी कैसे सुरक्षित रखी जाती है, इस पर एक नया अक्सर पूछा जाने वाला प्रश्न"
+    ]
+  },
+  "2.3.2": {
+    "en": [
+      "Referral program: share your link and earn points for every person who signs up"
+    ],
+    "fr": [
+      "Programme de parrainage : partagez votre lien et gagnez des points pour chaque personne qui s’inscrit"
+    ],
+    "pt": [
+      "Programa de convites: compartilhe o seu link e ganhe pontos por cada pessoa que se cadastrar"
+    ],
+    "zh-cn": [
+      "邀请计划：分享您的链接，每有一人注册即可获得积分。"
+    ],
+    "ja": [
+      "招待プログラム：リンクを共有すると、登録した人ひとりごとにポイントがもらえます。"
+    ],
+    "hi": [
+      "आमंत्रण कार्यक्रम: अपना लिंक साझा करें और जो भी व्यक्ति पंजीकरण करे, उसके लिए पॉइंट कमाएं"
+    ]
+  },
+  "2.3.1": {
+    "en": [
+      "Pie chart of spending in the analytics section",
+      "Clear notice when you reach the sign-in attempt limit"
+    ],
+    "fr": [
+      "Graphique circulaire des dépenses dans la section d’analyse",
+      "Message clair lorsque la limite de tentatives de connexion est atteinte"
+    ],
+    "pt": [
+      "Gráfico de pizza dos gastos na seção de análise",
+      "Aviso claro ao atingir o limite de tentativas de entrada"
+    ],
+    "zh-cn": [
+      "消费分析中新增支出饼图。",
+      "达到登录尝试次数上限时，会给出清晰的提示。"
+    ],
+    "ja": [
+      "支出分析に支出の円グラフを追加しました。",
+      "ログイン試行の上限に達したときに、わかりやすいお知らせが表示されます。"
+    ],
+    "hi": [
+      "विश्लेषण अनुभाग में खर्च का पाई चार्ट",
+      "लॉगिन की कोशिशों की सीमा पूरी होने पर साफ़ सूचना"
+    ]
+  },
+  "2.3.0": {
+    "en": [
+      "The app updates itself: it tells you when there is a new version and it installs with one tap",
+      "Amounts are shown with a thousands separator",
+      "Occasional in-app notices with what's new"
+    ],
+    "fr": [
+      "L’application se met à jour toute seule : elle vous prévient quand une nouvelle version est disponible et s’installe d’un seul toucher",
+      "Les montants s’affichent avec un séparateur de milliers",
+      "Annonces occasionnelles dans l’application avec les nouveautés"
+    ],
+    "pt": [
+      "O app se atualiza sozinho: avisa quando há uma versão nova e ela é instalada com um toque",
+      "Os valores são exibidos com separador de milhar",
+      "Avisos ocasionais dentro do app com as novidades"
+    ],
+    "zh-cn": [
+      "应用会自动更新：有新版本时提示您，轻点一下即可安装。",
+      "金额以千位分隔符显示。",
+      "应用内会不定期显示新功能公告。"
+    ],
+    "ja": [
+      "アプリが自動で更新されます。新しいバージョンが出るとお知らせし、ワンタップでインストールできます。",
+      "金額が桁区切りで表示されます。",
+      "新機能のお知らせが、ときどきアプリ内に表示されます。"
+    ],
+    "hi": [
+      "ऐप अपने आप अपडेट हो जाता है: नया संस्करण आने पर सूचित करता है और एक टैप में इंस्टॉल हो जाता है",
+      "राशियाँ हज़ार के विभाजक के साथ दिखाई जाती हैं",
+      "ऐप के भीतर नई चीज़ों की जानकारी के साथ कभी-कभार सूचनाएं"
+    ]
+  },
+  "2.2.0": {
+    "en": [
+      "Sign in with your ID number, email or phone: whichever you prefer",
+      "No more unexpected sign-outs while you were using the app",
+      "Redesigned analytics section, with a comparison against the previous period",
+      "Refreshed home screen and charts",
+      "More stable crypto prices"
+    ],
+    "fr": [
+      "Connexion avec votre numéro d’identité, votre e-mail ou votre téléphone : au choix",
+      "Fini les déconnexions inattendues pendant que vous utilisiez l’application",
+      "Section d’analyse repensée, avec comparaison avec la période précédente",
+      "Écran d’accueil et graphiques renouvelés",
+      "Prix des cryptos plus stables"
+    ],
+    "pt": [
+      "Entrada com documento, e-mail ou telefone: o que você preferir",
+      "Acabaram as saídas inesperadas da sua conta enquanto você usava o app",
+      "Seção de análise redesenhada, com comparação com o período anterior",
+      "Tela principal e gráficos renovados",
+      "Preços de cripto mais estáveis"
+    ],
+    "zh-cn": [
+      "可用证件号、邮箱或手机号登录：选您喜欢的方式。",
+      "使用应用时不会再被意外退出登录。",
+      "重新设计的分析页面，可与上一时段对比。",
+      "首页和图表全面焕新。",
+      "加密货币价格更稳定。"
+    ],
+    "ja": [
+      "ログインは、身分証番号、メール、電話番号のうち、お好みの方法でできます。",
+      "アプリの使用中に突然ログアウトされることはなくなりました。",
+      "分析セクションを刷新し、前の期間との比較を追加しました。",
+      "ホーム画面とグラフを刷新しました。",
+      "暗号資産の価格がより安定しました。"
+    ],
+    "hi": [
+      "पहचान संख्या, ईमेल या फ़ोन से लॉग इन: जो आप चाहें",
+      "ऐप इस्तेमाल करते समय अचानक लॉग आउट होना बंद",
+      "विश्लेषण अनुभाग नए रूप में, पिछली अवधि से तुलना के साथ",
+      "मुख्य स्क्रीन और चार्ट नए रूप में",
+      "क्रिप्टो की कीमतें ज़्यादा स्थिर"
+    ]
+  },
+  "2.1.0": {
+    "en": [
+      "Email verification code when you sign up",
+      "Real-time notifications, without reloading the screen",
+      "When you sign out, your data is no longer kept on the device"
+    ],
+    "fr": [
+      "Code de vérification par e-mail à l’inscription",
+      "Notifications en temps réel, sans recharger l’écran",
+      "À la déconnexion, vos données ne restent plus enregistrées sur l’appareil"
+    ],
+    "pt": [
+      "Código de verificação por e-mail ao se cadastrar",
+      "Notificações em tempo real, sem recarregar a tela",
+      "Ao sair da conta, seus dados deixam de ficar salvos no dispositivo"
+    ],
+    "zh-cn": [
+      "注册时通过邮件发送验证码。",
+      "通知实时送达，无需刷新页面。",
+      "退出登录后，您的数据不再保留在设备上。"
+    ],
+    "ja": [
+      "登録時にメールで確認コードが届きます。",
+      "通知がリアルタイムで届き、画面の再読み込みは不要です。",
+      "ログアウトすると、データが端末に残らなくなりました。"
+    ],
+    "hi": [
+      "पंजीकरण के समय ईमेल से सत्यापन कोड",
+      "रीयल-टाइम सूचनाएं, स्क्रीन रीलोड किए बिना",
+      "लॉग आउट करने पर आपका डेटा अब डिवाइस में सहेजा नहीं रहता"
+    ]
+  },
+  "2.0.0": {
+    "en": [
+      "Advanced account protection: automatic lockout after failed attempts",
+      "Real-time session verification for added security",
+      "Activity log to detect unauthorized access",
+      "Faster loading: screens load on demand",
+      "Style optimization for better performance",
+      "Push notifications for transfers and price alerts",
+      "Exchange rates updated in real time",
+      "More stable crypto prices, with protection against provider failures",
+      "Personalized notifications for each user via WebSocket",
+      "Deep links: open payments and transfers from external links",
+      "Mandatory biometric authentication on large transactions",
+      "Preparation for Google Play Store",
+      "Database restructuring for greater scalability",
+      "Automatic daily backup system",
+      "Database connection improvements for many simultaneous users"
+    ],
+    "fr": [
+      "Protection avancée du compte : blocage automatique après des tentatives échouées",
+      "Vérification de session en temps réel pour plus de sécurité",
+      "Journal d’activité pour détecter les accès non autorisés",
+      "Chargement plus rapide : les écrans se chargent à la demande",
+      "Optimisation des styles pour de meilleures performances",
+      "Notifications push pour les virements et les alertes de prix",
+      "Taux de change mis à jour en temps réel",
+      "Prix des cryptos plus stables, avec protection contre les défaillances du fournisseur",
+      "Notifications personnalisées pour chaque utilisateur via WebSocket",
+      "Liens profonds (deep links) : ouvrir des paiements et des virements depuis des liens externes",
+      "Authentification biométrique obligatoire pour les transactions importantes",
+      "Préparation pour le Google Play Store",
+      "Restructuration de la base de données pour une meilleure évolutivité",
+      "Système de sauvegardes automatiques quotidiennes",
+      "Améliorations de la connexion à la base de données pour plusieurs utilisateurs simultanés"
+    ],
+    "pt": [
+      "Proteção avançada da conta: bloqueio automático após tentativas fracassadas",
+      "Verificação da sessão em tempo real para mais segurança",
+      "Registro de atividade para detectar acessos não autorizados",
+      "Carregamento mais rápido: as telas são carregadas sob demanda",
+      "Otimização de estilos para melhor desempenho",
+      "Notificações push para transferências e alertas de preço",
+      "Taxas de câmbio atualizadas em tempo real",
+      "Preços de cripto mais estáveis, com proteção contra falhas do provedor",
+      "Notificações personalizadas por usuário via WebSocket",
+      "Deep links: abra pagamentos e transferências a partir de links externos",
+      "Autenticação biométrica obrigatória em transações grandes",
+      "Preparação para a Google Play Store",
+      "Reestruturação do banco de dados para maior escalabilidade",
+      "Sistema de backups automáticos diários",
+      "Melhorias na conexão com o banco de dados para vários usuários simultâneos"
+    ],
+    "zh-cn": [
+      "账户高级保护：多次失败后自动锁定。",
+      "实时验证会话，安全性更高。",
+      "活动记录，用于发现未经授权的访问。",
+      "加载更快：页面按需加载。",
+      "优化样式以提升性能。",
+      "转账和价格提醒支持推送通知。",
+      "汇率实时更新。",
+      "加密货币价格更稳定，数据提供方出现故障时也有保护。",
+      "通过 WebSocket 为每位用户提供个性化通知。",
+      "深度链接：可从外部链接打开付款和转账。",
+      "大额交易必须进行生物识别验证。",
+      "为上架 Google Play Store 做好准备。",
+      "重构数据库，以便支持更多用户。",
+      "每日自动备份系统。",
+      "改进数据库连接，支持多名用户同时使用。"
+    ],
+    "ja": [
+      "アカウントの高度な保護：失敗が続くと自動的にロックされます。",
+      "セキュリティ強化のため、セッションをリアルタイムで確認します。",
+      "不正なアクセスを検知するため、アクティビティを記録します。",
+      "読み込みが高速化：画面は必要になったときに読み込まれます。",
+      "パフォーマンス向上のため、スタイルを最適化しました。",
+      "送金と価格アラートのプッシュ通知に対応しました。",
+      "為替レートをリアルタイムで更新します。",
+      "提供元の障害に備える保護により、暗号資産の価格がより安定しました。",
+      "WebSocket経由で、ユーザーごとに合わせた通知を届けます。",
+      "ディープリンク：外部のリンクから支払いや送金を開けます。",
+      "高額な取引には生体認証が必須になりました。",
+      "Google Play Storeへの対応準備を行いました。",
+      "より多くの利用に対応できるよう、データベースを再構成しました。",
+      "毎日の自動バックアップの仕組みを導入しました。",
+      "多数のユーザーが同時に使えるよう、データベース接続を改善しました。"
+    ],
+    "hi": [
+      "उन्नत खाता सुरक्षा: असफल कोशिशों के बाद स्वचालित ब्लॉक",
+      "ज़्यादा सुरक्षा के लिए सत्र का रीयल-टाइम सत्यापन",
+      "अनधिकृत पहुँच पहचानने के लिए गतिविधि रिकॉर्ड",
+      "तेज़ लोडिंग: स्क्रीन ज़रूरत पड़ने पर लोड होती हैं",
+      "बेहतर प्रदर्शन के लिए स्टाइल का अनुकूलन",
+      "ट्रांसफ़र और कीमत अलर्ट के लिए पुश सूचनाएं",
+      "विनिमय दरें रीयल-टाइम में अपडेट",
+      "प्रदाता की विफलता से सुरक्षा के साथ क्रिप्टो की ज़्यादा स्थिर कीमतें",
+      "WebSocket के ज़रिए हर उपयोगकर्ता के लिए अलग सूचनाएं",
+      "डीप लिंक: बाहरी लिंक से भुगतान और ट्रांसफ़र खोलें",
+      "बड़े लेन-देन में बायोमेट्रिक प्रमाणीकरण अनिवार्य",
+      "Google Play Store की तैयारी",
+      "अधिक स्केलेबिलिटी के लिए डेटाबेस का पुनर्गठन",
+      "रोज़ाना स्वचालित बैकअप की प्रणाली",
+      "एक साथ कई उपयोगकर्ताओं के लिए डेटाबेस कनेक्शन में सुधार"
+    ]
+  },
+  "1.1.0": {
+    "en": [
+      "Authentication system with ID number and PIN",
+      "Biometrics support (fingerprint/Face ID)",
+      "Local data storage",
+      "Working notifications view",
+      "FAQ section",
+      "Add SINPE contacts along with their bank",
+      "Working copy and share buttons",
+      "History of service payments and recharges",
+      "Versioning system with changelog",
+      "PIN confirmation for security changes"
+    ],
+    "fr": [
+      "Système d’authentification par numéro d’identité et PIN",
+      "Prise en charge de la biométrie (empreinte / Face ID)",
+      "Enregistrement local des données",
+      "Écran de notifications fonctionnel",
+      "Section de questions fréquentes (FAQ)",
+      "Ajout de contacts SINPE avec leur banque",
+      "Boutons copier et partager fonctionnels",
+      "Historique des paiements de services et des recharges",
+      "Système de versions avec journal des modifications (changelog)",
+      "Confirmation par PIN pour les modifications de sécurité"
+    ],
+    "pt": [
+      "Sistema de autenticação com documento e PIN",
+      "Suporte a biometria (digital/Face ID)",
+      "Armazenamento local de dados",
+      "Tela de notificações funcional",
+      "Seção de perguntas frequentes",
+      "Adicionar contatos SINPE com banco",
+      "Botões de copiar e compartilhar funcionais",
+      "Histórico de pagamentos de serviços e recargas",
+      "Sistema de versionamento com histórico de alterações",
+      "Confirmação por PIN para alterações de segurança"
+    ],
+    "zh-cn": [
+      "使用证件号和 PIN 码的认证系统。",
+      "支持生物识别（指纹 / Face ID）。",
+      "数据在本地保存。",
+      "通知页面可以正常使用。",
+      "新增常见问题板块。",
+      "可添加带银行信息的 SINPE 联络人。",
+      "复制和分享按钮可以正常使用。",
+      "新增缴费和储值的历史记录。",
+      "带更新记录的版本管理系统。",
+      "更改安全设置时需要 PIN 码确认。"
+    ],
+    "ja": [
+      "身分証番号とPINによる認証の仕組みを追加しました。",
+      "生体認証（指紋 / Face ID）に対応しました。",
+      "データを端末内に保存するようになりました。",
+      "通知画面が使えるようになりました。",
+      "よくある質問のセクションを追加しました。",
+      "銀行を指定してSINPEの連絡先を追加できます。",
+      "コピーと共有のボタンが使えるようになりました。",
+      "サービスの支払いとチャージの履歴を追加しました。",
+      "バージョン管理と更新履歴の仕組みを追加しました。",
+      "セキュリティ設定の変更時にPINでの確認が必要になりました。"
+    ],
+    "hi": [
+      "पहचान संख्या और PIN के साथ प्रमाणीकरण प्रणाली",
+      "बायोमेट्रिक्स का समर्थन (फिंगरप्रिंट/Face ID)",
+      "डेटा का स्थानीय संग्रहण",
+      "काम करने वाली सूचनाओं की स्क्रीन",
+      "अक्सर पूछे जाने वाले प्रश्नों का अनुभाग",
+      "बैंक के साथ SINPE संपर्क जोड़ें",
+      "काम करने वाले कॉपी और साझा करने के बटन",
+      "सेवाओं के भुगतान और रिचार्ज का इतिहास",
+      "बदलावों के इतिहास के साथ संस्करण प्रणाली",
+      "सुरक्षा बदलावों के लिए PIN से पुष्टि"
+    ]
+  },
+  "1.0.0": {
+    "en": [
+      "Initial version of KiramoPay",
+      "Home screen with balance",
+      "SINPE Móvil: send and receive money",
+      "Service payments (ICE, AyA, CNFL)",
+      "Phone recharges (Kolbi, Claro, Movistar)",
+      "Marketplace for rides and food: Uber, DiDi, Uber Eats",
+      "User profile with settings",
+      "Dark mode",
+      "Virtual cards"
+    ],
+    "fr": [
+      "Version initiale de KiramoPay",
+      "Écran d’accueil avec solde",
+      "SINPE Móvil : envoyer et recevoir de l’argent",
+      "Paiement de services (ICE, AyA, CNFL)",
+      "Recharges téléphoniques (Kolbi, Claro, Movistar)",
+      "Marketplace : Uber, DiDi, Uber Eats",
+      "Profil utilisateur avec paramètres",
+      "Mode sombre",
+      "Cartes virtuelles"
+    ],
+    "pt": [
+      "Versão inicial do KiramoPay",
+      "Tela principal com saldo",
+      "SINPE Móvil: enviar e receber dinheiro",
+      "Pagamento de serviços (ICE, AyA, CNFL)",
+      "Recargas de celular (Kolbi, Claro, Movistar)",
+      "Marketplace de transporte e comida: Uber, DiDi, Uber Eats",
+      "Perfil de usuário com configurações",
+      "Modo escuro",
+      "Cartões virtuais"
+    ],
+    "zh-cn": [
+      "KiramoPay 的首个版本。",
+      "显示余额的首页。",
+      "SINPE Móvil：收发款项。",
+      "缴费（ICE、AyA、CNFL）。",
+      "电话储值（Kolbi、Claro、Movistar）。",
+      "市场：Uber、DiDi、Uber Eats。",
+      "带有各项设置的用户个人资料。",
+      "深色模式。",
+      "虚拟卡。"
+    ],
+    "ja": [
+      "KiramoPayの最初のバージョン。",
+      "残高を表示するホーム画面。",
+      "SINPE Móvil：お金の送受信。",
+      "サービスの支払い（ICE、AyA、CNFL）。",
+      "電話チャージ（Kolbi、Claro、Movistar）。",
+      "マーケット：Uber、DiDi、Uber Eats。",
+      "設定を備えたユーザープロフィール。",
+      "ダークモード。",
+      "仮想カード。"
+    ],
+    "hi": [
+      "KiramoPay का पहला संस्करण",
+      "बैलेंस के साथ मुख्य स्क्रीन",
+      "SINPE Móvil: पैसे भेजें और पाएं",
+      "सेवाओं का भुगतान (ICE, AyA, CNFL)",
+      "फ़ोन रिचार्ज (Kolbi, Claro, Movistar)",
+      "मार्केटप्लेस: Uber, DiDi, Uber Eats",
+      "सेटिंग्स के साथ उपयोगकर्ता प्रोफाइल",
+      "डार्क मोड",
+      "वर्चुअल कार्ड"
+    ]
+  }
+}

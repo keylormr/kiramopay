@@ -1,6 +1,7 @@
 import React from 'react';
 import { BottomSheet } from './BottomSheet';
 import { Icons } from './Icons';
+import { Bandera } from './Bandera';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 interface LanguageSheetProps {
@@ -29,7 +30,7 @@ export const LanguageSheet: React.FC<LanguageSheetProps> = ({ isOpen, onClose })
                 : 'uv-surface-2 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]'
             }`}
           >
-            <span className="text-2xl mr-4">{lang.flag}</span>
+            <Bandera pais={lang.flag} className="text-2xl mr-4" />
             <div className="flex-1 text-left">
               <p className={`font-bold ${
                 language === lang.code ? 'text-primary' : 'uv-text-primary'

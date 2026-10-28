@@ -17,7 +17,7 @@ import type {
   CatalogItem,
   MerchantLocation,
 } from '@/api/repositories/qrpayment.repository';
-import { mensajeDelRechazoDelCobro, minutosParaVencer } from '@/utils/erroresQr';
+import { mensajeDelRechazoDelCobro, minutosParaVencer, textoDeDuracion } from '@/utils/erroresQr';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { fechaCorta } from '@/utils/fechaPlazo';
 
@@ -521,7 +521,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
               </div>
             ) : cobro ? (
               <p className="text-xs uv-text-muted">
-                {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobro.expiresAt)))}
+                {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobro.expiresAt), t))}
               </p>
             ) : (
               <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>

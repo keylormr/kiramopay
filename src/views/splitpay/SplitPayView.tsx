@@ -35,6 +35,11 @@ const CLAVES_ERROR_CREAR: Record<string, string> = {
   SPLIT_INVALID_TYPE: 'splitpay_err_invalid_type',
 };
 
+// Los estados de una cuenta dividida que el servidor devuelve. La lista mostraba
+// el valor crudo ("cancelled"); cada uno tiene su texto en los siete idiomas, y
+// un estado que no esta aqui se muestra como llega.
+const ESTADOS_CONOCIDOS = ['active', 'settled', 'cancelled'];
+
 // El resto de acciones del modulo (ver detalle, pagar, rechazar, cancelar)
 // solo tienen UN codigo por fallo (NOT_FOUND, PAY_FAILED...), que viaja con el
 // texto de diagnostico en ingles del backend (`err.Error()`): para esos, el
@@ -322,7 +327,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     {split.description && <p className="text-xs text-gray-400 mt-0.5">{split.description}</p>}
                   </div>
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(split.status)}`}>
-                    {split.status}
+                    {ESTADOS_CONOCIDOS.includes(split.status) ? t(`splitpay_status_${split.status}`) : split.status}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">

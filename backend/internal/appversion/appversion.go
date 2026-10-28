@@ -26,6 +26,12 @@
 // que trae no es motivo para no exigirla. Una falla pasajera de las notas se
 // cachea solo un minuto, no los diez de siempre.
 //
+// El mismo notas.json trae, en "traducciones", las novedades en los demas
+// idiomas de la app (src/config/notasTraducidas.json), y la respuesta las pasa
+// en "notes_i18n" por codigo de idioma. "notes" sigue siendo el espanol de
+// siempre: las versiones instaladas que no conocen el campo lo ignoran, y la
+// que lo conoce cae a "notes" si falta el idioma de la persona.
+//
 // Como la actualizacion es obligatoria, ofrecer una version cuyo APK no existe
 // deja a la gente frente a una barrera con un boton que da 404. Los dos
 // workflows del tag publican en el mismo release, y si iOS termina primero o el
@@ -64,6 +70,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -95,10 +102,16 @@ const (
 
 var plataformas = []string{"android", "ios"}
 
+// codigoDeIdioma es la forma de los codigos de idioma de la app (es, en, zh-cn):
+// una clave de "traducciones" que no la cumple no es un idioma y se descarta.
+var codigoDeIdioma = regexp.MustCompile(`^[a-z]{2,3}(-[a-z0-9]{2,8})?$`)
+
 type infoVersion struct {
 	Version string   `json:"version"`
 	URL     string   `json:"url"`
 	Notas   []string `json:"notes"`
+	// Las mismas novedades en los demas idiomas, por codigo. Nunca null.
+	NotasI18n map[string][]string `json:"notes_i18n"`
 	// La capa web de la plataforma que pregunta, si el release la trae. Se
 	// omite si no: los binarios viejos no conocen el campo.
 	Web *infoWeb `json:"web,omitempty"`
@@ -218,7 +231,7 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	// version y los adjuntos, no info: info se completa aca, al terminar.
 	var (
 		wg                  sync.WaitGroup
-		notas               []string
+		notas               novedades
 		notasDefinitivas    bool
 		paquetesDefinitivos = make([]bool, len(plataformas))
 		paquetesPlataforma  = make([]*infoWeb, len(plataformas))
@@ -236,7 +249,8 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
-	info.Notas = notas
+	info.Notas = notas.Espanol
+	info.NotasI18n = notas.Traducidas
 	definitivo := notasDefinitivas
 	info.paquetes = map[string]*infoWeb{}
 	for i, p := range plataformas {
@@ -294,6 +308,9 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 	// novedades no las trae.
 	if info.Notas == nil {
 		info.Notas = []string{}
+	}
+	if info.NotasI18n == nil {
+		info.NotasI18n = map[string][]string{}
 	}
 	info.Web = info.paquetes[plataforma]
 	return info
@@ -372,54 +389,78 @@ func (h *Handler) paqueteDe(ctx context.Context, version string, adjuntos map[st
 	return &infoWeb{Manifest: publicado.Manifiesto, Signature: publicado.Firma, URL: urlPaquete}, true
 }
 
+// novedades es lo que trae el notas.json de un release: los cambios en espanol y
+// los mismos en los demas idiomas, por codigo de idioma. Las dos listas salen
+// vacias, nunca nil, cuando no hay nada.
+type novedades struct {
+	Espanol    []string
+	Traducidas map[string][]string
+}
+
+func sinNovedades() novedades {
+	return novedades{Espanol: []string{}, Traducidas: map[string][]string{}}
+}
+
+// limpiarCambios recorta cada texto y descarta los vacios.
+func limpiarCambios(cambios []string) []string {
+	limpios := make([]string, 0, len(cambios))
+	for _, c := range cambios {
+		if c = strings.TrimSpace(c); c != "" {
+			limpios = append(limpios, c)
+		}
+	}
+	return limpios
+}
+
 // notasDe baja el notas.json del release de esa version. Cualquier problema
-// (no existe, no es JSON, es de otra version) da una lista vacia y queda en el
-// log: la version se exige igual.
-// notasDe baja el notas.json del release de esa version. Cualquier problema da
-// una lista vacia y queda en el log: la version se exige igual. El segundo
-// valor dice si el resultado es definitivo (hay notas, o el release no las
-// tiene, o son invalidas) o si fue una falla pasajera que conviene reintentar
-// pronto (red, corte, 5xx).
-func (h *Handler) notasDe(ctx context.Context, version string) ([]string, bool) {
+// (no existe, no es JSON, es de otra version) da novedades vacias y queda en el
+// log: la version se exige igual. El segundo valor dice si el resultado es
+// definitivo (hay notas, o el release no las tiene, o son invalidas) o si fue
+// una falla pasajera que conviene reintentar pronto (red, corte, 5xx).
+func (h *Handler) notasDe(ctx context.Context, version string) (novedades, bool) {
 	if h.notasFmt == "" {
-		return []string{}, true
+		return sinNovedades(), true
 	}
 	url := fmt.Sprintf(h.notasFmt, "v"+version)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return []string{}, true
+		return sinNovedades(), true
 	}
 	resp, err := h.clienteDescargas.Do(req)
 	if err != nil {
 		slog.Warn("app version: no se pudieron bajar las novedades", "version", version, "err", err)
-		return []string{}, false
+		return sinNovedades(), false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		slog.Warn("app version: el release no trae novedades", "version", version, "status", resp.StatusCode)
-		return []string{}, resp.StatusCode < 500
+		return sinNovedades(), resp.StatusCode < 500
 	}
 	var notas struct {
-		Version string   `json:"version"`
-		Cambios []string `json:"cambios"`
+		Version      string              `json:"version"`
+		Cambios      []string            `json:"cambios"`
+		Traducciones map[string][]string `json:"traducciones"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxNotas)).Decode(&notas); err != nil {
 		slog.Warn("app version: las novedades no son JSON valido", "version", version, "err", err)
-		return []string{}, true
+		return sinNovedades(), true
 	}
 	// Un adjunto subido al release equivocado no puede presentarse como lo que
 	// trae esta version.
 	if notas.Version != version {
 		slog.Warn("app version: las novedades son de otra version", "release", version, "notas", notas.Version)
-		return []string{}, true
+		return sinNovedades(), true
 	}
-	limpias := make([]string, 0, len(notas.Cambios))
-	for _, c := range notas.Cambios {
-		if c = strings.TrimSpace(c); c != "" {
-			limpias = append(limpias, c)
+	resultado := novedades{Espanol: limpiarCambios(notas.Cambios), Traducidas: map[string][]string{}}
+	for idioma, cambios := range notas.Traducciones {
+		idioma = strings.ToLower(strings.TrimSpace(idioma))
+		// Una clave que no es un codigo de idioma, o una lista sin textos, no
+		// la leeria nadie: la app cae al espanol.
+		if limpios := limpiarCambios(cambios); codigoDeIdioma.MatchString(idioma) && len(limpios) > 0 {
+			resultado.Traducidas[idioma] = limpios
 		}
 	}
-	return limpias, true
+	return resultado, true
 }
 
 // existeDescarga confirma que el adjunto esta publicado. Pide un solo byte:

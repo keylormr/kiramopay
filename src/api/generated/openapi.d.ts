@@ -9032,6 +9032,8 @@ export interface paths {
                 query?: {
                     limit?: number;
                     offset?: number;
+                    /** @description Language the app is showing. The catalogue notices are written again in that language (the stored record does not change); without it, or with a language the app does not have, they come as they were stored. */
+                    lang?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
                 };
                 header?: never;
                 path?: never;

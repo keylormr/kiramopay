@@ -6,6 +6,8 @@ import type { ReferralSummary } from '@/api/repositories/loyalty.repository';
 import { compartirEnlace, enlaceInvitacion } from '@/utils/compartir';
 import { Icons } from '../../components/Icons';
 import { MarcaKiramo } from '../../components/MarcaKiramo';
+import { Bandera } from '../../components/Bandera';
+import { HistorialDeVersiones } from './HistorialDeVersiones';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { LanguageSheet } from '../../components/LanguageSheet';
@@ -15,7 +17,7 @@ import { WebhooksSheet } from './WebhooksSheet';
 import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { EliminarCuentaSheet } from './EliminarCuentaSheet';
 import { abrirPublico, RUTA_PRIVACIDAD } from '../../utils/enlacesLegales';
-import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
+import { getVersionString, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
 import { mensajeDeRechazo } from '../../i18n/mensajesDeError';
@@ -981,7 +983,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mr-3">
-              <span className="text-lg">{currentLanguage.flag}</span>
+              <Bandera pais={currentLanguage.flag} className="text-lg" />
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('language')}</p>
@@ -1300,31 +1302,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           </div>
 
           {/* Changelog */}
-          {getAllVersions().map((version, index) => (
-            <div key={version.version} className="uv-surface-2 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold uv-text-primary">
-                    v{version.version}
-                  </span>
-                  {index === 0 && (
-                    <span className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs px-2 py-0.5 rounded-full">
-                      Actual
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-500">{version.releaseDate}</span>
-              </div>
-              <ul className="space-y-1.5">
-                {version.changes.map((change, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm uv-text-secondary">
-                    <span className="text-[var(--color-primary)] mt-0.5">•</span>
-                    {change}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <HistorialDeVersiones />
 
           {/* Footer */}
           <div className="text-center pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">

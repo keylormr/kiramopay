@@ -62,6 +62,50 @@ describe('ActualizacionObligatoria', () => {
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(NOTAS);
   });
 
+  // Las novedades de la version nueva las escribe el release en espanol y, desde
+  // esta version, en los demas idiomas de la app. Cada persona las lee en el suyo;
+  // lo que el release no traduce sale en espanol.
+  describe('las novedades en el idioma de la persona', () => {
+    const TRADUCIDAS = { en: ['Paying with QR is faster', 'Your savings goals show your progress'], fr: ['Payer par QR est plus rapide'] };
+
+    it('en ingles lee las novedades en ingles', () => {
+      localStorage.setItem('kiramopay_language', 'en');
+      montar({ notasTraducidas: TRADUCIDAS });
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(TRADUCIDAS.en);
+    });
+
+    it('en un idioma que el release no traduce, lee el espanol', () => {
+      localStorage.setItem('kiramopay_language', 'ja');
+      montar({ notasTraducidas: TRADUCIDAS });
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(NOTAS);
+    });
+
+    it('en espanol lee las de siempre, aunque haya traducciones', () => {
+      montar({ notasTraducidas: TRADUCIDAS });
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(NOTAS);
+    });
+
+    it('la barrera pasa las traducciones que trajo el hook', () => {
+      localStorage.setItem('kiramopay_language', 'fr');
+      hook.actualizacion = {
+        version: '2.8.0',
+        instalada: '2.7.0',
+        notas: NOTAS,
+        notasTraducidas: TRADUCIDAS,
+        via: 'externa',
+        url: 'https://ejemplo/kiramopay.apk',
+      } as ActualizacionDisponible;
+      render(
+        <LanguageProvider>
+          <BarreraDeActualizacion>
+            <p>App</p>
+          </BarreraDeActualizacion>
+        </LanguageProvider>,
+      );
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(TRADUCIDAS.fr);
+    });
+  });
+
   // Si la instalacion falla, con esto la persona sabe que pedir.
   it('dice que version tiene instalada', () => {
     montar();

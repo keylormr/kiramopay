@@ -5624,6 +5624,15 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: lang
+          in: query
+          description: >-
+            Language the app is showing. The catalogue notices are written again
+            in that language (the stored record does not change); without it, or
+            with a language the app does not have, they come as they were stored.
+          schema:
+            type: string
+            enum: [es, en, fr, pt, zh-cn, ja, hi]
       responses:
         '200':
           description: List of notifications

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
+import { Bandera } from '../../components/Bandera';
 import { BottomSheet } from '../../components/BottomSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -29,6 +30,7 @@ import {
   mensajeDeCobro,
   mensajeDelRechazoDelCobro,
   minutosParaVencer,
+  textoDeDuracion,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
 import { saldoTotal, formatearSaldoTotal } from '@/utils/saldoTotal';
@@ -516,8 +518,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     const info: Record<QRCurrency, { symbol: string; flag: string; name: string }> = {
       BTC: { symbol: '₿', flag: '🟠', name: 'Bitcoin' },
       ETH: { symbol: 'Ξ', flag: '🔷', name: 'Ethereum' },
-      CRC: { symbol: '₡', flag: '🇨🇷', name: 'Colones' },
-      USD: { symbol: '$', flag: '🇺🇸', name: 'Dolares' },
+      CRC: { symbol: '₡', flag: 'CR', name: 'Colones' },
+      USD: { symbol: '$', flag: 'US', name: 'Dolares' },
     };
     return info[ccy];
   };
@@ -777,7 +779,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-2xl">{acc.flag}</span>
+                  <Bandera pais={acc.flag} className="text-2xl" />
                   <span className={`text-[11px] font-bold uppercase tracking-wider ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.ccy}</span>
                 </div>
                 <div>
@@ -891,11 +893,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     {formatCurrency(cobrarCharge.amount, cobrarCharge.currency as QRCurrency)}
                   </p>
                   <p className="text-xs uv-text-muted mt-1">
-                    {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobrarCharge.expiresAt)))}
+                    {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobrarCharge.expiresAt), t))}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_personal_ayuda')}</p>
               )}
 
               {/* El campo de monto es una accion OPCIONAL sobre el codigo que ya
@@ -1003,7 +1005,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               return (
                 <div key={ccy} className="flex flex-col items-center">
                   <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
-                    {info.flag}
+                    <Bandera pais={info.flag} />
                   </div>
                   <span className="text-xs text-gray-500">{ccy}</span>
                 </div>
