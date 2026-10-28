@@ -240,6 +240,22 @@ export async function revisarTelefono(page) {
       if (r.bottom > alto + 1 || r.top < -1) fuera.push(`${nombre(el)} (fijo; arriba ${Math.round(r.top)}, abajo ${Math.round(r.bottom)} de ${alto})`);
     }
     if (fuera.length) problemas.push(`controles fuera de la pantalla: ${[...new Set(fuera)].slice(0, 8).join('; ')}`);
+    // Texto que se sale de su caja (un monto largo que pisa el borde del cuadro, por ejemplo).
+    // Se ignoran las cajas que recortan o se desplazan a proposito.
+    const desbordados = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.closest('svg') || !visible(el)) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'inline' || cs.overflowX !== 'visible') continue;
+      const texto = [...el.childNodes]
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent)
+        .join('')
+        .trim();
+      if (!texto || dentroDeDesplazable(el)) continue;
+      if (el.scrollWidth > el.clientWidth + 2) desbordados.push(`"${texto.slice(0, 30)}" (${el.scrollWidth} px en una caja de ${el.clientWidth} px)`);
+    }
+    if (desbordados.length) problemas.push(`texto que se sale de su caja: ${[...new Set(desbordados)].slice(0, 6).join('; ')}`);
     return problemas;
   });
 }

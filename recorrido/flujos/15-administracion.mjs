@@ -115,10 +115,11 @@ export default {
 
     await f.paso('Pestaña "Plan de un comercio": asigna el plan Analítica al comercio rechazado', async (c) => {
       await keilor.page.getByRole('tab', { name: txt('Plan de un comercio'), exact: true }).click();
-      await keilor.page.locator('#admin-comercio-id').fill(comercios.rechazado.id);
+      await keilor.page.locator('#admin-plan-busqueda').fill(rechazado);
+      await keilor.page.locator('label').filter({ hasText: rechazado }).first().click();
       await boton(keilor.page, txt('Revisar y asignar'), { exacto: true }).click();
       const hoja = ultimoDialogo(keilor.page);
-      await verTexto(keilor.page, new RegExp(comercios.rechazado.id));
+      await verTexto(keilor.page, new RegExp(escapar(rechazado)));
       await boton(hoja, 'Sí, asignar Analítica', { exacto: true }).click();
       await sinDialogos(keilor.page, 15000);
       await verTexto(keilor.page, /quedó con el plan Anal[ií]tica/);
