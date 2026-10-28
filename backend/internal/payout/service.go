@@ -135,7 +135,7 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateRequest)
 	}
 
 	// Mismo tope diario que las transferencias y el escrow: un payout debita la
-	// billetera contra SYSTEM:EXTERNAL igual que ellos. Esta es la comprobacion
+	// billetera y saca la plata del sistema igual que ellos. Esta es la comprobacion
 	// RAPIDA, para no pedir el segundo factor a quien de todos modos no puede;
 	// la que decide corre dentro del asiento (submit), donde dos payouts
 	// simultaneos ya no pueden leer la misma suma.
@@ -224,7 +224,7 @@ func (s *Service) submit(ctx context.Context, p *Payout) (*Payout, error) {
 		},
 		Entries: []ledger.Entry{
 			{Account: ledger.Account{UserID: p.UserID}, Side: ledger.Debit, AmountMinor: p.AmountMinor, Currency: p.Currency},
-			{Account: railSystemAccount(p.Rail, p.Currency), Side: ledger.Credit, AmountMinor: p.AmountMinor, Currency: p.Currency},
+			{Account: reservaDelPayout(p.Currency), Side: ledger.Credit, AmountMinor: p.AmountMinor, Currency: p.Currency},
 		},
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
 			// El tope primero: antes de anotar el propio movimiento, o la suma
@@ -270,7 +270,7 @@ func (s *Service) submit(ctx context.Context, p *Payout) (*Payout, error) {
 		return nil, fmt.Errorf("payout debit posting: %w", perr)
 	}
 
-	// Money is now held in SYSTEM:EXTERNAL:<RAIL>. Compliance + visibility.
+	// Money has left the reserve towards the rail. Compliance + visibility.
 	if s.uif != nil {
 		s.uif.Report(ctx, claimed.UserID, claimed.ID, claimed.Currency, claimed.AmountMinor)
 	}
@@ -349,7 +349,7 @@ func (s *Service) settle(ctx context.Context, p *Payout, res PayoutResult) (*Pay
 // Antes eran tres pasos: reclamar el rechazo (processing -> failed), postear el
 // reembolso, y si el asiento fallaba, desmarcar (failed -> processing). Si el
 // desmarcar tambien fallaba, quedaba un payout 'failed' —terminal— con la
-// plata todavia retenida en SYSTEM:EXTERNAL y nadie que la fuera a devolver.
+// plata ya fuera de la reserva y nadie que la fuera a devolver.
 //
 // El reclamo sigue siendo el mutex entre dos trabajadores que reaccionan al
 // riel: si otro ya lo marco 'completed', el UPDATE ... WHERE status =
@@ -367,7 +367,7 @@ func (s *Service) refundAndFail(ctx context.Context, p *Payout, res PayoutResult
 			"action":    "refund",
 		},
 		Entries: []ledger.Entry{
-			{Account: railSystemAccount(p.Rail, p.Currency), Side: ledger.Debit, AmountMinor: p.AmountMinor, Currency: p.Currency},
+			{Account: reservaDelPayout(p.Currency), Side: ledger.Debit, AmountMinor: p.AmountMinor, Currency: p.Currency},
 			{Account: ledger.Account{UserID: p.UserID}, Side: ledger.Credit, AmountMinor: p.AmountMinor, Currency: p.Currency},
 		},
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
@@ -484,11 +484,13 @@ func (s *Service) Get(ctx context.Context, userID, id string) (*Payout, error) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// railSystemAccount returns the per-rail external liability account, e.g.
-// SYSTEM:EXTERNAL:MOCK:CRC. It must be seeded (migration) for each rail/currency.
-func railSystemAccount(rail, currency string) ledger.Account {
-	code := fmt.Sprintf("SYSTEM:EXTERNAL:%s:%s", strings.ToUpper(rail), strings.ToUpper(currency))
-	return ledger.Account{SystemCode: ledger.SystemAccountCode(code)}
+// reservaDelPayout es la contraparte del libro de un payout: la reserva de la
+// moneda. La plata que se envia por un riel SALE del sistema, asi que el pasivo
+// con el usuario y la reserva bajan lo mismo; si el riel lo rechaza, vuelven a
+// subir lo mismo. Antes la contraparte era una cuenta externa por riel, que no
+// es reserva: cada envio dejaba la reserva de mas.
+func reservaDelPayout(currency string) ledger.Account {
+	return ledger.Account{SystemCode: ledger.ReserveFor(strings.ToUpper(currency))}
 }
 
 // historialDeEnvio arma la fila del historial del debito. La escribe el gancho

@@ -53,7 +53,7 @@ func TestElTopeDentroDelAsientoNoDejaNadaAMedias(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != antes {
 		t.Fatalf("billetera = %d, se esperaba %d", got, antes)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 0 {
+	if got := salidoPorLosRieles(t, pool); got != 0 {
 		t.Fatalf("cuenta del riel = %d, se esperaba 0", got)
 	}
 	if got := countTx(t, pool, user, "payout_sent"); got != 0 {
