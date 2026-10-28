@@ -117,13 +117,13 @@ export default {
 
     await paso('Cripto: pestaña', async () => {
       await aInicio(p);
-      await ir(p, txt('Crypto'));
+      await ir(p, txt('Cripto'));
       await sinDesborde(p);
     });
 
     await paso('Cripto: hoja de comprar', async () => {
       await aInicio(p);
-      await ir(p, txt('Crypto'));
+      await ir(p, txt('Cripto'));
       await boton(p, txt('Comprar'), { exacto: true }).first().click();
       await ultimoDialogo(p).waitFor({ state: 'visible' });
       await sinDesborde(p);

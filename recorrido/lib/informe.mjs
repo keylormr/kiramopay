@@ -138,6 +138,18 @@ export class Flujo {
   }
 
   /**
+   * Anota un paso en rojo que el recorrido detecta al cerrar el flujo, sin que el
+   * flujo lo haya pedido (una comprobacion que se hace entre flujos). No detiene
+   * nada y no lleva captura: no hay una pantalla a la que apuntar.
+   */
+  fallarAparte(nombre, error) {
+    const n = this.pasos.length + 1;
+    this.pasos.push({ n, nombre, estado: 'fallo', error, captura: null });
+    console.log(`  [FALLO] ${n}. ${nombre}`);
+    for (const l of error.split('\n')) console.log(`      ${l}`);
+  }
+
+  /**
    * Ejecuta un paso. `fn` recibe el objeto de comprobaciones. Si falla, el paso
    * queda en rojo y se omiten los siguientes del flujo, salvo `seguir: true`
    * (para pasos que no dependen de los anteriores).

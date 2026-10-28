@@ -5,7 +5,6 @@ import { CUENTAS, CORRIDA } from '../lib/entorno.mjs';
 import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, volver, reposar } from '../lib/ui.mjs';
 import { clientes, centimos } from '../lib/comun.mjs';
 import { peticion, esperarHasta } from '../lib/api.mjs';
-import { pausa } from '../lib/regulador.mjs';
 import * as bd from '../lib/bd.mjs';
 import { txt, escapar } from '../lib/textos.mjs';
 
@@ -98,13 +97,27 @@ export default {
     });
 
     await f.paso('Aprobar y rechazar un comercio deja registro de auditoría', async (c) => {
-      // Defecto conocido: aprobar, rechazar y fijar la comision de un comercio no escriben en audit_logs
-      // (si lo hacen cerrar y cambiar el plan). La auditoria llega con hasta 2 s de atraso.
-      await pausa(3000);
-      for (const [accion, id] of [['aprobar', comercios.aprobado.id], ['rechazar', comercios.rechazado.id]]) {
-        const filas = bd.consultar(`SELECT action FROM audit_logs WHERE resource_id = '${id}' OR details::text LIKE '%${id}%'`);
-        c.ok(filas.length > 0, `${accion} un comercio no dejó ninguna fila en audit_logs (comercio ${id})`);
+      // Cada decision del administrador sobre un comercio (aprobar, rechazar, fijar la comision) deja su fila en
+      // audit_logs con riesgo alto y el administrador como autor. La auditoria llega con hasta 2 s de atraso.
+      const filasDe = (id) => bd.consultar(`SELECT action, user_id, risk_level FROM audit_logs WHERE resource_type = 'merchant' AND resource_id = '${id}'`);
+      for (const [verbo, id, accion] of [['aprobar', comercios.aprobado.id, 'admin_merchant_approved'], ['rechazar', comercios.rechazado.id, 'admin_merchant_rejected']]) {
+        await esperarHasta(() => filasDe(id).some((x) => x.action === accion), { intentos: 10, cadaMs: 500, descripcion: `la auditoría de ${verbo} el comercio` }).catch(() => {});
+        const filas = filasDe(id);
+        const fila = filas.find((x) => x.action === accion);
+        c.ok(fila, `${verbo} un comercio no dejó la fila "${accion}" en audit_logs (comercio ${id}; filas: ${JSON.stringify(filas)})`);
+        if (fila) c.igual(fila.risk_level, 'high', `riesgo de la auditoría de ${verbo} el comercio`);
       }
+    }, { seguir: true });
+
+    await f.paso('Fijar la comisión de un comercio la cambia y deja su registro de auditoría', async (c) => {
+      const r = await api.keilor.patch(`/admin/merchants/${comercios.aprobado.id}/commission`, { commission_bps: 40 });
+      c.respuesta(r, 200, 'fijar la comisión del comercio aprobado en 0,40 %');
+      const lista = (await api.emmanuel.exigir('GET', '/qr/merchants')).data ?? [];
+      c.igual(lista.find((x) => x.id === comercios.aprobado.id)?.commission_bps, 40, 'comisión del comercio tras fijarla');
+      const filasDe = () => bd.consultar(`SELECT action, risk_level FROM audit_logs WHERE resource_type = 'merchant' AND resource_id = '${comercios.aprobado.id}' AND action = 'admin_merchant_commission_set'`);
+      await esperarHasta(() => filasDe().length > 0, { intentos: 10, cadaMs: 500, descripcion: 'la auditoría de fijar la comisión' }).catch(() => {});
+      const filas = filasDe();
+      c.ok(filas.length === 1, `fijar la comisión no dejó la fila "admin_merchant_commission_set" en audit_logs (filas: ${JSON.stringify(filas)})`);
     }, { seguir: true });
 
     await f.paso('Pestaña "Todos": busca el comercio aprobado y lo cierra con un motivo', async (c) => {

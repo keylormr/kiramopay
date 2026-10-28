@@ -1,19 +1,20 @@
 // Pago de recibos y recargas de saldo (pestana "Servicios"). Los convenios de
-// recibos estan activos fuera de produccion y el servidor solo conoce cuatro
-// proveedores (ice, aya, kolbi, cabletica); la pantalla ofrece quince.
+// recibos estan activos fuera de produccion. La lista de empresas y de operadores
+// que la pantalla ofrece sale del servidor (GET /services/providers): el recorrido
+// no lleva una lista propia, usa la que el servidor publica y comprueba que todo
+// lo que ofrece se puede pagar.
 import { llave } from '../lib/entorno.mjs';
 import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, reposar } from '../lib/ui.mjs';
 import { clientes, centimos, problemasDelLibro } from '../lib/comun.mjs';
-import { reColones, txt } from '../lib/textos.mjs';
+import { reColones, txt, escapar } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';
 
 const RECIBO = 1500;
 const RECARGA = 1000;
 const CLIENTE_ICE = '1234567';
 const TELEFONO = '88880000';
-const EXTERNO = 'SYSTEM:EXTERNAL:CRC';
-// Los once proveedores del selector que el servidor no conoce.
-const SIN_CONVENIO = ['cnfl', 'esph', 'coopelesca', 'esph-agua', 'claro', 'movistar', 'tigo', 'liberty', 'ccss', 'ins', 'marchamo'];
+// Pagar un recibo o recargar saca la plata del sistema: el pasivo con victor y la reserva bajan lo mismo.
+const RESERVA = 'SYSTEM:RESERVE:CRC';
 
 async function cerrarHoja(page) {
   await page.keyboard.press('Escape');
@@ -26,18 +27,31 @@ export default {
   async ejecutar(f, ctx) {
     const api = await clientes('victor');
     let victor;
+    let catalogo; // lo que el servidor ofrece: { agreements_active, providers: [{code, name, category}], operators: [{code, name}] }
     const antes = {};
+    const nombreDe = (codigo) => catalogo.providers.find((p) => p.code === codigo)?.name;
+    const operadorDe = (codigo) => catalogo.operators.find((o) => o.code === codigo)?.name;
+
+    await f.paso('El servidor publica las empresas y los operadores que la pantalla ofrece, y el cobro se puede entregar', async (c) => {
+      const r = await api.victor.exigir('GET', '/services/providers');
+      catalogo = r.data;
+      c.igual(catalogo.agreements_active, true, 'agreements_active (los convenios están activos fuera de producción)');
+      c.ok(Array.isArray(catalogo.providers) && catalogo.providers.length > 0, `la lista de empresas viene vacía: ${JSON.stringify(catalogo)}`);
+      c.ok(Array.isArray(catalogo.operators) && catalogo.operators.length > 0, `la lista de operadores viene vacía: ${JSON.stringify(catalogo)}`);
+      for (const codigo of ['ice', 'aya', 'cabletica']) c.ok(nombreDe(codigo), `la empresa ${codigo} no está en la lista del servidor: ${JSON.stringify(catalogo.providers)}`);
+      for (const codigo of ['kolbi', 'claro', 'movistar']) c.ok(operadorDe(codigo), `el operador ${codigo} no está en la lista del servidor: ${JSON.stringify(catalogo.operators)}`);
+    });
 
     await f.paso('Saldo y historial de servicios de victor antes de pagar', async () => {
       antes.saldo = await api.victor.saldo();
-      antes.externo = bd.saldoCuenta(EXTERNO);
+      antes.reserva = bd.saldoCuenta(RESERVA);
       antes.historial = ((await api.victor.exigir('GET', '/services/history')).data ?? []).length;
     });
 
     await f.paso(`Victor paga un recibo de ICE de ₡${RECIBO} desde "Servicios"`, async () => {
       victor = await abrirSesion(f, 'victor');
       await ir(victor.page, txt('Servicios'));
-      await boton(victor.page, /^ICE Electricidad/).first().click();
+      await boton(victor.page, new RegExp(`^${escapar(nombreDe('ice'))}`)).first().click();
       const hoja = ultimoDialogo(victor.page);
       await hoja.getByPlaceholder(txt('Ej: 1234567')).fill(CLIENTE_ICE);
       await hoja.getByPlaceholder('0', { exact: true }).fill(String(RECIBO));
@@ -46,7 +60,7 @@ export default {
       await victor.page.getByText(reColones(RECIBO)).first().waitFor({ state: 'visible' });
     });
 
-    await f.paso('El recibo baja el saldo exacto, deja su movimiento y su asiento contra la cuenta externa', async (c) => {
+    await f.paso('El recibo baja el saldo exacto, deja su movimiento y su asiento contra la reserva', async (c) => {
       const lectura = await api.victor.saldo();
       c.igual(lectura.crc, antes.saldo.crc - centimos(RECIBO), 'saldo de victor tras el recibo');
       const mov = (await api.victor.movimientos({ type: 'bill_payment', limit: '5' }))[0];
@@ -59,8 +73,8 @@ export default {
       const deb = lineas.find((l) => l.direccion === 'debit');
       const cre = lineas.find((l) => l.direccion === 'credit');
       c.ok(deb && deb.codigo.startsWith('USER:') && Number(deb.monto) === centimos(RECIBO), 'falta el débito a la billetera de victor');
-      c.ok(cre && cre.codigo === EXTERNO && Number(cre.monto) === centimos(RECIBO), `falta el crédito a ${EXTERNO}`);
-      c.igual(bd.saldoCuenta(EXTERNO), antes.externo + centimos(RECIBO), 'saldo de la cuenta externa');
+      c.ok(cre && cre.codigo === RESERVA && Number(cre.monto) === centimos(RECIBO), `falta el crédito a ${RESERVA}`);
+      c.igual(bd.saldoCuenta(RESERVA), antes.reserva - centimos(RECIBO), `saldo de ${RESERVA}`);
       const historial = (await api.victor.exigir('GET', '/services/history')).data ?? [];
       c.igual(historial.length, antes.historial + 1, 'filas en GET /services/history');
       c.igual(historial[0]?.client_id, CLIENTE_ICE, 'cliente de la fila del historial');
@@ -73,7 +87,7 @@ export default {
       antes.recarga = await api.victor.saldo();
       await victor.page.getByRole('tab', { name: txt('Recarga'), exact: true }).click();
       await reposar(victor.page, 400);
-      await boton(victor.page, /Kolbi/).first().click();
+      await boton(victor.page, new RegExp(escapar(operadorDe('kolbi')))).first().click();
       const hoja = ultimoDialogo(victor.page);
       await hoja.getByPlaceholder('8888-0000').fill(TELEFONO);
       await boton(hoja, reColones(RECARGA)).first().click();
@@ -88,7 +102,7 @@ export default {
       c.igual(mov.amount, centimos(RECARGA), 'monto del movimiento');
       const lineas = bd.asiento({ tx: mov.id });
       const cre = lineas.find((l) => l.direccion === 'credit');
-      c.ok(cre && cre.codigo === EXTERNO && Number(cre.monto) === centimos(RECARGA), `falta el crédito a ${EXTERNO}`);
+      c.ok(cre && cre.codigo === RESERVA && Number(cre.monto) === centimos(RECARGA), `falta el crédito a ${RESERVA}`);
       const problemas = problemasDelLibro();
       c.ok(problemas.length === 0, problemas.join(' | '));
     });
@@ -136,26 +150,44 @@ export default {
       c.igual((await api.victor.saldo()).crc, base, 'los rechazos no deben mover plata');
     });
 
-    await f.paso('Los quince proveedores de la pantalla se pueden pagar', async (c) => {
-      // Defecto conocido: la pantalla ofrece once proveedores que el servidor no tiene dados
-      // de alta; al pagarlos responde INVALID_PROVIDER y la pantalla dice solo "No se pudo
-      // completar la acción".
+    await f.paso('Todo lo que la pantalla ofrece, el servidor lo cobra: cada empresa y cada operador de su lista se paga', async (c) => {
       const base = (await api.victor.saldo()).crc;
       const rechazados = [];
-      for (const codigo of SIN_CONVENIO) {
-        const r = await api.victor.post('/services/pay-bill', { provider_code: codigo, client_id: CLIENTE_ICE, amount: 100, period: 'octubre de 2026', idempotency_key: llave('recibo') });
-        if (r.status !== 200) rechazados.push(`${codigo} (${r.codigo ?? r.status})`);
+      for (const p of catalogo.providers) {
+        const r = await api.victor.post('/services/pay-bill', { provider_code: p.code, client_id: CLIENTE_ICE, amount: 100, period: 'octubre de 2026', idempotency_key: llave('recibo') });
+        if (r.status !== 200) rechazados.push(`${p.code} (${r.codigo ?? r.status})`);
       }
+      for (const o of catalogo.operators) {
+        const r = await api.victor.post('/services/recharge', { operator: o.code, phone: '88880002', amount: centimos(500), idempotency_key: llave('recarga') });
+        if (r.status !== 200) rechazados.push(`${o.code} (${r.codigo ?? r.status})`);
+      }
+      const ofrecidos = catalogo.providers.length + catalogo.operators.length;
       const cobrado = base - (await api.victor.saldo()).crc;
-      c.ok(rechazados.length === 0, `${rechazados.length} de ${SIN_CONVENIO.length} proveedores del selector el servidor los rechaza: ${rechazados.join(', ')}`);
-      c.ok(cobrado === 100 * (SIN_CONVENIO.length - rechazados.length), `los rechazos no deben cobrar: se cobraron ${cobrado} centavos`);
-    }, { seguir: true });
+      c.ok(rechazados.length === 0, `${rechazados.length} de ${ofrecidos} empresas y operadores de la lista del servidor no se pueden pagar: ${rechazados.join(', ')}`);
+      c.igual(cobrado, 100 * catalogo.providers.length + centimos(500) * catalogo.operators.length, 'plata cobrada por los pagos de la lista (los rechazos no deben cobrar)');
+      const problemas = problemasDelLibro();
+      c.ok(problemas.length === 0, problemas.join(' | '));
+    });
 
-    await f.paso('Un recibo de CNFL (proveedor del selector) se paga desde la pantalla', async () => {
+    await f.paso('La pantalla ofrece las empresas y los operadores de la lista del servidor, y ninguna que el servidor no tenga', async (c) => {
       await ir(victor.page, txt('Servicios'));
       await victor.page.getByRole('tab', { name: txt('Servicios'), exact: true }).click();
       await reposar(victor.page, 400);
-      await boton(victor.page, /^CNFL/).first().click();
+      for (const p of catalogo.providers) await boton(victor.page, new RegExp(`^${escapar(p.name)}`)).first().waitFor({ state: 'visible', timeout: 10000 });
+      // Las empresas que la pantalla llevaba escritas a mano y el servidor no conoce no pueden aparecer.
+      const viejas = ['CNFL', 'ESPH', 'Coopelesca', 'Tigo', 'Liberty', 'CCSS', 'Marchamo'].filter((n) => !catalogo.providers.some((p) => p.name.toUpperCase().includes(n.toUpperCase())));
+      const sobran = [];
+      for (const n of viejas) if ((await victor.page.getByText(new RegExp(`\\b${escapar(n)}\\b`, 'i')).count()) > 0) sobran.push(n);
+      c.ok(sobran.length === 0, `la pantalla ofrece empresas que el servidor no tiene: ${sobran.join(', ')}`);
+      await victor.page.getByRole('tab', { name: txt('Recarga'), exact: true }).click();
+      await reposar(victor.page, 400);
+      for (const o of catalogo.operators) await boton(victor.page, new RegExp(escapar(o.name))).first().waitFor({ state: 'visible', timeout: 10000 });
+      await victor.page.getByRole('tab', { name: txt('Servicios'), exact: true }).click();
+      await reposar(victor.page, 400);
+    });
+
+    await f.paso('Un recibo de otra empresa de la lista (Cabletica) se paga desde la pantalla', async () => {
+      await boton(victor.page, new RegExp(`^${escapar(nombreDe('cabletica'))}`)).first().click();
       const hoja = ultimoDialogo(victor.page);
       await hoja.getByPlaceholder(txt('Ej: 1234567')).fill(CLIENTE_ICE);
       await hoja.getByPlaceholder('0', { exact: true }).fill('1000');
@@ -164,7 +196,7 @@ export default {
       if (!exito) {
         const aviso = await victor.page.locator('[role=alert], [role=status]').allInnerTexts().catch(() => []);
         await cerrarHoja(victor.page);
-        throw new Error(`pagar a CNFL, uno de los quince proveedores de la pantalla, no se pudo: la pantalla mostró ${JSON.stringify(aviso.filter(Boolean))}`);
+        throw new Error(`pagar a ${nombreDe('cabletica')}, una empresa de la lista del servidor, no se pudo: la pantalla mostró ${JSON.stringify(aviso.filter(Boolean))}`);
       }
     }, { seguir: true });
   },

@@ -54,7 +54,13 @@ export default {
       c.ok(problemas.length === 0, problemas.join(' | '));
       // Cifras de partida de la prueba de reservas: el libro final las compara con las del cierre.
       const reservas = await peticion('GET', '/transparency/proof-of-reserves');
+      c.exigirRespuesta(reservas, 200, 'prueba de reservas');
       ctx.estado.reservasInicio = Object.fromEntries((reservas.data?.currencies ?? []).map((m) => [m.currency, m]));
+      // La reserva es exactamente igual a lo que se les debe a los usuarios, en cada moneda, desde la semilla.
+      for (const m of reservas.data?.currencies ?? []) {
+        c.igual(m.difference_minor, 0, `diferencia entre la reserva y el pasivo en ${m.currency} al empezar (reserva ${m.reserve_balance_minor}, pasivo ${m.user_liabilities_minor})`);
+        c.igual(m.fully_backed, true, `fully_backed en ${m.currency} al empezar`);
+      }
     });
 
     await f.paso('Entrada sin contraseña por la pantalla (victor)', async (c) => {

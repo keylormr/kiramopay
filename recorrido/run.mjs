@@ -17,18 +17,28 @@ const ctx = { estado: {}, informe };
 console.log(`Recorrido ${CORRIDA}: pantalla ${APP}, servidor ${API_BASE}, salida ${SALIDA}`);
 const elegidos = SOLO.length ? flujos.filter((fl) => SOLO.includes(fl.id)) : flujos;
 
-// Diferencia (reserva menos pasivo con usuarios) de la prueba de reservas despues de cada flujo: si un
-// flujo la mueve, queda como alerta de ese flujo para saber cual la crea.
+// Diferencia (reserva menos pasivo con usuarios, difference_minor) de la prueba de reservas despues de cada
+// flujo. La reserva es exactamente igual al pasivo en cada moneda: si un flujo la mueve de cero, queda como
+// alerta de ese flujo para saber cual la descuadra.
 const diferenciaDeReservas = {};
 async function anotarReservas(flujo) {
   try {
     const r = await peticion('GET', '/transparency/proof-of-reserves');
     for (const m of r.data?.currencies ?? []) {
-      const dif = Number(m.reserve_balance_minor) - Number(m.user_liabilities_minor);
+      const dif = Number(m.difference_minor);
+      if (!Number.isFinite(dif)) continue; // el libro final exige que la prueba traiga la cifra
       const antes = diferenciaDeReservas[m.currency];
       if (flujo && antes !== undefined && dif !== antes) {
         flujo.alertar(`Prueba de reservas ${m.currency}: la diferencia (reserva menos pasivo) pasó de ${antes} a ${dif} en este flujo`);
         (ctx.estado.cambiosReservas ??= []).push({ flujo: flujo.nombre, moneda: m.currency, antes, despues: dif });
+        // Quien descuadra la reserva queda en rojo en SU flujo (y solo ahi: los flujos siguientes no la mueven
+        // y no repiten el rojo; el libro final sigue exigiendo cero al terminar).
+        if (dif !== 0) {
+          flujo.fallarAparte(
+            `La reserva sigue igual al pasivo con los usuarios en ${m.currency} al terminar este flujo`,
+            `difference_minor pasó de ${antes} a ${dif} en ${m.currency} (reserva ${m.reserve_balance_minor}, pasivo ${m.user_liabilities_minor}): este flujo movió lo que se les debe a los usuarios sin mover la reserva lo mismo`,
+          );
+        }
       }
       diferenciaDeReservas[m.currency] = dif;
     }

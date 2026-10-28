@@ -49,16 +49,16 @@ export default {
       c.exigir(precioEth > 0, 'sin precio de ETH no se puede seguir');
     });
 
-    await f.paso('Victor no tiene cripto al empezar y abre la pantalla de Crypto', async (c) => {
+    await f.paso('Victor no tiene cripto al empezar y abre la pantalla de Cripto', async (c) => {
       c.igual((await api.victor.exigir('GET', '/crypto/assets')).data?.length ?? 0, 0, 'activos de victor al empezar');
       Object.assign(antes, { saldo: await api.victor.saldo() });
       victor = await abrirSesion(f, 'victor');
       await Promise.all([
         victor.page.waitForResponse((r) => r.url().includes('/crypto/prices') && r.status() === 200),
-        ir(victor.page, txt('Crypto')),
+        ir(victor.page, txt('Cripto')),
       ]);
       await victor.page.locator(`[role=status][aria-label="${txt('Precios actualizados')}"]`).waitFor({ state: 'visible', timeout: 15000 });
-      await verTexto(victor.page, txt('Mi Portfolio'));
+      await verTexto(victor.page, txt('Mi portafolio'));
     });
 
     await f.paso(`Comprar US$${COMPRA_USD} de ETH desde la pantalla`, async () => {
@@ -92,6 +92,13 @@ export default {
       const cre = bd.lineaDe(lineas, 'SYSTEM:EXTERNAL:USD', 'credit');
       c.ok(deb && Number(deb.monto) === centimos(COMPRA_USD), 'falta el débito a la cuenta USD de victor en el libro');
       c.ok(cre && Number(cre.monto) === centimos(COMPRA_USD), 'falta el crédito a SYSTEM:EXTERNAL:USD en el libro');
+      // Comprar cripto baja lo que se le debe a victor y la plata deja de respaldar a nadie: la reserva se la
+      // entrega al capital propio en el mismo asiento, para seguir igual al pasivo.
+      const aCapital = bd.lineaDe(lineas, 'SYSTEM:CAPITAL:USD', 'debit');
+      const deLaReserva = bd.lineaDe(lineas, 'SYSTEM:RESERVE:USD', 'credit');
+      c.ok(aCapital && Number(aCapital.monto) === centimos(COMPRA_USD), `falta el débito al capital propio (SYSTEM:CAPITAL:USD) en el asiento de la compra: ${JSON.stringify(lineas)}`);
+      c.ok(deLaReserva && Number(deLaReserva.monto) === centimos(COMPRA_USD), `falta el crédito a la reserva (SYSTEM:RESERVE:USD) en el asiento de la compra: ${JSON.stringify(lineas)}`);
+      c.ok(lineas.length === 4, `el asiento de la compra debería tener 4 líneas y tiene ${lineas.length}: ${JSON.stringify(lineas)}`);
       ctx.estado.cripto = { ethComprado: num(eth.balance) };
     });
 
@@ -129,6 +136,11 @@ export default {
       const lineas = bd.asiento({ tx: fila.id });
       const cre = bd.lineaDe(lineas, bd.cuentaUsuario(CUENTAS.victor.id, 'CRC'), 'credit');
       c.ok(cre && Number(cre.monto) === acreditado, 'falta el crédito a la cuenta CRC de victor en el libro');
+      // Vender sube lo que se le debe a victor: el capital propio pone esos colones en la reserva en el mismo asiento.
+      const alaReserva = bd.lineaDe(lineas, 'SYSTEM:RESERVE:CRC', 'debit');
+      const delCapital = bd.lineaDe(lineas, 'SYSTEM:CAPITAL:CRC', 'credit');
+      c.ok(alaReserva && Number(alaReserva.monto) === acreditado, `falta el débito a la reserva (SYSTEM:RESERVE:CRC) en el asiento de la venta: ${JSON.stringify(lineas)}`);
+      c.ok(delCapital && Number(delCapital.monto) === acreditado, `falta el crédito al capital propio (SYSTEM:CAPITAL:CRC) en el asiento de la venta: ${JSON.stringify(lineas)}`);
       const problemas = problemasDelLibro();
       c.ok(problemas.length === 0, problemas.join(' | '));
     });
@@ -189,9 +201,9 @@ export default {
       c.ok(!!fila, 'no hay fila crypto_send en el historial de victor');
     });
 
-    await f.paso('Keilor ve el ETH recibido en su pantalla de Crypto', async () => {
+    await f.paso('Keilor ve el ETH recibido en su pantalla de Cripto', async () => {
       const keilor = await abrirSesion(f, 'keilor');
-      await ir(keilor.page, txt('Crypto'));
+      await ir(keilor.page, txt('Cripto'));
       await keilor.page.getByText(`${txt('Recibido')} ETH`).first().waitFor({ state: 'visible', timeout: 15000 });
     });
 
@@ -230,19 +242,24 @@ export default {
     });
 
     await f.paso('Casos límite por API: cantidad ínfima, par repetido y activo en minúsculas', async (c) => {
-      // Defectos conocidos del servidor: una cantidad que vale menos de medio centavo termina en 500,
-      // convertir un activo en si mismo se acepta, y un activo en minusculas se rechaza con un 503 de precio.
+      // Una cantidad que vale menos de un centavo no se puede anotar: se rechaza con un 400 claro antes de mover
+      // nada. Convertir un activo en si mismo no hace nada: 400 de par invalido. Un simbolo en minusculas es el
+      // mismo activo: se acepta.
       const eth0 = num((await activo(api.victor, 'ETH')).balance);
       const saldo0 = await api.victor.saldo();
       const polvo = await api.victor.post('/crypto/send', { asset: 'ETH', amount: 0.00000001, qr_data: qrKeilor, idempotency_key: llave('polvo') });
-      c.ok(polvo.status < 500, `enviar una cantidad que vale menos de medio centavo respondió ${polvo.resumen()} (se esperaba un rechazo 4xx claro, no un error del servidor)`);
-      // Aunque la respuesta sea mala, el rechazo no puede dejar plata movida.
-      c.cercano(num((await activo(api.victor, 'ETH')).balance), polvo.ok ? eth0 - 0.00000001 : eth0, 1e-12, 'ETH de victor tras el envío de la cantidad ínfima');
+      c.respuesta(polvo, 400, 'enviar una cantidad que vale menos de un centavo', 'CRYPTO_INVALID_AMOUNT');
+      c.cercano(num((await activo(api.victor, 'ETH')).balance), eth0, 1e-12, 'ETH de victor tras el envío de la cantidad ínfima');
       const igual = await api.victor.post('/crypto/convert', { from_asset: 'ETH', to_asset: 'ETH', from_amount: 0.0001, idempotency_key: llave('convert') });
-      c.ok(!igual.ok, `convertir ETH a ETH debería rechazarse y respondió ${igual.resumen()} (ETH de victor: ${num((await activo(api.victor, 'ETH')).balance)}, antes ${eth0})`);
+      c.respuesta(igual, 400, 'convertir ETH a ETH', 'CRYPTO_INVALID_PAIR');
+      const igualEnMinusculas = await api.victor.post('/crypto/convert', { from_asset: 'eth', to_asset: 'ETH', from_amount: 0.0001, idempotency_key: llave('convert') });
+      c.respuesta(igualEnMinusculas, 400, 'convertir "eth" a ETH (el mismo activo escrito distinto)', 'CRYPTO_INVALID_PAIR');
+      c.cercano(num((await activo(api.victor, 'ETH')).balance), eth0, 1e-12, 'ETH de victor tras convertir un activo en sí mismo');
+      c.igual((await api.victor.saldo()).usd, saldo0.usd, 'dólares de victor tras los rechazos');
       const minusculas = await api.victor.post('/crypto/buy', { asset: 'eth', from_currency: 'USD', from_amount: 1, idempotency_key: llave('buy') });
-      c.ok(minusculas.ok || minusculas.status === 400, `comprar con el activo en minúsculas respondió ${minusculas.resumen()} (se esperaba aceptarlo o un 400 claro)`);
-      if (!minusculas.ok) c.igual((await api.victor.saldo()).usd, saldo0.usd, 'dólares de victor tras la compra rechazada');
+      c.respuesta(minusculas, 201, 'comprar US$1 de "eth" en minúsculas');
+      c.igual((await api.victor.saldo()).usd, saldo0.usd - centimos(1), 'dólares de victor tras comprar con el símbolo en minúsculas');
+      c.cercano(num((await activo(api.victor, 'ETH')).balance), eth0 + 1 / precioEth, 1e-9, 'ETH de victor tras comprar con el símbolo en minúsculas');
       const problemas = problemasDelLibro();
       c.ok(problemas.length === 0, problemas.join(' | '));
     }, { seguir: true });

@@ -56,9 +56,8 @@ export default {
     });
 
     await f.paso('Al terminar el registro, la pantalla deja a keilor dentro del negocio nuevo', async () => {
-      // Defecto conocido: App.tsx fija el negocio activo apenas se crea, pero la lista de
-      // comercios todavia no lo trae y la "autocuracion" lo toma por un negocio que ya no
-      // existe: lo saca de vuelta al perfil personal sin decir nada.
+      // La pantalla fija el negocio activo apenas se crea, aunque la lista de comercios todavia no lo
+      // traiga: no puede sacar a keilor de vuelta al perfil personal sin decir nada.
       const dentro = await keilor.page.getByText(txt('Pendiente de verificación')).first()
         .waitFor({ state: 'visible', timeout: 6000 }).then(() => true, () => false);
       if (!dentro) {

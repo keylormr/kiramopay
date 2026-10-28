@@ -4,7 +4,7 @@ import { llave } from '../lib/entorno.mjs';
 import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil, reposar } from '../lib/ui.mjs';
 import { clientes, centimos, asegurarComercio, adminKp, problemasDelLibro } from '../lib/comun.mjs';
 import { esperarHasta } from '../lib/api.mjs';
-import { reColones, txt } from '../lib/textos.mjs';
+import { reColones, txt, escapar } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';
 
 const RETIRO = 500;
@@ -46,10 +46,14 @@ export default {
     });
 
     await f.paso('El resumen del inicio del negocio concuerda en singular y plural', async (c) => {
-      // Defecto conocido: con un solo cobro dice "Últimos 1 cobros" (el texto no distingue el singular).
-      const resumen = await keilor.page.getByText(/Últimos\s+\d+\s+cobros/).first().innerText().catch(() => null);
-      c.exigir(resumen, 'el inicio del negocio no muestra el resumen de cobros');
-      c.ok(!/Últimos\s+1\s+cobros/.test(resumen), `el resumen dice "${resumen}": con un solo cobro debería decir "Último cobro"`);
+      // Con un solo cobro dice "Último cobro", con varios "Últimos N cobros" (nunca "Últimos 1 cobros").
+      const n = ventas.length;
+      const esperado = n === 1 ? txt('Último cobro') : `Últimos ${n} cobros`;
+      const aparece = await keilor.page.getByText(new RegExp(`^${escapar(esperado)}$`)).first().waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false);
+      if (!aparece) {
+        const hallado = await keilor.page.getByText(/[ÚU]ltimos?\s+(\d+\s+)?cobros?/).first().innerText().catch(() => null);
+        c.ok(false, `el resumen dice ${JSON.stringify(hallado)}: con ${n} cobro(s) debería decir "${esperado}"`);
+      }
     }, { seguir: true });
 
     await f.paso(`Ajustes > Catálogo: agrega el producto "${producto}" de ₡2.500`, async (c) => {
@@ -151,7 +155,7 @@ export default {
     });
 
     await f.paso('La pantalla del negocio muestra el saldo nuevo sin tener que salir y volver', async (c) => {
-      // Defecto conocido: los datos del negocio no se refrescan solos tras retirar.
+      // Los datos del negocio se refrescan solos tras retirar.
       await keilor.page.getByText(reColones((antes.negocio - centimos(RETIRO)) / 100)).first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => {
         c.ok(false, `la pantalla sigue mostrando el saldo viejo del negocio; el nuevo es ₡${(antes.negocio - centimos(RETIRO)) / 100}`);
       });

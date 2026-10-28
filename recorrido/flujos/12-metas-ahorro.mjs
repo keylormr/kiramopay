@@ -94,8 +94,8 @@ export default {
     });
 
     await f.paso('Al volver al inicio, los movimientos del ahorro ya están en la lista', async (c) => {
-      // Defecto conocido: la pantalla de metas solo recarga las cuentas; la lista de movimientos
-      // del inicio queda como estaba hasta que se recarga la pagina.
+      // El inicio solo refresca su lista de movimientos con una notificacion en vivo: la pantalla de metas
+      // tiene que traerlos ella (ademas del saldo) para que no queden como estaban hasta recargar la pagina.
       await volver(victor.page);
       const filas = victor.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 10000 });

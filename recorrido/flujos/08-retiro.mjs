@@ -7,7 +7,9 @@ import { reColones, txt, escapar } from '../lib/textos.mjs';
 import { llave, CUENTAS } from '../lib/entorno.mjs';
 import * as bd from '../lib/bd.mjs';
 
-const MOCK = 'SYSTEM:EXTERNAL:MOCK:CRC';
+// La plata que sale por un riel sale del sistema: el pasivo con el usuario y la reserva bajan lo mismo (y
+// suben lo mismo si el riel rechaza y se reembolsa).
+const RESERVA = 'SYSTEM:RESERVE:CRC';
 
 async function abrirPagosSalientes(sesion) {
   const p = sesion.page;
@@ -50,7 +52,7 @@ export default {
       const rieles = await api.victor.exigir('GET', '/payouts/rails');
       c.ok((rieles.data.rails ?? []).includes('mock'), `rieles disponibles: ${JSON.stringify(rieles.data)}`);
       antes.saldo = await api.victor.saldo();
-      antes.externo = bd.saldoCuenta(MOCK);
+      antes.reserva = bd.saldoCuenta(RESERVA);
     });
 
     await f.paso('Victor envía ₡2.500 a una cuenta normal desde "Pagos salientes"', async () => {
@@ -75,8 +77,9 @@ export default {
       c.igual(mov.counterparty_name, `Beneficiario ${tag}`, 'beneficiario del movimiento');
       const lineas = bd.asiento({ llave: `payout:debit:${pago.id}` });
       c.ok(bd.lineaDe(lineas, bd.cuentaUsuario(CUENTAS.victor.id, 'CRC'), 'debit'), 'falta el débito a victor');
-      c.ok(bd.lineaDe(lineas, MOCK, 'credit'), 'falta el crédito a la cuenta externa del riel simulado');
-      c.igual(bd.saldoCuenta(MOCK), antes.externo + centimos(2500), 'saldo de la cuenta externa del riel');
+      c.ok(bd.lineaDe(lineas, RESERVA, 'credit'), `falta el crédito a ${RESERVA} (la plata sale del sistema)`);
+      c.igual(lineas.length, 2, 'líneas del asiento del pago');
+      c.igual(bd.saldoCuenta(RESERVA), antes.reserva - centimos(2500), `saldo de ${RESERVA}`);
     });
 
     await f.paso('La pantalla muestra el pago como "Completado" y su detalle', async () => {
@@ -104,9 +107,9 @@ export default {
       const reembolso = (await api.victor.movimientos({ type: 'payout_refund', limit: '5' }))[0];
       c.ok(reembolso && reembolso.amount === centimos(1000), 'falta el movimiento payout_refund de victor');
       const lineas = bd.asiento({ llave: `payout:refund:${pago.id}` });
-      c.ok(bd.lineaDe(lineas, MOCK, 'debit'), 'falta el débito a la cuenta externa en el reembolso');
+      c.ok(bd.lineaDe(lineas, RESERVA, 'debit'), `falta el débito a ${RESERVA} en el reembolso`);
       c.ok(bd.lineaDe(lineas, bd.cuentaUsuario(CUENTAS.victor.id, 'CRC'), 'credit'), 'falta el crédito a victor en el reembolso');
-      c.igual(bd.saldoCuenta(MOCK), antes.externo + centimos(2500), 'la cuenta externa conserva solo el pago completado');
+      c.igual(bd.saldoCuenta(RESERVA), antes.reserva - centimos(2500), 'la reserva baja solo por el pago completado: el reembolso devuelve lo suyo');
       const problemas = problemasDelLibro();
       c.ok(problemas.length === 0, problemas.join(' | '));
     });
@@ -149,7 +152,7 @@ export default {
     }, { seguir: true });
 
     await f.paso('El reembolso aparece como entrada (+) en los movimientos del inicio', async (c) => {
-      // Defecto conocido: la pantalla clasifica payout_refund como salida y lo pinta sin "+".
+      // El reembolso (payout_refund) vuelve plata a victor: es una entrada y se pinta con "+".
       const nueva = await abrirSesion(f, 'victor');
       const filas = nueva.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 15000 });

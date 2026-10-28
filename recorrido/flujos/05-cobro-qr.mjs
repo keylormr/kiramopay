@@ -74,7 +74,7 @@ export default {
     });
 
     await f.paso('El comprobante del pago muestra el monto con el formato de la app', async (c) => {
-      // Defecto conocido: el comprobante escribe "CRC 1000" en lugar de "₡1,000.00".
+      // El comprobante escribe "₡1,000.00" como el resto de la app, no "CRC 1000" (codigo de moneda y numero pelado).
       c.ok(reColones(MONTO).test(comprobante), `el comprobante dice ${JSON.stringify(comprobante.replace(/\s+/g, ' ').trim())}: el monto debería verse como ₡${MONTO.toLocaleString('en-US')}.00`);
     }, { seguir: true });
 
@@ -105,9 +105,13 @@ export default {
       ctx.estado.cobroPagado = { id: cobro.id, qr_data: cobro.qr_data, txId: fila.id };
     });
 
-    await f.paso('Libro: débito a victor, crédito al comercio y a las comisiones, balanceado', async (c) => {
+    await f.paso('Libro: débito a victor, crédito al comercio y a las comisiones, y la comisión pasa de la reserva al capital propio', async (c) => {
       const lineas = bd.asiento({ llavePrefijo: `qr2:${cobro.id}:` });
-      c.ok(lineas.length === 3, `se esperaban 3 líneas en el asiento y hay ${lineas.length}: ${JSON.stringify(lineas)}`);
+      c.ok(lineas.length === 5, `se esperaban 5 líneas en el asiento (3 del cobro y 2 que pasan la comisión de la reserva al capital propio) y hay ${lineas.length}: ${JSON.stringify(lineas)}`);
+      const alCapital = lineas.find((l) => l.codigo === 'SYSTEM:CAPITAL:CRC' && l.direccion === 'debit');
+      const delaReserva = lineas.find((l) => l.codigo === 'SYSTEM:RESERVE:CRC' && l.direccion === 'credit');
+      c.ok(alCapital && Number(alCapital.monto) === comision, `falta el débito de ${comision} a SYSTEM:CAPITAL:CRC (la comisión deja de respaldar a los usuarios)`);
+      c.ok(delaReserva && Number(delaReserva.monto) === comision, `falta el crédito de ${comision} a SYSTEM:RESERVE:CRC`);
       const deb = lineas.find((l) => l.codigo === bd.cuentaUsuario(CUENTAS.victor.id, 'CRC') && l.direccion === 'debit');
       const cm = lineas.find((l) => l.codigo.startsWith('MERCHANT:') && l.direccion === 'credit');
       const fee = lineas.find((l) => l.codigo === 'SYSTEM:FEES:CRC' && l.direccion === 'credit');

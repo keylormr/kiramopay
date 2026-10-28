@@ -35,28 +35,27 @@ export default {
       c.igual(ahorros, 0, 'saldo de SYSTEM:SAVINGS:CRC con todas las metas eliminadas');
     });
 
-    await f.paso('La prueba de reservas sigue cubriendo el pasivo en cada moneda, como al empezar', async (c) => {
-      // Defecto conocido: operar cripto y pagar recibos o retiros mueve el pasivo con usuarios sin mover la
-      // reserva; en la semilla la diferencia (reserva menos pasivo) es cero y la pagina publica una cobertura.
+    await f.paso('La reserva es exactamente igual al pasivo con los usuarios en cada moneda, como al empezar', async (c) => {
+      // Regla del dueno: en cada moneda la reserva es EXACTAMENTE igual a lo que se les debe a los usuarios
+      // (difference_minor = 0, fully_backed = true), despues de cualquier operacion. Lo que no es de ellos
+      // (comisiones, fondo de promociones, la plata de una compra de cripto) vive en SYSTEM:CAPITAL.
       const r = await peticion('GET', '/transparency/proof-of-reserves');
       c.exigirRespuesta(r, 200, 'prueba de reservas');
       const monedas = r.data.currencies ?? [];
       c.ok(monedas.length >= 1, 'la prueba de reservas no trae monedas');
       for (const m of monedas) {
-        const diferencia = Number(m.reserve_balance_minor) - Number(m.user_liabilities_minor);
-        const inicio = ctx.estado.reservasInicio?.[m.currency];
-        const alEmpezar = inicio ? `, al empezar ${Number(inicio.reserve_balance_minor) - Number(inicio.user_liabilities_minor)}` : '';
-        f.alertar(`Prueba de reservas ${m.currency}: pasivo ${m.user_liabilities_minor}, reserva ${m.reserve_balance_minor}, diferencia (reserva menos pasivo) al terminar ${diferencia}${alEmpezar}, cobertura ${Number(m.ratio_pct).toFixed(3)} %`);
+        c.ok(typeof m.difference_minor === 'number' && typeof m.fully_backed === 'boolean', `${m.currency}: la prueba de reservas no trae difference_minor y fully_backed: ${JSON.stringify(m)}`);
+        f.alertar(`Prueba de reservas ${m.currency}: pasivo ${m.user_liabilities_minor}, reserva ${m.reserve_balance_minor}, difference_minor ${m.difference_minor}, fully_backed ${m.fully_backed}, cobertura ${Number(m.ratio_pct).toFixed(3)} %`);
         const cambios = (ctx.estado.cambiosReservas ?? [])
           .filter((x) => x.moneda === m.currency)
           .map((x) => `${x.flujo}: ${x.antes} a ${x.despues}`)
           .join('; ');
-        c.ok(diferencia >= 0, `${m.currency}: la reserva (${m.reserve_balance_minor}) no cubre el pasivo con usuarios (${m.user_liabilities_minor}), faltan ${-diferencia} en unidades menores${alEmpezar.replace(', al empezar', '; al empezar la diferencia era')}. Cambios de la diferencia por flujo: ${cambios || 'ninguno'}`);
+        c.ok(m.difference_minor === 0 && m.fully_backed === true, `${m.currency}: la reserva (${m.reserve_balance_minor}) no es igual al pasivo con usuarios (${m.user_liabilities_minor}): difference_minor ${m.difference_minor}, fully_backed ${m.fully_backed}. Cambios de la diferencia por flujo: ${cambios || 'ninguno'}`);
       }
     }, { seguir: true });
 
     await f.paso('El historial acepta pedir más movimientos que el tope sin volver a 20', async (c) => {
-      // Defecto conocido: un "limit" mayor que el tope (100) vuelve al valor por defecto (20).
+      // Un "limit" mayor que el tope (100) devuelve el tope, no vuelve al valor por defecto (20).
       const victor = await clientes('victor');
       const cien = (await victor.victor.exigir('GET', '/transactions?limit=100')).data.transactions ?? [];
       const quinientos = (await victor.victor.exigir('GET', '/transactions?limit=500')).data.transactions ?? [];

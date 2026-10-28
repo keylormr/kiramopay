@@ -95,29 +95,33 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # El servidor pide los precios de cripto a api.coingecko.com, que limita
-      # por IP a los centros de datos. Un simulador local responde precios fijos
-      # en ese mismo nombre, con su propio certificado (que solo Go confia, por
-      # SSL_CERT_FILE). El servidor no se modifica.
-      - name: Simulador de precios de cripto
+      # por IP a los centros de datos, y el tipo de cambio del dolar a
+      # api.hacienda.go.cr, que a veces contesta 5xx (y una base nueva ya no trae
+      # un tipo de cambio de reserva: sin el, cripto en colones no opera). Un
+      # simulador local responde cifras fijas en esos dos nombres, con su propio
+      # certificado (que solo Go confia, por SSL_CERT_FILE). El servidor no se
+      # modifica.
+      - name: Simulador de precios de cripto y de tipo de cambio
         run: |
           mkdir -p "$RUNNER_TEMP/simulador"
           openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
             -keyout "$RUNNER_TEMP/simulador/llave.pem" \
             -out "$RUNNER_TEMP/simulador/cert.pem" \
             -subj "/CN=api.coingecko.com" \
-            -addext "subjectAltName=DNS:api.coingecko.com"
-          echo "127.0.0.1 api.coingecko.com" | sudo tee -a /etc/hosts
-          sudo nohup "$(command -v node)" recorrido/simulador/coingecko.mjs 443 \
+            -addext "subjectAltName=DNS:api.coingecko.com,DNS:api.hacienda.go.cr"
+          echo "127.0.0.1 api.coingecko.com api.hacienda.go.cr" | sudo tee -a /etc/hosts
+          sudo nohup "$(command -v node)" recorrido/simulador/terceros.mjs 443 \
             "$RUNNER_TEMP/simulador/llave.pem" "$RUNNER_TEMP/simulador/cert.pem" \
             > "$RUNNER_TEMP/simulador/simulador.log" 2>&1 &
           for i in $(seq 1 20); do
-            if curl -sf --cacert "$RUNNER_TEMP/simulador/cert.pem" https://api.coingecko.com/api/v3/ping > /dev/null; then
-              echo "Simulador de precios listo"
+            if curl -sf --cacert "$RUNNER_TEMP/simulador/cert.pem" https://api.coingecko.com/api/v3/ping > /dev/null \
+              && curl -sf --cacert "$RUNNER_TEMP/simulador/cert.pem" https://api.hacienda.go.cr/indicadores/tc/dolar > /dev/null; then
+              echo "Simulador de precios y de tipo de cambio listo"
               exit 0
             fi
             sleep 1
           done
-          echo "El simulador de precios no arrancó"
+          echo "El simulador no arrancó"
           cat "$RUNNER_TEMP/simulador/simulador.log"
           exit 1
 

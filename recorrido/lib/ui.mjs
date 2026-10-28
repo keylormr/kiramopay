@@ -100,7 +100,7 @@ export async function entrarPorLaPantalla(page, usuario) {
 
 export const barraInferior = (page) => page.getByRole('navigation', { name: /Navegaci[oó]n principal/ });
 
-/** Pestana de la barra inferior: Inicio, SINPE, Crypto, Servicios o Perfil. */
+/** Pestana de la barra inferior: Inicio, SINPE, Cripto, Servicios o Perfil. */
 export async function ir(page, destino) {
   await cupo(page.usuarioDelRecorrido, 25);
   await barraInferior(page).getByRole('button', { name: destino, exact: true }).click();

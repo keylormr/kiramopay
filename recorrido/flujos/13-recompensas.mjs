@@ -10,6 +10,7 @@ import * as bd from '../lib/bd.mjs';
 
 const PROMOCIONES = 'SYSTEM:PROMOTIONS:CRC';
 const RESERVA = 'SYSTEM:RESERVE:CRC';
+const CAPITAL = 'SYSTEM:CAPITAL:CRC';
 const FONDEO = 500;
 
 async function abrirRecompensas(sesion) {
@@ -66,9 +67,14 @@ export default {
     });
 
     await f.paso('La pantalla muestra el nivel de keilor en español', async (c) => {
-      // Defecto conocido: el nivel se pinta con el codigo crudo del servidor ("Nivel silver").
-      const crudo = await keilor.page.getByText(/Nivel\s+silver/i).count();
-      c.igual(crudo, 0, 'veces que la pantalla pinta el nivel en inglés ("Nivel silver")');
+      // El nivel del servidor ("silver") es un identificador, no un texto: la pantalla lo traduce ("Plata") y la
+      // barra de progreso nombra el siguiente nivel igual ("Oro").
+      const crudo = await keilor.page.getByText(/\b(bronze|silver|gold|platinum)\b/i).count();
+      c.igual(crudo, 0, 'veces que la pantalla pinta un nivel en inglés (silver, gold...)');
+      const traducido = await keilor.page.getByText(new RegExp(`Nivel\\s+${txt('Plata')}`, 'i')).count();
+      c.ok(traducido >= 1, `la pantalla no muestra "Nivel ${txt('Plata')}" para keilor (4.250 puntos totales)`);
+      const siguiente = await keilor.page.getByText(new RegExp(`${txt('Oro')}:\\s*25,000\\s*pts`)).count();
+      c.ok(siguiente >= 1, `la barra de progreso no nombra el siguiente nivel como "${txt('Oro')}: 25,000 pts"`);
     }, { seguir: true });
 
     await f.paso('Canjear con el fondo en cero por la API se rechaza (409) y no toca puntos, plata ni libro', async (c) => {
@@ -123,16 +129,19 @@ export default {
       c.igual((await api.keilor.exigir('GET', '/admin/promociones')).data.saldo_minor, centimos(FONDEO), 'saldo del fondo de promociones');
     });
 
-    await f.paso('El fondeo mueve solo el fondo y la reserva: ninguna billetera cambia', async (c) => {
+    await f.paso('El fondeo mueve solo el fondo y el capital propio: ni la reserva ni ninguna billetera cambian', async (c) => {
+      // El fondo es plata de la empresa hasta que se regala: no respalda a nadie y no sube la reserva publicada.
       c.igual((await api.keilor.saldo()).crc, antes.saldo.crc, 'saldo de keilor');
       c.igual(bd.saldoCuenta(PROMOCIONES), antes.promociones + centimos(FONDEO), `saldo de ${PROMOCIONES}`);
-      c.igual(bd.saldoCuenta(RESERVA), antes.reserva + centimos(FONDEO), `saldo de ${RESERVA}`);
+      c.igual(bd.saldoCuenta(RESERVA), antes.reserva, `saldo de ${RESERVA} (el fondeo no la toca)`);
       const lineas = bd.asiento({ llavePrefijo: 'loyalty:fondeo:' });
-      c.ok(bd.lineaDe(lineas, RESERVA, 'debit'), `falta el débito a ${RESERVA}`);
+      c.ok(bd.lineaDe(lineas, CAPITAL, 'debit'), `falta el débito a ${CAPITAL}`);
       c.ok(bd.lineaDe(lineas, PROMOCIONES, 'credit'), `falta el crédito a ${PROMOCIONES}`);
+      c.igual(lineas.length, 2, 'líneas del asiento del fondeo');
       const reservas = await reservasCrc();
-      c.igual(reservas.reserve_balance_minor, antes.reservas.reserve_balance_minor + centimos(FONDEO), 'reserva publicada en la prueba de reservas');
+      c.igual(reservas.reserve_balance_minor, antes.reservas.reserve_balance_minor, 'reserva publicada en la prueba de reservas');
       c.igual(reservas.user_liabilities_minor, antes.reservas.user_liabilities_minor, 'pasivo publicado en la prueba de reservas');
+      c.igual(reservas.difference_minor, 0, 'difference_minor publicado en la prueba de reservas');
       // La auditoria se escribe aparte del asiento: se espera un instante a que aparezca.
       const auditado = await esperarHasta(() => bd.consultar("SELECT 1 AS n FROM audit_logs WHERE action = 'promociones_fondeadas' LIMIT 1").length > 0, { intentos: 10, cadaMs: 500, descripcion: 'la auditoría del fondeo' }).then(() => true, () => false);
       c.ok(auditado, 'falta la auditoría "promociones_fondeadas" del fondeo');
@@ -156,12 +165,19 @@ export default {
       c.ok(await primero.isEnabled(), 'con el fondo cargado el primer premio debería poder canjearse');
       const saldoAntes = (await api.keilor.saldo()).crc;
       const fondoAntes = bd.saldoCuenta(PROMOCIONES);
+      const reservaAntes = bd.saldoCuenta(RESERVA);
       await primero.click();
       await p.getByText(new RegExp(`${reColones(FONDEO).source}\\s+acreditados`)).first().waitFor({ state: 'visible', timeout: 10000 });
       c.igual((await api.keilor.exigir('GET', '/loyalty/account')).data.available_points, antes.puntos - 500, 'puntos disponibles tras el canje');
       c.igual((await api.keilor.exigir('GET', '/loyalty/account')).data.total_points, antes.total, 'puntos totales tras el canje');
       c.igual((await api.keilor.saldo()).crc, saldoAntes + centimos(FONDEO), 'saldo de keilor tras el canje');
       c.igual(bd.saldoCuenta(PROMOCIONES), fondoAntes - centimos(FONDEO), `saldo de ${PROMOCIONES} tras el canje`);
+      // El premio sube lo que se le debe a keilor: el capital propio pone esa plata en la reserva en el mismo asiento.
+      c.igual(bd.saldoCuenta(RESERVA), reservaAntes + centimos(FONDEO), `saldo de ${RESERVA} tras el canje`);
+      const lineasCanje = bd.asiento({ llavePrefijo: 'loyalty:canje:' });
+      c.ok(bd.lineaDe(lineasCanje, RESERVA, 'debit'), `falta el débito a ${RESERVA} en el asiento del canje: ${JSON.stringify(lineasCanje)}`);
+      c.ok(bd.lineaDe(lineasCanje, CAPITAL, 'credit'), `falta el crédito a ${CAPITAL} en el asiento del canje: ${JSON.stringify(lineasCanje)}`);
+      c.igual((await reservasCrc()).difference_minor, 0, 'difference_minor publicado tras el canje');
       const mov = (await api.keilor.movimientos({ type: 'loyalty_cashback', limit: '5' }))[0];
       c.exigir(mov, 'keilor no tiene movimiento loyalty_cashback');
       c.igual(mov.amount, centimos(FONDEO), 'monto del movimiento');

@@ -71,7 +71,7 @@ export default {
     });
 
     await f.paso('La lista muestra el estado de la división en español', async (c) => {
-      // Defecto conocido de la pantalla: pinta el estado crudo del servidor ("active").
+      // La pantalla traduce el estado del servidor ("Activa"): no pinta el valor crudo ("active").
       const crudo = await victor.page.getByText('active', { exact: true }).count();
       if (crudo) await victor.page.getByText('active', { exact: true }).first().scrollIntoViewIfNeeded().catch(() => {});
       c.igual(crudo, 0, 'veces que la lista pinta el estado en inglés ("active")');
@@ -131,8 +131,8 @@ export default {
     });
 
     await f.paso('Una cuota de ₡100.000 pide segundo factor (como cualquier salida de ese monto)', async (c) => {
-      // Defecto conocido: la pantalla y el servidor responden un 400 generico (PAY_FAILED) en lugar de
-      // pedir el segundo factor, y la cuota nunca se puede pagar.
+      // Como en cualquier salida desde ₡100.000, el servidor responde 428 MFA_REQUIRED para que la pantalla
+      // pida el segundo factor (y no un 400 generico que dejaba la cuota sin poder pagarse).
       const crear = await api.victor.post('/splits', {
         title: `Grande ${titulo}`,
         total_amount: centimos(300000),
