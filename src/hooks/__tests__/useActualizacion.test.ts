@@ -142,6 +142,32 @@ describe('useActualizacion', () => {
     expect(result.current.actualizacion?.notas).toEqual(['Uno', 'Dos']);
   });
 
+  // El telefono que va a actualizar no conoce las novedades de la version nueva:
+  // las traducciones tienen que viajar con ellas (notes_i18n, del notas.json del
+  // release). Sin esto el aviso de la version nueva salia siempre en espanol.
+  it('trae las novedades traducidas, por idioma, y deja solo las que son texto', async () => {
+    getLatest.mockResolvedValue({
+      success: true,
+      data: {
+        version: '2.8.0',
+        url: 'https://ejemplo/kiramopay.apk',
+        notes: ['Uno'],
+        notes_i18n: { en: ['One', 3, '  ', 'Two'], fr: ['Un'], ja: 'no es una lista', pt: [] },
+      },
+    });
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.notasTraducidas).toEqual({ en: ['One', 'Two'], fr: ['Un'] });
+  });
+
+  it('un servidor que no manda traducciones deja el espanol y nada mas', async () => {
+    getLatest.mockResolvedValue(publicada('2.8.0', ['Uno']));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(result.current.actualizacion?.notasTraducidas).toEqual({});
+    expect(result.current.actualizacion?.notas).toEqual(['Uno']);
+  });
+
   it('un servidor que todavia no manda novedades da una lista vacia', async () => {
     getLatest.mockResolvedValue(publicada('2.8.0'));
     const { result } = renderHook(() => useActualizacion());

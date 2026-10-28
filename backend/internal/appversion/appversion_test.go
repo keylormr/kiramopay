@@ -364,6 +364,80 @@ func TestGetLatest_TraeLasNovedadesDelRelease(t *testing.T) {
 	}
 }
 
+// Las novedades de la version nueva viajan en todos los idiomas de la app:
+// quien va a actualizar todavia no tiene esa version, y no puede traducirlas
+// por su cuenta. El notas.json las trae en `traducciones` y la respuesta las
+// entrega como notes_i18n; `notes` sigue siendo el espanol de siempre, para las
+// versiones que no conocen el campo.
+type respuestaCruda struct {
+	Notes     []string            `json:"notes"`
+	NotesI18n map[string][]string `json:"notes_i18n"`
+}
+
+// pedirCrudo devuelve las novedades como salen en el JSON, y el cuerpo entero.
+func pedirCrudo(t *testing.T, h *Handler, ruta string) (respuestaCruda, string) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.GetLatest(rec, httptest.NewRequest(http.MethodGet, ruta, nil))
+	var sobre struct {
+		Data respuestaCruda `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &sobre); err != nil {
+		t.Fatalf("respuesta no es JSON (%d): %s", rec.Code, rec.Body.String())
+	}
+	return sobre.Data, rec.Body.String()
+}
+
+func TestGetLatest_TraeLasNovedadesTraducidas(t *testing.T) {
+	api := servidorAPI(t, http.StatusOK, false)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := servidorNotas(t, "v2.3.6",
+		`{"version":"2.3.6","cambios":["Primero","Segundo"],"traducciones":{"en":["First","Second"],"fr":["Premier","  ","Second"],"ja":[],"no es un idioma!":["x"]}}`,
+		http.StatusOK)
+	defer notas.Close()
+
+	got, _ := pedirCrudo(t, conNotas(api.URL, web.URL, notas.URL), "/api/v1/app/version")
+	if want := []string{"Primero", "Segundo"}; !reflect.DeepEqual(got.Notes, want) {
+		t.Fatalf("notes=%q, esperaba el espanol %q", got.Notes, want)
+	}
+	want := map[string][]string{"en": {"First", "Second"}, "fr": {"Premier", "Second"}}
+	if !reflect.DeepEqual(got.NotesI18n, want) {
+		t.Fatalf("notes_i18n=%q, esperaba %q (sin vacios, sin listas vacias, sin claves que no son un idioma)", got.NotesI18n, want)
+	}
+}
+
+// Un release sin traducciones (todos los anteriores) sale con un objeto vacio,
+// nunca null: la pantalla lo recorre.
+func TestGetLatest_SinTraduccionesNotesI18nVaVacio(t *testing.T) {
+	api := servidorAPI(t, http.StatusOK, false)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := servidorNotas(t, "v2.3.6", `{"version":"2.3.6","cambios":["Uno"]}`, http.StatusOK)
+	defer notas.Close()
+
+	_, cuerpo := pedirCrudo(t, conNotas(api.URL, web.URL, notas.URL), "/api/v1/app/version")
+	if !strings.Contains(cuerpo, `"notes_i18n":{}`) {
+		t.Fatalf("body=%s, esperaba notes_i18n:{}", cuerpo)
+	}
+}
+
+func TestPlataforma_IOSRecibeLasMismasTraducciones(t *testing.T) {
+	api := servidorAPI(t, http.StatusOK, false)
+	defer api.Close()
+	web := servidorWeb(t, true)
+	defer web.Close()
+	notas := servidorNotas(t, "v2.3.6", `{"version":"2.3.6","cambios":["Uno"],"traducciones":{"en":["One"]}}`, http.StatusOK)
+	defer notas.Close()
+
+	got, _ := pedirCrudo(t, conNotas(api.URL, web.URL, notas.URL), "/api/v1/app/version?platform=ios")
+	if !reflect.DeepEqual(got.NotesI18n, map[string][]string{"en": {"One"}}) {
+		t.Fatalf("notes_i18n=%q, esperaba las mismas traducciones que Android", got.NotesI18n)
+	}
+}
+
 // En Render la cuota de la API suele estar agotada y la version sale por la
 // redireccion: ese camino, que es el de todos los dias, tambien trae las
 // novedades.
