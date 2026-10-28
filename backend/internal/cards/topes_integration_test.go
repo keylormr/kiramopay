@@ -182,7 +182,7 @@ func TestTopeTarjetas_ElHandlerResponde409ConDetalle(t *testing.T) {
 			next.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, uno)))
 		})
 	})
-	r.Post("/cards", cards.NewHandler(svc).CreateCard)
+	r.Post("/cards", cards.NewHandler(svc).ConNombreDe(nombreDelPerfil(pool)).CreateCard)
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/cards", strings.NewReader(`{}`)))
