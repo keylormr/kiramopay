@@ -10,6 +10,10 @@ regexes = [
   # Clave fija de cifrado de PII usada por internal/testutil en los tests de
   # integracion (se inyecta como GUC kiramopay.encryption_key de la DB de test).
   '''test-pii-encryption-key-0123456789ab''',
+  # Token falso del BCCR que usan las pruebas de la fuente del tipo de cambio
+  # (internal/country) para comprobar que el token viaja en el encabezado y no se
+  # escribe en ningun error ni registro. No abre nada.
+  '''tok-secreto-de-prueba-123''',
 ]
 paths = [
   # Podfile.lock lista los SPEC CHECKSUMS de CocoaPods: SHA-1 de 40 caracteres

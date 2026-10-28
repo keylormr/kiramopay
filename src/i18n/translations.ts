@@ -615,6 +615,8 @@ export type TranslationKeys = {
   crypto_err_generic: string;
   crypto_action_needs_price: string;
   crypto_value_unavailable: string;
+  crypto_crc_unavailable: string;
+  crypto_sell_crc_needs_rate: string;
   crypto_refresh_prices: string;
   crypto_no_assets_to_convert: string;
   crypto_my_portfolio: string;
@@ -1242,6 +1244,8 @@ export type TranslationKeys = {
   home_spent_failed: string;
   home_vs_last_month: string;
   balance_usd_estimate: string;
+  fx_total_unavailable: string;
+  fx_total_unavailable_short: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;
   qr_mi_codigo: string;

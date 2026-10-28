@@ -95,8 +95,11 @@ func (r *Repository) GetByIdempotencyKey(ctx context.Context, userID, key string
 
 // ListByUser returns the user's payouts, newest first.
 func (r *Repository) ListByUser(ctx context.Context, userID string, limit int) ([]Payout, error) {
-	if limit <= 0 || limit > 200 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope.
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	rows, err := r.db.Query(ctx,
 		`SELECT `+payoutCols+` FROM payouts WHERE user_id = $1::uuid

@@ -227,3 +227,20 @@ describe('ProfileView encabezado: las estadisticas a 390 px', () => {
     expect(grilla.className).toMatch(/min-\[\d+px\]:grid-cols-2|sm:grid-cols-2/);
   });
 });
+
+describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
+  it('el guion del total dice por que no hay cifra', () => {
+    appState.accounts = [colones(500_000, undefined), dolares(445)];
+    pintar();
+
+    const total = estadistica('Balance Total');
+    expect(total.getByText('—')).toBeInTheDocument();
+    expect(total.getByText('Sin tipo de cambio')).toBeInTheDocument();
+  });
+
+  it('con tipo de cambio no aparece el aviso', () => {
+    pintar();
+
+    expect(estadistica('Balance Total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
+  });
+});

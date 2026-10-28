@@ -400,12 +400,13 @@ class CryptoPriceService {
     return histories;
   }
 
-  // Convert crypto amount to fiat
+  // Convert crypto amount to fiat. In colones it needs the exchange rate the
+  // server gave: without one the answer is null, not a figure from a made-up rate.
   async convertToFiat(
     symbol: string,
     amount: number,
     fiatCurrency: 'USD' | 'CRC' = 'USD'
-  ): Promise<number> {
+  ): Promise<number | null> {
     const priceData = await this.getPrice(symbol);
     if (!priceData) return 0;
 
@@ -413,25 +414,28 @@ class CryptoPriceService {
 
     if (fiatCurrency === 'CRC') {
       const rate = await getUsdToCrcRate();
-      return usdValue * rate;
+      return rate === null ? null : usdValue * rate;
     }
 
     return usdValue;
   }
 
-  // Convert fiat to crypto amount
+  // Convert fiat to crypto amount. Colones need the exchange rate the server
+  // gave; without one the answer is null (it used to treat the colones as
+  // dollars, a factor of ~450).
   async convertFromFiat(
     symbol: string,
     fiatAmount: number,
     fiatCurrency: 'USD' | 'CRC' = 'USD'
-  ): Promise<number> {
+  ): Promise<number | null> {
     const priceData = await this.getPrice(symbol);
     if (!priceData) return 0;
 
     let usdAmount = fiatAmount;
     if (fiatCurrency === 'CRC') {
       const rate = await getUsdToCrcRate();
-      usdAmount = rate > 0 ? fiatAmount / rate : fiatAmount;
+      if (rate === null || !(rate > 0)) return null;
+      usdAmount = fiatAmount / rate;
     }
 
     return usdAmount / priceData.price;

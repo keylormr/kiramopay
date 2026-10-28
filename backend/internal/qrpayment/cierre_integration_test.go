@@ -497,10 +497,10 @@ func TestComercioCerrado_NoCobraNiSeAdministra(t *testing.T) {
 	}); !errors.Is(err, qrpayment.ErrComercioCerrado) {
 		t.Fatalf("editar un comercio cerrado: err = %v, se esperaba ErrComercioCerrado", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba); !errors.Is(err, qrpayment.ErrComercioCerrado) {
+	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba, qrpayment.ActorContext{}); !errors.Is(err, qrpayment.ErrComercioCerrado) {
 		t.Fatalf("aprobar un comercio cerrado: err = %v, se esperaba ErrComercioCerrado", err)
 	}
-	if _, err := svc.RejectMerchant(ctx, m.ID, revisorDePrueba, "motivo"); !errors.Is(err, qrpayment.ErrComercioCerrado) {
+	if _, err := svc.RejectMerchant(ctx, m.ID, revisorDePrueba, "motivo", qrpayment.ActorContext{}); !errors.Is(err, qrpayment.ErrComercioCerrado) {
 		t.Fatalf("rechazar un comercio cerrado: err = %v, se esperaba ErrComercioCerrado", err)
 	}
 	if _, err := svc.AddStaff(ctx, m.ID, owner, &qrpayment.AddStaffRequest{Cedula: "707770777", Role: "cashier"}); err == nil {
