@@ -112,7 +112,7 @@ func TestTiposDeIngresoEnPantalla_SonLosDelFront(t *testing.T) {
 	cuerpo = cuerpo[:strings.Index(cuerpo, "]);")]
 
 	var delFront []string
-	comillas := regexp.MustCompile(`'([a-z_]+)'`)
+	comillas := regexp.MustCompile(`'([a-z0-9_]+)'`)
 	for _, linea := range strings.Split(cuerpo, "\n") {
 		if i := strings.Index(linea, "//"); i >= 0 {
 			linea = linea[:i]

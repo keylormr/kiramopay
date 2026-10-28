@@ -612,7 +612,11 @@ func main() {
 	}
 	assistantService := assistant.NewService(
 		assistantLLM,
-		assistant.NewTools(walletService, txService, budgetService, paymentService),
+		// El resumen por periodo y los tipos de cambio son los mismos servicios que
+		// alimentan el Inicio: el asistente cuenta con las mismas fuentes que la
+		// pantalla y por eso da las mismas cifras.
+		assistant.NewTools(walletService, txService, budgetService, paymentService,
+			assistant.WithResumen(txService), assistant.WithTipoDeCambio(countryService)),
 		auditLogger,
 		logger,
 		assistantOpts...,
