@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,7 +68,7 @@ func TestMedirCostoDeTestDB(t *testing.T) {
 			t.Fatalf("createSchema: %v", err)
 		}
 	})
-	medir(t, "truncateAll (TRUNCATE de a una tabla, vacias)", func() {
+	medir(t, "truncateAll (tablas vacias)", func() {
 		if err := truncateAll(ctx, pool); err != nil {
 			t.Fatalf("truncateAll: %v", err)
 		}
@@ -81,6 +82,35 @@ func TestMedirCostoDeTestDB(t *testing.T) {
 	if err := truncateAll(ctx, pool); err != nil { // deja el sembrado de ledger_accounts
 		t.Fatalf("truncateAll: %v", err)
 	}
+	// El caso tipico: la prueba sembro un usuario y hay que limpiar lo que toco.
+	// Se mide el algoritmo de antes (un TRUNCATE por tabla) y el de ahora en la
+	// misma corrida, sobre la misma base y con los mismos datos.
+	antes := make([]time.Duration, 0, repeticiones)
+	despues := make([]time.Duration, 0, repeticiones)
+	for i := 0; i < repeticiones; i++ {
+		SeedTestUser(t, pool, "702650930", "hash-de-prueba")
+		ini := time.Now()
+		for _, tbl := range strings.Split(todas, ", ") {
+			if _, err := pool.Exec(ctx, "TRUNCATE TABLE "+tbl+" CASCADE"); err != nil {
+				t.Fatalf("truncate %s: %v", tbl, err)
+			}
+		}
+		antes = append(antes, time.Since(ini))
+
+		SeedTestUser(t, pool, "702650930", "hash-de-prueba")
+		ini = time.Now()
+		if err := truncateAll(ctx, pool); err != nil {
+			t.Fatalf("truncateAll: %v", err)
+		}
+		despues = append(despues, time.Since(ini))
+	}
+	informar(t, "ANTES: un TRUNCATE por tabla, tras sembrar un usuario", antes)
+	informar(t, "AHORA: truncateAll, tras sembrar un usuario", despues)
+	medir(t, "asegurarEsquema (esquema ya creado)", func() {
+		if err := asegurarEsquema(ctx, pool); err != nil {
+			t.Fatalf("asegurarEsquema: %v", err)
+		}
+	})
 	medir(t, "SELECT 1 (ida y vuelta a la base)", func() {
 		var x int
 		if err := pool.QueryRow(ctx, `SELECT 1`).Scan(&x); err != nil {
