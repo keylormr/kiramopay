@@ -128,8 +128,9 @@ func TestLimiteDeHistorial(t *testing.T) {
 	casos := []struct{ pedido, want int }{
 		{0, 20},
 		{-5, 20},
-		{51, 20},
-		{1000, 20},
+		// Pedir mas que el tope devuelve el tope, no el valor por defecto.
+		{51, 50},
+		{1000, 50},
 		{1, 1},
 		{20, 20},
 		{50, 50},

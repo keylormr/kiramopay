@@ -257,8 +257,11 @@ func (r *Repository) MarkAttemptFailed(ctx context.Context, id string, code *int
 // RecentDeliveries lists an endpoint's latest deliveries for debugging,
 // scoped to the owning user.
 func (r *Repository) RecentDeliveries(ctx context.Context, userID, endpointID string, limit int) ([]Delivery, error) {
-	if limit <= 0 || limit > 100 {
+	// Sin pedido son 25; pedir mas que el tope devuelve el tope.
+	if limit <= 0 {
 		limit = 25
+	} else if limit > 100 {
+		limit = 100
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT d.id::text, d.endpoint_id::text, d.event_type, d.payload, d.status,

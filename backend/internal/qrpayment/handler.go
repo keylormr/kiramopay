@@ -555,7 +555,8 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
@@ -575,7 +576,8 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	var req VerificationDecisionRequest
 	// Body is optional; an empty/invalid body just means no reason was given.
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
@@ -597,7 +599,8 @@ func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	merchant, err := h.service.SetCommission(r.Context(), id, adminID, req.CommissionBps)
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.SetCommission(r.Context(), id, adminID, req.CommissionBps, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
