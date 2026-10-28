@@ -281,18 +281,22 @@ func TestToolsDeclarations(t *testing.T) {
 
 func TestSpendingSummaryAggregates(t *testing.T) {
 	tx := &fakeTx{records: []transaction.TransactionRecord{
-		{Type: "sinpe_send", Amount: 300_000, Status: "completed"},
-		{Type: "sinpe_send", Amount: 200_000, Status: "completed"},
-		{Type: "qr_payment", Amount: 100_000, Status: "completed"},
-		{Type: "sinpe_receive", Amount: 999_000, Status: "completed"}, // incoming — excluded
-		{Type: "qr_payment", Amount: 50_000, Status: "pending"},       // not completed — excluded
+		{Type: "sinpe_send", Amount: 300_000, Currency: "CRC", Status: "completed"},
+		{Type: "sinpe_send", Amount: 200_000, Currency: "CRC", Status: "completed"},
+		{Type: "qr_payment", Amount: 100_000, Currency: "CRC", Status: "completed"},
+		{Type: "sinpe_receive", Amount: 999_000, Currency: "CRC", Status: "completed"}, // incoming — excluded
+		{Type: "qr_payment", Amount: 50_000, Currency: "CRC", Status: "pending"},       // not completed — excluded
 	}}
 	out, _, err := newTestTools(&fakeWallet{}, tx).Invoke(context.Background(), "u1", "spending_summary", nil)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
 	m := out.(map[string]any)
-	if got := m["total_outgoing"].(float64); got != 6000 { // (300k+200k+100k)/100
+	filas, _ := m["by_currency"].([]map[string]any)
+	if len(filas) != 1 || filas[0]["currency"] != "CRC" {
+		t.Fatalf("by_currency = %v", m["by_currency"])
+	}
+	if got := filas[0]["total_outgoing"].(float64); got != 6000 { // (300k+200k+100k)/100
 		t.Errorf("total_outgoing = %v, want 6000", got)
 	}
 }
@@ -303,7 +307,13 @@ func TestGetBalanceConvertsToMajorUnits(t *testing.T) {
 		t.Fatalf("invoke: %v", err)
 	}
 	m := out.(map[string]any)
-	if m["crc"].(float64) != 15000 || m["usd"].(float64) != 50 {
+	cuentas, _ := m["accounts"].([]map[string]any)
+	got := map[string]float64{}
+	for _, c := range cuentas {
+		moneda, _ := c["currency"].(string)
+		got[moneda], _ = c["balance"].(float64)
+	}
+	if got["CRC"] != 15000 || got["USD"] != 50 {
 		t.Errorf("balance = %v", m)
 	}
 }

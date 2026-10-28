@@ -147,6 +147,8 @@ export const CryptoView: React.FC = () => {
   const { state, dispatch } = useApp();
   const { t, language } = useLanguage();
   // Single shared USD->CRC rate (same source as the wallet + balance summary).
+  // null: the server has not given one. Every colones figure on this screen then
+  // stays out instead of being computed with a made-up rate.
   const crcRate = useUsdToCrcRate();
 
   // El aviso de la operacion repetida (ver trasOperacionRepetida): null si no
@@ -273,7 +275,7 @@ export const CryptoView: React.FC = () => {
     acc + (asset.balance * asset.currentPrice), 0
   );
 
-  const totalCrcValue = totalUsdValue * crcRate;
+  const totalCrcValue = crcRate === null ? null : totalUsdValue * crcRate;
 
   // La ganancia solo se calcula sobre lo que tiene costo conocido. Un activo
   // con costo cero (el que vuelve al saldo desde una posicion de staking sin
@@ -483,8 +485,11 @@ export const CryptoView: React.FC = () => {
   };
 
   // Un monto en colones derivado de un precio en dolares. Por debajo de cien
-  // colones los centimos si importan (una unidad de ADA vale unos 300).
-  const crcDesdeUsd = (usd: number) => {
+  // colones los centimos si importan (una unidad de ADA vale unos 300). Sin tipo
+  // de cambio del servidor no hay monto en colones: null, y cada lugar que lo
+  // muestra se calla en vez de pintar una cifra con una tasa que nadie dio.
+  const crcDesdeUsd = (usd: number): string | null => {
+    if (crcRate === null) return null;
     const crc = usd * crcRate;
     return crc < 100 ? formatMoney(crc, 'CRC', { decimals: 2 }) : formatCrc(crc);
   };
@@ -637,13 +642,16 @@ export const CryptoView: React.FC = () => {
     if (!selectedAsset || !amount || isTrading) return;
     const cryptoAmount = parseFloat(amount);
     if (!(cryptoAmount > 0)) return;
+    // El servidor liquida con su propia tasa, pero quien vende en colones tiene
+    // que ver cuanto recibe antes de confirmar: sin tipo de cambio no se puede.
+    if (convertTo === 'CRC' && crcRate === null) return;
     const fiatAmount = cryptoAmount * selectedAsset.currentPrice;
     const payload = {
       asset: selectedAsset.symbol,
       amount: cryptoAmount,
       price: selectedAsset.currentPrice,
       toCurrency: convertTo,
-      toAmount: convertTo === 'CRC' ? fiatAmount * crcRate : fiatAmount,
+      toAmount: convertTo === 'CRC' && crcRate !== null ? fiatAmount * crcRate : fiatAmount,
     };
 
     setIsTrading(true);
@@ -996,10 +1004,10 @@ export const CryptoView: React.FC = () => {
           className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
           style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
         />
-        <div className="relative flex justify-between items-start mb-4">
+        <div className="relative flex flex-col gap-3 min-[420px]:flex-row min-[420px]:justify-between min-[420px]:items-start mb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t('total_portfolio')}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
               <div aria-live="polite">
                 {isLoading ? (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
@@ -1022,10 +1030,12 @@ export const CryptoView: React.FC = () => {
               {sinPrecios ? SIN_DATO : formatUsd(totalUsdValue)}
             </h1>
             {!sinPrecios && (
-              <p className="text-white/70 text-sm mt-1 tabular-nums">{formatCrc(totalCrcValue)}</p>
+              <p className="text-white/70 text-sm mt-1 tabular-nums">
+                {totalCrcValue === null ? t('crypto_crc_unavailable') : formatCrc(totalCrcValue)}
+              </p>
             )}
           </div>
-          <div className="text-right shrink-0">
+          <div className="min-[420px]:text-right shrink-0">
             {/* Sin precios, la ganancia se calcula contra cero y sale una
                 perdida enorme que nadie tuvo: es la mentira mas cara de esta
                 pantalla, peor que el total. Se muestra neutra. */}
@@ -1041,7 +1051,7 @@ export const CryptoView: React.FC = () => {
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
                 aria-label={t('crypto_refresh_prices')}
-                className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors ml-auto"
+                className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors min-[420px]:ml-auto"
               >
                 <Icons.RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
                 {formatTimeAgo(lastUpdated)}
@@ -1067,19 +1077,19 @@ export const CryptoView: React.FC = () => {
         <div className="relative flex gap-2 mt-4">
           <button
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.Plus size={16} /> {t('buy')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
             onClick={openConvertSheet}
-            className="flex-1 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
           </button>
@@ -1136,13 +1146,13 @@ export const CryptoView: React.FC = () => {
                     >
                       {asset.icon}
                     </div>
-                    <div className="flex-1 text-left">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold uv-text-primary">{asset.name}</span>
-                        <span className="font-bold uv-text-primary">{montoUsd(value, asset.currentPrice)}</span>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="font-bold uv-text-primary truncate">{asset.name}</span>
+                        <span className="font-bold uv-text-primary shrink-0 whitespace-nowrap">{montoUsd(value, asset.currentPrice)}</span>
                       </div>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                      <div className="flex justify-between items-center gap-2 mt-1">
+                        <span className="text-sm text-gray-500 truncate">{formatCrypto(asset.balance)} {asset.symbol}</span>
                         {/* Ganancia o perdida desde la compra, no el cambio de
                             24 h ni la tendencia de la curva: se rotula para
                             que no se lean como la misma cifra. */}
@@ -1278,7 +1288,7 @@ export const CryptoView: React.FC = () => {
                             cartera ya se muestra asi arriba, y cada moneda no. */}
                         <span className="text-sm text-gray-500 tabular-nums truncate min-w-0">
                           {asset.symbol}
-                          {asset.currentPrice > 0 && <> · ≈ {crcDesdeUsd(asset.currentPrice)}</>}
+                          {asset.currentPrice > 0 && crcDesdeUsd(asset.currentPrice) !== null && <> · ≈ {crcDesdeUsd(asset.currentPrice)}</>}
                         </span>
                         {asset.currentPrice > 0 && (
                           <span className="flex flex-col items-end leading-tight">
@@ -1447,7 +1457,9 @@ export const CryptoView: React.FC = () => {
                 <div className="text-2xl font-black uv-text-primary leading-tight tabular-nums">{montoUsd(selectedAsset.currentPrice, selectedAsset.currentPrice)}</div>
                 {selectedAsset.currentPrice > 0 ? (
                   <div className="text-sm font-medium tabular-nums">
-                    <span className="uv-text-secondary">≈ {crcDesdeUsd(selectedAsset.currentPrice)}</span>
+                    {crcDesdeUsd(selectedAsset.currentPrice) !== null && (
+                      <span className="uv-text-secondary">≈ {crcDesdeUsd(selectedAsset.currentPrice)}</span>
+                    )}
                     <span className={`ml-2 ${selectedAsset.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                       {selectedAsset.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(selectedAsset.priceChange24h).toFixed(2)}% (24h)
                     </span>
@@ -1475,7 +1487,7 @@ export const CryptoView: React.FC = () => {
                   </p>
                   <p className="text-lg font-semibold uv-text-primary tabular-nums">
                     ≈ {montoUsd(valorActual, selectedAsset.currentPrice)}
-                    {selectedAsset.currentPrice > 0 && (
+                    {selectedAsset.currentPrice > 0 && crcDesdeUsd(valorActual) !== null && (
                       <span className="ml-2 text-sm font-medium uv-text-secondary">{crcDesdeUsd(valorActual)}</span>
                     )}
                   </p>
@@ -1601,7 +1613,8 @@ export const CryptoView: React.FC = () => {
                 la da en dolares. */}
             {selectedAsset && selectedAsset.currentPrice > 0 && (
               <p className="text-sm uv-text-secondary mt-1 tabular-nums">
-                1 {selectedAsset.symbol} = {formatUsd(selectedAsset.currentPrice)} ≈ {crcDesdeUsd(selectedAsset.currentPrice)}
+                1 {selectedAsset.symbol} = {formatUsd(selectedAsset.currentPrice)}
+                {crcDesdeUsd(selectedAsset.currentPrice) !== null && <> ≈ {crcDesdeUsd(selectedAsset.currentPrice)}</>}
               </p>
             )}
           </div>
@@ -1714,7 +1727,7 @@ export const CryptoView: React.FC = () => {
             </div>
             {/* El estimado va en la moneda en que se recibe: con colones
                 marcado (la opcion por defecto) se mostraba en dolares. */}
-            {amount && selectedAsset && (
+            {amount && selectedAsset && !(convertTo === 'CRC' && crcRate === null) && (
               <p className="text-sm text-gray-500 mt-2 tabular-nums">
                 ≈ {selectedAsset.currentPrice > 0 && convertTo === 'CRC'
                   ? crcDesdeUsd(parseFloat(amount) * selectedAsset.currentPrice)
@@ -1742,9 +1755,12 @@ export const CryptoView: React.FC = () => {
           {sinPrecio(selectedAsset) && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
           )}
+          {convertTo === 'CRC' && crcRate === null && (
+            <p className="text-sm text-center uv-text-muted">{t('crypto_sell_crc_needs_rate')}</p>
+          )}
           <button
             onClick={handleSell}
-            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0) || sinPrecio(selectedAsset)}
+            disabled={isTrading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > (selectedAsset?.balance || 0) || sinPrecio(selectedAsset) || (convertTo === 'CRC' && crcRate === null)}
             className="w-full bg-red-500 text-white py-4 rounded-xl font-bold disabled:opacity-50"
           >
             {isTrading ? t('processing') : <>{t('crypto_sell_and_receive')} {convertTo}</>}

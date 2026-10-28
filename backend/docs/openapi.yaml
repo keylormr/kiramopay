@@ -1399,6 +1399,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/services/providers:
+    get:
+      tags: [Services]
+      summary: Companies and carriers the Services screen offers
+      description: >-
+        The companies a bill can be paid to (the `provider_code` that
+        POST /api/v1/services/pay-bill accepts), the carriers a phone can be
+        topped up through (the `operator` that POST /api/v1/services/recharge
+        accepts) and whether the payment can be delivered. The screen builds its
+        list from this response and does not carry one of its own.
+        `agreements_active` is false while there is no agreement with the
+        companies or the carriers (production today): both payment endpoints
+        answer SIN_CONVENIO and nothing is charged, so the client says so before
+        the person fills in the form.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceCatalog'
+
   /api/v1/services/saved:
     get:
       tags: [Services]
@@ -1746,7 +1770,8 @@ paths:
                 $ref: '#/components/schemas/CryptoTransactionRecord'
         '400':
           description: >-
-            CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or
+            CRYPTO_INVALID_AMOUNT (also when the amount is worth less than one
+            cent at the market price), QR_INVALIDO, CRYPTO_SEND_SELF, or
             INVALID_BODY.
           content:
             application/json:
@@ -1832,7 +1857,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CryptoTransactionRecord'
         '400':
-          description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          description: >-
+            CRYPTO_INVALID_AMOUNT, CRYPTO_INVALID_PAIR (`from_asset` and
+            `to_asset` are the same asset, in any letter case) or INVALID_BODY.
           content:
             application/json:
               schema:
@@ -2811,7 +2838,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Page size. Out of range (or absent), 50.
+          description: Page size. Absent, 50; above the maximum, the maximum.
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
         - name: before
           in: query
@@ -3764,15 +3791,30 @@ paths:
         '200':
           description: Share paid
         '400':
-          description: PAY_FAILED — the share could not be paid.
+          description: >-
+            PAY_FAILED — the share could not be paid (the split is gone or no
+            longer active, or the share is no longer pending).
+            TRANSFER_BLOCKED — the risk engine stopped the payment. Nothing
+            moved.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: >-
-            RECIPIENT_UNAVAILABLE — whoever created the split asked to delete
-            the account. Nothing moved.
+            INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or
+            MONTHLY_LIMIT_EXCEEDED — the payment is over what the account can
+            spend. RECIPIENT_UNAVAILABLE — whoever created the split asked to
+            delete the account. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '428':
+          description: >-
+            MFA_REQUIRED — a share of 100,000 colones or more needs a verified
+            second factor. Nothing moved: verify a high_value_tx challenge and
+            retry the same request.
           content:
             application/json:
               schema:
@@ -6022,11 +6064,13 @@ paths:
       tags: [Admin]
       summary: Record a company deposit into the promotions fund
       description: >-
-        Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This
-        RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match
-        a real deposit: a reference (transfer or receipt number) is mandatory
-        and the funding is audited with high risk. The idempotency key makes a
-        double tap fund once.
+        Posts debit SYSTEM:CAPITAL:CRC / credit SYSTEM:PROMOTIONS:CRC. This
+        does NOT raise the published reserves: the reserve is exactly what is
+        owed to users, and this money belongs to the company until a reward is
+        redeemed (each redemption moves it from capital to the reserve). It must
+        still match a real deposit: a reference (transfer or receipt number) is
+        mandatory and the funding is audited with high risk. The idempotency key
+        makes a double tap fund once.
       security:
         - bearerAuth: []
       requestBody:
@@ -7428,18 +7472,30 @@ components:
           additionalProperties: false
           required: [fuente, usd_crc, compra]
           description: >-
-            Official USD/CRC reference rate (BCCR, as republished by Hacienda),
-            refreshed hourly. `usd_crc` is the rate the app charges with, in
-            both directions. If the source cannot confirm it for 96 hours,
-            crypto quoted in colones stops trading rather than using a stale
-            number; `ultimo_error` says why.
+            Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN`
+            loaded it comes from the Banco Central de Costa Rica (SDDE) and, if
+            that fails, from Hacienda, which republishes the same reference rate;
+            without the token it comes from Hacienda and `falta` names the
+            missing variable. `fuente` is where the last confirmed rate really
+            came from (`bccr` or `hacienda`), empty until one is confirmed.
+            `usd_crc` is the rate the app charges with, in both directions. If
+            the source cannot confirm it for 96 hours, crypto quoted in colones
+            stops trading rather than using a stale number; `ultimo_error` says
+            why, including why the BCCR was skipped when Hacienda covered it.
           properties:
-            fuente: { type: string, example: hacienda }
+            fuente: { type: string, example: bccr }
             usd_crc: { type: number, example: 450.06 }
             compra: { type: number, example: 444.22 }
             fecha_fuente: { type: string, example: '2026-09-11' }
             ultima_confirmacion: { type: string, format: date-time }
             ultimo_error: { type: string }
+            falta:
+              type: array
+              description: >-
+                Names (never values) of the environment variables that are not
+                loaded and keep the rate from coming from the BCCR.
+              items: { type: string }
+              example: [BCCR_TOKEN]
         crypto_prices:
           type: object
           description: >-
@@ -7797,6 +7853,47 @@ components:
           description: >-
             Present and true when this response repeats a payment already made
             under the same `idempotency_key`: nothing was charged now.
+
+    ServiceCatalog:
+      type: object
+      required: [agreements_active, providers, operators]
+      properties:
+        agreements_active:
+          type: boolean
+          description: >-
+            False while the payment cannot be delivered (no agreement with the
+            companies or the carriers). Never assume true when it is absent.
+        providers:
+          type: array
+          description: Active providers, ordered by category and name.
+          items:
+            type: object
+            required: [code, name, category]
+            properties:
+              code:
+                type: string
+                description: The `provider_code` to send to pay-bill.
+                example: ice
+              name:
+                type: string
+                example: ICE — Electricidad
+              category:
+                type: string
+                description: electricity, water, telecom or internet.
+                example: electricity
+        operators:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code:
+                type: string
+                description: The `operator` to send to recharge.
+                example: kolbi
+              name:
+                type: string
+                example: Kölbi (ICE)
 
     RechargeResponse:
       type: object
@@ -8410,4 +8507,14 @@ components:
               currency: { type: string }
               user_liabilities_minor: { type: integer }
               reserve_balance_minor: { type: integer }
+              difference_minor:
+                type: integer
+                description: >-
+                  Reserve minus user liabilities, in minor units and signed
+                  (negative when the reserve falls short). Zero when the reserve
+                  is exactly what is owed to users. Read this, not ratio_pct:
+                  a percentage rounded to one decimal hides small shortfalls.
+              fully_backed:
+                type: boolean
+                description: The reserve covers everything owed to users.
               ratio_pct: { type: number }

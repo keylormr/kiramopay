@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -144,16 +145,59 @@ func (h *Handler) PayShare(w http.ResponseWriter, r *http.Request) {
 	response.NoContent(w)
 }
 
+// motivosDelModulo son los rechazos propios de la division: salen con su texto
+// fijo, sin el prefijo del modulo ni el rastro de las capas por las que subio.
+var motivosDelModulo = []struct {
+	err error
+	msg string
+}{
+	{ErrGroupNotFound, "split not found"},
+	{ErrNotActive, "split is no longer active"},
+	{ErrNoShareForUser, "no share for this user in the split"},
+	{ErrCuotaNoReclamable, "the share is no longer pending"},
+	{ErrUnauthenticated, "user not authenticated"},
+}
+
 // respuestaDelPago traduce el rechazo del pago de una cuota.
+//
+// Los motivos del dinero salen con el MISMO codigo que en el resto de las
+// salidas (SINPE, recibos, pagos), para que la pantalla los explique igual. El
+// texto que viaja es el del motivo y no err.Error(): el error sube envuelto en
+// prefijos internos ("settle split share: ...") y un 4xx sale tal cual. Lo que
+// no se reconoce es un 500: nada que corregir en el pedido, y response.Error
+// deja el detalle en el log y no lo manda al cliente.
 func respuestaDelPago(err error) (int, string, string) {
+	switch {
 	// Quien creo el reparto pidio eliminar su cuenta: el libro rechazo limpio y
 	// nada se movio. Sin el texto interno, que le diria a un tercero que esa
 	// cuenta esta cerrada.
-	if errors.Is(err, ledger.ErrCuentaCerrada) {
+	case errors.Is(err, ledger.ErrCuentaCerrada):
 		return http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE",
 			"the recipient account cannot receive money"
+	// El segundo factor: desde 100.000 colones el pago pide un desafio
+	// verificado. Se verifica y se reintenta la misma peticion.
+	case errors.Is(err, transaction.ErrMFARequired):
+		return http.StatusPreconditionRequired, "MFA_REQUIRED",
+			"verified MFA challenge required for this amount"
+	case errors.Is(err, transaction.ErrSaldoInsuficiente),
+		errors.Is(err, ledger.ErrInsufficientFunds):
+		return http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
+			transaction.ErrSaldoInsuficiente.Error()
+	case errors.Is(err, transaction.ErrDailyLimitExceeded):
+		return http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED",
+			transaction.ErrDailyLimitExceeded.Error()
+	case errors.Is(err, transaction.ErrMonthlyLimitExceeded):
+		return http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
+			transaction.ErrMonthlyLimitExceeded.Error()
+	case errors.Is(err, transaction.ErrBloqueadoPorRiesgo):
+		return http.StatusBadRequest, "TRANSFER_BLOCKED", transaction.ErrBloqueadoPorRiesgo.Error()
 	}
-	return http.StatusBadRequest, "PAY_FAILED", err.Error()
+	for _, m := range motivosDelModulo {
+		if errors.Is(err, m.err) {
+			return http.StatusBadRequest, "PAY_FAILED", m.msg
+		}
+	}
+	return http.StatusInternalServerError, "PAY_FAILED", err.Error()
 }
 
 func (h *Handler) DeclineShare(w http.ResponseWriter, r *http.Request) {

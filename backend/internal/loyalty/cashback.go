@@ -87,6 +87,14 @@ func (s *Service) canjearCashback(ctx context.Context, reward *Reward, rd *Redem
 	if s.ledger == nil {
 		return ErrPremioSinEntrega
 	}
+	// El premio sube lo que se le debe a la persona; la reserva tiene que subir
+	// lo mismo. Esa plata sale del fondo de promociones, que es de la empresa
+	// (capital propio): el capital la pone en la reserva en este mismo asiento.
+	entradas := []ledger.Entry{
+		{Account: ledger.Account{SystemCode: ledger.SystemPromotionsCRC}, Side: ledger.Debit, AmountMinor: reward.CashbackMinor, Currency: "CRC"},
+		{Account: ledger.Account{UserID: rd.UserID}, Side: ledger.Credit, AmountMinor: reward.CashbackMinor, Currency: "CRC"},
+	}
+	entradas = append(entradas, ledger.CapitalAReserva("CRC", reward.CashbackMinor)...)
 	_, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    "Canje de puntos: " + reward.Name,
 		IdempotencyKey: "loyalty:canje:" + rd.ID,
@@ -95,10 +103,7 @@ func (s *Service) canjearCashback(ctx context.Context, reward *Reward, rd *Redem
 			"reward_id":     reward.ID,
 			"redemption_id": rd.ID,
 		},
-		Entries: []ledger.Entry{
-			{Account: ledger.Account{SystemCode: ledger.SystemPromotionsCRC}, Side: ledger.Debit, AmountMinor: reward.CashbackMinor, Currency: "CRC"},
-			{Account: ledger.Account{UserID: rd.UserID}, Side: ledger.Credit, AmountMinor: reward.CashbackMinor, Currency: "CRC"},
-		},
+		Entries: entradas,
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
 			saldo, err := saldoPromocionesEnTx(ctx, tx)
 			if err != nil {
@@ -139,13 +144,16 @@ func (s *Service) canjearCashback(ctx context.Context, reward *Reward, rd *Redem
 // billetera desde la cuenta de promociones.
 const TipoCashback = "loyalty_cashback"
 
-// FondearPromociones registra que la empresa deposito `montoMinor` para
-// promociones: debito SYSTEM:RESERVE:CRC, credito SYSTEM:PROMOTIONS:CRC.
+// FondearPromociones registra que la empresa puso `montoMinor` de su propia
+// plata para promociones: debito SYSTEM:CAPITAL:CRC, credito
+// SYSTEM:PROMOTIONS:CRC.
 //
-// ESTO SUBE LA RESERVA PUBLICADA en la prueba de reservas: tiene que
-// corresponder a un deposito real. Por eso exige una referencia (el numero de
-// transferencia o comprobante) y queda en el rastro de auditoria con riesgo
-// alto y el nombre de quien lo hizo.
+// NO SUBE LA RESERVA PUBLICADA: la reserva es exactamente lo que se le debe a
+// los usuarios, y esta plata es de la empresa hasta que se regala. Pasa a la
+// reserva, de a poco, con cada canje (ver canjearCashback). Aun asi tiene que
+// corresponder a un deposito real en la cuenta de la empresa. Por eso exige
+// una referencia (el numero de transferencia o comprobante) y queda en el
+// rastro de auditoria con riesgo alto y el nombre de quien lo hizo.
 func (s *Service) FondearPromociones(ctx context.Context, adminID string, montoMinor int64, referencia, llave string) (int64, error) {
 	referencia = strings.TrimSpace(referencia)
 	llave = strings.TrimSpace(llave)
@@ -161,7 +169,7 @@ func (s *Service) FondearPromociones(ctx context.Context, adminID string, montoM
 		CreatedBy:      adminID,
 		Metadata:       map[string]any{"referencia": referencia},
 		Entries: []ledger.Entry{
-			{Account: ledger.Account{SystemCode: ledger.SystemReserveCRC}, Side: ledger.Debit, AmountMinor: montoMinor, Currency: "CRC"},
+			{Account: ledger.Account{SystemCode: ledger.SystemCapitalCRC}, Side: ledger.Debit, AmountMinor: montoMinor, Currency: "CRC"},
 			{Account: ledger.Account{SystemCode: ledger.SystemPromotionsCRC}, Side: ledger.Credit, AmountMinor: montoMinor, Currency: "CRC"},
 		},
 	})

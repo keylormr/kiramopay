@@ -609,8 +609,12 @@ func valorDe(s *string) string {
 // RespuestasSinEntregar lista las que pasaron a operaciones, la de plazo mas
 // cercano primero.
 func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]RespuestaPendiente, error) {
-	if limite <= 0 || limite > 100 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope. Antes volvia
+	// al valor por defecto, y `limit=500` traia menos filas que `limit=100`.
+	if limite <= 0 {
 		limite = 50
+	} else if limite > 100 {
+		limite = 100
 	}
 	filas, err := s.pool.Query(ctx, `
 		SELECT r.id::text, r.kind, r.created_at, r.respond_by, r.attempts, COALESCE(r.last_error, ''),
@@ -661,8 +665,12 @@ func (s *Service) RespuestasSinEntregar(ctx context.Context, limite int) ([]Resp
 // aunque no este verificado, y no las que operaciones entrego por otro medio. La
 // mas reciente primero, sin la direccion: se borro al entregarla.
 func (s *Service) EnviadasSinConfirmar(ctx context.Context, limite int) ([]RespuestaEnviadaSinConfirmar, error) {
-	if limite <= 0 || limite > 100 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope. Antes volvia
+	// al valor por defecto, y `limit=500` traia menos filas que `limit=100`.
+	if limite <= 0 {
 		limite = 50
+	} else if limite > 100 {
+		limite = 100
 	}
 	filas, err := s.pool.Query(ctx, `
 		SELECT r.id::text, r.kind, r.delivered_at, r.user_id::text, u.deleted_at IS NOT NULL

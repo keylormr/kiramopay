@@ -81,7 +81,7 @@ describe('LoyaltyView — pestana Ganar', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Ganar' }));
 
-    for (const nombre of ['SINPE', 'Servicios', 'Crypto', 'Recargas', 'Pago con QR']) {
+    for (const nombre of ['SINPE', 'Servicios', 'Cripto', 'Recargas', 'Pago con QR']) {
       expect(screen.getByText(nombre)).toBeInTheDocument();
     }
     expect(screen.queryByText(/^Services$/i)).toBeNull();

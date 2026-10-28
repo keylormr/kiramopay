@@ -92,6 +92,18 @@ var casosDeAlcance = []casoDeAlcance{
 	// De KiramoPay.
 	{mensaje: "cual es mi saldo?", enAlcance: true, idioma: "es"},
 	{mensaje: "cuanto gaste este mes?", enAlcance: true},
+	// Las dos preguntas que la app sugiere y que el asistente contestaba mal
+	// (saldo con las dos monedas mezcladas, gasto del mes sumando los ultimos
+	// movimientos): son de la app, tienen que llegar al modelo principal.
+	{mensaje: "How much did I spend this month?", enAlcance: true, idioma: "en"},
+	{mensaje: "cual es mi saldo total entre colones y dolares?", enAlcance: true},
+	{mensaje: "cuanto tengo en dolares?", enAlcance: true},
+	{
+		mensaje:       "y en dolares?",
+		prevUser:      "cuanto gaste este mes?",
+		prevAssistant: "Este mes gastaste ₡120.000.",
+		enAlcance:     true,
+	},
 	{mensaje: "como envio plata por SINPE Movil?", enAlcance: true},
 	{mensaje: "que es SINPE Movil?", enAlcance: true},
 	{mensaje: "a cuanto esta el tipo de cambio en la app?", enAlcance: true},

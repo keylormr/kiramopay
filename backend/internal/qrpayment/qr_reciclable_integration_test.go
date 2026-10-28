@@ -31,7 +31,7 @@ func comercioVerificado(t *testing.T, svc *qrpayment.Service, owner string) *qrp
 	if err != nil {
 		t.Fatalf("register merchant: %v", err)
 	}
-	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba); err != nil {
+	if _, err := svc.ApproveMerchant(ctx, m.ID, revisorDePrueba, qrpayment.ActorContext{}); err != nil {
 		t.Fatalf("approve merchant: %v", err)
 	}
 	return m

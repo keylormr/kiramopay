@@ -82,17 +82,17 @@ describe('HomeView: saldo total de la tarjeta principal', () => {
     setup();
 
     // 500.000 colones + 445 dolares (a 0,002 USD por colon) = 722.500 colones.
-    expect(tarjetaDelSaldo('Balance Total').getByText('₡722,500.00')).toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').getByText('₡722,500.00')).toBeInTheDocument();
     // La cuenta base sola ya no se presenta como el total.
-    expect(tarjetaDelSaldo('Balance Total').queryByText('₡500,000.00')).not.toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').queryByText('₡500,000.00')).not.toBeInTheDocument();
   });
 
   it('la linea en dolares sigue ahi, traducida y con el formato de montos de la app', () => {
     setup();
 
-    expect(tarjetaDelSaldo('Balance Total').getByText('≈ $1,445.00 USD en total')).toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').getByText('≈ $1,445.00 USD en total')).toBeInTheDocument();
     // El texto fijo en ingles ya no se cuela en la app en espanol.
-    expect(tarjetaDelSaldo('Balance Total').queryByText(/USD Total/)).not.toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').queryByText(/USD Total/)).not.toBeInTheDocument();
   });
 
   it('con la app en ingles la linea en dolares se lee en ingles', async () => {
@@ -108,7 +108,7 @@ describe('HomeView: saldo total de la tarjeta principal', () => {
     appState.accounts = [colones(500_000, undefined), dolares(445)];
     setup();
 
-    const tarjeta = tarjetaDelSaldo('Balance Total');
+    const tarjeta = tarjetaDelSaldo('Saldo total');
     expect(tarjeta.getByText('—')).toBeInTheDocument();
     expect(tarjeta.queryByText('₡500,000.00')).not.toBeInTheDocument();
     expect(tarjeta.queryByText(/≈/)).not.toBeInTheDocument();
@@ -118,6 +118,28 @@ describe('HomeView: saldo total de la tarjeta principal', () => {
     appState.accounts = [colones(500_000, 0), dolares(445)];
     setup();
 
-    expect(tarjetaDelSaldo('Balance Total').getByText('—')).toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').getByText('—')).toBeInTheDocument();
+  });
+});
+
+// Un guion solo no explica nada: quien lo ve no sabe si cargo mal o si no hay
+// dato. Sin tipo de cambio, la tarjeta lo dice con palabras y sin cifra inventada.
+describe('HomeView: sin tipo de cambio del dolar', () => {
+  it('dice que el total no esta disponible y por que', () => {
+    appState.accounts = [colones(500_000, undefined), dolares(445)];
+    setup();
+
+    const tarjeta = tarjetaDelSaldo('Saldo total');
+    expect(tarjeta.getByText('—')).toBeInTheDocument();
+    expect(tarjeta.getByText(/Total no disponible por ahora/)).toBeInTheDocument();
+    // Ni el total ni la linea en dolares: ninguna cifra salida de una tasa que nadie dio.
+    expect(tarjeta.queryByText(/≈ \$/)).not.toBeInTheDocument();
+    expect(tarjeta.queryByText(/722/)).not.toBeInTheDocument();
+  });
+
+  it('con tipo de cambio no aparece el aviso', () => {
+    setup();
+
+    expect(tarjetaDelSaldo('Saldo total').queryByText(/Total no disponible/)).not.toBeInTheDocument();
   });
 });

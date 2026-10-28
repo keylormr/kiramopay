@@ -189,6 +189,28 @@ describe('CryptoView — el servidor decide antes que la pantalla', () => {
     expect(operacionesDespachadas()).toEqual([]);
   });
 
+  // Convertir un activo en si mismo: el servidor lo rechaza con su propio codigo
+  // (CRYPTO_INVALID_PAIR) y la pantalla lo decia con el texto generico de cripto.
+  it('dice que no se puede convertir un activo en si mismo', async () => {
+    mocks.api.crypto.convert.mockResolvedValue({
+      success: false,
+      error: { code: 'CRYPTO_INVALID_PAIR', message: 'cannot convert an asset into itself' },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    const d = await abrirConvertir(user);
+    await user.type(d.getByPlaceholderText('0.00'), '0.1');
+    await user.click(d.getByRole('button', { name: 'Convertir' }));
+
+    expect(
+      await screen.findByText('Elige dos activos distintos: no se puede convertir una cripto en sí misma.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/cannot convert an asset/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos completar la operación/)).not.toBeInTheDocument();
+    expect(operacionesDespachadas()).toEqual([]);
+  });
+
   // Esta prueba tambien cubre el destino por defecto: la hoja reusaba el estado
   // de la venta, que arranca en 'CRC', y ningun activo del selector coincidia.
   // El <select> mostraba la primera opcion pero el estado seguia en 'CRC', asi

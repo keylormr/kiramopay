@@ -10,7 +10,17 @@ import { fechaCorta } from '@/utils/fechaPlazo';
 const ISO = '2026-09-04T15:30:00Z';
 
 vi.mock('@/api', () => ({
-  getApiLayer: () => ({ services: { payBill: vi.fn(), recharge: vi.fn() }, mfa: { totpVerify: vi.fn() } }),
+  getApiLayer: () => ({
+    services: {
+      getCatalog: vi.fn().mockResolvedValue({
+        success: true,
+        data: { agreementsActive: true, providers: [], operators: [{ code: 'kolbi', name: 'Kolbi' }] },
+      }),
+      payBill: vi.fn(),
+      recharge: vi.fn(),
+    },
+    mfa: { totpVerify: vi.fn() },
+  }),
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 

@@ -64,3 +64,62 @@ describe('HttpServicesRepository — la llave del pago y de la recarga', () => {
     expect(res.data?.repetida).toBeUndefined();
   });
 });
+
+// La lista de empresas y operadores sale del servidor (GET /services/providers):
+// la pantalla ya no la lleva escrita a mano. El mismo endpoint dice si el cobro
+// se puede entregar, para avisarlo antes de que la persona llene el formulario.
+describe('HttpServicesRepository.getCatalog', () => {
+  it('trae empresas, operadores y si hay convenios', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        agreements_active: true,
+        providers: [{ code: 'ice', name: 'ICE — Electricidad', category: 'electricity' }],
+        operators: [{ code: 'kolbi', name: 'Kölbi (ICE)' }],
+      },
+    });
+    const repo = new HttpServicesRepository({ get, post: vi.fn() } as unknown as HttpClient);
+
+    const res = await repo.getCatalog();
+
+    expect(get).toHaveBeenCalledWith('/api/v1/services/providers');
+    expect(res.success).toBe(true);
+    expect(res.data).toEqual({
+      agreementsActive: true,
+      providers: [{ code: 'ice', name: 'ICE — Electricidad', category: 'electricity' }],
+      operators: [{ code: 'kolbi', name: 'Kölbi (ICE)' }],
+    });
+  });
+
+  it('sin convenios lo dice: no se asume que si', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: { agreements_active: false, providers: [], operators: [] },
+    });
+    const repo = new HttpServicesRepository({ get, post: vi.fn() } as unknown as HttpClient);
+
+    const res = await repo.getCatalog();
+
+    expect(res.data?.agreementsActive).toBe(false);
+  });
+
+  it('una respuesta sin listas ni bandera no revienta y no ofrece cobros', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: {} });
+    const repo = new HttpServicesRepository({ get, post: vi.fn() } as unknown as HttpClient);
+
+    const res = await repo.getCatalog();
+
+    expect(res.data).toEqual({ agreementsActive: false, providers: [], operators: [] });
+  });
+
+  it('un fallo conserva el codigo del servidor', async () => {
+    const error = { code: 'RATE_LIMITED', message: 'Demasiadas solicitudes.' };
+    const get = vi.fn().mockResolvedValue({ success: false, error });
+    const repo = new HttpServicesRepository({ get, post: vi.fn() } as unknown as HttpClient);
+
+    const res = await repo.getCatalog();
+
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('RATE_LIMITED');
+  });
+});

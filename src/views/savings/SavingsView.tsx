@@ -7,7 +7,7 @@ import { CampoMonto } from '@/components/CampoMonto';
 import { useSavingsStore, SavingsGoal } from '@/stores/savings.store';
 import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
-import { refreshAccounts } from '@/services/dataSync';
+import { refreshAccounts, refreshTransactions } from '@/services/dataSync';
 import type { Transaction } from '@/types';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
@@ -15,6 +15,15 @@ import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
 
 const hasBackend = !!import.meta.env.VITE_API_URL;
+
+// Depositar, retirar o borrar una meta con plata mueve el saldo Y deja una fila
+// en los movimientos. El Inicio solo refresca la lista cuando llega una
+// notificacion en vivo, asi que sin traerla aqui el movimiento no aparecia
+// hasta recargar la pagina.
+function traerSaldoYMovimientos() {
+  refreshAccounts().catch(() => {});
+  refreshTransactions().catch(() => {});
+}
 
 // La llave de depositar y retirar vive en intentoPendiente, por meta, sentido y
 // monto: la misma mientras se reintente lo mismo, aunque la app se cierre en
@@ -333,7 +342,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet debit locally.
-      if (hasBackend) refreshAccounts().catch(() => {});
+      if (hasBackend) traerSaldoYMovimientos();
       else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, false);
       if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
@@ -375,7 +384,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
       updateGoal(selectedGoal.id, { saved: res.data.saved });
       // http: the backend moved the money; sync the real balance.
       // mock: mirror the wallet credit locally.
-      if (hasBackend) refreshAccounts().catch(() => {});
+      if (hasBackend) traerSaldoYMovimientos();
       else if (!res.data.repetida) localWalletTx(amount, `${t('savings_title')}: ${selectedGoal.name}`, true);
       if (res.data.repetida) setAviso(t('savings_ya_hecho'));
 
@@ -408,7 +417,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
       }
       removeGoal(goal.id);
       // Deleting returns any held savings to the wallet.
-      if (hasBackend) refreshAccounts().catch(() => {});
+      if (hasBackend) traerSaldoYMovimientos();
       else if (goal.saved > 0) localWalletTx(goal.saved, `${t('savings_title')}: ${goal.name}`, true);
       setMetaAEliminar(null);
       if (goal.saved > 0) {

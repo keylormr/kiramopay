@@ -2,6 +2,7 @@ import type {
   IServicesRepository,
   PayBillRequest,
   RechargeRequest,
+  ServiceCatalog,
 } from '../../repositories/services.repository';
 import type { ConMarcaDeRepeticion } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
@@ -21,6 +22,26 @@ function conMarca<T>(dato: T, repetido?: boolean): ConMarcaDeRepeticion<T> {
 
 export class HttpServicesRepository implements IServicesRepository {
   constructor(private client: HttpClient) {}
+
+  async getCatalog(): Promise<ApiResponse<ServiceCatalog>> {
+    const res = await this.client.get<{
+      agreements_active?: boolean;
+      providers?: Array<{ code: string; name: string; category: string }>;
+      operators?: Array<{ code: string; name: string }>;
+    }>('/api/v1/services/providers');
+
+    if (!res.success || !res.data) {
+      return falla(res, 'FETCH_FAILED');
+    }
+
+    return apiSuccess({
+      // Sin la bandera no se asume que si: ofrecer un cobro que no se entrega es
+      // lo que este endpoint existe para evitar.
+      agreementsActive: res.data.agreements_active === true,
+      providers: (res.data.providers ?? []).map((p) => ({ code: p.code, name: p.name, category: p.category })),
+      operators: (res.data.operators ?? []).map((o) => ({ code: o.code, name: o.name })),
+    });
+  }
 
   async getSavedServices(): Promise<ApiResponse<SavedService[]>> {
     const res = await this.client.get<

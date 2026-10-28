@@ -11,6 +11,7 @@ import type {
   SavedService,
   Recharge,
 } from '@/types';
+import type { ServiceCatalog } from '../../repositories/services.repository';
 import { traducirFueraDeReact as tr } from '@/i18n/mensajesDeError';
 
 export const initialAccounts: Account[] = [
@@ -102,6 +103,35 @@ export const initialStakingPositions: StakingPosition[] = [
   // boton de reclamar que la app real no tiene.
   { id: 'stake1', asset: 'ETH', amount: 0.5, apy: 4.5, startDate: seAparto, earned: 0, locked: false },
 ];
+
+// La lista que ofrece la demo sin servidor. Con servidor sale de
+// GET /api/v1/services/providers; aqui es la misma forma, con convenios activos
+// para que la demo deje pagar.
+export const mockServiceCatalog: ServiceCatalog = {
+  agreementsActive: true,
+  providers: [
+    { code: 'ice', name: 'ICE Electricidad', category: 'electricity' },
+    { code: 'cnfl', name: 'CNFL', category: 'electricity' },
+    { code: 'esph', name: 'ESPH Heredia', category: 'electricity' },
+    { code: 'coopelesca', name: 'Coopelesca', category: 'electricity' },
+    { code: 'aya', name: 'AyA', category: 'water' },
+    { code: 'esph-agua', name: 'ESPH Agua', category: 'water' },
+    { code: 'kolbi', name: 'Kolbi', category: 'telecom' },
+    { code: 'claro', name: 'Claro', category: 'telecom' },
+    { code: 'movistar', name: 'Movistar', category: 'telecom' },
+    { code: 'tigo', name: 'Tigo', category: 'internet' },
+    { code: 'liberty', name: 'Liberty', category: 'cable' },
+    { code: 'cabletica', name: 'Cabletica', category: 'cable' },
+    { code: 'ccss', name: 'CCSS (Caja)', category: 'other' },
+    { code: 'ins', name: 'INS Seguros', category: 'insurance' },
+    { code: 'marchamo', name: 'Marchamo', category: 'other' },
+  ],
+  operators: [
+    { code: 'kolbi', name: 'Kolbi' },
+    { code: 'claro', name: 'Claro' },
+    { code: 'movistar', name: 'Movistar' },
+  ],
+};
 
 export const initialSavedServices: SavedService[] = [
   { id: '1', providerId: 'ice', clientId: '1234567', nickname: 'Casa', lastAmount: 32450, dueDate: '2025-01-15' },

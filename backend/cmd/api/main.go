@@ -452,8 +452,8 @@ func main() {
 	})
 	// Payouts — ledger-backed outbound payments over pluggable rails. Only the
 	// deterministic mock rail is registered today; real rails (SINPE
-	// participant, dLocal, Circle/USDC) are added by registering an adapter and
-	// seeding its SYSTEM:EXTERNAL:<RAIL>:<CUR> accounts.
+	// participant, dLocal, Circle/USDC) are added by registering an adapter; the
+	// ledger side needs no extra account (a payout moves reserve and liability).
 	payoutRegistry := payout.NewRegistry()
 	// The mock rail debits the user's real wallet but never actually disburses,
 	// so it must NEVER be reachable in production. Only register it outside
@@ -477,7 +477,7 @@ func main() {
 		Logger:      logger,
 	})
 	// Pago de recibos y recargas: sin convenio con la empresa o el operador,
-	// cobrar solo debita la billetera y deja la plata en SYSTEM:EXTERNAL, sin
+	// cobrar solo debita la billetera y saca la plata de la reserva, sin
 	// entrega y sin reverso. Misma politica que el registro de rieles de
 	// payouts de mas arriba: fuera de produccion se permite para las demos.
 	paymentService := payment.NewService(paymentRepo, txService, &payment.Options{
@@ -528,9 +528,20 @@ func main() {
 			Logger:        logger,
 		})
 
-	// El tipo de cambio oficial, traido de Hacienda cada hora. Sin esto la
-	// tasa de arriba nunca se confirma y cripto en colones no opera.
-	tipoDeCambio := country.NewActualizador(countryRepo, country.NewFuenteHacienda(), time.Hour, logger)
+	// El tipo de cambio oficial, traido cada hora. Sin esto la tasa de arriba
+	// nunca se confirma y cripto en colones no opera.
+	//
+	// Con BCCR_TOKEN el dolar sale del Banco Central (SDDE) y, si falla, de
+	// Hacienda, que republica el mismo tipo de referencia. Sin el token sale de
+	// Hacienda como antes, y /health (tipo_de_cambio.falta) dice que variable
+	// falta. El euro sigue saliendo de Hacienda. La fila guardada y /health dicen
+	// de donde salio cada pasada: "bccr" o "hacienda".
+	fuenteDelDolar := country.NewFuenteDelDolar(os.Getenv(country.VariableTokenBCCR))
+	if falta := fuenteDelDolar.Faltantes(); len(falta) > 0 {
+		logger.Warn("tipo de cambio: el dolar sale de Hacienda porque falta la variable de entorno del BCCR",
+			"falta", falta)
+	}
+	tipoDeCambio := country.NewActualizador(countryRepo, fuenteDelDolar, time.Hour, logger)
 	tipoDeCambioCtx, tipoDeCambioCancel := context.WithCancel(context.Background())
 	defer tipoDeCambioCancel()
 	go tipoDeCambio.Run(tipoDeCambioCtx)
@@ -612,7 +623,11 @@ func main() {
 	}
 	assistantService := assistant.NewService(
 		assistantLLM,
-		assistant.NewTools(walletService, txService, budgetService, paymentService),
+		// El resumen por periodo y los tipos de cambio son los mismos servicios que
+		// alimentan el Inicio: el asistente cuenta con las mismas fuentes que la
+		// pantalla y por eso da las mismas cifras.
+		assistant.NewTools(walletService, txService, budgetService, paymentService,
+			assistant.WithResumen(txService), assistant.WithTipoDeCambio(countryService)),
 		auditLogger,
 		logger,
 		assistantOpts...,
@@ -1120,6 +1135,7 @@ func main() {
 			// Services & Payments
 			r.Post("/services/pay-bill", paymentHandler.PayBill)
 			r.Post("/services/recharge", paymentHandler.Recharge)
+			r.Get("/services/providers", paymentHandler.GetProviders)
 			r.Get("/services/saved", paymentHandler.GetSavedServices)
 			r.Post("/services/saved", paymentHandler.AddSavedService)
 			r.Get("/services/history", paymentHandler.GetPaymentHistory)

@@ -2013,6 +2013,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/services/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Companies and carriers the Services screen offers
+         * @description The companies a bill can be paid to (the `provider_code` that POST /api/v1/services/pay-bill accepts), the carriers a phone can be topped up through (the `operator` that POST /api/v1/services/recharge accepts) and whether the payment can be delivered. The screen builds its list from this response and does not carry one of its own. `agreements_active` is false while there is no agreement with the companies or the carriers (production today): both payment endpoints answer SIN_CONVENIO and nothing is charged, so the client says so before the person fills in the form.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The catalog */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServiceCatalog"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services/saved": {
         parameters: {
             query?: never;
@@ -2523,7 +2562,7 @@ export interface paths {
                         "application/json": components["schemas"]["CryptoTransactionRecord"];
                     };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or INVALID_BODY. */
+                /** @description CRYPTO_INVALID_AMOUNT (also when the amount is worth less than one cent at the market price), QR_INVALIDO, CRYPTO_SEND_SELF, or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -2620,7 +2659,7 @@ export interface paths {
                         "application/json": components["schemas"]["CryptoTransactionRecord"];
                     };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                /** @description CRYPTO_INVALID_AMOUNT, CRYPTO_INVALID_PAIR (`from_asset` and `to_asset` are the same asset, in any letter case) or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -4181,7 +4220,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Page size. Out of range (or absent), 50. */
+                    /** @description Page size. Absent, 50; above the maximum, the maximum. */
                     limit?: number;
                     /** @description Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page. */
                     before?: string;
@@ -5634,7 +5673,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description PAY_FAILED — the share could not be paid. */
+                /** @description PAY_FAILED — the share could not be paid (the split is gone or no longer active, or the share is no longer pending). TRANSFER_BLOCKED — the risk engine stopped the payment. Nothing moved. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -5643,8 +5682,17 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED — the payment is over what the account can spend. RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — a share of 100,000 colones or more needs a verified second factor. Nothing moved: verify a high_value_tx challenge and retry the same request. */
+                428: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -9875,7 +9923,7 @@ export interface paths {
         put?: never;
         /**
          * Record a company deposit into the promotions fund
-         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         * @description Posts debit SYSTEM:CAPITAL:CRC / credit SYSTEM:PROMOTIONS:CRC. This does NOT raise the published reserves: the reserve is exactly what is owed to users, and this money belongs to the company until a reward is redeemed (each redemption moves it from capital to the reserve). It must still match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
          */
         post: {
             parameters: {
@@ -11651,9 +11699,9 @@ export interface components {
              * @example 0
              */
             auditoria_descartada: number;
-            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            /** @description Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN` loaded it comes from the Banco Central de Costa Rica (SDDE) and, if that fails, from Hacienda, which republishes the same reference rate; without the token it comes from Hacienda and `falta` names the missing variable. `fuente` is where the last confirmed rate really came from (`bccr` or `hacienda`), empty until one is confirmed. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why, including why the BCCR was skipped when Hacienda covered it. */
             tipo_de_cambio: {
-                /** @example hacienda */
+                /** @example bccr */
                 fuente: string;
                 /** @example 450.06 */
                 usd_crc: number;
@@ -11664,6 +11712,13 @@ export interface components {
                 /** Format: date-time */
                 ultima_confirmacion?: string;
                 ultimo_error?: string;
+                /**
+                 * @description Names (never values) of the environment variables that are not loaded and keep the rate from coming from the BCCR.
+                 * @example [
+                 *       "BCCR_TOKEN"
+                 *     ]
+                 */
+                falta?: string[];
             };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
@@ -11889,6 +11944,34 @@ export interface components {
             status: string;
             /** @description Present and true when this response repeats a payment already made under the same `idempotency_key`: nothing was charged now. */
             replayed?: boolean;
+        };
+        ServiceCatalog: {
+            /** @description False while the payment cannot be delivered (no agreement with the companies or the carriers). Never assume true when it is absent. */
+            agreements_active: boolean;
+            /** @description Active providers, ordered by category and name. */
+            providers: {
+                /**
+                 * @description The `provider_code` to send to pay-bill.
+                 * @example ice
+                 */
+                code: string;
+                /** @example ICE — Electricidad */
+                name: string;
+                /**
+                 * @description electricity, water, telecom or internet.
+                 * @example electricity
+                 */
+                category: string;
+            }[];
+            operators: {
+                /**
+                 * @description The `operator` to send to recharge.
+                 * @example kolbi
+                 */
+                code: string;
+                /** @example Kölbi (ICE) */
+                name: string;
+            }[];
         };
         RechargeResponse: {
             transaction_id: string;
@@ -12376,6 +12459,10 @@ export interface components {
                 currency?: string;
                 user_liabilities_minor?: number;
                 reserve_balance_minor?: number;
+                /** @description Reserve minus user liabilities, in minor units and signed (negative when the reserve falls short). Zero when the reserve is exactly what is owed to users. Read this, not ratio_pct: a percentage rounded to one decimal hides small shortfalls. */
+                difference_minor?: number;
+                /** @description The reserve covers everything owed to users. */
+                fully_backed?: boolean;
                 ratio_pct?: number;
             }[];
         };

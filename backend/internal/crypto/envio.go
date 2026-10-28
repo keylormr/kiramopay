@@ -246,6 +246,13 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest) (*T
 		return nil, err
 	}
 	valorMinor := toMinor(req.Amount.Mul(usd))
+	// Lo que no vale ni un centavo no se puede anotar: la fila del historial
+	// lleva ese valor, y la base rechaza una de monto cero (chk_tx_amount_positive).
+	// Sin este rechazo el envio llegaba hasta ahi y salia como un 500. Se dice
+	// antes de pedir el segundo factor y de mover nada.
+	if valorMinor <= 0 {
+		return nil, fmt.Errorf("%w: worth less than one cent", ErrMontoInvalido)
+	}
 
 	if err := s.exigirMFA(ctx, userID, valorMinor); err != nil {
 		return nil, err

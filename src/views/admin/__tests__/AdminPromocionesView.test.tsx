@@ -3,9 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { AdminPromocionesView } from '../AdminPromocionesView';
 
-// El fondo del que sale el cashback de puntos. Registrar un deposito sube la
-// reserva publicada: se confirma diciendo cuanto y con que referencia, y se
-// avisa antes de hacerlo.
+// El fondo del que sale el cashback de puntos. Registrar un deposito NO sube la
+// reserva publicada (es capital propio de la empresa y pasa a la reserva con
+// cada canje): se confirma diciendo cuanto y con que referencia, y se avisa
+// antes de hacerlo.
 const mocks = vi.hoisted(() => ({ saldoPromociones: vi.fn(), fondearPromociones: vi.fn() }));
 
 vi.mock('@/api', () => ({ getApiLayer: () => ({ admin: mocks }) }));
@@ -37,7 +38,7 @@ describe('AdminPromocionesView', () => {
     expect(screen.queryByText('₡0.00')).not.toBeInTheDocument();
   });
 
-  it('registrar exige referencia, avisa que sube la reserva y manda centimos', async () => {
+  it('registrar exige referencia, avisa que no sube la reserva y manda centimos', async () => {
     mocks.fondearPromociones.mockResolvedValue({ success: true, data: { saldoMinor: 22_500_000 } });
     const user = userEvent.setup();
     pintar();
@@ -51,7 +52,8 @@ describe('AdminPromocionesView', () => {
     expect(boton).toBeEnabled();
 
     await user.click(boton);
-    expect(await screen.findByText(/sube la reserva/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no sube la reserva/i)).toBeInTheDocument();
+    expect(screen.getByText(/pasa a la reserva de a poco, con cada canje de cashback/)).toBeInTheDocument();
     expect(screen.getByText(/₡100,000.00 en el fondo de promociones, con la referencia TRF-2026-0911/)).toBeInTheDocument();
     expect(mocks.fondearPromociones).not.toHaveBeenCalled();
 
@@ -78,5 +80,22 @@ describe('AdminPromocionesView', () => {
     await waitFor(() => expect(mocks.fondearPromociones).toHaveBeenCalledTimes(2));
     const [primera, segunda] = mocks.fondearPromociones.mock.calls;
     expect(segunda[2]).toBe(primera[2]);
+  });
+
+  // El aviso lo traduce cada idioma: ninguno puede seguir diciendo que el
+  // fondeo sube la reserva, que es lo que decia antes del capital propio.
+  it('el aviso en ingles tampoco dice que sube la reserva', async () => {
+    localStorage.setItem('kiramopay_language', 'en');
+    mocks.fondearPromociones.mockResolvedValue({ success: true, data: { saldoMinor: 1 } });
+    const user = userEvent.setup();
+    pintar();
+    await screen.findByText('₡125,000.00');
+
+    await user.type(screen.getByPlaceholderText('0.00'), '100000');
+    await user.type(screen.getByPlaceholderText(/transfer or receipt/i), 'TRF-1');
+    await user.click(screen.getByRole('button', { name: 'Record deposit' }));
+
+    expect(await screen.findByText(/does not raise the reserves/i)).toBeInTheDocument();
+    expect(screen.getByText(/with each cashback redemption/)).toBeInTheDocument();
   });
 });

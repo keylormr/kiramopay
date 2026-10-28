@@ -504,6 +504,7 @@ export type TranslationKeys = {
   sinpe_transfer_success: string;
   sinpe_self_send_error: string;
   sinpe_phone_invalid: string;
+  sinpe_phone_incomplete: string;
   sinpe_invalid_amount: string;
   sinpe_recipient_not_user: string;
   sinpe_err_sin_confirmar: string;
@@ -606,6 +607,7 @@ export type TranslationKeys = {
   crypto_err_insufficient_asset: string;
   crypto_err_insufficient_funds: string;
   crypto_err_invalid_amount: string;
+  crypto_err_invalid_pair: string;
   crypto_err_repeated_request: string;
   crypto_err_price_unavailable: string;
   crypto_err_price_moved: string;
@@ -615,6 +617,8 @@ export type TranslationKeys = {
   crypto_err_generic: string;
   crypto_action_needs_price: string;
   crypto_value_unavailable: string;
+  crypto_crc_unavailable: string;
+  crypto_sell_crc_needs_rate: string;
   crypto_refresh_prices: string;
   crypto_no_assets_to_convert: string;
   crypto_my_portfolio: string;
@@ -829,6 +833,9 @@ export type TranslationKeys = {
   loyalty_unavailable: string;
   loyalty_redeem_failed: string;
   business_sales_window: string;
+  business_sales_window_one: string;
+  business_charges_count_one: string;
+  business_charges_count: string;
   business_sales_load_failed: string;
   error_retry: string;
   update_required_title: string;
@@ -945,6 +952,7 @@ export type TranslationKeys = {
   analytics_cat_cash: string;
   analytics_cat_other: string;
   analytics_cat_savings: string;
+  analytics_cat_crypto: string;
   tx_title_sinpe_send: string;
   tx_title_sinpe_receive: string;
   tx_title_qr_payment: string;
@@ -1242,6 +1250,8 @@ export type TranslationKeys = {
   home_spent_failed: string;
   home_vs_last_month: string;
   balance_usd_estimate: string;
+  fx_total_unavailable: string;
+  fx_total_unavailable_short: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;
   qr_mi_codigo: string;
@@ -1359,6 +1369,10 @@ export type TranslationKeys = {
   loyalty_loading_slow: string;
   loyalty_tier: string;
   loyalty_tier_max: string;
+  loyalty_tier_bronze: string;
+  loyalty_tier_silver: string;
+  loyalty_tier_gold: string;
+  loyalty_tier_platinum: string;
   loyalty_lifetime: string;
   loyalty_available: string;
   loyalty_rewards: string;
@@ -1949,6 +1963,12 @@ export type TranslationKeys = {
   // la llave se conserva. Y la repeticion de uno que ya estaba hecho.
   bill_err_sin_confirmar: string;
   recharge_err_sin_confirmar: string;
+  services_unavailable_title: string;
+  services_unavailable_hint: string;
+  services_catalog_error: string;
+  services_no_providers: string;
+  bill_err_proveedor: string;
+  recharge_err_operador: string;
   bill_ya_hecho: string;
   recharge_ya_hecho: string;
   servicio_ya_hecho_desc: string;
