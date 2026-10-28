@@ -1,0 +1,24 @@
+-- 085_actividad_de_sesion.sql
+--
+-- Cuando fue la ultima ACCION de la persona en cada sesion.
+--
+-- El cierre por inactividad (JWT_IDLE_MINUTES, 30 por defecto) se media desde la
+-- ultima EMISION del token de refresh. Con un token de acceso de quince
+-- minutos la inactividad efectiva iba de 15 a 30, y una peticion que sale sola
+-- en segundo plano (precios cada cinco minutos, el sondeo de un pedido) que
+-- cayera con el token vencido renovaba la sesion sin que nadie tocara la app.
+--
+-- Ahora el cliente avisa cada accion real de la persona (POST /auth/activity) y
+-- el servidor la guarda aca. Renovar el token no la mueve: una renovacion no es
+-- una accion.
+--
+-- NULL = la sesion nunca aviso: la abrio un cliente anterior a este cambio
+-- (un APK sin actualizar). Esas sesiones se siguen midiendo como antes, desde la
+-- emision del token, hasta que el cliente se actualice; si se les pusiera un
+-- valor, el servidor las cerraria a los 30 minutos con la persona usando la app,
+-- porque ese cliente no sabe avisar. El login tampoco la llena, por lo mismo: la
+-- llena el primer aviso.
+--
+-- Con zona, como toda fecha desde la 034.
+
+ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;

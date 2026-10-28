@@ -54,6 +54,11 @@ var ErrReferralCodeInvalid = errors.New("referral code not found")
 // oraculo de enumeracion. El motivo del bloqueo nunca sale al cliente.
 var ErrAccountBlocked = errors.New("account blocked")
 
+// ErrSesionInactiva: la sesion ya no sirve para registrar una accion, porque
+// esta cerrada o porque pasaron mas de JWT_IDLE_MINUTES sin una accion de la
+// persona. Avisar no revive una sesion vencida.
+var ErrSesionInactiva = errors.New("session ended by inactivity")
+
 // ErrPasswordRequired: se intento entrar sin contrasena a una cuenta que si la
 // pide. Tiene codigo propio para que la pantalla sepa que debe pedirla, en vez
 // de mostrar "credenciales incorrectas" antes de que el usuario teclee nada.
@@ -203,6 +208,11 @@ func NewService(
 	}
 	if opts.AbsoluteTimeout <= 0 {
 		opts.AbsoluteTimeout = 7 * 24 * time.Hour
+	}
+	// La misma ventana la usa el repositorio para dejar de servir, peticion a
+	// peticion, una sesion sin acciones: una sola fuente, JWT_IDLE_MINUTES.
+	if authRepo != nil {
+		authRepo.SetIdleTimeout(opts.IdleTimeout)
 	}
 	return &Service{
 		authRepo:                 authRepo,
@@ -830,15 +840,31 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 		return nil, fmt.Errorf("invalid refresh token")
 	}
 
-	// Enforce the idle and absolute session windows. The presented token's
-	// issued_at is the last activity; the family origin is the original login.
-	// On a violation, revoke the family so the stale token can't be retried and
-	// force a fresh login.
+	// Enforce the idle and absolute session windows. The family origin is the
+	// original login. On a violation, revoke the family so the stale token can't
+	// be retried and force a fresh login.
+	//
+	// La inactividad se mide desde la ultima ACCION de la persona, la que el
+	// cliente avisa con POST /auth/activity, y no desde la emision del token:
+	// renovar no es una accion. Antes se media desde rec.IssuedAt, asi que una
+	// peticion de fondo que cayera con el token vencido (precios, el sondeo de
+	// un pedido) renovaba la sesion sin que nadie tocara la app, y con el token
+	// de acceso de 15 minutos la inactividad real iba de 15 a 30. Una sesion que
+	// nunca aviso (un cliente anterior a la migracion 085) se sigue midiendo
+	// desde la emision.
 	familyOrigin := rec.IssuedAt
 	if fo, ferr := s.authRepo.FamilyOrigin(ctx, rec.FamilyID); ferr == nil && !fo.IsZero() {
 		familyOrigin = fo
 	}
-	if sessionWindowExceeded(time.Now(), rec.IssuedAt, familyOrigin, s.idleTimeout, s.absoluteTimeout) {
+	inicioDeInactividad := rec.IssuedAt
+	ultimaAccion, uerr := s.authRepo.UltimaAccionDeLaSesion(ctx, rec.JTI)
+	if uerr != nil {
+		slog.Warn("refresh: could not read last activity, falling back to token issue time",
+			"family_id", rec.FamilyID, "err", uerr.Error())
+	} else if ultimaAccion != nil {
+		inicioDeInactividad = *ultimaAccion
+	}
+	if sessionWindowExceeded(time.Now(), inicioDeInactividad, familyOrigin, s.idleTimeout, s.absoluteTimeout) {
 		if rerr := s.authRepo.RevokeRefreshFamily(ctx, rec.FamilyID); rerr != nil {
 			slog.Warn("refresh: revoke on session timeout failed", "family_id", rec.FamilyID, "err", rerr.Error())
 		}
@@ -863,6 +889,21 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 		return nil, fmt.Errorf("persist rolled session: %w", err)
 	}
 	return tokens, nil
+}
+
+// RegistrarAccion anota que la persona acaba de actuar en la sesion de
+// accessJTI. Es lo unico que mantiene viva una sesion ante el cierre por
+// inactividad: ni renovar el token ni una peticion de fondo la mueven. Devuelve
+// ErrSesionInactiva si la sesion esta cerrada o ya paso la ventana.
+func (s *Service) RegistrarAccion(ctx context.Context, accessJTI string) error {
+	vigente, err := s.authRepo.RegistrarAccion(ctx, accessJTI)
+	if err != nil {
+		return err
+	}
+	if !vigente {
+		return ErrSesionInactiva
+	}
+	return nil
 }
 
 // Logout revokes the current access jti (Redis denylist for remaining TTL +

@@ -19,11 +19,18 @@ import (
 type Repository struct {
 	db    *pgxpool.Pool
 	redis *redis.Client
+	// idleTimeout es cuanto puede pasar sin una accion de la persona antes de
+	// que una sesion con actividad registrada deje de servir. Lo fija NewService
+	// con JWT_IDLE_MINUTES; cero lo apaga.
+	idleTimeout time.Duration
 }
 
 func NewRepository(db *pgxpool.Pool, redis *redis.Client) *Repository {
 	return &Repository{db: db, redis: redis}
 }
+
+// SetIdleTimeout fija la ventana de inactividad. Cero o negativo la apaga.
+func (r *Repository) SetIdleTimeout(d time.Duration) { r.idleTimeout = d }
 
 // ─────────────────────────────────────────────────────────────────────────
 //  user_sessions (high-level session tracking; ties access+refresh jti)
@@ -55,6 +62,50 @@ func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error 
 		s.AccessJTI, s.RefreshJTI, // legacy token_hash / refresh_token_hash mirror
 	)
 	return err
+}
+
+// UltimaAccionDeLaSesion devuelve la ultima accion de la persona en la sesion
+// cuyo refresh token vigente es refreshJTI, o nil si no hay fila o nunca aviso
+// (un cliente anterior a la migracion 085): el llamante mide entonces desde la
+// emision del token, como siempre.
+func (r *Repository) UltimaAccionDeLaSesion(ctx context.Context, refreshJTI string) (*time.Time, error) {
+	var ultima *time.Time
+	err := r.db.QueryRow(ctx,
+		`SELECT last_activity_at FROM user_sessions
+		  WHERE refresh_jti = $1::uuid AND revoked_at IS NULL`,
+		refreshJTI,
+	).Scan(&ultima)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ultima accion de la sesion: %w", err)
+	}
+	return ultima, nil
+}
+
+// RegistrarAccion anota que la persona acaba de hacer algo en la sesion de
+// accessJTI. Devuelve false, sin tocar nada, si la sesion ya no sirve: esta
+// cerrada, o lleva mas de la ventana de inactividad sin acciones. Avisar no
+// resucita una sesion vencida: el que llega tarde vuelve a entrar.
+//
+// Una sesion sin actividad registrada (last_activity_at NULL) la empieza a
+// contar con este primer aviso.
+func (r *Repository) RegistrarAccion(ctx context.Context, accessJTI string) (bool, error) {
+	if accessJTI == "" {
+		return false, nil
+	}
+	tag, err := r.db.Exec(ctx,
+		`UPDATE user_sessions SET last_activity_at = NOW()
+		  WHERE access_jti = $1::uuid AND revoked_at IS NULL
+		    AND ($2::float8 <= 0 OR last_activity_at IS NULL
+		         OR last_activity_at >= NOW() - make_interval(secs => $2::float8))`,
+		accessJTI, r.idleTimeout.Seconds(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("registrar accion: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // MoverSesionAlRotar apunta la fila de sesion del dispositivo al par de tokens
@@ -107,6 +158,13 @@ func (r *Repository) RevokeSessionByAccessJTI(ctx context.Context, jti string) e
 
 // IsAccessJTIRevoked returns true if the given access-token jti has been
 // revoked at the session level. Fail-closed: any DB/Redis error returns true.
+//
+// Una sesion con actividad registrada que lleva mas de la ventana de
+// inactividad sin una accion de la persona cuenta como revocada: el token de
+// acceso vive 15 minutos y, sin esto, alargaria el cierre por inactividad hasta
+// 45 (los 30 de la ventana mas el token que se emitio en el ultimo momento). El
+// cliente trata el 401 como cualquier otro, intenta renovar, y la renovacion
+// (Service.Refresh) cierra la sesion por la misma razon.
 func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, error) {
 	// Fast path: Redis denylist.
 	if r.redis != nil {
@@ -119,10 +177,14 @@ func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, 
 		}
 	}
 	var revokedAt *time.Time
+	var inactiva bool
 	err := r.db.QueryRow(ctx,
-		`SELECT revoked_at FROM user_sessions WHERE access_jti = $1`,
-		jti,
-	).Scan(&revokedAt)
+		`SELECT revoked_at,
+		        ($2::float8 > 0 AND last_activity_at IS NOT NULL
+		         AND last_activity_at < NOW() - make_interval(secs => $2::float8))
+		   FROM user_sessions WHERE access_jti = $1`,
+		jti, r.idleTimeout.Seconds(),
+	).Scan(&revokedAt, &inactiva)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No session record found for this jti. We treat as NOT revoked here —
 		// the access middleware also independently validates JWT signature + expiry.
@@ -131,7 +193,7 @@ func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, 
 	if err != nil {
 		return true, fmt.Errorf("session lookup: %w", err)
 	}
-	return revokedAt != nil, nil
+	return revokedAt != nil || inactiva, nil
 }
 
 // IsLiveSession dice si accessJTI es el token de acceso VIGENTE de una sesion

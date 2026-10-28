@@ -322,6 +322,13 @@ export class HttpAuthRepository implements IAuthRepository {
     return apiSuccess(undefined as unknown as void);
   }
 
+  async registrarActividad(): Promise<ApiResponse<void>> {
+    // Con el token de acceso (auth=true): si vencio, la renovacion de siempre
+    // lo resuelve; si la sesion ya paso la ventana de inactividad, el servidor
+    // responde 401 y esa renovacion se rechaza.
+    return this.client.post<void>('/api/v1/auth/activity');
+  }
+
   async setLanguage(language: string): Promise<ApiResponse<void>> {
     const res = await this.client.put<void>('/api/v1/users/me/language', { language });
     if (!res.success) {

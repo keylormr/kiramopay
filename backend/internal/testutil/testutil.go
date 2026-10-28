@@ -1518,6 +1518,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- Migracion 001: la sesion apunta al dispositivo desde el que se abrio (sin
 	-- ON DELETE, como alla). El CREATE de user_sessions de arriba no la traia.
 	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES user_devices(id);
+	-- Migracion 085: la hora de la ultima accion de la persona en la sesion.
+	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
 	CREATE TABLE IF NOT EXISTS linked_bank_accounts (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
