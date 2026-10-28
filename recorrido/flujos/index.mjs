@@ -2,5 +2,8 @@
 // cobro con QR y el modo negocio, y el libro final va siempre al ultimo.
 import preparacion from './01-preparacion.mjs';
 import enviarDinero from './02-enviar-dinero.mjs';
+import cripto from './03-cripto.mjs';
+import comercioAlta from './04-comercio-alta.mjs';
+import cobroQr from './05-cobro-qr.mjs';
 
-export default [preparacion, enviarDinero];
+export default [preparacion, enviarDinero, cripto, comercioAlta, cobroQr];

@@ -126,6 +126,18 @@ export function boton(ambito, nombre, { exacto = false } = {}) {
   return ambito.getByRole('button', { name: nombre, exact: exacto });
 }
 
+/**
+ * Cambia el perfil activo desde el boton "Cambiar de perfil" de la barra
+ * superior: "Personal" o el nombre de un negocio.
+ */
+export async function cambiarAPerfil(page, quien) {
+  await boton(page, txt('Cambiar de perfil'), { exacto: true }).first().click();
+  const fila = quien === 'Personal' ? /^Personal/ : new RegExp(quien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  await boton(ultimoDialogo(page), fila).click();
+  await sinDialogos(page);
+  await reposar(page);
+}
+
 /** Cierra la sesion de una persona (contexto del navegador). */
 export async function cerrarSesion(sesion) {
   try {

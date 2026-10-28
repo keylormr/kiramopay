@@ -1,5 +1,5 @@
 // Ayudas compartidas por varios flujos.
-import { entrar, peticion } from './api.mjs';
+import { entrar, entrarConContrasena, peticion } from './api.mjs';
 import { CORRIDA, CUENTAS } from './entorno.mjs';
 import * as bd from './bd.mjs';
 
@@ -57,28 +57,40 @@ export function problemasDelLibro() {
 /** Nombre unico de esta corrida (para comercios y metas que no se pueden repetir). */
 export const nombreUnico = (base) => `${base} ${CORRIDA}`;
 
-/** Rastro de un comercio aprobado para los flujos que lo necesitan. */
+/**
+ * admin.kp: el otro administrador de la semilla. No es cuenta de demostracion,
+ * asi que entra con la contrasena de seeder.go (valida solo en desarrollo). Es
+ * quien aprueba el comercio de keilor: un administrador no puede aprobar el suyo.
+ */
+export async function adminKp() {
+  return entrarConContrasena('admin.kp', 'Admin2024!');
+}
+
+/**
+ * Comercio de keilor ya aprobado, para los flujos que lo necesitan. Si el flujo
+ * de alta no corrio (o fallo antes de dejarlo listo), lo deja listo por API.
+ */
 export async function asegurarComercio(ctx) {
-  if (ctx.estado.comercio) return ctx.estado.comercio;
-  const emmanuel = await entrar('emmanuel');
+  if (ctx.estado.comercio?.aprobado) return ctx.estado.comercio;
   const keilor = await entrar('keilor');
-  const propios = await emmanuel.exigir('GET', '/qr/merchants');
+  const propios = await keilor.exigir('GET', '/qr/merchants');
   let comercio = (propios.data ?? []).find((m) => m.name?.includes(CORRIDA));
   if (!comercio) {
-    const r = await emmanuel.exigir('POST', '/qr/merchant', {
-      name: nombreUnico('Soda Recorrido'),
+    const r = await keilor.exigir('POST', '/qr/merchant', {
+      name: nombreUnico('Soda Keilor'),
       description: 'Comercio de la prueba',
       category: 'restaurant',
       cedula: '3101123',
       cedula_type: 'juridica',
-      legal_name: nombreUnico('Soda Recorrido SA'),
+      legal_name: nombreUnico('Soda Keilor SA'),
     });
     comercio = r.data;
   }
   if (comercio.verification_status !== 'verified') {
-    await keilor.exigir('POST', `/admin/merchants/${comercio.id}/approve`, {});
+    const admin = await adminKp();
+    await admin.exigir('POST', `/admin/merchants/${comercio.id}/approve`, {});
   }
-  ctx.estado.comercio = { id: comercio.id, nombre: comercio.name };
+  ctx.estado.comercio = { id: comercio.id, nombre: comercio.name, aprobado: true };
   return ctx.estado.comercio;
 }
 

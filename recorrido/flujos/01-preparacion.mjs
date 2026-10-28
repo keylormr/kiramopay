@@ -27,8 +27,11 @@ export default {
         c.igual(api.id, CUENTAS[u].id, `id de ${u}`);
         c.igual(api.perfil.kyc_level, 1, `nivel KYC de ${u}`);
       }
+      // El rol no viaja en la respuesta del login: se comprueba por lo que puede hacer.
       const keilor = await entrar('keilor');
-      c.igual(keilor.perfil.role, 'admin', 'rol de keilor');
+      c.respuesta(await keilor.get('/admin/merchants/pending'), 200, 'keilor (administrador) entra al panel de comercios');
+      const victor = await entrar('victor');
+      c.respuesta(await victor.get('/admin/merchants/pending'), 403, 'victor (usuario común) no entra al panel de comercios', 'FORBIDDEN');
     });
 
     await f.paso('Una cuenta que no es de demostración sigue pidiendo contraseña', async (c) => {
