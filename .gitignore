@@ -63,6 +63,8 @@ Thumbs.db
 playwright-report/
 test-results/
 coverage/
+# Salida del recorrido con servidor real (capturas e informes)
+recorrido-salida/
 
 # Local assistant config/state (not part of the repo)
 .claude/

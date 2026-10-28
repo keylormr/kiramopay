@@ -1,0 +1,189 @@
+name: Recorrido con servidor real
+
+# Una copia completa de la app en el runner (Postgres, Redis, el servidor en Go
+# y la pantalla compilada, todo en localhost y con datos de prueba) por la que
+# un script recorre los flujos de dinero con un navegador de verdad. A
+# diferencia de las pruebas e2e de e2e/, aqui nada esta simulado del lado de la
+# app: lo que contesta es el servidor real. No toca produccion.
+#
+# Solo corre cuando cambia el propio recorrido; el resto de los cambios ya pasa
+# por ci.yml. A mano se puede pedir un subconjunto de flujos.
+
+on:
+  pull_request:
+    paths:
+      - 'recorrido/**'
+      - '.github/workflows/recorrido.yml'
+  workflow_dispatch:
+    inputs:
+      solo:
+        description: 'Flujos a correr, separados por coma (vacío = todos)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recorrido-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recorrido:
+    name: Recorrido de los flujos de dinero
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kiramopay
+          POSTGRES_PASSWORD: kiramopay_dev
+          POSTGRES_DB: kiramopay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # psql (el recorrido lee el libro contable directo de la base).
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: kiramopay
+      PGPASSWORD: kiramopay_dev
+      PGDATABASE: kiramopay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Falla rapido y con claridad si el recorrido quedo viejo respecto de los
+      # textos de la app (no hace falta servidor para saberlo).
+      - name: Verificar los textos que busca el recorrido
+        run: node recorrido/verificar-textos.mjs
+
+      - name: Compilar el servidor
+        working-directory: backend
+        run: go build -o bin/api ./cmd/api
+
+      # VITE_API_URL apunta la pantalla al servidor de arriba; sin ella la app
+      # usa repositorios simulados y el recorrido probaria otra cosa.
+      - name: Compilar la pantalla contra el servidor local
+        env:
+          VITE_API_URL: http://localhost:8080
+        run: npm run build
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      # El servidor pide los precios de cripto a api.coingecko.com, que limita
+      # por IP a los centros de datos, y el tipo de cambio del dolar a
+      # api.hacienda.go.cr, que a veces contesta 5xx (y una base nueva ya no trae
+      # un tipo de cambio de reserva: sin el, cripto en colones no opera). Un
+      # simulador local responde cifras fijas en esos dos nombres, con su propio
+      # certificado (que solo Go confia, por SSL_CERT_FILE). El servidor no se
+      # modifica.
+      - name: Simulador de precios de cripto y de tipo de cambio
+        run: |
+          mkdir -p "$RUNNER_TEMP/simulador"
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+            -keyout "$RUNNER_TEMP/simulador/llave.pem" \
+            -out "$RUNNER_TEMP/simulador/cert.pem" \
+            -subj "/CN=api.coingecko.com" \
+            -addext "subjectAltName=DNS:api.coingecko.com,DNS:api.hacienda.go.cr"
+          echo "127.0.0.1 api.coingecko.com api.hacienda.go.cr" | sudo tee -a /etc/hosts
+          sudo nohup "$(command -v node)" recorrido/simulador/terceros.mjs 443 \
+            "$RUNNER_TEMP/simulador/llave.pem" "$RUNNER_TEMP/simulador/cert.pem" \
+            > "$RUNNER_TEMP/simulador/simulador.log" 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -sf --cacert "$RUNNER_TEMP/simulador/cert.pem" https://api.coingecko.com/api/v3/ping > /dev/null \
+              && curl -sf --cacert "$RUNNER_TEMP/simulador/cert.pem" https://api.hacienda.go.cr/indicadores/tc/dolar > /dev/null; then
+              echo "Simulador de precios y de tipo de cambio listo"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "El simulador no arrancó"
+          cat "$RUNNER_TEMP/simulador/simulador.log"
+          exit 1
+
+      # Las migraciones y la semilla las aplica el propio servidor al arrancar
+      # (RUN_MIGRATIONS=true y ENVIRONMENT=development, que siembra las cuentas
+      # keilor, victor, emmanuel, demo y admin.kp), exactamente como en un
+      # despliegue.
+      - name: Preparar la base y arrancar el servidor
+        working-directory: backend
+        env:
+          ENVIRONMENT: development
+          DEMO_LOGIN_ENABLED: 'true'
+          RUN_MIGRATIONS: 'true'
+          MIGRATIONS_DIR: ./migrations
+          SERVER_PORT: '8080'
+          SSL_CERT_FILE: ${{ runner.temp }}/simulador/cert.pem
+        run: |
+          # La migracion 024 lee la clave de cifrado de datos personales de la
+          # base; es la misma que usa el servidor en desarrollo.
+          psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE kiramopay SET kiramopay.encryption_key = 'dev-pii-encryption-key-change-me-000';"
+          nohup ./bin/api > "$RUNNER_TEMP/servidor.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "Servidor listo"
+              grep -E "Migrations up to date|Seed:" "$RUNNER_TEMP/servidor.log" | head -20 || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "El servidor no arrancó"
+          tail -60 "$RUNNER_TEMP/servidor.log"
+          exit 1
+
+      - name: Servir la pantalla compilada
+        run: |
+          nohup npx vite preview --port 9999 --host 0.0.0.0 > "$RUNNER_TEMP/pantalla.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9999/ > /dev/null; then
+              echo "Pantalla lista"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "La pantalla no arrancó"
+          cat "$RUNNER_TEMP/pantalla.log"
+          exit 1
+
+      - name: Recorrido
+        env:
+          RECORRIDO_SOLO: ${{ github.event.inputs.solo }}
+        run: node recorrido/run.mjs
+
+      - name: Guardar los registros del servidor
+        if: always()
+        run: |
+          mkdir -p recorrido-salida
+          cp "$RUNNER_TEMP/servidor.log" recorrido-salida/servidor.log || true
+          cp "$RUNNER_TEMP/simulador/simulador.log" recorrido-salida/simulador.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recorrido-capturas
+          path: recorrido-salida/
+          retention-days: 7
