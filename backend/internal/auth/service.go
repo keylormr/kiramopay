@@ -865,8 +865,15 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 		inicioDeInactividad = *ultimaAccion
 	}
 	if sessionWindowExceeded(time.Now(), inicioDeInactividad, familyOrigin, s.idleTimeout, s.absoluteTimeout) {
-		if rerr := s.authRepo.RevokeRefreshFamily(ctx, rec.FamilyID); rerr != nil {
-			slog.Warn("refresh: revoke on session timeout failed", "family_id", rec.FamilyID, "err", rerr.Error())
+		// Se cierra la familia Y la fila de la sesion, con el motivo. Antes solo
+		// la familia: la sesion seguia listada como abierta en "Dispositivos
+		// conectados" cuando ya no podia renovarse ni servir.
+		motivo := MotivoInactividad
+		if s.absoluteTimeout > 0 && time.Since(familyOrigin) > s.absoluteTimeout {
+			motivo = MotivoAntiguedad
+		}
+		if rerr := s.authRepo.CerrarFamilia(ctx, rec.FamilyID, motivo); rerr != nil {
+			slog.Warn("refresh: close session on timeout failed", "family_id", rec.FamilyID, "err", rerr.Error())
 		}
 		if s.auditLogger != nil {
 			s.auditLogger.Log(audit.Event{
@@ -875,6 +882,7 @@ func (s *Service) Refresh(ctx context.Context, refreshTokenRaw string, lc LoginC
 				RiskLevel: "low",
 				IPAddress: lc.IPAddress,
 				UserAgent: lc.UserAgent,
+				Details:   map[string]interface{}{"reason": motivo},
 			})
 		}
 		return nil, fmt.Errorf("session timed out")

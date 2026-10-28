@@ -293,12 +293,11 @@ func (r *Repository) ConsumeRefreshToken(ctx context.Context, jti, hash string) 
 		return rec, false, fmt.Errorf("refresh token expired")
 	}
 	if reused {
-		// Mark family revoked.
-		_, _ = tx.Exec(ctx,
-			`UPDATE refresh_tokens SET revoked_at = NOW()
-			 WHERE family_id = $1::uuid AND revoked_at IS NULL`,
-			rec.FamilyID,
-		)
+		// Mark family revoked, and the device's session with it: a revoked
+		// family with its session row still open is listed as "connected".
+		if err := cerrarFamilia(ctx, tx, rec.FamilyID, MotivoReusoDeRefresh); err != nil {
+			return rec, true, fmt.Errorf("revoke family on reuse: %w", err)
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return rec, true, fmt.Errorf("commit family revoke: %w", err)
 		}
