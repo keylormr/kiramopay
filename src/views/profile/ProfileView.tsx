@@ -6,6 +6,8 @@ import type { ReferralSummary } from '@/api/repositories/loyalty.repository';
 import { compartirEnlace, enlaceInvitacion } from '@/utils/compartir';
 import { Icons } from '../../components/Icons';
 import { MarcaKiramo } from '../../components/MarcaKiramo';
+import { Bandera } from '../../components/Bandera';
+import { HistorialDeVersiones } from './HistorialDeVersiones';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { LanguageSheet } from '../../components/LanguageSheet';
@@ -15,7 +17,7 @@ import { WebhooksSheet } from './WebhooksSheet';
 import { AvisosDelDispositivo } from './AvisosDelDispositivo';
 import { EliminarCuentaSheet } from './EliminarCuentaSheet';
 import { abrirPublico, RUTA_PRIVACIDAD } from '../../utils/enlacesLegales';
-import { getVersionString, getAllVersions, getBuildDate } from '../../config/version';
+import { getVersionString, getBuildDate } from '../../config/version';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { biometricService } from '../../services/biometric';
 import { mensajeDeRechazo } from '../../i18n/mensajesDeError';
@@ -71,6 +73,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   // pantalla de analisis: resumen del servidor, dias civiles de Costa Rica.
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
+  // La cuenta entra sin contrasena (demostracion): ver el aviso de Seguridad.
+  const sinContrasena = state.user?.passwordlessLogin === true;
   // Admin entry is gated by a server-side probe: the role lives only on the
   // backend (no role is exposed to the client), so we surface the menu item only
   // when the admin-only endpoint answers successfully for this user.
@@ -642,19 +646,33 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           <HelpButton topic="mfa" className="-mr-1" />
         </div>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-          <button
-            onClick={() => setShowPasswordSheet(true)}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Lock size={18} className="text-orange-600" />
+          {/* Las cuentas que entran sin contrasena no tienen una contrasena actual que
+              presentar: cambiarla y eliminar la cuenta fallarian (el servidor las
+              rechaza), asi que no se ofrecen y esta linea dice por que. */}
+          {sinContrasena && (
+            <div role="note" className="flex items-start gap-3 px-4 py-3.5">
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center shrink-0">
+                <Icons.Lock size={18} className="text-orange-600" />
+              </div>
+              <p className="flex-1 text-sm leading-relaxed uv-text-secondary">{t('profile_demo_account')}</p>
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold uv-text-primary text-sm">{t('change_password')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('password_requirements')}</p>
-            </div>
-            <Icons.ChevronRight size={18} className="uv-text-muted" />
-          </button>
+          )}
+
+          {!sinContrasena && (
+            <button
+              onClick={() => setShowPasswordSheet(true)}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Lock size={18} className="text-orange-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('change_password')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('password_requirements')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
 
           {ofrecerBiometria && (
             <div>
@@ -746,19 +764,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           {/* Eliminar la cuenta: accion destructiva, por eso el titulo va en el
               color de peligro y la hoja pide confirmacion fuerte. Google Play
               exige que esta via este a la vista, en los ajustes de la cuenta. */}
-          <button
-            onClick={() => setShowDeleteSheet(true)}
-            className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
-          >
-            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.Trash size={18} className="text-red-600" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
-              <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
-            </div>
-            <Icons.ChevronRight size={18} className="uv-text-muted" />
-          </button>
+          {!sinContrasena && (
+            <button
+              onClick={() => setShowDeleteSheet(true)}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Trash size={18} className="text-red-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -963,7 +983,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mr-3">
-              <span className="text-lg">{currentLanguage.flag}</span>
+              <Bandera pais={currentLanguage.flag} className="text-lg" />
             </div>
             <div className="flex-1 text-left">
               <p className="font-semibold uv-text-primary text-sm">{t('language')}</p>
@@ -1198,6 +1218,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             </button>
           )}
 
+          {/* Antes seguia un boton "Solicitar aumento" sin accion. Aumentar los
+              limites llega con la verificacion avanzada, que todavia no esta
+              disponible: se dice, y no se ofrece un boton que no hace nada. */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Icons.Info size={18} className="text-blue-500 mt-0.5" />
@@ -1208,10 +1231,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               </div>
             </div>
           </div>
-
-          <button className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all">
-            {t('request_increase')}
-          </button>
         </div>
       </BottomSheet>
 
@@ -1282,31 +1301,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           </div>
 
           {/* Changelog */}
-          {getAllVersions().map((version, index) => (
-            <div key={version.version} className="uv-surface-2 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold uv-text-primary">
-                    v{version.version}
-                  </span>
-                  {index === 0 && (
-                    <span className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs px-2 py-0.5 rounded-full">
-                      Actual
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-500">{version.releaseDate}</span>
-              </div>
-              <ul className="space-y-1.5">
-                {version.changes.map((change, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm uv-text-secondary">
-                    <span className="text-[var(--color-primary)] mt-0.5">•</span>
-                    {change}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <HistorialDeVersiones />
 
           {/* Footer */}
           <div className="text-center pt-4 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">

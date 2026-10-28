@@ -254,9 +254,21 @@ func validatePushEndpoint(raw string) error {
 	return nil
 }
 
-// ListHistory returns paginated notifications for a user.
-func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset int) ([]*NotificationRecord, error) {
-	return s.repo.ListNotifications(ctx, userID, limiteDeHistorial(limit), offset)
+// ListHistory returns paginated notifications for a user. Con idioma (uno de la
+// app), los avisos del catalogo salen escritos en ese idioma aunque se hayan
+// guardado en otro; sin idioma, o con uno que la app no tiene, salen como se
+// guardaron. Es una vista: lo guardado no cambia.
+func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset int, idioma string) ([]*NotificationRecord, error) {
+	lista, err := s.repo.ListNotifications(ctx, userID, limiteDeHistorial(limit), offset)
+	if err != nil || !IdiomaValido(idioma) {
+		return lista, err
+	}
+	for _, n := range lista {
+		if titulo, cuerpo, ok := Localizar(n.Title, n.Body, idioma); ok {
+			n.Title, n.Body = titulo, cuerpo
+		}
+	}
+	return lista, nil
 }
 
 // limiteDeHistorial acota una pagina del historial: sin pedido o fuera de

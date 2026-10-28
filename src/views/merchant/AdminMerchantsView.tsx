@@ -15,17 +15,25 @@ type Pestana = 'pending' | 'all' | 'plan';
 
 const PLANES_COMERCIO: readonly PlanComercio[] = ['base', 'analitica'];
 
-// El servidor responde INVALID_ID a cualquier cosa que no sea un UUID: se
-// revisa antes para no gastar una peticion (ni una linea de auditoria).
-const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Cuanto espera el buscador del plan despues de la ultima tecla antes de pedir la
+// lista al servidor.
+const ESPERA_DE_LA_BUSQUEDA_MS = 300;
 
 const nombrePlan = (p: PlanComercio | undefined) => (p === 'analitica' ? 'business_plan_analitica' : 'business_plan_base');
 
 // Los rechazos de aprobar o rechazar un pendiente que la pantalla explica con
 // su texto. Lo demas cae al aviso generico, nunca al texto del servidor.
 // ADMIN_IS_AFFECTED_PARTY: el comercio es del propio administrador, y lo revisa
-// otro.
+// otro. COMMISSION_OUT_OF_RANGE: la comision que se escribio no esta entre 0 y 100 %.
 const CLAVES_DE_LA_REVISION: Readonly<Record<string, string>> = {
+  MERCHANT_CLOSED: 'business_close_err_closed',
+  ADMIN_IS_AFFECTED_PARTY: 'merchant_admin_err_own',
+  COMMISSION_OUT_OF_RANGE: 'merchant_admin_err_commission',
+};
+
+// Los rechazos de asignar el plan, por codigo. Lo demas cae al aviso generico.
+const CLAVES_DEL_PLAN: Readonly<Record<string, string>> = {
+  MERCHANT_NOT_FOUND: 'merchant_admin_plan_not_found',
   MERCHANT_CLOSED: 'business_close_err_closed',
   ADMIN_IS_AFFECTED_PARTY: 'merchant_admin_err_own',
 };
@@ -55,7 +63,14 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
   const [commission, setCommission] = useState<Record<string, string>>({});
 
   // ── Plan de un comercio (pilotos, mientras no exista el cobro) ──
-  const [idComercio, setIdComercio] = useState('');
+  // El comercio se busca por nombre y se elige de la lista: el administrador no
+  // tiene como ver el identificador de un comercio ajeno.
+  const [busquedaPlan, setBusquedaPlan] = useState('');
+  const [candidatos, setCandidatos] = useState<QRMerchant[]>([]);
+  const [cargandoCandidatos, setCargandoCandidatos] = useState(true);
+  const [errorCandidatos, setErrorCandidatos] = useState('');
+  const [recargaCandidatos, setRecargaCandidatos] = useState(0);
+  const [elegido, setElegido] = useState<QRMerchant | null>(null);
   const [planElegido, setPlanElegido] = useState<PlanComercio>('analitica');
   const [errorPlan, setErrorPlan] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -78,6 +93,9 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
   const [cerradoAhora, setCerradoAhora] = useState<string | null>(null);
 
   const cat = (c: string) => categoriaDeComercio(t, c);
+
+  // El comercio elegido sigue a la vista aunque la busqueda ya no lo traiga.
+  const visibles = elegido && !candidatos.some((c) => c.id === elegido.id) ? [elegido, ...candidatos] : candidatos;
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +136,43 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
     // t cambia con el idioma; la lista no depende de el.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pestana, busquedaAplicada, recargaTodos]);
+
+  // La lista de comercios del plan. Sin texto se pide enseguida; al escribir se
+  // espera a que la persona haga una pausa. Un comercio cerrado no se ofrece: el
+  // servidor no le cambia el plan (MERCHANT_CLOSED).
+  useEffect(() => {
+    if (pestana !== 'plan') return;
+    let cancelled = false;
+    const consulta = busquedaPlan.trim();
+    const temporizador = window.setTimeout(async () => {
+      setCargandoCandidatos(true);
+      setErrorCandidatos('');
+      try {
+        const api = getApiLayer();
+        if (!api.qrPayments) return;
+        const res = await api.qrPayments.listAllMerchants(consulta);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setCandidatos(res.data.filter((m) => !m.closedAt));
+        } else {
+          setCandidatos([]);
+          setErrorCandidatos(mensajeDeRechazo(res.error, {}, 'merchant_admin_action_failed', t));
+        }
+      } catch {
+        if (cancelled) return;
+        setCandidatos([]);
+        setErrorCandidatos(t('merchant_admin_action_failed'));
+      } finally {
+        if (!cancelled) setCargandoCandidatos(false);
+      }
+    }, consulta ? ESPERA_DE_LA_BUSQUEDA_MS : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(temporizador);
+    };
+    // t cambia con el idioma; la lista no depende de el.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pestana, busquedaPlan, recargaCandidatos]);
 
   const buscar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,9 +227,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       if (bps !== m.commissionBps) {
         const cr = await api.qrPayments.setMerchantCommission(m.id, bps);
         if (!cr.success) {
-          setError(cr.error?.code === 'ADMIN_IS_AFFECTED_PARTY'
-            ? t('merchant_admin_err_own')
-            : cr.error?.message || t('merchant_admin_action_failed'));
+          setError(mensajeDeRechazo(cr.error, CLAVES_DE_LA_REVISION, 'merchant_admin_action_failed', t));
           return;
         }
       }
@@ -211,36 +264,31 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
 
   const revisarPlan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!FORMATO_UUID.test(idComercio.trim())) {
-      setErrorPlan('merchant_admin_plan_id_invalid');
-      return;
-    }
+    if (!elegido) return;
     setErrorPlan(null);
     setConfirmando(true);
   };
 
   const asignarPlan = async () => {
-    if (asignandoRef.current) return;
+    if (!elegido || asignandoRef.current) return;
     asignandoRef.current = true;
     setAsignando(true);
     setErrorPlan(null);
     try {
       const api = getApiLayer();
       if (!api.qrPayments) return;
-      const res = await api.qrPayments.setMerchantPlan(idComercio.trim(), planElegido);
+      const res = await api.qrPayments.setMerchantPlan(elegido.id, planElegido);
       if (res.success && res.data) {
         setAsignado(res.data);
-        setIdComercio('');
+        setElegido(null);
+        // La lista muestra el plan actual de cada comercio: se vuelve a pedir.
+        setRecargaCandidatos((n) => n + 1);
       } else {
         const codigo = res.error?.code;
         setErrorPlan(
-          codigo === 'MERCHANT_NOT_FOUND'
-            ? 'merchant_admin_plan_not_found'
-            : codigo === 'INVALID_ID'
-              ? 'merchant_admin_plan_id_invalid'
-              : codigo === 'ADMIN_IS_AFFECTED_PARTY'
-                ? 'merchant_admin_err_own'
-                : 'merchant_admin_plan_failed',
+          codigo && Object.prototype.hasOwnProperty.call(CLAVES_DEL_PLAN, codigo)
+            ? CLAVES_DEL_PLAN[codigo]
+            : 'merchant_admin_plan_failed',
         );
       }
     } catch {
@@ -430,26 +478,73 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               </div>
             )}
 
-            <form onSubmit={revisarPlan} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-4" noValidate>
+            <div className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-3">
               <div>
-                <label htmlFor="admin-comercio-id" className="text-sm font-medium uv-text-secondary mb-1.5 block">
-                  {t('merchant_admin_plan_id_label')}
+                <label htmlFor="admin-plan-busqueda" className="text-sm font-medium uv-text-secondary mb-1.5 block">
+                  {t('merchant_admin_search_label')}
                 </label>
                 <input
-                  id="admin-comercio-id"
-                  type="text"
-                  value={idComercio}
-                  onChange={(e) => { setIdComercio(e.target.value); if (errorPlan) setErrorPlan(null); }}
+                  id="admin-plan-busqueda"
+                  type="search"
+                  value={busquedaPlan}
+                  onChange={(e) => setBusquedaPlan(e.target.value)}
+                  placeholder={t('merchant_admin_search_placeholder')}
                   autoComplete="off"
-                  autoCapitalize="none"
                   spellCheck={false}
-                  inputMode="text"
-                  placeholder="00000000-0000-0000-0000-000000000000"
-                  aria-invalid={errorPlan === 'merchant_admin_plan_id_invalid' || undefined}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent text-sm outline-none focus:border-[var(--color-primary)]"
                 />
               </div>
 
+              <fieldset>
+                <legend className="text-sm font-medium uv-text-secondary mb-1.5">{t('merchant_admin_plan_pick_label')}</legend>
+                {errorCandidatos && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{errorCandidatos}</p>}
+                {cargandoCandidatos ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : visibles.length === 0 && !errorCandidatos ? (
+                  <p className="py-6 text-center text-sm font-semibold uv-text-primary">{t('merchant_admin_all_empty')}</p>
+                ) : (
+                  <ul className="max-h-72 space-y-2 overflow-y-auto">
+                    {visibles.map((m) => {
+                      const marcado = elegido?.id === m.id;
+                      return (
+                        <li key={m.id}>
+                          <label
+                            className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-primary)] ${
+                              marcado
+                                ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)]'
+                                : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="comercio-plan"
+                              value={m.id}
+                              checked={marcado}
+                              onChange={() => { setElegido(m); if (errorPlan) setErrorPlan(null); }}
+                              className="mt-1 accent-[var(--color-primary)]"
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-bold uv-text-primary">{m.name}</span>
+                              <span className="block truncate text-xs uv-text-muted">{m.legalName}</span>
+                              {m.ownerName && (
+                                <span className="block truncate text-xs uv-text-muted">{rellenar(t('merchant_admin_owner'), { name: m.ownerName })}</span>
+                              )}
+                              <span className="block text-xs uv-text-secondary">
+                                {rellenar(t('merchant_admin_plan_current'), { plan: t(nombrePlan(m.plan)) })}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </fieldset>
+            </div>
+
+            <form onSubmit={revisarPlan} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4 space-y-4" noValidate>
               <fieldset>
                 <legend className="text-sm font-medium uv-text-secondary mb-1.5">{t('business_plan_label')}</legend>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -488,7 +583,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
 
               <button
                 type="submit"
-                disabled={asignando}
+                disabled={asignando || !elegido}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
               >
                 {t('merchant_admin_plan_review')}
@@ -569,7 +664,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
       >
         <div className="space-y-4">
           <p className="text-sm leading-relaxed uv-text-secondary break-words">
-            {rellenar(t('merchant_admin_plan_confirm_body'), { plan: t(nombrePlan(planElegido)), id: idComercio.trim() })}
+            {rellenar(t('merchant_admin_plan_confirm_body'), { plan: t(nombrePlan(planElegido)), name: elegido?.name ?? asignado?.name ?? '' })}
           </p>
           <p className="text-xs leading-relaxed uv-text-muted">{t('admin_users_plan_hint')}</p>
           <button

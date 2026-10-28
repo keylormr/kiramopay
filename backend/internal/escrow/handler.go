@@ -37,7 +37,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	response.JSON(w, http.StatusCreated, a)
+	response.JSON(w, http.StatusCreated, h.service.ConContraparte(r.Context(), userID, a))
 }
 
 // List handles GET /escrow.
@@ -52,7 +52,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, items)
+	response.JSON(w, http.StatusOK, h.service.ConContrapartes(r.Context(), userID, items))
 }
 
 // Get handles GET /escrow/{id}.
@@ -66,7 +66,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, a)
+	response.JSON(w, http.StatusOK, h.service.ConContraparte(r.Context(), userID, a))
 }
 
 // Fund handles POST /escrow/{id}/fund.
@@ -113,7 +113,7 @@ func (h *Handler) Dispute(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, a)
+	response.JSON(w, http.StatusOK, h.service.ConContraparte(r.Context(), userID, a))
 }
 
 // Resolve handles POST /admin/escrow/{id}/resolve (admin-gated at the route).
@@ -151,7 +151,7 @@ func (h *Handler) action(
 		h.writeError(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, a)
+	response.JSON(w, http.StatusOK, h.service.ConContraparte(r.Context(), userID, a))
 }
 
 func (h *Handler) caller(w http.ResponseWriter, r *http.Request) (string, bool) {

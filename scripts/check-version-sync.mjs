@@ -21,8 +21,9 @@
 // Correr con: npm run check:version
 
 import { readFileSync } from 'node:fs';
+import { notasDeVersion, idiomasDeLaApp } from './notas-de-version.mjs';
 
-const leer = (ruta) => readFileSync(new URL(`../${ruta}`, import.meta.url), 'utf8');
+const leer =(ruta) => readFileSync(new URL(`../${ruta}`, import.meta.url), 'utf8');
 
 const fallos = [];
 
@@ -85,6 +86,27 @@ for (const b of new Set(iosBuilds)) {
   }
 }
 
+// Las novedades de la version vigente tienen que estar en todos los idiomas de
+// la app: el aviso de actualizacion las cuenta y el perfil las lista. Sin esto,
+// la version nueva sale con sus notas en espanol para quien usa otro idioma.
+try {
+  const { cambios } = notasDeVersion(versionTs);
+  const traducidas = JSON.parse(leer('src/config/notasTraducidas.json'))[paquete] ?? {};
+  const idiomas = idiomasDeLaApp(leer('src/i18n/translations.ts')).filter((c) => c !== 'es');
+  for (const idioma of idiomas) {
+    const textos = traducidas[idioma];
+    if (!Array.isArray(textos)) {
+      fallos.push(`src/config/notasTraducidas.json no trae la ${paquete} en ${idioma}`);
+    } else if (textos.length !== cambios.length) {
+      fallos.push(
+        `la ${paquete} en ${idioma} tiene ${textos.length} cambios en notasTraducidas.json y ${cambios.length} en el changelog`,
+      );
+    }
+  }
+} catch (e) {
+  fallos.push(`no se pudieron revisar las notas traducidas: ${e.message}`);
+}
+
 if (fallos.length > 0) {
   console.error('La version no esta sincronizada:\n');
   for (const f of fallos) console.error(`  - ${f}`);
@@ -93,7 +115,8 @@ if (fallos.length > 0) {
       '\n  1. "version" en package.json' +
       '\n  2. versionName y versionCode en android/app/build.gradle' +
       '\n  3. APP_VERSION.current en src/config/version.ts, con su entrada de changelog' +
-      '\n     (y bajar la anterior a history)' +
+      '\n     (y bajar la anterior a history), y sus traducciones en' +
+      '\n     src/config/notasTraducidas.json (los seis idiomas, un texto por cambio)' +
       '\n  4. backend/internal/buildinfo/version.txt, que es lo que responde /health' +
       '\n  5. MARKETING_VERSION y CURRENT_PROJECT_VERSION en' +
       '\n     ios/App/App.xcodeproj/project.pbxproj (las dos configuraciones)\n',

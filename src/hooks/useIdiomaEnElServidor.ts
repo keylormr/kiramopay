@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { getApiLayer } from '@/api';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LANGUAGES, type Language } from '@/i18n/translations';
+import { refreshNotifications } from '@/services/dataSync';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**
@@ -18,7 +20,7 @@ import { useAuthStore } from '@/stores/auth.store';
  * dos pedidos juntos, y el servidor podia quedarse con el primero.
  */
 export function useIdiomaEnElServidor(): void {
-  const { language, elegido } = useLanguage();
+  const { language, elegido, adoptarIdiomaDeLaCuenta } = useLanguage();
   const userId = useAuthStore((s) => s.user?.id);
   const idiomaDelPerfil = useAuthStore((s) => s.user?.language);
   // Sin servidor configurado la sesion se guarda sin sus llaves: tras recargar
@@ -46,6 +48,28 @@ export function useIdiomaEnElServidor(): void {
     }
     enServidor.current = { id: userId, idioma: idiomaDelPerfil };
   }, [userId, idiomaDelPerfil]);
+
+  // El idioma de la cuenta es el de la persona; el del navegador es una
+  // adivinanza. Con la cuenta ya conocida, una pantalla que nadie eligio pasa a
+  // su idioma, y el dispositivo lo recuerda: la pantalla de arranque corre antes
+  // de saber quien entra y salia en el que adivino el navegador (Chrome en
+  // ingles, cuenta en espanol: "The server is waking up").
+  useEffect(() => {
+    if (!userId || !idiomaDelPerfil) return;
+    if (!LANGUAGES.some((l) => l.code === idiomaDelPerfil)) return;
+    adoptarIdiomaDeLaCuenta(idiomaDelPerfil as Language);
+  }, [userId, idiomaDelPerfil, adoptarIdiomaDeLaCuenta]);
+
+  // Los avisos de la campana se piden en el idioma de la pantalla (el servidor
+  // reescribe los que guardo en otro): al cambiar de idioma, los que ya estaban
+  // cargados seguirian en el anterior. Al abrir la app no hace falta: la
+  // sincronizacion de la entrada los trae en el idioma que haya en ese momento.
+  const idiomaPrevio = useRef(language);
+  useEffect(() => {
+    if (idiomaPrevio.current === language) return;
+    idiomaPrevio.current = language;
+    if (userId && conToken) void refreshNotifications().catch(() => {});
+  }, [language, userId, conToken]);
 
   useEffect(() => {
     if (!userId || !conToken || !enServidor.current || enVuelo.current) return;

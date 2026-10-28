@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { getApiLayer } from '@/api';
 import { formatMoney, MONEY_LOCALE } from '@/utils/money';
 import { fechaYHora } from '@/utils/fechaPlazo';
+import { nombreDelPremio, descripcionDelPremio, descripcionDelMovimiento } from '@/utils/textosDeRecompensas';
 import type { PointsAccount, Reward, PointsTransaction, CashbackRule } from '@/api/repositories/loyalty.repository';
 
 const TIER_CONFIG: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
@@ -343,8 +344,8 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                             {reward.category === 'experience' && <Icons.Star size={22} className="text-purple-600" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-bold uv-text-primary text-sm">{reward.name}</h3>
-                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{reward.description}</p>
+                            <h3 className="font-bold uv-text-primary text-sm">{nombreDelPremio(reward, t)}</h3>
+                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{descripcionDelPremio(reward, t)}</p>
                             <div className="flex items-center justify-between mt-2">
                               <span className="text-sm font-extrabold text-[var(--color-primary)]">{formatPoints(reward.pointsCost)} pts</span>
                               <button
@@ -473,7 +474,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                           : <Icons.ArrowUpRight size={18} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold uv-text-primary truncate">{tx.description}</p>
+                        <p className="text-sm font-bold uv-text-primary truncate">{descripcionDelMovimiento(tx.description, t)}</p>
                         <p className="text-xs text-gray-400">{fechaYHora(tx.createdAt, language)}</p>
                       </div>
                       <span className={`text-sm font-extrabold ${

@@ -383,6 +383,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tell the server the person just did something
+         * @description The client calls this when the PERSON acts (a tap, a key press, the wheel), at most once a minute, and once when a session opens or is restored. It is the only thing that keeps a session alive against the idle timeout (`JWT_IDLE_MINUTES`, 30 by default), counted from the last action and not from the last token renewal. Background requests (price polling, order tracking, the notifications socket) and token refreshes are NOT actions, which is why activity is not inferred from the other routes: the same route is fetched by the person and by a timer. Past the window nothing is revived: the answer is 401 `SESSION_IDLE` and the client's refresh, which applies the same rule, ends the session. A session opened by a client that never calls this (an older app) is measured as before, from the token's issue time.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recorded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED (closed, or idle past the window) | SESSION_IDLE (idle past the window) */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description ACTIVITY_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-pin": {
         parameters: {
             query?: never;
@@ -3563,8 +3615,26 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); REGISTER_FAILED (a required field is missing or invalid). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_DUPLICATE — the database reported a uniqueness conflict. Nothing was saved. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REGISTER_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3680,7 +3750,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3689,8 +3759,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                /** @description MERCHANT_NOT_FOUND — the merchant does not exist or the caller is not its owner (the two are not told apart), or the id is not a UUID. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. MERCHANT_DUPLICATE — the database reported a uniqueness conflict. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description UPDATE_FAILED — anything unexpected, including the database being down. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5637,7 +5725,7 @@ export interface paths {
         put?: never;
         /**
          * Create a virtual card
-         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit.
+         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit. The cardholder name is the person's own name, read from the profile.
          */
         post: {
             parameters: {
@@ -5655,14 +5743,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY | CREATE_FAILED */
+                /** @description INVALID_BODY | INVALID_CURRENCY (only CRC or USD) | INVALID_CARD_TYPE (only virtual or physical) */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) */
+                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) | CARDHOLDER_NAME_MISSING (the profile has no name to print) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5670,6 +5758,13 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["PlanLimitError"];
                     };
+                };
+                /** @description CREATE_FAILED. The body never carries the database error; the cause stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -7317,12 +7412,14 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description APPROVE_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
@@ -7333,8 +7430,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description APPROVE_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7389,7 +7504,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description REJECT_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7407,8 +7522,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REJECT_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7464,7 +7597,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant). */
+                /** @description INVALID_ID (the id is not a UUID); INVALID_BODY; COMMISSION_OUT_OF_RANGE (commission_bps is not between 0 and 10000). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7482,8 +7615,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant keeps the commission it had. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SET_COMMISSION_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8888,6 +9039,8 @@ export interface paths {
                 query?: {
                     limit?: number;
                     offset?: number;
+                    /** @description Language the app is showing. The catalogue notices are written again in that language (the stored record does not change); without it, or with a language the app does not have, they come as they were stored. */
+                    lang?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
                 };
                 header?: never;
                 path?: never;
@@ -11345,6 +11498,33 @@ export interface components {
              * @enum {string}
              */
             closed_by_expiry?: "entrega" | "revision";
+            /**
+             * Format: date-time
+             * @description When the buyer funded it.
+             */
+            funded_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went to the seller.
+             */
+            released_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went back to the buyer.
+             */
+            refunded_at?: string;
+            /**
+             * Format: date-time
+             * @description When a dispute was opened.
+             */
+            disputed_at?: string;
+            /**
+             * Format: date-time
+             * @description When it was cancelled before funding.
+             */
+            cancelled_at?: string;
+            /** @description Name of the OTHER party, the one who is not asking: the seller for the buyer and the buyer for the seller. Only in the response to a party of the agreement (create, list, get and each action); it is not stored and does not travel in webhook events. Absent when the account cannot be read. */
+            counterparty_name?: string;
         };
         /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
         PayoutDestination: {
@@ -11563,6 +11743,8 @@ export interface components {
                      * @enum {string|null}
                      */
                     language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+                    /** @description Same as UserProfile.passwordless_login */
+                    passwordless_login?: boolean;
                 };
             };
         };
@@ -11600,6 +11782,8 @@ export interface components {
              * @enum {string|null}
              */
             language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+            /** @description true when the account enters without a password: it is marked as a demonstration account and the server has DEMO_LOGIN_ENABLED on. Such an account has no current password to present, so changing the password and deleting the account are rejected with DEMO_ACCOUNT (the app does not offer them). Always present; false for any other account. */
+            passwordless_login?: boolean;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */

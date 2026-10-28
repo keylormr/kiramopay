@@ -383,4 +383,38 @@ describe('HttpAuthRepository', () => {
       expect(result.data?.user.language).toBe('fr');
     });
   });
+
+  // Las cuentas que entran sin contrasena (demostracion) no tienen contrasena
+  // actual que presentar: "Cambiar contrasena" y "Eliminar cuenta" fallaban. El
+  // servidor dice cuales son con passwordless_login y la app lo lee del login y
+  // del perfil.
+  describe('cuenta que entra sin contrasena', () => {
+    const cuenta = {
+      id: 'user-001', cedula: '702650930', phone: '+506 8888-0000', first_name: 'Keilor',
+      last_name: 'Martinez', email: '', kyc_level: 2, status: 'active',
+    };
+
+    it('lo lee del login', async () => {
+      mockLoginSuccess({ ...cuenta, passwordless_login: true } as Parameters<typeof mockLoginSuccess>[0]);
+      const result = await repo.login({ identifier: 'keilor', cedula: '', password: '' });
+      expect(result.data?.user.passwordlessLogin).toBe(true);
+    });
+
+    it('lo lee del perfil', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { ...cuenta, passwordless_login: true } }),
+      });
+      expect((await repo.getProfile()).data?.passwordlessLogin).toBe(true);
+    });
+
+    it('una cuenta normal, o un servidor anterior que no lo manda, no entra sin contrasena', async () => {
+      mockLoginSuccess({ ...cuenta, passwordless_login: false } as Parameters<typeof mockLoginSuccess>[0]);
+      expect((await repo.login({ identifier: '702650930', cedula: '702650930', password: 'x' })).data?.user.passwordlessLogin).toBe(false);
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: cuenta }) });
+      expect((await repo.getProfile()).data?.passwordlessLogin).toBe(false);
+    });
+  });
 });

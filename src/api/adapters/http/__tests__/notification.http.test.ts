@@ -23,6 +23,37 @@ describe('HttpNotificationRepository.getAll', () => {
   });
 });
 
+// Los avisos se guardan ya escritos, en el idioma que la cuenta tenia ese dia:
+// los anteriores a la migracion 074 estan en espanol. La lista se pide en el
+// idioma de la pantalla (?lang=) y el servidor reescribe los que reconoce.
+describe('HttpNotificationRepository.getAll: idioma', () => {
+  const vacio = () => vi.fn().mockResolvedValue({ success: true, data: [] });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('pide la lista en el idioma que la persona eligio', async () => {
+    localStorage.setItem('kiramopay_language', 'fr');
+    const get = vacio();
+    await new HttpNotificationRepository({ get } as unknown as HttpClient).getAll();
+    expect(get).toHaveBeenCalledWith('/api/v1/notifications?lang=fr');
+  });
+
+  it('sin eleccion guardada, en el que usa la pantalla (el del navegador, ingles en la prueba)', async () => {
+    const get = vacio();
+    await new HttpNotificationRepository({ get } as unknown as HttpClient).getAll();
+    expect(get).toHaveBeenCalledWith('/api/v1/notifications?lang=en');
+  });
+
+  it('el idioma de chino simplificado va como lo conoce el servidor', async () => {
+    localStorage.setItem('kiramopay_language', 'zh-cn');
+    const get = vacio();
+    await new HttpNotificationRepository({ get } as unknown as HttpClient).getAll();
+    expect(get).toHaveBeenCalledWith('/api/v1/notifications?lang=zh-cn');
+  });
+});
+
 // Ocultar una notificacion (la pantalla dice "eliminar"; el servidor la oculta
 // y el registro queda). La ruta lleva el id escapado, y el codigo del rechazo
 // es el del servidor: antes se pisaba con DELETE_FAILED.

@@ -129,6 +129,22 @@ export function minutosParaVencer(expiresAt?: string): number {
 }
 
 /**
+ * Una duracion en la unidad que se lee de un vistazo: "20 min", "1 h 30 min",
+ * "24 h". Un cobro de un dia se leia "Vence en 1440 min". Las abreviaturas son
+ * las del idioma (duration_hours, duration_minutes). Cero o un valor que no sirve
+ * se lee "0 min", nunca NaN.
+ */
+export function textoDeDuracion(minutos: number, t: (clave: string) => string): string {
+  const total = Number.isFinite(minutos) && minutos > 0 ? Math.round(minutos) : 0;
+  const horas = Math.floor(total / 60);
+  const resto = total % 60;
+  const partes: string[] = [];
+  if (horas > 0) partes.push(t('duration_hours').replace('{n}', String(horas)));
+  if (resto > 0 || horas === 0) partes.push(t('duration_minutes').replace('{n}', String(resto)));
+  return partes.join(' ');
+}
+
+/**
  * Los rechazos de pedir el codigo propio o el rotulo, emitir un cobro y
  * quitarle el monto, por codigo. Las tres hojas que cobran (inicio, solicitar
  * en SINPE y el negocio) pintaban `res.error.message` cuando el codigo no era

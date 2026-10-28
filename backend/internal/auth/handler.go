@@ -396,6 +396,30 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	response.NoContent(w)
 }
 
+// RegistrarActividad — POST /api/v1/auth/activity
+//
+// El cliente avisa aqui que la persona acaba de hacer algo (tocar, teclear): es
+// lo unico que mantiene viva la sesion ante el cierre por inactividad
+// (JWT_IDLE_MINUTES). Una peticion de fondo o una renovacion del token NO
+// cuentan, por eso no se infiere la actividad de las demas rutas: la misma
+// ruta (precios, un pedido) la piden la persona y un temporizador.
+//
+// Pasada la ventana la respuesta es 401 SESSION_IDLE y no se revive nada: el
+// cliente la trata como cualquier 401, intenta renovar y la renovacion cierra la
+// sesion.
+func (h *Handler) RegistrarActividad(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	if err := h.service.RegistrarAccion(r.Context(), middleware.GetAccessJTI(r.Context())); err != nil {
+		if errors.Is(err, ErrSesionInactiva) {
+			response.Error(w, http.StatusUnauthorized, "SESSION_IDLE", "session ended by inactivity")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "ACTIVITY_FAILED", "could not record activity")
+		return
+	}
+	response.NoContent(w)
+}
+
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {

@@ -7,6 +7,12 @@ import { getApiLayer } from '@/api';
 import type { VirtualCard } from '@/api/repositories/cards.repository';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
+import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+
+// Los rechazos viajan como codigo y el texto lo pone la pantalla: el del
+// servidor va en ingles y, ante un fallo, puede traer el de la base de datos.
+const CLAVES_DE_CREAR: Record<string, string> = { CARDHOLDER_NAME_MISSING: 'card_err_no_name' };
+const SIN_CLAVES_PROPIAS: Record<string, string> = {};
 
 export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans }) => {
   const { t } = useLanguage();
@@ -35,7 +41,6 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
   // memory to show once and never persist them.
   const [revealed, setRevealed] = useState<VirtualCard | null>(null);
   const [tempDaily, setTempDaily] = useState(0);
-  const [tempAtm, setTempAtm] = useState(0);
 
   // Reusable refresh for event handlers (after create/freeze/limits/cancel).
   const load = useCallback(async () => {
@@ -94,7 +99,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
         setTopeServidor(alTope);
         return;
       }
-      setError(res.error?.message || t('assistant_action_failed'));
+      setError(mensajeDeRechazo(res.error, CLAVES_DE_CREAR, 'card_err_create', t));
       return;
     }
     setRevealed(res.data);
@@ -143,13 +148,12 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
     const res = await api.freezeCard(card.id, !frozen);
     setBusy(false);
     if (res.success) await load();
-    else setError(res.error?.message || t('assistant_action_failed'));
+    else setError(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'assistant_action_failed', t));
   };
 
   const openLimits = () => {
     if (!card) return;
     setTempDaily(card.dailyLimit);
-    setTempAtm(card.atmLimit);
     setShowLimits(true);
   };
 
@@ -157,10 +161,11 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
     if (!api || !card || busy) return;
     setBusy(true);
     setError('');
-    const res = await api.updateLimits(card.id, { dailyLimit: tempDaily, atmLimit: tempAtm });
+    // Solo el limite diario: la tarjeta no retira en cajeros.
+    const res = await api.updateLimits(card.id, { dailyLimit: tempDaily });
     setBusy(false);
     if (res.success) { await load(); setShowLimits(false); }
-    else setError(res.error?.message || t('assistant_action_failed'));
+    else setError(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'assistant_action_failed', t));
   };
 
   const confirmCancel = async () => {
@@ -175,7 +180,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
       // es verdad y escondia el boton de crear otra hasta recargar.
       setTopeServidor(null);
       await load();
-    } else setError(res.error?.message || t('assistant_action_failed'));
+    } else setError(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'assistant_action_failed', t));
   };
 
   const copyNumber = async () => {
@@ -362,10 +367,6 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
               <span className="uv-text-muted">{t('daily_limit')}</span>
               <span className="font-semibold uv-text-primary tabular-nums">{formatCRC(card.dailySpent)} / {formatCRC(card.dailyLimit)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="uv-text-muted">{t('card_atm_limit')}</span>
-              <span className="font-semibold uv-text-primary tabular-nums">{formatCRC(card.atmLimit)}</span>
-            </div>
           </div>
 
           {/* Otra tarjeta: solo si el plan la permite. Si no, se dice por que. */}
@@ -412,18 +413,6 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
               type="range" min={0} max={1000000} step={10000}
               value={tempDaily}
               onChange={(e) => setTempDaily(parseInt(e.target.value, 10))}
-              className="w-full h-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-            />
-          </div>
-          <div>
-            <div className="flex justify-between mb-2">
-              <label className="font-semibold uv-text-primary">{t('card_atm_limit')}</label>
-              <span className="text-[var(--color-primary)] font-bold tabular-nums">{formatCRC(tempAtm)}</span>
-            </div>
-            <input
-              type="range" min={0} max={200000} step={5000}
-              value={tempAtm}
-              onChange={(e) => setTempAtm(parseInt(e.target.value, 10))}
               className="w-full h-2 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
             />
           </div>

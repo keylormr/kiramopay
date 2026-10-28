@@ -267,6 +267,37 @@ paths:
         '204':
           description: Logged out
 
+  /api/v1/auth/activity:
+    post:
+      tags: [Auth]
+      summary: Tell the server the person just did something
+      description: >-
+        The client calls this when the PERSON acts (a tap, a key press, the
+        wheel), at most once a minute, and once when a session opens or is
+        restored. It is the only thing that keeps a session alive against the
+        idle timeout (`JWT_IDLE_MINUTES`, 30 by default), counted from the last
+        action and not from the last token renewal. Background requests (price
+        polling, order tracking, the notifications socket) and token refreshes
+        are NOT actions, which is why activity is not inferred from the other
+        routes: the same route is fetched by the person and by a timer. Past
+        the window nothing is revived: the answer is 401 `SESSION_IDLE` and the
+        client's refresh, which applies the same rule, ends the session. A
+        session opened by a client that never calls this (an older app) is
+        measured as before, from the token's issue time.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Recorded
+        '401':
+          description: >-
+            UNAUTHORIZED | SESSION_REVOKED (closed, or idle past the window) |
+            SESSION_IDLE (idle past the window)
+        '403':
+          $ref: '#/components/responses/AccountBlocked'
+        '500':
+          description: ACTIVITY_FAILED
+
   /api/v1/auth/change-pin:
     post:
       tags: [Auth]
@@ -2307,8 +2338,26 @@ paths:
         '400':
           description: >-
             INVALID_BODY; INVALID_CATEGORY (the category is not one of the five
-            the app offers); REGISTER_FAILED (a required field is missing or
-            invalid).
+            the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or
+            MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing);
+            MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or
+            juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is
+            over 200 characters, or the cedula is over 50).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_DUPLICATE — the database reported a uniqueness conflict. Nothing was saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            REGISTER_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged server-side, never
+            returned to the client.
           content:
             application/json:
               schema:
@@ -2404,14 +2453,37 @@ paths:
         '400':
           description: >-
             INVALID_BODY; INVALID_CATEGORY (the new category is not one of the
-            five the app offers); UPDATE_FAILED (a required field is missing,
-            the merchant does not exist or the caller is not its owner).
+            five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED
+            or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing);
+            MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or
+            juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is
+            over 200 characters, or the cedula is over 50).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >-
+            MERCHANT_NOT_FOUND — the merchant does not exist or the caller is
+            not its owner (the two are not told apart), or the id is not a UUID.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          description: >-
+            MERCHANT_CLOSED — the merchant was closed; it is no longer
+            administered. Nothing changed. MERCHANT_DUPLICATE — the database
+            reported a uniqueness conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            UPDATE_FAILED — anything unexpected, including the database being
+            down. The message is the generic "internal server error"; the cause
+            is only logged server-side, never returned to the client.
           content:
             application/json:
               schema:
@@ -3730,20 +3802,25 @@ paths:
         numbers in force are published in /api/v1/transparency/fees).
         Cancelled, expired and replaced cards do not count. The limit only
         stops creating: whoever already has more keeps every card. Two
-        simultaneous creations cannot both slip past the limit.
+        simultaneous creations cannot both slip past the limit. The
+        cardholder name is the person's own name, read from the profile.
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Card created
         '400':
-          description: INVALID_BODY | CREATE_FAILED
+          description: INVALID_BODY | INVALID_CURRENCY (only CRC or USD) | INVALID_CARD_TYPE (only virtual or physical)
         '409':
-          description: CARD_LIMIT (the plan does not allow another active or frozen card)
+          description: >-
+            CARD_LIMIT (the plan does not allow another active or frozen card)
+            | CARDHOLDER_NAME_MISSING (the profile has no name to print)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanLimitError'
+        '500':
+          description: CREATE_FAILED. The body never carries the database error; the cause stays in the server log.
     get:
       tags: [Virtual Cards]
       summary: List user's virtual cards
@@ -4638,7 +4715,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: APPROVE_FAILED
+          description: INVALID_ID (the id is not a UUID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            APPROVE_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: >-
             FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
@@ -4681,7 +4776,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: REJECT_FAILED
+          description: INVALID_ID (the id is not a UUID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            REJECT_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged.
           content:
             application/json:
               schema:
@@ -4726,7 +4835,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant).
+          description: >-
+            INVALID_ID (the id is not a UUID); INVALID_BODY;
+            COMMISSION_OUT_OF_RANGE (commission_bps is not between 0 and 10000).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            SET_COMMISSION_FAILED — anything unexpected. The message is the
+            generic "internal server error"; the cause is only logged.
           content:
             application/json:
               schema:
@@ -5504,6 +5629,15 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: lang
+          in: query
+          description: >-
+            Language the app is showing. The catalogue notices are written again
+            in that language (the stored record does not change); without it, or
+            with a language the app does not have, they come as they were stored.
+          schema:
+            type: string
+            enum: [es, en, fr, pt, zh-cn, ja, hi]
       responses:
         '200':
           description: List of notifications
@@ -7117,6 +7251,19 @@ components:
             Set when a deadline closed the agreement: `entrega` (the seller
             never marked delivery) or `revision` (the buyer neither released
             nor disputed).
+        funded_at: { type: string, format: date-time, description: When the buyer funded it. }
+        released_at: { type: string, format: date-time, description: When the money went to the seller. }
+        refunded_at: { type: string, format: date-time, description: When the money went back to the buyer. }
+        disputed_at: { type: string, format: date-time, description: When a dispute was opened. }
+        cancelled_at: { type: string, format: date-time, description: When it was cancelled before funding. }
+        counterparty_name:
+          type: string
+          description: >-
+            Name of the OTHER party, the one who is not asking: the seller for
+            the buyer and the buyer for the seller. Only in the response to a
+            party of the agreement (create, list, get and each action); it is
+            not stored and does not travel in webhook events. Absent when the
+            account cannot be read.
 
     PayoutDestination:
       type: object
@@ -7415,6 +7562,9 @@ components:
                   nullable: true
                   enum: [es, en, fr, pt, zh-cn, ja, hi]
                   description: Same as UserProfile.language; a new account has none (null)
+                passwordless_login:
+                  type: boolean
+                  description: Same as UserProfile.passwordless_login
 
     UserProfile:
       type: object
@@ -7455,6 +7605,15 @@ components:
             written in it. null means the person has not chosen one yet: their
             notifications go out in es, and the app may save the language its
             screen shows without overwriting a choice made on another device.
+        passwordless_login:
+          type: boolean
+          description: >-
+            true when the account enters without a password: it is marked as a
+            demonstration account and the server has DEMO_LOGIN_ENABLED on. Such
+            an account has no current password to present, so changing the
+            password and deleting the account are rejected with DEMO_ACCOUNT
+            (the app does not offer them). Always present; false for any
+            other account.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }

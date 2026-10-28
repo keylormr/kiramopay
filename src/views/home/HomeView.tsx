@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
+import { Bandera } from '../../components/Bandera';
 import { BottomSheet } from '../../components/BottomSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -29,6 +30,7 @@ import {
   mensajeDeCobro,
   mensajeDelRechazoDelCobro,
   minutosParaVencer,
+  textoDeDuracion,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
 import { saldoTotal, formatearSaldoTotal } from '@/utils/saldoTotal';
@@ -516,8 +518,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     const info: Record<QRCurrency, { symbol: string; flag: string; name: string }> = {
       BTC: { symbol: '₿', flag: '🟠', name: 'Bitcoin' },
       ETH: { symbol: 'Ξ', flag: '🔷', name: 'Ethereum' },
-      CRC: { symbol: '₡', flag: '🇨🇷', name: 'Colones' },
-      USD: { symbol: '$', flag: '🇺🇸', name: 'Dolares' },
+      CRC: { symbol: '₡', flag: 'CR', name: 'Colones' },
+      USD: { symbol: '$', flag: 'US', name: 'Dolares' },
     };
     return info[ccy];
   };
@@ -777,7 +779,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-2xl">{acc.flag}</span>
+                  <Bandera pais={acc.flag} className="text-2xl" />
                   <span className={`text-[11px] font-bold uppercase tracking-wider ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.ccy}</span>
                 </div>
                 <div>
@@ -891,11 +893,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     {formatCurrency(cobrarCharge.amount, cobrarCharge.currency as QRCurrency)}
                   </p>
                   <p className="text-xs uv-text-muted mt-1">
-                    {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobrarCharge.expiresAt)))}
+                    {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobrarCharge.expiresAt), t))}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_personal_ayuda')}</p>
               )}
 
               {/* El campo de monto es una accion OPCIONAL sobre el codigo que ya
@@ -945,14 +947,51 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Add Money (Crypto) Sheet */}
-      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('deposit_crypto')}>
-        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
-            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
+      {/* Agregar dinero. Sobre el saldo en colones abria "Depositar Crypto /
+          proximamente": otra cosa que lo que se pidio. Dice como entra dinero
+          hoy —recibir de otra cuenta KiramoPay, por numero o por QR—, lleva a
+          las dos pantallas donde se hace, y avisa que cargar desde el banco
+          llega con la conexion a SINPE. */}
+      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('add_money')}>
+        <div className="space-y-5 px-1 pb-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-success-soft)] text-[var(--color-success)]">
+              <Icons.Receive size={22} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold uv-text-primary">{t('add_money_today_title')}</h3>
+              <p className="mt-1 text-sm uv-text-secondary leading-relaxed">{t('add_money_today_desc')}</p>
+            </div>
           </div>
-          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
-          <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.Receive size={18} aria-hidden="true" />}
+              onClick={() => { setActiveSheet('none'); onNavigateToSinpe?.('receive'); }}
+            >
+              {t('receive')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.QrCode size={18} aria-hidden="true" />}
+              onClick={() => setActiveSheet('cobrar')}
+            >
+              {t('my_qr_short')}
+            </Button>
+          </div>
+
+          <p
+            role="note"
+            className="flex items-start gap-2 rounded-xl uv-surface-2 p-3 text-sm uv-text-secondary leading-relaxed"
+          >
+            <Icons.Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {t('add_money_bank_soon')}
+          </p>
         </div>
       </BottomSheet>
 
@@ -1003,7 +1042,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               return (
                 <div key={ccy} className="flex flex-col items-center">
                   <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
-                    {info.flag}
+                    <Bandera pais={info.flag} />
                   </div>
                   <span className="text-xs text-gray-500">{ccy}</span>
                 </div>

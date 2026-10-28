@@ -125,3 +125,44 @@ describe('SinpeView — solicitar dinero, cada rechazo en el idioma de la app', 
     expect(screen.queryByText(crudo)).not.toBeInTheDocument();
   });
 });
+
+// Cada solicitud activa tiene un boton que abre el QR de ESA solicitud. Decia
+// "Ver todo" ("View All"), como si abriera la lista completa.
+describe('SinpeView — las solicitudes activas', () => {
+  const pedido = {
+    id: 'charge-1',
+    qrCodeId: 'code-1',
+    createdBy: 'u1',
+    amount: 5000,
+    currency: 'CRC',
+    channel: 'link' as const,
+    status: 'pending' as const,
+    qrData: 'KP:p2p_request:chg12345:500000:CRC:xbbbbbbbbbbbbbbbbbbbbbbbb',
+    expiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+
+  it('el boton de cada solicitud dice que muestra el QR, no "ver todo"', async () => {
+    mocks.api.qrPayments.listCharges.mockResolvedValue({ success: true, data: [pedido] });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Solicitar' })[0]);
+    const hoja = within(await screen.findByRole('dialog'));
+
+    expect(await hoja.findByRole('button', { name: 'Ver QR' })).toBeInTheDocument();
+    expect(hoja.queryByRole('button', { name: /ver todo/i })).not.toBeInTheDocument();
+  });
+
+  it('y lo que abre es el QR de esa solicitud', async () => {
+    mocks.api.qrPayments.listCharges.mockResolvedValue({ success: true, data: [pedido] });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Solicitar' })[0]);
+    const hoja = within(await screen.findByRole('dialog'));
+    await user.click(await hoja.findByRole('button', { name: 'Ver QR' }));
+
+    expect(await hoja.findByRole('button', { name: 'Compartir' })).toBeInTheDocument();
+  });
+});

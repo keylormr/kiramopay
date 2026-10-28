@@ -32,7 +32,10 @@ interface Props {
   version: string;
   /** La que corre en el telefono. */
   instalada?: string;
+  /** Las novedades en espanol: lo que se lee si el release no trae el idioma de la persona. */
   notas: string[];
+  /** Las mismas novedades en los demas idiomas, por codigo. */
+  notasTraducidas?: Record<string, string[]>;
   plataforma: PlataformaApp | null;
   onActualizar: () => void;
   /** Presente cuando la version se baja por dentro. */
@@ -130,14 +133,18 @@ const Avance: React.FC<{ estado: EstadoInterno; onReintentar?: () => void }> = (
 export const ActualizacionObligatoria: React.FC<Props> = ({
   version,
   instalada,
-  notas,
+  notas: notasEnEspanol,
+  notasTraducidas,
   plataforma,
   onActualizar,
   interna,
   onReintentar,
 }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const ios = plataforma === 'ios';
+  // El idioma de la persona si el release lo trae; si no, el espanol de siempre.
+  const traducidas = notasTraducidas?.[language];
+  const notas = traducidas && traducidas.length > 0 ? traducidas : notasEnEspanol;
 
   const titulo = interna ? t('update_internal_title') : t('update_title');
   const cuerpo = interna ? t('update_internal_body') : t(ios ? 'update_body_ios' : 'update_body');
@@ -217,6 +224,7 @@ export const BarreraDeActualizacion: React.FC<{ children: React.ReactNode }> = (
       version={actualizacion.version}
       instalada={actualizacion.instalada}
       notas={actualizacion.notas}
+      notasTraducidas={actualizacion.notasTraducidas}
       plataforma={plataforma}
       onActualizar={actualizar}
       interna={

@@ -193,7 +193,11 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <p className="text-lg font-bold mb-2 uv-text-primary">{t('payout_empty')}</p>
             <p className="text-sm text-center mb-6">{t('payout_empty_desc')}</p>
             {rails.length === 0 ? (
-              <p className="text-sm text-center text-red-400">{t('payout_no_rails')}</p>
+              // No es un error: es algo que todavia no existe. Antes salia en
+              // rojo y con la jerga del modulo ("rieles").
+              <p role="status" className="max-w-[320px] text-sm text-center uv-text-secondary">
+                {t('payout_no_rails')}
+              </p>
             ) : (
               <button
                 onClick={() => {

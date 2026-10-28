@@ -34,6 +34,7 @@ import { takeReferralCode } from './utils/referralCode';
 import { enlaceInvitacion, compartirEnlace } from './utils/compartir';
 import { useAuthStore } from './stores/auth.store';
 import { useIdiomaEnElServidor } from './hooks/useIdiomaEnElServidor';
+import { useActividadDeSesion } from './hooks/useActividadDeSesion';
 import { useBusinessStore } from './stores/business.store';
 import { useBusinessData } from './hooks/useBusinessData';
 import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
@@ -889,6 +890,12 @@ const AppContainer = () => {
     publishDeepLink({ tab, params: params ?? {} });
   }, []);
   useDeepLinks({ navigateTo, isAuthenticated: state.isAuthenticated });
+
+  // El cierre por inactividad del servidor cuenta desde la ultima ACCION de la
+  // persona: este gancho se lo avisa (a lo sumo una vez por minuto, y solo ante
+  // un toque, una tecla o la rueda; nunca por temporizador ni por una peticion
+  // de fondo como los precios o el sondeo de un pedido).
+  useActividadDeSesion(state.isAuthenticated);
 
   // Sync data from backend when app mounts with an authenticated user
   useEffect(() => {

@@ -22,4 +22,11 @@ export interface User {
    * avisos y sus push. Un servidor anterior a la migracion 074 no lo manda.
    */
   language?: string | null;
+  /**
+   * La cuenta entra sin contraseña (una cuenta de demostración con la bandera del
+   * servidor encendida). No tiene contraseña actual que presentar: no se le
+   * ofrece cambiarla ni eliminar la cuenta. Un servidor anterior no lo manda y
+   * se lee como false.
+   */
+  passwordlessLogin?: boolean;
 }

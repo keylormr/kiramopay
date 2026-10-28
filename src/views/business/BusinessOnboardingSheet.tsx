@@ -6,6 +6,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { getApiLayer } from '@/api';
 import type { QRMerchant } from '@/api/repositories/qrpayment.repository';
 import { CATEGORIAS_DE_COMERCIO as CATEGORIES, categoriaDeComercio } from '@/utils/categoriaDeComercio';
+import { LARGO_MAXIMO_DE_COMERCIO as LARGO, mensajeDelPerfilDeComercio } from '@/utils/erroresDeComercio';
 
 interface Props {
   isOpen: boolean;
@@ -81,7 +82,9 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
       onCreated(res.data);
       reset();
     } else {
-      setError(res.error?.message || t('merchant_register_error'));
+      // El texto lo pone la pantalla a partir del codigo: el del servidor va en
+      // ingles y, ante una caida, puede traer el del controlador de la base.
+      setError(mensajeDelPerfilDeComercio(t, res.error, 'merchant_register_error'));
     }
   };
 
@@ -132,7 +135,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
           <div className="space-y-4">
             <div>
               <label className={label}>{t('merchant_name')}</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={LARGO.nombre} className={field} />
             </div>
             <div>
               <label className={label}>{t('merchant_category')}</label>
@@ -155,6 +158,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
                 value={cedula}
                 onChange={(e) => { setCedula(e.target.value); setLookupState('idle'); }}
                 onBlur={lookupCedula}
+                maxLength={LARGO.cedula}
                 className={field}
                 inputMode="numeric"
               />
@@ -168,7 +172,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
             </div>
             <div>
               <label className={label}>{t('merchant_legal_name')}</label>
-              <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className={field} />
+              <input value={legalName} onChange={(e) => setLegalName(e.target.value)} maxLength={LARGO.razonSocial} className={field} />
             </div>
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[var(--color-primary)]" />

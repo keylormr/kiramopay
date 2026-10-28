@@ -35,6 +35,11 @@ const CLAVES_ERROR_CREAR: Record<string, string> = {
   SPLIT_INVALID_TYPE: 'splitpay_err_invalid_type',
 };
 
+// Los estados de una cuenta dividida que el servidor devuelve. La lista mostraba
+// el valor crudo ("cancelled"); cada uno tiene su texto en los siete idiomas, y
+// un estado que no esta aqui se muestra como llega.
+const ESTADOS_CONOCIDOS = ['active', 'settled', 'cancelled'];
+
 // El resto de acciones del modulo (ver detalle, pagar, rechazar, cancelar)
 // solo tienen UN codigo por fallo (NOT_FOUND, PAY_FAILED...), que viaja con el
 // texto de diagnostico en ingles del backend (`err.Error()`): para esos, el
@@ -44,6 +49,14 @@ const CLAVES_ERROR_CREAR: Record<string, string> = {
 // esta pantalla lo hacia, y el 401 del reintento tras renovar la sesion salia
 // como "user not authenticated".
 const SIN_CLAVES_PROPIAS: Readonly<Record<string, string>> = {};
+
+// El estado del grupo en el detalle. El rotulo de la lista es otro y lo cambia
+// otro trabajo: estas claves son solo del detalle.
+const CLAVES_DEL_ESTADO_DEL_GRUPO: Readonly<Record<string, string>> = {
+  active: 'splitpay_detail_state_active',
+  settled: 'splitpay_detail_state_settled',
+  cancelled: 'splitpay_detail_state_cancelled',
+};
 
 export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
@@ -322,7 +335,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     {split.description && <p className="text-xs text-gray-400 mt-0.5">{split.description}</p>}
                   </div>
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(split.status)}`}>
-                    {split.status}
+                    {ESTADOS_CONOCIDOS.includes(split.status) ? t(`splitpay_status_${split.status}`) : split.status}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -444,7 +457,18 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               <p className="text-2xl font-extrabold uv-text-primary mt-1">
                 {formatMoney(detalle.group.totalAmount, detalle.group.currency as 'CRC' | 'USD')}
               </p>
+              {/* El estado del grupo: el detalle de una division cancelada no
+                  decia que lo estaba. */}
+              <span className={`mt-2 inline-block px-2 py-0.5 text-[11px] font-bold rounded-full ${getStatusColor(detalle.group.status)}`}>
+                {t(CLAVES_DEL_ESTADO_DEL_GRUPO[detalle.group.status] ?? 'splitpay_detail_state_active')}
+              </span>
             </div>
+
+            {detalle.group.status === 'cancelled' && (
+              <p role="status" className="rounded-xl px-3 py-2 text-sm uv-surface-2 uv-text-secondary">
+                {t('splitpay_detail_cancelled_note')}
+              </p>
+            )}
 
             <div className="space-y-2">
               {detalle.shares.map((cuota) => {
@@ -467,7 +491,10 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       <p className="text-[11px] text-gray-400">
                         {cuota.status === 'paid' ? t('splitpay_share_paid')
                           : cuota.status === 'declined' ? t('splitpay_share_declined')
-                            : t('splitpay_share_pending')}
+                            // Una cuota pendiente de una division cancelada ya no
+                            // se debe: "Pendiente" parecia que si.
+                            : detalle.group.status === 'cancelled' ? t('splitpay_share_not_charged')
+                              : t('splitpay_share_pending')}
                       </p>
                     </div>
                     <span className="text-sm font-bold uv-text-primary flex-shrink-0 ml-3">
@@ -490,6 +517,15 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 <p className="text-sm text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
                   {confirmando === 'decline' ? t('splitpay_confirm_decline') : t('splitpay_confirm_cancel')}
                 </p>
+                {/* Cancelar solo cambia el estado del grupo: el dinero que
+                    otros ya pagaron esta en la cuenta de quien creo la
+                    division y no vuelve solo. La cuota del propio creador no
+                    cuenta: nace pagada y no mueve dinero. */}
+                {confirmando === 'cancel' && detalle.shares.some((c) => c.status === 'paid' && c.userId !== detalle.group.creatorId) && (
+                  <p className="text-sm font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
+                    {t('splitpay_cancel_paid_warning')}
+                  </p>
+                )}
                 <div className="flex gap-3">
                   <Button
                     variant="secondary"

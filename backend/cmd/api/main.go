@@ -390,7 +390,9 @@ func main() {
 		EmailSender:              emailSender,
 		PublicAppURL:             msgCfg.PublicAppURL,
 	})
-	userService := user.NewService(userRepo)
+	// El perfil dice que cuentas entran sin contrasena con la misma bandera del
+	// login, para que la app no les ofrezca cambiar una contrasena que no tienen.
+	userService := user.NewService(userRepo).ConEntradaDeDemostracion(cfg.Server.DemoLoginEnabled)
 	walletService := wallet.NewService(walletRepo)
 	// El motor de riesgo se construye ANTES que el servicio de transacciones
 	// porque este ultimo lo consulta en el camino de salida. Hasta ahora solo
@@ -672,7 +674,14 @@ func main() {
 	loyaltyHandler := loyalty.NewHandler(loyaltyService)
 	qrHandler := qrpayment.NewHandler(qrService)
 	splitHandler := splitpay.NewHandler(splitService)
-	cardsHandler := cards.NewHandler(cardsService)
+	// El titular de la tarjeta es el nombre de la persona, el de su perfil.
+	cardsHandler := cards.NewHandler(cardsService).ConNombreDe(func(ctx context.Context, userID string) (string, error) {
+		u, err := userRepo.FindByID(ctx, userID)
+		if err != nil {
+			return "", err
+		}
+		return u.FirstName + " " + u.LastName, nil
+	})
 	fraudHandler := fraud.NewHandler(fraudService)
 	countryHandler := country.NewHandler(countryService)
 	budgetHandler := budget.NewHandler(budgetService)
@@ -1014,6 +1023,9 @@ func main() {
 
 			// Auth
 			r.Post("/auth/logout", authHandler.Logout)
+			// La persona acaba de actuar: lo unico que mantiene viva la sesion
+			// ante el cierre por inactividad (JWT_IDLE_MINUTES).
+			r.Post("/auth/activity", authHandler.RegistrarActividad)
 			// Los dispositivos con sesion abierta, y el poder de cerrarlos:
 			// uno solo, o todos los demas.
 			r.Get("/auth/sessions", authHandler.Sessions)

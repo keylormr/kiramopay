@@ -140,6 +140,51 @@ beforeEach(() => {
   mocks.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
 });
 
+// Quien cobra con QR desde Inicio es una persona, no un comercio: el texto del
+// codigo fijo hablaba de imprimirlo y pegarlo en el mostrador, y el vencimiento
+// de un cobro de un dia decia "Vence en 1440 min".
+describe('Cobrar con QR — lo que lee una persona', () => {
+  it('el codigo fijo se explica para una persona, no para un mostrador', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+
+    expect(screen.queryByText(/mostrador/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Este código es fijo: compártelo cuando quieras que te paguen.')).toBeInTheDocument();
+  });
+
+  it('el vencimiento de un cobro de un dia se lee en horas', async () => {
+    mocks.createCharge.mockResolvedValue({
+      success: true,
+      data: { ...cobro, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000 + 5_000).toISOString() },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByRole('button', { name: 'Cobrar este monto' }));
+
+    expect(await screen.findByText('Vence en 24 h')).toBeInTheDocument();
+    expect(screen.queryByText(/1440/)).not.toBeInTheDocument();
+  });
+
+  it('un cobro que vence pronto sigue leyendose en minutos', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByRole('button', { name: 'Cobrar este monto' }));
+
+    expect(await screen.findByText('Vence en 20 min')).toBeInTheDocument();
+  });
+});
+
 describe('Cobrar con QR — el codigo se recicla', () => {
   it('la hoja abre con el codigo puesto, sin paso previo de generarlo', async () => {
     const user = userEvent.setup();

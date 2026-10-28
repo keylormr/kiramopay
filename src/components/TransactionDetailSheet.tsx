@@ -1,7 +1,7 @@
 import React from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useLanguage } from '@/i18n/LanguageContext';
-import { txTitle } from '@/utils/txTitle';
+import { contraparteDelMovimiento, notaDelMovimiento, tipoDeMovimiento, txTitle } from '@/utils/txTitle';
 import { fechaYHora } from '@/utils/fechaPlazo';
 import { estiloDeCategoria, etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
 import { estiloDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
@@ -51,6 +51,9 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
   const estado = estiloDeEstado(tx ?? {});
   const IconoEstado = estado.icon;
   const tachado = tx ? noMovioDinero(tx) : false;
+  // Que fue el movimiento, con quien y la nota, aparte del titulo.
+  const contraparte = tx ? contraparteDelMovimiento(tx) : '';
+  const nota = tx ? notaDelMovimiento(tx) : '';
 
   return (
     <BottomSheet isOpen={isOpen && tx !== null} onClose={onClose} title={t('transaction_details')}>
@@ -83,6 +86,9 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({ 
               </span>
             </Fila>
             <Fila etiqueta={t('date')}>{fechaYHora(tx.dateISO, language) || tx.date}</Fila>
+            <Fila etiqueta={t('transaction_type')}>{tipoDeMovimiento(tx, t)}</Fila>
+            {contraparte && <Fila etiqueta={entrante ? t('from') : t('transaction_to')}>{contraparte}</Fila>}
+            {nota && <Fila etiqueta={t('transaction_note')}>{nota}</Fila>}
             <Fila etiqueta={t('category')}>
               <span className={estilo.text}>{etiquetaDeCategoria(tx.category, t)}</span>
             </Fila>
