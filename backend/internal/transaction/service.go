@@ -637,9 +637,9 @@ func (s *Service) CrearOReconocer(ctx context.Context, userID string, req *Creat
 		tx = creada
 	}
 
-	// Build the ledger posting for outgoing/incoming legs against the
-	// SYSTEM:EXTERNAL counterparty for now (callers that know the peer should
-	// use CreateTransfer instead).
+	// Build the ledger posting for outgoing/incoming legs against the reserve
+	// (or, for crypto, the external position plus the own-capital swap) for
+	// now; callers that know the peer should use CreateTransfer instead.
 	posting := s.buildSingleSidedPosting(tx, req)
 	completar := s.completarEnLaMismaTx(tx.ID)
 	var topes func(context.Context, pgx.Tx) error
@@ -1189,6 +1189,13 @@ func (s *Service) TransferirOReconocer(ctx context.Context, req *CreateTransferR
 		}
 	}
 
+	// La comision sale del pasivo (de quien paga) y ya no es de los usuarios:
+	// la reserva la entrega al capital propio, para que siga igual a lo que se
+	// les debe.
+	if req.Fee > 0 {
+		entries = append(entries, ledger.ReservaACapital(req.Currency, req.Fee)...)
+	}
+
 	p := &ledger.Posting{
 		Description:    fmt.Sprintf("transfer %s %d %s", req.TxType, req.Amount, req.Currency),
 		IdempotencyKey: req.IdempotencyKey,
@@ -1503,37 +1510,67 @@ func (s *Service) checkMonthlyLimit(ctx context.Context, userID, currency string
 	return nil
 }
 
-// buildSingleSidedPosting books external-counterparty transfers (deposits,
-// withdrawals, bill payments) where the second leg is a system account.
+// buildSingleSidedPosting arma el asiento de un movimiento contra el exterior
+// (recibos, recargas, compra y venta de cripto, y los depositos y retiros que
+// llegan con Internal). La regla es la de las reservas: en cada moneda, la
+// reserva queda EXACTAMENTE igual a lo que se les debe a los usuarios.
+//
+//   - Plata que cruza la frontera del sistema (recibo, recarga, retiro o
+//     deposito): la contraparte es la RESERVA. El pasivo baja (o sube) y la
+//     reserva baja (o sube) lo mismo. Antes la contraparte era SYSTEM:EXTERNAL,
+//     que no es reserva: cada salida dejaba reserva de mas y cada entrada
+//     dejaba reserva de menos.
+//   - Cripto: la plata no sale del sistema, pasa a ser de KiramoPay. La
+//     contraparte sigue siendo SYSTEM:EXTERNAL (la posicion de cripto con los
+//     usuarios) y la reserva y el capital propio se pasan lo que cambio el
+//     pasivo: comprar cripto baja el pasivo y la reserva entrega ese efectivo
+//     al capital; vender lo sube y el capital lo pone en la reserva.
+//   - Una comision (Fee) baja el pasivo pero ya no es de los usuarios: pasa de
+//     la reserva al capital propio.
 func (s *Service) buildSingleSidedPosting(tx *TransactionRecord, req *CreateTransactionRequest) *ledger.Posting {
-	// La cuenta externa y la de comisiones se eligen por la moneda del
-	// movimiento. Anotar un asiento en dolares contra SYSTEM:EXTERNAL:CRC
-	// —una cuenta declarada en colones— deja la contraparte externa con dos
-	// monedas mezcladas y arruina cualquier conciliacion por moneda.
+	// Las cuentas se eligen por la moneda del movimiento. Anotar un asiento en
+	// dolares contra una cuenta declarada en colones deja la contraparte con
+	// dos monedas mezcladas y arruina cualquier conciliacion por moneda.
 	external := ledger.SystemExternalCRC
 	feeAccount := ledger.SystemFeesCRC
 	if req.Currency == "USD" {
 		external = ledger.SystemExternalUSD
 		feeAccount = ledger.SystemFeesUSD
 	}
+	reserve := ledger.ReserveFor(req.Currency)
 
+	user := ledger.Account{UserID: tx.UserID}
 	entries := []ledger.Entry{}
-	if isOutgoing(req.Type) {
+	switch {
+	case req.Type == TypeCryptoBuy:
 		entries = append(entries,
-			ledger.Entry{Account: ledger.Account{UserID: tx.UserID}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
+			ledger.Entry{Account: user, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
 			ledger.Entry{Account: ledger.Account{SystemCode: external}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
 		)
-		if req.Fee > 0 {
-			entries = append(entries,
-				ledger.Entry{Account: ledger.Account{UserID: tx.UserID}, Side: ledger.Debit, AmountMinor: req.Fee, Currency: req.Currency},
-				ledger.Entry{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
-			)
-		}
-	} else {
+		entries = append(entries, ledger.ReservaACapital(req.Currency, req.Amount)...)
+	case req.Type == TypeCryptoSell:
 		entries = append(entries,
 			ledger.Entry{Account: ledger.Account{SystemCode: external}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
-			ledger.Entry{Account: ledger.Account{UserID: tx.UserID}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+			ledger.Entry{Account: user, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
 		)
+		entries = append(entries, ledger.CapitalAReserva(req.Currency, req.Amount)...)
+	case isOutgoing(req.Type):
+		entries = append(entries,
+			ledger.Entry{Account: user, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
+			ledger.Entry{Account: ledger.Account{SystemCode: reserve}, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+		)
+	default:
+		entries = append(entries,
+			ledger.Entry{Account: ledger.Account{SystemCode: reserve}, Side: ledger.Debit, AmountMinor: req.Amount, Currency: req.Currency},
+			ledger.Entry{Account: user, Side: ledger.Credit, AmountMinor: req.Amount, Currency: req.Currency},
+		)
+	}
+	if isOutgoing(req.Type) && req.Fee > 0 {
+		entries = append(entries,
+			ledger.Entry{Account: user, Side: ledger.Debit, AmountMinor: req.Fee, Currency: req.Currency},
+			ledger.Entry{Account: ledger.Account{SystemCode: feeAccount}, Side: ledger.Credit, AmountMinor: req.Fee, Currency: req.Currency},
+		)
+		entries = append(entries, ledger.ReservaACapital(req.Currency, req.Fee)...)
 	}
 
 	return &ledger.Posting{

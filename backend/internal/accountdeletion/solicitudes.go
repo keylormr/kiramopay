@@ -463,8 +463,12 @@ type SolicitudAdmin struct {
 // ListarVerificadas devuelve la cola: las solicitudes con el contacto ya
 // comprobado, la mas antigua primero.
 func (s *Service) ListarVerificadas(ctx context.Context, limite int) ([]SolicitudAdmin, error) {
-	if limite <= 0 || limite > 100 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope. Antes volvia
+	// al valor por defecto, y `limit=500` traia menos filas que `limit=100`.
+	if limite <= 0 {
 		limite = 50
+	} else if limite > 100 {
+		limite = 100
 	}
 	filas, err := s.pool.Query(ctx, `
 		SELECT id::text, contact_kind, status, created_at, verified_at, COALESCE(user_id::text, '')

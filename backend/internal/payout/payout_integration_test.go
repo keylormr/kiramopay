@@ -41,18 +41,22 @@ func walletCRC(t *testing.T, pool *pgxpool.Pool, userID string) int64 {
 	return bal
 }
 
-// systemBalance returns the signed balance of a system account from the journal.
-func systemBalance(t *testing.T, pool *pgxpool.Pool, code string) int64 {
+// salidoPorLosRieles devuelve cuanta plata ha salido de la reserva en colones
+// por payouts, neta de reembolsos: lo que antes retenia la cuenta externa del
+// riel. Solo cuenta los asientos de payouts, asi el saldo con que se siembra la
+// reserva no entra.
+func salidoPorLosRieles(t *testing.T, pool *pgxpool.Pool) int64 {
 	t.Helper()
-	var bal int64
+	var salido int64
 	if err := pool.QueryRow(context.Background(), `
 		SELECT COALESCE(SUM(CASE WHEN je.direction = 'credit' THEN je.amount_minor ELSE -je.amount_minor END), 0)
 		FROM journal_entries je
+		JOIN journal_postings jp ON jp.id = je.posting_id
 		JOIN ledger_accounts la ON la.id = je.account_id
-		WHERE la.code = $1`, code).Scan(&bal); err != nil {
-		t.Fatalf("read system account %s: %v", code, err)
+		WHERE la.code = 'SYSTEM:RESERVE:CRC' AND jp.idempotency_key LIKE 'payout:%'`).Scan(&salido); err != nil {
+		t.Fatalf("leer lo que salio de la reserva por payouts: %v", err)
 	}
-	return bal
+	return salido
 }
 
 func countTx(t *testing.T, pool *pgxpool.Pool, userID, txType string) int {
@@ -65,8 +69,6 @@ func countTx(t *testing.T, pool *pgxpool.Pool, userID, txType string) int {
 	}
 	return n
 }
-
-const mockExternalCRC = "SYSTEM:EXTERNAL:MOCK:CRC"
 
 func setup(t *testing.T) (*pgxpool.Pool, *Service, *MockRail, string) {
 	t.Helper()
@@ -115,8 +117,8 @@ func TestPayoutCompleted(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before-250_000 {
 		t.Errorf("wallet = %d, want %d", got, before-250_000)
 	}
-	// Money left the platform: the rail's external liability holds it.
-	if got := systemBalance(t, pool, mockExternalCRC); got != 250_000 {
+	// Money left the platform: the reserve released it towards the rail.
+	if got := salidoPorLosRieles(t, pool); got != 250_000 {
 		t.Errorf("external account = %d, want 250000", got)
 	}
 	if got := countTx(t, pool, user, "payout_sent"); got != 1 {
@@ -140,7 +142,7 @@ func TestPayoutFailedRefunds(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before {
 		t.Errorf("wallet = %d, want %d (refunded)", got, before)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 0 {
+	if got := salidoPorLosRieles(t, pool); got != 0 {
 		t.Errorf("external account = %d, want 0 after refund", got)
 	}
 	if got := countTx(t, pool, user, "payout_sent"); got != 1 {
@@ -206,7 +208,7 @@ func TestPayoutPendingThenRefresh(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before-90_000 {
 		t.Errorf("wallet = %d, want %d", got, before-90_000)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 90_000 {
+	if got := salidoPorLosRieles(t, pool); got != 90_000 {
 		t.Errorf("external = %d, want 90000 while pending", got)
 	}
 
@@ -222,7 +224,7 @@ func TestPayoutPendingThenRefresh(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before-90_000 {
 		t.Errorf("wallet after settle = %d, want %d", got, before-90_000)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 90_000 {
+	if got := salidoPorLosRieles(t, pool); got != 90_000 {
 		t.Errorf("external after settle = %d, want 90000", got)
 	}
 }
@@ -256,7 +258,7 @@ func TestPayoutPollerReconciles(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before+40_000 {
 		t.Errorf("wallet after poller refund = %d, want %d", got, before+40_000)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 0 {
+	if got := salidoPorLosRieles(t, pool); got != 0 {
 		t.Errorf("external after refund = %d, want 0", got)
 	}
 }
@@ -280,7 +282,7 @@ func TestPayoutAmbiguousStaysProcessing(t *testing.T) {
 	if got := walletCRC(t, pool, user); got != before-30_000 {
 		t.Errorf("wallet = %d, want %d (held, not refunded)", got, before-30_000)
 	}
-	if got := systemBalance(t, pool, mockExternalCRC); got != 30_000 {
+	if got := salidoPorLosRieles(t, pool); got != 30_000 {
 		t.Errorf("external = %d, want 30000 (held)", got)
 	}
 }
@@ -307,8 +309,8 @@ func TestPayoutMFAGate(t *testing.T) {
 	if _, err := svc.Create(ctx, user, req("00012345", 50_000_000, "idem-mfa")); !errors.Is(err, ErrMFARequired) {
 		t.Fatalf("expected ErrMFARequired, got %v", err)
 	}
-	// No money moved, no rail account touched.
-	if got := systemBalance(t, pool, mockExternalCRC); got != 0 {
+	// No money moved, nothing left the reserve.
+	if got := salidoPorLosRieles(t, pool); got != 0 {
 		t.Errorf("external = %d, want 0 (gated before posting)", got)
 	}
 }

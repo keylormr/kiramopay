@@ -84,7 +84,7 @@ func (s *Service) notifyReceiver(userID, monto string) {
 // Send transfers CRC to a recipient phone. If the phone belongs to a
 // KiramoPay user, the transfer is INTERNAL: both legs are booked atomically
 // against the ledger and the receiver's wallet is credited. If the phone is
-// external, the transfer is booked against the SYSTEM:EXTERNAL account.
+// external, the transfer would leave the system through the reserve.
 func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipAddr string) (*SendResponse, error) {
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
@@ -126,7 +126,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 	}
 	// Sending to a number that is NOT a KiramoPay user is refused rather than
 	// accepted. The cross-bank rail needs a licence we do not hold, so such a
-	// transfer could only be debited and parked in SYSTEM:EXTERNAL: never
+	// transfer could only be debited and taken out of the reserve: never
 	// delivered, and with no refund path to undo it. Taking the money and
 	// showing "pending" forever is worse than saying no up front.
 	//

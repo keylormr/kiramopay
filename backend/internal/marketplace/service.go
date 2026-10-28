@@ -35,7 +35,7 @@ type HistoryRecorder interface {
 //
 // El precio del viaje lo inventa este mismo archivo (rand) y el chofer sale
 // de una lista fija: cobrarlo debita la billetera de verdad contra un monto
-// que nadie cotizo, deja la plata en SYSTEM:EXTERNAL y no hay reverso. Es la
+// que nadie cotizo, saca la plata de la reserva y no hay reverso. Es la
 // politica que el repositorio ya aplica en sinpe.Send (se niega a enviar a
 // quien no es usuario) y en el registro de rieles de payouts (no se registra
 // el de prueba en produccion porque debita y no desembolsa). Pedir el viaje y
@@ -65,9 +65,10 @@ func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder, o
 	return s
 }
 
-// chargeWallet debita la billetera por un pedido o un viaje, contra
-// SYSTEM:EXTERNAL (la contraparte del socio). La liquidacion al socio necesita
-// una integracion y no existe; esto deja el gasto real registrado.
+// chargeWallet debita la billetera por un pedido o un viaje, contra la reserva:
+// la plata sale del sistema hacia el socio, asi que el pasivo y la reserva
+// bajan lo mismo. La liquidacion al socio necesita una integracion y no existe;
+// esto deja el gasto real registrado.
 //
 // idemKey es la llave de idempotencia del asiento: una llave ESTABLE (por
 // viaje) hace que un cobro repetido choque en el libro y no debite dos veces.
@@ -110,7 +111,7 @@ func (s *Service) chargeWallet(
 		CreatedBy:      userID,
 		Entries: []ledger.Entry{
 			{Account: ledger.Account{UserID: userID}, Side: ledger.Debit, AmountMinor: amountMinor, Currency: "CRC"},
-			{Account: ledger.Account{SystemCode: ledger.SystemExternalCRC}, Side: ledger.Credit, AmountMinor: amountMinor, Currency: "CRC"},
+			{Account: ledger.Account{SystemCode: ledger.SystemReserveCRC}, Side: ledger.Credit, AmountMinor: amountMinor, Currency: "CRC"},
 		},
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx) error {
 			// El tope antes de anotar el propio cobro, o la suma lo contaria
