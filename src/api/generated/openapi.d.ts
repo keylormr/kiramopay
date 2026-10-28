@@ -9923,7 +9923,7 @@ export interface paths {
         put?: never;
         /**
          * Record a company deposit into the promotions fund
-         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         * @description Posts debit SYSTEM:CAPITAL:CRC / credit SYSTEM:PROMOTIONS:CRC. This does NOT raise the published reserves: the reserve is exactly what is owed to users, and this money belongs to the company until a reward is redeemed (each redemption moves it from capital to the reserve). It must still match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
          */
         post: {
             parameters: {
@@ -12459,6 +12459,10 @@ export interface components {
                 currency?: string;
                 user_liabilities_minor?: number;
                 reserve_balance_minor?: number;
+                /** @description Reserve minus user liabilities, in minor units and signed (negative when the reserve falls short). Zero when the reserve is exactly what is owed to users. Read this, not ratio_pct: a percentage rounded to one decimal hides small shortfalls. */
+                difference_minor?: number;
+                /** @description The reserve covers everything owed to users. */
+                fully_backed?: boolean;
                 ratio_pct?: number;
             }[];
         };
