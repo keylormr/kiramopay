@@ -212,3 +212,20 @@ describe('ProfileView encabezado: telefono', () => {
     expect(hoja.queryByText('+50688880001')).not.toBeInTheDocument();
   });
 });
+
+describe('ProfileView encabezado: sin tipo de cambio del dolar', () => {
+  it('el guion del total dice por que no hay cifra', () => {
+    appState.accounts = [colones(500_000, undefined), dolares(445)];
+    pintar();
+
+    const total = estadistica('Balance Total');
+    expect(total.getByText('—')).toBeInTheDocument();
+    expect(total.getByText('Sin tipo de cambio')).toBeInTheDocument();
+  });
+
+  it('con tipo de cambio no aparece el aviso', () => {
+    pintar();
+
+    expect(estadistica('Balance Total').queryByText('Sin tipo de cambio')).not.toBeInTheDocument();
+  });
+});
