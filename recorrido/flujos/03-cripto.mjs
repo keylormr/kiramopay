@@ -151,8 +151,9 @@ export default {
       await hoja.waitFor({ state: 'visible' });
       await hoja.locator('#qr-manual-code').fill(qrKeilor);
       await boton(hoja, txt('Continuar'), { exacto: true }).click();
-      await verTexto(victor.page, CUENTAS.keilor.nombre);
+      // El nombre de quien recibe se resuelve recien cuando hay monto ("Le llega a: —" antes).
       await hoja.getByPlaceholder('0.00').fill(String(ENVIO_ETH));
+      await verTexto(victor.page, CUENTAS.keilor.nombre);
       // La vista previa llega ~400 ms despues de teclear: trae la comision.
       await verTexto(victor.page, txt('Comisión de KiramoPay'));
       await boton(hoja, 'Enviar ETH', { exacto: true }).click();

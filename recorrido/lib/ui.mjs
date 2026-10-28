@@ -5,7 +5,7 @@
 import { chromium } from '@playwright/test';
 import { APP, API_BASE } from './entorno.mjs';
 import { entrar } from './api.mjs';
-import { txt } from './textos.mjs';
+import { txt, escapar } from './textos.mjs';
 
 let navegador = null;
 
@@ -145,6 +145,13 @@ export async function cambiarAPerfil(page, quien) {
   const fila = quien === 'Personal' ? /^Personal/ : new RegExp(quien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   await boton(ultimoDialogo(page), fila).click();
   await sinDialogos(page);
+  await reposar(page);
+}
+
+/** Abre una pantalla desde la lista de Perfil (Pagos fijos, Presupuestos, Pagos salientes...). */
+export async function abrirDesdePerfil(page, texto) {
+  await ir(page, 'Perfil');
+  await boton(page, new RegExp(escapar(texto))).first().click();
   await reposar(page);
 }
 

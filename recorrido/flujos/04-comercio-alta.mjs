@@ -104,7 +104,10 @@ export default {
 
     await f.paso('Keilor refresca su perfil de negocio y ya puede generar cobros', async () => {
       await refrescarPerfilDeNegocio(keilor, nombre);
-      await verTexto(keilor.page, txt('Verificado'));
+      // Verificado, el inicio del negocio ya no muestra la tarjeta de estado pendiente.
+      await verTexto(keilor.page, txt('Saldo del negocio'));
+      const pendiente = await keilor.page.getByText(txt('Pendiente de verificación')).count();
+      if (pendiente) throw new Error('el inicio del negocio sigue mostrando "Pendiente de verificación" tras la aprobación');
       const generar = boton(keilor.page, txt('Generar QR de cobro'), { exacto: true }).first();
       await generar.waitFor({ state: 'visible', timeout: 15000 });
       if (await generar.isDisabled()) throw new Error('"Generar QR de cobro" sigue deshabilitado tras la aprobación');

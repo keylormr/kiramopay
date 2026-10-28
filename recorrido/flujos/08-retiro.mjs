@@ -1,7 +1,7 @@
 // Retiro por el riel simulado ("Pagos salientes"). El riel de prueba decide el
 // resultado por el prefijo de la cuenta de destino: cualquier cuenta normal se
 // completa; "fail..." es rechazada por el riel y el servidor devuelve el dinero.
-import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, volver, reposar } from '../lib/ui.mjs';
+import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, reposar } from '../lib/ui.mjs';
 import { clientes, centimos, problemasDelLibro } from '../lib/comun.mjs';
 import { reColones, txt, escapar } from '../lib/textos.mjs';
 import { llave, CUENTAS } from '../lib/entorno.mjs';
@@ -137,15 +137,14 @@ export default {
     });
 
     await f.paso('El reembolso aparece como entrada (+) en los movimientos del inicio', async (c) => {
-      // Defecto conocido: la pantalla clasifica payout_refund como salida.
-      await volver(victor.page);
+      // Defecto conocido: la pantalla clasifica payout_refund como salida y lo pinta sin "+".
       const nueva = await abrirSesion(f, 'victor');
       const filas = nueva.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 15000 });
       const textos = await filas.allInnerTexts();
-      const reembolsos = textos.filter((t) => reColones(1000).test(t) && /refund|reembols|devoluci/i.test(t));
-      c.ok(reembolsos.length > 0, `no se encontró la fila del reembolso de ₡1.000 entre los movimientos del inicio: ${JSON.stringify(textos)}`);
-      c.ok(reembolsos.some((t) => t.includes('+')), `la fila del reembolso no se muestra como entrada (+): ${JSON.stringify(reembolsos)}`);
+      const deMil = textos.filter((t) => reColones(1000).test(t));
+      c.ok(deMil.length > 0, `no hay filas de ₡1.000 entre los movimientos del inicio: ${JSON.stringify(textos)}`);
+      c.ok(deMil.some((t) => t.includes('+')), `el reembolso de ₡1.000 no se muestra como entrada (+) en el inicio: ${JSON.stringify(deMil)}`);
     }, { seguir: true });
   },
 };

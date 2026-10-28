@@ -5,6 +5,7 @@ import { CUENTAS } from '../lib/entorno.mjs';
 import { abrirSesion, boton, ultimoDialogo, sinDialogos, verTexto, reposar } from '../lib/ui.mjs';
 import { clientes, centimos, problemasDelLibro } from '../lib/comun.mjs';
 import { txt } from '../lib/textos.mjs';
+import { esperarHasta } from '../lib/api.mjs';
 import * as bd from '../lib/bd.mjs';
 
 async function abrirDividirCuenta(sesion) {
@@ -80,7 +81,9 @@ export default {
       await abrirDividirCuenta(emmanuel);
       await emmanuel.page.getByText(titulo).first().click();
       await boton(ultimoDialogo(emmanuel.page), txt('Pagar mi parte'), { exacto: true }).click();
-      await verTexto(emmanuel.page, txt('Pagada'));
+      // "Pagada" ya sale en la cuota de victor: se espera a que desaparezca el boton de pagar.
+      await boton(emmanuel.page, txt('Pagar mi parte'), { exacto: true }).waitFor({ state: 'detached', timeout: 15000 });
+      await esperarHasta(async () => (await detalle()).shares.find((s) => s.user_id === CUENTAS.emmanuel.id)?.status === 'paid', { descripcion: 'que se registre el pago de emmanuel' }).catch(() => {});
       const d = await detalle();
       const cuota = d.shares.find((s) => s.user_id === CUENTAS.emmanuel.id);
       c.igual(cuota.status, 'paid', 'cuota de emmanuel');
@@ -119,6 +122,7 @@ export default {
       // Pide confirmacion en el mismo panel.
       await boton(ultimoDialogo(keilor.page), txt('Rechazar mi parte'), { exacto: true }).last().click();
       await verTexto(keilor.page, txt('Rechazada'));
+      await esperarHasta(async () => (await detalle()).group.status === 'settled', { descripcion: 'que el grupo quede liquidado' }).catch(() => {});
       const d = await detalle();
       c.igual(d.shares.find((s) => s.user_id === CUENTAS.keilor.id).status, 'declined', 'cuota de keilor');
       c.igual(d.group.status, 'settled', 'estado del grupo');
