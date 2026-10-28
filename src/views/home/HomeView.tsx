@@ -545,10 +545,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         <div className="relative text-[2.5rem] leading-tight font-black tracking-tight mb-1 tabular-nums">
           {formatearSaldoTotal(totales.enBase, monedaDelSaldo)}
         </div>
-        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea se
-            va en vez de mostrar una cifra inventada. */}
+        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea de
+            la cifra se va en vez de mostrar una inventada, y en su lugar dice
+            por que el total es un guion. */}
         <div className="relative text-sm text-white/70 mb-6 tabular-nums">
-          {totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
+          {totales.enBase === null
+            ? t('fx_total_unavailable')
+            : totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
         </div>
 
         <div className="relative flex gap-2.5">

@@ -394,6 +394,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <p className="text-lg font-black tabular-nums">
               {formatearSaldoTotal(totalBalance, monedaBase)}
             </p>
+            {/* Un guion solo no dice si cargo mal o si no hay dato. */}
+            {totalBalance === null && (
+              <p className="text-[10px] text-white/70 mt-0.5">{t('fx_total_unavailable_short')}</p>
+            )}
           </div>
           <div
             className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3"

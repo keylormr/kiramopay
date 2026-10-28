@@ -528,9 +528,20 @@ func main() {
 			Logger:        logger,
 		})
 
-	// El tipo de cambio oficial, traido de Hacienda cada hora. Sin esto la
-	// tasa de arriba nunca se confirma y cripto en colones no opera.
-	tipoDeCambio := country.NewActualizador(countryRepo, country.NewFuenteHacienda(), time.Hour, logger)
+	// El tipo de cambio oficial, traido cada hora. Sin esto la tasa de arriba
+	// nunca se confirma y cripto en colones no opera.
+	//
+	// Con BCCR_TOKEN el dolar sale del Banco Central (SDDE) y, si falla, de
+	// Hacienda, que republica el mismo tipo de referencia. Sin el token sale de
+	// Hacienda como antes, y /health (tipo_de_cambio.falta) dice que variable
+	// falta. El euro sigue saliendo de Hacienda. La fila guardada y /health dicen
+	// de donde salio cada pasada: "bccr" o "hacienda".
+	fuenteDelDolar := country.NewFuenteDelDolar(os.Getenv(country.VariableTokenBCCR))
+	if falta := fuenteDelDolar.Faltantes(); len(falta) > 0 {
+		logger.Warn("tipo de cambio: el dolar sale de Hacienda porque falta la variable de entorno del BCCR",
+			"falta", falta)
+	}
+	tipoDeCambio := country.NewActualizador(countryRepo, fuenteDelDolar, time.Hour, logger)
 	tipoDeCambioCtx, tipoDeCambioCancel := context.WithCancel(context.Background())
 	defer tipoDeCambioCancel()
 	go tipoDeCambio.Run(tipoDeCambioCtx)

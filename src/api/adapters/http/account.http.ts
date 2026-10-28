@@ -5,6 +5,7 @@ import { apiSuccess } from '../../types';
 import { falla, errorPropio } from './falla';
 import { HttpClient } from './client';
 import { getUsdToCrcRate } from '@/services/fxRate';
+import { saldoTotal } from '@/utils/saldoTotal';
 // Generated from backend/docs/openapi.yaml — re-run `npm run gen:api`
 // after any backend handler/schema change. The compiler will then surface
 // every adapter that needs updating.
@@ -35,8 +36,12 @@ export class HttpAccountRepository implements IAccountRepository {
     // Attach the USD conversion factor so callers (HomeView "USD Total",
     // ProfileView, getBalanceSummary) convert consistently instead of counting
     // CRC 1:1 against USD. Sourced from the single shared FX rate.
+    //
+    // Without a rate from the server the CRC account carries NO factor (not 0,
+    // not a made-up one): saldoTotal then reports the total as unavailable and
+    // the screens say so, instead of painting a figure nobody gave.
     const usdPerCrc = await getUsdToCrcRate();
-    const crcToUsd = usdPerCrc > 0 ? 1 / usdPerCrc : 0;
+    const crcToUsd = usdPerCrc !== null && usdPerCrc > 0 ? 1 / usdPerCrc : undefined;
 
     const accounts: Account[] = [
       {
@@ -81,15 +86,17 @@ export class HttpAccountRepository implements IAccountRepository {
     return errorPropio('NOT_IMPLEMENTED');
   }
 
-  async getBalanceSummary(): Promise<ApiResponse<{ totalUsd: number; accounts: Account[] }>> {
+  async getBalanceSummary(): Promise<ApiResponse<{ totalUsd: number | null; accounts: Account[] }>> {
     const res = await this.getAccounts();
     if (!res.success || !res.data) {
       return falla(res, 'FETCH_FAILED');
     }
 
     // getAccounts already attached rateToUsd from the shared FX rate, so the
-    // summary reuses it instead of a second (divergent) hardcoded constant.
-    const totalUsd = res.data.reduce((sum, a) => sum + a.balance * (a.rateToUsd ?? 0), 0);
+    // summary reuses it instead of a second (divergent) hardcoded constant. An
+    // account with a balance and no rate leaves the total null: a partial sum
+    // that silently drops the colones would understate it.
+    const totalUsd = saldoTotal(res.data, 'USD').enUsd;
 
     return apiSuccess({ totalUsd, accounts: res.data });
   }
