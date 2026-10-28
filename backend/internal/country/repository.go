@@ -364,15 +364,14 @@ func (r *Repository) SeedCountries(ctx context.Context) error {
 		}
 	}
 
-	// Seed initial exchange rates (approximate, updated at runtime)
+	// Seed initial exchange rates (approximate). Los pares del colon con el
+	// dolar y el balboa NO se siembran: los escribe el actualizador desde la
+	// fuente oficial, y un 515 sembrado aca seria un tipo de cambio inventado
+	// (ver la migracion 088).
 	rates := []struct {
 		From, To string
 		Rate     float64
 	}{
-		{"CRC", "USD", 0.00194}, // 1 CRC ≈ 0.00194 USD
-		{"USD", "CRC", 515.0},   // 1 USD ≈ 515 CRC
-		{"CRC", "PAB", 0.00194}, // PAB is pegged to USD
-		{"PAB", "CRC", 515.0},
 		{"CRC", "GTQ", 0.0150}, // 1 CRC ≈ 0.015 GTQ
 		{"GTQ", "CRC", 66.67},
 		{"USD", "PAB", 1.0}, // PAB pegged 1:1 to USD
