@@ -188,14 +188,14 @@
     ];
   }
 
-  // Esa cuenta no se elimina por esta via: se la lleva al contacto de privacidad,
+  // Esa cuenta no se elimina por esta via: se la lleva al correo de soporte,
   // sin decir por que. Tambien es una respuesta escrita: no se borro nada y la
   // persona puede acudir a la PRODHAB.
   function respuestaNoDisponible() {
-    var contactoPrivacidad = elemento('a', 'contacto de privacidad');
-    contactoPrivacidad.href = '/privacidad/#contacto';
-    var aviso = elemento('p', 'Para tratar tu caso, escribe al ');
-    aviso.appendChild(contactoPrivacidad);
+    var correoSoporte = elemento('a', 'soporte@kiramopay.com');
+    correoSoporte.href = 'mailto:soporte@kiramopay.com';
+    var aviso = elemento('p', 'Para tratar tu caso, escribe a ');
+    aviso.appendChild(correoSoporte);
     aviso.appendChild(document.createTextNode('.'));
     return [
       elemento('h3', 'Esta solicitud no se puede completar aquí'),

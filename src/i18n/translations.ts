@@ -267,8 +267,8 @@ export type TranslationKeys = {
   support: string;
   help_center: string;
   faq: string;
-  chat_support: string;
-  support_soon_desc: string;
+  support_write_title: string;
+  support_write_desc: string;
   about: string;
   version: string;
 

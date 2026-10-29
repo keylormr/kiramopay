@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Icons } from '../../components/Icons';
+import { EnlaceSoporte } from '../../components/EnlaceSoporte';
+import { TextoConCorreo } from '../../components/TextoConCorreo';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 interface FAQViewProps {
@@ -189,7 +191,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
                   <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                       <p className="text-sm uv-text-secondary leading-relaxed whitespace-pre-line">
-                        {item.body}
+                        <TextoConCorreo texto={item.body} />
                       </p>
                     </div>
                   </div>
@@ -200,10 +202,12 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
         )}
 
         {/* Soporte: antes prometía chat y llamada 24/7 con dos botones que no
-            hacían nada. Hoy el único canal real es el asistente. */}
+            hacían nada, y después un chat que "llegaría pronto". Hoy los canales
+            reales son el correo de soporte y el asistente. */}
         <div className="mt-8 uv-surface-1 rounded-2xl p-5 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-          <h3 className="font-bold text-base uv-text-primary mb-1">{t('chat_support')}</h3>
-          <p className="uv-text-secondary text-sm">{t('support_soon_desc')}</p>
+          <h3 className="font-bold text-base uv-text-primary mb-1">{t('support_write_title')}</h3>
+          <p className="uv-text-secondary text-sm">{t('support_write_desc')}</p>
+          <EnlaceSoporte className="mt-4" />
         </div>
       </div>
     </div>

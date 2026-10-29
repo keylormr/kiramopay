@@ -131,11 +131,12 @@ func TestDeletionCodeSMSEsAsciiYCabeEnUnaParte(t *testing.T) {
 }
 
 // El aviso de cuenta eliminada llega a un buzon que se borra en el mismo acto:
-// no debe repetir ningun dato de la cuenta.
+// no debe repetir ningun dato de la cuenta. El correo de soporte no es un dato
+// de la cuenta: es el contacto publico a donde escribir.
 func TestAccountDeletedEmailNoLlevaDatosDeLaCuenta(t *testing.T) {
 	_, text, html := AccountDeletedEmail()
 	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
-		if strings.Contains(cuerpo, "@") && nombre == "texto" {
+		if strings.Contains(strings.ReplaceAll(cuerpo, SupportEmail, ""), "@") && nombre == "texto" {
 			t.Errorf("el %s lleva algo con forma de correo", nombre)
 		}
 		if !strings.Contains(cuerpo, "eliminada") {
@@ -254,5 +255,50 @@ func TestDeletionRejectedEmailEsLaRespuestaEscrita(t *testing.T) {
 				t.Errorf("el %s deja ver el motivo (%q):\n%s", nombre, motivo, cuerpo)
 			}
 		}
+	}
+}
+
+// El chat de soporte no existe y los correos mandaban a "la pagina de ayuda de
+// KiramoPay" o a un "contacto de privacidad" que la politica dejaba sin definir:
+// la persona no tenia a quien escribir. Todo correo que manda a escribir lo dice
+// con el correo de soporte, en el texto y como enlace mailto en el HTML.
+func TestCorreosQueMandanAEscribirDanElCorreoDeSoporte(t *testing.T) {
+	const correo = "soporte@kiramopay.com"
+	dia := time.Date(2026, 11, 30, 12, 0, 0, 0, time.UTC)
+
+	casos := map[string]func() (string, string, string){
+		"solicitud recibida":  func() (string, string, string) { return AccountDeletionRequestedEmail(dia, dia) },
+		"cuenta eliminada":    AccountDeletedEmail,
+		"cuenta reactivada":   AccountReactivatedEmail,
+		"solicitud rechazada": DeletionRejectedEmail,
+	}
+	for nombre, armar := range casos {
+		_, texto, htmlCuerpo := armar()
+
+		if !strings.Contains(texto, correo) {
+			t.Errorf("%s: el texto no da el correo de soporte:\n%s", nombre, texto)
+		}
+		if !strings.Contains(htmlCuerpo, `href="mailto:`+correo+`"`) {
+			t.Errorf("%s: el HTML no lleva el enlace mailto de soporte", nombre)
+		}
+		for parte, cuerpo := range map[string]string{"texto": texto, "html": htmlCuerpo} {
+			if strings.Contains(cuerpo, "página de ayuda") {
+				t.Errorf("%s: el %s todavia manda a una pagina de ayuda sin contacto", nombre, parte)
+			}
+			if strings.Contains(cuerpo, "contacto de privacidad que aparece") {
+				t.Errorf("%s: el %s todavia manda a un contacto de privacidad sin definir", nombre, parte)
+			}
+		}
+	}
+}
+
+// En el texto plano la direccion va sin marcas: el enlace es solo del HTML.
+func TestCorreoDeSoporteSoloEsEnlaceEnElHTML(t *testing.T) {
+	_, texto, _ := AccountDeletedEmail()
+	if !strings.Contains(texto, "soporte@kiramopay.com") {
+		t.Fatalf("el texto no da el correo de soporte:\n%s", texto)
+	}
+	if strings.Contains(texto, "<a ") || strings.Contains(texto, "mailto:") {
+		t.Errorf("el texto plano no debe llevar marcas de enlace:\n%s", texto)
 	}
 }

@@ -593,8 +593,10 @@ const Layout = () => {
         </Suspense>
       </main>
 
-      {/* Bottom Navigation */}
-      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
+      {/* Bottom Navigation. Fondo OPACO: al 95 % con desenfoque se adivinaba el
+          texto de la lista que pasa por detrás ("-₡1.00" bajo "Inicio"). Una
+          barra fija no necesita transparencia. */}
+      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)] border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
         <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
           {NAV_ITEMS.map((item) => {
             const active = currentNavId === item.id;

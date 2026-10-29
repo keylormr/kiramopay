@@ -208,6 +208,27 @@ func securityNotice() string {
 		`</td></tr></table>`
 }
 
+// SupportEmail es el correo de soporte: el unico canal para escribirle a una
+// persona del equipo (no hay chat en vivo). Los correos que mandan a "escribir"
+// lo dicen con esta direccion. No es una variable de entorno: es el contacto
+// publico que definio el dueno y es el mismo que da la app y la politica de
+// privacidad.
+const SupportEmail = "soporte@kiramopay.com"
+
+// supportLink es la direccion de soporte como enlace mailto para el HTML de un
+// correo. Con el color de la marca y subrayado, que es lo que reconocen los
+// clientes de correo como enlace.
+func supportLink() string {
+	return `<a href="mailto:` + SupportEmail + `" style="color:` + brandBlueDeep + `;font-weight:600;text-decoration:underline">` +
+		SupportEmail + `</a>`
+}
+
+// withSupportLink vuelve enlace la direccion de soporte dentro de una frase que
+// ya esta lista para el HTML. El texto plano usa la misma frase sin tocar.
+func withSupportLink(s string) string {
+	return strings.ReplaceAll(s, SupportEmail, supportLink())
+}
+
 // DeletionCodeSMS es el cuerpo del codigo con que se comprueba que quien pide
 // eliminar una cuenta desde la pagina web controla el telefono registrado.
 // ASCII sin tildes, igual que los otros SMS (ver VerificationSMS).
@@ -281,7 +302,7 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
 	ajeno := "Si no fuiste vos quien lo pidió, entrá con tu contraseña, reactivá la cuenta y cambiá la contraseña, " +
-		"o escribinos desde la página de ayuda de KiramoPay."
+		"o escribinos a " + SupportEmail + "."
 
 	var text strings.Builder
 	for _, p := range []string{bloqueada, suprime, conserva, reactivar, prodhab, ajeno} {
@@ -294,7 +315,7 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 	body.WriteString(paragraph("<strong>Qué se conserva y hasta cuándo.</strong> " + conserva))
 	body.WriteString(paragraph("<strong>Si cambiás de opinión.</strong> " + reactivar))
 	body.WriteString(paragraph("<strong>Tus derechos.</strong> " + prodhab))
-	body.WriteString(note(ajeno))
+	body.WriteString(note(withSupportLink(ajeno)))
 
 	htmlBody = emailShell("Recibimos tu solicitud", "Tu cuenta se elimina el "+dia30+".", body.String())
 	return subject, strings.TrimRight(text.String(), "\n") + "\n", htmlBody
@@ -309,14 +330,14 @@ func AccountDeletedEmail() (subject, textBody, htmlBody string) {
 	hecho := "Se suprimieron tus datos de acceso, tus preferencias, tus contactos y el resto de lo que te " +
 		"indicamos al recibir tu solicitud. Lo que la Ley 7786 obliga a conservar queda guardado aparte, por el " +
 		"plazo que te informamos, y solo se usa para cumplir esa ley."
-	ajeno := "Si no fuiste vos quien lo pidió, escribinos cuanto antes desde la página de ayuda de KiramoPay."
+	ajeno := "Si no fuiste vos quien lo pidió, escribinos cuanto antes a " + SupportEmail + "."
 
 	text := cerrada + "\n\n" + hecho + "\n\n" + ajeno + "\n"
 
 	body := new(strings.Builder)
 	body.WriteString(paragraph(cerrada))
 	body.WriteString(paragraph(hecho))
-	body.WriteString(note(ajeno))
+	body.WriteString(note(withSupportLink(ajeno)))
 
 	htmlBody = emailShell("Tu cuenta fue eliminada", "Tu cuenta de KiramoPay fue eliminada.", body.String())
 	return subject, text, htmlBody
@@ -332,14 +353,14 @@ func AccountReactivatedEmail() (subject, textBody, htmlBody string) {
 	pendiente := "Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tenés que crear " +
 		"otras: las de antes quedaron revocadas."
 	ajeno := "Si no fuiste vos quien la reactivó, alguien conoce tu contraseña: cambiala cuanto antes desde " +
-		"Perfil, o escribinos desde la página de ayuda de KiramoPay."
+		"Perfil, o escribinos a " + SupportEmail + "."
 
 	text := hecho + "\n\n" + pendiente + "\n\n" + ajeno + "\n"
 
 	body := new(strings.Builder)
 	body.WriteString(paragraph(hecho))
 	body.WriteString(paragraph(pendiente))
-	body.WriteString(note(ajeno))
+	body.WriteString(note(withSupportLink(ajeno)))
 
 	htmlBody = emailShell("Reactivaste tu cuenta", "La eliminación de tu cuenta quedó cancelada.", body.String())
 	return subject, text, htmlBody
@@ -383,8 +404,8 @@ func DeletionRejectedEmail() (subject, textBody, htmlBody string) {
 	subject = "No pudimos atender tu solicitud para eliminar tu cuenta de KiramoPay"
 	recibida := "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero no la podemos atender por " +
 		"esta vía. No se borró nada."
-	contacto := "Para tratar tu caso, escribinos al contacto de privacidad que aparece en la política de " +
-		"privacidad de KiramoPay."
+	contacto := "Para tratar tu caso, escribinos a " + SupportEmail + ", el mismo contacto que figura en la " +
+		"política de privacidad de KiramoPay."
 	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
 	ajeno := "Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."
@@ -393,7 +414,7 @@ func DeletionRejectedEmail() (subject, textBody, htmlBody string) {
 
 	body := new(strings.Builder)
 	body.WriteString(paragraph(recibida))
-	body.WriteString(paragraph(contacto))
+	body.WriteString(paragraph(withSupportLink(contacto)))
 	body.WriteString(paragraph("<strong>Tus derechos.</strong> " + prodhab))
 	body.WriteString(note(ajeno))
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { LoginView } from '../auth/LoginView';
@@ -176,7 +176,12 @@ describe('LoginView', () => {
       const aviso = screen.getByRole('alert');
       expect(aviso).toHaveTextContent('Cuenta bloqueada');
       expect(aviso).toHaveTextContent(
-        'Un administrador bloqueó el acceso a esta cuenta. Si crees que es un error, escribe a soporte.',
+        'Un administrador bloqueó el acceso a esta cuenta. Si crees que es un error, escribe a soporte@kiramopay.com.',
+      );
+      // La direccion es un enlace: se toca, no se copia.
+      expect(within(aviso).getByRole('link', { name: 'soporte@kiramopay.com' })).toHaveAttribute(
+        'href',
+        'mailto:soporte@kiramopay.com',
       );
 
       // La X descarta el aviso.
@@ -203,9 +208,13 @@ describe('LoginView', () => {
       await user.type(screen.getByPlaceholderText('Contraseña'), 'Kiramopay2024!');
       await user.click(screen.getByText('Ingresar'));
 
-      await waitFor(() => {
-        expect(screen.getByText('Esta cuenta está bloqueada. Escribe a soporte.')).toBeInTheDocument();
-      });
+      const mensaje = await screen.findByText(
+        (_contenido, el) => el?.tagName === 'P' && el.textContent === 'Esta cuenta está bloqueada. Escribe a soporte@kiramopay.com.',
+      );
+      expect(within(mensaje).getByRole('link', { name: 'soporte@kiramopay.com' })).toHaveAttribute(
+        'href',
+        'mailto:soporte@kiramopay.com',
+      );
       expect(screen.queryByText('Usuario o contraseña incorrecta')).not.toBeInTheDocument();
       expect(onLogin).not.toHaveBeenCalled();
     });
