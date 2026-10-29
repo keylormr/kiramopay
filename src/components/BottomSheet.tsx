@@ -24,6 +24,16 @@ interface BottomSheetProps {
   dismissable?: boolean;
 }
 
+/**
+ * Sitio, en px, que el contenedor con scroll de la hoja deja alrededor del
+ * contenido para que no se corte la sombra del boton principal
+ * (`--shadow-primary: 0 8px 20px`: 20 px a los lados, 12 arriba, 28 abajo). Los
+ * lados valen lo mismo que el relleno de la hoja (p-6 = 24 px), asi el
+ * contenedor llega justo al borde de la hoja. Si se agranda esa sombra, hay que
+ * agrandar esto: BottomSheet.sombras.test.tsx lo vigila.
+ */
+const HOLGURA_SOMBRA = { lado: 24, arriba: 16, abajo: 28 } as const;
+
 const ENFOCABLES = [
   'a[href]',
   'button:not([disabled])',
@@ -202,7 +212,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
           </div>
         )}
 
-        <div className="min-h-0 overflow-y-auto no-scrollbar">
+        {/* El contenido se desplaza aqui dentro. Un contenedor con overflow
+            recorta TODO lo que sale de su caja, tambien las sombras: la del
+            boton principal (--shadow-primary, 0 8px 20px) se extiende 20 px a
+            cada lado y 28 px hacia abajo, y quedaba cortada en el borde del
+            boton como un rectangulo azul palido. El relleno le da sitio a la
+            sombra; el margen negativo igual de grande devuelve al contenido a
+            donde estaba, asi que la hoja no cambia de tamano. */}
+        <div
+          className="min-h-0 overflow-y-auto no-scrollbar"
+          style={{
+            paddingTop: HOLGURA_SOMBRA.arriba,
+            paddingRight: HOLGURA_SOMBRA.lado,
+            paddingBottom: HOLGURA_SOMBRA.abajo,
+            paddingLeft: HOLGURA_SOMBRA.lado,
+            marginTop: -HOLGURA_SOMBRA.arriba,
+            marginRight: -HOLGURA_SOMBRA.lado,
+            marginBottom: -HOLGURA_SOMBRA.abajo,
+            marginLeft: -HOLGURA_SOMBRA.lado,
+          }}
+        >
           {children}
         </div>
       </div>

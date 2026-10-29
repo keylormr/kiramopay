@@ -21,6 +21,7 @@ import { Capacitor } from '@capacitor/core';
 import { resolveApiBaseUrl } from '@/api/baseUrl';
 import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 import { fechaLarga } from '@/utils/planes';
+import { TextoConCorreo } from '@/components/TextoConCorreo';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -360,7 +361,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
           <div className="min-w-0 flex-1">
             <p className="font-bold text-white">{t('account_blocked_title')}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
-              {t('account_blocked_body')}
+              <TextoConCorreo texto={t('account_blocked_body')} />
             </p>
           </div>
           <button
@@ -582,7 +583,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
               {error && (
                 <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
                   <Icons.AlertCircle size={14} />
-                  {error}
+                  <TextoConCorreo texto={error} />
                 </p>
               )}
             </div>
@@ -763,7 +764,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 {error && (
                   <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
                     <Icons.AlertCircle size={14} />
-                    {error}
+                    <TextoConCorreo texto={error} />
                   </p>
                 )}
               </div>

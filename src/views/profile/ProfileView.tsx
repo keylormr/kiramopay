@@ -10,6 +10,7 @@ import { Bandera } from '../../components/Bandera';
 import { HistorialDeVersiones } from './HistorialDeVersiones';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
+import { EnlaceSoporte } from '../../components/EnlaceSoporte';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { TwoFactorSheet } from './TwoFactorSheet';
 import { ApiKeysSheet } from './ApiKeysSheet';
@@ -25,6 +26,7 @@ import { Capacitor } from '@capacitor/core';
 import { useGastoDelMes } from '@/views/home/useGastoDelMes';
 import { saldoTotal, formatearSaldoTotal, SALDO_SIN_DATO } from '@/utils/saldoTotal';
 import { formatearTelefonoCR } from '@/utils/telefono';
+import { CORREO_SOPORTE } from '@/utils/soporte';
 
 // Cada rechazo de cambiar la contrasena con su texto. Todo decia "Contraseña
 // incorrecta", tambien cuando la actual era correcta y el problema era otro.
@@ -1023,10 +1025,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
           >
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
-              <Icons.MessageCircle size={18} className="text-blue-600" />
+              <Icons.Mail size={18} className="text-blue-600" />
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold uv-text-primary text-sm">{t('chat_support')}</p>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="font-semibold uv-text-primary text-sm">{t('support_write_title')}</p>
+              <p className="text-xs uv-text-muted mt-0.5 break-all">{CORREO_SOPORTE}</p>
             </div>
             <Icons.ChevronRight size={18} className="uv-text-muted" />
           </button>
@@ -1347,18 +1350,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
       </BottomSheet>
 
-      {/* Support — honest placeholder until a live-chat backend exists; routes to
-          the real Help Center meanwhile. */}
+      {/* Soporte: no hay chat en vivo. El canal es el correo de soporte (un
+          enlace mailto) y, mientras llega la respuesta, el Centro de ayuda. */}
       <BottomSheet
         isOpen={showSupport}
         onClose={() => setShowSupport(false)}
-        title={t('chat_support')}
+        title={t('support_write_title')}
       >
         <div className="space-y-4">
-          <p className="uv-text-secondary text-sm">{t('support_soon_desc')}</p>
+          <p className="uv-text-secondary text-sm">{t('support_write_desc')}</p>
+          <EnlaceSoporte destacado />
           <button
             onClick={() => { setShowSupport(false); onOpenFAQ?.(); }}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
+            className="w-full uv-surface-2 uv-text-primary py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-focus-ring"
           >
             <Icons.HelpCircle size={18} />
             {t('help_center')}

@@ -445,7 +445,10 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   );
 
   const tabClass = (active: boolean) =>
-    `flex-1 min-w-0 px-2 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+    // El icono va sobre el texto en pantalla angosta: tres pestanas en 358 px
+    // dejaban ~74 px de texto junto al icono y "Eliminaciones" salia
+    // "Eliminaci...". Con el ancho de una tableta vuelven a ir lado a lado.
+    `flex-1 min-w-0 px-2 py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${
       active ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm' : 'text-gray-500'
     }`;
 
@@ -471,15 +474,15 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
           <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist" aria-label={t('admin_users_title')}>
             <button type="button" role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')} className={tabClass(tab === 'search')}>
               <Icons.Search size={14} className="shrink-0" aria-hidden="true" />
-              <span className="truncate">{t('admin_users_tab_search')}</span>
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_users_tab_search')}</span>
             </button>
             <button type="button" role="tab" aria-selected={tab === 'blocked'} onClick={() => setTab('blocked')} className={tabClass(tab === 'blocked')}>
               <Icons.Lock size={14} className="shrink-0" aria-hidden="true" />
-              <span className="truncate">{t('admin_users_tab_blocked')}</span>
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_users_tab_blocked')}</span>
             </button>
             <button type="button" role="tab" aria-selected={tab === 'deletions'} onClick={() => setTab('deletions')} className={tabClass(tab === 'deletions')}>
               <Icons.Trash size={14} className="shrink-0" aria-hidden="true" />
-              <span className="truncate">{t('admin_del_tab')}</span>
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_del_tab')}</span>
             </button>
           </div>
         </div>

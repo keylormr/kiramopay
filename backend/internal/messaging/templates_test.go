@@ -131,11 +131,12 @@ func TestDeletionCodeSMSEsAsciiYCabeEnUnaParte(t *testing.T) {
 }
 
 // El aviso de cuenta eliminada llega a un buzon que se borra en el mismo acto:
-// no debe repetir ningun dato de la cuenta.
+// no debe repetir ningun dato de la cuenta. El correo de soporte no es un dato
+// de la cuenta: es el contacto publico a donde escribir.
 func TestAccountDeletedEmailNoLlevaDatosDeLaCuenta(t *testing.T) {
 	_, text, html := AccountDeletedEmail()
 	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
-		if strings.Contains(cuerpo, "@") && nombre == "texto" {
+		if strings.Contains(strings.ReplaceAll(cuerpo, SupportEmail, ""), "@") && nombre == "texto" {
 			t.Errorf("el %s lleva algo con forma de correo", nombre)
 		}
 		if !strings.Contains(cuerpo, "eliminada") {
