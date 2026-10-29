@@ -27,12 +27,16 @@ interface BottomSheetProps {
 /**
  * Sitio, en px, que el contenedor con scroll de la hoja deja alrededor del
  * contenido para que no se corte la sombra del boton principal
- * (`--shadow-primary: 0 8px 20px`: 20 px a los lados, 12 arriba, 28 abajo). Los
- * lados valen lo mismo que el relleno de la hoja (p-6 = 24 px), asi el
- * contenedor llega justo al borde de la hoja. Si se agranda esa sombra, hay que
- * agrandar esto: BottomSheet.sombras.test.tsx lo vigila.
+ * (`--shadow-primary: 0 8px 20px`: 20 px a los lados, 12 arriba, 28 abajo).
+ *
+ * Lados y abajo valen lo mismo que el relleno de la hoja (p-6 = 24 px): el
+ * contenedor llega justo al borde de la hoja y NO mas alla. Pasarse por abajo
+ * dejaba al boton principal "visible" para el navegador (dentro del area que se
+ * desplaza) con unos pixeles bajo el borde de la pantalla, y al desplazarlo a la
+ * vista quedaba cortado (e2e/hoja-de-envio-en-pantalla-chica.spec.ts). Los 4 px
+ * de cola que se pierden abajo son el 1 % de opacidad de la sombra: no se ven.
  */
-const HOLGURA_SOMBRA = { lado: 24, arriba: 12, abajo: 28 } as const;
+const HOLGURA_SOMBRA = { lado: 24, arriba: 12, abajo: 24 } as const;
 
 const ENFOCABLES = [
   'a[href]',

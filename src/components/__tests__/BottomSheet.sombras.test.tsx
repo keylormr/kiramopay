@@ -19,6 +19,15 @@ import { BottomSheet } from '../BottomSheet';
 
 const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
 
+/** El relleno de la hoja (p-6). */
+const RELLENO_DE_LA_HOJA = 24;
+/**
+ * Lo que se puede perder del final de la sombra, hacia abajo: a 24 px del boton
+ * la sombra azul (0.32 de opacidad, desenfoque de 20 px) vale ~1,8 %, a 28 px
+ * ~0,7 %. Un corte a ese nivel no se ve.
+ */
+const COLA_QUE_NO_SE_VE = 4;
+
 /** Cuanto se extiende una sombra (primera capa) hacia cada lado. */
 function alcanceDe(variable: string) {
   const declaracion = new RegExp(`--${variable}:\\s*([^;]+);`).exec(css)?.[1] ?? '';
@@ -59,7 +68,20 @@ describe('BottomSheet: la sombra del boton principal cabe en el contenedor que s
     expect(px(estilo.paddingLeft)).toBeGreaterThanOrEqual(a.izquierda);
     expect(px(estilo.paddingRight)).toBeGreaterThanOrEqual(a.derecha);
     expect(px(estilo.paddingTop)).toBeGreaterThanOrEqual(a.arriba);
-    expect(px(estilo.paddingBottom)).toBeGreaterThanOrEqual(a.abajo);
+    // Abajo se pierde la cola: ver el limite de la prueba siguiente.
+    expect(px(estilo.paddingBottom)).toBeGreaterThanOrEqual(a.abajo - COLA_QUE_NO_SE_VE);
+  });
+
+  // El contenedor no puede pasar del borde de la hoja: si se asoma bajo el
+  // borde de la pantalla, el navegador da por "a la vista" un boton que queda
+  // cortado (e2e/hoja-de-envio-en-pantalla-chica.spec.ts). El relleno de la hoja
+  // es p-6 (24 px) y es lo maximo que puede ceder el contenedor hacia abajo.
+  it('no se asoma bajo el borde de la hoja', () => {
+    const estilo = contenedorDelContenido().style;
+
+    expect(px(estilo.paddingBottom)).toBeLessThanOrEqual(RELLENO_DE_LA_HOJA);
+    expect(px(estilo.paddingLeft)).toBeLessThanOrEqual(RELLENO_DE_LA_HOJA);
+    expect(px(estilo.paddingRight)).toBeLessThanOrEqual(RELLENO_DE_LA_HOJA);
   });
 
   it('recupera ese relleno con margen negativo, para que la hoja no cambie de tamano', () => {
