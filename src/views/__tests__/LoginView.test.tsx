@@ -127,6 +127,27 @@ describe('LoginView', () => {
     });
   });
 
+  // La primera etapa tenia dos "Crear cuenta": el boton bajo Continuar y el
+  // enlace del pie. El enlace queda solo en la etapa de la contrasena, que no
+  // tiene el boton.
+  it('muestra un solo "Crear cuenta" en cada etapa', async () => {
+    const user = userEvent.setup();
+    const { onRegister } = renderLoginView();
+
+    expect(screen.getAllByRole('button', { name: 'Crear cuenta' })).toHaveLength(1);
+    expect(screen.queryByText('¿No tienes cuenta?')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Crear cuenta' }));
+    expect(onRegister).toHaveBeenCalledTimes(1);
+
+    await user.type(screen.getByPlaceholderText('Usuario, cédula, correo o teléfono'), '702650930');
+    await user.click(screen.getByText('Continuar'));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
+    });
+    expect(screen.getByText('¿No tienes cuenta?')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Crear cuenta' })).toHaveLength(1);
+  });
+
   it('should call auth store login on submit', async () => {
     // After login succeeds, getState returns user
     mockLogin.mockImplementation(async (_id: string, password: string) => {
