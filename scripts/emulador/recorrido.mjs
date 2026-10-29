@@ -326,7 +326,13 @@ async function recorrer(cdp) {
   await hasta('entra a la app (barra de abajo con Perfil)', () =>
     cdp.evaluar(`[...document.querySelectorAll('nav button')].some((b) => (b.innerText || '').trim() === 'Perfil')`),
   );
-  await esperar(2000);
+  // El inicio pide sus datos despues de entrar, y el teclado que abrio la
+  // contrasena achica la pantalla hasta cerrarse: se espera a las dos cosas.
+  await cdp.evaluar('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true');
+  await hasta('carga el inicio (Ver todo de las transacciones)', () =>
+    cdp.evaluar(`[...document.querySelectorAll('button, a')].some((b) => (b.innerText || '').trim().startsWith('Ver todo'))`),
+  );
+  await esperar(2500);
   paso('inicio', { captura: captura('inicio') });
 
   await hasta('abre Movimientos (Ver todo)', () => tocar(cdp, ['Ver todo']));
