@@ -2,6 +2,7 @@ package accountdeletion
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -29,17 +30,33 @@ func TestResponderAntesDe_CincoDiasHabiles(t *testing.T) {
 	}
 }
 
-// El aviso de una solicitud bloqueada sale por correo, y el correo va en voseo.
-var tuteo = regexp.MustCompile(`(?i)\b(tienes|tiene que|envíalo|retíralo|gástalo|pásalo|véndelas|envíalas|retírala|cancélalos|ciérralo|espera a)\b`)
+// El aviso de una solicitud bloqueada sale por correo, y el correo tutea: asi le
+// habla la app a la persona (el dueno pidio sacar el voseo, #275). Las formas con
+// el pronombre pegado ("envialo", "cerralo") van sin tilde en voseo y con tilde
+// en tuteo ("envíalo", "ciérralo").
+var voseo = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(tenés|podés|esperá|envialo|retiralo|gastalo|pasalo|vendelas|envialas|retirala|cancelalos|cerralo)(?:[^\p{L}]|$)`)
 
-func TestFrasesDeBloqueo_EnVoseo(t *testing.T) {
+func TestFrasesDeBloqueo_EnTuteo(t *testing.T) {
 	for codigo, frase := range frasesDeBloqueo {
-		if m := tuteo.FindString(frase); m != "" {
-			t.Errorf("%s: %q usa tuteo (%q); el correo va en voseo", codigo, frase, m)
+		if m := voseo.FindStringSubmatch(frase); m != nil {
+			t.Errorf("%s: %q usa voseo (%q); el correo tutea", codigo, frase, m[1])
 		}
 	}
-	if frasesDeBloqueo[BloqueoSaldo] == "" || !regexp.MustCompile(`\btenés\b`).MatchString(frasesDeBloqueo[BloqueoSaldo]) {
+	if !regexp.MustCompile(`\btienes\b`).MatchString(frasesDeBloqueo[BloqueoSaldo]) {
 		t.Errorf("la frase del saldo: %q", frasesDeBloqueo[BloqueoSaldo])
+	}
+	// Las que mandan a hacer algo lo dicen en tuteo, no solo sin voseo.
+	for codigo, esperada := range map[string]string{
+		BloqueoSaldo:          "envíalo, retíralo o gástalo",
+		BloqueoAhorros:        "pásalo a tu billetera",
+		BloqueoCripto:         "véndelas o envíalas",
+		BloqueoStaking:        "retírala",
+		BloqueoCobrosAbiertos: "cancélalos",
+		BloqueoEscrowAbierto:  "ciérralo o espera a que se liquide",
+	} {
+		if !strings.Contains(frasesDeBloqueo[codigo], esperada) {
+			t.Errorf("%s: %q no dice %q", codigo, frasesDeBloqueo[codigo], esperada)
+		}
 	}
 }
 

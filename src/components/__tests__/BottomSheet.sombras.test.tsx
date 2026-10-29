@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
+import { alcanceDeSombra as alcanceDe, px } from '@/test/sombras';
 import { BottomSheet } from '../BottomSheet';
 
 // El rectangulo palido detras de los botones principales. El contenido de la
@@ -17,8 +16,6 @@ import { BottomSheet } from '../BottomSheet';
 // alrededor del contenido, como relleno, lo que la sombra mas grande necesita, y
 // lo recupera con margen negativo para que el diseno de la hoja no se mueva.
 
-const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
-
 /** El relleno de la hoja (p-6). */
 const RELLENO_DE_LA_HOJA = 24;
 /**
@@ -27,15 +24,6 @@ const RELLENO_DE_LA_HOJA = 24;
  * ~0,7 %. Un corte a ese nivel no se ve.
  */
 const COLA_QUE_NO_SE_VE = 4;
-
-/** Cuanto se extiende una sombra (primera capa) hacia cada lado. */
-function alcanceDe(variable: string) {
-  const declaracion = new RegExp(`--${variable}:\\s*([^;]+);`).exec(css)?.[1] ?? '';
-  const sinColor = declaracion.replace(/rgba?\([^)]*\)/g, '').split(',')[0].trim();
-  const [x, y, desenfoque, extension = 0] = sinColor.split(/\s+/).map((v) => Number.parseFloat(v));
-  const radio = desenfoque + extension;
-  return { izquierda: radio - x, derecha: radio + x, arriba: radio - y, abajo: radio + y };
-}
 
 function contenedorDelContenido() {
   render(
@@ -47,8 +35,6 @@ function contenedorDelContenido() {
   );
   return screen.getByTestId('hijo').parentElement as HTMLElement;
 }
-
-const px = (valor: string) => Number.parseFloat(valor || '0');
 
 describe('BottomSheet: la sombra del boton principal cabe en el contenedor que se desplaza', () => {
   it('la prueba mide una sombra real (si cambia el formato de la variable, avisa)', () => {
