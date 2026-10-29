@@ -106,6 +106,20 @@ func writeMigration(t *testing.T, dir, name, body string) {
 // a pool to it plus a cleanup that drops it. Skips when TEST_DB_DSN is unset.
 func freshMigrationDB(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
+	return baseDescartable(t, "kiramopay_migrunner_test", 0)
+}
+
+// claveDePIIDeLaBaseDescartable es el valor del parametro kiramopay.encryption_key
+// con el que nace cada base descartable: la 024 lo exige (>= 32 caracteres) para
+// cifrar la PII, igual que en produccion.
+const claveDePIIDeLaBaseDescartable = "kiramopay-ci-migtest-encryption-key-deadbeefcafe"
+
+// baseDescartable crea una base nueva con el nombre dado (derivada de
+// TEST_DB_DSN), con la clave de PII puesta, y devuelve un pool hacia ella y la
+// limpieza que la borra. maxConns > 0 fija el tamano del pool; 0 deja el de por
+// omision. Se salta si TEST_DB_DSN no esta definida.
+func baseDescartable(t *testing.T, dbName string, maxConns int32) (*pgxpool.Pool, func()) {
+	t.Helper()
 	dsn := os.Getenv("TEST_DB_DSN")
 	if dsn == "" {
 		t.Skip("set TEST_DB_DSN to run migration-runner integration tests")
@@ -118,7 +132,6 @@ func freshMigrationDB(t *testing.T) (*pgxpool.Pool, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	const dbName = "kiramopay_migrunner_test"
 	adminCfg := cfg.Copy()
 	adminCfg.ConnConfig.Database = "postgres"
 	admin, err := pgxpool.NewWithConfig(ctx, adminCfg)
@@ -134,9 +147,19 @@ func freshMigrationDB(t *testing.T) (*pgxpool.Pool, func()) {
 		admin.Close()
 		t.Fatalf("create %s: %v", dbName, err)
 	}
+	// El valor es una constante de la prueba, no una entrada: no se parametriza
+	// porque ALTER DATABASE ... SET no admite parametros.
+	if _, err := admin.Exec(ctx, `ALTER DATABASE `+dbName+` SET kiramopay.encryption_key = '`+claveDePIIDeLaBaseDescartable+`'`); err != nil { // #nosec G202
+		_, _ = admin.Exec(ctx, `DROP DATABASE IF EXISTS `+dbName+` WITH (FORCE)`) // #nosec G202
+		admin.Close()
+		t.Fatalf("set kiramopay.encryption_key on %s: %v", dbName, err)
+	}
 
 	testCfg := cfg.Copy()
 	testCfg.ConnConfig.Database = dbName
+	if maxConns > 0 {
+		testCfg.MaxConns = maxConns
+	}
 	pool, err := pgxpool.NewWithConfig(context.Background(), testCfg)
 	if err != nil {
 		admin.Close()
