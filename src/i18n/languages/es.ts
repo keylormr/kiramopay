@@ -1126,7 +1126,7 @@ const es: TranslationKeys = {
   qr_verificando: 'Verificando el código…',
   qr_solicitudes_activas: 'Solicitudes activas',
   qr_ver_qr: 'Ver QR',
-  qr_sin_solicitudes: 'No tenes solicitudes activas',
+  qr_sin_solicitudes: 'No tienes solicitudes activas',
   qr_err_revocado: 'Ese código fue retirado por su dueño.',
   qr_err_reemplazado: 'El cobro cambió. Vuelve a escanear.',
   qr_err_ya_pagado: 'Ese cobro ya fue pagado.',

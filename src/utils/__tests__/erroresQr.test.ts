@@ -4,7 +4,7 @@ import jaDic from '@/i18n/languages/ja';
 import { codigoDeCobroCerrado, mensajeDeCobro, textoDeDuracion } from '../erroresQr';
 
 // Solo seis codigos se traducian: QR_INVALIDO o NO_PODES_PAGARTE caian al texto
-// del servidor, que existe solo en espanol ("no podes pagarte a vos mismo"), y
+// del servidor, que existe solo en espanol ("no puedes pagarte a ti mismo"), y
 // con la app en ingles el motivo salia sin traducir.
 
 const traductor = (diccionario: Record<string, string>) => (clave: string) => diccionario[clave] ?? clave;

@@ -49,7 +49,7 @@ var (
 
 	// ErrNoTePodesEnviar: el QR escaneado es el propio. No mueve nada y cobraria
 	// la comision, que es cobrar por nada.
-	ErrNoTePodesEnviar = errors.New("no podes enviarte cripto a vos mismo")
+	ErrNoTePodesEnviar = errors.New("no puedes enviarte cripto a ti mismo")
 )
 
 // Destinatarios resuelve de QUIEN es un codigo QR y como se llama una persona.
