@@ -142,6 +142,15 @@ export class MockSplitPayRepository implements ISplitPayRepository {
     if (groups[idx].creatorId !== 'current-user') {
       return apiError('FORBIDDEN', 'Solo el creador puede cancelar el grupo');
     }
+    // Igual que el servidor: una division donde alguien ya pago no se cancela.
+    // La cuota del propio creador no cuenta.
+    const allShares: SplitShare[] = state?.splitShares ?? [];
+    const alguienPago = allShares.some(
+      (s) => s.groupId === groupId && s.status === 'paid' && s.userId !== groups[idx].creatorId,
+    );
+    if (alguienPago) {
+      return apiError('SPLIT_HAS_PAYMENTS', 'La division ya tiene pagos y no se puede cancelar');
+    }
     groups[idx].status = 'cancelled';
     saveField('splitGroups', groups);
     return apiSuccess(undefined as unknown as void);

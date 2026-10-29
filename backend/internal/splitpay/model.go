@@ -108,4 +108,12 @@ var (
 	ErrNoShareForUser  = errors.New("splitpay: no share for this user in the split")
 	ErrNotCreator      = errors.New("splitpay: only the creator can cancel a split")
 	ErrUnauthenticated = errors.New("splitpay: user not authenticated")
+
+	// ErrSplitHasPayments: la division ya tiene una cuota ajena pagada y por eso
+	// no se puede cancelar (decision del dueno: "No se puede cancelar"). Cancelar
+	// solo cambia el estado del grupo; el dinero de esa cuota ya esta en la
+	// cuenta de quien creo la division y no vuelve solo, asi que quien pago se
+	// quedaria cobrado y sin division. La cuota del creador no cuenta: nace
+	// pagada y no mueve dinero.
+	ErrSplitHasPayments = errors.New("splitpay: the split already has payments and can no longer be cancelled")
 )

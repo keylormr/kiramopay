@@ -1,13 +1,15 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { SplitPayView } from '../SplitPayView';
 
 // El detalle de una division CANCELADA no decia que estaba cancelada y mostraba
 // "Tu parte: Pendiente", como si todavia se debiera. Ahora muestra el estado del
-// grupo y que las cuotas pendientes ya no se cobran. Y al cancelar una division
-// donde alguien ya pago, avisa que cancelar no devuelve lo pagado: CancelSplit
-// solo cambia el estado del grupo, el dinero de las cuotas pagadas ya esta en la
-// cuenta de quien creo la division.
+// grupo y que las cuotas pendientes ya no se cobran. Y una division donde
+// alguien ya pago NO se puede cancelar (decision del dueno: "No se puede
+// cancelar"): el dinero de las cuotas pagadas ya esta en la cuenta de quien creo
+// la division y cancelar no lo devuelve. En vez del boton, la pantalla dice por
+// que; y si el servidor lo rechaza con SPLIT_HAS_PAYMENTS (alguien pago despues
+// de abrir el detalle), se muestra el mismo motivo.
 
 const mocks = vi.hoisted(() => ({
   listSplits: vi.fn(),
@@ -120,22 +122,29 @@ describe('SplitPayView: el detalle dice el estado del grupo', () => {
   });
 });
 
-describe('SplitPayView: cancelar una division donde alguien ya pago', () => {
-  const AVISO =
-    'Quien ya pagó su parte no recibe su dinero de vuelta al cancelar: ese pago ya está en tu cuenta. Si corresponde, devuélveselo tú con una transferencia.';
+describe('SplitPayView: una division donde alguien ya pago no se cancela', () => {
+  const MOTIVO = 'No se puede cancelar esta división porque alguien ya pagó su parte.';
+  const BOTON_CANCELAR = { name: /cancelar división/i };
 
-  it('advierte que cancelar no devuelve lo pagado', async () => {
+  it('en vez del boton Cancelar explica por que no se puede', async () => {
     const detalle = await abrirElDetalle(grupo('active', 'yo'), [
       cuota('s1', 'yo', 'Yo', 'paid'),
       cuota('s2', 'otro', 'Otro', 'paid'),
       cuota('s3', 'tercero', 'Tercero', 'pending'),
     ]);
 
-    fireEvent.click(within(detalle).getByRole('button', { name: /cancelar división/i }));
-
-    expect(await within(detalle).findByText(AVISO)).toBeInTheDocument();
-    // El aviso no cancela por si solo: falta confirmar.
+    expect(within(detalle).queryByRole('button', BOTON_CANCELAR)).toBeNull();
+    expect(within(detalle).getByText(MOTIVO)).toBeInTheDocument();
     expect(mocks.cancelSplit).not.toHaveBeenCalled();
+  });
+
+  it('ya no existe el aviso viejo de que lo pagado queda con quien creo la division', async () => {
+    const detalle = await abrirElDetalle(grupo('active', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'paid'),
+    ]);
+
+    expect(within(detalle).queryByText(/no recibe su dinero de vuelta/)).toBeNull();
   });
 
   it('la cuota del propio creador no cuenta como "alguien ya pago"', async () => {
@@ -145,9 +154,79 @@ describe('SplitPayView: cancelar una division donde alguien ya pago', () => {
       cuota('s2', 'otro', 'Otro', 'pending'),
     ]);
 
-    fireEvent.click(within(detalle).getByRole('button', { name: /cancelar división/i }));
+    expect(within(detalle).getByRole('button', BOTON_CANCELAR)).toBeInTheDocument();
+    expect(within(detalle).queryByText(MOTIVO)).toBeNull();
 
+    fireEvent.click(within(detalle).getByRole('button', BOTON_CANCELAR));
     expect(await within(detalle).findByText(/Se cancela para todos los participantes/)).toBeInTheDocument();
-    expect(within(detalle).queryByText(AVISO)).toBeNull();
+  });
+
+  it('una cuota rechazada no impide cancelar', async () => {
+    const detalle = await abrirElDetalle(grupo('active', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'declined'),
+    ]);
+
+    expect(within(detalle).getByRole('button', BOTON_CANCELAR)).toBeInTheDocument();
+    expect(within(detalle).queryByText(MOTIVO)).toBeNull();
+  });
+
+  it('a quien no creo la division no le explica nada de cancelar', async () => {
+    const detalle = await abrirElDetalle(grupo('active', 'otro'), [
+      cuota('s1', 'otro', 'Otro', 'paid'),
+      cuota('s2', 'tercero', 'Tercero', 'paid'),
+      cuota('s3', 'yo', 'Yo', 'pending'),
+    ]);
+
+    expect(within(detalle).queryByRole('button', BOTON_CANCELAR)).toBeNull();
+    expect(within(detalle).queryByText(MOTIVO)).toBeNull();
+  });
+
+  it('si el servidor lo rechaza con SPLIT_HAS_PAYMENTS, muestra el motivo y quita el boton', async () => {
+    // Al abrir el detalle nadie habia pagado; antes de confirmar, alguien pago.
+    const detalle = await abrirElDetalle(grupo('active', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'pending'),
+    ]);
+    mocks.cancelSplit.mockResolvedValue({
+      success: false,
+      error: { code: 'SPLIT_HAS_PAYMENTS', message: 'the split already has payments' },
+    });
+    mocks.getSplit.mockResolvedValue({
+      success: true,
+      data: {
+        group: grupo('active', 'yo'),
+        shares: [cuota('s1', 'yo', 'Yo', 'paid'), cuota('s2', 'otro', 'Otro', 'paid')],
+      },
+    });
+
+    fireEvent.click(within(detalle).getByRole('button', BOTON_CANCELAR));
+    fireEvent.click(await within(detalle).findByRole('button', { name: /^cancelar división$/i }));
+
+    await waitFor(() => expect(mocks.cancelSplit).toHaveBeenCalledWith('g1'));
+    const actual = await screen.findByRole('dialog', { name: 'Detalle de la división' });
+    expect(await within(actual).findByText(MOTIVO)).toBeInTheDocument();
+    expect(within(actual).queryByRole('button', BOTON_CANCELAR)).toBeNull();
+    // El motivo es el de siempre, no el aviso generico de "no pudimos cancelar".
+    expect(within(actual).queryByText('No pudimos cancelar la división.')).toBeNull();
+    // Y la cuota que acaba de pagarse se ve pagada.
+    expect(within(actual).getAllByText('Pagada')).toHaveLength(2);
+  });
+
+  it('un fallo cualquiera al cancelar sigue diciendo "No pudimos cancelar"', async () => {
+    const detalle = await abrirElDetalle(grupo('active', 'yo'), [
+      cuota('s1', 'yo', 'Yo', 'paid'),
+      cuota('s2', 'otro', 'Otro', 'pending'),
+    ]);
+    mocks.cancelSplit.mockResolvedValue({
+      success: false,
+      error: { code: 'CANCEL_FAILED', message: 'boom' },
+    });
+
+    fireEvent.click(within(detalle).getByRole('button', BOTON_CANCELAR));
+    fireEvent.click(await within(detalle).findByRole('button', { name: /^cancelar división$/i }));
+
+    expect(await screen.findByText('No pudimos cancelar la división.')).toBeInTheDocument();
+    expect(screen.queryByText(MOTIVO)).toBeNull();
   });
 });
