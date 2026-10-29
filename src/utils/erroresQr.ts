@@ -27,7 +27,7 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
     case 'COBRO_DUPLICADO_APP_VIEJA':
       return t('qr_err_actualiza_app');
     // Los de forma y de seguridad. Sin estos, la vista caia al texto del
-    // servidor, que esta solo en espanol y en voseo ("no podes pagarte a vos
+    // servidor, que esta solo en espanol ("no puedes pagarte a ti
     // mismo"): con la app en otro idioma el motivo salia sin traducir.
     case 'QR_INVALIDO':
       return t('qr_err_invalido');

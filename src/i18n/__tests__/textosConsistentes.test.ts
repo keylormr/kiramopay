@@ -13,9 +13,12 @@ import type { TranslationKeys } from '../translations';
 // La segunda parte es el imperativo con el pronombre pegado ("Pedile",
 // "Ponele", "Revisalos", "imprimilo"): en voseo va sin tilde y en tuteo la
 // lleva ("Pídele", "Revísalos", "imprímelo"). La lista vieja no lo veia y
-// ocho textos lo conservaban.
+// ocho textos lo conservaban. La tercera es el voseo sin tilde ("No tenes
+// solicitudes"): "tenes", "podes" y "queres" no existen en tuteo ("tienes",
+// "puedes", "quieres"), asi que no hay con que confundirlos.
 const VOSEO = new RegExp(
   '(?<![a-záéíóúñ])(' +
+    'tenes|podes|queres|volve|elegi|' +
     'vos|podés|tenés|querés|sabés|enviás|escaneá|revisá|agregá|tocá|elegí|escribí|mirá|probá|hacé|poné|decí|confirmá|' +
     'pedile|pedila|pedilo|ponele|ponelo|decile|decilo|mandale|mandalo|avisale|avisanos|escribile|escribinos|' +
     'contale|contanos|mostrale|mostralo|pasale|pasalo|revisalos?|revisalas?|imprimilos?|pegalos?|copialos?|' +

@@ -111,6 +111,7 @@ var casosDeAlcance = []casoDeAlcance{
 	{mensaje: "que es Bitcoin?", enAlcance: true},
 	{mensaje: "deberia comprar bitcoin ahora?", enAlcance: true},
 	{mensaje: "cuanto cuesta el plan Plus?", enAlcance: true},
+	{mensaje: "como me comunico con soporte?", enAlcance: true},
 	{mensaje: "como activo la verificacion en dos pasos?", enAlcance: true},
 	{mensaje: "mi tarjeta fue rechazada en una tienda, que hago?", enAlcance: true},
 	{mensaje: "hola", enAlcance: true},

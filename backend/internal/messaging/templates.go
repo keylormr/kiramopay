@@ -16,7 +16,7 @@ func VerificationSMS(code string) string {
 
 // StepUpSMS is the message body for a high-value transaction step-up code.
 func StepUpSMS(code string) string {
-	return fmt.Sprintf("KiramoPay: tu codigo de autorizacion es %s. Vence en 5 minutos. Si no fuiste vos, no lo uses.", code)
+	return fmt.Sprintf("KiramoPay: tu codigo de autorizacion es %s. Vence en 5 minutos. Si no fuiste tu, no lo uses.", code)
 }
 
 // RegistrationOTPEmail builds the subject and the text/HTML bodies for the
@@ -30,17 +30,17 @@ func RegistrationOTPEmail(code string) (subject, textBody, htmlBody string) {
 	text.WriteString("Tu código de verificación es:\n")
 	text.WriteString(code + "\n\n")
 	text.WriteString("El código vence en 10 minutos y solo puede usarse una vez.\n")
-	text.WriteString("Si no estás creando una cuenta en KiramoPay, ignorá este mensaje.\n\n")
+	text.WriteString("Si no estás creando una cuenta en KiramoPay, ignora este mensaje.\n\n")
 	text.WriteString("KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.\n")
 
 	body := new(strings.Builder)
-	body.WriteString(paragraph("Estás creando tu cuenta. Usá este código para verificar tu correo:"))
+	body.WriteString(paragraph("Estás creando tu cuenta. Usa este código para verificar tu correo:"))
 	body.WriteString(codeBlock(code))
 	body.WriteString(note("El código vence en <strong>10 minutos</strong> y solo puede usarse una vez. " +
-		"Si no estás creando una cuenta en KiramoPay, ignorá este mensaje."))
+		"Si no estás creando una cuenta en KiramoPay, ignora este mensaje."))
 	body.WriteString(securityNotice())
 
-	htmlBody = emailShell("Verificá tu correo", "Tu código de verificación vence en 10 minutos.", body.String())
+	htmlBody = emailShell("Verifica tu correo", "Tu código de verificación vence en 10 minutos.", body.String())
 	return subject, text.String(), htmlBody
 }
 
@@ -83,15 +83,15 @@ func PasswordResetEmail(token, appURL, username string) (subject, textBody, html
 	text.WriteString("Tu código de restablecimiento es:\n")
 	text.WriteString(token + "\n\n")
 	if link != "" {
-		text.WriteString("O abrí este enlace para continuar:\n")
+		text.WriteString("O abre este enlace para continuar:\n")
 		text.WriteString(link + "\n\n")
 	}
 	text.WriteString("El código vence en 15 minutos y solo puede usarse una vez.\n")
-	text.WriteString("Si no solicitaste este cambio, ignorá este mensaje: tu contraseña sigue igual.\n\n")
+	text.WriteString("Si no solicitaste este cambio, ignora este mensaje: tu contraseña sigue igual.\n\n")
 	text.WriteString("KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.\n")
 
 	body := new(strings.Builder)
-	body.WriteString(paragraph("Recibimos una solicitud para restablecer tu contraseña. Usá este código para continuar:"))
+	body.WriteString(paragraph("Recibimos una solicitud para restablecer tu contraseña. Usa este código para continuar:"))
 	if username != "" {
 		// Escapado: el nombre de usuario lo elige el propio usuario y aqui se
 		// interpola en HTML. Hoy su formato ya excluye los caracteres que
@@ -103,10 +103,10 @@ func PasswordResetEmail(token, appURL, username string) (subject, textBody, html
 		body.WriteString(button(link, "Restablecer contraseña"))
 	}
 	body.WriteString(note("El código vence en <strong>15 minutos</strong> y solo puede usarse una vez. " +
-		"Si no solicitaste este cambio, ignorá este mensaje: tu contraseña sigue igual."))
+		"Si no solicitaste este cambio, ignora este mensaje: tu contraseña sigue igual."))
 	body.WriteString(securityNotice())
 
-	htmlBody = emailShell("Restablecé tu contraseña", "Tu código de restablecimiento vence en 15 minutos.", body.String())
+	htmlBody = emailShell("Restablece tu contraseña", "Tu código de restablecimiento vence en 15 minutos.", body.String())
 	return subject, text.String(), htmlBody
 }
 
@@ -239,24 +239,24 @@ func DeletionCodeSMS(code string) string {
 // DeletionCodeEmail arma el correo con el codigo para confirmar una solicitud de
 // eliminacion de cuenta hecha desde la pagina web.
 func DeletionCodeEmail(code string) (subject, textBody, htmlBody string) {
-	subject = "Confirmá que querés eliminar tu cuenta de KiramoPay"
+	subject = "Confirma que quieres eliminar tu cuenta de KiramoPay"
 
 	var text strings.Builder
 	text.WriteString("Alguien pidió eliminar la cuenta de KiramoPay asociada a este correo.\n\n")
-	text.WriteString("Si fuiste vos, este es el código para confirmar la solicitud:\n")
+	text.WriteString("Si fuiste tú, este es el código para confirmar la solicitud:\n")
 	text.WriteString(code + "\n\n")
 	text.WriteString("El código vence en 15 minutos y solo puede usarse una vez.\n")
-	text.WriteString("Si no fuiste vos, ignorá este mensaje: no se elimina nada sin este código.\n\n")
+	text.WriteString("Si no fuiste tú, ignora este mensaje: no se elimina nada sin este código.\n\n")
 	text.WriteString("KiramoPay nunca te va a pedir este código por teléfono, chat ni redes sociales.\n")
 
 	body := new(strings.Builder)
-	body.WriteString(paragraph("Alguien pidió eliminar la cuenta de KiramoPay asociada a este correo. Si fuiste vos, usá este código para confirmar la solicitud:"))
+	body.WriteString(paragraph("Alguien pidió eliminar la cuenta de KiramoPay asociada a este correo. Si fuiste tú, usa este código para confirmar la solicitud:"))
 	body.WriteString(codeBlock(code))
 	body.WriteString(note("El código vence en <strong>15 minutos</strong> y solo puede usarse una vez. " +
-		"Si no fuiste vos, ignorá este mensaje: no se elimina nada sin este código."))
+		"Si no fuiste tú, ignora este mensaje: no se elimina nada sin este código."))
 	body.WriteString(securityNotice())
 
-	htmlBody = emailShell("Confirmá la eliminación de tu cuenta", "Tu código vence en 15 minutos.", body.String())
+	htmlBody = emailShell("Confirma la eliminación de tu cuenta", "Tu código vence en 15 minutos.", body.String())
 	return subject, text.String(), htmlBody
 }
 
@@ -287,22 +287,22 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 	hasta := fechaCR(conservaHasta)
 
 	bloqueada := "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay y aceptaste el plazo de 30 días. " +
-		"Desde ahora tu cuenta está bloqueada: no podés entrar, mover dinero ni recibir avisos."
+		"Desde ahora tu cuenta está bloqueada: no puedes entrar, mover dinero ni recibir avisos."
 	suprime := "El " + dia30 + " se suprimen de forma definitiva tus datos de acceso, tus preferencias, " +
 		"tus contactos, tus presupuestos, tus pagos programados, tus alertas, tus conversaciones con el asistente " +
 		"y los dispositivos registrados."
 	conserva := "La Ley 7786 obliga a KiramoPay a conservar tus documentos de identificación y el registro de tus " +
 		"operaciones durante cinco años después del cierre, es decir, hasta el " + hasta + ". Se guardan aparte, " +
 		"fuera de la aplicación, y solo se usan para cumplir esa ley. El plazo puede ser mayor únicamente si la ley " +
-		"o una autoridad competente lo exige. Al vencer, dejan de estar asociados a vos de forma irreversible."
-	reactivar := "Si cambiás de opinión, hasta el " + dia30 + " podés reactivar tu cuenta: entrá a KiramoPay con " +
-		"tu contraseña y elegí reactivarla. Reactivarla cancela la eliminación y tu cuenta vuelve a funcionar. " +
-		"Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tenés que crear otras: las " +
+		"o una autoridad competente lo exige. Al vencer, dejan de estar asociados a ti de forma irreversible."
+	reactivar := "Si cambias de opinión, hasta el " + dia30 + " puedes reactivar tu cuenta: entra a KiramoPay con " +
+		"tu contraseña y elige reactivarla. Reactivarla cancela la eliminación y tu cuenta vuelve a funcionar. " +
+		"Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tienes que crear otras: las " +
 		"de antes quedaron revocadas."
-	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
+	prodhab := "Si consideras que no se respetaron tus derechos sobre tus datos personales, puedes acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
-	ajeno := "Si no fuiste vos quien lo pidió, entrá con tu contraseña, reactivá la cuenta y cambiá la contraseña, " +
-		"o escribinos a " + SupportEmail + "."
+	ajeno := "Si no fuiste tú quien lo pidió, entra con tu contraseña, reactiva la cuenta y cambia la contraseña, " +
+		"o escríbenos a " + SupportEmail + "."
 
 	var text strings.Builder
 	for _, p := range []string{bloqueada, suprime, conserva, reactivar, prodhab, ajeno} {
@@ -313,7 +313,7 @@ func AccountDeletionRequestedEmail(seEliminaEl, conservaHasta time.Time) (subjec
 	body.WriteString(paragraph(bloqueada))
 	body.WriteString(paragraph("<strong>Qué se borra.</strong> " + suprime))
 	body.WriteString(paragraph("<strong>Qué se conserva y hasta cuándo.</strong> " + conserva))
-	body.WriteString(paragraph("<strong>Si cambiás de opinión.</strong> " + reactivar))
+	body.WriteString(paragraph("<strong>Si cambias de opinión.</strong> " + reactivar))
 	body.WriteString(paragraph("<strong>Tus derechos.</strong> " + prodhab))
 	body.WriteString(note(withSupportLink(ajeno)))
 
@@ -330,7 +330,7 @@ func AccountDeletedEmail() (subject, textBody, htmlBody string) {
 	hecho := "Se suprimieron tus datos de acceso, tus preferencias, tus contactos y el resto de lo que te " +
 		"indicamos al recibir tu solicitud. Lo que la Ley 7786 obliga a conservar queda guardado aparte, por el " +
 		"plazo que te informamos, y solo se usa para cumplir esa ley."
-	ajeno := "Si no fuiste vos quien lo pidió, escribinos cuanto antes a " + SupportEmail + "."
+	ajeno := "Si no fuiste tú quien lo pidió, escríbenos cuanto antes a " + SupportEmail + "."
 
 	text := cerrada + "\n\n" + hecho + "\n\n" + ajeno + "\n"
 
@@ -350,10 +350,10 @@ func AccountReactivatedEmail() (subject, textBody, htmlBody string) {
 	subject = "Reactivaste tu cuenta de KiramoPay"
 	hecho := "Tu cuenta de KiramoPay se reactivó y la solicitud para eliminarla quedó cancelada. " +
 		"Tu cuenta vuelve a funcionar como antes."
-	pendiente := "Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tenés que crear " +
+	pendiente := "Los avisos se vuelven a encender desde Perfil y, si usabas llaves de API, tienes que crear " +
 		"otras: las de antes quedaron revocadas."
-	ajeno := "Si no fuiste vos quien la reactivó, alguien conoce tu contraseña: cambiala cuanto antes desde " +
-		"Perfil, o escribinos a " + SupportEmail + "."
+	ajeno := "Si no fuiste tú quien la reactivó, alguien conoce tu contraseña: cámbiala cuanto antes desde " +
+		"Perfil, o escríbenos a " + SupportEmail + "."
 
 	text := hecho + "\n\n" + pendiente + "\n\n" + ajeno + "\n"
 
@@ -378,8 +378,8 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 	for _, m := range motivos {
 		text.WriteString("- " + m + "\n")
 	}
-	text.WriteString("\nNo se borró nada. Cuando lo resolvás, volvé a pedir la eliminación en la página de solicitud de KiramoPay.\n")
-	text.WriteString("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba.\n")
+	text.WriteString("\nNo se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay.\n")
+	text.WriteString("Si no fuiste tú quien lo pidió, no tienes que hacer nada: tu cuenta sigue como estaba.\n")
 
 	body := new(strings.Builder)
 	body.WriteString(paragraph("Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero todavía no se pudo porque:"))
@@ -388,8 +388,8 @@ func DeletionBlockedEmail(motivos []string) (subject, textBody, htmlBody string)
 		items.WriteString("<li style=\"margin:0 0 6px\">" + html.EscapeString(m) + "</li>")
 	}
 	body.WriteString(`<ul style="margin:0 0 16px;padding-left:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:` + inkPrimary + `">` + items.String() + `</ul>`)
-	body.WriteString(paragraph("No se borró nada. Cuando lo resolvás, volvé a pedir la eliminación en la página de solicitud de KiramoPay."))
-	body.WriteString(note("Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."))
+	body.WriteString(paragraph("No se borró nada. Cuando lo resuelvas, vuelve a pedir la eliminación en la página de solicitud de KiramoPay."))
+	body.WriteString(note("Si no fuiste tú quien lo pidió, no tienes que hacer nada: tu cuenta sigue como estaba."))
 
 	htmlBody = emailShell("Todavía no pudimos eliminar tu cuenta", "No se borró nada.", body.String())
 	return subject, text.String(), htmlBody
@@ -404,11 +404,11 @@ func DeletionRejectedEmail() (subject, textBody, htmlBody string) {
 	subject = "No pudimos atender tu solicitud para eliminar tu cuenta de KiramoPay"
 	recibida := "Recibimos tu solicitud para eliminar tu cuenta de KiramoPay, pero no la podemos atender por " +
 		"esta vía. No se borró nada."
-	contacto := "Para tratar tu caso, escribinos a " + SupportEmail + ", el mismo contacto que figura en la " +
+	contacto := "Para tratar tu caso, escríbenos a " + SupportEmail + ", el mismo contacto que figura en la " +
 		"política de privacidad de KiramoPay."
-	prodhab := "Si considerás que no se respetaron tus derechos sobre tus datos personales, podés acudir a la " +
+	prodhab := "Si consideras que no se respetaron tus derechos sobre tus datos personales, puedes acudir a la " +
 		"Agencia de Protección de Datos de los Habitantes (PRODHAB)."
-	ajeno := "Si no fuiste vos quien lo pidió, no tenés que hacer nada: tu cuenta sigue como estaba."
+	ajeno := "Si no fuiste tú quien lo pidió, no tienes que hacer nada: tu cuenta sigue como estaba."
 
 	text := recibida + "\n\n" + contacto + "\n\n" + prodhab + "\n\n" + ajeno + "\n"
 

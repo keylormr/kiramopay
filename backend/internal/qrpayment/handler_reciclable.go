@@ -51,12 +51,12 @@ func responderConocido(w http.ResponseWriter, err error) bool {
 	casos := []caso{
 		{ErrQRInvalido, "QR_INVALIDO", http.StatusBadRequest, "ese codigo no existe o ya no es valido"},
 		{ErrQRRevocado, "QR_REVOCADO", http.StatusConflict, "ese codigo fue retirado por su dueno"},
-		{ErrCobroReemplazado, "COBRO_REEMPLAZADO", http.StatusConflict, "el cobro cambio, volve a escanear"},
+		{ErrCobroReemplazado, "COBRO_REEMPLAZADO", http.StatusConflict, "el cobro cambio, vuelve a escanear"},
 		{ErrCobroYaPagado, "COBRO_YA_PAGADO", http.StatusConflict, "ese cobro ya fue pagado"},
 		{ErrCobroVencido, "COBRO_VENCIDO", http.StatusConflict, "ese cobro vencio"},
 		{ErrCobroCancelado, "COBRO_CANCELADO", http.StatusConflict, "ese cobro fue cancelado"},
-		{ErrNoPodesPagarte, "NO_PODES_PAGARTE", http.StatusBadRequest, "no podes pagarte a vos mismo"},
-		{ErrMontoRequerido, "MONTO_REQUERIDO", http.StatusBadRequest, "indica cuanto queres pagar"},
+		{ErrNoPodesPagarte, "NO_PODES_PAGARTE", http.StatusBadRequest, "no puedes pagarte a ti mismo"},
+		{ErrMontoRequerido, "MONTO_REQUERIDO", http.StatusBadRequest, "indica cuanto quieres pagar"},
 		{ErrLlaveReutilizada, "LLAVE_REUTILIZADA", http.StatusConflict, "esa operacion ya se hizo con otro monto"},
 		// El mismo caso detectado por el motor de transferencias, que compara
 		// la llave antes que el modulo: caia al PAYMENT_FAILED generico.

@@ -245,7 +245,7 @@ func TestDeletionRejectedEmailEsLaRespuestaEscrita(t *testing.T) {
 		t.Fatal("sin asunto")
 	}
 	for nombre, cuerpo := range map[string]string{"texto": text, "html": html} {
-		for _, debe := range []string{"No se borró nada", "privacidad", "PRODHAB", "escribinos"} {
+		for _, debe := range []string{"No se borró nada", "privacidad", "PRODHAB", "escríbenos"} {
 			if !strings.Contains(cuerpo, debe) {
 				t.Errorf("el %s no dice %q:\n%s", nombre, debe, cuerpo)
 			}
