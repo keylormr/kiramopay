@@ -1011,6 +1011,14 @@ export type TranslationKeys = {
   admin_promo_warning: string;
   admin_promo_done: string;
   admin_promo_failed: string;
+  admin_capital_menu: string;
+  admin_capital_menu_desc: string;
+  admin_capital_title: string;
+  admin_capital_explain: string;
+  admin_capital_shortfall: string;
+  admin_capital_ok: string;
+  admin_capital_failed: string;
+  admin_capital_empty: string;
   // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
   // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
   tx_totals_scope: string;

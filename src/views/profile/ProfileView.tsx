@@ -61,6 +61,7 @@ interface ProfileViewProps {
   onOpenAdminDisputas?: () => void;
   /** El fondo de promociones que paga el cashback de puntos (solo administradores). */
   onOpenAdminPromociones?: () => void;
+  onOpenAdminCapital?: () => void;
   onOpenPlans?: () => void;
   onOpenSessions?: () => void;
   /** Presupuestos: topes por categoria que la persona lleva a mano. */
@@ -69,7 +70,7 @@ interface ProfileViewProps {
   onOpenRecurring?: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenAdminCapital, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
   const { state, dispatch } = useApp();
   // El gasto del mes del encabezado es el MISMO de la tarjeta de Inicio y de la
   // pantalla de analisis: resumen del servidor, dias civiles de Costa Rica.
@@ -941,6 +942,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <div className="flex-1 text-left">
                 <p className="font-semibold uv-text-primary text-sm">{t('admin_promo_menu')}</p>
                 <p className="text-xs uv-text-muted mt-0.5">{t('admin_promo_menu_desc')}</p>
+              </div>
+              <Icons.ChevronRight size={18} className="uv-text-muted" />
+            </button>
+
+            <button
+              onClick={() => onOpenAdminCapital?.()}
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
+            >
+              <div className="w-10 h-10 bg-sky-100 dark:bg-sky-900/30 rounded-xl flex items-center justify-center mr-3">
+                <Icons.Bank size={18} className="text-sky-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-semibold uv-text-primary text-sm">{t('admin_capital_menu')}</p>
+                <p className="text-xs uv-text-muted mt-0.5">{t('admin_capital_menu_desc')}</p>
               </div>
               <Icons.ChevronRight size={18} className="uv-text-muted" />
             </button>
