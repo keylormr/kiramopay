@@ -467,19 +467,67 @@ func (r *Repository) GetUserPayments(ctx context.Context, userID string, limit i
 // repiten entre paginas. Un antesDe que no es una venta de este comercio no trae
 // nada.
 func (r *Repository) GetMerchantPayments(ctx context.Context, merchantID string, limit int, antesDe string) ([]QRPaymentRecord, error) {
+	return r.GetMerchantPaymentsEnVentana(ctx, merchantID, limit, antesDe, nil, nil)
+}
+
+// columnasDeLaVenta son las de paymentCols, con alias, mas los tres nombres que
+// el detalle del cobro necesita: quien pago, la sucursal y el cajero. Un nombre
+// que no se encuentra (la cuenta ya no existe, la venta es anterior al equipo)
+// sale vacio: ni se inventa ni se rellena.
+const columnasDeLaVenta = `p.id, p.qr_code_id, COALESCE(p.charge_id::text, ''), p.payer_id, p.receiver_id,
+	COALESCE(p.merchant_id::text, ''),
+	COALESCE(p.location_id::text, ''), COALESCE(p.collected_by::text, ''),
+	p.amount, p.fee, p.currency, p.status, COALESCE(p.note, ''), COALESCE(p.tx_id, ''),
+	p.created_at, p.completed_at,
+	COALESCE(TRIM(pu.first_name || ' ' || pu.last_name), ''),
+	COALESCE(l.name, ''),
+	COALESCE(TRIM(cu.first_name || ' ' || cu.last_name), '')`
+
+func scanVentaConNombres(row pgx.Row) (*QRPaymentRecord, error) {
+	var p QRPaymentRecord
+	if err := row.Scan(&p.ID, &p.QRCodeID, &p.ChargeID, &p.PayerID, &p.ReceiverID, &p.MerchantID,
+		&p.LocationID, &p.CollectedBy,
+		&p.Amount, &p.Fee, &p.Currency, &p.Status, &p.Note, &p.TxID,
+		&p.CreatedAt, &p.CompletedAt,
+		&p.PayerName, &p.LocationName, &p.CollectorName); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetMerchantPaymentsEnVentana es el feed del comercio dentro de [desde, hasta).
+// Un limite nil no corta: sin los dos es el feed de siempre. Cada venta trae los
+// nombres de quien pago, de la sucursal y del cajero.
+func (r *Repository) GetMerchantPaymentsEnVentana(
+	ctx context.Context, merchantID string, limit int, antesDe string, desde, hasta *time.Time,
+) ([]QRPaymentRecord, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+paymentCols+` FROM qr_payments
-		  WHERE merchant_id = $1::uuid
-		    AND ($3 = '' OR (created_at, id) < (
+		`SELECT `+columnasDeLaVenta+`
+		   FROM qr_payments p
+		   LEFT JOIN users pu ON pu.id = p.payer_id
+		   LEFT JOIN users cu ON cu.id = p.collected_by
+		   LEFT JOIN merchant_locations l ON l.id = p.location_id
+		  WHERE p.merchant_id = $1::uuid
+		    AND ($3 = '' OR (p.created_at, p.id) < (
 		          SELECT created_at, id FROM qr_payments
 		           WHERE id = NULLIF($3, '')::uuid AND merchant_id = $1::uuid))
-		 ORDER BY created_at DESC, id DESC LIMIT $2`,
-		merchantID, limit, antesDe)
+		    AND ($4::timestamptz IS NULL OR p.created_at >= $4::timestamptz)
+		    AND ($5::timestamptz IS NULL OR p.created_at < $5::timestamptz)
+		  ORDER BY p.created_at DESC, p.id DESC LIMIT $2`,
+		merchantID, limit, antesDe, desde, hasta)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return collectPayments(rows)
+	var out []QRPaymentRecord
+	for rows.Next() {
+		p, err := scanVentaConNombres(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *p)
+	}
+	return out, rows.Err()
 }
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
@@ -639,7 +687,9 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 		        m.qr_code, m.active, m.cedula, m.cedula_type, m.legal_name, m.verification_status,
 		        m.rejection_reason, m.reviewed_at, m.commission_bps, m.created_at,
 		        m.plan, m.promo_hasta, m.primera_aprobacion_at,
-		        m.closed_at, COALESCE(m.closed_by::text, ''), COALESCE(m.closure_reason, ''), s.role
+		        m.closed_at, COALESCE(m.closed_by::text, ''), COALESCE(m.closure_reason, ''), s.role,
+		        COALESCE((SELECT btrim(COALESCE(o.first_name, '') || ' ' || COALESCE(o.last_name, ''))
+		                    FROM users o WHERE o.id = m.user_id), '')
 		   FROM merchant_staff s
 		   JOIN qr_merchants m ON m.id = s.merchant_id
 		  WHERE s.user_id = $1::uuid AND s.status = 'active' AND m.active = TRUE AND m.closed_at IS NULL
@@ -652,7 +702,7 @@ func (r *Repository) GetMerchantsByStaffUserID(ctx context.Context, userID strin
 	ahora := time.Now()
 	for rows.Next() {
 		var m Merchant
-		if err := rows.Scan(append(merchantDest(&m), &m.Role)...); err != nil {
+		if err := rows.Scan(append(merchantDest(&m), &m.Role, &m.OwnerName)...); err != nil {
 			return nil, err
 		}
 		m.ComisionEfectivaBps = ComisionEfectiva(m.CommissionBps, m.PromoHasta, ahora)
@@ -856,22 +906,28 @@ func (r *Repository) DeleteCatalogItem(ctx context.Context, merchantID, itemID, 
 
 // ── Reports (phase 4) ────────────────────────────────────────────────────────
 
-// reportFilter is the shared WHERE of every report query: the shop's completed
+// filtroDeReporte is the shared WHERE of every report query: the shop's completed
 // sales since a UTC instant. Every column is qualified with the `p` alias —
 // the breakdown queries join tables that also have created_at/status columns.
-const reportFilter = `p.merchant_id = $1::uuid AND p.status = 'completed' AND p.created_at >= $2`
+//
+// `hasta` ($N) es el corte superior de una ventana acotada (el mes anterior);
+// NULL no corta nada, que es lo de siempre: la ventana llega hasta ahora.
+func filtroDeReporte(posicionDeHasta int) string {
+	return fmt.Sprintf(`p.merchant_id = $1::uuid AND p.status = 'completed' AND p.created_at >= $2
+		    AND ($%[1]d::timestamptz IS NULL OR p.created_at < $%[1]d::timestamptz)`, posicionDeHasta)
+}
 
 // ReportDaily buckets the shop's sales per day. tzOffsetMin is the CLIENT's
 // offset in minutes WEST of UTC (JS getTimezoneOffset(): Costa Rica = 360), so
 // subtracting it re-expresses each instant in the client's local day.
-func (r *Repository) ReportDaily(ctx context.Context, merchantID string, since time.Time, tzOffsetMin int) ([]ReportDay, error) {
+func (r *Repository) ReportDaily(ctx context.Context, merchantID string, since time.Time, hasta *time.Time, tzOffsetMin int) ([]ReportDay, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT ((p.created_at - make_interval(mins => $3))::date)::text,
 		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
 		   FROM qr_payments p
-		  WHERE `+reportFilter+`
+		  WHERE `+filtroDeReporte(4)+`
 		  GROUP BY 1 ORDER BY 1 ASC`,
-		merchantID, since, tzOffsetMin)
+		merchantID, since, tzOffsetMin, hasta)
 	if err != nil {
 		return nil, err
 	}
@@ -890,15 +946,15 @@ func (r *Repository) ReportDaily(ctx context.Context, merchantID string, since t
 
 // ReportByLocation aggregates the shop's sales per location, biggest first.
 // Sales with no location fall into one bucket with an empty key.
-func (r *Repository) ReportByLocation(ctx context.Context, merchantID string, since time.Time) ([]ReportBucket, error) {
+func (r *Repository) ReportByLocation(ctx context.Context, merchantID string, since time.Time, hasta *time.Time) ([]ReportBucket, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT COALESCE(p.location_id::text, ''), COALESCE(l.name, ''),
 		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
 		   FROM qr_payments p
 		   LEFT JOIN merchant_locations l ON l.id = p.location_id
-		  WHERE `+reportFilter+`
+		  WHERE `+filtroDeReporte(3)+`
 		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
-		merchantID, since)
+		merchantID, since, hasta)
 	if err != nil {
 		return nil, err
 	}
@@ -909,16 +965,16 @@ func (r *Repository) ReportByLocation(ctx context.Context, merchantID string, si
 // ReportByCollector aggregates the shop's sales per team member who generated
 // the charge, biggest first. Pre-team sales have no collector and fall into
 // one bucket with an empty key.
-func (r *Repository) ReportByCollector(ctx context.Context, merchantID string, since time.Time) ([]ReportBucket, error) {
+func (r *Repository) ReportByCollector(ctx context.Context, merchantID string, since time.Time, hasta *time.Time) ([]ReportBucket, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT COALESCE(p.collected_by::text, ''),
 		        COALESCE(TRIM(u.first_name || ' ' || u.last_name), ''),
 		        COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.fee), 0), COUNT(*)
 		   FROM qr_payments p
 		   LEFT JOIN users u ON u.id = p.collected_by
-		  WHERE `+reportFilter+`
+		  WHERE `+filtroDeReporte(3)+`
 		  GROUP BY 1, 2 ORDER BY SUM(p.amount) DESC`,
-		merchantID, since)
+		merchantID, since, hasta)
 	if err != nil {
 		return nil, err
 	}

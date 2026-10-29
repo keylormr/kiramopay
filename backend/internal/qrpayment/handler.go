@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -255,9 +256,44 @@ func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
 
-// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?limit=&before=.
+// leerPeriodo lee ?period=. Con obligatorio=false, sin el no hay periodo y todo
+// sigue como antes (presente=false). Uno que la pantalla no ofrece es un 400
+// INVALID_PERIOD: no se adivina, ni se cae a otro.
+func leerPeriodo(w http.ResponseWriter, r *http.Request, obligatorio bool) (p Periodo, presente, ok bool) {
+	crudo := r.URL.Query().Get("period")
+	if crudo == "" && !obligatorio {
+		return "", false, true
+	}
+	p, valido := ParsePeriodo(crudo)
+	if !valido {
+		response.Error(w, http.StatusBadRequest, "INVALID_PERIOD", "period must be today, week, month or prev_month")
+		return "", false, false
+	}
+	return p, true, true
+}
+
+// desfaseDelCliente es ?tz=: los minutos al oeste de UTC que da getTimezoneOffset().
+func desfaseDelCliente(r *http.Request) int {
+	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
+	return tz
+}
+
+// responderLectura contesta el error de una lectura del comercio: quien no es
+// del equipo (o un comercio que no existe) es un 404, sin decir cual; lo demas
+// es una falla del servidor, no un "no existe".
+func responderLectura(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrComercioNoEncontrado) {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", "internal server error")
+}
+
+// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?period=&tz=&limit=&before=.
 // The shop's sales feed, visible to the whole team (owner, manager, cashier),
-// newest first. `before` is the id of the last payment already shown.
+// newest first. `before` is the id of the last payment already shown. Con
+// `period` (+ `tz`) trae solo las de ese periodo, contado en el dia de quien
+// mira.
 func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
@@ -272,15 +308,78 @@ func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 		}
 		antesDe = id.String()
 	}
-	payments, err := h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
-	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
 		return
+	}
+	var payments []QRPaymentRecord
+	var err error
+	if hayPeriodo {
+		payments, err = h.service.VentasDelComercioEnPeriodo(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), limite, antesDe, time.Now())
+		if err != nil {
+			responderLectura(w, err)
+			return
+		}
+	} else {
+		payments, err = h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
+		if err != nil {
+			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
 	}
 	if payments == nil {
 		payments = []QRPaymentRecord{}
 	}
 	response.JSON(w, http.StatusOK, payments)
+}
+
+// GetMerchantDailyTotals — GET /api/v1/qr/merchants/{id}/payments/daily?period=&tz=.
+// Las ventas de cada dia del periodo, por moneda, para el total de cada dia de
+// la lista de movimientos. El periodo es obligatorio.
+func (h *Handler) GetMerchantDailyTotals(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	periodo, _, ok := leerPeriodo(w, r, true)
+	if !ok {
+		return
+	}
+	dias, err := h.service.TotalesPorDia(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, dias)
+}
+
+// GetMerchantWithdrawals — GET /api/v1/qr/merchants/{id}/withdrawals?period=&tz=.
+// Los retiros del saldo del negocio en el periodo. Dueno o encargado.
+func (h *Handler) GetMerchantWithdrawals(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	periodo, _, ok := leerPeriodo(w, r, true)
+	if !ok {
+		return
+	}
+	retiros, err := h.service.RetirosDelComercio(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, retiros)
+}
+
+// GetMerchantSummary — GET /api/v1/qr/merchants/{id}/summary?tz=360.
+// Las ventas de hoy, de los ultimos 7 dias, del mes y del mes anterior, por
+// moneda. Un cajero recibe solo hoy; la comparacion es del plan analitica.
+func (h *Handler) GetMerchantSummary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	resumen, err := h.service.ResumenDelComercio(r.Context(), merchantID, userID, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, resumen)
 }
 
 // GetMerchantReport — GET /api/v1/qr/merchants/{id}/report?days=30&tz=360.
@@ -291,7 +390,17 @@ func (h *Handler) GetMerchantReport(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
-	report, err := h.service.MerchantReport(r.Context(), merchantID, userID, days, tz)
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
+		return
+	}
+	var report *MerchantReport
+	var err error
+	if hayPeriodo {
+		report, err = h.service.MerchantReportDelPeriodo(r.Context(), merchantID, userID, periodo, tz, time.Now())
+	} else {
+		report, err = h.service.MerchantReport(r.Context(), merchantID, userID, days, tz)
+	}
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -310,7 +419,17 @@ func (h *Handler) GetMerchantReportCSV(w http.ResponseWriter, r *http.Request) {
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
 
-	rep, err := h.service.ReporteExportable(r.Context(), merchantID, userID, days, tz)
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
+		return
+	}
+	var rep *MerchantReport
+	var err error
+	if hayPeriodo {
+		rep, err = h.service.ReporteExportableDelPeriodo(r.Context(), merchantID, userID, periodo, tz, time.Now())
+	} else {
+		rep, err = h.service.ReporteExportable(r.Context(), merchantID, userID, days, tz)
+	}
 	if err != nil {
 		if errors.Is(err, ErrPlanAnaliticaRequerido) {
 			response.ErrorConDetalle(w, http.StatusForbidden, "PLAN_REQUIRED",

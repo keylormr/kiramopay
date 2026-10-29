@@ -2527,7 +2527,9 @@ paths:
         window moved `days` days back and cut at the same hour, so today's
         half day is not compared with a whole day. With the base plan
         `comparison` is absent. Anyone who is not the owner or a manager gets
-        404, without learning whether the merchant exists.
+        404, without learning whether the merchant exists. With `period` the
+        window is that period (the previous month ends where this one starts)
+        and `days` is ignored.
       security:
         - bearerAuth: []
       parameters:
@@ -2535,6 +2537,15 @@ paths:
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
         - name: tz
           in: query
           description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
@@ -2546,6 +2557,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MerchantReport'
+        '400':
+          description: INVALID_PERIOD — period is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
 
@@ -2558,7 +2575,9 @@ paths:
         closed merchant is the exception: its window ends when it closed, and
         its owner exports with any plan, since the plan was for operating. The
         role is checked first: someone outside the team gets 404 and never
-        learns which plan the merchant has.
+        learns which plan the merchant has. With `period` the window is that
+        period (the movements screen exports the period it is showing) and
+        `days` is ignored.
       security:
         - bearerAuth: []
       parameters:
@@ -2566,6 +2585,15 @@ paths:
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
         - name: tz
           in: query
           description: Client offset in minutes WEST of UTC (Costa Rica = 360)
@@ -2604,6 +2632,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanRequiredError'
+        '400':
+          description: INVALID_PERIOD — period is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
         '500':
@@ -2830,11 +2864,28 @@ paths:
         Sales by pages, newest first: `limit` of them (50 by default), and with
         `before` the ones that follow the payment with that id. A page shorter
         than `limit` is the last one. The owner of a closed merchant still
-        reads them; its former staff does not.
+        reads them; its former staff does not. With `period` only the payments
+        of that period come, counted in the client's calendar day (`tz`); the
+        period is asked of the server, not filtered on the screen, so a page
+        never hides a day half loaded. Every payment carries the names of who
+        paid, of the location and of the cashier when they could be resolved.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
         - name: limit
           in: query
           required: false
@@ -2855,13 +2906,166 @@ paths:
                 items:
                   $ref: '#/components/schemas/QRPaymentRecord'
         '400':
-          description: INVALID_CURSOR — before is not an id.
+          description: INVALID_CURSOR — before is not an id. INVALID_PERIOD — period is not one of the four.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/payments/daily:
+    get:
+      tags: [QR Payments]
+      summary: Sales of each day of a period, by currency (whole team)
+      description: >-
+        One row per day and currency, the most recent day first, for the total
+        of each day in the movements list. Only completed sales count: a
+        refunded payment shows in the list but is not a sale. Currencies are
+        never added together. The day is the client's calendar day (`tz`). The
+        owner of a closed merchant reads it, with the period counted from the
+        day it closed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: true
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Totals per day and currency (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchantDayTotal'
+        '400':
+          description: INVALID_PERIOD — period is missing or is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the totals could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/withdrawals:
+    get:
+      tags: [QR Payments]
+      summary: Withdrawals from the merchant balance in a period (owner or manager)
+      description: >-
+        The completed withdrawals from the shop's balance to its owner's
+        account, the most recent first (at most 200). They are movements of the
+        shop, not sales. A cashier does not see the balance, and so does not see
+        what is withdrawn from it: it gets 404, like anyone outside the team.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: true
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Withdrawals (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchantWithdrawalRecord'
+        '400':
+          description: INVALID_PERIOD — period is missing or is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not its owner or a manager (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the withdrawals could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/summary:
+    get:
+      tags: [QR Payments]
+      summary: Sales of today, the last 7 days, this month and the previous month, by currency
+      description: >-
+        Completed sales per period, one entry per currency (currencies are never
+        added together). A period without sales comes with an empty
+        `currencies`: the server counted it. With the analitica plan every
+        currency also carries `previous` and `delta`: the same period moved
+        back, cut at the same hour (today against yesterday up to now; this
+        month against the previous month up to the same day and hour, whole when
+        it was shorter). With the base plan they are absent. A cashier gets only
+        `today`, without comparison: the week and the month are the business's
+        numbers, like the report. The owner of a closed merchant reads it, with
+        the periods counted from the day it closed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantSummary'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the summary could not be read.
           content:
             application/json:
               schema:
@@ -6952,7 +7156,11 @@ components:
             reason an administrator wrote. Absent while it is open.
         owner_name:
           type: string
-          description: Owner's display name (only in the administrator's list)
+          description: >-
+            Owner's display name. In the administrator's list, and in the list
+            of someone who works at the merchant without owning it (so they know
+            whom to ask for a permission). Absent in the owner's own list and
+            when it could not be resolved.
 
     MerchantProfileRequest:
       type: object
@@ -6996,6 +7204,80 @@ components:
         tx_id: { type: string }
         created_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time }
+        payer_name:
+          type: string
+          description: >-
+            Who paid. Only in the merchant's sales feed; absent when the account
+            could not be resolved. Never filled in.
+        location_name:
+          type: string
+          description: Name of the location the charge was for. Absent when the sale has no location (location_id is absent too) or the name could not be resolved.
+        collector_name:
+          type: string
+          description: Name of the team member who issued the charge. Absent for a sale from before the team existed (collected_by is absent too).
+
+    MerchantDayTotal:
+      type: object
+      additionalProperties: false
+      required: [date, currency, gross, fee, net, count]
+      properties:
+        date: { type: string, format: date, description: "Calendar day in the client's timezone" }
+        currency: { type: string }
+        gross: { type: integer, format: int64, description: Minor units charged to payers }
+        fee: { type: integer, format: int64, description: Minor units of commission }
+        net: { type: integer, format: int64, description: gross - fee }
+        count: { type: integer }
+
+    MerchantWithdrawalRecord:
+      type: object
+      additionalProperties: false
+      required: [id, amount, currency, status, created_at]
+      properties:
+        id: { type: string, format: uuid, description: The withdrawal's transaction id }
+        amount: { type: integer, format: int64, description: Minor units withdrawn }
+        currency: { type: string }
+        status: { type: string }
+        withdrawn_by_name: { type: string, description: Who withdrew it; absent when it could not be resolved }
+        created_at: { type: string, format: date-time }
+
+    MerchantSummaryCurrency:
+      type: object
+      additionalProperties: false
+      required: [currency, gross, fee, net, count]
+      properties:
+        currency: { type: string }
+        gross: { type: integer, format: int64, description: Minor units charged to payers }
+        fee: { type: integer, format: int64 }
+        net: { type: integer, format: int64 }
+        count: { type: integer }
+        previous: { $ref: '#/components/schemas/ReportBucket' }
+        delta: { $ref: '#/components/schemas/ReportDelta' }
+
+    MerchantSummaryPeriod:
+      type: object
+      additionalProperties: false
+      required: [period, from, to, currencies]
+      properties:
+        period: { type: string, enum: [today, week, month, prev_month] }
+        from: { type: string, format: date, description: "First day of the period, in the client's timezone" }
+        to: { type: string, format: date, description: Last day of the period }
+        previous_from: { type: string, format: date, description: Only with the analitica plan }
+        previous_to: { type: string, format: date, description: Only with the analitica plan }
+        currencies:
+          type: array
+          description: One entry per currency with sales; empty when the period had none.
+          items: { $ref: '#/components/schemas/MerchantSummaryCurrency' }
+
+    MerchantSummary:
+      type: object
+      additionalProperties: false
+      required: [plan, periods]
+      properties:
+        plan: { type: string, enum: [base, analitica] }
+        periods:
+          type: array
+          description: Today, week, month and prev_month; a cashier gets only today.
+          items: { $ref: '#/components/schemas/MerchantSummaryPeriod' }
 
     StaffMember:
       type: object

@@ -6,7 +6,8 @@ import { getApiLayer } from '@/api';
 import { VENTAS_POR_PAGINA, type QRMerchant, type QRPayment } from '@/api/repositories/qrpayment.repository';
 import { fechaLarga, rellenar } from '@/utils/planes';
 import { useCapa } from '@/navegacion/pilaDeCapas';
-import { BusinessMovementsView } from './BusinessMovementsView';
+import { ListaDeMovimientos } from './ListaDeMovimientos';
+import { movimientoDeCobro } from '@/utils/movimientosDelComercio';
 import { BusinessReportsView } from './BusinessReportsView';
 
 interface Props {
@@ -227,11 +228,23 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
         ) : ventas === null ? (
           <p className="text-sm uv-text-muted text-center py-10" role="status">{t('loading')}</p>
         ) : (
-          <BusinessMovementsView
-            payments={ventas}
-            paymentsFailed={falloVentas}
-            conTitulo={false}
-            pie={hayMas && (
+          <div className="pb-24 pt-4 px-4 space-y-4">
+            {falloVentas ? (
+              <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">
+                <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] opacity-70 mb-3" aria-hidden="true" />
+                <p className="uv-text-muted text-sm">{t('business_sales_load_failed')}</p>
+              </div>
+            ) : ventas.length === 0 ? (
+              <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">
+                <Icons.Receipt size={40} className="mx-auto uv-text-muted opacity-50 mb-3" aria-hidden="true" />
+                <p className="uv-text-muted text-sm">{t('merchant_history_empty')}</p>
+              </div>
+            ) : (
+              // Sin totales por dia: el servidor los da por periodo, y el historial de
+              // un comercio cerrado no es un periodo.
+              <ListaDeMovimientos movimientos={ventas.map(movimientoDeCobro)} tzOffsetMin={new Date().getTimezoneOffset()} />
+            )}
+            {hayMas && (
               <div className="space-y-2">
                 {falloMas && (
                   <p role="alert" className="text-sm text-center text-[var(--color-danger)]">{t('business_closed_more_failed')}</p>
@@ -241,7 +254,7 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
                 </Button>
               </div>
             )}
-          />
+          </div>
         )}
       </div>
     </div>

@@ -19,6 +19,13 @@ import type {
   CreateChargeRequest,
   ResolvedQR,
   BusinessReportComparison,
+  PeriodoDeVentas,
+  ResumenDelComercio,
+  ResumenDelPeriodo,
+  RetiroDelComercio,
+  TotalDelDia,
+  TotalesDeVentas,
+  VentasPorMoneda,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
@@ -153,7 +160,11 @@ interface PaymentDTO {
   currency: string;
   status: string;
   note: string;
+  tx_id?: string;
   created_at: string;
+  payer_name?: string;
+  location_name?: string;
+  collector_name?: string;
 }
 
 function mapPayment(d: PaymentDTO): QRPayment {
@@ -170,7 +181,58 @@ function mapPayment(d: PaymentDTO): QRPayment {
     currency: d.currency,
     status: d.status as QRPayment['status'],
     note: d.note || undefined,
+    txId: d.tx_id || undefined,
     createdAt: d.created_at,
+    // Un nombre que el servidor no dio queda sin definir: la pantalla lo dice
+    // ("No disponible"), no pinta uno vacio ni inventado.
+    payerName: d.payer_name || undefined,
+    locationName: d.location_name || undefined,
+    collectorName: d.collector_name || undefined,
+  };
+}
+
+interface TotalesDTO { gross: number; fee: number; net: number; count: number }
+interface VariacionDTO extends TotalesDTO {
+  gross_pct: number | null; net_pct: number | null; count_pct: number | null;
+}
+interface VentasPorMonedaDTO extends TotalesDTO {
+  currency: string; previous?: TotalesDTO; delta?: VariacionDTO;
+}
+interface ResumenDelPeriodoDTO {
+  period: string; from: string; to: string; previous_from?: string; previous_to?: string;
+  currencies: VentasPorMonedaDTO[] | null;
+}
+
+// Del servidor llegan centimos; la aplicacion trabaja en unidades.
+const enUnidades = (t: TotalesDTO): TotalesDeVentas => ({
+  gross: t.gross / 100, fee: t.fee / 100, net: t.net / 100, count: t.count,
+});
+const porcentaje = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+function mapVentasPorMoneda(d: VentasPorMonedaDTO): VentasPorMoneda {
+  const out: VentasPorMoneda = { currency: d.currency, ...enUnidades(d) };
+  if (d.previous) out.previous = enUnidades(d.previous);
+  if (d.delta) {
+    out.delta = {
+      ...enUnidades(d.delta),
+      grossPct: porcentaje(d.delta.gross_pct),
+      netPct: porcentaje(d.delta.net_pct),
+      countPct: porcentaje(d.delta.count_pct),
+    };
+  }
+  return out;
+}
+
+function mapResumenDelPeriodo(d: ResumenDelPeriodoDTO): ResumenDelPeriodo {
+  return {
+    period: d.period as PeriodoDeVentas,
+    from: d.from,
+    to: d.to,
+    previousFrom: d.previous_from || undefined,
+    previousTo: d.previous_to || undefined,
+    // Una lista vacia es un dato (el periodo no tuvo ventas); un null del
+    // servidor se lee igual.
+    currencies: (d.currencies ?? []).map(mapVentasPorMoneda),
   };
 }
 
@@ -448,11 +510,55 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(res.data.map(mapPayment));
   }
 
-  async getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>> {
-    const desde = opciones?.antesDe ? `?before=${encodeURIComponent(opciones.antesDe)}` : '';
-    const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments${desde}`);
+  async getMerchantPayments(
+    merchantId: string,
+    opciones?: { antesDe?: string; periodo?: PeriodoDeVentas },
+  ): Promise<ApiResponse<QRPayment[]>> {
+    const q: string[] = [];
+    // El periodo viaja con la zona horaria de la persona: lo cuenta el servidor.
+    if (opciones?.periodo) q.push(`period=${opciones.periodo}`, `tz=${new Date().getTimezoneOffset()}`);
+    if (opciones?.antesDe) q.push(`before=${encodeURIComponent(opciones.antesDe)}`);
+    const consulta = q.length ? `?${q.join('&')}` : '';
+    const res = await this.client.get<PaymentDTO[]>(`/api/v1/qr/merchants/${merchantId}/payments${consulta}`);
     if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
     return apiSuccess(res.data.map(mapPayment));
+  }
+
+  async getMerchantSummary(merchantId: string): Promise<ApiResponse<ResumenDelComercio>> {
+    const tz = new Date().getTimezoneOffset();
+    const res = await this.client.get<{ plan?: string; periods: ResumenDelPeriodoDTO[] | null }>(
+      `/api/v1/qr/merchants/${merchantId}/summary?tz=${tz}`,
+    );
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
+    return apiSuccess({
+      plan: normalizarPlanComercio(res.data.plan),
+      periods: (res.data.periods ?? []).map(mapResumenDelPeriodo),
+    });
+  }
+
+  async getMerchantDailyTotals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<TotalDelDia[]>> {
+    const tz = new Date().getTimezoneOffset();
+    const res = await this.client.get<Array<TotalesDTO & { date: string; currency: string }> | null>(
+      `/api/v1/qr/merchants/${merchantId}/payments/daily?period=${periodo}&tz=${tz}`,
+    );
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
+    return apiSuccess(res.data.map((d) => ({ date: d.date, currency: d.currency, ...enUnidades(d) })));
+  }
+
+  async getMerchantWithdrawals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<RetiroDelComercio[]>> {
+    const tz = new Date().getTimezoneOffset();
+    const res = await this.client.get<Array<{
+      id: string; amount: number; currency: string; status: string; withdrawn_by_name?: string; created_at: string;
+    }> | null>(`/api/v1/qr/merchants/${merchantId}/withdrawals?period=${periodo}&tz=${tz}`);
+    if (!res.success || !res.data) return falla(res, 'FETCH_FAILED');
+    return apiSuccess(res.data.map((d) => ({
+      id: d.id,
+      amount: d.amount / 100,
+      currency: d.currency,
+      status: d.status,
+      withdrawnByName: d.withdrawn_by_name || undefined,
+      createdAt: d.created_at,
+    })));
   }
 
   async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {
@@ -510,18 +616,28 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     });
   }
 
-  async exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>> {
+  async exportMerchantReportCsv(
+    merchantId: string,
+    days: number,
+    idioma?: string,
+    periodo?: PeriodoDeVentas,
+  ): Promise<ApiResponse<ArchivoDescargado>> {
     const tz = new Date().getTimezoneOffset();
     const lang = idioma ? `&lang=${encodeURIComponent(idioma)}` : '';
+    // Con periodo, el servidor exporta ese periodo y `days` no cuenta.
+    const ventana = periodo ? `period=${periodo}` : `days=${days}`;
     // Se pide como archivo: un 200 es el CSV tal cual; un 403 PLAN_REQUIRED o
     // un 404 llegan como el sobre de error de siempre, con su codigo.
     const res = await this.client.getArchivo(
-      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?days=${days}&tz=${tz}${lang}`,
+      `/api/v1/qr/merchants/${encodeURIComponent(merchantId)}/report.csv?${ventana}&tz=${tz}${lang}`,
     );
     if (!res.success || !res.data) {
       return falla(res, 'EXPORT_FAILED');
     }
-    return apiSuccess({ blob: res.data.blob, nombre: res.data.nombre || `reporte-${days}-dias.csv` });
+    return apiSuccess({
+      blob: res.data.blob,
+      nombre: res.data.nombre || (periodo ? `reporte-${periodo}.csv` : `reporte-${days}-dias.csv`),
+    });
   }
 
   // ── Team ───────────────────────────────────────────────────────────────────
