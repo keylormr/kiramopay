@@ -32,7 +32,7 @@ interface BottomSheetProps {
  * contenedor llega justo al borde de la hoja. Si se agranda esa sombra, hay que
  * agrandar esto: BottomSheet.sombras.test.tsx lo vigila.
  */
-const HOLGURA_SOMBRA = { lado: 24, arriba: 16, abajo: 28 } as const;
+const HOLGURA_SOMBRA = { lado: 24, arriba: 12, abajo: 28 } as const;
 
 const ENFOCABLES = [
   'a[href]',
@@ -187,8 +187,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         {/* Drag handle (mobile only) */}
         <div className="shrink-0 w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
 
+        {/* El titulo tiene fondo propio y relleno en vez de margen: el contenedor
+            con scroll sube HOLGURA_SOMBRA.arriba px sobre el hueco que deja el
+            titulo, y sin este fondo el contenido que se desplaza se veria pasar
+            justo debajo del titulo en vez de cortarse 20 px mas abajo. */}
         {title && (
-          <div className="shrink-0 flex justify-between items-center mb-5">
+          <div className="relative z-10 shrink-0 flex justify-between items-center pb-5 bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)]">
             <div className="flex items-center gap-1.5 min-w-0">
               <h2
                 id={idTitulo}
