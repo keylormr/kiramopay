@@ -29,6 +29,18 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     hostname: esIOS ? 'localhost' : 'app.kiramopay.com',
+    // Solo Android (ver android.minWebViewVersion). En iOS errorPath se abre
+    // ante cualquier carga fallida y la pagina hablaria de Android.
+    ...(esIOS ? {} : { errorPath: 'webview-viejo/index.html' }),
+  },
+  // El WebView minimo con el que la capa web se ve y funciona: su JavaScript
+  // pide Chrome 80 (el operador `??`) y sus estilos, de Tailwind 4, Chrome 111
+  // (debajo de la 99 no entienden @layer y se pierde casi todo el CSS). Con un
+  // WebView anterior Capacitor no carga la app: abre server.errorPath, una
+  // pagina en ES5 que dice que actualizar (public/webview-viejo, con el mismo
+  // numero). Sin errorPath solo lo anota en Logcat y la app queda en blanco.
+  android: {
+    minWebViewVersion: 111,
   },
   // Sin bloque `ios`: el default de `contentInset` es 'never', que es
   // justamente lo que esta app necesita —el HTML declara viewport-fit=cover y

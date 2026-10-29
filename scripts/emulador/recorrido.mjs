@@ -18,6 +18,9 @@
 // debe aparecer "Exportado exitosamente"), Cripto y Perfil. Una captura por
 // paso con adb exec-out screencap.
 //
+// Con un WebView anterior al minimo (API 24) no hay app que recorrer: tiene que
+// aparecer la pagina que dice como actualizarlo, en ingles y en espanol.
+//
 // No toca los avisos: un APK sin google-services.json se cierra al pedirlos, y
 // este build no lleva VITE_PUSH_NATIVO, asi que la app ni siquiera los ofrece.
 
@@ -30,10 +33,11 @@ const PAQUETE = 'com.kiramopay.app';
 const ORIGEN = 'https://app.kiramopay.com';
 const API_SIMULADA = 'http://localhost:8080';
 const PUERTO = 9222;
-// La capa web se compila con el objetivo por defecto de Vite 6 (chrome87). Un
-// WebView anterior no puede correrla: la imagen del emulador de Android 7 trae
-// el de fabrica, y un telefono real con Android 7 lo actualiza por Play Store.
-const WEBVIEW_MINIMO = 87;
+// android.minWebViewVersion de capacitor.config.ts. Con un WebView anterior la
+// app no carga y Capacitor abre la pagina de public/webview-viejo: la imagen del
+// emulador de Android 7 trae el de fabrica (69), y un telefono real con Android
+// 7 lo actualiza por Play Store.
+const WEBVIEW_MINIMO = 111;
 const API_LEVEL = Number(process.env.API_LEVEL || 0);
 
 mkdirSync(SALIDA, { recursive: true });
@@ -395,6 +399,68 @@ async function recorrer(cdp) {
   if (aProduccion.length) throw new Error(`la app intento llamar a produccion: ${aProduccion.join(', ')}`);
 }
 
+// ── Con un WebView viejo ─────────────────────────────────────────────────────
+
+/** Lo que muestra la pagina del WebView viejo, leido con ES5 (corre en ese motor). */
+function estadoDeLaPagina(cdp) {
+  return cdp.evaluar(`(function () {
+    var raiz = document.documentElement;
+    var titulo = document.getElementById('titulo');
+    var boton = document.getElementById('boton');
+    return JSON.stringify({
+      ruta: location.pathname,
+      motivo: raiz.getAttribute('data-motivo'),
+      lengua: raiz.getAttribute('lang'),
+      titulo: titulo ? titulo.textContent : '',
+      boton: boton ? boton.getAttribute('href') : '',
+      texto: document.body ? document.body.innerText : ''
+    });
+  })()`).then((t) => JSON.parse(t));
+}
+
+// Capacitor no carga la app: abre server.errorPath (public/webview-viejo), que
+// tiene que decir que actualizar en el idioma del telefono, nunca quedar en
+// blanco. El emulador esta en ingles; despues se repite con el WebView diciendo
+// que el idioma es espanol.
+async function paginaDeWebViewViejo(cdp, mayor) {
+  const enIngles = await hasta(
+    'aparece la pagina para actualizar el WebView (no la app en blanco)',
+    async () => {
+      const e = await estadoDeLaPagina(cdp);
+      return e.motivo === 'webview-viejo' && e.titulo ? e : false;
+    },
+    { ms: 30000, cada: 1000 },
+  );
+  await esperar(1500);
+  if (enIngles.ruta !== '/webview-viejo/index.html') throw new Error(`la pagina abierta es ${enIngles.ruta}`);
+  if (enIngles.lengua !== 'en' || enIngles.titulo !== 'An update is needed') {
+    throw new Error(`con el telefono en ingles la pagina dice "${enIngles.titulo}" (${enIngles.lengua})`);
+  }
+  if (!/Google Play/.test(enIngles.texto) || !enIngles.texto.includes(String(mayor))) {
+    throw new Error('la pagina no dice que actualizar desde Google Play ni que version tiene el telefono');
+  }
+  paso('pagina para actualizar el WebView (ingles)', { captura: captura('webview-viejo-en'), ...enIngles });
+
+  await cdp.enviar('Page.enable');
+  await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', {
+    source:
+      "Object.defineProperty(navigator, 'language', { get: function () { return 'es-CR'; } });" +
+      "Object.defineProperty(navigator, 'languages', { get: function () { return ['es-CR']; } });",
+  });
+  await cdp.enviar('Page.reload', { ignoreCache: true });
+  const enEspanol = await hasta(
+    'la pagina sale en espanol con el telefono en espanol',
+    async () => {
+      const e = await estadoDeLaPagina(cdp);
+      return e.lengua === 'es' && e.titulo === 'Hace falta una actualización' ? e : false;
+    },
+    { ms: 20000, cada: 1000 },
+  );
+  await esperar(1500);
+  paso('pagina para actualizar el WebView (espanol)', { captura: captura('webview-viejo-es'), ...enEspanol });
+  console.log(`::notice::API ${API_LEVEL}: WebView ${mayor} < ${WEBVIEW_MINIMO}; la app muestra la pagina para actualizarlo.`);
+}
+
 async function principal() {
   const { cdp, socket, version } = await conectarAlWebView();
   resumen.socket = socket;
@@ -404,27 +470,12 @@ async function principal() {
   const textoVersion = process.env.WEBVIEW_VERSION || String(resumen.navegador || '').match(/Chrome\/([\d.]+)/)?.[1] || '';
   const mayor = Number(textoVersion.split('.')[0]) || 0;
 
-  if (mayor && mayor < WEBVIEW_MINIMO) {
-    // La app arranco y el WebView esta vivo; la capa web no puede correr en un
-    // motor tan viejo, asi que no hay pantallas que recorrer.
-    resumen.omitido = `WebView ${textoVersion} < ${WEBVIEW_MINIMO}`;
-    await esperar(5000);
-    // Lo que dijo la consola del WebView al cargar la capa web (el motivo de la
-    // pantalla en blanco, si la hay).
-    let consola = '';
-    try {
-      consola = adb('logcat', '-d', '-s', 'Capacitor/Console').trim();
-    } catch {
-      consola = '';
-    }
-    paso('arranque (sin recorrido)', { captura: captura('arranque'), consola: consola.split('\n').slice(-10) });
-    console.log(`::warning::API ${API_LEVEL}: el WebView de la imagen es ${textoVersion}; la capa web pide ${WEBVIEW_MINIMO}+. Se comprobo solo que la app instala, arranca y no se cae.`);
-    cdp.cerrar();
-    return;
-  }
+  const viejo = mayor && mayor < WEBVIEW_MINIMO;
+  if (viejo) resumen.webviewViejo = `WebView ${textoVersion} < ${WEBVIEW_MINIMO}`;
 
   try {
-    await recorrer(cdp);
+    if (viejo) await paginaDeWebViewViejo(cdp, mayor);
+    else await recorrer(cdp);
   } catch (e) {
     try {
       captura('error');
