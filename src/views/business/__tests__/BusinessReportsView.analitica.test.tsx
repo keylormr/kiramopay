@@ -149,6 +149,8 @@ describe('BusinessReportsView con Analitica', () => {
 
   it('en la app del telefono sin forma de compartir no finge que descargo', async () => {
     vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    // Un binario anterior a los plugins de archivos y de compartir.
+    vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(false);
     mocks.api.qrPayments.getMerchantReport.mockResolvedValue({ success: true, data: reporteAnalitica });
     mocks.api.qrPayments.exportMerchantReportCsv.mockResolvedValue({
       success: true,

@@ -80,6 +80,21 @@ describe('entregarArchivo en el telefono', () => {
     expect(estado).toBe('quieto');
   });
 
+  it('si el menu no se pudo abrir (no fue la persona), es un error, no un "quieto"', async () => {
+    enElTelefono();
+    nativo.share.mockRejectedValue(new Error('only file urls are supported'));
+
+    expect(await entregarArchivo(new Blob(['a,b']), 'reporte.csv')).toBe('error');
+  });
+
+  it('un nombre con barras no escribe fuera de la cache', async () => {
+    enElTelefono();
+
+    await entregarArchivo(new Blob(['a,b']), '../reporte/octubre.csv');
+
+    expect(nativo.writeFile).toHaveBeenCalledWith(expect.objectContaining({ path: '..-reporte-octubre.csv' }));
+  });
+
   it('si no se pudo escribir el archivo, avisa el error y no abre el menu', async () => {
     enElTelefono();
     nativo.writeFile.mockRejectedValue(new Error('disco lleno'));

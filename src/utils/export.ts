@@ -1,6 +1,7 @@
 import type { Transaction } from '@/types';
 import { etiquetaDeCategoria } from '@/utils/categoriaMovimiento';
 import { estaCompletado, etiquetaDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
+import { entregarArchivo, type EstadoExport } from '@/utils/entregarArchivo';
 
 /**
  * El traductor de la app (`t` de useLanguage). Lo que la persona lee del
@@ -49,7 +50,9 @@ export function resumirPorMoneda(transactions: Transaction[]): ResumenPorMoneda[
 }
 
 // --- Excel-compatible CSV ---
-export function exportTransactionsCSV(transactions: Transaction[], t: Traductor, filename?: string): void {
+// Devuelve como termino la entrega (ver entregarArchivo): en el telefono la
+// persona puede cerrar el menu de compartir sin mandar nada.
+export function exportTransactionsCSV(transactions: Transaction[], t: Traductor, filename?: string): Promise<EstadoExport> {
   // Excel separator hint + BOM for UTF-8
   const sep = 'sep=,\n';
   const headers = [
@@ -90,13 +93,13 @@ export function exportTransactionsCSV(transactions: Transaction[], t: Traductor,
 
   const csvContent = sep + [headers.join(','), ...rows.map((r) => (r as string[]).join(','))].join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  downloadBlob(blob, filename || nombreDeArchivo(t, 'csv'));
+  return entregarArchivo(blob, filename || nombreDeArchivo(t, 'csv'));
 }
 
 // --- JSON export ---
 // El contenido es de maquina (claves en ingles, `credit`/`debit`, la fecha ISO):
 // lo lee un programa. El nombre del archivo si lo lee la persona.
-export function exportTransactionsJSON(transactions: Transaction[], t: Traductor, filename?: string): void {
+export function exportTransactionsJSON(transactions: Transaction[], t: Traductor, filename?: string): Promise<EstadoExport> {
   const data = {
     app: 'KiramoPay',
     exportDate: new Date().toISOString(),
@@ -126,7 +129,7 @@ export function exportTransactionsJSON(transactions: Transaction[], t: Traductor
 
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
-  downloadBlob(blob, filename || nombreDeArchivo(t, 'json'));
+  return entregarArchivo(blob, filename || nombreDeArchivo(t, 'json'));
 }
 
 // --- Copy to clipboard (formatted table) ---
@@ -235,17 +238,6 @@ function celda(texto: string): string {
 
 function aCentimos(monto: number): number {
   return Math.round(monto * 100) / 100;
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 // El dia local, el mismo de la linea "Generado": con toISOString era el de UTC,
