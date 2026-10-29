@@ -333,10 +333,16 @@ async function recorrer(cdp) {
   // El inicio pide sus datos despues de entrar, y el teclado que abrio la
   // contrasena achica la pantalla hasta cerrarse: se espera a las dos cosas.
   await cdp.evaluar('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true');
-  await hasta('carga el inicio (Ver todo de las transacciones)', () =>
-    cdp.evaluar(`[...document.querySelectorAll('button, a')].some((b) => (b.innerText || '').trim().startsWith('Ver todo'))`),
+  // Recien entrado, el inicio puede volver un momento al esqueleto de carga
+  // (Suspense): se captura cuando lleva un rato cargado y sin esqueleto.
+  const inicioCargado = () =>
+    cdp.evaluar(`!document.querySelector('[data-testid="loading-skeleton"]') &&
+      [...document.querySelectorAll('button, a')].some((b) => (b.innerText || '').trim().startsWith('Ver todo'))`);
+  await hasta(
+    'carga el inicio y se queda cargado (Ver todo, sin esqueleto)',
+    async () => (await inicioCargado()) && (await esperar(2500), await inicioCargado()),
+    { ms: 45000, cada: 500 },
   );
-  await esperar(2500);
   paso('inicio', { captura: captura('inicio') });
 
   await hasta('abre Movimientos (Ver todo)', () => tocar(cdp, ['Ver todo']));
